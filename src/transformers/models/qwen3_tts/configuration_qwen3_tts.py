@@ -247,7 +247,7 @@ class Qwen3TTSTalkerConfig(PreTrainedConfig):
             Number of code groups (codebooks).
         text_hidden_size (`int`, *optional*, defaults to 2048):
             The dimension of the text embedding in the talker.
-        codec_eos_token_id (`int`, *optional*, defaults to 4198):
+        codec_eos_token_id (`int`, *optional*, defaults to 2150):
             The end-of-sequence token ID for codec tokens.
         codec_think_id (`int`, *optional*, defaults to 4202):
             Token ID used to signal thinking mode in codec generation.
@@ -257,9 +257,9 @@ class Qwen3TTSTalkerConfig(PreTrainedConfig):
             Beginning-of-sequence token ID for codec thinking mode.
         codec_think_eos_id (`int`, *optional*, defaults to 4205):
             End-of-sequence token ID for codec thinking mode.
-        codec_pad_id (`int`, *optional*, defaults to 4196):
+        codec_pad_id (`int`, *optional*, defaults to 2148):
             The padding token ID for codec tokens.
-        codec_bos_id (`int`, *optional*, defaults to 4197):
+        codec_bos_id (`int`, *optional*, defaults to 2149):
             The beginning-of-sequence token ID for codec tokens.
         spk_id (`int`, *optional*):
             Speaker ID for built-in voice presets.
@@ -304,13 +304,13 @@ class Qwen3TTSTalkerConfig(PreTrainedConfig):
         attention_dropout: float | None = 0.0,
         num_code_groups: int | None = 32,
         text_hidden_size: int | None = 2048,
-        codec_eos_token_id: int | None = 4198,
+        codec_eos_token_id: int | None = 2150,
         codec_think_id: int | None = 4202,
         codec_nothink_id: int | None = 4203,
         codec_think_bos_id: int | None = 4204,
         codec_think_eos_id: int | None = 4205,
-        codec_pad_id: int | None = 4196,
-        codec_bos_id: int | None = 4197,
+        codec_pad_id: int | None = 2148,
+        codec_bos_id: int | None = 2149,
         spk_id: int | None = None,
         spk_is_dialect: bool | None = None,
         codec_language_id: int | None = None,
@@ -451,9 +451,6 @@ class Qwen3TTSConfig(PreTrainedConfig):
         self.tts_bos_token_id = tts_bos_token_id
         self.tts_eos_token_id = tts_eos_token_id
 
-
-__all__ = [
-    "Qwen3TTSConfig",
     def get_text_config(self, *args, **kwargs):
         """Defaulting to the talker config: it is the decoder that generates codec tokens and owns the cache."""
         # `super().__init__` runs the config validators before `talker_config` is assigned, so this has to
@@ -463,6 +460,9 @@ __all__ = [
             return super().get_text_config(*args, **kwargs)
         return talker_config
 
+
+__all__ = [
+    "Qwen3TTSConfig",
     "Qwen3TTSTalkerConfig",
     "Qwen3TTSSpeakerEncoderConfig",
     "Qwen3TTSTalkerCodePredictorConfig",
