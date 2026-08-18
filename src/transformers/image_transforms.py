@@ -915,7 +915,7 @@ def _group_images_by_shape(nested_images, *paired_inputs, is_nested: bool = Fals
 
     # Missing paired inputs are grouped as a single `None` per shape instead of a list of `None` values
     paired_grouped_values = [
-        dict.fromkeys(grouped_images) if paired_input is None else grouped_values
+        dict.fromkeys(grouped_images, value=None) if paired_input is None else grouped_values
         for paired_input, grouped_values in zip(paired_inputs, paired_grouped_values)
     ]
 
@@ -1036,7 +1036,7 @@ def group_images_by_shape(
 
         grouped_images = {key: img.unsqueeze(0) for key, img in _iterate_items(images, is_nested)}
         paired_grouped_values = [
-            dict.fromkeys(grouped_images)
+            dict.fromkeys(grouped_images, value=None)
             if paired_list is None
             else {key: [item] for key, item in _iterate_items(paired_list, is_nested)}
             for paired_list in paired_inputs
