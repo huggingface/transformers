@@ -1335,6 +1335,8 @@ class GenerationConfig(PushToHubMixin):
                 to_remove.append(key)
             elif hasattr(self, key):
                 if not defaults_only or getattr(self, key) is None:
+                    if key == "watermarking_config" and isinstance(value, dict):
+                        value = WatermarkingConfig.from_dict(value)
                     setattr(self, key, value)
                     to_remove.append(key)
 
