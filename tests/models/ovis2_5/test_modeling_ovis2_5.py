@@ -259,7 +259,7 @@ class Ovis2_5VisionModelTest(ModelTesterMixin, unittest.TestCase):
     additional_model_inputs = ["grid_thw"]
     # The vision input embedding is a patch projection, not a resizable token embedding.
     test_resize_embeddings = False
-    # Packed grid metadata uses data-dependent Python control flow.
+    # Inherited VideoLlama3 attention turns packed sequence lengths into a Python list during export.
     test_torch_exportable = False
 
     def setUp(self):
@@ -442,7 +442,7 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = Ovis2_5VisionText2TextModelTester
     # The visual-tokenizer head consumes the encoder state before post_layernorm.
     test_all_params_have_gradient = False
-    # Packed patch counts and grid metadata use data-dependent Python control flow.
+    # Inherited VideoLlama3 attention turns packed sequence lengths into a Python list during export.
     test_torch_exportable = False
 
     # Ovis records encoder-layer states without an initial embedding state.
@@ -828,6 +828,49 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         self.assertEqual(outputs.pooler_output.shape[0], int(grid_thw.prod()))
 
         self.assertFalse(hasattr(config, "preserve_original_pe"))
+
+    def test_vision_position_interpolation_matches_bicubic_reference(self):
+        config = self.model_tester.get_vision_config()
+        config.image_size = 8
+        model = Ovis2_5VisionModel(config).to(torch_device).eval()
+        grid_thw = torch.tensor([[1, 2, 4], [2, 4, 2]], dtype=torch.long, device=torch_device)
+        pixel_values = torch.randn(
+            int(grid_thw.prod(dim=1).sum()),
+            config.num_channels * config.patch_size**2,
+            device=torch_device,
+        )
+
+        with torch.no_grad():
+            actual = model.embeddings(pixel_values, grid_thw)
+            patches = model.embeddings.patch_embedding(
+                pixel_values.view(-1, config.num_channels, config.patch_size, config.patch_size)
+            ).reshape(-1, config.hidden_size)
+            position_table = model.embeddings.position_embedding.weight.reshape(
+                1,
+                model.embeddings.num_grid_per_side,
+                model.embeddings.num_grid_per_side,
+                config.hidden_size,
+            ).permute(0, 3, 1, 2)
+            expected_positions = []
+            for grid_t, grid_h, grid_w in grid_thw.tolist():
+                positions = torch.nn.functional.interpolate(
+                    position_table,
+                    size=(grid_h, grid_w),
+                    mode="bicubic",
+                    align_corners=False,
+                )
+                positions = positions.permute(0, 2, 3, 1).reshape(grid_h * grid_w, -1).repeat(grid_t, 1)
+                positions = positions.reshape(
+                    grid_t,
+                    grid_h // config.hidden_stride,
+                    config.hidden_stride,
+                    grid_w // config.hidden_stride,
+                    config.hidden_stride,
+                    config.hidden_size,
+                )
+                expected_positions.append(positions.permute(0, 1, 3, 2, 4, 5).reshape(-1, config.hidden_size))
+
+        torch.testing.assert_close(actual, patches + torch.cat(expected_positions), atol=1e-5, rtol=1e-5)
 
     def test_visual_modules_use_native_state_dict_layout(self):
         model = Ovis2_5ForConditionalGeneration(self.model_tester.get_config())

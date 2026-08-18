@@ -34,6 +34,7 @@ from ...utils.generic import accepts_precomputed_kwargs, merge_with_config_defau
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import (
     get_vision_attention_seqlens,
+    get_vision_interpolation_indices_and_weights,
     get_vision_position_ids,
     get_vision_window_index,
 )
@@ -311,6 +312,10 @@ class Ovis2_5VisionEmbeddings(nn.Module):
         self.config = config
         self.embed_dim = config.hidden_size
         self.patch_size = config.patch_size
+        self.spatial_merge_size = config.hidden_stride
+        self.num_grid_per_side = config.image_size // config.patch_size
+        self.interpolation_mode = "bicubic"
+        self.interpolation_align_corners = False
         self.patch_embedding = nn.Conv2d(
             in_channels=config.num_channels,
             out_channels=config.hidden_size,
@@ -319,10 +324,14 @@ class Ovis2_5VisionEmbeddings(nn.Module):
             padding="valid",
             bias=True,
         )
-        self.position_embedding_size = config.image_size // config.patch_size
-        self.position_embedding = nn.Embedding(self.position_embedding_size**2, config.hidden_size)
+        self.position_embedding = nn.Embedding(self.num_grid_per_side**2, config.hidden_size)
 
-    def forward(self, pixel_values: torch.FloatTensor, grid_thw: torch.LongTensor) -> torch.Tensor:
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor,
+        grid_thw: torch.LongTensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
         target_dtype = self.patch_embedding.weight.dtype
         pixel_values = pixel_values.view(
             -1,
@@ -332,36 +341,18 @@ class Ovis2_5VisionEmbeddings(nn.Module):
         )
         patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype)).reshape(-1, self.embed_dim)
 
-        position_embeddings = self.position_embedding.weight.reshape(
-            1,
-            self.position_embedding_size,
-            self.position_embedding_size,
-            self.embed_dim,
-        ).permute(0, 3, 1, 2)
-        interpolated_positions = torch.zeros_like(patch_embeds)
-        offset = 0
-        hidden_stride = self.config.hidden_stride
-        for grid_t, grid_h, grid_w in grid_thw:
-            num_tokens = grid_t * grid_h * grid_w
-            position_embedding = nn.functional.interpolate(
-                position_embeddings,
-                size=(grid_h, grid_w),
-                mode="bicubic",
-                align_corners=False,
-            )
-            position_embedding = position_embedding.permute(0, 2, 3, 1).reshape(1, grid_h * grid_w, -1)
-            position_embedding = position_embedding[0].repeat(grid_t, 1)
-            position_embedding = position_embedding.reshape(
-                grid_t,
-                grid_h // hidden_stride,
-                hidden_stride,
-                grid_w // hidden_stride,
-                hidden_stride,
-                self.embed_dim,
-            )
-            position_embedding = position_embedding.permute(0, 1, 3, 2, 4, 5).reshape(num_tokens, -1)
-            interpolated_positions[offset : offset + num_tokens] = position_embedding
-            offset += num_tokens
+        interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
+            grid_thw,
+            self.num_grid_per_side,
+            mode=self.interpolation_mode,
+            align_corners=self.interpolation_align_corners,
+            spatial_merge_size=self.spatial_merge_size,
+            kwargs=kwargs,
+        )
+        position_embeddings = self.position_embedding(interp_indices)
+        interpolated_positions = (
+            position_embeddings * interp_weights.to(position_embeddings.dtype).unsqueeze(-1)
+        ).sum(dim=1)
 
         return patch_embeds + interpolated_positions
 
@@ -520,6 +511,9 @@ class Ovis2_5VisionModel(Ovis2_5PreTrainedModel):
 
     def __init__(self, config: Ovis2_5VisionConfig):
         super().__init__(config)
+        self.spatial_merge_size = config.hidden_stride
+        self.window_size = config.window_size
+        self.patch_size = config.patch_size
         self.embeddings = Ovis2_5VisionEmbeddings(config)
         self.encoder = Ovis2_5VisionEncoder(config)
         self.post_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -543,7 +537,7 @@ class Ovis2_5VisionModel(Ovis2_5PreTrainedModel):
         grid_thw (`torch.LongTensor` of shape `(num_images_or_videos, 3)`):
             Temporal, height, and width patch-grid dimensions for each packed image or video.
         """
-        hidden_states = self.embeddings(pixel_values, grid_thw)
+        hidden_states = self.embeddings(pixel_values, grid_thw, **kwargs)
         position_ids = get_vision_position_ids(grid_thw, self.config.hidden_stride, kwargs=kwargs)
         rotary_pos_emb = self.rotary_pos_emb(position_ids)
         rotary_pos_emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
