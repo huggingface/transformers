@@ -403,7 +403,7 @@ def _find_disjoint(tensors: list[set[str]], state_dict: dict[str, torch.Tensor])
                 filtered_tensors.append({name})
             else:
                 filtered_tensors[-1].add(name)
-            last_stop = stop
+            last_stop = max(last_stop, stop)
     disjoint_tensors = []
     shared_tensors = []
     for tensors in filtered_tensors:
