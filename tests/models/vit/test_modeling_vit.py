@@ -264,6 +264,11 @@ def prepare_img():
 @require_torch
 @require_vision
 class ViTModelIntegrationTest(unittest.TestCase):
+    @slow
+    def test_dummy_failure_for_pr_ci_amd_verification(self):
+        # TODO: remove this test — added temporarily to verify check_new_failures pipeline on AMD PR comment CI
+        assert 1 == 2
+
     @cached_property
     def default_image_processor(self):
         return ViTImageProcessorPil.from_pretrained("google/vit-base-patch16-224") if is_vision_available() else None
