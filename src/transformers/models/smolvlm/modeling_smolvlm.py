@@ -605,16 +605,15 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.text_model.get_input_embeddings()(input_ids).to(input_ids.device)
 
-        if pixel_values is not None and image_hidden_states is not None:
-            raise ValueError("You cannot specify both pixel_values and image_hidden_states at the same time")
-
-        if pixel_values is not None:
+        # `image_hidden_states` takes precedence over `pixel_values`: during `generate()`, callers may pass both
+        # (e.g. reusing a previous call's vision-tower output while `pixel_values` is still present in kwargs).
+        if image_hidden_states is not None:
+            image_hidden_states = image_hidden_states.to(dtype=self.dtype, device=inputs_embeds.device)
+        elif pixel_values is not None:
             image_hidden_states = self.get_image_features(
                 pixel_values, pixel_attention_mask, return_dict=True
             ).pooler_output
             image_hidden_states = image_hidden_states.to(inputs_embeds.device)
-        elif image_hidden_states is not None:
-            image_hidden_states = image_hidden_states.to(dtype=self.dtype, device=inputs_embeds.device)
 
         if image_hidden_states is not None:
             inputs_embeds = self.inputs_merger(
