@@ -168,12 +168,14 @@ def create_config_from_checkpoint(checkpoint_path: Path) -> Qwen3TTSConfig:
         rope_params["interleaved"] = False
         talker_filtered["rope_parameters"] = rope_params
 
-    code_predictor_rope = code_predictor_dict.get("rope_scaling")
-    if code_predictor_rope is not None:
-        cp_rope_params = dict(code_predictor_rope)
-        cp_rope_theta = code_predictor_dict.get("rope_theta")
-        if cp_rope_theta is not None:
-            cp_rope_params["rope_theta"] = cp_rope_theta
+    # The code predictor declares no `rope_scaling`, only a `rope_theta`, so the two are merged
+    # independently: keying this off `rope_scaling` alone would drop `rope_theta` and silently fall
+    # back to the config default, which detunes the rotary frequencies.
+    cp_rope_params = dict(code_predictor_dict.get("rope_scaling") or {})
+    cp_rope_theta = code_predictor_dict.get("rope_theta")
+    if cp_rope_theta is not None:
+        cp_rope_params["rope_theta"] = cp_rope_theta
+    if cp_rope_params:
         code_predictor_filtered["rope_parameters"] = cp_rope_params
 
     # Pass code_predictor as a dict inside talker_dict, since configs unpack with **
