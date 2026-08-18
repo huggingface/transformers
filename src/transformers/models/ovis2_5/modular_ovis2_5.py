@@ -24,6 +24,7 @@ from torch import nn
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -327,7 +328,7 @@ class Ovis2_5VisionAttention(VideoLlama3VisionAttention):
     pass
 
 
-class Ovis2_5VisionEncoderLayer(VideoLlama3VisionEncoderLayer):
+class Ovis2_5VisionEncoderLayer(VideoLlama3VisionEncoderLayer, GradientCheckpointingLayer):
     pass
 
 
