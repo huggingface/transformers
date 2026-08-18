@@ -33,48 +33,29 @@ class Ovis2_5Processor(ProcessorMixin):
         tokenizer=None,
         video_processor=None,
         chat_template=None,
-        image_token="<image>",
-        video_token="<video>",
-        visual_atom_token="<ovis_visual_atom>",
-        image_start_token="<ovis_image_start>",
-        image_end_token="<ovis_image_end>",
-        video_start_token="<ovis_video_start>",
-        video_end_token="<ovis_video_end>",
         **kwargs,
     ):
-        r"""
-        image_token (`str`, *optional*, defaults to `"<image>"`):
-            Text placeholder replaced by an expanded image sequence.
-        video_token (`str`, *optional*, defaults to `"<video>"`):
-            Text placeholder replaced by an expanded video sequence.
-        visual_atom_token (`str`, *optional*, defaults to `"<ovis_visual_atom>"`):
-            Token occupying each projected visual feature position.
-        image_start_token (`str`, *optional*, defaults to `"<ovis_image_start>"`):
-            Token placed before an image's visual atoms.
-        image_end_token (`str`, *optional*, defaults to `"<ovis_image_end>"`):
-            Token placed after an image's visual atoms.
-        video_start_token (`str`, *optional*, defaults to `"<ovis_video_start>"`):
-            Token placed before a video's visual atoms.
-        video_end_token (`str`, *optional*, defaults to `"<ovis_video_end>"`):
-            Token placed after a video's visual atoms.
-        """
-        self.image_token = image_token
-        self.video_token = video_token
-        # Raw placeholders are deliberately not model tokens. The model sees
-        # only the five positive special tokens below.
-        self.image_token_id = None
-        self.video_token_id = None
+        self._image_placeholder = "<image>"
+        self._video_placeholder = "<video>"
 
-        self.visual_atom_token = visual_atom_token
-        self.image_start_token = image_start_token
-        self.image_end_token = image_end_token
-        self.video_start_token = video_start_token
-        self.video_end_token = video_end_token
-        self.visual_atom_token_id = tokenizer.convert_tokens_to_ids(visual_atom_token)
-        self.image_start_token_id = tokenizer.convert_tokens_to_ids(image_start_token)
-        self.image_end_token_id = tokenizer.convert_tokens_to_ids(image_end_token)
-        self.video_start_token_id = tokenizer.convert_tokens_to_ids(video_start_token)
-        self.video_end_token_id = tokenizer.convert_tokens_to_ids(video_end_token)
+        visual_token = getattr(tokenizer, "image_token", getattr(tokenizer, "video_token", "<ovis_visual_atom>"))
+        self.image_token = visual_token
+        self.video_token = visual_token
+        self.image_token_id = tokenizer.convert_tokens_to_ids(visual_token)
+        self.video_token_id = self.image_token_id
+
+        self.image_start_token = getattr(tokenizer, "image_start_token", "<ovis_image_start>")
+        self.image_end_token = getattr(tokenizer, "image_end_token", "<ovis_image_end>")
+        self.video_start_token = getattr(tokenizer, "video_start_token", "<ovis_video_start>")
+        self.video_end_token = getattr(tokenizer, "video_end_token", "<ovis_video_end>")
+        self.image_start_token_id = tokenizer.convert_tokens_to_ids(self.image_start_token)
+        self.image_end_token_id = tokenizer.convert_tokens_to_ids(self.image_end_token)
+        self.video_start_token_id = tokenizer.convert_tokens_to_ids(self.video_start_token)
+        self.video_end_token_id = tokenizer.convert_tokens_to_ids(self.video_end_token)
+
+        # Temporary aliases until the replacement methods use the standard token names.
+        self.visual_atom_token = self.image_token
+        self.visual_atom_token_id = self.image_token_id
 
         super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
 
