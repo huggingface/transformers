@@ -23,6 +23,7 @@ from torch import nn
 
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
+from ...generation import GenerationMixin
 from ...image_processing_backends import PilBackend, TorchvisionBackend
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling, SizeDict
 from ...modeling_layers import GradientCheckpointingLayer
@@ -41,7 +42,8 @@ from ...vision_utils import (
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..glm4v.image_processing_glm4v import Glm4vImageProcessor, Glm4vImageProcessorKwargs
 from ..glm4v.image_processing_pil_glm4v import Glm4vImageProcessorPil
-from ..ovis2.modeling_ovis2 import Ovis2ForConditionalGeneration, Ovis2Model
+from ..ovis2.modeling_ovis2 import Ovis2Model
+from ..qwen2_vl.modeling_qwen2_vl import Qwen2VLForConditionalGeneration
 from ..video_llama_3.modeling_video_llama_3 import (
     VideoLlama3CausalLMOutputWithPast,
     VideoLlama3ModelOutputWithPast,
@@ -743,29 +745,16 @@ class Ovis2_5Model(Ovis2Model):
 
 
 @auto_docstring(custom_intro="The Ovis2.5 multimodal model with a language modeling head.")
-class Ovis2_5ForConditionalGeneration(Ovis2ForConditionalGeneration):
+class Ovis2_5ForConditionalGeneration(Qwen2VLForConditionalGeneration):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: Ovis2_5Config):
-        PreTrainedModel.__init__(self, config)
-        self.model = Ovis2_5Model(config)
-        text_hidden_size = getattr(config.text_config, "hidden_size")
-        text_vocab_size = getattr(config.text_config, "vocab_size")
-        self.lm_head = nn.Linear(text_hidden_size, text_vocab_size, bias=False)
-        self.post_init()
+        text_config = config.get_text_config()
+        super().__init__(config)  # just to add type hint on config
+        self.lm_head = nn.Linear(text_config.hidden_size, text_config.vocab_size, bias=False)
 
-    @auto_docstring
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.FloatTensor,
-        video_grid_thw: torch.LongTensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Ovis2_5VisualFeaturesOutput:
-        r"""
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`):
-            Temporal, height, and width patch-grid dimensions for each packed video.
-        """
-        return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
+    def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
+        return GenerationMixin._prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs)
 
     @can_return_tuple
     @auto_docstring

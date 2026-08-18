@@ -801,37 +801,43 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
         )
 
 
-@auto_docstring
-@dataclass
-class BaseModelOutputWithVisualIndicatorFeatures(BaseModelOutputWithPooling):
-    r"""
-    visual_indicator_features (`torch.FloatTensor` of shape `(batch_size, visual_indicator_size)`):
-        Visual indicator features extracted from the model, which can be used for auxiliary tasks or further processing.
-    """
-
-    visual_indicator_features: torch.FloatTensor | None = None
-
-
 @auto_docstring(custom_intro="The Ovis2.5 multimodal model with a language modeling head.")
 class Ovis2_5ForConditionalGeneration(Ovis2_5PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: Ovis2_5Config):
         super().__init__(config)
+        text_config = config.get_text_config()
         self.model = Ovis2_5Model(config)
-        text_hidden_size = getattr(config.text_config, "hidden_size")
-        text_vocab_size = getattr(config.text_config, "vocab_size")
-        self.lm_head = nn.Linear(text_hidden_size, text_vocab_size, bias=False)
+        self.lm_head = nn.Linear(text_config.hidden_size, text_config.vocab_size, bias=False)
+
         self.post_init()
 
-    def get_output_embeddings(self) -> nn.Module:
-        return self.lm_head
+    @auto_docstring
+    def get_video_features(
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input videos.
+        """
+        return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
 
     @auto_docstring
     def get_image_features(
-        self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithVisualIndicatorFeatures:
-        return self.model.get_image_features(pixel_values=pixel_values, **kwargs)
+        self,
+        pixel_values: torch.FloatTensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
+        """
+        return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
     @can_return_tuple
     @auto_docstring
@@ -896,24 +902,26 @@ class Ovis2_5ForConditionalGeneration(Ovis2_5PreTrainedModel, GenerationMixin):
             video_hidden_states=outputs.video_hidden_states,
         )
 
-    @auto_docstring
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.FloatTensor,
-        video_grid_thw: torch.LongTensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Ovis2_5VisualFeaturesOutput:
-        r"""
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`):
-            Temporal, height, and width patch-grid dimensions for each packed video.
-        """
-        return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
+    def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
+        return super()._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
 
     def _get_image_nums_and_video_nums(
         self,
         input_ids: torch.LongTensor | None,
         inputs_embeds: torch.FloatTensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Get the number of images and videos for each sample to calculate the separation length of the sample tensor.
+        These parameters are not passed through the processor to avoid unpredictable impacts from interface modifications.
+
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary.
+
+        Returns:
+            image_nums (`torch.LongTensor` of shape `(batch_size, num_images_sample)`)
+            video_nums (`torch.LongTensor` of shape `(batch_size, num_videos_sample)`)
+        """
         # Generation creates placeholder `input_ids` when the caller supplies
         # only `inputs_embeds`. Prefer the real embeddings whenever they are
         # available so beam expansion still sees the multimodal boundaries.

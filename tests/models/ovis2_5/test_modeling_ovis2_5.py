@@ -532,6 +532,21 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         for actual, expected in zip(counts_from_embeds, counts_from_ids):
             torch.testing.assert_close(actual, expected)
 
+    def test_generation_uses_text_position_ids(self):
+        """Generation keeps the Qwen3 text backbone's one-dimensional position IDs."""
+        model = Ovis2_5ForConditionalGeneration(self.model_tester.get_config()).to(torch_device).eval()
+        input_ids = torch.tensor([[1, 2, 3, 4]], dtype=torch.long, device=torch_device)
+        attention_mask = torch.tensor([[0, 1, 1, 1]], dtype=torch.long, device=torch_device)
+
+        position_ids = model._prepare_position_ids_for_generation(
+            input_ids,
+            {"attention_mask": attention_mask},
+        )
+
+        torch.testing.assert_close(position_ids, torch.tensor([[0, 0, 1, 2]], device=torch_device))
+        self.assertEqual(position_ids.ndim, 2)
+        self.assertFalse(hasattr(model.model, "rope_deltas"))
+
     def test_native_subconfig_names(self):
         text_config = self.model_tester.get_text_config().to_dict()
         vision_config = self.model_tester.get_vision_config().to_dict()
