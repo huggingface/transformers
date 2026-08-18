@@ -19,25 +19,13 @@ from .audio_processing_numpy_xcodec2 import Xcodec2AudioProcessorNumpy
 
 
 class Xcodec2AudioProcessor(TorchAudioBackend):
-    """Dual-output codec processor: raw padded audio for the acoustic encoder
-    (`audio_values`) plus per-utterance kaldi fbank features for the semantic encoder
-    (`audio_features`), computed in `_postprocess_output` from the padded audio batch.
-    The fbank path is bit-exact against `torchaudio.compliance.kaldi.fbank` as used by the
-    legacy `Xcodec2FeatureExtractor`."""
-
     sampling_rate = 16000
     force_mono = True
     add_channel_dim = True
-    padding_value = 0.0
-    # One acoustic-encoder frame = `hop_length` audio samples (product of downsampling ratios)
     hop_length = 320
     pad_to_multiple_of = 320
-    # Semantic features: pairs of consecutive fbank frames are concatenated (stride 2)
     stride = 2
-    # Mel frames are padded with 1.0 (the legacy FE's `padding_value`), unlike the raw audio
     feature_padding_value = 1.0
-    # Semantic features are derived from the padded audio in `_postprocess_output`, not via
-    # the base spectrogram path
     do_extract_spectrogram = False
 
     spectrogram_config = Xcodec2AudioProcessorNumpy.spectrogram_config

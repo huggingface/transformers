@@ -19,21 +19,18 @@ from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
 def _whisper_chunk_length_to_max_length(value, config_dict):
-    # Legacy Whisper hub configs store `chunk_length=30` (seconds); the new API uses `max_length`
-    # in samples. Translate using the sampling rate carried by the pass-through `sampling_rate` key.
+    # Map legacy chunk_length (seconds) → max_length (samples) using sampling_rate.
     sampling_rate = config_dict.get("sampling_rate") or 16000
     config_dict.setdefault("max_length", value * sampling_rate)
 
 
 class WhisperAudioProcessorNumpy(NumpyAudioBackend):
-    """NumPy sibling of [`WhisperAudioProcessor`]. Required to produce bit-exact outputs
-    against the torch sibling (ADR 0001)."""
-
     sampling_rate = 16000
     force_mono = True
     return_padding_mask = False
     truncation = True
     max_length = 480000  # 30 seconds at 16000 Hz
+
     spectrogram_config = SpectrogramConfig(
         stft_config=StftConfig(
             n_fft=400,
@@ -60,7 +57,6 @@ class WhisperAudioProcessorNumpy(NumpyAudioBackend):
     }
 
     def _apply_mel_scale(self, features, *, spectrogram_config, **kwargs):
-        # `filters_first` matmul order with mel_floor clamp, matching the torch sibling.
         return np.maximum(spectrogram_config.mel_floor, np.matmul(self.mel_filters.T, features))
 
 
