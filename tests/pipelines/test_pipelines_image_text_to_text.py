@@ -19,6 +19,7 @@ from types import SimpleNamespace
 from transformers import MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING, is_vision_available
 from transformers.pipelines import ImageTextToTextPipeline, pipeline
 from transformers.testing_utils import (
+    CaptureLogger,
     Expectations,
     is_pipeline_test,
     require_deterministic_for_xpu,
@@ -26,6 +27,7 @@ from transformers.testing_utils import (
     require_vision,
     slow,
 )
+from transformers.utils import logging
 
 from .test_pipelines_common import ANY
 
@@ -81,34 +83,23 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
         )
 
     def test_preprocess_empty_processor_kwargs_not_leaked(self):
-        # An explicit empty `processor_kwargs={}` must stay empty and must not fall back to the
-        # remaining processing kwargs, which would leak unrelated arguments into the processor call.
-        class RecordingModelInputs(dict):
-            def to(self, *args, **kwargs):
-                return self
+        pipe = pipeline("image-text-to-text", model="llava-hf/llava-interleave-qwen-0.5b-hf")
+        logger = logging.get_logger("transformers.processing_utils")
+        logger.warning_once.cache_clear()  # clear cache before each call
 
-        class RecordingProcessor:
-            def __init__(self):
-                self.captured_kwargs = None
+        # Empty dict is explicit: nothing extra should reach the processor, so no warning raised
+        with CaptureLogger(logger) as cl:
+            pipe.preprocess("a single prompt", processor_kwargs={}, unrelated_kwarg=True)
+        self.assertEqual(cl.out, "")
 
-            def __call__(self, images=None, text=None, return_tensors=None, **kwargs):
-                self.captured_kwargs = kwargs
-                return RecordingModelInputs()
-
-        pipe = object.__new__(ImageTextToTextPipeline)
-        # `dtype` is a read-only property that reads from `self.model`; a no-op `.to()` above
-        # means the concrete dtype value is irrelevant here.
-        pipe.model = SimpleNamespace(dtype=None)
-
-        # Empty dict is explicit: nothing extra should reach the processor.
-        pipe.processor = RecordingProcessor()
-        pipe.preprocess("a single prompt", processor_kwargs={}, unrelated_kwarg=True)
-        self.assertEqual(pipe.processor.captured_kwargs, {})
-
-        # When `processor_kwargs` is omitted, the remaining kwargs are forwarded as before.
-        pipe.processor = RecordingProcessor()
-        pipe.preprocess("a single prompt", unrelated_kwarg=True)
-        self.assertEqual(pipe.processor.captured_kwargs, {"unrelated_kwarg": True})
+        # When `processor_kwargs` is omitted, it passes all kwargs to processor raising a warning
+        logger.warning_once.cache_clear()
+        with CaptureLogger(logger) as cl:
+            pipe.preprocess("a single prompt", unrelated_kwarg=True)
+        self.assertEqual(
+            cl.out,
+            "Keyword argument `unrelated_kwarg` is not a valid argument for this processor and will be ignored.\n",
+        )
 
     @require_torch
     def test_small_model_pt_token_text_only(self):
