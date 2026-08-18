@@ -1752,10 +1752,6 @@ class DynamicCache(Cache):
         offload_only_non_sliding (`bool`, *optional*, defaults to `False`):
             If `offloading` is `True`, this further decides if only the non-sliding layers will be offloaded (because
             usually the sliding layers are small in size, so there is no need to offload them, and skipping it is faster).
-        layers (`Optional`, *optional*):
-            A list of pre-created `CacheLayerMixin` or `LinearAttentionCacheLayerMixin`. Cannot be used together with
-            `ddp_cache_data` or `config`.
-
     Example:
 
     ```python
@@ -1779,19 +1775,7 @@ class DynamicCache(Cache):
         config: PreTrainedConfig | None = None,
         offloading: bool = False,
         offload_only_non_sliding: bool = False,
-        *,
-        layers: list[CacheLayerMixin | LinearAttentionCacheLayerMixin] | None = None,
     ):
-        if layers is not None:
-            if ddp_cache_data is not None or config is not None:
-                raise ValueError("`layers` cannot be used together with `ddp_cache_data` or `config`.")
-            super().__init__(
-                layers=layers,
-                offloading=offloading,
-                offload_only_non_sliding=offload_only_non_sliding,
-            )
-            return
-
         layers = []
         # If a config is passed, use it to infer the layer types and initialize accordingly
         if config is not None:
@@ -1816,8 +1800,12 @@ class DynamicCache(Cache):
                         layers.append(DynamicSlidingWindowLayer(sliding_window=sliding_window))
                     else:
                         layers.append(DynamicLayer())
-                # Update the layer with the data
-                _, _ = layers[layer_idx].update(kv_and_optional_sliding[0], kv_and_optional_sliding[1])
+                key_states, value_states = kv_and_optional_sliding[:2]
+                if (key_states is None) != (value_states is None):
+                    raise ValueError("Key and value states must both be tensors or both be `None`.")
+                if key_states is not None and value_states is not None:
+                    # Update the layer with the data
+                    _, _ = layers[layer_idx].update(key_states, value_states)
 
         # If neither of config nor ddp_data was passed, then simply lazy init a full cache of DynamicLayer
         if len(layers) == 0:

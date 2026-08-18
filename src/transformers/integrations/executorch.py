@@ -1164,11 +1164,11 @@ def _unflatten_dynamic_cache(values, context: torch.utils._pytree.Context):
     dictionary = torch.utils._pytree._dict_unflatten(values, dictionary_keys)
     key_states = iter(dictionary.get("key_cache", []))
     value_states = iter(dictionary.get("value_cache", []))
-    layers = []
+    ddp_cache_data = []
     for sliding_window, is_populated in layout:
-        layer = DynamicLayer() if sliding_window is None else DynamicSlidingWindowLayer(sliding_window)
-        if is_populated:
-            layer.update(next(key_states), next(value_states))
-        layers.append(layer)
+        key_state = next(key_states) if is_populated else None
+        value_state = next(value_states) if is_populated else None
+        sliding_window_tensor = None if sliding_window is None else torch.tensor([sliding_window])
+        ddp_cache_data.append((key_state, value_state, sliding_window_tensor))
 
-    return DynamicCache(layers=layers) if layers else DynamicCache()
+    return DynamicCache(ddp_cache_data) if ddp_cache_data else DynamicCache()
