@@ -411,7 +411,7 @@ class Qwen3TTSTokenizerMultiCodebookDecoder(Qwen3TTSTokenizerMultiCodebookCode2W
             decoder.append(Qwen3TTSTokenizerMultiCodebookDecoderBlock(config, i))
         output_dim = config.decoder_dim // 2 ** len(config.upsample_rates)
         decoder += [
-            SnakeBeta(output_dim),
+            Qwen3TTSTokenizerMultiCodebookSnakeBeta(output_dim),
             Qwen3TTSTokenizerMultiCodebookCausalConvNet(output_dim, 1, 7),
         ]
         self.decoder = nn.ModuleList(decoder)
@@ -456,12 +456,15 @@ class Qwen3TTSTokenizerMultiCodebookDecoder(Qwen3TTSTokenizerMultiCodebookCode2W
 class Qwen3TTSTokenizerMultiCodebookEncoderModel(MimiModel):
     def __init__(self, config):
         super().__init__(config)
-        # Nullify decoder components — encoder-only model does not need them.
-        # MimiModel.__init__ creates MimiDecoder (compatible with MimiConfig),
-        # then we null it out along with upsample and decoder_transformer.
+        # Encoder-only model: waveform reconstruction is handled by the separate multi-codebook
+        # decoder, so Mimi's decode stack is dropped. `upsample` is cleared through `setattr`
+        # because Mimi assigns it twice — once as `None`, then conditionally as a module — and a
+        # plain `self.upsample = None` here is folded into the first of those by the modular
+        # converter, leaving the module to be rebuilt afterwards. It has no weights in the
+        # checkpoint, so keeping it would ship a randomly initialized parameter.
         self.decoder = None
         self.decoder_transformer = None
-        self.upsample = None
+        setattr(self, "upsample", None)
 
 
 #  Top-level Model
