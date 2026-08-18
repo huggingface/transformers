@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import hashlib
 import json
 import logging
@@ -19,7 +21,7 @@ import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 log = logging.getLogger(__name__)
 
@@ -35,17 +37,15 @@ class ModelDebtReport:
     mutation_safety_score: float  # Target 100.0
     production_readiness_index: float  # Scale 0 - 100
     is_production_ready: bool
-    critical_smells: List[str]
+    critical_smells: list[str]
     receipt_hash: str
 
 
 class TechnicalDueDiligenceLedger:
-    """
-    Cryptographic SHA-256 hash-chained Action Ledger for Hugging Face Transformers model runs.
-    """
+    """Cryptographic SHA-256 hash-chained Action Ledger for Hugging Face Transformers model runs."""
 
     def __init__(self) -> None:
-        self._entries: List[Dict[str, Any]] = []
+        self._entries: list[dict[str, Any]] = []
         self._last_hash: str = GENESIS_HASH
 
     def record_model_inference(
@@ -53,9 +53,9 @@ class TechnicalDueDiligenceLedger:
         model_id: str,
         event_type: str,
         readiness_index: float,
-        critical_smells: List[str],
-        metadata: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        critical_smells: list[str],
+        metadata: dict[str, Any],
+    ) -> dict[str, Any]:
         timestamp = datetime.now(timezone.utc).isoformat()
         index = len(self._entries)
 
@@ -80,7 +80,7 @@ class TechnicalDueDiligenceLedger:
         self._last_hash = curr_hash
         return entry
 
-    def get_ledger_entries(self) -> List[Dict[str, Any]]:
+    def get_ledger_entries(self) -> list[dict[str, Any]]:
         return list(self._entries)
 
     def verify_ledger_integrity(self) -> bool:
@@ -93,8 +93,7 @@ class TechnicalDueDiligenceLedger:
 
 
 class ProductionDebtEvaluator:
-    """
-    A2Z SOC Production Debt & Technical Due Diligence Evaluator for Hugging Face Transformers.
+    """A2Z SOC Production Debt & Technical Due Diligence Evaluator for Hugging Face Transformers.
 
     Quantifies foundation model inference pipelines against 4 Enterprise KPIs:
     1. Model Debt Index (MDI <= 12.0)
@@ -139,7 +138,7 @@ class ProductionDebtEvaluator:
                 "A2Z SOC ActionGate: Emergency kill switch is engaged. Foundation model inference halted."
             )
 
-        critical_smells: List[str] = []
+        critical_smells: list[str] = []
 
         # KPI 2: KV Cache Memory Inflation Multiplier
         memory_ratio = allocated_kv_cache_mb / max(1.0, utilized_kv_cache_mb)
