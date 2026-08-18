@@ -1374,3 +1374,54 @@ class TrainerIntegrationTest(TestCasePlus):
         trainer.train()
         model_wrapped_after = trainer.model_wrapped
         self.assertIs(model_wrapped_before, model_wrapped_after, "should be not wrapped twice")
+
+    def test_validate_quantization_for_training(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+
+        from transformers.trainer_utils import validate_quantization_for_training
+
+        # 1. Non-quantized model passes
+        non_quantized = SimpleNamespace(is_quantized=False)
+        validate_quantization_for_training(non_quantized)
+
+        # 2. Purely quantized model without adapters raises ValueError
+        quant_config = SimpleNamespace(quant_method="fp8")
+        quantizer = SimpleNamespace(is_trainable=False, is_qat_trainable=False, quantization_config=quant_config)
+        purely_quantized = SimpleNamespace(
+            is_quantized=True,
+            _hf_peft_config_loaded=False,
+            hf_quantizer=quantizer,
+        )
+        with self.assertRaises(ValueError) as cm:
+            validate_quantization_for_training(purely_quantized)
+        self.assertIn("You cannot perform fine-tuning on purely quantized models", str(cm.exception))
+
+        # 3. Quantized model with native adapter (_hf_peft_config_loaded=True) passes
+        native_peft = SimpleNamespace(
+            is_quantized=True,
+            _hf_peft_config_loaded=True,
+            hf_quantizer=quantizer,
+        )
+        validate_quantization_for_training(native_peft)
+
+        # 4. Quantized model wrapped with PEFT model passes (even with _hf_peft_config_loaded=False)
+        peft_wrapped = SimpleNamespace(
+            is_quantized=True,
+            _hf_peft_config_loaded=False,
+            hf_quantizer=quantizer,
+        )
+        with patch("transformers.trainer_utils._is_peft_model", return_value=True):
+            validate_quantization_for_training(peft_wrapped)
+
+        # 5. Quantized model compiled with torch.compile raises ValueError
+        compiled_quantized = SimpleNamespace(
+            is_quantized=True,
+            _hf_peft_config_loaded=True,
+            hf_quantizer=quantizer,
+            _orig_mod=SimpleNamespace(),
+        )
+        with self.assertRaises(ValueError) as cm:
+            validate_quantization_for_training(compiled_quantized)
+        self.assertIn("torch.compile()", str(cm.exception))
+
