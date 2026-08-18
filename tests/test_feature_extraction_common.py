@@ -27,7 +27,9 @@ class FeatureExtractionSavingTestMixin:
         feat_extract = self.feature_extraction_class(**self.feat_extract_dict)
         obj = json.loads(feat_extract.to_json_string())
         for key, value in self.feat_extract_dict.items():
-            self.assertEqual(obj[key], value)
+            # A key whose value is None and whose declared default is also None is omitted from
+            # the config: it reconstructs as None either way. `.get` mirrors that on read.
+            self.assertEqual(obj.get(key), value)
 
     def test_feat_extract_to_json_file(self):
         feat_extract_first = self.feature_extraction_class(**self.feat_extract_dict)
