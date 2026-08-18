@@ -220,6 +220,16 @@ class SentencePieceBackend(PreTrainedTokenizer):
         unk_token_length = len(self.sp_model.encode(str(self.unk_token)))
         return tokens[unk_token_length:] if len(tokens) >= unk_token_length else tokens
 
+    def convert_tokens_to_string(self, tokens: list[str]) -> str:
+        """Converts a sequence of tokens (strings) to a single string.
+
+        Handles byte-fallback tokens (e.g. "<0x0A>", "<0xF0>") produced by
+        SentencePiece models with byte_fallback=True by delegating to
+        ``sp_model.decode``, which natively decodes those tokens into the
+        corresponding bytes and assembles them into a valid UTF-8 string.
+        """
+        return self.sp_model.decode(tokens)
+
     def _convert_token_to_id(self, token):
         """Converts a token (str) to an id using the vocab."""
         return self.sp_model.piece_to_id(token)
