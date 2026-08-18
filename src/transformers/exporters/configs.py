@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import copy
+from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import Enum
 from os import PathLike
@@ -102,9 +103,11 @@ class DynamoConfig(ExportConfigMixin):
             quantized (`prepare_pt2e` → calibrate → `convert_pt2e`) before it is returned/lowered.
             Backend-agnostic: the resulting quantized `ExportedProgram` runs on inductor (int8), lowers
             to ExecuTorch, or translates to ONNX QDQ. `None` (default) exports in full precision.
-        calibration_dataset (`list[dict]`, *optional*):
+        calibration_dataset (`Iterable[dict]`, *optional*):
             Forward-kwarg dicts run through the prepared graph to gather observer statistics for static
-            quantization. Ignored when `quantizer` is `None`. When `None`, calibration falls back to a
+            quantization — any iterable of dicts works, including a `torch.utils.data.DataLoader` whose
+            batches collate to forward kwargs. Ignored when `quantizer` is `None`. When `None`,
+            calibration falls back to a
             single pass on the export's own sample inputs (a warning is emitted — one sample can hurt
             accuracy). For generative models, pass a generate-style dataset to `export_for_generation`'s
             `calibration_dataset` instead — it fans out a per-component calibration set automatically.
@@ -118,7 +121,7 @@ class DynamoConfig(ExportConfigMixin):
     prefer_deferred_runtime_asserts_over_guards: bool = False
 
     quantizer: Any = None
-    calibration_dataset: list[Any] | None = None
+    calibration_dataset: Iterable[Any] | None = None
 
 
 @dataclass
@@ -178,10 +181,13 @@ class ExecutorchConfig(DynamoConfig):
 
             - `"xnnpack"` — CPU inference via the XNNPACK library (default; runs anywhere).
             - `"cuda"` — GPU inference via the ExecuTorch CUDA backend.
-            - `"qnn"` — Qualcomm HTP (NPU) inference via the QNN backend. Requires the Qualcomm AI
-              Engine Direct SDK; pair with a `QnnQuantizer` via `quantizer` for int8/16 HTP (else fp16).
-        soc_model (`str`, *optional*, defaults to `"SM8650"`):
-            QNN only. Target Qualcomm chipset — a `QcomChipset` name (e.g. `"SM8650"`, `"SM8550"`).
+            - `"qnn"` — on-SoC accelerator inference via the Qualcomm QNN backend. QNN serves several
+              accelerators (HTP/NPU, LPAI, the Adreno GPU); this integration currently targets the HTP.
+              Requires the Qualcomm AI Engine Direct SDK; pair with a `QnnQuantizer` via `quantizer`
+              for int8/16 (else fp16). For generative exports, deploy the multi-token `decode` program
+              alone — it serves the prefill step too, and each exported program carries its own full
+              weight copy (programs don't share a QNN context binary), so shipping a separate prefill
+              would double the deployed size.
         alloc_graph_input (`bool`, *optional*, defaults to `True`):
             Whether the memory-planning pass reserves arena memory for graph inputs. When `False`,
             the runtime uses the caller-provided input buffers directly instead of copying into the
@@ -199,7 +205,6 @@ class ExecutorchConfig(DynamoConfig):
     export_format: ExportFormat = ExportFormat.EXECUTORCH
 
     backend: str = "xnnpack"
-    soc_model: str = "SM8650"
     alloc_graph_input: bool = True
     alloc_graph_output: bool = True
     alloc_mutable_buffers: bool = True

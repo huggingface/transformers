@@ -191,10 +191,17 @@ def _get_edge_compile_config() -> EdgeCompileConfig:
 def _lower_to_edge(exported_program, partitioner, backend):
     """Lower an (optionally quantized) program to the edge dialect and delegate it to ``partitioner``.
 
-    QNN can't reuse the generic path: its HTP compiler needs its own edge-transform passes — notably
-    `FoldQDQ`, which folds the PT2E `quantize`/`dequantize` ops into HTP-native quant encodings. Without
+    QNN can't reuse the generic path yet: its compiler needs its own edge-transform passes — notably
+    `FoldQDQ`, which folds the PT2E `quantize`/`dequantize` ops into QNN-native quant encodings. Without
     them the raw dequantize ops reach the backend and graph finalization fails (`op validation ... 3110`).
     Mirror `to_edge_transform_and_lower_to_qnn` for QNN; every other backend uses the plain path.
+
+    This reaches into `executorch.backends.qualcomm._passes`, which is internal and churning — kept because
+    neither exit exists as of ExecuTorch 1.4.1: the public `to_edge_transform_and_lower_to_qnn` takes a
+    module and re-exports it (discarding this exporter's already-patched `ExportedProgram` and its dynamic
+    shapes), and the migration consolidating QNN's passes into the standard `to_edge_transform_and_lower`
+    flow (pytorch/executorch#20738) has not landed in a release. TODO: once it lands, drop this branch and
+    lower QNN through the plain path below like every other backend.
     """
     if backend == "qnn":
         from executorch.backends.qualcomm._passes.qnn_pass_manager import QnnPassManager
@@ -301,9 +308,12 @@ def prepare_for_qnn(model: PreTrainedModel, sample_inputs: dict[str, Any], confi
             layer.cumulative_length = cumulative_length.reshape(1)
 
     backend_options = generate_htp_compiler_spec(use_fp16=config.quantizer is None)
-    compiler_specs = generate_qnn_executorch_compiler_spec(
-        soc_model=getattr(QcomChipset, config.soc_model), backend_options=backend_options
-    )
+    # The chipset has one authority: a `QnnQuantizer` chooses per-op quantization by chipset, so a quantized
+    # export compiles for the chipset the graph was annotated for. An fp16 export has no quantizer to ask
+    # and chipset only tunes the HTP compiler, so a recent default serves it.
+    quantizer_soc = getattr(getattr(config.quantizer, "soc_info", None), "soc_model", None)
+    soc_model = quantizer_soc if quantizer_soc is not None else QcomChipset.SM8650
+    compiler_specs = generate_qnn_executorch_compiler_spec(soc_model=soc_model, backend_options=backend_options)
     partitioner = [QnnPartitioner(compiler_specs)]
     return model, _make_contiguous(sample_inputs), partitioner
 

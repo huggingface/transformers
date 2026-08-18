@@ -261,8 +261,9 @@ class QuantizationExportTest(unittest.TestCase):
     @pytest.mark.torch_export_test
     def test_calibration_dataset_captured_per_component(self):
         """One generate-level `calibration_dataset` becomes a separate calibration set for each generation
-        component: running it through `generate` captures every component's real inputs, giving one set per
-        component (each the same length as the input dataset) so each calibrates on its own activations."""
+        component: running it through `generate` captures every component's real inputs, so each calibrates
+        on its own activations. A multi-token decode graph serves the prefill step too, so its set also
+        carries each sample's prefill inputs — one graph, encodings covering both distributions."""
         model = self._tiny_model()
         calibration = [
             {"input_ids": torch.randint(0, 64, (1, n)), "attention_mask": torch.ones(1, n, dtype=torch.long)}
@@ -272,7 +273,8 @@ class QuantizationExportTest(unittest.TestCase):
             model, copy.deepcopy(calibration), generation_config=self._generation_config(), multi_token_decode=True
         )
         self.assertEqual(set(captured), {"prefill", "decode"})
-        self.assertTrue(all(len(inputs) == len(calibration) for inputs in captured.values()))
+        self.assertEqual(len(captured["prefill"]), len(calibration))
+        self.assertEqual(len(captured["decode"]), 2 * len(calibration))
 
     @parameterized.expand([("dense",), ("moe",), ("ssm",)])
     @pytest.mark.torch_export_test
@@ -372,12 +374,14 @@ class QuantizationExportTest(unittest.TestCase):
                 self.skipTest("requires the Qualcomm QNN SDK")
             if family == "moe":
                 # QNN's quantizer annotates the int64 routing `arange` for per-tensor quant, which its
-                # `quantize_per_tensor` meta kernel rejects (float-only). A QNN HTP limitation, not ours.
+                # `quantize_per_tensor` meta kernel rejects (float-only; the 1.4.1 dtype guard covers
+                # constant tensors, not activations). Re-verified on ExecuTorch 1.4.1.
                 self.skipTest("QNN HTP quantizer can't annotate MoE integer routing tensors")
             if family == "ssm":
-                # QNN's `CanonicalizeConv` pass unconditionally `unsqueeze`s a conv bias, which Mamba2's
-                # bias-less grouped `conv1d` doesn't have. A QNN HTP limitation, not ours.
-                self.skipTest("QNN HTP `CanonicalizeConv` pass can't lower Mamba's bias-less conv1d")
+                # 1.4.1 fixed `CanonicalizeConv` for Mamba's bias-less `conv1d`, but the graph now trips
+                # the next pass over: `LiftConstantScalarOperands` fails on the quantized SSM graph.
+                # Re-verified on ExecuTorch 1.4.1.
+                self.skipTest("QNN HTP `LiftConstantScalarOperands` pass fails on Mamba's quantized graph")
 
         et_backend = "qnn" if quantizer == "qnn" else "xnnpack"
         model, inputs = self._quantization_target(family)

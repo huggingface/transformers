@@ -42,7 +42,7 @@ import enum
 import functools
 import inspect
 import sys
-from collections.abc import MutableMapping
+from collections.abc import Iterable, MutableMapping
 from typing import Any
 
 from ..utils import logging
@@ -935,7 +935,7 @@ def decompose_for_generation(
 
 def capture_calibration_inputs(
     model: PreTrainedModel,
-    calibration_dataset: list[dict[str, Any]],
+    calibration_dataset: Iterable[dict[str, Any]],
     generation_config: Any = None,
     multi_token_decode: bool = False,
 ) -> dict[str, list[dict]]:
@@ -955,4 +955,10 @@ def capture_calibration_inputs(
         )
         for name, (_submodel, forward_inputs) in components.items():
             calibration.setdefault(name, []).append(forward_inputs)
+        # A multi-token decode graph serves the prefill step too, so its quantization encodings must cover
+        # both distributions — calibrated on decode steps alone, the KV-cache values it writes at prefill
+        # would be quantized under encodings observed only on single-token steps. Feed it the prefill
+        # capture as one more calibration sample (the same forward, so the same kwarg schema).
+        if multi_token_decode and "prefill" in components and "decode" in components:
+            calibration["decode"].append(components["prefill"][1])
     return calibration

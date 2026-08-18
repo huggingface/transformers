@@ -752,12 +752,13 @@ Each target runtime expects its own quantizer. Whichever you pass, the quantized
 | --- | --- | --- |
 | PyTorch inductor, or ONNX Runtime (QDQ) | `X86InductorQuantizer` | `torchao.quantization.pt2e.quantizer.x86_inductor_quantizer` |
 | ExecuTorch XNNPACK backend | `XNNPACKQuantizer` | `executorch.backends.xnnpack.quantizer.xnnpack_quantizer` |
-| ExecuTorch QNN backend (Qualcomm HTP) | `QnnQuantizer` | `executorch.backends.qualcomm.quantizer.quantizer` |
+| ExecuTorch QNN backend (Qualcomm SoC accelerators; HTP today) | `QnnQuantizer` | `executorch.backends.qualcomm.quantizer.quantizer` |
 
 ### Calibration
 
-`calibration_dataset` is a list of forward-kwarg dicts run through the prepared graph to gather
-observer statistics. Omit it and the exporter falls back to a single pass over the export's own sample
+`calibration_dataset` is an iterable of forward-kwarg dicts run through the prepared graph to gather
+observer statistics — a plain list, or a `DataLoader` whose batches collate to forward kwargs.
+Omit it and the exporter falls back to a single pass over the export's own sample
 inputs, with a warning (one sample can skew the observed ranges).
 
 For generative models, set `calibration_dataset` on the config you pass to [`~HfExporter.export_for_generation`] and give it generate-style kwargs. Each sample runs through a short `generate`, and every component (`prefill`, `decode`, the encoders) is calibrated on the activations captured for it.
