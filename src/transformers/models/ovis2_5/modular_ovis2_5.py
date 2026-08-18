@@ -358,9 +358,9 @@ class Ovis2_5VisionEncoder(nn.Module):
         hidden_states: torch.Tensor,
         grid_thw: torch.LongTensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        output_hidden_states: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
+        output_hidden_states = kwargs.pop("output_hidden_states", self.config.output_hidden_states)
         spatial_merge_size = self.config.hidden_stride
         spatial_merge_unit = spatial_merge_size**2
         window_index, cu_window_seqlens = get_vision_window_index(
@@ -382,6 +382,8 @@ class Ovis2_5VisionEncoder(nn.Module):
             rotary_cos[window_index].reshape(sequence_length, -1),
             rotary_sin[window_index].reshape(sequence_length, -1),
         )
+        # CODEPATH: AIDC-AI/Ovis2.5-2B and Ovis2.5-9B set `use_rope=True`; `False` supports custom configs
+        # that disable vision RoPE.
         if not self.config.use_rope:
             position_embeddings = (
                 torch.ones_like(position_embeddings[0]),
