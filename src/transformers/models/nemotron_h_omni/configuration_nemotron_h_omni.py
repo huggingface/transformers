@@ -56,6 +56,11 @@ class NemotronH_Omni_Reasoning_V3_Config(PreTrainedConfig):
     """
 
     model_type = "nemotron_h_omni"
+    sub_configs = {
+        "vision_config": RadioConfig,
+        "llm_config": NemotronHConfig,
+        "sound_config": ParakeetEncoderConfig,
+    }
     is_composition = True
 
     vision_config: dict | RadioConfig | None = None

@@ -225,6 +225,10 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel, GenerationMixin):
 
         self.sound_context_token_id = config.sound_context_token_id
         if config.sound_config is not None:
+            # ParakeetEncoder has no flash-attention kernel, so it must not inherit a FA2 request
+            # propagated from the parent config through `sub_configs`.
+            if config.sound_config._attn_implementation == "flash_attention_2":
+                config.sound_config._attn_implementation = "sdpa"
             self.sound_projector = NemotronH_Omni_Reasoning_V3SoundProjector(config.sound_config, llm_hidden_size)
         else:
             self.sound_projector = None
@@ -233,17 +237,10 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel, GenerationMixin):
 
         self.post_init()
 
-    def _vision_output_kwargs(self, kwargs):
-        # `vision_config` is not reached by the top-level output flags, so forward them explicitly.
-        for flag in ("output_hidden_states", "output_attentions"):
-            kwargs.setdefault(flag, getattr(self.config, flag, None))
-        return kwargs
-
     @can_return_tuple
     def get_image_features(self, pixel_values, image_flags=None, **kwargs):
         # `pixel_values` is a list when tiles of differing sizes are batched; each runs the tower
         # separately and their projected tokens are concatenated.
-        kwargs = self._vision_output_kwargs(kwargs)
         tiles = list(pixel_values) if isinstance(pixel_values, (list, tuple)) else [pixel_values]
         last_hidden_states, image_embeds = [], []
         for tile in tiles:
@@ -268,7 +265,6 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel, GenerationMixin):
 
     @can_return_tuple
     def get_video_features(self, pixel_values_videos, **kwargs):
-        kwargs = self._vision_output_kwargs(kwargs)
         pixel_values_videos = pixel_values_videos.to(dtype=self.vision_model.config.torch_dtype)
         temporal_patch_dim = self.video_temporal_patch_dim
         num_frames, channels, height, width = pixel_values_videos.shape
