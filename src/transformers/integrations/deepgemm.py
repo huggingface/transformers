@@ -800,6 +800,16 @@ def setup_megamoe_weights(module: torch.nn.Module) -> None:
     # Force int8 view: the kernel's interleave reshape/empty_like/copy_ is bit-level.
     gate_up_w = to_local(module.gate_up_proj.data).view(torch.int8).contiguous()
     down_w = to_local(module.down_proj.data).view(torch.int8).contiguous()
+    # `transform_weights_for_mega_moe` does its own gate/up interleave, so it takes the stacked
+    # [gate; up] form. Modules loaded for this backend are never interleaved (see
+    # `interleave_gate_up_after_loading`); reaching here interleaved means the backend was switched
+    # after load, and silently re-permuting would be a wrong answer rather than a failure.
+    if module.has_gate and getattr(module, "_gate_up_interleaved", False):
+        raise RuntimeError(
+            "Mega MoE needs gate|up stacked, but this module was loaded interleaved for the triton "
+            "experts backend. Switching to 'deepgemm_megamoe' after load is not supported — set "
+            "`_experts_implementation` before loading the model."
+        )
 
     intermediate_hidden = module.intermediate_dim
     num_local_experts = module.num_experts

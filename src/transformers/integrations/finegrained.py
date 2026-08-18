@@ -1010,9 +1010,19 @@ def interleave_gate_up_after_loading(model: nn.Module, *, already_interleaved: b
     """
     if already_interleaved:
         return
+    # Backends that pack gate|up themselves (DeepGEMM Mega MoE) take the stacked form, so skip
+    # them rather than interleaving and having them undo it. `_gate_up_interleaved` records what
+    # the module actually holds, since `set_experts_implementation` can switch backends after
+    # load — a consumer must read the flag, not re-derive the backend.
+    impl = getattr(getattr(model, "config", None), "_experts_implementation", None)
+    packs_gate_up_itself = impl in ("deepgemm_megamoe",)
     for module in model.modules():
         if not isinstance(module, FineGrainedExperts) or not module.has_gate:
             continue
+        if packs_gate_up_itself:
+            module._gate_up_interleaved = False
+            continue
+        module._gate_up_interleaved = True
         for name in ("gate_up_proj", "gate_up_proj_scale_inv", "gate_up_proj_bias"):
             t = getattr(module, name, None)
             if t is None or t.device.type == "meta":
