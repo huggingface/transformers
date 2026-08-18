@@ -52,7 +52,7 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
     accepts_precomputed_kwargs,
@@ -69,9 +69,6 @@ from ...vision_utils import (
 )
 from ..auto.modeling_auto import AutoModel
 from .configuration_qwen4_exp import Qwen4ExpConfig, Qwen4ExpTextConfig, Qwen4ExpVisionConfig
-
-
-logger = logging.get_logger(__name__)
 
 
 class Qwen4ExpVisionRotaryEmbedding(nn.Module):
@@ -1419,16 +1416,6 @@ class Qwen4ExpPreTrainedModel(PreTrainedModel):
             init.zeros_(module.weight)
         elif isinstance(module, Qwen4ExpPLELayer):
             init.zeros_(module.conv1d.weight)
-
-    def _valid_auto_compile_criteria(self, model_kwargs, generation_config):
-        if self.config.get_text_config().indexer_n_heads is not None:
-            if generation_config.compile_config is not None:
-                logger.warning_once(
-                    "Qwen4-Exp QSA uses data-dependent token selection, so automatic generation compilation "
-                    "is disabled."
-                )
-            return False
-        return GenerationMixin._valid_auto_compile_criteria(self, model_kwargs, generation_config)
 
 
 class Qwen4ExpVisionMLP(nn.Module):

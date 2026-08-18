@@ -22,7 +22,6 @@ from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
-from ...generation import GenerationMixin
 from ...integrations import use_kernelized_func
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import (
@@ -972,16 +971,6 @@ class Qwen4ExpPreTrainedModel(Qwen3_5MoePreTrainedModel):
             init.zeros_(module.weight)
         elif isinstance(module, Qwen4ExpPLELayer):
             init.zeros_(module.conv1d.weight)
-
-    def _valid_auto_compile_criteria(self, model_kwargs, generation_config):
-        if self.config.get_text_config().indexer_n_heads is not None:
-            if generation_config.compile_config is not None:
-                logger.warning_once(
-                    "Qwen4-Exp QSA uses data-dependent token selection, so automatic generation compilation "
-                    "is disabled."
-                )
-            return False
-        return GenerationMixin._valid_auto_compile_criteria(self, model_kwargs, generation_config)
 
 
 class Qwen4ExpVisionModel(Qwen3_5MoeVisionModel):
