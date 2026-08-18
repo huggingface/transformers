@@ -70,8 +70,8 @@ class Ovis2_5Processor(ProcessorMixin):
             videos = [] if isinstance(videos, (list, tuple)) and len(videos) == 0 else make_batched_videos(videos)
         return images, text, videos, None
 
-    def validate_inputs(self, images=None, text=None, videos=None, audio=None, **kwargs):
-        super().validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)
+    def validate_inputs(self, images=None, text=None, videos=None, **kwargs):
+        super().validate_inputs(images=images, text=text, videos=videos, **kwargs)
 
         image_count = len(images) if images is not None else 0
         video_count = len(videos) if videos is not None else 0
