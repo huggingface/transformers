@@ -532,6 +532,7 @@ class Ovis2_5VisionModel(Ovis2_5PreTrainedModel):
     config: Ovis2_5VisionConfig
     main_input_name = "pixel_values"
     input_modalities = ("image", "video")
+    _input_embed_layer = "patch_embedding"
     _can_record_outputs = {
         "hidden_states": OutputRecorder(
             Ovis2_5VisionHiddenStateRecorder,
@@ -551,9 +552,6 @@ class Ovis2_5VisionModel(Ovis2_5PreTrainedModel):
         head_dim = config.hidden_size // config.num_attention_heads
         self.rotary_pos_emb = Ovis2_5VisionRotaryEmbedding(head_dim // 2)
         self.post_init()
-
-    def get_input_embeddings(self) -> nn.Module:
-        return self.embeddings.patch_embedding
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)

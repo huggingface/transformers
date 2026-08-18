@@ -273,7 +273,14 @@ class Ovis2_5VisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         model = Ovis2_5VisionModel(config)
-        self.assertIsInstance(model.get_input_embeddings(), torch.nn.Module)
+        replacement = torch.nn.Conv2d(
+            config.num_channels,
+            config.hidden_size,
+            kernel_size=config.patch_size,
+            stride=config.patch_size,
+        )
+        model.set_input_embeddings(replacement)
+        self.assertIs(model.get_input_embeddings(), replacement)
         self.assertIsNone(model.get_output_embeddings())
 
     # Packed patch rows must stay aligned with grid_thw when the comparison batch is expanded.
