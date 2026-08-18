@@ -825,7 +825,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
         )
         self.assertIn("DynamicSlidingWindowLayer", str(generate_outputs.past_key_values))
 
-        # If we manually specify the cache implementation = "hybrid", it will use the static sliding window cache
+        # Even if we manually specify cache_implementation="hybrid", it will still use the dynamic sliding window cache
         generate_outputs = model.generate(
             **model_inputs,
             max_new_tokens=2,
@@ -833,4 +833,4 @@ class Gemma3IntegrationTest(unittest.TestCase):
             return_dict_in_generate=True,
             cache_implementation="hybrid",
         )
-        self.assertNotIn("DynamicSlidingWindowLayer", str(generate_outputs.past_key_values))
+        self.assertIn("DynamicSlidingWindowLayer", str(generate_outputs.past_key_values))
