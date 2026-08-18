@@ -195,11 +195,11 @@ class Qwen4ExpRMSNorm(nn.Module):
 
 @use_kernel_forward_from_hub("RMSNormGated")
 class Qwen4ExpRMSNormGated(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6, **kwargs):
+    def __init__(self, hidden_size: int, eps: float = 1e-6, activation: str = "silu"):
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
-        self.activation = "silu"
+        self.activation = activation
 
     def forward(self, hidden_states, gate=None):
         input_dtype = hidden_states.dtype
@@ -446,8 +446,9 @@ class Qwen4ExpGatedDeltaNet(nn.Module):
         # Lower bound kept away from 0 so log(A) never becomes -inf
         A = torch.empty(self.num_v_heads).uniform_(0.01, 16)
         self.A_log = nn.Parameter(torch.log(A))
-
-        self.norm = Qwen4ExpRMSNormGated(self.head_v_dim, eps=self.layer_norm_epsilon)
+        self.norm = Qwen4ExpRMSNormGated(
+            self.head_v_dim, eps=self.layer_norm_epsilon, activation=config.output_gate_type or config.hidden_act
+        )
         self.out_proj = nn.Linear(self.value_dim, self.hidden_size, bias=False)
 
         self.layer_type = config.layer_types[layer_idx]
@@ -456,7 +457,6 @@ class Qwen4ExpGatedDeltaNet(nn.Module):
         self.in_proj_z = nn.Linear(self.hidden_size, self.value_dim, bias=False)
         self.in_proj_b = nn.Linear(self.hidden_size, self.num_v_heads, bias=False)
         self.in_proj_a = nn.Linear(self.hidden_size, self.num_v_heads, bias=False)
-        self.norm.activation = config.output_gate_type or config.hidden_act
 
     @force_accelerate_hooks("conv1d")
     def forward(

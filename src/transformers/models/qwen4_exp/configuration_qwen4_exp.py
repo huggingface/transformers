@@ -38,8 +38,6 @@ class Qwen4ExpTextConfig(PreTrainedConfig):
         Number of key heads used in linear attention layers.
     linear_num_value_heads (`int`, *optional*, defaults to 32):
         Number of value heads used in linear attention layers.
-    output_gate_type (`str`, *optional*):
-        Activation used by the output gate of linear attention. If unset, `hidden_act` is used.
     hc_count (`int`, *optional*, defaults to 4):
         Number of residual streams used by the hyper-connections.
     hc_lowrank (`int`, *optional*, defaults to 320):
@@ -61,6 +59,9 @@ class Qwen4ExpTextConfig(PreTrainedConfig):
         Divisor used to pad the combined n-gram embedding vocabulary.
     seed (`int`, *optional*, defaults to 1234):
         Seed used to deterministically derive the per-layer n-gram hash multipliers.
+    split_ngram_parts (`int`, *optional*, defaults to 512):
+        Number of checkpoint shards used for each PLE n-gram embedding table. Loading concatenates the shards into a
+        single runtime embedding, while `save_pretrained` restores the configured sharded layout.
     indexer_n_heads (`int`, *optional*):
         Number of query heads used by the QSA token indexer. Setting this enables QSA on full-attention layers.
     indexer_kv_heads (`int`, *optional*):
@@ -71,9 +72,8 @@ class Qwen4ExpTextConfig(PreTrainedConfig):
         Maximum number of tokens selected from complete compressed blocks for each query.
     indexer_compress_ratio (`int`, *optional*):
         Number of consecutive token keys averaged into one QSA index block.
-    split_ngram_parts (`int`, *optional*, defaults to 512):
-        Number of checkpoint shards used for each PLE n-gram embedding table. Loading concatenates the shards into a
-        single runtime embedding, while `save_pretrained` restores the configured sharded layout.
+    output_gate_type (`str`, *optional*):
+        Activation used by the output gate of linear attention. If unset, `hidden_act` is used.
     """
 
     model_type = "qwen4_exp_text"
