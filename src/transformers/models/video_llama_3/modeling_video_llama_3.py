@@ -25,7 +25,6 @@ import torch
 import torch.nn as nn
 from torch.nn import LayerNorm
 
-from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
@@ -412,12 +411,6 @@ class VideoLlama3PreTrainedModel(PreTrainedModel):
 
     _can_compile_fullgraph = True
     _supports_attention_backend = True
-
-    def _init_weights(self, module):
-        super()._init_weights(module)
-        if isinstance(module, VideoLlama3Qwen2VLVisionRotaryEmbedding):
-            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
-            init.copy_(module.inv_freq, inv_freq)
 
 
 class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):

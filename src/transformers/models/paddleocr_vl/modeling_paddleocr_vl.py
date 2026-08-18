@@ -68,7 +68,6 @@ from .configuration_paddleocr_vl import (
     PaddleOCRTextConfig,
     PaddleOCRVisionConfig,
     PaddleOCRVLConfig,
-    PaddleOCRVLVisionConfig,
 )
 
 
@@ -112,9 +111,9 @@ class PaddleOCRProjector(nn.Module):
 
 
 # Simple axial 2D rope as in sam3/edgetam/etc with same freq of head-dim//2 for H and W
-class PaddleOCRQwen2VLVisionRotaryEmbedding(nn.Module):
+class PaddleOCRVisionRotaryEmbedding(nn.Module):
     @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config: PaddleOCRVLVisionConfig, device=None):
+    def __init__(self, config: PaddleOCRVisionConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -133,7 +132,7 @@ class PaddleOCRQwen2VLVisionRotaryEmbedding(nn.Module):
     @staticmethod
     @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
-        config: PaddleOCRVLVisionConfig, device=None, **kwargs
+        config: PaddleOCRVisionConfig, device=None, **kwargs
     ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
@@ -145,7 +144,7 @@ class PaddleOCRQwen2VLVisionRotaryEmbedding(nn.Module):
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
         base = config.rope_parameters["rope_theta"]
-        dim = getattr(config, "head_dim", None) or config.embed_dim // config.num_attention_heads
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
         spatial_dim = dim // 2
 
         attention_factor = 1.0  # Unused in this type of RoPE
@@ -496,9 +495,6 @@ class PaddleOCRVLPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, PaddleOCRVisionEmbeddings):
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
-        elif isinstance(module, PaddleOCRQwen2VLVisionRotaryEmbedding):
-            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
-            init.copy_(module.inv_freq, inv_freq)
 
 
 @auto_docstring
@@ -858,7 +854,7 @@ class PaddleOCRVisionEncoder(nn.Module):
         self.config = config
         self.layers = nn.ModuleList([PaddleOCRVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
-        self.rotary_pos_emb = PaddleOCRQwen2VLVisionRotaryEmbedding(config)
+        self.rotary_pos_emb = PaddleOCRVisionRotaryEmbedding(config)
 
     # Ignore copy
     @can_return_tuple
@@ -891,9 +887,7 @@ class PaddleOCRVisionEncoder(nn.Module):
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
         )
-        rotary_embeddings = self.rotary_pos_emb(position_ids)
-        rotary_embeddings = rotary_embeddings.repeat(1, 2)
-        position_embeddings = (rotary_embeddings.cos(), rotary_embeddings.sin())
+        position_embeddings = self.rotary_pos_emb(hidden_states, position_ids)
 
         for encoder_layer in self.layers:
             hidden_states = encoder_layer(

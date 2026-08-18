@@ -39,6 +39,7 @@ class Exaone4_5_VisionConfig(PreTrainedConfig):
 
     model_type = "exaone4_5_vision"
     base_config_key = "vision_config"
+    attribute_map = {"num_attention_heads": "num_heads"}
 
     depth: int = 32
     hidden_size: int = 3584
@@ -54,6 +55,8 @@ class Exaone4_5_VisionConfig(PreTrainedConfig):
     fullatt_block_indexes: list[int] | tuple[int, ...] = (7, 15, 23, 31)
     initializer_range: float = 0.02
     num_key_value_heads: int = 8
+    max_position_embeddings: int | None = None
+    rope_parameters: dict | None = None
 
 
 @auto_docstring(checkpoint="LGAI-EXAONE/EXAONE-4.5-33B")

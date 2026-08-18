@@ -148,9 +148,6 @@ class Qwen3OmniMoePreTrainedModel(PreTrainedModel):
         elif isinstance(module, SinusoidsPositionEmbedding):
             position_embeddings = module.compute_default_singular_positional_embedding()
             init.copy_(module.positional_embedding, position_embeddings)
-        elif isinstance(module, Qwen3OmniMoeVisionRotaryEmbedding):
-            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
-            init.copy_(module.inv_freq, inv_freq)
 
 
 def _get_feat_extract_output_lengths(input_lengths, n_window=50):

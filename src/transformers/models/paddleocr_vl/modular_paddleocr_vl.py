@@ -278,6 +278,8 @@ class PaddleOCRVisionConfig(SiglipVisionConfig):
     image_size: int = 384
     patch_size: int = 14
     spatial_merge_size: int = 2
+    max_position_embeddings: int | None = None
+    rope_parameters: dict | None = None
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PaddleOCR-VL")
@@ -350,7 +352,7 @@ class PaddleOCRProjector(nn.Module):
         return torch.cat(processed_features, dim=0)
 
 
-class PaddleOCRQwen2VLVisionRotaryEmbedding(Qwen2VLVisionRotaryEmbedding):
+class PaddleOCRVisionRotaryEmbedding(Qwen2VLVisionRotaryEmbedding):
     pass
 
 
@@ -406,9 +408,6 @@ class PaddleOCRVLPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, PaddleOCRVisionEmbeddings):
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
-        elif isinstance(module, PaddleOCRQwen2VLVisionRotaryEmbedding):
-            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
-            init.copy_(module.inv_freq, inv_freq)
 
 
 class PaddleOCRTextModel(PaddleOCRVLPreTrainedModel, Ernie4_5Model):
@@ -556,7 +555,7 @@ class PaddleOCRVisionEncoderLayer(VideoLlama3VisionEncoderLayer):
 class PaddleOCRVisionEncoder(VideoLlama3VisionEncoder):
     def __init__(self, config: PaddleOCRVisionConfig):
         super().__init__()
-        self.rotary_pos_emb = PaddleOCRQwen2VLVisionRotaryEmbedding(config)
+        self.rotary_pos_emb = PaddleOCRVisionRotaryEmbedding(config)
 
     @can_return_tuple
     @auto_docstring
@@ -588,9 +587,7 @@ class PaddleOCRVisionEncoder(VideoLlama3VisionEncoder):
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
         )
-        rotary_embeddings = self.rotary_pos_emb(position_ids)
-        rotary_embeddings = rotary_embeddings.repeat(1, 2)
-        position_embeddings = (rotary_embeddings.cos(), rotary_embeddings.sin())
+        position_embeddings = self.rotary_pos_emb(hidden_states, position_ids)
 
         for encoder_layer in self.layers:
             hidden_states = encoder_layer(

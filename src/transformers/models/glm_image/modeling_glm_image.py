@@ -437,9 +437,6 @@ class GlmImagePreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
 
-    def _init_weights(self, module):
-        raise AttributeError("Normal super call")
-
 
 @auto_docstring
 @dataclass

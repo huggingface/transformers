@@ -82,7 +82,7 @@ class MLCDRotaryEmbedding(nn.Module):
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
         base = config.rope_parameters["rope_theta"]
-        dim = getattr(config, "head_dim", None) or config.embed_dim // config.num_attention_heads
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
         spatial_dim = dim // 2
 
         attention_factor = 1.0  # Unused in this type of RoPE
@@ -461,9 +461,6 @@ class MLCDPreTrainedModel(PreTrainedModel):
             factor = self.config.initializer_factor
             pos_emb_std = (module.config.hidden_size // module.config.num_attention_heads // 2) ** -0.5 * factor
             init.normal_(module.class_pos_emb, mean=0.0, std=pos_emb_std)
-        elif isinstance(module, MLCDRotaryEmbedding):
-            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
-            init.copy_(module.inv_freq, inv_freq)
 
 
 @auto_docstring(
@@ -485,7 +482,7 @@ class MLCDVisionModel(MLCDPreTrainedModel):
         self.pre_layrnorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self.encoder = MLCDEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-        self.vision_rotary_embedding = MLCDRotaryEmbedding(config.hidden_size // config.num_attention_heads // 2)
+        self.vision_rotary_embedding = MLCDRotaryEmbedding(config)
         self.class_pos_emb = nn.Parameter(torch.randn(1, config.hidden_size // config.num_attention_heads // 2))
         self.post_init()
 
@@ -524,6 +521,9 @@ class MLCDVisionModel(MLCDPreTrainedModel):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
+        hidden_states = self.embeddings(pixel_values)
+        hidden_states = self.pre_layrnorm(hidden_states)
+
         num_patches_height = pixel_values.shape[-2] // self.config.patch_size
         num_patches_width = pixel_values.shape[-1] // self.config.patch_size
         hpos_ids = (
@@ -533,11 +533,12 @@ class MLCDVisionModel(MLCDPreTrainedModel):
             torch.arange(num_patches_width, device=pixel_values.device).unsqueeze(0).expand(num_patches_height, -1)
         )
         pos_ids = torch.stack([hpos_ids.flatten(), wpos_ids.flatten()], dim=-1)
-        position_embeddings = self.vision_rotary_embedding(pos_ids)
-        position_embeddings = torch.cat([self.class_pos_emb, position_embeddings], dim=0)
-
-        hidden_states = self.embeddings(pixel_values)
-        hidden_states = self.pre_layrnorm(hidden_states)
+        position_embeddings = self.vision_rotary_embedding(hidden_states, pos_ids)
+        class_pos_emb = torch.cat([self.class_pos_emb, self.class_pos_emb], dim=-1)
+        position_embeddings = [
+            torch.cat([class_pos_emb.cos(), position_embeddings[0]], dim=0),
+            torch.cat([class_pos_emb.sin(), position_embeddings[1]], dim=0),
+        ]
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,

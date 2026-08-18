@@ -25,7 +25,6 @@ from typing import Any
 import torch
 from torch import nn
 
-from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
@@ -109,7 +108,7 @@ class Exaone4_5_VisionRotaryEmbedding(nn.Module):
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
         base = config.rope_parameters["rope_theta"]
-        dim = getattr(config, "head_dim", None) or config.embed_dim // config.num_attention_heads
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
         spatial_dim = dim // 2
 
         attention_factor = 1.0  # Unused in this type of RoPE
@@ -529,12 +528,6 @@ class Exaone4_5_PreTrainedModel(PreTrainedModel):
     config_class = Exaone4_5_Config
     _keys_to_ignore_on_load_unexpected = [r"mtp.*"]
 
-    def _init_weights(self, module):
-        super()._init_weights(module)
-        if isinstance(module, Exaone4_5_VisionRotaryEmbedding):
-            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
-            init.copy_(module.inv_freq, inv_freq)
-
 
 class Exaone4_5_VisionModel(Exaone4_5_PreTrainedModel):
     config: Exaone4_5_VisionConfig
@@ -606,10 +599,11 @@ class Exaone4_5_VisionModel(Exaone4_5_PreTrainedModel):
         hidden_states = hidden_states.reshape(seq_len, -1)
 
         position_embeddings = self.rotary_pos_emb(hidden_states, position_ids)
-        position_embeddings = position_embeddings.reshape(
-            seq_len // self.spatial_merge_unit, self.spatial_merge_unit, -1
-        )
-        position_embeddings = position_embeddings[window_index, :, :]
+        window_position_embeddings = ()
+        for freq in position_embeddings:
+            freq = freq.reshape(seq_len // self.spatial_merge_unit, self.spatial_merge_unit, -1)
+            freq = freq[window_index, ...].reshape(seq_len, -1)
+            window_position_embeddings += (freq,)
 
         for layer_num, blk in enumerate(self.blocks):
             if layer_num in self.fullatt_block_indexes:
@@ -623,7 +617,7 @@ class Exaone4_5_VisionModel(Exaone4_5_PreTrainedModel):
                 hidden_states,
                 cu_seqlens=cu_seqlens_now,
                 max_seqlen=max_seqlen_now,
-                position_embeddings=position_embeddings,
+                position_embeddings=window_position_embeddings,
                 **kwargs,
             )
 

@@ -92,6 +92,7 @@ class Glm4vVisionConfig(PreTrainedConfig):
 
     model_type = "glm4v_vision"
     base_config_key = "vision_config"
+    attribute_map = {"num_attention_heads": "num_heads"}
 
     depth: int = 24
     hidden_size: int = 1536
@@ -108,6 +109,8 @@ class Glm4vVisionConfig(PreTrainedConfig):
     out_hidden_size: int = 4096
     intermediate_size: int = 13696
     initializer_range: float = 0.02
+    max_position_embeddings: int | None = None
+    rope_parameters: dict | None = None
 
 
 @auto_docstring(checkpoint="zai-org/GLM-4.1V-9B-Thinking")
@@ -623,9 +626,7 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
 
         hidden_states = self.patch_embed(hidden_states)
         hidden_states = self.post_conv_layernorm(hidden_states)
-        rotary_emb = self.rotary_pos_emb(position_ids)
-        emb = torch.cat((rotary_emb, rotary_emb), dim=-1)
-        position_embeddings = (emb.cos(), emb.sin())
+        position_embeddings = self.rotary_pos_emb(hidden_states, position_ids)
 
         seqlens = cu_seqlens[1:] - cu_seqlens[:-1]
         hidden_states = self.embeddings(

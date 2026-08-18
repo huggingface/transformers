@@ -49,6 +49,7 @@ class GlmOcrVisionConfig(PreTrainedConfig):
 
     model_type = "glm_ocr_vision"
     base_config_key = "vision_config"
+    attribute_map = {"num_attention_heads": "num_heads"}
 
     depth: int = 24
     hidden_size: int = 1024
@@ -65,6 +66,8 @@ class GlmOcrVisionConfig(PreTrainedConfig):
     out_hidden_size: int = 1536
     intermediate_size: int = 4096
     initializer_range: float = 0.02
+    max_position_embeddings: int | None = None
+    rope_parameters: dict | None = None
 
 
 @auto_docstring(checkpoint="zai-org/GLM-OCR")

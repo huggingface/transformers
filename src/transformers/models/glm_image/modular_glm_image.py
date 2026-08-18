@@ -342,9 +342,6 @@ class GlmImagePreTrainedModel(Glm4vPreTrainedModel):
     config: GlmImageConfig
     input_modalities = ("image", "text")
 
-    def _init_weights(self, module):
-        raise AttributeError("Normal super call")
-
 
 class GlmImageModelOutputWithPast(Glm4vModelOutputWithPast):
     pass

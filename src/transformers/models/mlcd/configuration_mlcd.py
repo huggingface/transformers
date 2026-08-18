@@ -61,6 +61,8 @@ class MLCDVisionConfig(PreTrainedConfig):
     attention_dropout: float | int = 0.0
     initializer_range: float = 0.02
     initializer_factor: float = 1.0
+    max_position_embeddings: int | None = None
+    rope_parameters: dict | None = None
 
 
 __all__ = ["MLCDVisionConfig"]
