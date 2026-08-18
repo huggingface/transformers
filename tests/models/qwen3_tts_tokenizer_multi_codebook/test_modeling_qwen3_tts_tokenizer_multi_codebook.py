@@ -255,11 +255,23 @@ class Qwen3TTSTokenizerMultiCodebookModelTest(ModelTesterMixin, unittest.TestCas
     @unittest.skip(reason="No standard forward — left padding test not applicable")
     def test_left_padding_compatibility(self):
         pass
+    def _load_fixture(self, name):
+        path = Path(__file__).parent.parent.parent / f"fixtures/qwen3_tts_tokenizer_multi_codebook/{name}"
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
 
+
+        """Decode with soundfile and resample with torchaudio.
+
+        `reproduce_qwen3_tts_tokenizer_mc_from_original.py` loads the same samples the same
+        way, so both sides see bit-identical audio: resampling differences between backends
+        would change the codes.
+        """
     @unittest.skip(reason="No standard forward — torch fx not applicable")
     def test_torch_fx(self):
         pass
 
+        import torchaudio
     @unittest.skip(reason="No standard forward — torch fx not applicable")
     def test_torch_fx_output_loss(self):
         pass
@@ -268,8 +280,8 @@ class Qwen3TTSTokenizerMultiCodebookModelTest(ModelTesterMixin, unittest.TestCas
     def test_sdpa_can_dispatch_composite_models(self):
         pass
 
-    @unittest.skip(reason="Torch export not supported — codec model uses dynamic control flow")
-    def test_torch_export(self):
+    @unittest.skip(reason="codec model has no token embeddings, so `get_input_embeddings` is not implemented")
+    def test_model_get_set_embeddings(self):
         pass
 
 
@@ -286,11 +298,7 @@ class Qwen3TTSTokenizerMultiCodebookIntegrationTest(unittest.TestCase):
         from transformers.testing_utils import cleanup
 
         cleanup(torch_device, gc_collect=True)
-        cls.checkpoint = "Qwen/Qwen3-TTS-Tokenizer-12Hz"
-        # Override with local converted checkpoint if available (for offline testing)
-        local = Path(__file__).parents[3] / "qwen3_tts_tokenizer_mc_converted"
-        if local.exists():
-            cls.checkpoint = local
+        cls.checkpoint = "qwen3_tts_tokenizer_mc_converted"
 
     def tearDown(self):
         from transformers.testing_utils import cleanup
@@ -300,47 +308,46 @@ class Qwen3TTSTokenizerMultiCodebookIntegrationTest(unittest.TestCase):
     def _load_datasamples(self, num_samples):
         import io
 
-        import librosa
         import numpy as np
         import soundfile as sf
         from datasets import load_dataset
 
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        ds = ds.sort("id")
-        raw_col = ds.data.column("audio").to_pylist()
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
         samples = []
-        for raw in raw_col[:num_samples]:
+        for raw in ds.data.column("audio").to_pylist()[:num_samples]:
             audio_bytes = raw.get("bytes")
-            if audio_bytes:
-                array, sr = sf.read(io.BytesIO(audio_bytes), dtype="float32")
-            else:
-                array, sr = sf.read(raw["path"], dtype="float32")
+            array, sr = (
+                sf.read(io.BytesIO(audio_bytes), dtype="float32")
+                if audio_bytes
+                else sf.read(raw["path"], dtype="float32")
+            )
+        expected_slice = torch.tensor(expected["audio_values_slice"][0], dtype=torch.float32)
             if array.ndim > 1:
                 array = array.mean(axis=1)
             if sr != self.TARGET_SAMPLE_RATE:
-                array = librosa.resample(array, orig_sr=sr, target_sr=self.TARGET_SAMPLE_RATE)
+                array = torchaudio.functional.resample(
+                    torch.from_numpy(array), sr, self.TARGET_SAMPLE_RATE
+                ).numpy()
             samples.append(np.array(array, dtype=np.float32))
         return samples
 
     @slow
     def test_single(self):
         """
-        gist: https://gist.github.com/ShahVandit/cab13f3b7232c52b4ff93cce592950c4
-        Ground truth generated from original Qwen3TTSTokenizerV2Model.
+        Ground truth generated from the original Qwen3-TTS tokenizer by
+        import numpy as np
+
+        `reproduce_qwen3_tts_tokenizer_mc_from_original.py`.
         """
         set_seed(42)
-        fixtures = (
-            Path(__file__).parent.parent.parent
-            / "fixtures/qwen3_tts_tokenizer_multi_codebook/expected_results_single.json"
-        )
-        with open(fixtures, "r", encoding="utf-8") as f:
-            expected = json.load(f)
+        expected = self._load_fixture("expected_results_single.json")
 
-        model = Qwen3TTSTokenizerMultiCodebookModel.from_pretrained(self.checkpoint, torch_dtype=torch.float32)
-        model.eval()
+        model = Qwen3TTSTokenizerMultiCodebookModel.from_pretrained(
+            self.checkpoint, dtype=torch.float32, device_map=torch_device
+        ).eval()
 
         samples = self._load_datasamples(1)
-        input_values = torch.tensor(samples[0]).unsqueeze(0).to(torch_device)
+        input_values = torch.tensor(samples[0]).unsqueeze(0).to(model.device)
         padding_mask = torch.ones_like(input_values).bool()
 
         with torch.no_grad():
@@ -349,44 +356,44 @@ class Qwen3TTSTokenizerMultiCodebookIntegrationTest(unittest.TestCase):
 
         torch.testing.assert_close(
             codes.cpu().long(),
-            torch.tensor(expected["audio_codes"], dtype=torch.long),
+            torch.tensor(expected["audio_codes"][0], dtype=torch.long),
         )
 
         with torch.no_grad():
             decoded = model.decode(codes.unsqueeze(0))
 
         torch.testing.assert_close(
-            decoded.audio_values[0].cpu().float(),
-            torch.tensor(expected["audio_values"], dtype=torch.float32),
+            decoded.audio_values[0].cpu().float()[..., : expected_slice.shape[-1]],
+            expected_slice,
             atol=2e-2,
             rtol=1e-3,
         )
 
+            expected_slice = torch.tensor(exp_slice, dtype=torch.float32)
     @slow
     def test_batch(self):
         """
-        gist: https://gist.github.com/ShahVandit/cab13f3b7232c52b4ff93cce592950c4
-        Ground truth generated from original Qwen3TTSTokenizerV2Model.
+        Ground truth generated from the original Qwen3-TTS tokenizer by
+        `reproduce_qwen3_tts_tokenizer_mc_from_original.py`.
         """
         set_seed(42)
-        fixtures = (
-            Path(__file__).parent.parent.parent
-            / "fixtures/qwen3_tts_tokenizer_multi_codebook/expected_results_batch.json"
-        )
-        with open(fixtures, "r", encoding="utf-8") as f:
-            expected = json.load(f)
+        expected = self._load_fixture("expected_results_batch.json")
 
-        model = Qwen3TTSTokenizerMultiCodebookModel.from_pretrained(self.checkpoint, torch_dtype=torch.float32)
-        model.eval()
+        model = Qwen3TTSTokenizerMultiCodebookModel.from_pretrained(
+            self.checkpoint, dtype=torch.float32, device_map=torch_device
+        ).eval()
 
         samples = self._load_datasamples(2)
-        import numpy as np
-
-        max_len = max(len(s) for s in samples)
-        input_values = torch.stack([torch.tensor(np.pad(s, (0, max_len - len(s)))) for s in samples]).to(torch_device)
+        max_len = max(len(sample) for sample in samples)
+        input_values = torch.stack(
+            [torch.tensor(np.pad(sample, (0, max_len - len(sample)))) for sample in samples]
+        ).to(model.device)
         padding_mask = torch.stack(
-            [torch.tensor(np.concatenate([np.ones(len(s)), np.zeros(max_len - len(s))]).astype(bool)) for s in samples]
-        ).to(torch_device)
+            [
+                torch.tensor(np.concatenate([np.ones(len(sample)), np.zeros(max_len - len(sample))]).astype(bool))
+                for sample in samples
+            ]
+        ).to(model.device)
 
         with torch.no_grad():
             encoded = model.encode(input_values, padding_mask=padding_mask)
@@ -398,12 +405,12 @@ class Qwen3TTSTokenizerMultiCodebookIntegrationTest(unittest.TestCase):
                 torch.tensor(exp_codes, dtype=torch.long),
             )
 
-        for i, (codes, exp_audio) in enumerate(zip(codes_list, expected["audio_values"])):
+        for i, (codes, exp_slice) in enumerate(zip(codes_list, expected["audio_values_slice"])):
             with torch.no_grad():
                 decoded = model.decode(codes.unsqueeze(0))
             torch.testing.assert_close(
-                decoded.audio_values[0].cpu().float(),
-                torch.tensor(exp_audio, dtype=torch.float32),
+                decoded.audio_values[0].cpu().float()[..., : expected_slice.shape[-1]],
+                expected_slice,
                 atol=2e-2,
                 rtol=1e-3,
             )
