@@ -79,7 +79,6 @@ class Ovis2_5VisionEmbeddings(nn.Module):
             self.position_embedding = nn.Embedding(self.position_embedding_size**2, config.hidden_size)
 
     def forward(self, pixel_values: torch.FloatTensor, grid_thw: torch.LongTensor) -> torch.Tensor:
-        grid_values = grid_thw.tolist()
         target_dtype = self.patch_embedding.weight.dtype
         pixel_values = pixel_values.view(
             -1,
@@ -89,6 +88,8 @@ class Ovis2_5VisionEmbeddings(nn.Module):
         )
         patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype)).reshape(-1, self.embed_dim)
 
+        # CODEPATH: AIDC-AI/Ovis2.5-2B and Ovis2.5-9B set `preserve_original_pe=True`; `False` supports
+        # custom configs without the learned position embedding.
         if not self.config.preserve_original_pe:
             return patch_embeds
 
@@ -101,7 +102,7 @@ class Ovis2_5VisionEmbeddings(nn.Module):
         interpolated_positions = torch.zeros_like(patch_embeds)
         offset = 0
         hidden_stride = self.config.hidden_stride
-        for grid_t, grid_h, grid_w in grid_values:
+        for grid_t, grid_h, grid_w in grid_thw:
             num_tokens = grid_t * grid_h * grid_w
             position_embedding = nn.functional.interpolate(
                 position_embeddings,
