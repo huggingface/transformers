@@ -112,7 +112,6 @@ import numpy as np
 import torch
 from datasets import Dataset, load_dataset, load_from_disk
 from huggingface_hub import logging as huggingface_hub_logging
-from huggingface_hub import snapshot_download
 from tqdm import tqdm
 
 import transformers
@@ -158,61 +157,28 @@ MAX_LENGTH = 4096
 
 
 def _normalize(string: str | None) -> str:
-    """
-    Normalize a string by removing all non-alphanumeric characters and converting to lowercase.
-
-    Args:
-        string (`str` or `None`): The string to normalize.
-
-    Returns:
-        `str`: The normalized string, or empty string if input is None.
-    """
+    """Strip non-alphanumeric chars and lowercase."""
     return re.sub(r"[^a-z0-9]+", "", string.lower()) if string else ""
 
 
 def _strip_source_for_tokens(code: str) -> str:
-    """
-    Strip docstrings, comments, and import statements from source code.
-
-    Args:
-        code (`str`): The source code to strip.
-
-    Returns:
-        `str`: The stripped source code.
-    """
+    """Strip docstrings, comments, and import lines from source code."""
     code = re.sub(r'("""|\'\'\')(?:.|\n)*?\1', "", code)
     code = re.sub(r"#.*", "", code)
     return "\n".join(line for line in code.splitlines() if not re.match(r"\s*(from|import)\s+", line))
 
 
 def _tokenize(code: str) -> set[str]:
-    """
-    Extract all Python identifiers from source code.
-
-    Args:
-        code (`str`): The source code to tokenize.
-
-    Returns:
-        `set[str]`: A set of all identifiers found in the code.
-    """
+    """Extract all Python identifiers from source code."""
     return set(re.findall(r"\b[a-zA-Z_][a-zA-Z0-9_]*\b", code))
 
 
 def _model_name_from_filename(filename: str) -> str:
-    """
-    Strip a known modeling/configuration/image-processing file prefix and the ``.py``
-    suffix from a filename (or stem), returning the bare model name.
-
-    Args:
-        filename (`str`): A file name or stem, e.g. ``"configuration_llama.py"`` or ``"configuration_llama"``.
-
-    Returns:
-        `str`: The bare model name, e.g. ``"llama"``. Returned unchanged if no known prefix matches.
-    """
+    """Strip a known file prefix and ``.py`` suffix, returning the bare model name."""
     stem = filename.removesuffix(".py")
     for prefix in FILE_PREFIXES:
         if stem.startswith(prefix) and len(stem) > len(prefix):
-            return stem[len(prefix) :]
+            return stem[len(prefix):]
     return stem
 
 
@@ -254,40 +220,24 @@ def _leading_symbol_prefix(name: str) -> str:
 
 def _strip_type_hints(code: str) -> str:
     """Strip type hints from Python code to improve embedding similarity."""
-    # Remove return type hints like `-> Type:` → `:`
     code = re.sub(r"->\s*[^:\n]+:\s*", ": ", code)
-
-    # Remove function parameter type hints: `param: Type` → `param`
     code = re.sub(r"\b([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*[^=,):\n]+(?=\s*[,)=])", r"\1", code)
-
-    # Remove variable annotations: `var: Type = value` → `var = value`
     code = re.sub(r"\b([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*[^=\n]+\s*=", r"\1 =", code)
-
-    # Clean up spacing artifacts
     code = re.sub(r"  +", " ", code)
-    # Clean up spaces around commas
     code = re.sub(r"\s*,\s*", ", ", code)
-    # Clean up spaces before colons (from return type removal)
     code = re.sub(r"\s+:", ":", code)
-    # Clean up spaces around parentheses
     code = re.sub(r"\(\s+", "(", code)
     code = re.sub(r"\s+\)", ")", code)
-    # Clean up spaces around equals
     code = re.sub(r"\s*=\s*", " = ", code)
-    # Remove double spaces again after all replacements
     code = re.sub(r"  +", " ", code)
-
     return code
 
 
 def _normalize_dtype_patterns(code: str) -> str:
     """Normalize dtype save-and-cast patterns for embedding comparison."""
-    # Remove lines that are purely dtype variable assignments (tuple or single)
     code = re.sub(r"^[^\S\n]*\w+\s*,\s*\w+\s*=\s*\w+\.dtype\s*,\s*\w+\.dtype[^\S\n]*$", "", code, flags=re.MULTILINE)
     code = re.sub(r"^[^\S\n]*\w+\s*=\s*\w+\.dtype[^\S\n]*$", "", code, flags=re.MULTILINE)
-    # Remove `.to(dtype=VARNAME)` calls entirely
     code = re.sub(r"\.to\(\s*dtype\s*=\s*\w+\s*\)", "", code)
-    # Remove `.to(VARNAME)` where VARNAME looks like a dtype variable
     code = re.sub(r"\.to\(\s*\w*(?:_type|_dtype|dtype)\s*\)", "", code)
     return code
 
@@ -299,17 +249,7 @@ def _normalize_layer_constructor_kwargs(code: str) -> str:
 
 
 def _sanitize_for_embedding(code: str, model_hint: str | None, symbol_hint: str | None) -> str:
-    """
-    Sanitize code for embedding by replacing model-specific identifiers with generic placeholder.
-
-    Args:
-        code (`str`): The source code to sanitize.
-        model_hint (`str` or `None`): Hint about the model name (e.g., 'llama').
-        symbol_hint (`str` or `None`): Hint about the symbol name (e.g., 'LlamaAttention').
-
-    Returns:
-        `str`: The sanitized code with model-specific identifiers replaced by 'Model'.
-    """
+    """Strip type hints, normalise dtype patterns, and replace model-specific names with 'Model'."""
     base = _strip_source_for_tokens(code)
     base = _strip_type_hints(base)
     base = _normalize_dtype_patterns(base)
@@ -483,15 +423,7 @@ class CodeSimilarityAnalyzer:
         return name if name != stem else None
 
     def _encode_batch(self, texts: list[str]) -> np.ndarray:
-        """
-        Encode a batch of texts into normalized embeddings.
-
-        Args:
-            texts (`list[str]`): List of text strings to encode.
-
-        Returns:
-            `np.ndarray`: Normalized embeddings as a float32 numpy array.
-        """
+        """Encode a batch of texts into L2-normalised float32 embeddings."""
         with self._gpu_lock:
             encoded = self.tokenizer(texts, padding=True, truncation=True, max_length=MAX_LENGTH, return_tensors="pt")
             encoded = {key: value.to(self.device) for key, value in encoded.items()}
@@ -514,15 +446,7 @@ class CodeSimilarityAnalyzer:
         return result
 
     def encode(self, texts: list[str]) -> np.ndarray:
-        """
-        Encode a list of texts into embeddings, processing in batches.
-
-        Args:
-            texts (`list[str]`): List of text strings to encode.
-
-        Returns:
-            `np.ndarray`: Stacked embeddings for all texts.
-        """
+        """Encode texts in batches, returning stacked embeddings."""
         output = []
         num_batches = (len(texts) + BATCH_SIZE - 1) // BATCH_SIZE
         batch_indices = list(range(0, len(texts), BATCH_SIZE))
@@ -582,7 +506,6 @@ class CodeSimilarityAnalyzer:
         self,
         query_embedding_row: np.ndarray,
         self_model_normalized: str,
-        self_name: str,
         k: int,
         dates: dict[str, str] | None = None,
         ignore_models: set[str] | None = None,
@@ -596,17 +519,13 @@ class CodeSimilarityAnalyzer:
         for score, identifier in zip(scores_arr, examples["identifier"]):
             parent_relative_path, match_name = identifier.split(":", 1)
             parent_model = Path(parent_relative_path).parts[0]
-            # Skip non-model directories (e.g. auto, deprecated)
             if parent_model in NON_MODEL_DIRS:
                 continue
-            # Skip if same model
             if self_model_normalized and _normalize(parent_model) == self_model_normalized:
                 continue
-            # Skip if in ignore list
             if _normalize(parent_model) in ignore_models:
                 continue
             output.append((identifier, float(score)))
-        # Sort by score (descending), then by release date (ascending, oldest first) for tie-breaking
         if dates:
 
             def sort_key(item):
@@ -623,23 +542,10 @@ class CodeSimilarityAnalyzer:
         self,
         query_tokens: set[str],
         self_model_normalized: str,
-        self_name: str,
         k: int,
         ignore_models: set[str] | None = None,
     ) -> list[tuple[str, float]]:
-        """
-        Find top-k most similar definitions using Jaccard similarity on token sets.
-
-        Args:
-            query_tokens (`set[str]`): Set of tokens from the query definition.
-            self_model_normalized (`str`): Normalized name of the query model to exclude.
-            self_name (`str`): Name of the query definition to exclude.
-            k (`int`): Number of top results to return.
-            ignore_models (`set[str]` or `None`, *optional*): Set of normalized model IDs to exclude.
-
-        Returns:
-            `list[tuple[str, float]]`: List of (identifier, score) tuples.
-        """
+        """Return top-k (identifier, score) pairs by Jaccard similarity on token sets."""
         assert self.dataset is not None
         if ignore_models is None:
             ignore_models = set()
@@ -647,13 +553,10 @@ class CodeSimilarityAnalyzer:
         for identifier, token_list in zip(self.dataset["identifier"], self.dataset["tokens"]):
             parent_relative_path, match_name = identifier.split(":", 1)
             parent_model = Path(parent_relative_path).parts[0]
-            # Skip non-model directories (e.g. auto, deprecated)
             if parent_model in NON_MODEL_DIRS:
                 continue
-            # Skip only if same model
             if self_model_normalized and _normalize(parent_model) == self_model_normalized:
                 continue
-            # Skip if in ignore list
             if _normalize(parent_model) in ignore_models:
                 continue
             tokens = set(token_list)
@@ -798,7 +701,6 @@ class CodeSimilarityAnalyzer:
             embedding_top = self._topk_embedding(
                 query_embeddings[i],
                 self_model_normalized,
-                query_name,
                 top_k_per_item,
                 dates,
                 ignore_models,
@@ -838,7 +740,7 @@ class CodeSimilarityAnalyzer:
             entry = {"kind": kind, "embedding": embedding_top}
             if use_jaccard:
                 jaccard_top = self._topk_jaccard(
-                    query_tokens_list[i], self_model_normalized, query_name, top_k_per_item, ignore_models
+                    query_tokens_list[i], self_model_normalized, top_k_per_item, ignore_models
                 )
                 jaccard_set = {identifier for identifier, _ in jaccard_top}
                 intersection = set(embedding_set & jaccard_set)
@@ -1091,7 +993,7 @@ def compute_model_class_match_summary(
 
     Returns:
         `(total_classes, ordered_summary)` where `ordered_summary` is a list of dicts with keys
-        `model_id`, `num_matched`, `pct`, `mean_score`, `matched_classes`,
+        `model_id`, `num_matched`, `pct`, `mean_score`, `matched_symbols`,
         in the same order as printed by the CLI
         (models with most matched classes, ancestry-aware, then by mean score).
     """
@@ -1111,20 +1013,11 @@ def compute_model_class_match_summary(
     model_class_matches: dict[str, set[str]] = {}
     model_class_scores: dict[str, dict[str, float]] = {}
     for query_name, data in summary_entries:
-        # For each query class, compute the best score per identifier across
-        # all available metrics (embedding, jaccard) and attribute it to the
-        # corresponding model so the strongest signal drives the summary.
         best_per_identifier: dict[str, float] = {}
-
-        # 1) embedding scores
         for identifier, score in data.get("embedding", []):
             best_per_identifier[identifier] = max(best_per_identifier.get(identifier, float("-inf")), score)
-
-        # 2) jaccard scores (if present); override embedding if higher
         for identifier, score in data.get("jaccard", []):
             best_per_identifier[identifier] = max(best_per_identifier.get(identifier, float("-inf")), score)
-
-        # 3) Aggregate per model using the best score for that identifier
         for identifier, best_score in best_per_identifier.items():
             try:
                 relative_path, _ = identifier.split(":", 1)
@@ -1171,7 +1064,6 @@ def compute_model_class_match_summary(
                 "num_matched": len(matched),
                 "pct": round(pct, 1),
                 "mean_score": round(mean_score, 4),
-                "matched_classes": matched_symbols,
                 "matched_symbols": matched_symbols,
             }
         )
@@ -1180,7 +1072,7 @@ def compute_model_class_match_summary(
 
 def compute_per_class_recommendations(
     results: dict[str, dict],
-    max_models: int = 3,
+    max_models: int = 10,
     min_gain_ratio: float = 0.02,
 ) -> tuple[dict[str, dict], list[str]]:
     """
@@ -1268,19 +1160,32 @@ def compute_per_class_recommendations(
             break
 
     # Rescue pass: for any class whose best score in the selected set lags the
-    # global best match by >= 0.2, pull in that global-best model as an extra parent.
+    # global best match by >= 0.02, pull in that global-best model as an extra parent.
+    # A gap of 2 points on the 0–1 embedding scale is large enough to be architecturally
+    # meaningful (e.g. Qwen2Attention 0.9832 vs Zamba2Attention 0.9612) while small enough
+    # not to flood the output with marginally better one-off parents.
     for query_name, scores in class_model_scores.items():
         if not scores:
             continue
         best_selected_score = max((scores.get(m, 0.0) for m in selected), default=0.0)
         best_global_model = max(scores, key=scores.get)
         best_global_score = scores[best_global_model]
-        if best_global_score - best_selected_score >= 0.2 and best_global_model not in selected:
+        if best_global_score - best_selected_score >= 0.02 and best_global_model not in selected:
             selected.append(best_global_model)
 
     per_class: dict[str, dict] = {}
     for query_name, scores in class_model_scores.items():
-        best_model = max(selected, key=lambda m: scores.get(m, 0.0))
+        best_score_val = max(scores.get(m, 0.0) for m in selected)
+        # `selected` is ordered from highest-coverage (first) to lowest.  When two
+        # models are within _TIE_EPSILON of the best score, prefer the earlier one
+        # so that a high-coverage parent (e.g. qwen3_vl) always wins over a
+        # low-coverage child model (e.g. paddleocr_vl) that only ranks fractionally
+        # higher due to the child-preference boost (× 1.001 ≈ +0.001).
+        _TIE_EPSILON = 0.002
+        best_model = next(
+            (m for m in selected if scores.get(m, 0.0) >= best_score_val - _TIE_EPSILON),
+            max(selected, key=lambda m: scores.get(m, 0.0)),
+        )
         matches = class_model_matches.get(query_name, {})
         per_class[query_name] = {
             "model": best_model,
@@ -1303,6 +1208,12 @@ def main():
         type=str,
         help='Path to a modeling_*.py, configuration_*.py, or image_processing_*.py file. '
         'You can just specify "vits" if you are lazy like me (see --file-type).',
+    )
+    parser.add_argument(
+        "--modeling-dir",
+        type=str,
+        help="Path to a directory containing modeling_*.py, configuration_*.py, and/or "
+        "image_processing_*.py files. All matching files are analyzed and their results merged.",
     )
     parser.add_argument(
         "--file-type",
@@ -1361,14 +1272,29 @@ def main():
             analyzer.push_index_to_hub()
         return
 
-    if not args.modeling_file:
-        raise SystemExit("Provide --modeling-file or use --build")
+    if not args.modeling_file and not args.modeling_dir:
+        raise SystemExit("Provide --modeling-file, --modeling-dir, or use --build")
 
     dates = build_date_data()
-    modeling_file = args.modeling_file
-    if os.sep not in modeling_file:
-        prefix = FILE_TYPE_TO_PREFIX[args.file_type]
-        modeling_file = os.path.join("src", "transformers", "models", modeling_file, f"{prefix}{modeling_file}.py")
+
+    # Resolve the list of files to analyze.
+    if args.modeling_dir:
+        dir_path = Path(args.modeling_dir)
+        if not dir_path.is_dir():
+            raise SystemExit(f"--modeling-dir {dir_path!r} is not a directory")
+        modeling_files = sorted(
+            p for prefix in FILE_PREFIXES for p in dir_path.glob(f"{prefix}*.py")
+        )
+        if not modeling_files:
+            raise SystemExit(f"No modeling/configuration/image_processing files found in {dir_path}")
+        # Use the first file for release-date & prompt-generation bookkeeping.
+        modeling_file = str(modeling_files[0])
+    else:
+        modeling_file = args.modeling_file
+        if os.sep not in modeling_file:
+            prefix = FILE_TYPE_TO_PREFIX[args.file_type]
+            modeling_file = os.path.join("src", "transformers", "models", modeling_file, f"{prefix}{modeling_file}.py")
+        modeling_files = [Path(modeling_file)]
 
     modeling_filename = Path(modeling_file).name
     release_key = _model_name_from_filename(modeling_filename)
@@ -1386,9 +1312,13 @@ def main():
             if model_date > release_date:
                 ignore_models_set.add(_normalize(model_id))
 
-    results = analyzer.analyze_file(
-        Path(modeling_file), top_k_per_item=50, allow_hub_fallback=True, use_jaccard=args.use_jaccard, dates=dates, ignore_models=ignore_models_set
-    )
+    # Analyze all files and merge results (class names are unique across files).
+    results: dict[str, dict] = {}
+    for mf in modeling_files:
+        file_results = analyzer.analyze_file(
+            Path(mf), top_k_per_item=50, allow_hub_fallback=True, use_jaccard=args.use_jaccard, dates=dates, ignore_models=ignore_models_set
+        )
+        results.update(file_results)
 
     aggregate_scores: dict[str, float] = {}
     for data in results.values():
@@ -1450,11 +1380,7 @@ def main():
                 if table_rows:
                     table_rows.append(None)
 
-                symbol_label = query_name
-                if release_date:
-                    symbol_label = f"{symbol_label}"
-
-                symbol_row = (symbol_label,) + ("",) * (len(headers) - 1)
+                symbol_row = (query_name,) + ("",) * (len(headers) - 1)
                 table_rows.append(symbol_row)
                 row_styles.append(ANSI_BOLD)
 
@@ -1585,82 +1511,85 @@ def main():
     # Model summary (classes + functions)
     total_symbols, ordered_summary = compute_model_class_match_summary(results, include_functions=True)
     if total_symbols and ordered_summary:
-            logging.info(_colorize_heading("Model match summary (classes + functions)"))
-            logging.info("")
-            logging.info(f"Total definitions: {total_symbols}")
-            logging.info("")
-            logging.info("Models with most matched definitions:")
-            for item in ordered_summary[:15]:
-                model_id = item["model_id"]
-                num_matched = int(item["num_matched"])
-                pct = float(item["pct"])
-                mean_score = float(item["mean_score"])
-                matched_symbols = ", ".join(str(name) for name in item.get("matched_symbols", []))
-                logging.info(
-                    f"  {model_id:25s}: {num_matched:2d}/{total_symbols} definitions ({pct:5.1f}%), "
-                    f"mean score {mean_score:.4f}, matched definitions [{matched_symbols}]"
-                )
-            logging.info("")
+        logging.info(_colorize_heading("Model match summary (classes + functions)"))
+        logging.info("")
+        logging.info(f"Total definitions: {total_symbols}")
+        logging.info("")
+        logging.info("Models with most matched definitions:")
+        for item in ordered_summary[:15]:
+            model_id = item["model_id"]
+            num_matched = int(item["num_matched"])
+            pct = float(item["pct"])
+            mean_score = float(item["mean_score"])
+            matched_symbols = ", ".join(str(name) for name in item.get("matched_symbols", []))
+            logging.info(
+                f"  {model_id:25s}: {num_matched:2d}/{total_symbols} definitions ({pct:5.1f}%), "
+                f"mean score {mean_score:.4f}, matched definitions [{matched_symbols}]"
+            )
+        logging.info("")
 
-            per_class_recs, selected_models = compute_per_class_recommendations(results)
-            if per_class_recs and selected_models:
-                logging.info(_colorize_heading(
-                    f"Suggested modular inheritance  ({len(selected_models)} parent model(s))"
-                ))
-                logging.info("")
-                groups: dict[str, list[tuple[str, float]]] = {m: [] for m in selected_models}
-                for class_name, rec in per_class_recs.items():
-                    groups[rec["model"]].append((class_name, rec["score"]))
-                for model_id in selected_models:
-                    classes = sorted(groups[model_id], key=lambda x: -x[1])
-                    logging.info(f"  {ANSI_BOLD}{model_id}{ANSI_RESET}  ({len(classes)} classes)")
-                    for class_name, score in classes:
-                        rec = per_class_recs[class_name]
-                        match_name = rec.get("match", "")
-                        pair = f"{class_name} → {match_name} [{score:.4f}]" if match_name else f"{class_name} [{score:.4f}]"
-                        all_scores = rec["all_scores"]
-                        all_matches = rec.get("all_matches", {})
-                        alts = [(m, s, all_matches.get(m, "")) for m, s in all_scores.items() if m != model_id]
-                        # Append the global top-1 embedding match if outside the selected-model set
-                        top_embedding = results.get(class_name, {}).get("embedding", [])
-                        if top_embedding:
-                            top_ident, top_sc = top_embedding[0]
-                            try:
-                                top_rel, top_mn = top_ident.split(":", 1)
-                                top_mid = Path(top_rel).parts[0] if Path(top_rel).parts else None
-                            except ValueError:
-                                top_mid = top_mn = None
-                            if top_mid and top_mid not in all_scores:
-                                alts.append((top_mid, top_sc, top_mn))
-                        alt_str = (
-                            "  alt: " + ", ".join(
-                                f"{m}:{mn} {s:.4f}" if mn else f"{m} {s:.4f}"
-                                for m, s, mn in sorted(alts, key=lambda x: -x[1])
-                            )
-                            if alts else ""
+        per_class_recs, selected_models = compute_per_class_recommendations(results)
+        if per_class_recs and selected_models:
+            logging.info(_colorize_heading(
+                f"Suggested modular inheritance  ({len(selected_models)} parent model(s))"
+            ))
+            logging.info("")
+            groups: dict[str, list[tuple[str, float]]] = {m: [] for m in selected_models}
+            for class_name, rec in per_class_recs.items():
+                groups[rec["model"]].append((class_name, rec["score"]))
+            for model_id in selected_models:
+                classes = sorted(groups[model_id], key=lambda x: -x[1])
+                logging.info(f"  {ANSI_BOLD}{model_id}{ANSI_RESET}  ({len(classes)} classes)")
+                for class_name, score in classes:
+                    rec = per_class_recs[class_name]
+                    match_name = rec.get("match", "")
+                    # Clamp to 1.0: the child-preference boost (× 1.001) is an internal
+                    # ranking artefact, not a real cosine similarity.
+                    disp_score = min(score, 1.0)
+                    pair = f"{class_name} → {match_name} [{disp_score:.4f}]" if match_name else f"{class_name} [{disp_score:.4f}]"
+                    all_scores = rec["all_scores"]
+                    all_matches = rec.get("all_matches", {})
+                    alts = [(m, min(s, 1.0), all_matches.get(m, "")) for m, s in all_scores.items() if m != model_id]
+                    top_embedding = results.get(class_name, {}).get("embedding", [])
+                    if top_embedding:
+                        top_ident, top_sc = top_embedding[0]
+                        try:
+                            top_rel, top_mn = top_ident.split(":", 1)
+                            top_mid = Path(top_rel).parts[0] if Path(top_rel).parts else None
+                        except ValueError:
+                            top_mid = top_mn = None
+                        if top_mid and top_mid not in all_scores:
+                            alts.append((top_mid, top_sc, top_mn))
+                    alts = [(m, s, mn) for m, s, mn in alts if s >= disp_score * 0.9]
+                    alt_str = (
+                        "  alt: " + ", ".join(
+                            f"{m}:{mn} {s:.4f}" if mn else f"{m} {s:.4f}"
+                            for m, s, mn in sorted(alts, key=lambda x: -x[1])
                         )
-                        logging.info(f"    {pair:75s}{alt_str}")
-                    logging.info("")
+                        if alts else ""
+                    )
+                    logging.info(f"    {pair:75s}{alt_str}")
+                logging.info("")
 
-            if args.generate_prompt:
-                _, prompt_summary = compute_model_class_match_summary(results, include_functions=False)
-                summary_for_prompt = prompt_summary if prompt_summary else ordered_summary
-                prompt = generate_modular_prompt(
-                    modeling_file=Path(modeling_file),
-                    ordered_summary=summary_for_prompt,
-                    results=results,
-                    models_root=analyzer.models_root,
-                    per_class_recs=per_class_recs,
-                    selected_models=selected_models,
-                )
-                if args.generate_prompt == "__AUTO__":
-                    model_name = _model_name_from_filename(Path(modeling_file).stem)
-                    output_path = Path(modeling_file).with_name(f"{model_name}_MODULAR_PROMPT")
-                    output_path.write_text(prompt, encoding="utf-8")
-                    logging.info("Wrote prompt to %s", output_path)
-                else:
-                    Path(args.generate_prompt).write_text(prompt, encoding="utf-8")
-                    logging.info("Wrote prompt to %s", args.generate_prompt)
+        if args.generate_prompt:
+            _, prompt_summary = compute_model_class_match_summary(results, include_functions=False)
+            summary_for_prompt = prompt_summary if prompt_summary else ordered_summary
+            prompt = generate_modular_prompt(
+                modeling_file=Path(modeling_file),
+                ordered_summary=summary_for_prompt,
+                results=results,
+                models_root=analyzer.models_root,
+                per_class_recs=per_class_recs,
+                selected_models=selected_models,
+            )
+            if args.generate_prompt == "__AUTO__":
+                model_name = _model_name_from_filename(Path(modeling_file).stem)
+                output_path = Path(modeling_file).with_name(f"{model_name}_MODULAR_PROMPT")
+                output_path.write_text(prompt, encoding="utf-8")
+                logging.info("Wrote prompt to %s", output_path)
+            else:
+                Path(args.generate_prompt).write_text(prompt, encoding="utf-8")
+                logging.info("Wrote prompt to %s", args.generate_prompt)
 
 
 def generate_modular_prompt(
@@ -1726,32 +1655,14 @@ Matched classes:
 """
     else:
         # Fallback: single-model path.
-        top_base = ordered_summary[0]["model_id"] if ordered_summary else None
         top_summary = ordered_summary[0] if ordered_summary else {}
-        top_num_matched = int(top_summary.get("num_matched", 0)) if top_summary else 0
-        top_pct = float(top_summary.get("pct", 0.0)) if top_summary else 0.0
-        top_matched_classes = [str(c) for c in top_summary.get("matched_classes", [])] if top_summary else []
-        top_matched_class_set = set(top_matched_classes)
+        top_base = top_summary.get("model_id")
+        top_num_matched = int(top_summary.get("num_matched", 0))
+        top_pct = float(top_summary.get("pct", 0.0))
 
         single_class_lines: list[str] = []
         for query_name, data in results.items():
             if data.get("kind", "function") != "class":
-                continue
-            if query_name in top_matched_class_set and top_base is not None:
-                # Find the specific matched class name in top_base
-                best_match_name = ""
-                best_score = float("-inf")
-                for identifier, score in data.get("embedding", []):
-                    try:
-                        relative_path, match_name = identifier.split(":", 1)
-                    except ValueError:
-                        continue
-                    mid = Path(relative_path).parts[0] if Path(relative_path).parts else None
-                    if mid == top_base and score > best_score:
-                        best_score = score
-                        best_match_name = match_name
-                ref = f"`{top_base}.{best_match_name}`" if best_match_name else f"`{top_base}`"
-                single_class_lines.append(f"- `{query_name}` → base on {ref} (score {best_score:.4f})")
                 continue
             best_score = float("-inf")
             best_match_name = ""
