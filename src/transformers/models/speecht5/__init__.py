@@ -18,6 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
+    from .audio_processing_numpy_speecht5 import *
+    from .audio_processing_speecht5 import *
     from .configuration_speecht5 import *
     from .feature_extraction_speecht5 import *
     from .modeling_speecht5 import *
