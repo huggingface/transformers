@@ -256,6 +256,11 @@ diff = '''
 [rules.TRF016]
 description = "do_* flags declared on a processor class must be referenced by overridden preprocess/_preprocess."
 default_enabled = true
+# Allowlist inherited unchanged from the base pin (0.1.2), so this PR changes no TRF001-TRF019 behavior.
+# Both entries are the same shape: `do_convert_rgb` is declared on the video processor
+# (`video_processing_kimi_k25.py:98`, `video_processing_minimax_m3_vl.py:45`) but never read by the
+# `_preprocess` override, so only the model owner can say whether the flag is dead or the override lost a
+# step. Left to the follow-ups with the two owners.
 allowlist_models = ["kimi_k25", "minimax_m3_vl"]
 
 [rules.TRF016.explanation]
@@ -308,6 +313,12 @@ diff = '''
 [rules.TRF018]
 description = "_init_weights overrides should call super()._init_weights(module), except modular-file sentinels."
 default_enabled = true
+# Allowlist inherited unchanged from the base pin (0.1.2). 15 of the 16 call the base implementation as
+# `PreTrainedModel._init_weights(module)` instead of `super()._init_weights(module)` -- the form a modular
+# file needs, since `super()` there resolves to the inherited model, not to `PreTrainedModel`. The rule only
+# recognizes the `super()` spelling (459 files use it, these 15 the other), reported upstream as
+# huggingface/transformers-mlinter#27. `radio` is the one real case: it never calls the base implementation.
+# Kept as-is so no pre-existing rule changes behavior in this PR.
 allowlist_models = ["cosmos3_omni", "diffusion_gemma", "eomt_dinov3", "exaone4_5", "gemma4", "higgs_audio_v2", "kimi_k25", "olmo3", "pp_formulanet", "pp_lcnet_v3", "radio", "sam3_lite_text", "sam3_tracker", "slanet", "voxtral_realtime", "xcodec2"]
 
 [rules.TRF018.explanation]
@@ -326,6 +337,10 @@ diff = '''
 [rules.TRF019]
 description = "A processor TypedDict class must not define `_defaults`, instead push them upstream to the hub (`processor_config.json`)."
 default_enabled = true
+# Allowlist inherited unchanged from the base pin (0.1.2). Three entries still fire -- `hunyuan_vl`,
+# `kosmos2`, `qwen3_asr` -- and each sets `_defaults` on its processor kwargs class; dropping it means
+# publishing those defaults in `processor_config.json` on the Hub repos first, which is on the checkpoint
+# owners. `blip_2`, `grounding_dino` and `omdet_turbo` are covered by `cutoff_date` and no longer fire.
 allowlist_models = ["blip_2", "grounding_dino", "hunyuan_vl", "kosmos2", "omdet_turbo", "qwen3_asr"]
 cutoff_date = "2026-06-20"
 
@@ -344,6 +359,10 @@ diff = '''
 [rules.TRF020]
 description = "MLA models must isolate the KV LoRA expansion (kv_b_proj) in a dedicated method that forward() calls."
 default_enabled = true
+# `axk2`: false positive. `AXK2Attention.forward` does call `self.expand_kv(k_pass, k_rot)`
+# (`modular_axk2.py:348`), and `expand_kv` is inherited from `DeepseekV32Attention`, landing at
+# `modeling_axk2.py:568`. The rule resolves the base chain only inside the linted file, so the modular
+# file looks like it is missing the method. Same root cause as TRF034, upstream mlinter#27.
 allowlist_models = ["axk2"]
 
 [rules.TRF020.explanation]
@@ -617,6 +636,16 @@ diff = '''
 [rules.TRF034]
 description = "Layer classes held in an nn.ModuleList must subclass GradientCheckpointingLayer."
 default_enabled = true
+# 24 findings over these 16 models, and they split in two.
+# False positive (13 models): the rule resolves a class's base chain only inside the file being linted, so
+# a `modular_*.py` layer inheriting another model's layer looks unpatched while the generated
+# `modeling_*.py` does subclass `GradientCheckpointingLayer` -- checked class by class for cohere_compass,
+# cosmos3_edge, granite_swa, granitemoe_swa, hunyuan_vl, kimi_k25, muse_glimmer, muse_glimmer_assistant,
+# radio, step3p7, tipsv2, x_clip (both encoder layers), xcodec2 (`Xcodec2DecoderLayer`), so gradient
+# checkpointing does work at runtime. Reported upstream as mlinter#27.
+# Real (5 models), left for a follow-up: `dinov3_convnext` (`DINOv3ConvNextLayer`), `openai` (`Block`),
+# `tipsv2_dpt` (3 DPT head layers), `x_clip` (`PromptGeneratorLayer`), `xcodec2` (`Xcodec2ResNetBlock`) --
+# x_clip and xcodec2 are in both groups, hence still listed.
 allowlist_models = ["cohere_compass", "cosmos3_edge", "dinov3_convnext", "granite_swa", "granitemoe_swa", "hunyuan_vl", "kimi_k25", "muse_glimmer", "muse_glimmer_assistant", "openai", "radio", "step3p7", "tipsv2", "tipsv2_dpt", "x_clip", "xcodec2"]
 cutoff_date = "2026-06-20"
 
@@ -633,6 +662,15 @@ diff = '''
 [rules.TRF035]
 description = "Model files must not silence the linter with `# noqa`."
 default_enabled = true
+# 4 sites, one per model, and deleting the `# noqa` only moves the failure to ruff:
+#   `hunyuan_vl`      `modular_hunyuan_vl.py:53`       F401, `repeat_kv` re-exported for downstream tooling
+#   `step3p7`         `modular_step3p7.py:68`          F401, import that steers the converter to Qwen2-VL's
+#                                                      2-axis vision RoPE instead of MiniMax's 3-axis one
+#   `nemotron3_5_asr` `modular_nemotron3_5_asr.py:340` F821, quoted forward reference to a cache class
+#                                                      defined in another model
+#   `zaya`            `modular_zaya.py:287`            F821, `del op_size` drops a name that only exists in
+#                                                      the inherited parent body
+# The last three are modular-converter mechanics, so the fix belongs upstream, not in the model files.
 allowlist_models = ["hunyuan_vl", "nemotron3_5_asr", "step3p7", "zaya"]
 cutoff_date = "2026-06-20"
 
@@ -681,7 +719,12 @@ diff = '''
 [rules.TRF038]
 description = "Every modeling-family source file needs a matching test file under tests/models/."
 default_enabled = true
-allowlist_models = ["bros", "cohere_asr", "emu3", "exaone4_5", "gemma4", "glm46v", "glm_image", "glmga", "granite_speech", "higgs_audio_v2", "inkling", "kyutai_speech_to_text", "lasr", "minimax_m3_vl", "moonshine_streaming", "nemotron_asr_streaming", "nemotron3_5_asr", "nougat", "paddleocr_vl", "pe_audio", "pe_video", "pe_audio_video", "pi0", "pp_formulanet", "rf_detr", "sam2", "sam2_video", "sam3_tracker", "sam3_tracker_video", "sam3_video", "siglip", "siglip2", "tvp", "video_llava", "vilt", "vjepa2", "voxtral", "voxtral_realtime", "x_clip"]
+# 49 findings over 38 models. Verified during review: only `nougat` and `glmga` genuinely have no test.
+# For the rest the rule pairs each modeling-family source file with its own test file, so a family that
+# has a processor / feature extractor but no dedicated test for it is flagged even though the model itself
+# is tested. Agreed in review: enforce for new models, backfill the old families opportunistically, rather
+# than block this PR on ~30 test files. `sam2` no longer fires and was dropped.
+allowlist_models = ["bros", "cohere_asr", "emu3", "exaone4_5", "gemma4", "glm46v", "glm_image", "glmga", "granite_speech", "higgs_audio_v2", "inkling", "kyutai_speech_to_text", "lasr", "minimax_m3_vl", "moonshine_streaming", "nemotron_asr_streaming", "nemotron3_5_asr", "nougat", "paddleocr_vl", "pe_audio", "pe_video", "pe_audio_video", "pi0", "pp_formulanet", "rf_detr", "sam2_video", "sam3_tracker", "sam3_tracker_video", "sam3_video", "siglip", "siglip2", "tvp", "video_llava", "vilt", "vjepa2", "voxtral", "voxtral_realtime", "x_clip"]
 
 [rules.TRF038.explanation]
 what_it_does = "For each modeling_*.py, processing_*.py, image_processing_*.py, video_processing_*.py and feature_extraction_*.py file, checks that a corresponding tests/models/<model>/test_*.py file exists (e.g. modeling_acme.py -> tests/models/acme/test_modeling_acme.py). configuration_*.py is exempt since config classes are conventionally covered by ConfigTester inside the companion test_modeling_*.py file. modular_*.py files are handled separately: since a single modular file can define modeling, processing, image/video-processor and config classes together, the classes it defines are classified by name suffix (XxxModel/XxxPreTrainedModel/XxxForCausalLM -> modeling, XxxImageProcessor(Fast) -> image processing, XxxProcessor -> processing, XxxVideoProcessor -> video processing, XxxFeatureExtractor -> feature extraction, XxxConfig -> skipped), and one violation is reported per missing test file, not just one per source file. There is no `# trf-ignore: TRF038` support for this rule: use `allowlist_models` if a model genuinely cannot ship a test yet, so the exemption is visible in review."
@@ -724,7 +767,12 @@ diff = '''
 [rules.TRF041]
 description = "A config-gated branch must carry a `# CODEPATH:` note saying which checkpoints diverge."
 default_enabled = true
-allowlist_models = ["axk2", "cohere_compass", "dinov3_vit", "inkling", "kimi_k25", "kosmos2", "mimo_v2_flash", "muse_glimmer", "openai", "timm_backbone", "timm_wrapper", "tipsv2", "vitpose_backbone", "x_clip"]
+# 35 findings over these 13 models: openai(11), dinov3_vit(4), inkling(4), kosmos2(3), axk2(2),
+# cohere_compass(2), timm_backbone(2), timm_wrapper(2), kimi_k25(1), muse_glimmer(1), tipsv2(1),
+# vitpose_backbone(1), x_clip(1). Every one needs its `# CODEPATH:` note to name the checkpoints that take
+# each path, which only the model owner knows -- guessing would be worse than the missing note -- so they
+# go out as per-model follow-ups. `mimo_v2_flash` no longer fires and was dropped.
+allowlist_models = ["axk2", "cohere_compass", "dinov3_vit", "inkling", "kimi_k25", "kosmos2", "muse_glimmer", "openai", "timm_backbone", "timm_wrapper", "tipsv2", "vitpose_backbone", "x_clip"]
 cutoff_date = "2026-06-20"
 
 [rules.TRF041.explanation]
@@ -759,6 +807,12 @@ diff = '''
 [rules.TRF043]
 description = "Attention classes must not declare position_ids in their forward signature; it flows via **kwargs."
 default_enabled = true
+# This rule has no `cutoff_date`, so it fires across the pre-existing corpus: 21 attention classes, one
+# site each. 14 are legacy `modeling_*.py` (chameleon, clvp, codegen, falcon, gpt_neox_japanese, gptj,
+# idefics, idefics2, moshi, persimmon, prophetnet, qwen2_vl, recurrent_gemma, stablelm), 7 are modular
+# (axk2, deepseek_v32, deepseek_v4, gemma4, glm_moe_dsa, ministral3, mistral4). Dropping `position_ids`
+# from a public `forward` signature is a breaking change per model, so each is its own follow-up. Upstream:
+# a `cutoff_date` would express the legacy half better than a list this long.
 allowlist_models = ["axk2", "chameleon", "clvp", "codegen", "deepseek_v32", "deepseek_v4", "falcon", "gemma4", "glm_moe_dsa", "gpt_neox_japanese", "gptj", "idefics", "idefics2", "ministral3", "mistral4", "moshi", "persimmon", "prophetnet", "qwen2_vl", "recurrent_gemma", "stablelm"]
 
 [rules.TRF043.explanation]
@@ -822,6 +876,11 @@ diff = '''
 [rules.TRF046]
 description = "forward must not write module attributes; modules are stateless in forward."
 default_enabled = true
+# No `cutoff_date`: 26 findings over 13 pre-existing models, mostly rotary/position caches written into
+# `self` during `forward` (clvp, codegen, recurrent_gemma, seamless_m4t, udop, wav2vec2_conformer, ...).
+# 9 are legacy `modeling_*.py`, 4 modular (qwen2_5_omni, qwen3_omni_moe, switch_transformers,
+# wav2vec2_conformer). Making a module stateless changes runtime behavior, so each model needs its own PR
+# with its tests re-run.
 allowlist_models = ["clvp", "codegen", "ctrl", "fastspeech2_conformer", "nllb_moe", "qwen2_5_omni", "qwen3_omni_moe", "recurrent_gemma", "seamless_m4t", "switch_transformers", "trocr", "udop", "wav2vec2_conformer"]
 
 [rules.TRF046.explanation]
@@ -909,6 +968,10 @@ diff = '''
 [rules.TRF051]
 description = "Modeling code must not branch on _attn_implementation; the attention interface owns dispatch."
 default_enabled = true
+# No `cutoff_date`: 10 findings over 9 models, in two shapes that need a case-by-case call with the
+# attention-interface owner. Legacy dispatch in plain `modeling_*.py`: decision_transformer, falcon, gpt2.
+# Backend-conditional tensor handling in modular MLA/DSA-style models the interface cannot express yet:
+# axk2, deepseek_v32, diffusion_gemma, glm_moe_dsa, minimax_m3_vl, qwen2_5_omni. Follow-ups either way.
 allowlist_models = ["axk2", "decision_transformer", "deepseek_v32", "diffusion_gemma", "falcon", "glm_moe_dsa", "gpt2", "minimax_m3_vl", "qwen2_5_omni"]
 
 [rules.TRF051.explanation]
@@ -945,6 +1008,10 @@ diff = '''
 [rules.TRF053]
 description = "No manual label shifting in modeling code; self.loss_function owns it."
 default_enabled = true
+# No `cutoff_date`: 37 findings over 15 pre-existing models that slice `shift_logits` / `shift_labels` by
+# hand, 12 of them in legacy `modeling_*.py` and 3 modular (csm, gemma3, modernbert_decoder). Each move to
+# `self.loss_function` has to be checked against that model's own loss -- encoder-decoder models pass
+# already-shifted labels -- so they go one model per PR.
 allowlist_models = ["blip_2", "clvp", "csm", "gemma3", "git", "gpt2", "granite_speech", "imagegpt", "llama4", "mamba", "modernbert_decoder", "moshi", "openai", "qwen2_audio", "xlstm"]
 
 [rules.TRF053.explanation]

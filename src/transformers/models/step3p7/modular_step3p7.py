@@ -788,11 +788,8 @@ class Step3p7MLP(DeepseekV4MLP):
     def __init__(self, config, layer_idx, is_shared_expert=False):
         super().__init__(config)
         self.intermediate_size = config.share_expert_dim if is_shared_expert else config.intermediate_size
-        # CODEPATH: stepfun-ai/Step-3.7-Flash ships a full `swiglu_limits_shared` list, so this reads
-        # the per-layer bound (16 on layers 43-44, `0.0` -- i.e. no clamp -- everywhere else). A config
-        # that omits the list leaves every layer unclamped. `0.0` entries are falsy and mean "no clamp",
-        # hence the `or float("inf")` fallback rather than an `is None` test.
-        # Kept as one statement: the modular converter reorders plain locals relative to `self.*` writes.
+        # CODEPATH: stepfun-ai/Step-3.7-Flash clamps layers 43-44 (bound 16) via `swiglu_limits_shared`;
+        # a `0.0` entry or no list at all means "no clamp", hence the `or float("inf")`.
         self.limit = (config.swiglu_limits_shared[layer_idx] if config.swiglu_limits_shared else 0) or float("inf")
 
     def forward(self, x):
@@ -824,10 +821,8 @@ class Step3p7TopKRouter(MiniMaxM3VLTopKRouter):
 class Step3p7SparseMoeBlock(MiniMaxM3VLSparseMoeBlock):
     def __init__(self, config, layer_idx):
         nn.Module.__init__(self)
-        # CODEPATH: stepfun-ai/Step-3.7-Flash ships a full `swiglu_limits` list, clamping the routed
-        # experts on layers 43-44 (bound 7) and leaving the rest at `0.0`, i.e. unclamped. A config that
-        # omits the list leaves every layer unclamped; `or None` maps those `0.0` entries onto the same
-        # "no clamp" path.
+        # CODEPATH: stepfun-ai/Step-3.7-Flash clamps the routed experts on layers 43-44 (bound 7) via
+        # `swiglu_limits`; a `0.0` entry or no list at all means "no clamp".
         swiglu_limit = (config.swiglu_limits[layer_idx] or None) if config.swiglu_limits else None
         self.gate = Step3p7TopKRouter(config)
         self.experts = Step3p7Experts(config, swiglu_limit=swiglu_limit)
@@ -898,15 +893,10 @@ class Step3p7DecoderLayer(LagunaDecoderLayer):
         self.self_attn.config = config
         self.attention_type = config.layer_types[layer_idx]
 
-        self.mlp = (
-            # CODEPATH: both branches run on stepfun-ai/Step-3.7-Flash -- its `moe_layers_enum` marks
-            # layers 3-44 as `"sparse"`, leaving layers 0-2 `"dense"`. A config whose `mlp_layer_types`
-            # is all `"sparse"` (the fallback when neither `mlp_layer_types` nor `moe_layers_enum` is
-            # set) never builds the dense branch.
-            Step3p7SparseMoeBlock(config, layer_idx)
-            if config.mlp_layer_types[layer_idx] == "sparse"
-            else Step3p7MLP(config, layer_idx)
-        )
+        # CODEPATH: on stepfun-ai/Step-3.7-Flash `moe_layers_enum` marks layers 3-44 `"sparse"` and 0-2
+        # `"dense"`; a config without it is all-sparse and never builds the dense branch.
+        mlp_class = Step3p7SparseMoeBlock if config.mlp_layer_types[layer_idx] == "sparse" else Step3p7MLP
+        self.mlp = mlp_class(config, layer_idx)
 
         self.input_layernorm = Step3p7RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Step3p7RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
