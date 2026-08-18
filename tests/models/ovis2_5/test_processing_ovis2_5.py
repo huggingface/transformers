@@ -131,15 +131,21 @@ class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(processor.image_token_id, processor.video_token_id)
 
     def test_visual_tokens_survive_processor_reload(self):
-        processor = self.get_processor()
+        for named_visual_tokens in (True, False):
+            processor = self.processor_class(
+                image_processor=self.get_component("image_processor"),
+                tokenizer=self._build_tokenizer(named_visual_tokens=named_visual_tokens),
+                video_processor=self.get_component("video_processor"),
+            )
 
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            processor.save_pretrained(tmpdirname)
-            reloaded_processor = self.processor_class.from_pretrained(tmpdirname)
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                processor.save_pretrained(tmpdirname)
+                reloaded_processor = self.processor_class.from_pretrained(tmpdirname)
 
-        for token_attribute in NAMED_VISUAL_TOKENS:
-            self.assertEqual(getattr(reloaded_processor, token_attribute), getattr(processor, token_attribute))
-        self.assertEqual(reloaded_processor.image_token_id, reloaded_processor.video_token_id)
+            for token_attribute in NAMED_VISUAL_TOKENS:
+                self.assertEqual(getattr(reloaded_processor, token_attribute), getattr(processor, token_attribute))
+                self.assertNotIn(token_attribute, processor.to_dict())
+            self.assertEqual(reloaded_processor.image_token_id, reloaded_processor.video_token_id)
 
     def test_image_prompt_expansion_matches_patch_grid(self):
         """An image placeholder expands to boundary tokens and one visual atom per merged patch."""
