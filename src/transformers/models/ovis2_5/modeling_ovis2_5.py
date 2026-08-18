@@ -353,7 +353,6 @@ class Ovis2_5VisionEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.layers = nn.ModuleList([Ovis2_5VisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.hidden_state_recorder = Ovis2_5VisionPatchOrderRestorer()
 
     def forward(
         self,
