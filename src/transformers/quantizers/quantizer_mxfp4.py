@@ -60,7 +60,11 @@ class Mxfp4HfQuantizer(HfQuantizer):
 
                 self.triton_kernels_hub = get_kernel("kernels-community/gpt-oss-triton-kernels", version=1)
             except ImportError:
-                raise ImportError("kernels package is required for MXFP4 quantization")
+                raise ImportError(
+                    "MXFP4 quantization requires the `kernels` package: "
+                    f"Please install a compatible version ({KERNELS_MIN_VERSION} <= version < {KERNELS_MAX_VERSION}), "
+                    f"e.g. `pip install kernels=={KERNELS_MIN_VERSION}`"
+                )
         return self.triton_kernels_hub
 
     def validate_environment(self, *args, **kwargs):
@@ -146,7 +150,11 @@ class Mxfp4HfQuantizer(HfQuantizer):
                 "XPU/CPU requires Triton >= 3.5.0. Please install triton: `pip install triton`"
             )
         elif not kernels_installed:
-            raise ValueError("MXFP4 quantization requires the `kernels` package: `pip install kernels>=0.12.0`")
+            raise ValueError(
+                "MXFP4 quantization requires the `kernels` package: "
+                f"Please install a compatible version ({KERNELS_MIN_VERSION} <= version < {KERNELS_MAX_VERSION}), "
+                f"e.g. `pip install kernels=={KERNELS_MIN_VERSION}`"
+            )
 
         if not self.pre_quantized:
             self._lazy_import_kernels()
@@ -188,14 +196,14 @@ class Mxfp4HfQuantizer(HfQuantizer):
         # if we are using kernels, we can't use the quantized model, since the forward pass is different and needs special handling
         # only CPU kernels can work with pre-quantized models
         device = torch.accelerator.current_accelerator() or torch.device("cpu")
-        if use_kernels and device.type not in ["cpu"]:
+        if use_kernels and device.type != "cpu":
             logger.warning_once(
                 "You are using full precision kernels, we will dequantize the model to bf16. "
                 "To use the quantized model with quantization kernels, please set use_kernels=False"
             )
             self.quantization_config.dequantize = True
 
-        if not use_kernels and device.type in ["cpu"]:
+        if not use_kernels and device.type == "cpu":
             logger.warning_once(
                 "MXFP4 inference on CPU requires use_kernels=True, but use_kernels is disabled. "
                 "We will dequantize the model to bf16. To run MXFP4 natively on CPU, please set use_kernels=True."

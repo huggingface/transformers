@@ -287,17 +287,18 @@ class Mxfp4QuantizerTest(unittest.TestCase):
         self.assertIn("triton", warning_text.lower())
         self.assertTrue(quantizer.quantization_config.dequantize)
 
-    @unittest.skipUnless(torch_device in {"cuda", "xpu"}, "test requires CUDA or XPU")
     def test_error_distinguishes_triton_from_kernels(self):
         """When quantizing without a dependency, ValueError should mention it specifically."""
         from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
+        from transformers.utils.import_utils import KERNELS_MIN_VERSION
 
-        # Missing kernels only -> error should mention kernels
+        # Missing kernels only -> error should mention kernels and min version
         config = Mxfp4Config()
         quantizer = Mxfp4HfQuantizer(config)
         quantizer.pre_quantized = False
 
         with (
+            patch("transformers.quantizers.quantizer_mxfp4.is_accelerate_available", return_value=True),
             patch("transformers.quantizers.quantizer_mxfp4.is_triton_available", return_value=True),
             patch("transformers.quantizers.quantizer_mxfp4.is_kernels_available", return_value=False),
         ):
@@ -305,6 +306,7 @@ class Mxfp4QuantizerTest(unittest.TestCase):
                 quantizer.validate_environment()
 
         self.assertIn("kernels", str(ctx.exception).lower())
+        self.assertIn(KERNELS_MIN_VERSION, str(ctx.exception))
 
         # Missing triton only -> error should mention triton
         config = Mxfp4Config()
@@ -312,6 +314,7 @@ class Mxfp4QuantizerTest(unittest.TestCase):
         quantizer.pre_quantized = False
 
         with (
+            patch("transformers.quantizers.quantizer_mxfp4.is_accelerate_available", return_value=True),
             patch("transformers.quantizers.quantizer_mxfp4.is_triton_available", return_value=False),
             patch("transformers.quantizers.quantizer_mxfp4.is_kernels_available", return_value=True),
         ):
@@ -319,6 +322,20 @@ class Mxfp4QuantizerTest(unittest.TestCase):
                 quantizer.validate_environment()
 
         self.assertIn("triton", str(ctx.exception).lower())
+
+    def test_lazy_import_kernels_missing(self):
+        """When importing kernels fails, ImportError should mention the min version."""
+        from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
+        from transformers.utils.import_utils import KERNELS_MIN_VERSION
+
+        config = Mxfp4Config()
+        quantizer = Mxfp4HfQuantizer(config)
+
+        with patch("transformers.integrations.hub_kernels.get_kernel", side_effect=ImportError):
+            with self.assertRaises(ImportError) as ctx:
+                quantizer._lazy_import_kernels()
+
+        self.assertIn(KERNELS_MIN_VERSION, str(ctx.exception))
 
 
 class Mxfp4IntegrationTest(unittest.TestCase):
