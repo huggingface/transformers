@@ -683,13 +683,6 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
             self.get_input_embeddings()(input_ids) if inputs_embeds is None else inputs_embeds
         )
 
-        image_hidden_states = None
-        video_hidden_states = None
-        visual_features = None
-        visual_indicator_features = None
-        boundary_token_ids = ()
-        indicator_indexes = ()
-        num_visual_inputs = 0
         if pixel_values is not None:
             image_outputs = self.get_image_features(
                 pixel_values=pixel_values,
@@ -698,6 +691,7 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
                 **kwargs,
             )
             image_hidden_states = torch.cat(image_outputs.pooler_output, dim=0)
+            video_hidden_states = None
             visual_features = image_hidden_states
             visual_indicator_features = image_outputs.visual_indicator_features
             boundary_token_ids = (self.config.image_start_token_id, self.config.image_end_token_id)
@@ -711,13 +705,17 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
                 **kwargs,
             )
             video_hidden_states = torch.cat(video_outputs.pooler_output, dim=0)
+            image_hidden_states = None
             visual_features = video_hidden_states
             visual_indicator_features = video_outputs.visual_indicator_features
             boundary_token_ids = (self.config.video_start_token_id, self.config.video_end_token_id)
             indicator_indexes = (2, 3)
             num_visual_inputs = len(video_outputs.pooler_output)
+        else:
+            image_hidden_states = None
+            video_hidden_states = None
 
-        if visual_features is not None and visual_indicator_features is not None:
+        if pixel_values is not None or pixel_values_videos is not None:
             atom_mask = self.get_placeholder_mask(
                 input_ids,
                 inputs_embeds=merged_inputs_embeds,
