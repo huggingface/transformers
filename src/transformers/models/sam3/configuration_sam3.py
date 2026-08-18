@@ -26,8 +26,6 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 @strict
 class Sam3ViTConfig(PreTrainedConfig):
     r"""
-    rope_theta (`float`, *optional*, defaults to 10000.0):
-        Base frequency for RoPE.
     window_size (`int`, *optional*, defaults to 24):
         Window size for windowed attention.
     global_attn_indexes (`list[int]`, *optional*, defaults to `[7, 15, 23, 31]`):

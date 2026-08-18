@@ -752,31 +752,32 @@ class Gemma4VisionRotaryEmbedding(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, ...].float()
-        position_ids_expanded = position_ids.permute(1, 2, 0).float()  # shape (positions, 2, 1)
-
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = position_ids_expanded @ inv_freq_expanded
-            cos = freqs.cos() * self.attention_scaling
-            sin = freqs.sin() * self.attention_scaling
-        cos = self.recomposition_to_2d(cos).to(dtype=x.dtype)
-        sin = self.recomposition_to_2d(sin).to(dtype=x.dtype)
 
+        # Multidimensional positions: [batch, num_patches, ndim]. Apply rotations to each spatial dim separately
+        all_cos, all_sin = [], []
+        for i in range(2):
+            dim_position_ids = position_ids[:, :, i]
+            dim_position_ids_expanded = dim_position_ids[:, None, :].float()
+
+            with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
+                freqs = (inv_freq_expanded.float() @ dim_position_ids_expanded.float()).transpose(1, 2)
+                emb = torch.cat((freqs, freqs), dim=-1)
+                cos = emb.cos() * self.attention_scaling
+                sin = emb.sin() * self.attention_scaling
+            all_cos.append(cos)
+            all_sin.append(sin)
+
+        cos = torch.cat(all_cos, dim=-1).to(dtype=x.dtype)
+        sin = torch.cat(all_sin, dim=-1).to(dtype=x.dtype)
         return cos, sin
-
-    def recomposition_to_2d(self, freq):
-        # in contrast to pixtral, interleave grids as H-H-W-W
-        freq_h, freq_w = freq[:, 0], freq[:, 1]
-        return torch.cat([freq_h, freq_h, freq_w, freq_w], dim=-1)[None, ...]
 
 
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
     x2 = x[..., x.shape[-1] // 2 :]
-    # torch.cat(-x[..., x.shape[-1] // 4: x.shape[-1] // 2], x[..., : x.shape[-1] // 4]) * cos[..., x.shape[-1] // 2]
-    # torch.cat(-x[..., x.shape[-1] // 4 * 3: ], x[..., x.shape[-1] // 2: x.shape[-1] // 4 * 3]) * cos[..., x.shape[-1] // 2: ]
     return torch.cat((-x2, x1), dim=-1)
 
 

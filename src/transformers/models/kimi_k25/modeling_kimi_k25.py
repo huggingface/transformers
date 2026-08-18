@@ -231,22 +231,18 @@ class Kimi_K25VisionRotaryEmbedding(nn.Module):
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         position_ids_expanded = position_ids.transpose(0, 1)[..., None].float()  # (positions, 2, 1)
-        inv_freq_expanded = self.inv_freq[None, ...].float()
+        inv_freq_expanded = (
+            self.inv_freq[None, None, :].float().expand(position_ids_expanded.shape[0], 2, -1).to(x.device)
+        )  # (positions, 2, freq_dim)
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = position_ids_expanded.float() @ inv_freq_expanded
-            cos = freqs.cos() * self.attention_scaling  # (722, 2, 32)
-            sin = freqs.sin() * self.attention_scaling
+            freqs = (inv_freq_expanded.float() * position_ids_expanded.float()).transpose(1, 2).flatten(1)
+            emb = torch.cat([freqs, freqs], dim=-1)
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
 
-        cos = self.recomposition_to_2d(cos)
-        sin = self.recomposition_to_2d(sin)
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
-
-    def recomposition_to_2d(self, freq):
-        # interleave grids as H-W-H-W
-        freq_hw = freq.transpose(1, 2).flatten(1)
-        return torch.cat([freq_hw, freq_hw], dim=-1)
+        return cos, sin
 
 
 class Kimi_K25VisionMLP(nn.Module):
