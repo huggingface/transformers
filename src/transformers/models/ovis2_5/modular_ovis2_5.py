@@ -32,7 +32,7 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import accepts_precomputed_kwargs, merge_with_config_defaults
-from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ...utils.output_capturing import capture_outputs
 from ...vision_utils import (
     get_vision_attention_seqlens,
     get_vision_interpolation_indices_and_weights,
@@ -497,10 +497,7 @@ class Ovis2_5VisionModel(Ovis2_5PreTrainedModel):
     input_modalities = ("image", "video")
     _input_embed_layer = "patch_embedding"
     _can_record_outputs = {
-        "hidden_states": OutputRecorder(
-            Ovis2_5VisionPatchOrderRestorer,
-            capture_initial_hidden_state=False,
-        ),
+        "hidden_states": Ovis2_5VisionEncoderLayer,
         "attentions": Ovis2_5VisionAttention,
     }
 

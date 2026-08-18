@@ -57,7 +57,7 @@ class Ovis2_5VisionModelTester:
         self.hidden_size = 16
         self.intermediate_size = 32
         self.num_hidden_layers = 1
-        self.expected_num_hidden_layers = self.num_hidden_layers
+        self.expected_num_hidden_layers = self.num_hidden_layers + 1
         self.num_attention_heads = 4
         self.seq_length = (self.image_size // self.patch_size) ** 2
         self.is_training = True
@@ -409,7 +409,7 @@ class Ovis2_5VisionModelTest(ModelTesterMixin, unittest.TestCase):
         model = Ovis2_5VisionModel._from_config(config, attn_implementation="eager").to(torch_device).eval()
         check_attention_outputs(model, inputs)
 
-    # Hidden states contain packed patches and one recorded state per encoder layer.
+    # Hidden states contain the packed patch embeddings followed by one state per encoder layer.
     def test_hidden_states_output(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         expected_shape = [int(inputs["grid_thw"].prod(dim=1).sum()), self.model_tester.hidden_size]
@@ -451,16 +451,6 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
     test_all_params_have_gradient = False
     # Inherited VideoLlama3 attention turns packed sequence lengths into a Python list during export.
     test_torch_exportable = False
-
-    # Ovis records encoder-layer states without an initial embedding state.
-    def _image_features_get_expected_num_hidden_states(self, model_tester=None):
-        model_tester = self.model_tester if model_tester is None else model_tester
-        return model_tester.num_hidden_layers
-
-    # Video features use the same encoder-state contract as image features.
-    def _video_features_get_expected_num_hidden_states(self, model_tester=None):
-        model_tester = self.model_tester if model_tester is None else model_tester
-        return model_tester.num_hidden_layers
 
     def test_reverse_loading_mapping(self):
         # The official-key mapping targets the conditional model's `model.*` subtree.
@@ -753,7 +743,7 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         self.assertIsNotNone(outputs.video_hidden_states)
         self.assertIsNone(outputs.image_hidden_states)
 
-    def test_vision_hidden_states_preserve_patch_order(self):
+    def test_vision_hidden_states_do_not_change_outputs(self):
         config = self.model_tester.get_vision_config()
         config.num_hidden_layers = 3
         config.layer_types = ["full_attention"] * config.num_hidden_layers
@@ -780,11 +770,11 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
                 return_dict=True,
             )
 
-        self.assertEqual(len(outputs.hidden_states), config.num_hidden_layers)
+        self.assertEqual(len(outputs.hidden_states), config.num_hidden_layers + 1)
         torch.testing.assert_close(outputs.last_hidden_state, baseline.last_hidden_state)
-        torch.testing.assert_close(outputs.pooler_output, outputs.hidden_states[-1])
+        torch.testing.assert_close(outputs.pooler_output, baseline.pooler_output)
         torch.testing.assert_close(
-            model.post_layernorm(outputs.hidden_states[-1]),
+            model.post_layernorm(outputs.pooler_output),
             outputs.last_hidden_state,
         )
 
