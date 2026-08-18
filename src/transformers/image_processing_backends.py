@@ -220,7 +220,7 @@ class TorchvisionBackend(BaseImageProcessor):
         else:
             interpolation = tvF.InterpolationMode.BILINEAR
         if interpolation == tvF.InterpolationMode.LANCZOS and (
-            not is_torchvision_greater_or_equal("0.27") or image.device != "cpu"
+            not is_torchvision_greater_or_equal("0.27") or image.device.type != "cpu"
         ):
             logger.warning_once(
                 "LANCZOS resample requires torchvision >= 0.27 and processing on CPU; it is not supported on CUDA or for "
