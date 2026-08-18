@@ -53,6 +53,9 @@ class InklingAudioProcessor(TorchAudioBackend):
         log_mode="log10",
         mel_floor=1e-10,
         transpose_features=True,
+        # `_stft` left-pads by `n_fft - hop`, so frame k is centred on sample k*hop and counts as
+        # valid whenever that centre lies in the real audio, even if its window reaches padding.
+        count_partial_frames=True,
     )
 
     def _stft(self, audio, *, spectrogram_config, audio_ranges=None, **kwargs):
@@ -74,10 +77,10 @@ class InklingAudioProcessor(TorchAudioBackend):
     # Pointwise log10 (ADR 0005) and the (batch, frames, mels) layout are the base
     # `log_mode="log10"` / `transpose_features` path; no `_normalize_magnitude` override needed.
 
-    def _get_features_lengths(self, audio_lengths, spectrogram_config, include_center_frame=False):
-        # Inkling emits ceil(audio_length / hop) frames (its right-pad rounds up to a hop multiple).
+    def _get_mask_width(self, padded_length, spectrogram_config) -> int:
+        # Inkling right-pads to a whole number of hops, so it emits ceil(length / hop) frames.
         hop = spectrogram_config.stft_config.hop_length
-        return (audio_lengths + hop - 1) // hop
+        return int((padded_length + hop - 1) // hop)
 
     def _postprocess_output(self, output, audio_ranges=None, feature_ranges=None, **kwargs):
         # No normalization; zero padded frames and emit the legacy keys the model consumes.

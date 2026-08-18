@@ -57,7 +57,6 @@ class Gemma4AudioProcessorNumpy(NumpyAudioBackend):
         mel_floor=0.0,  # no clamp; the log guard is pre_log_offset
         pre_log_offset=1e-3,
         log_mode="log",
-        # float64 mel filters, kept float64 for the numpy matmul; torch casts to float32 at apply time
         computation_dtype="float64",
     )
 
