@@ -19,6 +19,7 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
+    from .audio_processing_inkling import *
     from .configuration_inkling import *
     from .feature_extraction_inkling import *
     from .image_processing_inkling import *
