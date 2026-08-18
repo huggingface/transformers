@@ -388,8 +388,6 @@ class EsmFold2RotaryEmbedding(nn.Module):
         self.num_uid_pairs = atom_config.num_uid_rope_pairs
         self.spatial_rope_base_frequency = atom_config.spatial_rope_base_frequency
         self.uid_rope_base_frequency = atom_config.uid_rope_base_frequency
-        # Channels past the last UID frequency are inactive: they take frequency 0 below, which is an
-        # identity rotation whatever position they read.
         self.num_inactive_channels = (
             atom_config.head_dim // 2 - 3 * self.num_spatial_pairs_per_axis - self.num_uid_pairs
         )
@@ -407,13 +405,9 @@ class EsmFold2RotaryEmbedding(nn.Module):
             self.uid_rope_base_frequency
             ** (torch.arange(0, self.num_uid_pairs, dtype=torch.float32, device=device) / self.num_uid_pairs)
         )
-        # One frequency per half-head channel: the spatial ladder once per spatial axis, then the UID
-        # ladder, then the inactive tail.
         inv_freq = torch.cat(
             [spatial_inv_freq.repeat(3), uid_inv_freq, spatial_inv_freq.new_zeros(self.num_inactive_channels)]
         )
-        # The position each channel rotates, in the same layout: x/y/z each held for a full spatial
-        # ladder, then the space UID for the UID ladder and the inactive tail.
         positions = torch.cat(
             [
                 ref_pos.float().repeat_interleave(self.num_spatial_pairs_per_axis, dim=-1),
@@ -610,13 +604,16 @@ class EsmFold2AtomDecoder(nn.Module):
         return atom_coords
 
 
-class EsmFold2AttentionPairBias(nn.Module):
-    """Gated multi-head attention with pair bias conditioning."""
+class EsmFold2DiffusionAttention(nn.Module):
+    """Gated multi-head self-attention over the token stream, taking a ready-made additive pair bias.
 
-    def __init__(self, config: EsmFold2Config) -> None:
+    Dims come from ``diffusion_config``, the diffusion sub-config resolved for this call site; the bias
+    is built by the owning ``EsmFold2DiffusionLayer``.
+    """
+
+    def __init__(self, config: EsmFold2Config, diffusion_config: EsmFold2DiffusionModuleConfig) -> None:
         super().__init__()
         self.config = config
-        diffusion_config = config.structure_head.diffusion_module
         self.head_dim = diffusion_config.head_dim
         self.scaling = self.head_dim**-0.5
         # No grouped-query attention; identity repeat keeps the attention interface happy.
@@ -628,27 +625,6 @@ class EsmFold2AttentionPairBias(nn.Module):
         self.v_proj = nn.Linear(diffusion_config.hidden_size, diffusion_config.hidden_size, bias=False)
         self.gate_proj = nn.Linear(diffusion_config.hidden_size, diffusion_config.hidden_size, bias=False)
         self.o_proj = nn.Linear(diffusion_config.hidden_size, diffusion_config.hidden_size, bias=False)
-
-        self.pair_norm = EsmFold2LayerNorm(config.pairwise_hidden_size)
-        self.pair_bias_proj = nn.Linear(config.pairwise_hidden_size, diffusion_config.num_attention_heads, bias=False)
-
-    def compute_pair_bias(self, pair_states: Tensor, attention_mask: Tensor | None = None) -> Tensor:
-        """This layer's additive attention bias, ``[batch_size, num_attention_heads, num_queries, num_keys]``:
-        the per-head projection of the normed pair representation with token padding folded in.
-
-        Step-invariant, so it is built once per fold outside the sampling loop and ``forward`` never
-        sees a mask.
-        """
-        pair_bias = self.pair_bias_proj(self.pair_norm(pair_states))
-        attention_bias = pair_bias.permute(0, 3, 1, 2)  # [B, Q, K, H] -> [B, H, Q, K]
-        if attention_mask is not None:
-            # Built at the bias dtype: python scalars would promote the whole bias to fp32.
-            attention_bias = attention_bias + torch.where(
-                attention_mask[:, None, None, :],
-                attention_bias.new_zeros(()),
-                attention_bias.new_full((), torch.finfo(attention_bias.dtype).min),
-            )
-        return attention_bias
 
     def forward(
         self,
@@ -683,37 +659,44 @@ class EsmFold2AttentionPairBias(nn.Module):
         return self.o_proj(attn_output), attn_weights
 
 
-class EsmFold2ConditionedTransition(nn.Module):
-    """Conditioned EsmFold2SwiGLU transition with adaptive layer norm."""
-
-    def __init__(self, config: EsmFold2DiffusionModuleConfig) -> None:
-        super().__init__()
-        self.adaln = EsmFold2AdaptiveLayerNorm(config.hidden_size)
-        self.output_gate = nn.Linear(config.hidden_size, config.hidden_size, bias=True)
-        self.mlp = EsmFold2SwiGLU(config.hidden_size, config.intermediate_size)
-
-    def forward(self, token_hidden_states: Tensor, single_states: Tensor) -> Tensor:
-        hidden_states = self.adaln(token_hidden_states, single_states)
-        hidden_states = self.mlp(hidden_states)
-        return torch.sigmoid(self.output_gate(single_states)) * hidden_states
-
-
 class EsmFold2DiffusionLayer(GradientCheckpointingLayer):
-    """Pair-bias attention and transition, each adaLN-conditioned and gated on the single stream.
+    """adaLN-Zero conditioned pair-bias attention and SwiGLU FFN, each gated on the single stream.
 
-    The adaLN pre-norm and the output gate live here rather than inside the attention, so that
-    ``EsmFold2AttentionPairBias`` sees only normed states and returns an ungated result.
+    Everything that conditions the two halves lives here -- the adaLN pre-norms, the two residual
+    gates and the per-head pair bias -- so ``EsmFold2DiffusionAttention`` sees only normed states and a
+    ready-made bias.
     """
 
     def __init__(self, config: EsmFold2Config) -> None:
         super().__init__()
-        # The pair-bias attention also needs trunk-level widths, so it keeps the full config; the
-        # transition is entirely described by the diffusion sub-config and takes only that.
         diffusion_config = config.structure_head.diffusion_module
-        self.adaln = EsmFold2AdaptiveLayerNorm(diffusion_config.hidden_size)
-        self.attn = EsmFold2AttentionPairBias(config)
-        self.out_gate = nn.Linear(diffusion_config.hidden_size, diffusion_config.hidden_size, bias=True)
-        self.transition = EsmFold2ConditionedTransition(diffusion_config)
+        self.input_layernorm = EsmFold2AdaptiveLayerNorm(diffusion_config.hidden_size)
+        self.self_attn = EsmFold2DiffusionAttention(config, diffusion_config)
+        self.attn_gate = nn.Linear(diffusion_config.hidden_size, diffusion_config.hidden_size, bias=True)
+        self.post_attention_layernorm = EsmFold2AdaptiveLayerNorm(diffusion_config.hidden_size)
+        self.mlp = EsmFold2SwiGLU(diffusion_config.hidden_size, diffusion_config.intermediate_size)
+        self.mlp_gate = nn.Linear(diffusion_config.hidden_size, diffusion_config.hidden_size, bias=True)
+
+        self.pair_norm = EsmFold2LayerNorm(config.pairwise_hidden_size)
+        self.pair_bias_proj = nn.Linear(config.pairwise_hidden_size, diffusion_config.num_attention_heads, bias=False)
+
+    def compute_pair_bias(self, pair_states: Tensor, attention_mask: Tensor | None = None) -> Tensor:
+        """This layer's additive attention bias, ``[batch_size, num_attention_heads, num_queries, num_keys]``:
+        the per-head projection of the normed pair representation with token padding folded in.
+
+        Step-invariant, so it is built once per fold outside the sampling loop and ``forward`` never
+        sees a mask.
+        """
+        pair_bias = self.pair_bias_proj(self.pair_norm(pair_states))
+        attention_bias = pair_bias.permute(0, 3, 1, 2)  # [B, Q, K, H] -> [B, H, Q, K]
+        if attention_mask is not None:
+            # Built at the bias dtype: python scalars would promote the whole bias to fp32.
+            attention_bias = attention_bias + torch.where(
+                attention_mask[:, None, None, :],
+                attention_bias.new_zeros(()),
+                attention_bias.new_full((), torch.finfo(attention_bias.dtype).min),
+            )
+        return attention_bias
 
     def forward(
         self,
@@ -722,9 +705,10 @@ class EsmFold2DiffusionLayer(GradientCheckpointingLayer):
         attention_bias: Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Tensor:
-        attn_output, _ = self.attn(self.adaln(hidden_states, single_states), attention_bias, **kwargs)
-        hidden_states = hidden_states + torch.sigmoid(self.out_gate(single_states)) * attn_output
-        return hidden_states + self.transition(hidden_states, single_states)
+        attn_output, _ = self.self_attn(self.input_layernorm(hidden_states, single_states), attention_bias, **kwargs)
+        hidden_states = hidden_states + torch.sigmoid(self.attn_gate(single_states)) * attn_output
+        mlp_output = self.mlp(self.post_attention_layernorm(hidden_states, single_states))
+        return hidden_states + torch.sigmoid(self.mlp_gate(single_states)) * mlp_output
 
 
 class EsmFold2DiffusionTransformer(nn.Module):
@@ -739,8 +723,8 @@ class EsmFold2DiffusionTransformer(nn.Module):
 
     def compute_pair_biases(self, pair_states: Tensor, attention_mask: Tensor | None = None) -> list[Tensor]:
         """Per-layer additive attention biases, built once per fold outside the sampling loop; see
-        ``EsmFold2AttentionPairBias.compute_pair_bias``."""
-        return [layer.attn.compute_pair_bias(pair_states, attention_mask) for layer in self.layers]
+        ``EsmFold2DiffusionLayer.compute_pair_bias``."""
+        return [layer.compute_pair_bias(pair_states, attention_mask) for layer in self.layers]
 
     def forward(self, token_hidden_states: Tensor, single_states: Tensor, attention_biases: list[Tensor]) -> Tensor:
         hidden_states = token_hidden_states
@@ -1205,13 +1189,10 @@ class EsmFold2OuterProductMean(nn.Module):
         seq_len = left.shape[1]
         chunk_size = self.chunk_size or seq_len
         outer_dim = left.shape[-1]
-        # The right operand is the same for every chunk, so lay it out for the matmul once.
         right_flat = right.permute(0, 2, 1, 3).flatten(2, 3)  # [B, msa_depth, num_tokens * d]
         out_chunks: list[Tensor] = []
         for start in range(0, seq_len, chunk_size):
             window = slice(start, start + chunk_size)
-            # Contract the MSA-depth axis, then split the two flattened axes back apart and move the
-            # c/d pair into the minor position: [B, chunk, num_tokens, c * d].
             outer = left[:, window].transpose(2, 3).flatten(1, 2) @ right_flat
             outer = outer.unflatten(1, (-1, outer_dim)).unflatten(-1, (-1, outer_dim)).transpose(2, 3).flatten(-2)
             if self.divide_outer_before_proj:
@@ -1710,15 +1691,14 @@ class EsmFold2MSAEncoderLayer(EsmFold2PairUpdateLayer):
     def __init__(self, config: EsmFold2Config, layer_idx: int) -> None:
         super().__init__(config)
         self.outer_product_mean = EsmFold2OuterProductMean(config)
-        is_last_layer = layer_idx == config.msa_encoder.num_hidden_layers - 1
-        self.msa_pair_weighted_averaging = None if is_last_layer else EsmFold2MSAPairWeightedAveraging(config)
-        self.msa_transition = (
-            None
-            if is_last_layer
-            else EsmFold2Transition(
+        if layer_idx != config.msa_encoder.num_hidden_layers - 1:
+            self.msa_pair_weighted_averaging = EsmFold2MSAPairWeightedAveraging(config)
+            self.msa_transition = EsmFold2Transition(
                 config.msa_encoder.hidden_size, config.msa_encoder.intermediate_size, config.chunk_size
             )
-        )
+        else:
+            # Final layer is simplified
+            self.msa_pair_weighted_averaging = self.msa_transition = None
 
     def forward(
         self,
@@ -1844,13 +1824,9 @@ class EsmFold2PreTrainedModel(PreTrainedModel):
         elif isinstance(module, EsmFold2AtomLayer):
             init.zeros_(module.adaln_linear.weight)
         elif isinstance(module, EsmFold2DiffusionLayer):
-            if getattr(module, "out_gate", None) is not None:
-                init.zeros_(module.out_gate.weight)
-                init.constant_(module.out_gate.bias, -2.0)
-        elif isinstance(module, EsmFold2ConditionedTransition):
-            if getattr(module, "output_gate", None) is not None:
-                init.zeros_(module.output_gate.weight)
-                init.constant_(module.output_gate.bias, -2.0)
+            for gate in (module.attn_gate, module.mlp_gate):
+                init.zeros_(gate.weight)
+                init.constant_(gate.bias, -2.0)
         elif isinstance(module, EsmFold2DiffusionModule):
             init.zeros_(module.single_to_token.weight)
         elif isinstance(module, EsmFold2LanguageModelEncoder):

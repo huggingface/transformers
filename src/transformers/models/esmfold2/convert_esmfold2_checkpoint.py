@@ -346,16 +346,21 @@ def rename_trunk_keys(trunk: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]
 def _nest_diffusion_layers(renamed: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
     """Merge the two parallel upstream diffusion stacks into one ``EsmFold2DiffusionLayer`` list.
 
-    Upstream keeps ``attn_blocks``/``transition_blocks`` side by side; here a single layer owns the
-    adaLN pre-norm, the attention, the output gate and the transition. Runs after
-    _WEIGHT_KEY_RENAMES so the inserted ``.attn.`` is not caught by its ``.attn.`` -> ``.self_attn.``
-    rule, which has already rewritten the (unrelated) atom-stack attention.
+    Upstream keeps ``attn_blocks``/``transition_blocks`` side by side; here a single layer owns both
+    halves, so each upstream block flattens onto that layer: the two adaLN pre-norms become
+    ``input_layernorm``/``post_attention_layernorm``, the two residual gates become
+    ``attn_gate``/``mlp_gate``, and the transition's SwiGLU becomes the layer's ``mlp``.
     """
-    # adaLN and the output gate belong to the layer; everything else in attn_blocks to its attention.
     substitutions = (
-        (r"\.attn_blocks\.(\d+)\.(adaln|out_gate)\.", r".layers.\1.\2."),
-        (r"\.attn_blocks\.(\d+)\.", r".layers.\1.attn."),
-        (r"\.transition_blocks\.(\d+)\.", r".layers.\1.transition."),
+        (r"\.attn_blocks\.(\d+)\.adaln\.", r".layers.\1.input_layernorm."),
+        (r"\.attn_blocks\.(\d+)\.out_gate\.", r".layers.\1.attn_gate."),
+        # The per-head pair bias is built by the layer, so only the projections proper end up on the
+        # attention.
+        (r"\.attn_blocks\.(\d+)\.(pair_norm|pair_bias_proj)\.", r".layers.\1.\2."),
+        (r"\.attn_blocks\.(\d+)\.", r".layers.\1.self_attn."),
+        (r"\.transition_blocks\.(\d+)\.adaln\.", r".layers.\1.post_attention_layernorm."),
+        (r"\.transition_blocks\.(\d+)\.output_gate\.", r".layers.\1.mlp_gate."),
+        (r"\.transition_blocks\.(\d+)\.", r".layers.\1."),
     )
     out: dict[str, torch.Tensor] = {}
     for key, tensor in renamed.items():
@@ -369,7 +374,7 @@ def _nest_diffusion_layers(renamed: dict[str, torch.Tensor]) -> dict[str, torch.
 
 def _standardize_attention_keys(renamed: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
     """Bring the two multi-head attention modules onto the standard transformers layout: split the
-    pair-bias attention's fused ``kv_proj`` into ``k_proj``/``v_proj`` (k first, matching the model's
+    diffusion attention's fused ``kv_proj`` into ``k_proj``/``v_proj`` (k first, matching the model's
     ``chunk`` order) and rename the attention output projection ``out_proj`` -> ``o_proj``. Scoped to
     the atom ``.self_attn.`` modules and the token ``token_transformer.layers`` so the (non-MHA)
     row-attention-pooling ``out_proj`` is left untouched. Both names are the post-rename spellings,
