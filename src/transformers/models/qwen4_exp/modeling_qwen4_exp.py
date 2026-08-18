@@ -41,11 +41,7 @@ from ...integrations import (
 )
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
-from ...modeling_layers import (
-    GenericForSequenceClassification,
-    GenericForTokenClassification,
-    GradientCheckpointingLayer,
-)
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
@@ -2466,10 +2462,6 @@ class Qwen4ExpForCausalLM(Qwen4ExpPreTrainedModel, GenerationMixin):
         )
 
 
-class Qwen4ExpForTokenClassification(GenericForTokenClassification, Qwen4ExpPreTrainedModel):
-    config: Qwen4ExpConfig
-
-
 @auto_docstring
 @dataclass
 class Qwen4ExpCausalLMOutputWithPast(CausalLMOutputWithPast):
@@ -2784,23 +2776,11 @@ class Qwen4ExpForConditionalGeneration(Qwen4ExpPreTrainedModel, GenerationMixin)
         return input_ids, model_kwargs
 
 
-class Qwen4ExpTextForSequenceClassification(GenericForSequenceClassification, Qwen4ExpPreTrainedModel):
-    config: Qwen4ExpTextConfig
-    input_modalities = ("text",)
-
-
-class Qwen4ExpForSequenceClassification(GenericForSequenceClassification, Qwen4ExpPreTrainedModel):
-    pass
-
-
 __all__ = [
     "Qwen4ExpVisionModel",
     "Qwen4ExpTextModel",
     "Qwen4ExpModel",
     "Qwen4ExpForCausalLM",
-    "Qwen4ExpTextForSequenceClassification",
-    "Qwen4ExpForSequenceClassification",
-    "Qwen4ExpForTokenClassification",
     "Qwen4ExpForConditionalGeneration",
     "Qwen4ExpPreTrainedModel",
 ]

@@ -35,11 +35,8 @@ if is_torch_available():
         Qwen4ExpConfig,
         Qwen4ExpForCausalLM,
         Qwen4ExpForConditionalGeneration,
-        Qwen4ExpForSequenceClassification,
-        Qwen4ExpForTokenClassification,
         Qwen4ExpModel,
         Qwen4ExpTextConfig,
-        Qwen4ExpTextForSequenceClassification,
         Qwen4ExpTextModel,
         Qwen4ExpVisionModel,
         StaticCache,
@@ -106,7 +103,6 @@ class Qwen4ExpTextModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = Qwen4ExpTextModel
         causal_lm_class = Qwen4ExpForCausalLM
-        sequence_classification_class = Qwen4ExpTextForSequenceClassification
 
     def __init__(self, parent):
         super().__init__(parent=parent)
@@ -774,14 +770,10 @@ class Qwen4ExpCompositeModelTest(unittest.TestCase):
             actual = conditional_model.model(input_ids=input_ids, use_cache=False).last_hidden_state
         torch.testing.assert_close(actual, expected)
 
-    def test_vision_and_task_heads(self):
+    def test_vision(self):
         config = self.get_config()
         config.num_labels = 3
-        input_ids = torch.tensor([[7, 8, 9, 10]], device=torch_device)
-        attention_mask = torch.ones_like(input_ids)
 
-        sequence_model = Qwen4ExpForSequenceClassification(config).to(torch_device).eval()
-        token_model = Qwen4ExpForTokenClassification(config).to(torch_device).eval()
         vision_model = Qwen4ExpVisionModel(config.vision_config).to(torch_device).eval()
         flattened_patch_size = (
             config.vision_config.in_channels
@@ -792,12 +784,8 @@ class Qwen4ExpCompositeModelTest(unittest.TestCase):
         grid_thw = torch.tensor([[1, 1, 1]], device=torch_device)
 
         with torch.no_grad():
-            sequence_outputs = sequence_model(input_ids=input_ids, attention_mask=attention_mask)
-            token_outputs = token_model(input_ids=input_ids, attention_mask=attention_mask)
             vision_outputs = vision_model(pixel_values, grid_thw=grid_thw)
 
-        self.assertEqual(sequence_outputs.logits.shape, (1, config.num_labels))
-        self.assertEqual(token_outputs.logits.shape, (1, 4, config.num_labels))
         self.assertEqual(vision_outputs.pooler_output.shape, (1, config.vision_config.out_hidden_size))
 
     def test_composite_auto_classes(self):

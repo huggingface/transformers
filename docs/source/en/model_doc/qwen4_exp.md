@@ -72,18 +72,3 @@ PLE enriches selected decoder layers with layer-specific lexical features derive
 
 [[autodoc]] Qwen4ExpForConditionalGeneration
     - forward
-
-## Qwen4ExpForSequenceClassification
-
-[[autodoc]] Qwen4ExpForSequenceClassification
-    - forward
-
-## Qwen4ExpTextForSequenceClassification
-
-[[autodoc]] Qwen4ExpTextForSequenceClassification
-    - forward
-
-## Qwen4ExpForTokenClassification
-
-[[autodoc]] Qwen4ExpForTokenClassification
-    - forward

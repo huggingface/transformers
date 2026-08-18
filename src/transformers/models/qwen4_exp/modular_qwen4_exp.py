@@ -26,8 +26,6 @@ from ...generation import GenerationMixin
 from ...integrations import use_kernelized_func
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import (
-    GenericForSequenceClassification,
-    GenericForTokenClassification,
     GradientCheckpointingLayer,
 )
 from ...modeling_outputs import BaseModelOutputWithPast
@@ -1223,10 +1221,6 @@ class Qwen4ExpForCausalLM(Qwen3_5MoeForCausalLM):
         )
 
 
-class Qwen4ExpForTokenClassification(GenericForTokenClassification, Qwen4ExpPreTrainedModel):
-    config: Qwen4ExpConfig
-
-
 class Qwen4ExpForConditionalGeneration(Qwen3_5MoeForConditionalGeneration):
     def forward(
         self,
@@ -1267,15 +1261,6 @@ class Qwen4ExpForConditionalGeneration(Qwen3_5MoeForConditionalGeneration):
         )
 
 
-class Qwen4ExpTextForSequenceClassification(GenericForSequenceClassification, Qwen4ExpPreTrainedModel):
-    config: Qwen4ExpTextConfig
-    input_modalities = ("text",)
-
-
-class Qwen4ExpForSequenceClassification(GenericForSequenceClassification, Qwen4ExpPreTrainedModel):
-    pass
-
-
 __all__ = [
     "Qwen4ExpConfig",
     "Qwen4ExpTextConfig",
@@ -1284,9 +1269,6 @@ __all__ = [
     "Qwen4ExpTextModel",
     "Qwen4ExpModel",
     "Qwen4ExpForCausalLM",
-    "Qwen4ExpTextForSequenceClassification",
-    "Qwen4ExpForSequenceClassification",
-    "Qwen4ExpForTokenClassification",
     "Qwen4ExpForConditionalGeneration",
     "Qwen4ExpPreTrainedModel",
 ]
