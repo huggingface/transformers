@@ -69,9 +69,9 @@ logger = logging.get_logger(__name__)
 class WeatherNext2FiLM(nn.Module):
     """Derives a per-channel scale and offset from the global conditioning vector."""
 
-    def __init__(self, config: WeatherNext2Config, hidden_size: int):
+    def __init__(self, config: WeatherNext2Config, num_features: int):
         super().__init__()
-        self.linear = nn.Linear(config.noise_channels, 2 * hidden_size)
+        self.linear = nn.Linear(config.noise_channels, 2 * num_features)
 
     def forward(self, hidden_states: torch.Tensor, conditioning: torch.Tensor) -> torch.Tensor:
         scale, offset = self.linear(conditioning).chunk(2, dim=-1)
@@ -84,10 +84,10 @@ class WeatherNext2FiLM(nn.Module):
 class WeatherNext2ConditionedNorm(nn.Module):
     """LayerNorm with no affine parameters of its own; the FiLM layer owns the scale and offset."""
 
-    def __init__(self, config: WeatherNext2Config, hidden_size: int):
+    def __init__(self, config: WeatherNext2Config, num_features: int):
         super().__init__()
-        self.norm = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps, elementwise_affine=False)
-        self.film = WeatherNext2FiLM(config, hidden_size)
+        self.norm = nn.LayerNorm(num_features, eps=config.layer_norm_eps, elementwise_affine=False)
+        self.film = WeatherNext2FiLM(config, num_features)
 
     def forward(self, hidden_states: torch.Tensor, conditioning: torch.Tensor) -> torch.Tensor:
         return self.film(self.norm(hidden_states), conditioning)
@@ -379,6 +379,9 @@ class WeatherNext2MeshTransformer(nn.Module):
 
     def build_attention_mask(self, attention_mask: torch.Tensor, batch_size: int):
         """Expands the banded per-block mask to the shape the attention interface expects."""
+        # CODEPATH: not a checkpoint difference. Every checkpoint takes both paths depending on the
+        # attention backend it is loaded with, because flex wants a BlockMask where the others want
+        # a dense tensor.
         if self.config._attn_implementation == "flex_attention":
             if self._flex_block_mask is None or self._flex_batch_size != batch_size:
                 self._flex_block_mask = build_flex_block_mask(attention_mask, batch_size)
@@ -517,6 +520,9 @@ class WeatherNext2Model(WeatherNext2PreTrainedModel):
         self.mesh_transformer = WeatherNext2MeshTransformer(config)
         self.mesh_to_grid = WeatherNext2BipartiteGraphNetwork(config, grid_to_mesh=False)
 
+        # CODEPATH: every published checkpoint records its graph sizes, so `from_pretrained` always
+        # takes the first path and the buffers are filled from the weights. The second is for a
+        # config written by hand, where the geometry has to be derived from the mesh and the grid.
         if config.num_grid_to_mesh_edges is not None and config.attention_bandwidth is not None:
             self.allocate_geometry_buffers()
         else:
@@ -679,6 +685,8 @@ class WeatherNext2ForWeatherForecasting(WeatherNext2PreTrainedModel):
         gate = torch.zeros(config.num_output_channels, dtype=torch.bool)
         offset = 0
         for variable, _, levels in config.target_channel_layout:
+            # CODEPATH: only checkpoints predicting `cyclone_exists_gaussian_unit_mode` shift an
+            # output; for every other target the dict is empty and no channel is gated.
             if variable in (config.sigmoid_shifted_outputs or {}):
                 gate[offset : offset + levels] = True
                 shifts[offset : offset + levels] = config.sigmoid_shifted_outputs[variable]
