@@ -593,7 +593,7 @@ def main():
 
     # Potentially load in the weights and states from a previous save
     if args.resume_from_checkpoint:
-        if args.resume_from_checkpoint is not None or args.resume_from_checkpoint != "":
+        if args.resume_from_checkpoint is not None and args.resume_from_checkpoint != "":
             checkpoint_path = args.resume_from_checkpoint
             path = os.path.basename(args.resume_from_checkpoint)
         else:
@@ -665,7 +665,10 @@ def main():
                 outputs = model(**batch)
 
             loss = outputs.loss
-            losses.append(accelerator.gather_for_metrics(loss.repeat(args.per_device_eval_batch_size)))
+            # Use actual batch size (from input_ids) instead of configured batch size
+            # to correctly handle the last partial batch
+            batch_size = batch["input_ids"].size(0)
+            losses.append(accelerator.gather_for_metrics(loss.repeat(batch_size)))
 
         losses = torch.cat(losses)
         try:
