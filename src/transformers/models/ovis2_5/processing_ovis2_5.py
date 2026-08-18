@@ -85,7 +85,7 @@ class Ovis2_5Processor(ProcessorMixin):
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         merge_length = self.image_processor.merge_size**2
         num_visual_tokens = image_inputs["image_grid_thw"][image_idx].prod() // merge_length
-        return self.image_start_token + self.visual_atom_token * num_visual_tokens + self.image_end_token
+        return self.image_start_token + self.image_token * num_visual_tokens + self.image_end_token
 
     def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
         merge_length = self.video_processor.merge_size**2
