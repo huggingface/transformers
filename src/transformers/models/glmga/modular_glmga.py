@@ -30,7 +30,7 @@ from ...processing_utils import ImagesKwargs, VideosKwargs
 from ...utils import TensorType
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 from ..glm46v.configuration_glm46v import Glm46VConfig
-from ..glm46v.image_processing_glm46v import Glm46VImageProcessor, smart_resize
+from ..glm46v.image_processing_glm46v import Glm46VImageProcessor
 from ..glm46v.image_processing_pil_glm46v import Glm46VImageProcessorPil
 from ..glm46v.video_processing_glm46v import Glm46VVideoProcessor
 
@@ -112,24 +112,15 @@ class GlmgaImageProcessor(Glm46VImageProcessor):
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
-            height, width = stacked_images.shape[-2:]
             if do_resize:
-                resized_height, resized_width = smart_resize(
-                    num_frames=temporal_patch_size,
-                    height=height,
-                    width=width,
-                    temporal_factor=temporal_patch_size,
-                    factor=patch_size * merge_size * patch_expand_factor,
-                    min_pixels=size.shortest_edge,
-                    max_pixels=size.longest_edge,
-                )
                 stacked_images = self.resize(
-                    stacked_images,
-                    size=SizeDict(height=resized_height, width=resized_width),
+                    images=stacked_images,
+                    size=size,
                     resample=resample,
+                    factor=patch_size * merge_size * patch_expand_factor,
+                    temporal_factor=temporal_patch_size,
                 )
             resized_images_grouped[shape] = stacked_images
-
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
         grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
@@ -137,52 +128,23 @@ class GlmgaImageProcessor(Glm46VImageProcessor):
         processed_grids = {}
 
         for shape, stacked_images in grouped_images.items():
-            resized_height, resized_width = stacked_images.shape[-2:]
-
-            patches = self.rescale_and_normalize(
+            stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
-            if patches.ndim == 4:  # (B, C, H, W)
-                patches = patches.unsqueeze(1)  # (B, T=1, C, H, W)
-
-            if patches.shape[1] % temporal_patch_size != 0:
-                repeats = patches[:, -1:].repeat(
-                    1, temporal_patch_size - (patches.shape[1] % temporal_patch_size), 1, 1, 1
-                )
-                patches = torch.cat([patches, repeats], dim=1)
-
-            batch_size, t_len, channel = patches.shape[:3]
-            grid_t = t_len // temporal_patch_size
-            grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
-
-            patches = patches.view(
-                batch_size,
-                grid_t,
-                temporal_patch_size,
-                channel,
-                grid_h // merge_size,
-                merge_size,
-                patch_size,
-                grid_w // merge_size,
-                merge_size,
-                patch_size,
-            )
-            # (B, grid_t, gh, gw, mh, mw, C, tp, ph, pw)
-            patches = patches.permute(0, 1, 4, 7, 5, 8, 3, 2, 6, 9)
-
-            flatten_patches = patches.reshape(
-                batch_size,
-                grid_t * grid_h * grid_w,
-                channel * temporal_patch_size * patch_size * patch_size,
+            patches, grid_h, grid_w = self.patchify(
+                stacked_images,
+                patch_size=patch_size,
+                merge_size=merge_size,
+                temporal_patch_size=temporal_patch_size,
             )
 
-            processed_images_grouped[shape] = flatten_patches
-            processed_grids[shape] = [[grid_t, grid_h, grid_w]] * batch_size
+            processed_images_grouped[shape] = patches
+            processed_grids[shape] = [[1, grid_h, grid_w]] * len(stacked_images)
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         processed_grids = reorder_images(processed_grids, grouped_images_index)
 
-        pixel_values = torch.cat(processed_images, dim=0)
+        pixel_values = processed_images[0] if len(processed_images) == 1 else torch.cat(processed_images, dim=0)
         image_grid_thw = torch.tensor(processed_grids)
 
         return BatchFeature(
@@ -218,21 +180,13 @@ class GlmgaImageProcessorPil(Glm46VImageProcessorPil):
         processed_grids = []
 
         for image in images:
-            height, width = image.shape[-2:]
             if do_resize:
-                resized_height, resized_width = smart_resize(
-                    num_frames=temporal_patch_size,
-                    height=height,
-                    width=width,
-                    temporal_factor=temporal_patch_size,
-                    factor=patch_size * merge_size * patch_expand_factor,
-                    min_pixels=size.shortest_edge,
-                    max_pixels=size.longest_edge,
-                )
                 image = self.resize(
                     image,
-                    size=SizeDict(height=resized_height, width=resized_width),
+                    size=size,
                     resample=resample,
+                    factor=patch_size * merge_size,
+                    temporal_factor=temporal_patch_size,
                 )
 
             # Rescale and normalize
@@ -241,51 +195,16 @@ class GlmgaImageProcessorPil(Glm46VImageProcessorPil):
             if do_normalize:
                 image = self.normalize(image, image_mean, image_std)
 
-            # Ensure float32 for patch processing
-            image_array = np.asarray(image, dtype=np.float32)
-            if image_array.ndim == 3:  # (C, H, W)
-                image_array = np.expand_dims(image_array, axis=0)  # (1, C, H, W)
-            if image_array.ndim == 4:  # (B, C, H, W)
-                image_array = np.expand_dims(image_array, axis=1)  # (B, T=1, C, H, W)
-
-            resized_height, resized_width = image_array.shape[-2:]
-
-            if image_array.shape[1] % temporal_patch_size != 0:
-                repeats = np.repeat(
-                    image_array[:, -1:],
-                    temporal_patch_size - (image_array.shape[1] % temporal_patch_size),
-                    axis=1,
-                )
-                image_array = np.concatenate([image_array, repeats], axis=1)
-
-            batch_size, t_len, channel = image_array.shape[:3]
-            grid_t = t_len // temporal_patch_size
-            grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
-
-            patches = image_array.reshape(
-                batch_size,
-                grid_t,
-                temporal_patch_size,
-                channel,
-                grid_h // merge_size,
-                merge_size,
-                patch_size,
-                grid_w // merge_size,
-                merge_size,
-                patch_size,
-            )
-            # (B, grid_t, gh, gw, mh, mw, C, tp, ph, pw)
-            patches = np.transpose(patches, (0, 1, 4, 7, 5, 8, 3, 2, 6, 9))
-
-            flatten_patches = patches.reshape(
-                batch_size,
-                grid_t * grid_h * grid_w,
-                channel * temporal_patch_size * patch_size * patch_size,
+            patches, grid_h, grid_w = self.patchify(
+                image,
+                patch_size=patch_size,
+                merge_size=merge_size,
+                temporal_patch_size=temporal_patch_size,
             )
 
             # Remove batch dimension and append: shape is (seq_len, hidden_dim)
-            processed_images.append(flatten_patches.squeeze(0))
-            processed_grids.append([grid_t, grid_h, grid_w])
+            processed_images.append(patches)
+            processed_grids.append([1, grid_h, grid_w])
 
         # Concatenate all images along sequence dimension: (total_seq_len, hidden_dim)
         pixel_values = np.concatenate(processed_images, axis=0)
@@ -297,6 +216,21 @@ class GlmgaImageProcessorPil(Glm46VImageProcessorPil):
 
 
 class GlmgaVideoProcessorInitKwargs(VideosKwargs, total=False):
+    r"""
+    patch_size (`int`, *optional*, defaults to 14):
+        The spatial patch size of the vision encoder.
+    temporal_patch_size (`int`, *optional*, defaults to 2):
+        The temporal patch size of the vision encoder.
+    merge_size (`int`, *optional*, defaults to 2):
+        The merge size of the vision encoder to llm encoder.
+    max_frames (`int`, *optional*, defaults to 640):
+        The maximum number of frames that can be sampled.
+    max_image_size (`dict`, *optional*, defaults to `28 * 28 * 2 * 55790`):
+        The maximum pixels a video can be resized to.
+    patch_expand_factor (`int`, *optional*, defaults to 1):
+        The factor that will be multiplied to `patch_size` when resizing videos.
+    """
+
     max_image_size: dict[str, int]
     patch_size: int
     temporal_patch_size: int
@@ -404,25 +338,14 @@ class GlmgaVideoProcessor(Glm46VVideoProcessor):
         for shape, stacked_videos in grouped_videos.items():
             if do_convert_rgb:
                 stacked_videos = self.convert_to_rgb(stacked_videos)
-            B, T, C, H, W = stacked_videos.shape
-            num_frames, height, width = T, H, W
             if do_resize:
-                resized_height, resized_width = smart_resize(
-                    num_frames=num_frames,
-                    height=height,
-                    width=width,
-                    temporal_factor=temporal_patch_size,
-                    factor=patch_size * merge_size * patch_expand_factor,
-                    min_pixels=size.shortest_edge,
-                    max_pixels=size.longest_edge,
-                )
-                stacked_videos = stacked_videos.view(B * T, C, H, W)
                 stacked_videos = self.resize(
-                    stacked_videos,
-                    size=SizeDict(height=resized_height, width=resized_width),
+                    videos=stacked_videos,
+                    size=size,
                     resample=resample,
+                    factor=patch_size * merge_size * patch_expand_factor,
+                    temporal_factor=temporal_patch_size,
                 )
-                stacked_videos = stacked_videos.view(B, T, C, resized_height, resized_width)
             resized_videos_grouped[shape] = stacked_videos
         resized_videos = reorder_videos(resized_videos_grouped, grouped_videos_index)
 
@@ -438,37 +361,15 @@ class GlmgaVideoProcessor(Glm46VVideoProcessor):
             stacked_videos = self.rescale_and_normalize(
                 stacked_videos, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
-            patches = stacked_videos
-
-            # Check that videos have `num_frames` divisible by `temporal_patch_size`
-            if patches.shape[1] % temporal_patch_size != 0:
-                repeats = patches[:, -1:].repeat(1, temporal_patch_size - 1, 1, 1, 1)
-                patches = torch.cat([patches, repeats], dim=1)
-            batch_size, grid_t, channel = patches.shape[:3]
-            grid_t = grid_t // temporal_patch_size
-            grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
-
-            patches = patches.view(
-                batch_size,
-                grid_t,
-                temporal_patch_size,
-                channel,
-                grid_h // merge_size,
-                merge_size,
-                patch_size,
-                grid_w // merge_size,
-                merge_size,
-                patch_size,
-            )
-            patches = patches.permute(0, 1, 4, 7, 5, 8, 3, 2, 6, 9)
-            flatten_patches = patches.reshape(
-                batch_size,
-                grid_t * grid_h * grid_w,
-                channel * temporal_patch_size * patch_size * patch_size,
+            patches, grid_t, grid_h, grid_w = self.patchify(
+                stacked_videos,
+                patch_size=patch_size,
+                merge_size=merge_size,
+                temporal_patch_size=temporal_patch_size,
             )
 
-            processed_videos_grouped[shape] = flatten_patches
-            processed_grids[shape] = [[grid_t, grid_h, grid_w]] * batch_size
+            processed_videos_grouped[shape] = patches
+            processed_grids[shape] = [[grid_t, grid_h, grid_w]] * len(stacked_videos)
 
         processed_videos = reorder_videos(processed_videos_grouped, grouped_videos_index)
         processed_grids = reorder_videos(processed_grids, grouped_videos_index)

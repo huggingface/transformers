@@ -19,7 +19,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -66,7 +65,6 @@ class MusicFlamingoConfig(PreTrainedConfig):
     audio_token_id: int = 151669
     projector_hidden_act: str = "gelu"
     projector_bias: bool = True
-    tie_word_embeddings: bool = False
 
     audio_bos_token_id: int = 151670
     audio_eos_token_id: int = 151671

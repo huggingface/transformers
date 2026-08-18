@@ -131,10 +131,67 @@ class ParakeetCTCConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
+@auto_docstring(checkpoint="nvidia/parakeet-rnnt-0.6b")
+@strict
+class ParakeetRNNTConfig(PreTrainedConfig):
+    r"""
+    decoder_hidden_size (`int`, *optional*, defaults to 640):
+        Hidden size of the LSTM prediction network and joint network.
+    num_decoder_layers (`int`, *optional*, defaults to 2):
+        Number of LSTM layers in the prediction network.
+    max_symbols_per_step (`int`, *optional*, defaults to 10):
+        Maximum number of symbols to emit per encoder time step during greedy decoding.
+    encoder_config (`Union[dict, ParakeetEncoderConfig]`, *optional*):
+        The config object or dictionary of the encoder.
+    blank_token_id (`int`, *optional*, defaults to 8192):
+        Blank token id. Different from `pad_token_id` for RNN-T.
+
+    Example:
+    ```python
+    >>> from transformers import ParakeetForRNNT, ParakeetRNNTConfig
+
+    >>> # Initializing a Parakeet RNN-T configuration
+    >>> configuration = ParakeetRNNTConfig()
+
+    >>> # Initializing a model from the configuration
+    >>> model = ParakeetForRNNT(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```
+    """
+
+    model_type = "parakeet_rnnt"
+    sub_configs = {"encoder_config": ParakeetEncoderConfig}
+
+    vocab_size: int = 8193
+    decoder_hidden_size: int = 640
+    num_decoder_layers: int = 2
+    hidden_act: str = "relu"
+    max_symbols_per_step: int = 10
+    encoder_config: dict | PreTrainedConfig | None = None
+    pad_token_id: int = 2
+    blank_token_id: int = 8192
+    is_encoder_decoder: bool = True
+
+    def __post_init__(self, **kwargs):
+        if isinstance(self.encoder_config, dict):
+            self.encoder_config = ParakeetEncoderConfig(**self.encoder_config)
+        elif self.encoder_config is None:
+            self.encoder_config = ParakeetEncoderConfig()
+        self.initializer_range = self.encoder_config.initializer_range
+        super().__post_init__(**kwargs)
+
+
 @auto_docstring(checkpoint="nvidia/parakeet-tdt-0.6b-v3")
 @strict
-class ParakeetTDTConfig(PreTrainedConfig):
+class ParakeetTDTConfig(ParakeetRNNTConfig):
     r"""
+    A TDT (Token-and-Duration Transducer) extends the base RNN-T configuration [`ParakeetRNNTConfig`] with a
+    `durations` field: the joint network gains a duration head (its output width grows from `vocab_size` to
+    `vocab_size + len(durations)`), and during greedy decoding the encoder frame pointer advances by the
+    predicted duration rather than a fixed single frame.
+
     decoder_hidden_size (`int`, *optional*, defaults to 640):
         Hidden size of the LSTM prediction network and joint network.
     num_decoder_layers (`int`, *optional*, defaults to 2):
@@ -165,26 +222,7 @@ class ParakeetTDTConfig(PreTrainedConfig):
     """
 
     model_type = "parakeet_tdt"
-    sub_configs = {"encoder_config": ParakeetEncoderConfig}
-
-    vocab_size: int = 8193
-    decoder_hidden_size: int = 640
-    num_decoder_layers: int = 2
-    hidden_act: str = "relu"
-    max_symbols_per_step: int = 10
     durations: list[int] | tuple[int, ...] = (0, 1, 2, 3, 4)
-    encoder_config: dict | PreTrainedConfig | None = None
-    pad_token_id: int = 2
-    blank_token_id: int = 8192
-    is_encoder_decoder: bool = True
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.encoder_config, dict):
-            self.encoder_config = ParakeetEncoderConfig(**self.encoder_config)
-        elif self.encoder_config is None:
-            self.encoder_config = ParakeetEncoderConfig()
-        self.initializer_range = self.encoder_config.initializer_range
-        super().__post_init__(**kwargs)
 
 
-__all__ = ["ParakeetCTCConfig", "ParakeetEncoderConfig", "ParakeetTDTConfig"]
+__all__ = ["ParakeetCTCConfig", "ParakeetEncoderConfig", "ParakeetRNNTConfig", "ParakeetTDTConfig"]

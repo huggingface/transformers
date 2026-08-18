@@ -15,7 +15,6 @@
 
 import itertools
 import os
-import random
 import tempfile
 import unittest
 from collections.abc import Sequence
@@ -30,29 +29,14 @@ from transformers.testing_utils import (
 )
 from transformers.utils.import_utils import is_torch_available
 
+from ...test_processing_common import floats_list
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
 
 
 if is_torch_available():
     pass
 
-global_rng = random.Random()
-
 MAX_LENGTH_FOR_TESTING = 512
-
-
-def floats_list(shape, scale=1.0, rng=None):
-    """Creates a random float32 tensor"""
-    if rng is None:
-        rng = global_rng
-
-    values = []
-    for _ in range(shape[0]):
-        values.append([])
-        for _ in range(shape[1]):
-            values[-1].append(rng.random() * scale)
-
-    return values
 
 
 class Gemma3nAudioFeatureExtractionTester:

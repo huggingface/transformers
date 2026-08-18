@@ -25,6 +25,7 @@ from transformers.integrations.tensor_parallel import (
     PackedColwiseParallel,
     PackedRowwiseParallel,
     RowwiseParallel,
+    add_tensor_parallel_hooks_to_module,
     get_packed_weights,
     repack_weights,
 )
@@ -166,6 +167,17 @@ class TestTensorParallelProperties(TestCasePlus):
         model.tp_plan = {"model.layers.*.self_attn.q_proj": "colwise"}
         self.assertEqual(model.tp_plan, {"model.layers.*.self_attn.q_proj": "colwise"})
 
+    def test_post_init_keeps_class_level_plans(self):
+        """Class-level plans (e.g. `lm_head` on ForCausalLM classes) must survive post_init alongside the base model plan."""
+        model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
+        model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
+
+        self.assertIn("lm_head", model._tp_plan)
+        self.assertIn("model.layers.*.self_attn.q_proj", model._tp_plan)
+        self.assertIn("lm_head", model._pp_plan)
+        # The merge must not have mutated the class attribute shared by all instances
+        self.assertEqual(set(type(model)._tp_plan), {"lm_head"})
+
 
 @is_tensor_parallel_test
 class TestTensorParallelLayer(TestCasePlus):
@@ -180,6 +192,21 @@ class TestTensorParallelLayer(TestCasePlus):
 
         def get_local_rank(self):
             return self.rank
+
+    def test_colwise_gather_output_rejects_indivisible_out_features(self):
+        device_mesh = self.MockDeviceMesh(world_size=2, rank=0)
+
+        with self.assertRaises(ValueError) as context:
+            add_tensor_parallel_hooks_to_module(
+                model=SimpleNamespace(config=None),
+                module=torch.nn.Linear(8, 99),
+                current_module_plan="colwise_gather_output",
+                layer_name="lm_head",
+                device_mesh=device_mesh,
+            )
+
+        self.assertIn("lm_head", str(context.exception))
+        self.assertIn("divisible", str(context.exception))
 
     def test_colwise_get_expected_sharded_shape(self):
         world_size = 3

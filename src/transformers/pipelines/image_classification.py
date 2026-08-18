@@ -181,7 +181,8 @@ class ImageClassificationPipeline(Pipeline):
         return super().__call__(inputs, **kwargs)
 
     def preprocess(self, image, timeout=None):
-        image = load_image(image, timeout=timeout)
+        if not isinstance(image, (np.ndarray, torch.Tensor)):
+            image = load_image(image, timeout=timeout)
         model_inputs = self.image_processor(images=image, return_tensors="pt")
         model_inputs = model_inputs.to(self.dtype)
         return model_inputs

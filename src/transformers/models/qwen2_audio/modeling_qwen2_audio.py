@@ -180,7 +180,7 @@ class Qwen2AudioAttention(nn.Module):
 
         bsz, tgt_len, _ = hidden_states.size()
 
-        # Scaling is susceptible to floating point arithmetics' inprecisions
+        # Scaling is susceptible to floating point arithmetics' imprecisions
         # which can lead to different results (this is dependent from model
         # to model, e.g. whisper is one such case). We therefore keep the
         # original order of scaling to follow the original implementation
@@ -737,7 +737,7 @@ class Qwen2AudioModel(Qwen2AudioPreTrainedModel):
                         f"Audio features and audio tokens do not match, tokens: {n_audio_tokens}, features: {n_audio_features}",
                     )
                     special_audio_mask = (input_ids == self.config.audio_token_id).to(inputs_embeds.device)
-                    special_audio_mask = special_audio_mask.unsqueeze(-1).expand_as(inputs_embeds)
+                    special_audio_mask = special_audio_mask.unsqueeze(-1)
                     audio_features = audio_features.to(inputs_embeds.device, inputs_embeds.dtype)
                     inputs_embeds = inputs_embeds.masked_scatter(special_audio_mask, audio_features)
 
@@ -766,8 +766,6 @@ class Qwen2AudioModel(Qwen2AudioPreTrainedModel):
     """
 )
 class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
-
     def __init__(self, config: Qwen2AudioConfig):
         super().__init__(config)
         self.model = Qwen2AudioModel(config)
@@ -872,20 +870,6 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
             attentions=outputs.attentions,
             attention_mask=attention_mask,
         )
-
-    def prepare_inputs_for_generation(self, *args, **kwargs):
-        # Overwritten -- we should not pass input_features when we are in cached decoding stage
-
-        input_features = kwargs.pop("input_features", None)
-        is_first_iteration = kwargs.get("is_first_iteration", False)
-
-        model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
-
-        if is_first_iteration or not kwargs.get("use_cache", True):
-            # input_features should only be passed when we are not in cached decoding stage
-            model_inputs["input_features"] = input_features
-
-        return model_inputs
 
 
 __all__ = ["Qwen2AudioForConditionalGeneration", "Qwen2AudioPreTrainedModel", "Qwen2AudioEncoder", "Qwen2AudioModel"]

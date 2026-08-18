@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any, TypeVar
 import torch
 import torch.distributed as _dist
 
+from ...distributed.utils import _is_torch_distributed_initialized
 from .requests import logger
 
 
@@ -39,7 +40,7 @@ class DistributedHelper:
     """A helper class to handle distributed-related operations. Notably, it does not crash when distributed is off."""
 
     def __init__(self, device_mesh: DeviceMesh | None, cpu_group_timeout: float | None) -> None:
-        self.dist_on = dist.is_available() and dist.is_initialized()
+        self.dist_on = _is_torch_distributed_initialized()
         self.device_mesh = device_mesh
 
         # Check validity of the device mesh
@@ -132,10 +133,12 @@ class DistributedHelper:
             payload_size, stop_status = self._cpu_int_acc.tolist()
         return payload_size, stop_status
 
-    def tp_all_reduce_min(self, value: torch.Tensor) -> torch.Tensor:
-        """Inside each TP group, all-reduces a tensor with the MIN op. No-op when TP is off."""
+    def tp_all_reduce_min(self, value: torch.Tensor, on_cpu: bool = False) -> torch.Tensor:
+        """Inside each TP group, all-reduces a tensor with the MIN op. No-op when TP is off. If the tensor is on CPU,
+        it is all-reduced on the CPU comm group."""
         if self.tp_size > 1:
-            dist.all_reduce(value, op=dist.ReduceOp.MIN, group=self.tp_group)
+            group = self.cpu_comm_group if on_cpu else self.tp_group
+            dist.all_reduce(value, op=dist.ReduceOp.MIN, group=group)
         return value
 
     def tp_broadcast_object_from_rank_0(self, obj: T) -> T:
@@ -159,7 +162,8 @@ class DistributedHelper:
         if tp_on and graph_mixing_not_disabled:
             logger.warning(
                 "NCCL_GRAPH_MIXING_SUPPORT was not set to '0' before init_process_group: performance will be harmed. "
-                "Construct your `ContinuousBatchingConfig(...)` BEFORE calling `from_pretrained(tp_plan='auto')`, or "
+                "Construct your `ContinuousBatchingConfig(...)` BEFORE calling "
+                "`from_pretrained(distributed_config=DistributedConfig(tp_size=...))`, or "
                 "set NCCL_GRAPH_MIXING_SUPPORT=0 in the launch environment."
             )
 

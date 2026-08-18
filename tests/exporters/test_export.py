@@ -1,0 +1,907 @@
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import copy
+import functools
+import inspect
+import itertools
+import re
+
+import pytest
+import torch
+from parameterized import parameterized
+
+from transformers import GenerationConfig, set_seed
+from transformers.exporters.exporter_dynamo import DynamoConfig, DynamoExporter
+from transformers.exporters.exporter_executorch import ExecutorchConfig, ExecutorchExporter
+from transformers.exporters.exporter_onnx import OnnxConfig, OnnxExporter
+from transformers.exporters.utils import (
+    cast_leaf_tensors,
+    decompose_for_generation,
+    decompose_multimodal,
+    get_leaf_tensors,
+    is_multimodal,
+    module_device,
+    module_dtype,
+)
+from transformers.testing_utils import (
+    require_executorch,
+    require_onnxruntime,
+    require_onnxscript,
+    require_torch_greater_or_equal,
+    set_config_for_less_flaky_test,
+    set_model_for_less_flaky_test,
+    slow,
+    torch_device,
+)
+
+
+# ──────────────────────────── skip lists ────────────────────────────
+#
+# A single mapping ``EXPORT_SKIPS[scope][model_class_name] = reason`` drives every skip.
+# ``scope`` is a dotted path that narrows from broad (``"all"`` — every backend, every variant)
+# to specific (``"onnx.generate"``, ``"onnx.dynamic"``, ``"openvino"``, …). At test time
+# ``_should_skip`` walks the scopes that match the current ``(backend, generate, dynamic)``
+# triple and returns ``True`` as soon as the model is found in any of them. Reasons live next
+# to the model name so the "why" travels with the entry.
+#
+# Adding a new skip: pick the most specific scope that applies and add a ``"Name": "reason"``
+# entry. Add a new scope key if the existing ones don't fit.
+
+
+EXPORT_SKIPS: dict[str, dict[str, str]] = {
+    # Every backend, every variant.
+    "all": {
+        "VideoMAEForPreTraining": (
+            "Computes loss even when `return_loss=False`, hitting a data-dependent guard in "
+            "`mse_loss`. TODO: skip loss when labels aren't provided."
+        ),
+        "OpenAIPrivacyFilterModel": (
+            "`get_correct_experts_implementation` defaults to `eager` because the model is "
+            "sensitive to accumulation order. Eager experts forward iterates over "
+            "`expert_hit.nonzero()` (data-dependent shape). Users can opt into "
+            "`set_experts_implementation('batched_mm')` to export."
+        ),
+        "OpenAIPrivacyFilterForTokenClassification": (
+            "Same root cause as `OpenAIPrivacyFilterModel` — eager experts implementation."
+        ),
+        "GlmImageModel": (
+            "Vision attention does a data-dependent chunked split (`torch.split(..., lengths.tolist())` "
+            "over `cu_seqlens`), which hits `GuardOnDataDependentSymNode: u0 > 1` — it needs the shared "
+            "vision-attention export patch, and even with it the export runs long (further guards / slow "
+            "symbolic lowering). Not worth the model-specific export support for a diffusers-pipeline "
+            "model. TODO: revisit on demand."
+        ),
+        "GlmImageForConditionalGeneration": "Same as `GlmImageModel`.",
+    },
+    # Every backend, generate path only.
+    "generate": {
+        "Blip2ForConditionalGeneration": (
+            "`generate()` delegates to the inner language model without calling top-level "
+            "`forward()`, so `decompose_prefill_decode` can't capture inputs. "
+            "TODO: route generate through top-level `forward()`."
+        ),
+        "InstructBlipForConditionalGeneration": "Same `generate()`-delegation as Blip2.",
+        "InstructBlipVideoForConditionalGeneration": "Same `generate()`-delegation as Blip2.",
+        "Kosmos2ForConditionalGeneration": "Same `generate()`-delegation as Blip2.",
+        "RecurrentGemmaForCausalLM": (
+            "Stores recurrent/conv state as module attributes (not a `Cache` object); "
+            "`torch.export` can't carry that state between calls. "
+            "TODO: refactor to a cache-based SSM pattern (like Mamba/Mamba2)."
+        ),
+        "MoshiForConditionalGeneration": (
+            "`generate()` creates `blank_user_audio_codes` outside the traced forward and "
+            "passes it as a kwarg; the resulting ONNX input has mismatched rank (scalar vs 3D). "
+            "TODO: make `blank_user_audio_codes` part of the model state."
+        ),
+        "UdopForConditionalGeneration": (
+            "Exported decoder output is missing `attention_mask` vs eager — encoder-decoder "
+            "cross-attention mask doesn't flow through the generate decomposition correctly."
+        ),
+        "VoxtralRealtimeForConditionalGeneration": (
+            "Exported prefill drops `past_key_values.*.{keys,values,_sliding_window_tensor}` "
+            "tensors that eager returns. Plain forward exports work. "
+            "TODO: align generate-decomposition path with the realtime KV-cache shape."
+        ),
+        "Gemma3nForConditionalGeneration": (
+            "KV-shared layers (`num_kv_shared_layers`) reuse cache entries from earlier layers; "
+            "exported prefill returns only `logits` while eager surfaces the populated KV cache. "
+            "Same shape as Voxtral. TODO: align the generate-decomposition path."
+        ),
+    },
+    # Every backend, dynamic-shape only.
+    "dynamic": {
+        "Sam2Model": (
+            "`torch.export` of the Hiera vision backbone under dynamic shapes exceeds the 10-minute "
+            "test timeout (12 attention blocks × 3 Q-pool stage transitions on symbolic H/W). Backend-"
+            "agnostic — the torch.export step itself overruns, so every backend hits it."
+        ),
+    },
+    # Generate path, dynamic-shape only — the multi-token decode (`_merge_decode_calls`) that keeps the
+    # query axis symbolic. Backend-agnostic (it's in the shared decomposition). Static generate, which
+    # captures a single-token decode with no merge, still runs.
+    "generate.dynamic": {
+        "MllamaForConditionalGeneration": (
+            "Cross-attention decode indexes `cross_attention_mask[:, :, arange(seq) + past_seen_tokens]`; "
+            "the multi-token merge grows the query axis but not the captured cross-attention mask, so the "
+            "index runs past it (out of bounds → CUDA device-side assert). Single-token static generate is fine. "
+            "TODO: grow `cross_attention_mask` in `_merge_decode_calls`."
+        ),
+        "ReformerModelWithLMHead": (
+            "Chunked local attention assumes a chunk-aligned query length; the merged multi-token query "
+            "(seq 2) mismatches the chunked key axis (`size 2 vs 6`). Single-token static generate is fine. "
+            "Same chunked-attention limitation as the `onnx.generate` skip."
+        ),
+    },
+    # ONNX, every variant.
+    "onnx": {
+        "CHMv2ForDepthEstimation": (
+            "`run_decompositions` retraces through aot_autograd which emits a `detach_(alias(...))` "
+            "pair the functional-graph assertion rejects (independent of any source `.detach()` — "
+            "verified). Torch export works. TODO: file upstream `torch.export` issue."
+        ),
+        "PixioModel": ("Lowering exceeds the 10-minute test timeout."),
+        "PixioBackbone": "Same `timeout` failure as `PixioModel`.",
+    },
+    # ONNX, generate path only.
+    "onnx.generate": {
+        "ReformerModelWithLMHead": (
+            "Chunked local attention exports a Constant idx that exceeds the cached-keys axis "
+            "length under static decode (prefill+1 token, seq=17 vs chunked axis of 16). The same "
+            "computation stays symbolic under dynamic so ORT can't pre-validate it. The other "
+            "three Reformer-local-attn ONNX variants pass."
+        ),
+    },
+    # ONNX, dynamic-shape only.
+    "onnx.dynamic": {
+        "GroundingDinoModel": (
+            "Same `detach_(alias(...))` retrace bug as CHMv2, but only triggered under dynamic "
+            "shapes — `aot_autograd`'s decomposition pipeline emits the detach itself (verified "
+            "by guarding all three modeling-side detaches with `if self.training`). Static works."
+        ),
+        "GroundingDinoForObjectDetection": "Same as `GroundingDinoModel`.",
+        "MMGroundingDinoModel": "Same as `GroundingDinoModel`.",
+        "MMGroundingDinoForObjectDetection": "Same as `GroundingDinoModel`.",
+        "Sam2VisionModel": (
+            "`torch.export` of the Hiera vision backbone under dynamic shapes takes ~7.5 min "
+            "even after simplifying `window_partition`/`window_unpartition` (12 attention blocks "
+            "× 3 Q-pool stage transitions on symbolic H/W). ONNX + ORT push past 1000s timeout."
+        ),
+        "BigBirdModel": ("Lowering exceeds the 10-minute test timeout under dynamic shapes."),
+        "BigBirdForCausalLM": "Same `timeout` failure as `BigBirdModel`.",
+        "BigBirdForMaskedLM": "Same `timeout` failure as `BigBirdModel`.",
+        "BigBirdForMultipleChoice": "Same `timeout` failure as `BigBirdModel`.",
+        "BigBirdForPreTraining": "Same `timeout` failure as `BigBirdModel`.",
+        "BigBirdForQuestionAnswering": "Same `timeout` failure as `BigBirdModel`.",
+        "BigBirdForSequenceClassification": "Same `timeout` failure as `BigBirdModel`.",
+        "BigBirdForTokenClassification": "Same `timeout` failure as `BigBirdModel`.",
+        "DonutSwinModel": "Same `timeout` failure as `BigBirdModel`.",
+        "DonutSwinForImageClassification": "Same `timeout` failure as `BigBirdModel`.",
+        "MaskFormerSwinModel": "Same `timeout` failure as `BigBirdModel`.",
+        "MaskFormerSwinBackbone": "Same `timeout` failure as `BigBirdModel`.",
+        "Mask2FormerModel": "Same `timeout` failure as `BigBirdModel`.",
+        "Mask2FormerForUniversalSegmentation": "Same `timeout` failure as `BigBirdModel`.",
+        "SwinModel": "Same `timeout` failure as `BigBirdModel`.",
+        "SwinBackbone": "Same `timeout` failure as `BigBirdModel`.",
+        "SwinForImageClassification": "Same `timeout` failure as `BigBirdModel`.",
+        "SwinForMaskedImageModeling": "Same `timeout` failure as `BigBirdModel`.",
+        "Swinv2Model": "Same `timeout` failure as `BigBirdModel`.",
+        "Swinv2Backbone": "Same `timeout` failure as `BigBirdModel`.",
+        "Swinv2ForImageClassification": "Same `timeout` failure as `BigBirdModel`.",
+        "Swinv2ForMaskedImageModeling": "Same `timeout` failure as `BigBirdModel`.",
+    },
+    # ExecuTorch — lowering failures grouped by root cause; see the first entry of each
+    # `Same ... as` chain for the full description.
+    "executorch": {
+        "JetMoeModel": (
+            "MoE and mixture-of-attention route tokens with a data-dependent `inputs.split(expert_size)` "
+            "(per-expert token counts), which ExecuTorch's ahead-of-time memory planner can't size "
+            "(`GuardOnDataDependentSymNode`). A static rewrite exists (per-token weight gather) but "
+            "duplicates expert weights per token, so it's only viable for low-batch decode — not as the "
+            "eager default — and the framework's `@use_experts_implementation` is MLP-only, so it can't "
+            "host the mixture-of-attention experts. Exports fine on torch.export/ONNX (dynamic dim at runtime)."
+        ),
+        "JetMoeForCausalLM": "Same data-dependent MoE/MoA routing as `JetMoeModel`.",
+        "JetMoeForSequenceClassification": "Same data-dependent MoE/MoA routing as `JetMoeModel`.",
+        "FastVlmForConditionalGeneration": (
+            "ExecuTorch lowering of the vision stack crashes the process (native segfault/OOM) — the "
+            "failure is uncatchable in-process, so the pytest worker dies rather than raising."
+        ),
+        "FastVlmModel": "Same native ExecuTorch crash as `FastVlmForConditionalGeneration`.",
+        "LlavaOnevisionForConditionalGeneration": "Same native ExecuTorch vision-stack crash as `FastVlmForConditionalGeneration`.",
+        "LlavaOnevisionModel": "Same native ExecuTorch crash as `LlavaOnevisionForConditionalGeneration`.",
+        "PaddleOCRVLForConditionalGeneration": "Same native ExecuTorch vision-stack crash as `FastVlmForConditionalGeneration`.",
+        "PaddleOCRVLModel": "Same native ExecuTorch crash as `PaddleOCRVLForConditionalGeneration`.",
+        "Qwen3ASRForConditionalGeneration": (
+            "Audio encoder packs valid frames with a data-dependent `.nonzero()`; the unbacked "
+            "packed length can't be sized by ExecuTorch's ahead-of-time memory planner "
+            "(`GuardOnDataDependentSymNode`). Exports fine on torch.export/ONNX, which carry the "
+            "dynamic dim at runtime."
+        ),
+        "Qwen3ASRModel": "Same data-dependent audio-encoder `.nonzero()` as `Qwen3ASRForConditionalGeneration`.",
+        "Qwen3ASRForTokenClassification": (
+            "Same data-dependent audio-encoder `.nonzero()` as `Qwen3ASRForConditionalGeneration`."
+        ),
+        "FlavaModel": (
+            "The interleaved text/image/multimodal encoder streams make XNNPACK's disjoint-set partitioner "
+            "emit partitions that form a dependency cycle once fused (`Invalid partition, found dependency "
+            "cycles`). The single-stream sub-models (image/text/multimodal/codebook) export fine."
+        ),
+        "FlavaForPreTraining": "Same fused-partition dependency cycle as `FlavaModel` (wraps it).",
+        "PPDocLayoutV3ForObjectDetection": (
+            "A single detection head applied at every decoder layer and tied to the encoder head is "
+            "duplicated by the constant-dedup pass; `_unsafe_adjust_original_program` then deletes the "
+            "shared target once and raises `KeyError` on the next copy while stripping delegated params."
+        ),
+        "EfficientNetModel": (
+            "ExecuTorch export exceeds the 1000s test timeout under both static and dynamic shapes "
+            "(dynamic ~1400s); the depthwise-conv / SiLU stack lowers slowly."
+        ),
+        "EfficientNetForImageClassification": "Same `timeout` as `EfficientNetModel`.",
+    },
+    "executorch.generate": {},
+    "executorch.dynamic": {
+        "Mask2FormerModel": ("Lowering exceeds the 10-minute test timeout under dynamic shapes."),
+        "Mask2FormerForUniversalSegmentation": "Same `timeout` failure as `Mask2FormerModel`.",
+        "BigBirdModel": "Same `timeout` failure as `Mask2FormerModel`.",
+        "BigBirdForPreTraining": "Same `timeout` failure as `Mask2FormerModel`.",
+        "BigBirdForMaskedLM": "Same `timeout` failure as `Mask2FormerModel`.",
+        "BigBirdForCausalLM": "Same `timeout` failure as `Mask2FormerModel`.",
+        "BigBirdForMultipleChoice": "Same `timeout` failure as `Mask2FormerModel`.",
+        "BigBirdForQuestionAnswering": "Same `timeout` failure as `Mask2FormerModel`.",
+        "BigBirdForSequenceClassification": "Same `timeout` failure as `Mask2FormerModel`.",
+        "BigBirdForTokenClassification": "Same `timeout` failure as `Mask2FormerModel`.",
+        "GroundingDinoModel": "Same `timeout` failure as `Mask2FormerModel`.",
+        "GroundingDinoForObjectDetection": "Same `timeout` failure as `Mask2FormerModel`.",
+        "MMGroundingDinoModel": "Same `timeout` failure as `Mask2FormerModel`.",
+        "MMGroundingDinoForObjectDetection": "Same `timeout` failure as `Mask2FormerModel`.",
+        "Sam2VisionModel": "Same `timeout` failure as `Mask2FormerModel`.",
+        "Swinv2Model": "Same `timeout` failure as `Mask2FormerModel`.",
+        "Swinv2ForImageClassification": "Same `timeout` failure as `Mask2FormerModel`.",
+        "Swinv2ForMaskedImageModeling": "Same `timeout` failure as `Mask2FormerModel`.",
+        "Swinv2Backbone": "Same `timeout` failure as `Mask2FormerModel`.",
+        "TimesformerModel": "Same `timeout` failure as `Mask2FormerModel`.",
+        "TimesformerForVideoClassification": "Same `timeout` failure as `Mask2FormerModel`.",
+    },
+    "executorch.static": {
+        "Wav2Vec2BertModel": (
+            "ExecuTorch *runtime* execution of the Conformer encoder exceeds the 15-min test timeout "
+            "under static shapes (~1350s in the runtime, not lowering). Dynamic shapes stay under budget."
+        ),
+        "Wav2Vec2BertForCTC": "Same Conformer-encoder runtime `timeout` as `Wav2Vec2BertModel`.",
+        "Wav2Vec2BertForSequenceClassification": "Same Conformer-encoder runtime `timeout` as `Wav2Vec2BertModel`.",
+        "Wav2Vec2BertForAudioFrameClassification": "Same Conformer-encoder runtime `timeout` as `Wav2Vec2BertModel`.",
+        "Wav2Vec2BertForXVector": "Same Conformer-encoder runtime `timeout` as `Wav2Vec2BertModel`.",
+        "GroundingDinoModel": (
+            "Static-shape export raises `KeyError: 'bbox_embed.1.layers.0.weight'`: the per-decoder-layer "
+            "bbox-embed head is shared/tied, so the constant-dedup pass duplicates it and "
+            "`_unsafe_adjust_original_program` deletes the shared target once then KeyErrors on the next "
+            "copy (same shared-detection-head issue as `PPDocLayoutV3ForObjectDetection`). The dynamic "
+            "variant is skipped for `timeout` above."
+        ),
+        "GroundingDinoForObjectDetection": "Same `bbox_embed` shared-head `KeyError` as `GroundingDinoModel`.",
+        "MMGroundingDinoModel": "Same `bbox_embed` shared-head `KeyError` as `GroundingDinoModel`.",
+        "MMGroundingDinoForObjectDetection": "Same `bbox_embed` shared-head `KeyError` as `GroundingDinoModel`.",
+    },
+}
+
+
+# ──────────────────────────── ONNX optimization toggles ────────────────────────────
+# Not "skips" — these select whether `onnxscript` optimisation runs for a given model.
+# Same scope-keyed shape as ``EXPORT_SKIPS`` for symmetry.
+
+
+ONNX_DISABLE_OPTIMIZE: dict[str, dict[str, str]] = {
+    # Disable for every variant.
+    "all": {
+        "LayoutLMv2Model": (
+            "Detectron2 FPN backbone — onnxscript optimizer drops initializers still referenced "
+            "by nodes, producing an invalid graph for ORT."
+        ),
+        "LayoutLMv2ForSequenceClassification": "Same as `LayoutLMv2Model`.",
+        "LayoutLMv2ForTokenClassification": "Same as `LayoutLMv2Model`.",
+        "LayoutLMv2ForQuestionAnswering": "Same as `LayoutLMv2Model`.",
+        "YolosModel": (
+            "Optimizer takes >6 min on the YOLOS detection graph (many small Concat/Slice nodes). "
+            "`optimize=False` exports in 2s. TODO: revisit when onnxscript's optimizer improves."
+        ),
+        "YolosForObjectDetection": "Same as `YolosModel`.",
+        "PixioModel": "Same dense-small-node optimizer slowdown as YOLOS (~100–290s).",
+        "SegGptModel": "Same dense-small-node optimizer slowdown as YOLOS.",
+        "SegGptForImageSegmentation": "Same dense-small-node optimizer slowdown as YOLOS.",
+    },
+    # Disable for dynamic-shape only — static benefits from optimisation.
+    "dynamic": {
+        "ProphetNetModel": (
+            "Onnxscript's `SplitToSequence` constant-folding trips `'NoneType' object has no "
+            "attribute 'ndim'` under dynamic shapes. Static works after the vectorized "
+            "`ngram_attention_bias` rewrite."
+        ),
+        "ProphetNetForConditionalGeneration": "Same `SplitToSequence` issue as `ProphetNetModel`.",
+        "ProphetNetDecoder": "Same `SplitToSequence` issue as `ProphetNetModel`.",
+        "ProphetNetForCausalLM": "Same `SplitToSequence` issue as `ProphetNetModel`.",
+        "ZoeDepthForDepthEstimation": "Same `SplitToSequence` issue as `ProphetNetModel`.",
+    },
+}
+
+
+# Parameterization for export tests: runs once with dynamic=True and once with dynamic=False.
+DYNAMIC_EXPORT_PARAMS = parameterized.expand(
+    [(False,), (True,)],
+    name_func=lambda f, _, p: f"{f.__name__}_{'dynamic' if p.args[0] else 'static'}",
+)
+
+# Generation export tests run the cartesian product of two axes: dynamic vs static shapes, and the
+# generation config used for the capture. `generation_config=None` is the model's own config (growing
+# `DynamicCache`); `cache_implementation="static"` exports against a `StaticCache`. Every cache runs
+# under both shape modes — under dynamic shapes a static cache still keeps a symbolic (resizable) size,
+# it just writes at fixed positions. A dynamic-shape export also captures the `decode` stage multi-token
+# (a symbolic query axis — continuation-from-past, or a plain prefill on an empty cache) rather than the
+# single-token step, since a single-token axis can't stay symbolic.
+_EXPORT_SHAPE_MODES = [False, True]  # dynamic=False (static shapes) / dynamic=True
+_EXPORT_GENERATION_CONFIGS = [None, GenerationConfig(cache_implementation="static")]
+
+GENERATE_EXPORT_PARAMS = parameterized.expand(
+    list(itertools.product(_EXPORT_SHAPE_MODES, _EXPORT_GENERATION_CONFIGS)),
+    name_func=lambda f, _, p: (
+        f"{f.__name__}_{'dynamic' if p.args[0] else 'static'}"
+        + (f"_{p.args[1].cache_implementation}_cache" if p.args[1] is not None else "")
+    ),
+)
+
+
+def _needs_static_cache(generation_config) -> bool:
+    """True if `generation_config` requests a cache the model must explicitly support (a static impl).
+    Such variants only run on models that can (see the `_can_compile_fullgraph` gate in the tests)."""
+    return generation_config is not None and generation_config.cache_implementation is not None
+
+
+# Maximum time (in seconds) for a single export test before it is killed.
+EXPORT_TEST_TIMEOUT = 1000
+
+# Minimum torch version the exporters target — older releases lack `torch.export` features the
+# exporters rely on, so the export sweep is skipped (not failed) below this. Sourced from the
+# exporter itself so the test and the runtime check can't drift apart.
+MIN_EXPORT_TORCH_VERSION = DynamoExporter.min_versions["torch"]
+
+
+# ──────────────────────────── helpers ────────────────────────────
+
+
+def disable_hub_kernels(test_fn):
+    """Force `is_kernels_available()` to `False` for the duration of an export test.
+
+    Export must trace the pure-PyTorch path, never a Hub kernel (`mamba-ssm`, `causal-conv1d`, …): those
+    need optional deps (`einops`, triton, …) and aren't exportable anyway. Kernels load lazily on the first
+    (eager) forward — outside the exporter's own trace-time patch — so the whole test is wrapped. With
+    `is_kernels_available()` False, `lazy_load_kernel` short-circuits to `None` and the fallback runs.
+    """
+
+    @functools.wraps(test_fn)
+    def wrapper(*args, **kwargs):
+        from transformers.integrations import hub_kernels
+        from transformers.utils import import_utils
+
+        # `lazy_load_kernel` gates on `hub_kernels`'s own binding; patch the canonical def too.
+        targets = [(hub_kernels, "is_kernels_available"), (import_utils, "is_kernels_available")]
+        saved = [(obj, name, getattr(obj, name)) for obj, name in targets]
+        for obj, name in targets:
+            setattr(obj, name, lambda *args, **kwargs: False)
+        try:
+            return test_fn(*args, **kwargs)
+        finally:
+            for obj, name, original in saved:
+                setattr(obj, name, original)
+
+    return wrapper
+
+
+def _clean_inputs_for_export(inputs_dict, config):
+    """Strip None values and export-incompatible keys from an inputs dict. Mutates config in-place."""
+    inputs_dict = {k: v for k, v in inputs_dict.items() if v is not None}
+    for key in ("labels", "future_values", "return_loss"):
+        inputs_dict.pop(key, None)
+    config.return_loss = False
+    return inputs_dict
+
+
+def _run_onnx_program(onnx_program, inputs) -> dict:
+    """Run an ONNX program and return outputs as a `{name: tensor}` dict."""
+    set_seed(1234)
+    onnx_inputs = get_leaf_tensors(inputs)
+    onnx_outputs = onnx_program(**onnx_inputs)
+    onnx_names = (re.sub(r"^output\.", "", node.name) for node in onnx_program.model_proto.graph.output)
+    return dict(zip(onnx_names, onnx_outputs))
+
+
+def _run_executorch_program(program_manager, inputs):
+    """Load and run an ExecuTorch program, returning its outputs — or ``None`` to skip this component.
+
+    ``None`` means "move on to the next component" and is returned when either:
+    - the export is valid but ExecuTorch's own runtime can't service it — a missing portable kernel
+      (``0x14``), an oversized arena (``0x21`` / ``bad_alloc``), or a portable-kernel / XNNPACK-delegate
+      failure at execute (``0x12`` / ``0x1``): a runtime limitation, not a transformers export defect; or
+    - the inputs couldn't be reconstructed for this program (a derived symint slot with no eager leaf).
+
+    Otherwise the model's declared outputs are returned for the caller to check against eager.
+    ``torch.export`` also appends mutated inputs (in-place-modified ``pixel_values``, recurrent state,
+    …) to the program outputs; those are dropped here — keeping only ``USER_OUTPUT`` slots — so the
+    result matches eager's returned leaves.
+
+    Inputs are bound *positionally* against the program's declared slots (``num_inputs`` /
+    ``input_tensor_meta``), filled in order from the eager pytree leaves — tensor leaves for tensor
+    slots, scalars for the rest.
+    """
+    from executorch.runtime import Runtime, Verification
+
+    set_seed(1234)
+    leaves = torch.utils._pytree.tree_leaves(inputs)
+    # The runtime rejects non-contiguous inputs, so materialise tensor leaves. `int` covers `bool`.
+    tensors = [t.contiguous() for t in leaves if isinstance(t, torch.Tensor)]
+    scalars = (t for t in leaves if isinstance(t, (int, float)))
+
+    # Load — surfaces ExecuTorch resource limits (missing portable kernel / oversized arena).
+    try:
+        program = Runtime.get().load_program(program_manager.buffer, verification=Verification.Minimal)
+        method = program.load_method("forward")
+    except (RuntimeError, MemoryError) as e:
+        if _is_executorch_runtime_limit(e):
+            return None
+        raise
+
+    # Each slot declares its shape; match it to an eager tensor leaf of that shape so the right tensor
+    # lands in the right slot (count alone isn't enough — a wrong-shape tensor crashes conv/copy
+    # kernels at execute). Under dynamic shapes the declared shape is an upper bound and won't match a
+    # leaf, so fall back to the next unused leaf (leaf order tracks the program's input order). If a
+    # slot can't be filled — a derived symint, or no leaf of the right shape — reconstruction isn't
+    # possible; return None and rely on the load check rather than run with bogus inputs.
+    args = []
+    for i in range(method.metadata.num_inputs()):
+        try:
+            shape = tuple(method.metadata.input_tensor_meta(i).sizes())
+        except Exception:  # non-tensor slot
+            args.append(next(scalars, None))
+        else:
+            match = next((t for t in tensors if tuple(t.shape) == shape), tensors[0] if tensors else None)
+            if match is not None:
+                tensors.remove(match)
+            args.append(match)
+        if args[-1] is None:
+            return None
+
+    try:
+        outputs = method.execute(args)
+    except (RuntimeError, MemoryError) as e:
+        if _is_executorch_runtime_limit(e):
+            return None
+        raise
+
+    # Drop `torch.export`'s appended mutated-input outputs, keeping only the model's `USER_OUTPUT`s
+    # (in program-output order). Then keep tensors only, mirroring eager's `get_leaf_tensors`, so the
+    # returned outputs line up with eager's returned leaves for the caller's count check.
+    exported_program = program_manager.exported_program
+    exported_program = exported_program() if callable(exported_program) else exported_program
+    output_kinds = [spec.kind.name for spec in exported_program.graph_signature.output_specs]
+    if len(output_kinds) == len(outputs):
+        outputs = [out for out, kind in zip(outputs, output_kinds) if kind == "USER_OUTPUT"]
+    return [out for out in outputs if isinstance(out, torch.Tensor)]
+
+
+# ExecuTorch runtime error codes that mean "the export is valid (it produced a loadable program) but
+# ExecuTorch's own portable runtime / XNNPACK backend can't service it" — a runtime limitation, not a
+# transformers export defect (which surfaces earlier as a `torch.export` error or later as an output
+# mismatch). Load: 0x14 missing portable kernel, 0x21 arena can't be allocated, 0x1 XNNPACK partition
+# won't compile (`xnn_status_unsupported_parameter`). Execute: 0x12 portable-kernel InvalidArgument
+# (constant_pad_nd/convolution/upsample_aa out-tensor sizing), 0x1 XNNPACK delegate failure, 0x10
+# XNNPACK delegate can't resize a static tensor to the runtime shape. The execute-phase codes surface
+# from either `execute()` or `set_inputs()` (binding the runtime inputs is part of `Method.execute`).
+_ET_LOAD_LIMIT_CODES = {"0x1", "0x14", "0x21"}
+_ET_EXECUTE_LIMIT_CODES = {"0x1", "0x10", "0x12"}
+
+
+def _is_executorch_runtime_limit(exc):
+    """True if ``exc`` is a known ExecuTorch runtime limitation (missing kernel / arena / kernel bug)."""
+    msg = str(exc)
+    if isinstance(exc, MemoryError) or "bad_alloc" in msg:
+        return True
+    load = re.search(r"Failed to load method forward, error: 0x:?([0-9a-fA-F]+)", msg)
+    if load and f"0x{load.group(1)}" in _ET_LOAD_LIMIT_CODES:
+        return True
+    execute = re.search(r"(?:execute\(\)|set_inputs\(\) for method '\w+') failed with error 0x([0-9a-fA-F]+)", msg)
+    return bool(execute and f"0x{execute.group(1)}" in _ET_EXECUTE_LIMIT_CODES)
+
+
+def _onnx_optimize_enabled(model_class, dynamic: bool) -> bool:
+    """Return whether onnxscript optimisation should run for this model under this shape mode.
+
+    Mirrors ``_should_skip``'s scope walk on ``ONNX_DISABLE_OPTIMIZE`` — ``"all"`` always
+    applies; ``"dynamic"`` adds the dynamic-only entries.
+    """
+    name = model_class.__name__
+    scopes = ["all"] + (["dynamic"] if dynamic else [])
+    return not any(name in ONNX_DISABLE_OPTIMIZE.get(scope, {}) for scope in scopes)
+
+
+# ──────────────────────────── mixins ────────────────────────────
+
+
+class ExportTesterMixin:
+    """Mixin providing non-generative export tests for Dynamo, ONNX, and ExecuTorch backends.
+
+    Mixed into [`ModelTesterMixin`] so every model test class that inherits from it
+    automatically runs these export tests against all entries in `all_model_classes`.
+
+    Expected attributes provided by [`ModelTesterMixin`]:
+    - `all_model_classes` — iterable of model class objects to test.
+    - `model_tester` — object with `prepare_config_and_inputs_for_common()` (and optionally
+      `prepare_config_and_inputs_for_model_class()`).
+    - `test_torch_exportable` — bool; set to `False` to skip all export tests for the model.
+    - `_prepare_for_class(inputs_dict, model_class)` — adjusts inputs per model class.
+
+    Tests are parameterised over `dynamic=True` / `dynamic=False` via `DYNAMIC_EXPORT_PARAMS`.
+    Multi-modal models (detected by `is_multimodal`) are automatically decomposed and each
+    submodule is tested independently.
+    """
+
+    def _skip_if_not_exportable(self):
+        """Skip the test if the model architecture is not exportable."""
+        if not self.test_torch_exportable:
+            self.skipTest(reason="Model architecture is not Dynamo exportable/traceable")
+
+        with open(inspect.getfile(self.all_model_classes[0]), "r") as f:
+            source_code = f.read()
+            # TODO: add use_experts_implementation support to remaining MoE models
+            if "for expert" in source_code and "use_experts_implementation" not in source_code:
+                self.skipTest(reason="Model architecture uses eager MoE implementation which is not torch exportable")
+
+    def _should_skip(self, model_class, generate=False, dynamic=False, backend=None, generation_config=None):
+        """Return True if this model class should be skipped for export tests.
+
+        Walks the scopes in ``EXPORT_SKIPS`` from broad to specific that match the current
+        ``(backend, generate, dynamic)`` triple — ``"all"`` always applies, ``"generate"`` only
+        for generate tests, ``"dynamic"`` / ``"static"`` for that shape variant on every backend,
+        ``"generate.dynamic"`` for the multi-token decode path, ``"<backend>"`` for that backend, and
+        ``"<backend>.<variant>"`` for the more-specific intersections. Also skips static-cache variants
+        (a ``generation_config`` requesting one) on models that can't compile fullgraph — they don't
+        support a static cache.
+        """
+        if _needs_static_cache(generation_config) and not model_class._can_compile_fullgraph:
+            return True
+        name = model_class.__name__
+        scopes = ["all"]
+        if generate:
+            scopes.append("generate")
+            if dynamic:
+                scopes.append("generate.dynamic")
+        scopes.append("dynamic" if dynamic else "static")
+        if backend:
+            scopes.append(backend)
+            if generate:
+                scopes.append(f"{backend}.generate")
+            scopes.append(f"{backend}.dynamic" if dynamic else f"{backend}.static")
+        return any(name in EXPORT_SKIPS.get(scope, {}) for scope in scopes)
+
+    def _prepare_export_model_and_inputs(self, model_class, device=torch_device):
+        """Create model and forward inputs ready for export.
+
+        ``device`` defaults to ``torch_device``; the ExecuTorch tests pass ``"cpu"`` since that
+        backend targets CPU anyway, keeping any pre-trace forward off the GPU (a device-side
+        assert during tracing would otherwise poison the whole xdist worker's CUDA context).
+
+        Returns:
+            Dict of `{name: (model, inputs)}` — one entry per component.
+        """
+        if hasattr(self.model_tester, "prepare_config_and_inputs_for_model_class"):
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
+        else:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+        inputs_dict = _clean_inputs_for_export(inputs_dict, config)
+
+        set_config_for_less_flaky_test(config)
+        model = model_class(config).eval().to(device)
+        set_model_for_less_flaky_test(model)
+
+        inputs_dict = cast_leaf_tensors(inputs_dict, dtype=module_dtype(model), device=module_device(model))
+
+        if is_multimodal(model):
+            return decompose_multimodal(model, inputs_dict)
+        return {"model": (model, inputs_dict)}
+
+    def _collect_eager_outputs(self, components):
+        """Run eager forward for each component and return a ``{name: leaf_tensors}`` dict."""
+        eager_outputs = {}
+        for name, (model, inputs) in components.items():
+            with torch.no_grad():
+                set_seed(1234)
+                eager_outputs[name] = get_leaf_tensors(model(**copy.deepcopy(inputs)))
+                assert eager_outputs[name], f"Eager outputs are empty for {name}."
+        return eager_outputs
+
+    def _check_outputs_close(self, actual, expected, atol, rtol, check_device=True):
+        """Assert outputs are close, allowing up to 5% element-level mismatch."""
+        try:
+            torch.testing.assert_close(actual, expected, atol=atol, rtol=rtol, check_device=check_device)
+        except AssertionError as e:
+            mismatched_percentage = re.findall(r"Mismatched elements: (\d+) / (\d+)", str(e))
+            if mismatched_percentage:
+                mismatched, total = map(int, mismatched_percentage[0])
+                if mismatched / total < 0.05:
+                    return  # allow up to 5%
+            raise e
+
+    # ──────────────────── torch.export tests ─────────────────────
+
+    @DYNAMIC_EXPORT_PARAMS
+    @slow
+    @pytest.mark.torch_export_test
+    @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
+    @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
+    @disable_hub_kernels
+    def test_torch_export(self, dynamic, atol=1e-4, rtol=1e-4):
+        """Export each model class with ``torch.export`` and verify outputs match eager within tolerance."""
+        self._skip_if_not_exportable()
+
+        exporter = DynamoExporter()
+        config = DynamoConfig(dynamic=dynamic)
+
+        for model_class in self.all_model_classes:
+            if self._should_skip(model_class, dynamic=dynamic, backend="dynamo"):
+                continue
+
+            components = self._prepare_export_model_and_inputs(model_class)
+            eager_outputs = self._collect_eager_outputs(components)
+
+            for name, (model, inputs) in components.items():
+                with self.subTest(f"{model_class.__name__}/{name}"):
+                    exported_program = exporter.export(model, inputs, config=config)
+
+                    with torch.no_grad():
+                        set_seed(1234)
+                        exported_outputs = get_leaf_tensors(exported_program.module()(**copy.deepcopy(inputs)))
+                        self.assertTrue(exported_outputs, f"Exported outputs are empty for {name}.")
+
+                    self._check_outputs_close(exported_outputs, eager_outputs[name], atol=atol, rtol=rtol)
+
+    # ──────────────────────── ONNX tests ─────────────────────────
+
+    @DYNAMIC_EXPORT_PARAMS
+    @slow
+    @require_onnxscript
+    @require_onnxruntime
+    @pytest.mark.onnx_export_test
+    @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
+    @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
+    @disable_hub_kernels
+    def test_onnx_export(self, dynamic):
+        """Export each model class to ONNX and verify output names match eager."""
+        self._skip_if_not_exportable()
+
+        for model_class in self.all_model_classes:
+            if self._should_skip(model_class, dynamic=dynamic, backend="onnx"):
+                continue
+
+            optimize = _onnx_optimize_enabled(model_class, dynamic)
+            exporter = OnnxExporter()
+            config = OnnxConfig(dynamic=dynamic, optimize=optimize)
+
+            components = self._prepare_export_model_and_inputs(model_class)
+            eager_outputs = self._collect_eager_outputs(components)
+
+            for name, (model, inputs) in components.items():
+                with self.subTest(f"{model_class.__name__}/{name}"):
+                    onnx_program = exporter.export(model, inputs, config=config)
+                    onnx_outputs = _run_onnx_program(onnx_program, inputs)
+                    self.assertTrue(onnx_outputs, f"ONNX outputs are empty for {name}.")
+                    self.assertEqual(set(onnx_outputs.keys()), set(eager_outputs[name].keys()))
+
+    # ──────────────────── ExecuTorch tests ───────────────────────
+
+    @DYNAMIC_EXPORT_PARAMS
+    @slow
+    @require_executorch
+    @pytest.mark.executorch_export_test
+    @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
+    @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
+    @disable_hub_kernels
+    def test_executorch_export(self, dynamic):
+        """Export each model class to ExecuTorch, run it, and verify output count matches eager."""
+
+        self._skip_if_not_exportable()
+        exporter = ExecutorchExporter()
+        config = ExecutorchConfig(dynamic=dynamic)
+
+        for model_class in self.all_model_classes:
+            if self._should_skip(model_class, dynamic=dynamic, backend="executorch"):
+                continue
+
+            # Trace on CPU: XNNPACK targets CPU, and CPU tracing yields device-consistent graphs.
+            # Tracing on CUDA surfaces per-model device bugs — models create in-`forward` tensors
+            # (arange/zeros/sinusoids) without `device=`, which default to CPU and then mismatch a
+            # CUDA model (`FakeTensor Device Propagation ... cuda:0, cpu`). The exporter *can* take a
+            # CUDA model, but the suite exercises the canonical CPU-traced path.
+            components = self._prepare_export_model_and_inputs(model_class, device="cpu")
+            eager_outputs = self._collect_eager_outputs(components)
+
+            for name, (model, inputs) in components.items():
+                with self.subTest(f"{model_class.__name__}/{name}"):
+                    program = exporter.export(model, inputs, config=config)
+                    executorch_outputs = _run_executorch_program(program, inputs)
+                    if executorch_outputs is None:  # ExecuTorch runtime limit / inputs not reconstructible
+                        continue
+                    self.assertEqual(len(executorch_outputs), len(eager_outputs[name]))
+
+
+class ExportGenerateTesterMixin(ExportTesterMixin):
+    """Mixin providing generation-aware export tests for torch.export, ONNX, and ExecuTorch backends.
+
+    Inherits ``ExportTesterMixin`` for the shared exportability gate / skip logic / input prep, and
+    is mixed into a model test class alongside ``GenerationTesterMixin``.
+
+    Required attributes on the host class (in addition to those from ``ExportTesterMixin``):
+    - ``all_generative_model_classes`` — iterable of generative model class objects to test.
+    - ``prepare_config_and_inputs_for_generate()`` — returns ``(config, inputs_dict)`` suitable
+      for ``model.generate()``.
+
+    Each generative model is decomposed into prefill and decode components via
+    :func:`decompose_prefill_decode`.  Multi-modal models additionally decompose the prefill
+    stage into individual submodules via :func:`decompose_multimodal`.
+    """
+
+    def _prepare_export_generate_model_and_inputs(
+        self, model_class, device=torch_device, generation_config=None, multi_token_decode=False
+    ):
+        """Decompose a generative model into exportable components.
+
+        For multi-modal models: decomposes the prefill stage into individual submodules plus the decode stage.
+        For decoder-only models: returns prefill and decode components.
+
+        ``device`` defaults to ``torch_device``; the ExecuTorch tests pass ``"cpu"`` so the
+        ``generate()`` call inside :func:`decompose_for_generation` runs on CPU — a device-side
+        assert there (e.g. a VLM ``masked_scatter`` size mismatch) would otherwise poison the
+        xdist worker's CUDA context and cascade to every later test on it.
+
+        ``generation_config`` is forwarded to the ``generate()`` capture (default: the model's own).
+        Pass one with ``cache_implementation="static"`` to export against a fixed-size ``StaticCache``.
+
+        ``multi_token_decode`` captures the ``decode`` component with a multi-token query axis
+        (continuation-from-past, or a plain prefill when the cache is empty) instead of the classic
+        single-token step — see :func:`decompose_for_generation`.
+
+        Returns:
+            Dict of `{name: (model, inputs)}` — one entry per component.
+        """
+        config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+        inputs_dict = _clean_inputs_for_export(inputs_dict, config)
+
+        set_config_for_less_flaky_test(config)
+        model = model_class(config).eval().to(device)
+        set_model_for_less_flaky_test(model)
+
+        inputs_dict = cast_leaf_tensors(inputs_dict, dtype=module_dtype(model), device=module_device(model))
+
+        return decompose_for_generation(
+            model, inputs_dict, generation_config=generation_config, multi_token_decode=multi_token_decode
+        )
+
+    # ──────────────────── torch.export tests ─────────────────────
+
+    @GENERATE_EXPORT_PARAMS
+    @slow
+    @pytest.mark.torch_export_test
+    @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
+    @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
+    @disable_hub_kernels
+    def test_torch_export_generate(self, dynamic, generation_config, atol=1e-4, rtol=1e-4):
+        """Export prefill and decode stages with ``torch.export`` and verify outputs match eager."""
+        self._skip_if_not_exportable()
+
+        exporter = DynamoExporter()
+        config = DynamoConfig(dynamic=dynamic)
+
+        for model_class in self.all_generative_model_classes:
+            if self._should_skip(
+                model_class, generate=True, dynamic=dynamic, backend="dynamo", generation_config=generation_config
+            ):
+                continue
+            components = self._prepare_export_generate_model_and_inputs(
+                model_class, generation_config=generation_config, multi_token_decode=dynamic
+            )
+            eager_outputs = self._collect_eager_outputs(components)
+
+            for name, (model, inputs) in components.items():
+                with self.subTest(f"{model_class.__name__}/{name}"):
+                    exported_program = exporter.export(model, inputs, config=config)
+
+                    with torch.no_grad():
+                        set_seed(1234)
+                        exported_outputs = get_leaf_tensors(exported_program.module()(**copy.deepcopy(inputs)))
+                        self.assertTrue(exported_outputs, "Exported outputs are empty.")
+
+                    self._check_outputs_close(exported_outputs, eager_outputs[name], atol=atol, rtol=rtol)
+
+    # ──────────────────────── ONNX tests ─────────────────────────
+
+    @GENERATE_EXPORT_PARAMS
+    @slow
+    @require_onnxscript
+    @require_onnxruntime
+    @pytest.mark.onnx_export_test
+    @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
+    @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
+    @disable_hub_kernels
+    def test_onnx_export_generate(self, dynamic, generation_config):
+        """Export prefill and decode stages to ONNX and verify output names match eager."""
+        self._skip_if_not_exportable()
+
+        for model_class in self.all_generative_model_classes:
+            if self._should_skip(
+                model_class, generate=True, dynamic=dynamic, backend="onnx", generation_config=generation_config
+            ):
+                continue
+
+            optimize = _onnx_optimize_enabled(model_class, dynamic)
+            exporter = OnnxExporter()
+            config = OnnxConfig(dynamic=dynamic, optimize=optimize)
+
+            components = self._prepare_export_generate_model_and_inputs(
+                model_class, generation_config=generation_config, multi_token_decode=dynamic
+            )
+            eager_outputs = self._collect_eager_outputs(components)
+
+            for name, (model, inputs) in components.items():
+                with self.subTest(f"{model_class.__name__}/{name}"):
+                    onnx_program = exporter.export(model, inputs, config=config)
+                    set_seed(1234)
+                    onnx_outputs = _run_onnx_program(onnx_program, inputs)
+                    self.assertTrue(onnx_outputs, "ONNX outputs are empty.")
+                    self.assertEqual(set(onnx_outputs.keys()), set(eager_outputs[name].keys()))
+
+    # ──────────────────── ExecuTorch tests ───────────────────────
+
+    @GENERATE_EXPORT_PARAMS
+    @slow
+    @require_executorch
+    @pytest.mark.executorch_export_test
+    @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
+    @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
+    @disable_hub_kernels
+    def test_executorch_export_generate(self, dynamic, generation_config):
+        """Export prefill and decode stages to ExecuTorch, run each, and verify output count matches eager."""
+
+        self._skip_if_not_exportable()
+        exporter = ExecutorchExporter()
+        config = ExecutorchConfig(dynamic=dynamic)
+
+        for model_class in self.all_generative_model_classes:
+            if self._should_skip(
+                model_class, generate=True, dynamic=dynamic, backend="executorch", generation_config=generation_config
+            ):
+                continue
+
+            components = self._prepare_export_generate_model_and_inputs(
+                model_class,
+                device="cpu",
+                generation_config=generation_config,
+                multi_token_decode=dynamic,
+            )
+            eager_outputs = self._collect_eager_outputs(components)
+
+            for name, (model, inputs) in components.items():
+                with self.subTest(f"{model_class.__name__}/{name}"):
+                    program = exporter.export(model, inputs, config=config)
+                    executorch_outputs = _run_executorch_program(program, inputs)
+                    if executorch_outputs is None:  # ExecuTorch runtime limit / inputs not reconstructible
+                        continue
+                    self.assertEqual(len(executorch_outputs), len(eager_outputs[name]))

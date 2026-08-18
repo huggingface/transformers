@@ -48,7 +48,7 @@ processor = AutoProcessor.from_pretrained("facebook/hf-seamless-m4t-medium")
 model = SeamlessM4TModel.from_pretrained("facebook/hf-seamless-m4t-medium", device_map="auto")
 ```
 
-You can seamlessly use this model on text or on audio, to generated either translated text or translated audio.
+You can seamlessly use this model on text or on audio, to generate either translated text or translated audio.
 
 Here is how to use the processor to process text and audio:
 
@@ -124,7 +124,7 @@ You have the possibility to change the speaker used for speech synthesis with th
 
 #### 3. Change the generation strategy
 
-You can use different [generation strategies](./generation_strategies) for speech and text generation, e.g `.generate(input_ids=input_ids, text_num_beams=4, speech_do_sample=True)` which will successively perform beam-search decoding on the text model, and multinomial sampling on the speech model.
+You can use different [generation strategies](../generation_strategies) for speech and text generation, e.g `.generate(input_ids=input_ids, text_num_beams=4, speech_do_sample=True)` which will successively perform beam-search decoding on the text model, and multinomial sampling on the speech model.
 
 #### 4. Generate speech and text at the same time
 

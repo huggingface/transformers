@@ -208,7 +208,8 @@ class RequestState:
             self.lifespan = (time.perf_counter(), -1)
         elif value == RequestStatus.FINISHED:
             self.lifespan = (self.lifespan[0], time.perf_counter())
-            self.log_end_of_request()
+            if logger.isEnabledFor(logging.DEBUG):
+                self.log_end_of_request()
         self._status = value
 
     @property
@@ -220,7 +221,7 @@ class RequestState:
         decode_len = self.generated_len()
         start_time = self.lifespan[0] - self.created_time
         end_time = self.lifespan[1] - self.created_time
-        logger.info(
+        logger.debug(
             f"Request {self.request_id} finished: {prefill_len = } {decode_len = } {start_time = } {end_time = }"
         )
 
@@ -282,18 +283,21 @@ class RequestState:
     def to_generation_output(self):
         """Convert the request state to a GenerationOutput object."""
         if self._true_initial_tokens:
-            self.generated_tokens = self.initial_tokens[self._true_initial_tokens :] + self.generated_tokens
-            self.initial_tokens = self.initial_tokens[: self._true_initial_tokens]
+            generated_tokens = self.initial_tokens[self._true_initial_tokens :] + self.generated_tokens
+            prompt_ids = self.initial_tokens[: self._true_initial_tokens]
+        else:
+            generated_tokens = self.generated_tokens[:]
+            prompt_ids = self.initial_tokens
         return GenerationOutput(
             request_id=self.request_id,
-            prompt_ids=self.initial_tokens,
-            generated_tokens=self.generated_tokens,
-            logprobs=self.logprobs,
+            prompt_ids=prompt_ids,
+            generated_tokens=generated_tokens,
+            logprobs=self.logprobs[:],
             error=self.error,
             status=self.status,
             created_time=self.created_time,
             lifespan=self.lifespan,
-            timestamps=self.timestamps,
+            timestamps=self.timestamps[:] if self.timestamps is not None else None,
         )
 
     def fork(self, new_request_id: str) -> "RequestState":

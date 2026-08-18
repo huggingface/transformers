@@ -112,7 +112,6 @@ class Granite4VisionModelTest(VLMModelTest, unittest.TestCase):
 
     model_tester_class = Granite4VisionModelTester
     skip_test_image_features_output_shape = True
-    test_torch_exportable = False
     # Custom layer-by-layer forward doesn't support output_attentions
     # (GraniteDecoderLayer discards attention weights internally)
     test_attention_outputs = False
@@ -213,9 +212,13 @@ class Granite4VisionIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_batch_matches_single(self):
-        model = Granite4VisionForConditionalGeneration.from_pretrained(self.model_id, torch_dtype=torch.bfloat16).to(
-            torch_device
-        )
+        model = Granite4VisionForConditionalGeneration.from_pretrained(
+            self.model_id,
+            torch_dtype=torch.bfloat16,
+            attn_implementation={
+                "qformer_config": "eager",
+            },
+        ).to(torch_device)
 
         prompt = self.make_prompt("What do you see in this image?")
 

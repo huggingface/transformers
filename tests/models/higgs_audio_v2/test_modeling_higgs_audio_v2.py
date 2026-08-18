@@ -147,6 +147,7 @@ class HiggsAudioV2ModelTester:
             dim=1,
         )
 
+        input_ids[input_ids == self.audio_token_id] = self.pad_token_id
         input_ids[audio_token_mask.bool()] = self.audio_token_id
 
         audio_seq_lengths = audio_token_mask.sum(-1)
@@ -292,6 +293,11 @@ class HiggsAudioV2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
         reason="This test does not apply to HiggsAudioV2 since audio_input_ids must be provided along input_ids"
     )
     def test_flash_attention_2_continue_generate_with_position_ids(self):
+        pass
+
+    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
+    @unittest.skip(reason="HiggsAudio doesn't return last hidden states")
+    def test_model_rope_scaling_from_config(self, scaling_type):
         pass
 
     def _check_scores(self, batch_size, scores, generated_length, config):

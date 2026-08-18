@@ -24,7 +24,8 @@ from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
 class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = JanusProcessor
-    model_id = "deepseek-community/Janus-Pro-1B"
+    # Tiny processor created with make_tiny_processor.py from "deepseek-community/Janus-Pro-1B"
+    tiny_model_id = "hf-internal-testing/tiny-processor-janus"
 
     @classmethod
     def _setup_from_pretrained(cls, model_id, **kwargs):
@@ -34,10 +35,13 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "eoi_token": "<end_of_image>",
         }
         processor = super()._setup_from_pretrained(model_id, extra_special_tokens=special_image_tokens)
+        return processor
+
+    @staticmethod
+    def prepare_processor_dict():
         # Set the processor to use the default system prompt to False as it's used based on input modality.
         # Hence set to False to avoid any issues in the test irrespective of inputs.
-        processor.use_default_system_prompt = False
-        return processor
+        return {"use_default_system_prompt": False, "num_image_tokens": 4}
 
     def test_chat_template_single(self):
         """

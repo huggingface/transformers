@@ -17,7 +17,7 @@ from collections.abc import Callable
 import numpy as np
 
 from ...activations import ACT2FN
-from ...audio_utils import AudioInput, make_list_of_audio
+from ...audio_utils import AudioInput, make_list_of_audio_chat_template
 from ...cache_utils import Cache
 from ...feature_extraction_utils import BatchFeature
 from ...modeling_layers import GradientCheckpointingLayer
@@ -25,7 +25,8 @@ from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPa
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, is_torch_available, logging
-from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.generic import can_return_tuple, merge_with_config_defaults, no_inherit_decorator
+from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
 from ..audioflamingo3.modeling_audioflamingo3 import (
     AudioFlamingo3ForConditionalGeneration,
@@ -50,6 +51,7 @@ logger = logging.get_logger(__name__)
 class GlmAsrProcessorKwargs(AudioFlamingo3ProcessorKwargs): ...
 
 
+@requires(backends=("torch",))
 @auto_docstring
 class GlmAsrProcessor(AudioFlamingo3Processor):
     def __init__(
@@ -112,14 +114,8 @@ class GlmAsrProcessor(AudioFlamingo3Processor):
 
         """
 
-        if isinstance(audio, str):
-            audio_items: list[str | np.ndarray] = [audio]
-        elif isinstance(audio, (list, tuple)) and audio and all(isinstance(el, str) for el in audio):
-            audio_items = list(audio)
-        else:
-            audio_items = list(make_list_of_audio(audio))
-            if is_torch_available():
-                audio_items = [el.detach().cpu().numpy() if isinstance(el, torch.Tensor) else el for el in audio_items]
+        audio_items: list[str | np.ndarray] = list(make_list_of_audio_chat_template(audio))
+        audio_items = [el.detach().cpu().numpy() if isinstance(el, torch.Tensor) else el for el in audio_items]
 
         batch_size = len(audio_items)
         if batch_size == 0:
@@ -190,6 +186,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
+@no_inherit_decorator
 class GlmAsrAttention(LlamaAttention):
     def __init__(self, config: GlmAsrConfig, layer_idx: int):
         super().__init__(config, layer_idx)
@@ -379,6 +376,8 @@ class GlmAsrModel(AudioFlamingo3Model):
     """
 )
 class GlmAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+
     def __init__(self, config):
         super().__init__(config)
         self.model = GlmAsrModel(config)

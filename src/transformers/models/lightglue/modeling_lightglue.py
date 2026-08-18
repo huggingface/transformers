@@ -26,7 +26,6 @@ from torch import nn
 from torch.nn.utils.rnn import pad_sequence
 
 from ...activations import ACT2FN
-from ...integrations import use_kernelized_func
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -171,7 +170,6 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-@use_kernelized_func(apply_rotary_pos_emb)
 class LightGlueAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -370,7 +368,7 @@ class LightGlueMatchAssignmentLayer(nn.Module):
         batch_size, num_keypoints, descriptor_dim = descriptors.shape
         # Final projection and similarity computation
         m_descriptors = self.final_projection(descriptors)
-        m_descriptors = m_descriptors / torch.tensor(self.descriptor_dim, device=m_descriptors.device) ** 0.25
+        m_descriptors = m_descriptors / torch.full((), self.descriptor_dim, device=m_descriptors.device) ** 0.25
         m_descriptors = m_descriptors.reshape(batch_size // 2, 2, num_keypoints, descriptor_dim)
         m_descriptors0 = m_descriptors[:, 0]
         m_descriptors1 = m_descriptors[:, 1]
@@ -461,7 +459,7 @@ def get_matches_from_scores(scores: torch.Tensor, threshold: float) -> tuple[tor
 
 def normalize_keypoints(keypoints: torch.Tensor, height: int, width: int) -> torch.Tensor:
     """
-    Normalize keypoints locations based on image image_shape
+    Normalize keypoints locations based on image_shape
 
     Args:
         keypoints (`torch.Tensor` of shape `(batch_size, num_keypoints, 2)`):
@@ -746,8 +744,8 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
                     config=self.config,
                     inputs_embeds=descriptors[:, 0:1, :],  # force q_len == 1
                     attention_mask=mask,
-                    # Model is too sensitive to the FA backend --> force mask to avoid the backend
-                    and_mask_function=lambda *args: torch.tensor(True, dtype=torch.bool),
+                    # Model is too sensitive to the FA backend, so always materialize the mask to avoid it.
+                    allow_is_bidirectional_skip=False,
                 )
             else:
                 extended_attention_mask = torch.ones((batch_size, descriptors.size()[-2]), device=keypoints.device)

@@ -860,7 +860,7 @@ class Wav2Vec2GumbelVectorQuantizer(nn.Module):
             perplexity = self._compute_perplexity(codevector_soft_dist, mask_time_indices)
         else:
             # take argmax in non-differentiable way
-            # comptute hard codevector distribution (one hot)
+            # compute hard codevector distribution (one hot)
             codevector_idx = hidden_states.argmax(dim=-1)
             codevector_probs = hidden_states.new_zeros(hidden_states.shape).scatter_(
                 -1, codevector_idx.view(-1, 1), 1.0
@@ -966,6 +966,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
         # Wav2Vec2ForPreTraining last 2 linear layers need standard Linear init.
         if isinstance(module, Wav2Vec2ForPreTraining):
             module.project_hid.reset_parameters()
@@ -986,14 +987,6 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
             k = math.sqrt(1 / module.projection.in_features)
             init.uniform_(module.projection.weight, a=-k, b=k)
             init.uniform_(module.projection.bias, a=-k, b=k)
-        elif isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
         elif isinstance(module, nn.Conv1d):
             init.kaiming_normal_(module.weight)
 

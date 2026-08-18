@@ -159,9 +159,12 @@ class VoxtralRealtimeCausalConv1d(nn.Conv1d):
         cache_key: str,
         stride: int = 1,
         dilation: int = 1,
+        groups: int = 1,
         bias: bool = True,
     ):
-        super().__init__(in_channels, out_channels, kernel_size, stride=stride, dilation=dilation, bias=bias)
+        super().__init__(
+            in_channels, out_channels, kernel_size, stride=stride, dilation=dilation, groups=groups, bias=bias
+        )
         self.cache_key = cache_key
 
     @cached_property
@@ -461,7 +464,7 @@ class VoxtralRealtimeTimeEmbedding(nn.Module):
         self.dim = dim
         self.theta = theta
         inv_freq = torch.exp(-math.log(self.theta) * torch.arange(self.dim // 2).float() / (self.dim // 2))
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
 
     def forward(self, time_tensor: torch.Tensor) -> torch.Tensor:
         inv_freq = self.inv_freq.to(device=time_tensor.device, dtype=time_tensor.dtype)
@@ -833,8 +836,8 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralRealtimePreTrainedModel, Ge
         need_new_cache = (
             not hasattr(self, "_encoder_cache")
             or cache_to_check.offloading != offload_cache
-            or cache_to_check.max_batch_size != batch_size
-            or cache_to_check.max_cache_len < max_cache_len
+            or cache_to_check.batch_size != batch_size
+            or cache_to_check.get_max_length() < max_cache_len
         )
 
         if need_new_cache:

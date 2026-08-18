@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -437,7 +437,7 @@ A form of model training that directly uses labeled data to correct and instruct
 ### Tensor Parallelism (TP)
 
 Parallelism technique for training on multiple GPUs in which each tensor is split up into multiple chunks, so instead of
-having the whole tensor reside on a single GPU, each shard of the tensor resides on its designated GPU. Shards gets
+having the whole tensor reside on a single GPU, each shard of the tensor resides on its designated GPU. Shards get
 processed separately and in parallel on different GPUs and the results are synced at the end of the processing step.
 This is what is sometimes called horizontal parallelism, as the splitting happens on horizontal level.
 Learn more about Tensor Parallelism [here](perf_train_gpu_many#tensor-parallelism).
@@ -447,7 +447,7 @@ Learn more about Tensor Parallelism [here](perf_train_gpu_many#tensor-parallelis
 A part of a sentence, usually a word, but can also be a subword (non-common words are often split in subwords) or a
 punctuation symbol.
 
-### token Type IDs
+### token type IDs
 
 Some models' purpose is to do classification on pairs of sentences or question answering.
 

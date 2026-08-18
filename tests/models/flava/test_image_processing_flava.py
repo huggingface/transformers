@@ -12,18 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import io
 import random
 import unittest
 
-import httpx
 import numpy as np
-from PIL import Image
 
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import (
+    ImageProcessingTestMixin,
+    load_coco_image,
+    prepare_image_inputs,
+)
 
 
 if is_torch_available():
@@ -105,8 +106,9 @@ class FlavaImageProcessingTester:
 
         self.codebook_do_resize = codebook_do_resize
         self.codebook_size = codebook_size
-        # LANCZOS resample does not support torch Tensor. Use BICUBIC as closest alternative
-        self.codebook_resample = codebook_resample if codebook_resample is not None else PILImageResampling.BICUBIC
+        # LANCZOS resample is natively supported with torchvision >= 0.27.
+        # On older versions, the base class falls back to BICUBIC automatically.
+        self.codebook_resample = codebook_resample if codebook_resample is not None else PILImageResampling.LANCZOS
         self.codebook_do_center_crop = codebook_do_center_crop
         self.codebook_crop_size = codebook_crop_size
         self.codebook_do_map_pixels = codebook_do_map_pixels
@@ -403,11 +405,7 @@ class FlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        dummy_image = Image.open(
-            io.BytesIO(
-                httpx.get("http://images.cocodataset.org/val2017/000000039769.jpg", follow_redirects=True).content
-            )
-        )
+        dummy_image = load_coco_image("000000039769.jpg")
 
         # Create processors for each backend
         encodings = {}

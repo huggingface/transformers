@@ -21,7 +21,7 @@ Transformers provides many pretrained models that are ready to use with a single
 Call [`~PreTrainedModel.from_pretrained`] to download and load a model's weights and configuration stored on the Hugging Face [Hub](https://hf.co/models).
 
 > [!TIP]
-> The [`~PreTrainedModel.from_pretrained`] method loads weights stored in the [safetensors](https://hf.co/docs/safetensors/index) file format if they're available. Traditionally, PyTorch model weights are serialized with the [pickle](https://docs.python.org/3/library/pickle.html) utility which is known to be unsecure. Safetensor files are more secure and faster to load.
+> The [`~PreTrainedModel.from_pretrained`] method loads weights stored in the [safetensors](https://hf.co/docs/safetensors/index) file format if they're available. Traditionally, PyTorch model weights are serialized with the [pickle](https://docs.python.org/3/library/pickle.html) utility which is known to be insecure. Safetensor files are more secure and faster to load.
 
 ```py
 from transformers import AutoModelForCausalLM
@@ -187,6 +187,46 @@ Access the `hf_device_map` attribute to see how a model is distributed across de
 device_map = {"model.layers.1": 0, "model.layers.14": 1, "model.layers.31": "cpu", "lm_head": "disk"}
 model.hf_device_map
 ```
+
+### Disk offloading
+
+When a model is too large for your GPUs and CPU RAM combined, Big Model Inference offloads the remaining weights to disk. Set `offload_folder` to a directory whenever any weight maps to `"disk"`, because that's where Transformers stores the offloaded weights.
+
+```py
+from transformers import AutoModelForCausalLM
+
+model = AutoModelForCausalLM.from_pretrained(
+    "google/gemma-7b",
+    device_map="auto",
+    offload_folder="./offload",
+)
+```
+
+Use `max_memory` to cap how much each device holds. Transformers fills devices in order of speed and sends whatever doesn't fit to disk. The example below limits the GPU to 10GB and the CPU to 30GB, so any leftover weights are held in `offload_folder`.
+
+```py
+model = AutoModelForCausalLM.from_pretrained(
+    "google/gemma-7b",
+    device_map="auto",
+    max_memory={0: "10GB", "cpu": "30GB"},
+    offload_folder="./offload",
+)
+```
+
+Set `max_memory={}` to specify that no gpu or cpu memory is available and to force offloading the entire model to disk.
+
+```py
+model = AutoModelForCausalLM.from_pretrained(
+    "google/gemma-7b",
+    device_map="auto",
+    max_memory={},
+    offload_folder="./offload",
+)
+```
+
+> [!NOTE]
+> Disk offloading trades memory for speed. Reading weights from disk on every forward pass is slower than reading from CPU or GPU memory.
+> Fully disk offloading requires `accelerate>1.14.0`
 
 ### Model data type
 

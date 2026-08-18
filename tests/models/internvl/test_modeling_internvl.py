@@ -250,6 +250,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
             {
                 (None, None): "The image shows two cats lying on a pink surface, which appears to be a bed or couch.",
                 ("xpu", 3): "The image shows two cats lying on a pink blanket. The cat on the left is a tabby",
+                ("xpu", 5): "The image shows two cats lying on a pink surface, which appears to be a bed or couch.",
             }
         )
         # fmt: on

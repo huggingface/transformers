@@ -11,8 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-
 import time
 from collections.abc import Callable
 from contextlib import nullcontext
@@ -50,6 +48,7 @@ class ModelRunner:
         self.return_logprobs = return_logprobs
         self.use_cuda_graph_varlen, self.use_cuda_graph_decode = self.cb_config.cuda_graph_booleans
         self.cache = cache
+        self._model_supports_logits_to_keep: bool | None = None  # resolved on first forward
 
         # Padding only happen when CUDA graphs or compile is used
         cuda_graph = self.use_cuda_graph_varlen or self.use_cuda_graph_decode
@@ -87,9 +86,17 @@ class ModelRunner:
             max_kv_read = pad_to_interval(max_kv_read, self.cb_config.kv_padding_interval_size, self.cache.num_pages)
         # For decode fast path batches, we pad using powers of 2 and use no KV
         else:
-            num_q_tokens = pad_to_pow2(num_q_tokens, max_batch_tokens)
+            num_q_tokens = pad_to_pow2(num_q_tokens, self.cb_config.max_requests_per_batch)
             max_kv_read = 0
         return num_q_tokens, max_kv_read
+
+    def supports_logits_to_keep(self, model: nn.Module) -> bool:
+        """Returns True if the model accepts the logits_to_keep kwarg in its forward."""
+        if self._model_supports_logits_to_keep is None:
+            self._model_supports_logits_to_keep = (
+                hasattr(model, "_supports_logits_to_keep") and model._supports_logits_to_keep()
+            )
+        return self._model_supports_logits_to_keep
 
     def compute_batch(self, model: nn.Module, batch_data: dict) -> None:
         """Runs the forward pass, processes the logits and samples the next tokens. It also handles which version of
@@ -99,6 +106,10 @@ class ModelRunner:
         carry_over_ids, prev_output_ids, output_ids = self.inputs_and_outputs.get_cb_kwargs()
         # This is the stream on which the compute happens
         compute_stream = self.inputs_and_outputs.compute_stream
+
+        # If supported, the model slices hidden states at logits_indices before lm_head, instead of us slicing logits
+        if self.supports_logits_to_keep(model):
+            batch_data["logits_to_keep"] = batch_data["logits_indices"]
 
         # Get the appropriate forward function (compiled or not, based on current path)
         forward_fn, use_cuda_graph = self._get_forward_fn(use_block_table=self.inputs_and_outputs.use_block_table)
@@ -158,57 +169,58 @@ class ModelRunner:
         # Perform carry-over (no-op for synchronous batching)
         self.inputs_and_outputs.carry_over_tokens(batch_data["input_ids"], carry_over_ids, prev_output_ids)
 
-        # Run model forward pass and convert to fp32 to match generate
-        logits = model(**batch_data).logits.float()
+        # Run model forward pass
+        logits = model(**batch_data).logits  # shape [1, seq_len OR num_logits, vocab_size]
+
+        # If it has not been done by the model, extract only the logits that are used to predict new tokens
+        logits_indices = batch_data["logits_indices"]  # shape [num_logits]
+        if "logits_to_keep" not in batch_data:
+            logits = logits[:, logits_indices, :]  # shape [1, num_logits, vocab_size]
+        # Convert to fp32 to match generate
+        logits = logits.float()  # shape [1, num_logits, vocab_size]
 
         # Process logits if there are any logit processors
         if self.logit_processor.do_processing:
             # Handle shape inconsistency between generate and continuous batching (dummy_dim is always 1)
-            dummy_dim, num_tokens, vocab_size = logits.shape
-            logits_2d = logits.view(dummy_dim * num_tokens, vocab_size)
-            input_ids_2d = batch_data["input_ids"].view(dummy_dim * num_tokens)
+            dummy_dim, num_logits, vocab_size = logits.shape
+            logits_2d = logits.view(dummy_dim * num_logits, vocab_size)
+            sliced_input_ids_2d = batch_data["input_ids"][0, logits_indices]  # shape [num_logits]
             # Process with 2D tensors
-            logits_2d = self.logit_processor(input_ids_2d, logits_2d, batch_data["logits_processor_args"])
+            logits_2d = self.logit_processor(sliced_input_ids_2d, logits_2d, batch_data["logits_processor_args"])
             # Reshape back to 3D
-            scores = logits_2d.view(dummy_dim, num_tokens, vocab_size)
+            scores = logits_2d.view(dummy_dim, num_logits, vocab_size)
         else:
             scores = logits
 
         # Sample next tokens
-        self._sample(scores, batch_data["logits_indices"], output_ids)
+        self._sample(scores, output_ids)
 
-    def _sample(self, scores: torch.Tensor, logits_indices: torch.Tensor, output_ids: torch.Tensor) -> None:
+    def _sample(self, scores: torch.Tensor, output_ids: torch.Tensor) -> None:
         """Private method to sample next tokens from the scores."""
         # Apply softmax if we are sampling or if we are generating log probabilities
         if self.do_sample or self.return_logprobs:
-            probs = nn.functional.softmax(scores[0], dim=-1)  # shape [seq_len, vocab_size]
+            probs = nn.functional.softmax(scores[0], dim=-1)  # shape [num_logits, vocab_size]
         else:
-            probs = scores.squeeze(0)  # shape [seq_len, vocab_size]
+            probs = scores.squeeze(0)  # shape [num_logits, vocab_size]
 
         # Retrieve next tokens through sampling or argmax
         if self.do_sample:
-            next_tokens = torch.multinomial(probs, num_samples=1)  # shape [seq_len, 1]
+            next_tokens = torch.multinomial(probs, num_samples=1)  # shape [num_logits, 1]
         else:
-            next_tokens = torch.argmax(probs, dim=-1, keepdim=True)  # shape [seq_len, 1]
+            next_tokens = torch.argmax(probs, dim=-1, keepdim=True)  # shape [num_logits, 1]
 
         # Maybe retrieve log probabilities
         if self.return_logprobs:
             per_token_probs = probs.gather(dim=1, index=next_tokens).squeeze(-1)
-            logprobs = per_token_probs.log()  # shape [seq_len]
+            logprobs = per_token_probs.log()  # shape [num_logits]
 
         # Always remove the extra dimension for the gather
-        next_tokens = next_tokens.squeeze(-1)  # shape [seq_len]
+        next_tokens = next_tokens.squeeze(-1)  # shape [num_logits]
 
-        # Get seq_len dimension to slice the logits indices
-        tokens = next_tokens.size(0)
-        # Shuffle the next tokens to match the order of the batch's requests
-        indices = logits_indices[:tokens]
-        next_tokens = next_tokens[indices]
         # Copy the next tokens and maybe their logprobs to the static output tensor
+        tokens = next_tokens.size(0)
         output_ids[0, :tokens].copy_(next_tokens)
         if self.return_logprobs:
-            # Shuffle the logprobs the same way as the next tokens
-            logprobs = logprobs[indices]
             # In order to match the dtype of output_ids, we cast the fp32 logprobs as int32 without changing the
             # underlying data. It's just a trick to use the same storage for both tensors.
             output_ids[1, :tokens].copy_(logprobs.view(dtype=torch.int32))
@@ -239,9 +251,9 @@ class ModelRunner:
             num_requests = 1
             while True:
                 total_duration += self.run_one_warmup(model=model, num_q_tokens=num_requests, max_kv_read=None)
-                if num_requests >= self.cache.max_batch_tokens:
+                if num_requests >= self.cb_config.max_requests_per_batch:
                     break
-                num_requests = min(2 * num_requests, self.cache.max_batch_tokens)
+                num_requests = min(2 * num_requests, self.cb_config.max_requests_per_batch)
 
             # Switch to the other IO pair if this is async
             if isinstance(self.inputs_and_outputs, ContinuousBatchingAsyncIOs):
@@ -282,17 +294,10 @@ class ModelRunner:
         start = time.perf_counter()
         try:
             self.inputs_and_outputs.prepare_batch_tensors(
-                future_states, self.logit_processor, use_decode_fast_path, padded_q, padded_kv
+                future_states, self.logit_processor, use_decode_fast_path, padded_q, padded_kv, use_padding=True
             )
             batch_data = self.inputs_and_outputs.get_model_kwargs(use_padding=True)
-            carry_over_ids, prev_output_ids, output_ids = self.inputs_and_outputs.get_cb_kwargs()
-            forward_fn, use_cuda_graph = self._get_forward_fn(use_block_table=self.inputs_and_outputs.use_block_table)
-            forward_fn_args = (model, batch_data, carry_over_ids, prev_output_ids, output_ids)
-            if use_cuda_graph:
-                self._capture_graph(forward_fn, self.inputs_and_outputs.compute_stream, *forward_fn_args)
-            else:
-                with torch.cuda.stream(self.inputs_and_outputs.compute_stream):
-                    forward_fn(*forward_fn_args)
+            self.compute_batch(model, batch_data)
             duration = time.perf_counter() - start
             logger.debug(f"Warmup completed in {duration:.2f}s")
 

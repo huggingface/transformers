@@ -98,8 +98,8 @@ class ExaoneMoeIntegrationTest(unittest.TestCase):
         # fmt: off
         EXPECTED_MEAN = Expectations(
             {
-                ("xpu", None): torch.tensor(
-                    [[-2.2315, -3.0070, -3.2105, -3.2688, -3.2211, -3.3958, -3.1049, -3.2591, -3.8714, -0.6801]]
+                ("xpu", 5): torch.tensor(
+                    [[-2.2315, -3.0607, -3.0840, -3.2559, -3.1974, -3.3996, -3.1582, -3.2548, -3.8877, -0.6911]]
                 ),
                 ("cuda", None): torch.tensor(
                     [[-2.2491, -3.0824, -3.2191, -3.2712, -3.1991, -3.4087, -3.1384, -3.2601, -3.8869, -0.6940]]
@@ -108,7 +108,7 @@ class ExaoneMoeIntegrationTest(unittest.TestCase):
         ).get_expectation()
         EXPECTED_SLICE = Expectations(
             {
-                ("xpu", None): torch.tensor(
+                ("xpu", 5): torch.tensor(
                     [-2.3750, -3.0156, 2.6875, -3.0000, 0.5078, -1.4141, -1.8516, -2.6719, -1.7578, -2.0781]
                 ),
                 ("cuda", None): torch.tensor(

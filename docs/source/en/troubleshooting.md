@@ -13,7 +13,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -55,8 +55,8 @@ CUDA out of memory. Tried to allocate 256.00 MiB (GPU 0; 11.17 GiB total capacit
 
 Here are some potential solutions you can try to lessen memory use:
 
-- Reduce the [`per_device_train_batch_size`](main_classes/trainer#transformers.TrainingArguments.per_device_train_batch_size) value in [`TrainingArguments`].
-- Try using [`gradient_accumulation_steps`](main_classes/trainer#transformers.TrainingArguments.gradient_accumulation_steps) in [`TrainingArguments`] to effectively increase overall batch size.
+- Reduce the [`~TrainingArguments#per_device_train_batch_size`] value in [`TrainingArguments`].
+- Try using [`~TrainingArguments#gradient_accumulation_steps`] in [`TrainingArguments`] to effectively increase overall batch size.
 
 <Tip>
 

@@ -206,11 +206,11 @@ class InstructBlipVideoModel(InstructBlipModel):
                 attention_mask = torch.ones_like(input_ids)
         else:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = special_image_mask.all(-1)
 
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         language_model_inputs = language_model_inputs.to(inputs_embeds.device, inputs_embeds.dtype)
         inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, language_model_inputs)
 
@@ -320,13 +320,13 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         """
         if input_ids is None:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = special_image_mask.all(-1)
         else:
             special_image_mask = input_ids == self.config.video_token_id
 
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         return special_image_mask
 
     @can_return_tuple
@@ -389,7 +389,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         ... )
         >>> container = av.open(file_path)
 
-        >>> # sample uniformly 4 frames from the videWhy is this video funny?o
+        >>> # sample uniformly 4 frames from the video
         >>> total_frames = container.streams.video[0].frames
         >>> indices = np.arange(0, total_frames, total_frames / 4).astype(int)
         >>> clip = read_video_pyav(container, indices)

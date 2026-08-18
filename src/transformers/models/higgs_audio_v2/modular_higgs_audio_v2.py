@@ -207,7 +207,7 @@ class HiggsAudioV2Model(LlamaModel):
 
         elif input_ids is None:
             special_audio_mask = inputs_embeds == self.embed_tokens(
-                torch.tensor(self.config.audio_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.audio_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_audio_mask = special_audio_mask.all(-1)
 
@@ -326,7 +326,7 @@ class HiggsAudioV2Model(LlamaModel):
                 else audio_embeds
             )
             inputs_embeds = inputs_embeds.masked_scatter(
-                audio_token_mask[..., None].expand_as(inputs_embeds), audio_embeds.to(inputs_embeds.device)
+                audio_token_mask[..., None], audio_embeds.to(inputs_embeds.device)
             )
         elif audio_input_ids is not None:
             inputs_embeds = audio_embeds

@@ -662,6 +662,7 @@ class TrainerAutoBatchSizeTest(TestCasePlus, TrainerIntegrationCommon):
             run_glue.main()
 
     @require_deepspeed
+    @require_torch_non_multi_accelerator
     def test_auto_batch_size_with_deepspeed(self):
         train_dataset = RegressionDataset(length=128)
 
@@ -982,7 +983,7 @@ class TrainerInterruptedTrainingTest(TestCasePlus, TrainerIntegrationCommon):
                 super().__init__()
                 self.fc = nn.Linear(10, 10, bias=False)
                 # data_order logs the order of data points seen by the model
-                self.register_buffer("data_order", torch.empty(0, dtype=torch.long))
+                self.data_order = nn.Buffer(torch.empty(0, dtype=torch.long))
 
             def load_state_dict(self, state_dict, strict=True):
                 # Handle data_order buffer size mismatch during checkpoint loading
