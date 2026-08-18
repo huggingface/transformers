@@ -29,7 +29,7 @@ from .utils import (
     is_torch_tensor,
     is_torchcodec_available,
     is_torchvision_available,
-    is_torchvision_greater_or_equal,
+    is_torchvision_lesser_or_equal,
     is_vision_available,
     logging,
     requires_backends,
@@ -533,7 +533,7 @@ def load_image_as_tensor(
     """
     import torch
 
-    if is_torchvision_greater_or_equal("0.26.0"):
+    if is_torchvision_lesser_or_equal("0.26.0"):
         if is_torchcodec_available():
             # Fallback to torchcodec for decoding
             from torchcodec.decoders import ImageReadMode, decode_image
