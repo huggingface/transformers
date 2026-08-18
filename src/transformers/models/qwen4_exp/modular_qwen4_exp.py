@@ -703,8 +703,6 @@ def _find_nth_prime_after(start: int, count: int) -> int:
 
 
 class Qwen4ExpNGramEmbedding(nn.Module):
-    _CONTEXT_STATE_IDX = 2
-
     def __init__(self, config: Qwen4ExpTextConfig, embedding_dim: int, ple_layer_index: int = 0):
         super().__init__()
         self.ngram_size = config.ngram_size
@@ -763,7 +761,7 @@ class Qwen4ExpNGramEmbedding(nn.Module):
         if past_key_values is None:
             return previous_context
 
-        if past_key_values.has_previous_state(layer_idx, state_idx=self._CONTEXT_STATE_IDX):
+        if past_key_values.has_previous_state(layer_idx, state_idx=2):
             context_update = input_ids
         else:
             # LinearAttentionLayer pads newly initialized states with zeros, while Qwen4-Exp n-grams must be padded
@@ -772,7 +770,7 @@ class Qwen4ExpNGramEmbedding(nn.Module):
         context_states = past_key_values.update_conv_state(
             context_update,
             layer_idx,
-            state_idx=self._CONTEXT_STATE_IDX,
+            state_idx=2,
             conv_kernel_size=context_len,
         )
         context_end = context_states.shape[-1] - input_ids.shape[-1]
@@ -816,8 +814,6 @@ class Qwen4ExpPLELayer(nn.Module):
     The returned tensor has shape `(batch_size, sequence_length, hc_count * hidden_size)`.
     """
 
-    _CONV_STATE_IDX = 1
-
     def __init__(self, config: Qwen4ExpTextConfig, layer_idx: int, ple_layer_index: int):
         super().__init__()
         self.layer_idx = layer_idx
@@ -852,7 +848,7 @@ class Qwen4ExpPLELayer(nn.Module):
                 conv_input = past_key_values.update_conv_state(
                     hidden_states,
                     self.layer_idx,
-                    state_idx=self._CONV_STATE_IDX,
+                    state_idx=1,
                     conv_kernel_size=self.short_conv_state_len,
                 )
             conv_input = F.pad(conv_input, (self.short_conv_state_len, 0))
