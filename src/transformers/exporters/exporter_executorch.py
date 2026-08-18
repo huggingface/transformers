@@ -171,10 +171,29 @@ def _signature_constant_methods(exported_program: ExportedProgram) -> dict[str, 
     into positions using the loaded method's output count).
     """
     signature = exported_program.graph_signature
-    return {
+    constant_methods = {
         "input_names": [name for name in signature.user_inputs if isinstance(name, str)],
         "num_user_outputs": [sum(spec.kind.name == "USER_OUTPUT" for spec in signature.output_specs)],
     }
+    # The cache's per-layer geometry travels too. A `.pte`'s metadata gives shapes but nothing that says
+    # which leaf is a layer's keys, and the pytree context the other backends read is not in the program —
+    # so bake what the trace knew, flattened as `layer, heads, key_dim, value_dim` runs.
+    if geometry := _traced_kv_geometry(exported_program):
+        constant_methods["kv_geometry"] = [
+            value for layer, dims in sorted(geometry.items()) for value in (layer, *dims)
+        ]
+    return constant_methods
+
+
+def _traced_kv_geometry(exported_program: ExportedProgram) -> dict[int, tuple[int, int, int]]:
+    """`{layer index: (num_kv_heads, key_head_dim, value_head_dim)}` of the cache this program was traced
+    with, read off its input spec the same way the dynamo runner does."""
+    from .runtime_utils import _traced_kv_geometry as read_geometry
+
+    try:
+        return read_geometry(exported_program.module())
+    except Exception:  # a program without a cache input has no geometry to describe
+        return {}
 
 
 def _get_edge_compile_config() -> EdgeCompileConfig:

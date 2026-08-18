@@ -136,6 +136,13 @@ class GraniteSpeechPlusModel(GraniteSpeechPlusPreTrainedModel):
         self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()
 
+    def get_encoder(self, modality: str | None = None):
+        # The audio tower predates the canonical `audio_tower` naming and renaming it would break checkpoint
+        # keys, so answer the modality lookup here rather than let it fall through to `self`.
+        if modality == "audio":
+            return self.encoder
+        return super().get_encoder(modality=modality)
+
     @can_return_tuple
     @auto_docstring
     def get_audio_features(

@@ -56,6 +56,7 @@ logger = logging.get_logger(__name__)
 if is_torch_available():
     import torch
 
+    from ..cache_utils import StaticLayer
     from ..configuration_utils import PreTrainedConfig
     from ..modeling_outputs import BaseModelOutput
     from ..modeling_utils import PreTrainedModel
@@ -380,6 +381,18 @@ def prepare_for_export(
     # honour them during the trace (we don't want them as traced kwargs).
     output_flags = {flag: inputs.pop(flag) for flag in _OUTPUT_FLAGS if flag in inputs}
 
+    # Drop kwargs that are `None`: `torch.export` still records them as placeholders carrying no value, so
+    # the graph declares an "input" there and dynamo then demands the key back on every call — a hole the
+    # runtime has to fill with `None` for no benefit. Only when the parameter's default is `None` too, or
+    # omitting it would switch the traced path (a `use_cache=True` default handed `None` would flip to True).
+    forward = getattr(model, "forward", None)
+    if forward is not None:
+        parameters = inspect.signature(forward).parameters
+        for name in [name for name, value in inputs.items() if value is None]:
+            parameter = parameters.get(name)
+            if parameter is not None and parameter.default is None:
+                inputs.pop(name)
+
     # Pre-compute data-dependent vision/audio tensors that use loops, .tolist(),
     # repeat_interleave, or itertools.groupby — untraceable by dynamo.
     # TODO: use the collator API once it covers these cases.
@@ -526,6 +539,11 @@ def _prepare_grid_thw_vision_inputs(config: Any, inputs: dict[str, Any]) -> None
         merge_size = _find_config_attr(config, "merge_size")
         inputs["pixel_shuffle_index"] = module.get_vision_pixel_shuffle_index(grid_thw, merge_size)
 
+    if hasattr(module, "get_vision_temporal_slice_index"):
+        # ernie4_5_vl_moe's merger interleaves even/odd frames through a `range(0, temporal_size, 2)` loop
+        # over the grid's values — untraceable, and the indices depend on nothing but the grid.
+        inputs["temporal_slice_index"] = module.get_vision_temporal_slice_index(grid_thw, spatial_merge_size)
+
 
 @register_export_input_preparer("target_sizes")
 def _prepare_navit_vision_inputs(config: Any, inputs: dict[str, Any]) -> None:
@@ -534,6 +552,14 @@ def _prepare_navit_vision_inputs(config: Any, inputs: dict[str, Any]) -> None:
     merged-shape / maximum-sequence-length helpers outside the traced graph."""
     target_sizes = inputs["target_sizes"]
     num_patches_per_side = _find_config_attr(config, "num_patches_per_side")
+    if num_patches_per_side is None:
+        # The tower derives the grid side rather than declaring it (minicpmv4_6's embeddings hold
+        # `image_size // patch_size`), and the precompute only ever sees the config — so derive it the same
+        # way. Reached only via the `target_sizes` marker, so an anyres model never lands here.
+        image_size = _find_config_attr(config, "image_size")
+        patch_size = _find_config_attr(config, "patch_size")
+        if image_size is not None and patch_size is not None:
+            num_patches_per_side = image_size // patch_size
     if num_patches_per_side is not None:
         inputs["position_ids"] = get_vision_nearest_position_ids(target_sizes, num_patches_per_side)
 
@@ -731,6 +757,9 @@ def _merge_decode_calls(decode_calls: list[dict]) -> dict:
     # `position_ids` is `[batch, seq]` or `[n_axes, batch, seq]` (m-rope) — the sequence axis is
     # last in both, so a negative dim concatenates it correctly either way.
     concat_along("position_ids", -1)
+    # `token_type_ids` is per-token too, and left at one step it specializes the merged graph's query axis
+    # back to 1 (`Guard failed: token_type_ids.size()[1] == 1`) — defeating the whole point of the merge.
+    concat_along("token_type_ids", -1)
 
     # `attention_mask` is either a 2D padding mask `[batch, kv]` (a growing `DynamicCache`: the model
     # rebuilds the causal mask from `position_ids` / `cache_position` internally, so the last step's
@@ -765,36 +794,197 @@ def _merge_step_masks(masks: list[Any]) -> Any:
     return last_mask
 
 
-def materialize_cache_layers(cache: Any, batch_size: int, config: Any, dtype: Any, device: Any) -> None:
+# Model types whose latent attention caches the *compressed* latent as a single head; the others sharing
+# those config fields (axk, deepseek_v32, glm_moe_dsa) cache decompressed keys, one per KV head. Listing a
+# model here only selects between two readings of `kv_lora_rank` / `qk_rope_head_dim` — a config without
+# those fields is not caching a latent at all, whatever its model type, and derives its geometry the
+# ordinary way.
+_COMPRESSED_LATENT_ATTENTIONS = {
+    "axk1",
+    "deepseek_v2",
+    "deepseek_v3",
+    "glm4_moe_lite",
+    "kimi_k25",
+    "minicpm3",
+    "youtu",
+}
+
+
+def _cache_kv_geometry(config: Any, layer_idx: int | None = None) -> tuple[int, int, int] | None:
+    """`(num_kv_heads, key_head_dim, value_head_dim)` of the KV cache a model writes, from its config.
+
+    `None` for a model with no attention at all (mamba, rwkv, …): its cache holds only recurrent states,
+    which the graph carries and the write-back fills in, so there is no key/value geometry to derive.
+
+    A heterogeneous config (gemma4, …) declares geometry fields like `head_dim` as *per-layer*, and
+    reading them off the global config raises rather than silently returning a value that may be wrong
+    for some layers. Pass `layer_idx` to read that layer's own config — the geometry is per layer, so
+    the callers that allocate or check a specific layer resolve it that way.
+    """
+    text_config = config.get_text_config()
+    if layer_idx is not None and getattr(text_config, "is_heterogeneous", False):
+        text_config = text_config.per_layer_config[layer_idx]
+    if getattr(text_config, "num_attention_heads", None) is None:
+        return None
+    # Latent attention (deepseek_v2/v3, kimi_k25, minicpm3, axk, …) caches something other than one entry
+    # per KV head, and in two styles their configs cannot tell apart — identical `kv_lora_rank` /
+    # `qk_*_head_dim` fields, but one caches the *compressed* latent and the other the decompressed keys,
+    # so the model type is the only discriminator.
+    kv_lora_rank = getattr(text_config, "kv_lora_rank", None)
+    if kv_lora_rank is not None and getattr(text_config, "model_type", None) in _COMPRESSED_LATENT_ATTENTIONS:
+        # one head holding the compressed latent as keys and the shared rope part as values — so the key
+        # and value head dims differ, unlike standard attention
+        num_kv_heads = 1
+        key_dim = kv_lora_rank
+        value_dim = getattr(text_config, "qk_rope_head_dim", None) or key_dim
+    else:
+        num_kv_heads = getattr(text_config, "num_key_value_heads", None) or text_config.num_attention_heads
+        default_dim = (
+            getattr(text_config, "head_dim", None) or text_config.hidden_size // text_config.num_attention_heads
+        )
+        # decompressed latent attention keys are `qk_nope + qk_rope` wide against `v_head_dim` values
+        qk_nope = getattr(text_config, "qk_nope_head_dim", None)
+        qk_rope = getattr(text_config, "qk_rope_head_dim", None)
+        key_dim = qk_nope + qk_rope if qk_nope and qk_rope else default_dim
+        value_dim = getattr(text_config, "v_head_dim", None) or default_dim
+    return num_kv_heads, key_dim, value_dim
+
+
+def _cache_halves(cache: Any, reference: Any = None) -> list[tuple[Any, Any]]:
+    """The `(cache, reference)` pairs to walk. An `EncoderDecoderCache` keeps its layers in the two caches
+    it pairs rather than on itself, and each half has to be matched with the same half of the reference."""
+    if hasattr(cache, "self_attention_cache"):
+        return [
+            (getattr(cache, half), getattr(reference, half, None))
+            for half in ("self_attention_cache", "cross_attention_cache")
+        ]
+    return [(cache, reference)]
+
+
+def check_cache_geometry(config: Any, cache: Any) -> None:
+    """Raise if the geometry `_cache_kv_geometry` derives disagrees with what the model really cached.
+
+    Called on a post-prefill cache, whose layers hold real tensors. The derivation cannot be read off
+    the config values alone for latent attention — a compressed and a decompressed model carry
+    identical `kv_lora_rank` / `qk_*_head_dim` fields — so this turns the resulting mismatch into a
+    message naming the fix, instead of an `index_copy_()` shape error deep in a later forward.
+
+    Raises only when the derivation matches *no* layer. A model may cache different geometries across
+    layers (deepseek_v32's sparse-indexer layers next to its latent ones), and the exporter fills only the
+    layers that reach it uninitialized — so a layer disagreeing is normal, and none agreeing is the
+    failure: whatever the exporter would have materialized fits nothing the model actually writes.
+    """
+    cached, derived_any = [], None
+    for cache_half, _ in _cache_halves(cache):
+        for layer_idx, layer in enumerate(cache_half.layers):
+            if getattr(layer, "keys", None) is None:
+                continue
+            derived = _cache_kv_geometry(config, layer_idx)
+            if derived is None:
+                continue
+            actual = (layer.keys.shape[1], layer.keys.shape[3], layer.values.shape[3])
+            if actual == derived:
+                return
+            cached.append(actual)
+            derived_any = derived
+    if cached:
+        model_type = getattr(config.get_text_config(), "model_type", type(config).__name__)
+        raise ValueError(
+            f"`{model_type}` caches (heads, key_dim, value_dim)={sorted(set(cached))} but the exporter "
+            f"derives {derived_any} for every layer, so the runtime would build a cache the exported "
+            "graph rejects. If this model caches a compressed latent (one head), add its model type to "
+            "`_COMPRESSED_LATENT_ATTENTIONS`; otherwise `_cache_kv_geometry` needs to learn its layout."
+        )
+
+
+def kv_geometry_of(cache: Any) -> dict[int, tuple[int, int, int]]:
+    """`{layer index: (num_kv_heads, key_head_dim, value_head_dim)}` of a cache the model itself filled."""
+    return {
+        index: (layer.keys.shape[1], layer.keys.shape[3], layer.values.shape[3])
+        for index, layer in enumerate(getattr(cache, "layers", []) or [])
+        if getattr(layer, "keys", None) is not None and layer.keys.dim() == 4
+    }
+
+
+def materialize_cache_layers(
+    cache: Any,
+    batch_size: int,
+    config: Any,
+    dtype: Any,
+    device: Any,
+    kv_geometry: dict[int, tuple[int, int, int]] | None = None,
+) -> None:
     """Give every lazily-uninitialized cache layer real tensors — `torch.export` can't trace lazy
     allocation, so both the traced (prefill) cache and the cache the runtime builds must be materialized,
     and identically (dynamo bakes the cache pytree into the graph's input spec). Static layers allocate
     their full buffers (the same `lazy_initialization` path `Cache.early_initialization` takes); growing
     layers get rank-4 zero-length `[batch, kv_heads, 0, head_dim]` tensors the graph can `cat` onto — NOT
-    the 1-D empty tensor their own lazy init makes, which would bake a rank-1 guard into the graph."""
-    if hasattr(cache, "self_attention_cache"):  # EncoderDecoderCache — materialize both sub-caches
-        materialize_cache_layers(cache.self_attention_cache, batch_size, config, dtype, device)
-        materialize_cache_layers(cache.cross_attention_cache, batch_size, config, dtype, device)
-        return
-    text_config = config.get_text_config()
-    if (kv_lora_rank := getattr(text_config, "kv_lora_rank", None)) is not None:
-        # Multi-head latent attention (deepseek_v3, kimi_k25) caches one compressed latent head of
-        # `kv_lora_rank`, not one entry per KV head — deriving the shape from `num_key_value_heads` would
-        # disagree with what the model, and so the traced graph, actually caches.
-        num_kv_heads, head_dim = 1, kv_lora_rank
-    else:
-        num_kv_heads = getattr(text_config, "num_key_value_heads", None) or text_config.num_attention_heads
-        head_dim = getattr(text_config, "head_dim", None) or text_config.hidden_size // text_config.num_attention_heads
-    for layer in cache.layers:
-        if getattr(layer, "is_initialized", True):
+    the 1-D empty tensor their own lazy init makes, which would bake a rank-1 guard into the graph.
+
+    `kv_geometry` is the per-layer geometry read off the graph (`ModelRunner.kv_geometry`) or off a cache the
+    model filled (`kv_geometry_of`). It wins where present, because a config cannot always give it —
+    mimo_v2_flash caches 2 KV heads on its sliding layers and 4 on its full ones — and the config derivation
+    covers the layers it does not reach.
+    """
+    kv_geometry = kv_geometry or {}
+    for cache_half, _ in _cache_halves(cache):
+        _materialize_layers(cache_half, batch_size, config, dtype, device, kv_geometry)
+
+
+def _materialize_layers(cache, batch_size, config, dtype, device, kv_geometry) -> None:
+    """`materialize_cache_layers` for one flat cache — see there."""
+    for layer_idx, layer in enumerate(cache.layers):
+        # `is_initialized` is not enough on its own: a layer whose own lazy init already ran holds a *rank-1*
+        # empty, and the graph was traced against the rank-4 `[batch, kv_heads, 0, head_dim]` form this
+        # helper builds. Feeding the rank-1 one indexes an axis that isn't there, inside the graph.
+        keys = getattr(layer, "keys", None)
+        rank_1_empty = keys is not None and keys.dim() < 4 and keys.numel() == 0
+        if getattr(layer, "is_initialized", True) and not rank_1_empty:
             continue
-        empty_kv = torch.zeros(batch_size, num_kv_heads, 0, head_dim, dtype=dtype, device=device)
-        if layer.get_max_length() == -1:
+        geometry = kv_geometry.get(layer_idx) or _cache_kv_geometry(config, layer_idx)
+        if geometry is None:
+            return
+        num_kv_heads, key_dim, value_dim = geometry
+        # A static layer also *records* its head count, and that record is compared as part of the graph's
+        # input spec — so it has to come from the same place the buffers do, not from the config's single
+        # value (mimo_v2_flash caches 2 heads on sliding layers and 4 on full ones).
+        if hasattr(layer, "num_heads"):
+            layer.num_heads = num_kv_heads
+        empty_keys = torch.zeros(batch_size, num_kv_heads, 0, key_dim, dtype=dtype, device=device)
+        empty_values = torch.zeros(batch_size, num_kv_heads, 0, value_dim, dtype=dtype, device=device)
+        # Growing vs fixed-size is the layer's *kind*, not what `get_max_length` reports: a
+        # `DynamicSlidingWindowLayer` grows and crops, yet reports its window as a max length — read that way
+        # it goes through its own `lazy_initialization` and ends up with the rank-1 empties the graph cannot
+        # index, which surfaces as `IndexError: tuple index out of range` inside the graph.
+        if not isinstance(layer, StaticLayer):
             layer.dtype, layer.device = dtype, device
-            layer.keys, layer.values = empty_kv, empty_kv.clone()
+            layer.keys, layer.values = empty_keys, empty_values
             layer.is_initialized = True
+            # Whatever else the layer already holds goes to the same device: a sliding layer builds
+            # `_sliding_window_tensor` in `__init__` and relies on its own `lazy_initialization` to move it,
+            # which this branch skips (those rank-1 empties would bake a rank-1 guard). Left behind, it is a
+            # cpu leaf among cuda ones and the graph's input spec mismatches on device. Dtypes stay as they
+            # are — that tensor is `long`, not the cache dtype.
+            for attribute, value in vars(layer).items():
+                if isinstance(value, torch.Tensor) and attribute not in ("keys", "values"):
+                    setattr(layer, attribute, value.to(device))
         else:
-            layer.lazy_initialization(empty_kv, empty_kv)
+            layer.lazy_initialization(empty_keys, empty_values)
+        # A sparse-indexer layer (deepseek_v32, axk2) caches a *third* tensor beside keys and values, and
+        # it is a graph input like the others — leave it lazy and every later cache leaf shifts by one.
+        # Rank-3 zero-length for the same reason the others are rank-4: its own lazy init makes a 1-D
+        # empty, which would bake a rank-1 guard into the graph.
+        if hasattr(layer, "is_indexer_initialized") and not layer.is_indexer_initialized:
+            index_head_dim = config.get_text_config().index_head_dim
+            empty_indexer_keys = torch.zeros(batch_size, 0, index_head_dim, dtype=dtype, device=device)
+            if layer.get_max_length() == -1:
+                layer.indexer_dtype, layer.indexer_device = dtype, device
+                layer.indexer_keys = empty_indexer_keys
+                layer.is_indexer_initialized = True
+            else:
+                # allocates the full `[batch, max_cache_len, index_head_dim]` buffer from the hint's shape,
+                # and puts the layer's own `indexer_cumulative_length` counter on the right device
+                layer.lazy_initialization_indexer(empty_indexer_keys)
 
 
 def decompose_prefill_decode(
@@ -841,6 +1031,17 @@ def decompose_prefill_decode(
         with _capture_forward(model) as calls:
             model.generate(**copy.deepcopy(inputs), generation_config=capture_config)
     except Exception as e:
+        # A cache-shape error here means the geometry `_cache_kv_geometry` derived for the materialized
+        # cache disagrees with what the model writes into it — say so, rather than leaving an
+        # `index_copy_()` slice error from deep inside the forward.
+        if "slice shapes" in str(e) or "Sizes of tensors must match" in str(e):
+            raise RuntimeError(
+                f"decompose_prefill_decode failed for {type(model).__name__}: the exporter materialized the "
+                f"cache as (heads, key_dim, value_dim)={_cache_kv_geometry(model.config, 0)}, which is not what "
+                "this model caches. If its attention caches a compressed latent (one head), add its model "
+                "type to `_COMPRESSED_LATENT_ATTENTIONS`; otherwise `_cache_kv_geometry` needs to learn its "
+                "layout."
+            ) from e
         raise RuntimeError(
             f"decompose_prefill_decode failed for {type(model).__name__}. "
             f"Inputs passed: {list(inputs.keys())}. "
@@ -868,6 +1069,12 @@ def decompose_prefill_decode(
     decode_inputs = (
         _merge_decode_calls(calls[first_decode:num_new_tokens]) if multi_token_decode else calls[first_decode]
     )
+    # `generate` built this cache itself, so its layers carry the model's real geometry — the one thing
+    # that can tell us whether the geometry the exporter derives (and materializes for the prefill capture
+    # and the runtime) is right for this architecture.
+    if (captured_cache := decode_inputs.get("past_key_values")) is not None:
+        check_cache_geometry(model.config, captured_cache)
+
     return {
         "prefill": (copy.copy(model), prefill_inputs),
         "decode": (copy.copy(model), decode_inputs),
@@ -962,38 +1169,179 @@ if is_torch_available():
         def forward(self, **kwargs):
             if self._grid_kwarg is not None and "grid_thw" in kwargs:
                 kwargs[self._grid_kwarg] = kwargs.pop("grid_thw")
-            outputs = getattr(self.model, self._getter)(**kwargs)
+            # `precompute_export_inputs` derives its tensors from the config alone, so it offers whatever
+            # the config implies — a windowed vision config yields `window_index` even for a getter that
+            # never takes one (minicpmv4_6). Keep only what this getter actually declares.
+            getter = getattr(self.model, self._getter)
+            parameters = inspect.signature(getter).parameters
+            if not any(p.kind is inspect.Parameter.VAR_KEYWORD for p in parameters.values()):
+                kwargs = {name: value for name, value in kwargs.items() if name in parameters}
+            outputs = getter(**kwargs)
+            # Most getters put the features in `pooler_output` or `last_hidden_state`. Some declare both
+            # and fill neither (granite4_vision returns its features as `hidden_states` +
+            # `deepstack_features`), so fall through to the whole output rather than the `None` those
+            # fields hold — a default on `getattr` only covers a *missing* attribute, not a null one.
             features = getattr(outputs, "pooler_output", None)
             if features is None:
-                features = getattr(outputs, "last_hidden_state", outputs)
+                features = getattr(outputs, "last_hidden_state", None)
+            if features is None:
+                features = outputs
             return torch.cat(features) if isinstance(features, (tuple, list)) else features
+
+    class PatchVisionEncoder(_ModelComponent):
+        """An anyres vision tower + projector, cut *before* `pack_image_features`.
+
+        The packing decides how many tokens each image contributes from that image's own size, so tracing it
+        bakes one `(image count, sizes)` pair into the graph. Everything up to the projector is plain batched
+        compute over a flat `(total_patches, channels, height, width)` tensor, so the component stops there
+        and the runtime packs the result — the same split optimum-intel's `OVModelForVisualCausalLM` uses.
+        `image_newline` rides along as a second output: the packing needs that weight and the runtime holds
+        no module to read it off.
+        """
+
+        def projector_specs(self) -> list[tuple[int, Any, Any]] | None:
+            """`(llm_layer, vision_layer, projector)` per projector this tower feeds, or `None` for the
+            single-projector case. A deepstack tower (granite4_vision) runs one projector per
+            `deepstack_layer_map` entry and one per `spatial_target_layers` group, each injected into the
+            decoder at its own layer — both loop counts come from the config, so they unroll legitimately."""
+            config = self.model.config
+            layer_map = getattr(config, "deepstack_layer_map", None)
+            if not layer_map:
+                return None
+            specs = [
+                (llm_layer, vision_layer, self.model.layerwise_projectors[index])
+                for index, (vision_layer, llm_layer) in enumerate(layer_map)
+            ]
+            specs += [
+                (llm_layer, config.spatial_vision_layer, self.model.spatial_projectors[index])
+                for index, llm_layer in enumerate(config.spatial_target_layers)
+            ]
+            return specs
+
+        def forward(self, pixel_values, vision_feature_layer=None, vision_feature_select_strategy=None):
+            outputs = self.model.vision_tower(pixel_values, output_hidden_states=True, return_dict=True)
+
+            def project(layer, projector):
+                if isinstance(layer, int):
+                    selected = outputs.hidden_states[layer]
+                else:
+                    selected = torch.cat([outputs.hidden_states[index] for index in layer], dim=-1)
+                if vision_feature_select_strategy == "default":
+                    selected = selected[:, 1:]
+                return projector(selected)
+
+            specs = self.projector_specs()
+            if specs is None:
+                features = {"image_features": project(vision_feature_layer, self.model.multi_modal_projector)}
+            else:
+                # Keyed by the decoder layer each one is injected at, so the runtime rebuilds the
+                # `deepstack_features` map without needing the config's ordering again.
+                features = {f"image_features.{llm}": project(layer, proj) for llm, layer, proj in specs}
+            features["image_newline"] = self.model.image_newline
+            return features
 
     class TokenEmbedder(_ModelComponent):
         """`input_ids -> inputs_embeds`, zeroing the placeholder ids (out of the text vocab) first, the way
         a VLM `forward` does before scattering in encoder features. Wraps the text decoder (never the outer
         VLM), so the export precompute's `get_rope_index` branch stays off on the `input_ids` it carries.
+
+        A decoder with per-layer embeddings (gemma3n, gemma4) reads a *second* per-token embedding straight
+        from `input_ids`, and recovers them by an exact reverse lookup when handed `inputs_embeds` alone —
+        data-dependent, and it fails outright once features are scattered in. So this returns that tensor
+        too, under the `per_layer_inputs` kwarg the decoder's `forward` already takes to skip the lookup.
+        Its placeholder rows survive into the decoder untouched (nothing scatters over them), so they use
+        the pad id the eager forward substitutes rather than the zero standing in for the text embedding.
         """
 
         def __init__(self, decoder: PreTrainedModel, placeholder_ids: list[int]):
             super().__init__(decoder)
             self._placeholder_ids = placeholder_ids
 
-        def forward(self, input_ids):
+        def _placeholder_mask(self, input_ids):
             placeholder = torch.zeros_like(input_ids, dtype=torch.bool)
             for token_id in self._placeholder_ids:
                 placeholder = placeholder | (input_ids == token_id)
-            return self.model.get_input_embeddings()(input_ids.masked_fill(placeholder, 0))
+            return placeholder
+
+        def forward(self, input_ids):
+            placeholder = self._placeholder_mask(input_ids)
+            inputs_embeds = self.model.get_input_embeddings()(input_ids.masked_fill(placeholder, 0))
+            if not hasattr(self.model, "get_per_layer_inputs"):
+                return inputs_embeds
+            pad_token_id = self.model.config.get_text_config().pad_token_id or 0
+            per_layer_ids = input_ids.masked_fill(placeholder, pad_token_id)
+            per_layer_inputs = self.model.get_per_layer_inputs(per_layer_ids, None)
+            return {"inputs_embeds": inputs_embeds, "per_layer_inputs": per_layer_inputs}
 
 
 # One row per input modality: (component name, `get_*_features` method, the input kwarg that signals the
 # modality is present, the getter's native grid kwarg — or `None` for audio, the placeholder-id config
 # field). Video/audio slot in exactly like image; a modality is exported only when its getter exists and
 # its input is passed.
+# The input kwarg is a tuple: a model may name the same modality differently (video_llava splits images
+# and videos, so its images arrive as `pixel_values_images`). The first name present is the one used.
 _MODALITY_SPECS = (
-    ("image_encoder", "get_image_features", "pixel_values", "image_grid_thw", "image_token_id"),
-    ("video_encoder", "get_video_features", "pixel_values_videos", "video_grid_thw", "video_token_id"),
-    ("audio_encoder", "get_audio_features", "input_features", None, "audio_token_id"),
+    (
+        "image_encoder",
+        "get_image_features",
+        ("pixel_values", "pixel_values_images"),
+        "image_grid_thw",
+        "image_token_id",
+    ),
+    ("video_encoder", "get_video_features", ("pixel_values_videos",), "video_grid_thw", "video_token_id"),
+    # `audio_input_ids` (inkling) is the same slot as `input_features` — the tensor whose presence means
+    # this call carries audio — just named for a getter that takes discrete codes rather than a spectrogram.
+    ("audio_encoder", "get_audio_features", ("input_features", "audio_input_ids"), None, "audio_token_id"),
 )
+
+
+_MODALITY_GETTERS = {name: getter for name, getter, *_ in _MODALITY_SPECS}
+
+
+def anyres_patch_counts(config: Any, image_sizes) -> list[int]:
+    """Tiles each image snaps to, plus the base patch — the per-image split sizes `get_image_features`
+    derives from `image_sizes`. Config-only, so the export and the runtime agree without a model."""
+    from ..image_processing_utils import select_best_resolution
+
+    pinpoints = _find_config_attr(config, "image_grid_pinpoints")
+    tile = _find_config_attr(config, "image_size")
+    counts = []
+    for size in image_sizes:
+        height, width = select_best_resolution(size.tolist() if hasattr(size, "tolist") else list(size), pinpoints)
+        counts.append(-(-height // tile) * -(-width // tile) + 1)
+    return counts
+
+
+def flatten_anyres_patches(config: Any, pixel_values, image_sizes):
+    """The flat `(total_patches, …)` tensor the tower takes, dropping each image's padding rows. The getter
+    does this from `image_sizes`; doing it here keeps the sizes out of the graph entirely."""
+    if pixel_values.dim() != 5:
+        return pixel_values
+    counts = anyres_patch_counts(config, image_sizes)
+    return torch.cat([pix[:count] for pix, count in zip(pixel_values, counts)], dim=0)
+
+
+def packs_anyres_features(owner: Any, config: Any) -> bool:
+    """Whether this image getter ends in the anyres `pack_image_features`, so the component must stop at the
+    projector and the runtime packs instead. Covers a deepstack tower (granite4_vision) too — it just has one
+    projector per injected decoder layer rather than one overall."""
+    projectors = ("multi_modal_projector", "layerwise_projectors")
+    return (
+        _find_config_attr(config, "image_grid_pinpoints") is not None
+        and any(hasattr(owner, name) for name in projectors)
+        and all(hasattr(owner, attr) for attr in ("vision_tower", "image_newline"))
+    )
+
+
+def _modality_owner(model, getter):
+    """Whichever of the model or its base actually defines a modality getter."""
+    base = model.base_model
+    return base if hasattr(base, getter) else (model if hasattr(model, getter) else None)
+
+
+def _present_input_key(inputs, input_keys):
+    """The modality's input kwarg that this call actually carries, or `None` when the modality is absent."""
+    return next((key for key in input_keys if inputs.get(key) is not None), None)
 
 
 @contextlib.contextmanager
@@ -1028,7 +1376,25 @@ def _capture_calls(obj: Any, attribute: str):
             delattr(obj, attribute)
 
 
-def decompose_multimodal(model: PreTrainedModel, inputs: dict[str, Any]) -> dict[str, tuple[torch.nn.Module, dict]]:
+def _embeds_input_ids(decoder: Any) -> bool:
+    """Whether `decoder` turns `input_ids` into embeddings with a single module.
+
+    Models that embed nothing raise rather than return. A multi-codebook decoder (musicgen) answers with a
+    `ModuleList` — one embedding per codebook — which is a container with no `forward`, so there is no one
+    `input_ids -> inputs_embeds` graph to export for it either."""
+    try:
+        embeddings = decoder.get_input_embeddings() if decoder is not None else None
+    except NotImplementedError:
+        return False
+    return isinstance(embeddings, torch.nn.Module) and not isinstance(embeddings, torch.nn.ModuleList)
+
+
+def decompose_multimodal(
+    model: PreTrainedModel,
+    inputs: dict[str, Any],
+    recorded_features: dict[str, list] | None = None,
+    prompt_ids: torch.Tensor | None = None,
+) -> dict[str, tuple[torch.nn.Module, dict]]:
     """Split a multi-modal model into independently exportable `name: (module, inputs)` pairs.
 
     Exports the model's own composition methods rather than raw submodules, so each component is
@@ -1054,10 +1420,16 @@ def decompose_multimodal(model: PreTrainedModel, inputs: dict[str, Any]) -> dict
     # Each active modality's `get_*_features` is invoked on the base model during `forward` (the outer
     # `ForConditionalGeneration` getter just delegates), so capture — and later export — from there.
     base = model.base_model
+    # `inputs` says which modalities this forward carries. A model that consumed them earlier — an
+    # encoder-decoder feeds its images through the encoder, so by prefill they are gone — has none left to
+    # find, and the caller instead hands over what it recorded the getters doing during the same generate.
+    recorded_features = recorded_features or {}
     active_modalities = []
-    for name, getter, input_key, grid_key, _token_field in _MODALITY_SPECS:
+    for name, getter, input_keys, grid_key, _token_field in _MODALITY_SPECS:
         owner = base if hasattr(base, getter) else (model if hasattr(model, getter) else None)
-        if owner is not None and inputs.get(input_key) is not None:
+        if owner is None:
+            continue
+        if _present_input_key(inputs, input_keys) is not None or recorded_features.get(name):
             active_modalities.append((name, getter, owner, grid_key))
 
     # the `text_decoder` takes activations, not user inputs, so capture its kwargs; capture each
@@ -1079,26 +1451,54 @@ def decompose_multimodal(model: PreTrainedModel, inputs: dict[str, Any]) -> dict
     components = {name: (module, captured_lm[name][-1]) for name, module in lm_targets.items() if captured_lm[name]}
 
     # embed_tokens: `input_ids -> inputs_embeds`, zeroing the placeholder ids (out of the text vocab)
-    # first, the way a VLM `forward` does before scattering in encoder features.
-    placeholder_ids = [
-        getattr(model.config, spec[-1], None)
-        for spec in _MODALITY_SPECS
-        if getattr(model.config, spec[-1], None) is not None
-    ]
-    components["embed_tokens"] = (
-        TokenEmbedder(model.get_decoder(), placeholder_ids),
-        {"input_ids": inputs["input_ids"]},
-    )
+    # first, the way a VLM `forward` does before scattering in encoder features. Only a model whose
+    # prompt *is* text gets one: an encoder-decoder (t5gemma, seamless_m4t, …) prompts with the encoded
+    # modality and reaches its decoder through cross-attention, with no placeholder rows to scatter into,
+    # so there is nothing for this component to do and the runtime drives those graphs directly. A
+    # dual-encoder (owlvit, groupvit, …) has a text tower rather than a decoder that embeds ids, and says
+    # so by refusing `get_input_embeddings` — take it at its word instead of failing the whole export.
+    # `prompt_ids` covers the same gap as `recorded_features`: an encoder-decoder's prefill kwargs carry
+    # `decoder_input_ids`, so the prompt this component embeds has to come from the generate inputs.
+    token_ids = inputs.get("input_ids") if inputs.get("input_ids") is not None else prompt_ids
+    if token_ids is not None and _embeds_input_ids(model.get_decoder()):
+        placeholder_ids = [
+            getattr(model.config, spec[-1], None)
+            for spec in _MODALITY_SPECS
+            if getattr(model.config, spec[-1], None) is not None
+        ]
+        components["embed_tokens"] = (
+            TokenEmbedder(model.get_decoder(), placeholder_ids),
+            {"input_ids": token_ids},
+        )
 
     # One feature graph per modality, from the captured getter call — a `ModalityEncoder` wrapping the
     # owner, whose `forward` runs `get_<modality>_features` and delegates introspection to the model.
     for name, getter, owner, grid_key in active_modalities:
-        calls = captured_features[name]
+        calls = captured_features.get(name) or recorded_features.get(name) or []
         if not calls:
             continue
         feature_inputs = {
             ("grid_thw" if key == grid_key else key): value for key, value in calls[-1].items() if value is not None
         }
+        # Hand the graph the tensors the precompute derives from the config, so it takes them as inputs
+        # instead of deriving them itself — the point of the precompute, and the only way a getter that
+        # reads its grid or image sizes *as data* can be traced at all.
+        if name == "image_encoder" and packs_anyres_features(owner, model.config):
+            tower_inputs = {
+                "pixel_values": flatten_anyres_patches(
+                    model.config, feature_inputs["pixel_values"], feature_inputs["image_sizes"]
+                )
+            }
+            tower_inputs.update(
+                {
+                    key: feature_inputs[key]
+                    for key in ("vision_feature_layer", "vision_feature_select_strategy")
+                    if key in feature_inputs
+                }
+            )
+            components[name] = (PatchVisionEncoder(owner), tower_inputs)
+            continue
+        feature_inputs = precompute_export_inputs(model.config, feature_inputs)
         components[name] = (ModalityEncoder(owner, getter, grid_key), feature_inputs)
     return components
 
@@ -1130,19 +1530,38 @@ def decompose_for_generation(
         models the `decode` component takes `inputs_embeds` (not `input_ids`) so the caller can scatter the
         encoder features into the embeddings before running it.
     """
+    recorded_features: dict[str, list] = {}
     if getattr(model.config, "is_encoder_decoder", False):
         # `generate` runs the encoder once outside the decoder loop (`get_encoder()(...)`), so it never
         # appears in the captured forwards — capture its call during the same generate to export it as its
         # own component (the runtime serves it back through `get_encoder()`).
-        with _capture_calls(model.get_encoder(), "forward") as encoder_calls:
+        # Record the modality getters over the same generate: this model runs its vision tower once, into
+        # the encoder, so the prefill kwargs the split sees below no longer carry the images.
+        modality_owners = {
+            name: owner
+            for name, getter, *_ in _MODALITY_SPECS
+            if (owner := _modality_owner(model, getter)) is not None
+        }
+        with contextlib.ExitStack() as stack:
+            encoder_calls = stack.enter_context(_capture_calls(model.get_encoder(), "forward"))
+            live = {
+                name: stack.enter_context(_capture_calls(owner, _MODALITY_GETTERS[name]))
+                for name, owner in modality_owners.items()
+            }
             stages = decompose_prefill_decode(
                 model, inputs, generation_config=generation_config, multi_token_decode=multi_token_decode
             )
+        recorded_features = {name: list(calls) for name, calls in live.items() if calls}
         encoder_inputs = {k: v for k, v in encoder_calls[0].items() if isinstance(v, torch.Tensor)}
         stages = {"encoder": (model.get_encoder(), encoder_inputs), **stages}
         # Each encoder returns its own `ModelOutput` subclass, and dynamo bakes the pytree type into the
         # decoder graphs' input spec. The decoder only reads `last_hidden_state`, so normalize to the base
         # class — every model's graphs then take the same `encoder_outputs` the runtime reconstructs.
+        # A decoder that reads more than that (cohere_asr wants the encoder's own `attention_mask`) cannot
+        # be served this way: `ModelOutput` flattens by its *dict*, so a field the encoder attached after
+        # construction never reaches the traced region, and a `None` one cannot be put in the dict either
+        # (the base class would reject the key on unflatten). Those need their encoder-output class kept
+        # end-to-end and rebuilt by every backend's runtime — see the `cohere_asr` skip.
         for _model, stage_inputs in stages.values():
             if (encoder_outputs := stage_inputs.get("encoder_outputs")) is not None:
                 stage_inputs["encoder_outputs"] = BaseModelOutput(last_hidden_state=encoder_outputs.last_hidden_state)
@@ -1159,18 +1578,36 @@ def decompose_for_generation(
         # and materializing it would leak cache inputs into the `text_decoder` component's capture.
         if (cache := prefill_inputs.get("past_key_values")) is not None:
             batch_size = next(t for t in prefill_inputs.values() if isinstance(t, torch.Tensor)).shape[0]
-            materialize_cache_layers(cache, batch_size, model.config, module_dtype(model), module_device(model))
+            # The decode capture ran after prefill, so its cache carries the geometry the model really
+            # writes — better than any derivation from the config.
+            # The decode capture ran after prefill, so its cache carries the geometry the model really
+            # writes, per layer — read the shapes off it for the prefill cache the graph will be traced with.
+            materialize_cache_layers(
+                cache,
+                batch_size,
+                model.config,
+                module_dtype(model),
+                module_device(model),
+                kv_geometry=kv_geometry_of(stages["decode"][1].get("past_key_values")),
+            )
         return stages
 
-    components = decompose_multimodal(prefill_model, prefill_inputs)
+    components = decompose_multimodal(prefill_model, prefill_inputs, recorded_features, inputs.get("input_ids"))
+    # The multi-modal split rebuilds the component set from the prefill, so carry over the stages that
+    # belong to the model as a whole — an encoder-decoder's `encoder` runs once outside the decode loop and
+    # is captured above, and dropping it leaves the runtime with a decode graph asking for `encoder_outputs`
+    # nothing produces.
+    if "encoder" in stages:
+        components["encoder"] = stages["encoder"]
 
     # Feed the decode graph `inputs_embeds` (not `input_ids`) so the runtime can scatter the encoder embeds
     # into the embeddings before the text stack; the full forward accepts `inputs_embeds` and — with no
     # modality inputs — skips the encoders. This is what lets the components reassemble into a loop.
     decode_model, decode_inputs = stages["decode"]
     decode_inputs = copy.copy(decode_inputs)
-    for _name, _getter, _input_key, grid_key, _token_field in _MODALITY_SPECS:
-        decode_inputs.pop(_input_key, None)
+    for _name, _getter, _input_keys, grid_key, _token_field in _MODALITY_SPECS:
+        for _input_key in _input_keys:
+            decode_inputs.pop(_input_key, None)
         if grid_key is not None:
             decode_inputs.pop(grid_key, None)
     # `mm_token_type_ids` only drives the model's internal M-RoPE (`get_rope_index`); once `position_ids`
@@ -1178,9 +1615,12 @@ def decompose_for_generation(
     # (which supplies `position_ids` via `modeling_rope_utils.get_mrope_index`) needn't thread a per-step token-type tensor.
     if decode_inputs.get("position_ids") is not None:
         decode_inputs.pop("mm_token_type_ids", None)
-    if decode_inputs.get("input_ids") is not None:
+    if decode_inputs.get("input_ids") is not None and "embed_tokens" in components:
         embedding = components["embed_tokens"][0]
         with torch.no_grad():
-            decode_inputs["inputs_embeds"] = embedding(decode_inputs.pop("input_ids"))
+            embedded = embedding(decode_inputs.pop("input_ids"))
+        # A decoder with per-layer embeddings returns those alongside `inputs_embeds`; both are per-token
+        # inputs of the decode graph, so they go in as they come out.
+        decode_inputs.update(embedded if isinstance(embedded, dict) else {"inputs_embeds": embedded})
     components["decode"] = (decode_model, decode_inputs)
     return components

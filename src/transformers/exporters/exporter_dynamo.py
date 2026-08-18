@@ -203,6 +203,36 @@ def patch_forward_signature(model: PreTrainedModel, inputs: dict[str, Any]):
 # applied to every chunked-vision attention class — see the long list below).
 
 
+@register_patch(
+    "dynamo",
+    "transformers.cache_utils.DynamicSlidingWindowLayer.get_mask_sizes",
+    "transformers.cache_utils.DynamicSlidingWindowLayer.get_seq_length",
+)
+def _patch_sliding_window_length(original):
+    """Read a growing sliding layer's length off its keys tensor instead of its own counter.
+
+    `cumulative_length` is a python int, so tracing bakes it as a *constant* while the cache tensor's length
+    axis stays symbolic. The graph then only accepts a cache at exactly the step it was traced at, which the
+    input tree spec reports as a `cumulative_length` mismatch (23 vs 0).
+
+    Below the window the two are the same quantity: `update` keeps the last `sliding_window - 1` tokens, so
+    `keys.shape[-2]` *is* how many tokens are cached, and it is symbolic. Taking it from there makes the
+    traced arithmetic track whatever cache it is handed. At or above the window they diverge (the tensor
+    saturates while the counter climbs) — but a traced graph has its `is_full` branch baked either way, so it
+    was never valid across that boundary; this changes which regime it is valid in, not that it is
+    regime-bound. The eager counter is untouched: this is a trace-time swap.
+    """
+
+    def patch(self, *args, **kwargs):
+        keys = getattr(self, "keys", None)
+        # A layer not yet given real tensors holds a rank-1 empty, which has no `-2` axis; nothing is cached.
+        cached = keys.shape[-2] if keys is not None and keys.dim() >= 2 else 0
+        with patch_attributes([(self, "cumulative_length", lambda _original: cached)]):
+            return original(self, *args, **kwargs)
+
+    return patch
+
+
 @register_patch("dynamo", "transformers.models.nllb_moe.modeling_nllb_moe.NllbMoeTop2Router._cast_classifier")
 def _patch_classifier_cast(_original):
     """Disable classifier dtype cast in nllb-moe (not traceable)."""
@@ -379,6 +409,7 @@ _VARLEN_ATTENTION_PATHS = (
     "transformers.models.glm4v_moe.modeling_glm4v_moe.Glm4vMoeVisionAttention.forward",
     "transformers.models.glm_ocr.modeling_glm_ocr.GlmOcrVisionAttention.forward",
     "transformers.models.ernie4_5_vl_moe.modeling_ernie4_5_vl_moe.Ernie4_5_VLMoeVisionAttention.forward",
+    "transformers.models.cohere_compass.modeling_cohere_compass.CohereCompassVisionAttention.forward",
     # Asymmetric `qkv` split + `(cos, sin)` rotary + `.proj`
     "transformers.models.exaone4_5.modeling_exaone4_5.Exaone4_5_VisionAttention.forward",
     # Separate `.q` / `.k` / `.v` + single rotary tensor + `.proj`
@@ -566,6 +597,12 @@ def _flatten_to_context(obj: Any, tensors: list) -> Any:
         raise TypeError("Cannot flatten a bound method for pytree context")
     if hasattr(obj, "__dict__"):
         state = {k: _flatten_to_context(v, tensors) for k, v in vars(obj).items()}
+        # A growing sliding layer's `cumulative_length` counts steps, so leaving it here pins the graph to the
+        # step it was traced at. `_patch_sliding_window_length` makes the traced arithmetic read the length off
+        # the keys tensor instead, so the counter is no longer load-bearing — normalise it and a graph traced
+        # at one step accepts a cache at another.
+        if "sliding_window" in state and "cumulative_length" in state:
+            state["cumulative_length"] = 0
         return {"_t": "obj", "p": _class_to_path(cls), "s": state}
 
     raise TypeError(f"Cannot flatten {type(obj).__name__} for pytree context")
@@ -686,12 +723,20 @@ def register_cache_pytrees_for_model(model: PreTrainedModel):
 # `DynamoConfig.dynamic` is True and no explicit `dynamic_shapes` are provided.
 
 
-def _auto_dynamic_shape(tensor: torch.Tensor) -> dict[int, torch.export.Dim]:
-    """Generate a dynamic shape with all dimensions set to Dim.AUTO for a given tensor."""
-    return dict.fromkeys(range(tensor.dim()), torch.export.Dim.AUTO)
+def _auto_dynamic_shape(tensor: torch.Tensor, is_cache_tensor: bool = False) -> dict[int, torch.export.Dim]:
+    """Generate a dynamic shape with all dimensions set to Dim.AUTO.
+
+    A `[batch, heads, seq, head_dim]` KV cache tensor keeps its heads and head_dim axes static: they are
+    fixed by the architecture, and marking them dynamic leaves the graph unable to report its own cache
+    geometry (every axis comes back symbolic), which the runtime needs to size the cache it feeds back. Only
+    that rank qualifies — a recurrent layer's states or a sliding layer's scalars ride in the same cache
+    without the same layout, so they stay fully dynamic.
+    """
+    static_dims = (1, 3) if is_cache_tensor and tensor.dim() == 4 else ()
+    return {dim: torch.export.Dim.AUTO for dim in range(tensor.dim()) if dim not in static_dims}
 
 
-def get_auto_dynamic_shapes(inputs: Any) -> Any:
+def get_auto_dynamic_shapes(inputs: Any, is_cache_tensor: bool = False) -> Any:
     """Recursively build dynamic shapes for any input value.
 
     - Tensors → per-dimension Dim.AUTO spec.
@@ -703,16 +748,16 @@ def get_auto_dynamic_shapes(inputs: Any) -> Any:
     - Everything else → None.
     """
     if isinstance(inputs, torch.Tensor):
-        return _auto_dynamic_shape(inputs)
+        return _auto_dynamic_shape(inputs, is_cache_tensor)
     if inputs is None or isinstance(inputs, (int, float, bool, str)):
         return None
     if hasattr(inputs, "__dict__"):
         leaves, _ = _pytree_flatten(inputs)
-        return get_auto_dynamic_shapes(leaves)
+        return get_auto_dynamic_shapes(leaves, is_cache_tensor or isinstance(inputs, Cache))
     if type(inputs) in (list, tuple, set, frozenset):
-        return type(inputs)(get_auto_dynamic_shapes(v) for v in inputs)
+        return type(inputs)(get_auto_dynamic_shapes(v, is_cache_tensor) for v in inputs)
     if type(inputs) is dict:
-        return {k: get_auto_dynamic_shapes(v) for k, v in inputs.items()}
+        return {k: get_auto_dynamic_shapes(v, is_cache_tensor) for k, v in inputs.items()}
     return None
 
 

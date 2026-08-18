@@ -106,6 +106,22 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "passes it as a kwarg; the resulting ONNX input has mismatched rank (scalar vs 3D). "
             "TODO: make `blank_user_audio_codes` part of the model state."
         ),
+        "CohereAsrForConditionalGeneration": (
+            "Its decoder reads `encoder_outputs.attention_mask` (the encoder's own frame mask), but the "
+            "exporter normalizes `encoder_outputs` to a `BaseModelOutput` so every backend's runtime can "
+            "rebuild one. `ModelOutput` flattens by its dict, and parakeet attaches that mask after "
+            "construction, so it never survives into the traced forward — and being `None` here it cannot "
+            "ride in the dict either. TODO: carry the encoder's own output class through export and have "
+            "`_ExportedEncoder` rebuild it."
+        ),
+        "DiaForConditionalGeneration": (
+            "Decodes several audio codebooks at once, so its decoder inputs carry a channel axis "
+            "(`decoder_input_ids` is 3-D) and its `decoder_attention_mask` is shaped to match. The runtime "
+            "builds the decoder's causal mask from the cache — 2-D positions into a `[batch, 1, q, kv]` "
+            "mask — which is the right thing for every other encoder-decoder and the wrong rank here "
+            "(`upper bound and lower bound inconsistent with step sign`). TODO: shape the decoder mask "
+            "from the graph's own declared rank, the way `_mask_feed` already does for mixed attention."
+        ),
         "UdopForConditionalGeneration": (
             "Exported decoder output is missing `attention_mask` vs eager — encoder-decoder "
             "cross-attention mask doesn't flow through the generate decomposition correctly."
@@ -129,19 +145,59 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "agnostic — the torch.export step itself overruns, so every backend hits it."
         ),
     },
-    # Generate path, dynamic-shape only — the multi-token decode (`_merge_decode_calls`) that keeps the
-    # query axis symbolic. Backend-agnostic (it's in the shared decomposition). Static generate, which
-    # captures a single-token decode with no merge, still runs.
+    # Generate path, dynamic-shape only. Backend-agnostic (it's in the shared decomposition).
     "generate.dynamic": {
+        "ReformerModelWithLMHead": (
+            "Carries LSH state as `past_buckets_states` (a list of tuples) plus `num_hashes` / "
+            "`next_sequence_length` kwargs instead of a `Cache`, so the runtime — which feeds "
+            "`past_key_values` / `cache_params` — can't satisfy the exported signature "
+            "(`kwarg keyword mismatch`). TODO: refactor Reformer onto a `Cache` subclass."
+        ),
+    },
+    # Generate path, multi-token decode capture only — the two decode steps merged by
+    # `_merge_decode_calls` into one graph whose query axis stays symbolic, so a single graph serves both
+    # the prompt and every decode step. Backend-agnostic. The single-token capture, which exports prefill
+    # and decode as separate graphs with their own fixed query lengths, still runs.
+    "generate.multi_token": {
+        "T5Gemma2ForConditionalGeneration": (
+            "Multi-modal *encoder-decoder*: its image features reach the decoder as encoder output, not "
+            "scattered into text embeddings, so the decomposition yields an `image_encoder` and a decode "
+            "graph but neither an `embed_tokens` nor an `encoder` runner — leaving the runtime nothing to "
+            "route `pixel_values` through (`model_kwargs are not used: ['pixel_values']`). Wiring a "
+            "modality graph's output in as `encoder_outputs` is a runtime capability that doesn't exist "
+            "yet. TODO: add it, then drop this skip."
+        ),
+        "PPFormulaNetForConditionalGeneration": "Same multi-modal encoder-decoder gap as `T5Gemma2ForConditionalGeneration`.",
+        "Gemma3ForConditionalGeneration": (
+            "Sliding-window cache **and** multi-modal. A multi-modal model exports no `prefill` graph, so its "
+            "merged decode graph serves the prompt too — and a decode graph is traced mid-generation, with "
+            "the sliding-window layer's `cumulative_length` fixed at that moment in the cache's pytree "
+            "context, which the fresh cache a prompt arrives on cannot match. Neither half alone breaks: "
+            "gemma2 / mistral / gemma3-text bake the same counter but route the prompt through their own "
+            "`prefill`, and llava / qwen2_vl are multi-modal with nothing step-dependent baked. "
+            "Three fixes were tried together and reverted — capturing with the model's prebuilt mask (so the "
+            "counter leaves the graph), explicit query/key dims on that mask (so `Dim.AUTO` cannot infer "
+            "`q == kv` from a prompt), and normalizing the counter out of the spec. The mask dims are what "
+            "fail: torch rejects a dim marked dynamic that the code specializes, and a *static* cache's key "
+            "axis is genuinely constant, so one spec cannot cover both cache kinds."
+        ),
+        "Gemma4ForConditionalGeneration": "Same sliding-window-plus-multi-modal shape as `Gemma3ForConditionalGeneration`.",
+        "MambaForCausalLM": (
+            "The selective-scan fallback unrolls the recurrence with `for index in range(seq_len)`, which "
+            "bakes the query length into the graph; the associative-scan alternative is deliberately "
+            "disabled while exporting (no ONNX translation). A single graph serving both a prompt and "
+            "2-token decode steps needs a symbolic query axis, so the baked guard fires."
+        ),
+        "JambaForCausalLM": "Same unrolled selective scan as `MambaForCausalLM` — it reuses the Mamba mixer.",
         "MllamaForConditionalGeneration": (
             "Cross-attention decode indexes `cross_attention_mask[:, :, arange(seq) + past_seen_tokens]`; "
             "the multi-token merge grows the query axis but not the captured cross-attention mask, so the "
-            "index runs past it (out of bounds → CUDA device-side assert). Single-token static generate is fine. "
+            "index runs past it (out of bounds → CUDA device-side assert). Single-token generate is fine. "
             "TODO: grow `cross_attention_mask` in `_merge_decode_calls`."
         ),
         "ReformerModelWithLMHead": (
             "Chunked local attention assumes a chunk-aligned query length; the merged multi-token query "
-            "(seq 2) mismatches the chunked key axis (`size 2 vs 6`). Single-token static generate is fine. "
+            "(seq 2) mismatches the chunked key axis (`size 2 vs 6`). "
             "Same chunked-attention limitation as the `onnx.generate` skip."
         ),
     },
@@ -359,14 +415,16 @@ _EXPORT_DECODE_MODES = [False, True]  # multi_token_decode
 # cache it declares; without it, the capture sizes the cache from its own internal token count and the
 # runtime from the caller's, and backends that freeze the traced length reject the mismatch.
 # `max_cache_len` must fit every tester's prompt + new tokens: `generate` silently grows an under-sized
-# static cache, which bakes the grown length into the traced graph while the runtime builds the declared
-# one (multi-modal prompts with image tokens run ~80 long).
+# static cache, and it grows it *differently* in each phase — the capture adds its own internal token count,
+# the runtime the caller's — so the graph bakes one length and the runtime builds another (gpt_bigcode and
+# minimax prompt at ~127 and ~151, and were off by exactly the one-token difference). Multi-modal prompts
+# with image tokens run ~80 long, so this sits well clear of every tester.
 # Both entries declare `use_cache=True`: an exported decode graph is only useful with a cache, and a model
 # whose own config disables caching (bart's standalone decoder) would otherwise be captured cacheless —
 # re-feeding the whole growing sequence every step, which a frozen-shape graph can't serve at all.
 _EXPORT_GENERATION_CONFIGS = [
     GenerationConfig(use_cache=True),
-    GenerationConfig(cache_implementation="static", max_cache_len=128, use_cache=True),
+    GenerationConfig(cache_implementation="static", max_cache_len=256, use_cache=True),
 ]
 
 GENERATE_EXPORT_PARAMS = parameterized.expand(
@@ -606,13 +664,16 @@ class ExportTesterMixin:
             if "for expert" in source_code and "use_experts_implementation" not in source_code:
                 self.skipTest(reason="Model architecture uses eager MoE implementation which is not torch exportable")
 
-    def _should_skip(self, model_class, generate=False, dynamic=False, backend=None, generation_config=None):
+    def _should_skip(
+        self, model_class, generate=False, dynamic=False, backend=None, multi_token=False, generation_config=None
+    ):
         """Return True if this model class should be skipped for export tests.
 
         Walks the scopes in ``EXPORT_SKIPS`` from broad to specific that match the current
         ``(backend, generate, dynamic)`` triple — ``"all"`` always applies, ``"generate"`` only
         for generate tests, ``"dynamic"`` / ``"static"`` for that shape variant on every backend,
-        ``"generate.dynamic"`` for the multi-token decode path, ``"<backend>"`` for that backend, and
+        ``"generate.multi_token"`` for the merged multi-token decode capture, ``"<backend>"`` for that
+        backend, and
         ``"<backend>.<variant>"`` for the more-specific intersections. Also skips static-cache variants
         (a ``generation_config`` requesting one) on models that can't compile fullgraph — they don't
         support a static cache.
@@ -625,6 +686,8 @@ class ExportTesterMixin:
             scopes.append("generate")
             if dynamic:
                 scopes.append("generate.dynamic")
+            if multi_token:
+                scopes.append("generate.multi_token")
         scopes.append("dynamic" if dynamic else "static")
         if backend:
             scopes.append(backend)
@@ -1049,7 +1112,12 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
 
         for model_class in self.all_generative_model_classes:
             if self._should_skip(
-                model_class, generate=True, dynamic=dynamic, backend="dynamo", generation_config=generation_config
+                model_class,
+                generate=True,
+                dynamic=dynamic,
+                backend="dynamo",
+                multi_token=multi_token_decode,
+                generation_config=generation_config,
             ):
                 continue
             components = self._prepare_export_generate_model_and_inputs(
@@ -1099,7 +1167,12 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
 
         for model_class in self.all_generative_model_classes:
             if self._should_skip(
-                model_class, generate=True, dynamic=dynamic, backend="onnx", generation_config=generation_config
+                model_class,
+                generate=True,
+                dynamic=dynamic,
+                backend="onnx",
+                multi_token=multi_token_decode,
+                generation_config=generation_config,
             ):
                 continue
 
@@ -1147,7 +1220,12 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
 
         for model_class in self.all_generative_model_classes:
             if self._should_skip(
-                model_class, generate=True, dynamic=dynamic, backend="executorch", generation_config=generation_config
+                model_class,
+                generate=True,
+                dynamic=dynamic,
+                backend="executorch",
+                multi_token=multi_token_decode,
+                generation_config=generation_config,
             ):
                 continue
 
