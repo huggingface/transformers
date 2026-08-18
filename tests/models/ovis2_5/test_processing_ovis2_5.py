@@ -204,7 +204,7 @@ class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         video_start = input_ids.index(processor.video_start_token_id)
         expected_video_ids = (
             [processor.video_start_token_id]
-            + [processor.visual_atom_token_id] * num_visual_tokens
+            + [processor.video_token_id] * num_visual_tokens
             + [processor.video_end_token_id]
         )
         self.assertListEqual(input_ids[video_start : video_start + num_visual_tokens + 2], expected_video_ids)

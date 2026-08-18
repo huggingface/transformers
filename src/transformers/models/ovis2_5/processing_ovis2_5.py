@@ -90,7 +90,7 @@ class Ovis2_5Processor(ProcessorMixin):
     def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
         merge_length = self.video_processor.merge_size**2
         num_visual_tokens = video_inputs["video_grid_thw"][video_idx].prod() // merge_length
-        return self.video_start_token + self.visual_atom_token * num_visual_tokens + self.video_end_token
+        return self.video_start_token + self.video_token * num_visual_tokens + self.video_end_token
 
     def _check_special_mm_tokens(self, text: list[str], text_inputs, modalities: list[str]):
         super()._check_special_mm_tokens(text, text_inputs, modalities)
