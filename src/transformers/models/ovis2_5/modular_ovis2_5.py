@@ -264,6 +264,8 @@ class Ovis2_5VisionEmbeddings(nn.Module):
             padding="valid",
             bias=True,
         )
+        # CODEPATH: AIDC-AI/Ovis2.5-2B and Ovis2.5-9B set `preserve_original_pe=True`; `False` supports
+        # custom configs without the learned position embedding.
         if config.preserve_original_pe:
             self.position_embedding_size = config.image_size // config.patch_size
             self.position_embedding = nn.Embedding(self.position_embedding_size**2, config.hidden_size)
