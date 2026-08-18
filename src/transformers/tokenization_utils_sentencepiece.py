@@ -239,11 +239,6 @@ class SentencePieceBackend(PreTrainedTokenizer):
         token = self.sp_model.IdToPiece(index)
         return token
 
-    def convert_tokens_to_string(self, tokens: list[str]) -> str:
-        """Converts a sequence of tokens (string) in a single string."""
-        out_string = "".join(tokens).replace(SPIECE_UNDERLINE, " ").strip()
-        return out_string
-
     def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str]:
         """
         Save the sentencepiece vocabulary (copy original file) to a directory.
