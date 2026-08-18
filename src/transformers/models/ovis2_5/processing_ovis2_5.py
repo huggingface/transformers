@@ -53,10 +53,6 @@ class Ovis2_5Processor(ProcessorMixin):
         self.video_start_token_id = tokenizer.convert_tokens_to_ids(self.video_start_token)
         self.video_end_token_id = tokenizer.convert_tokens_to_ids(self.video_end_token)
 
-        # Temporary aliases until the replacement methods use the standard token names.
-        self.visual_atom_token = self.image_token
-        self.visual_atom_token_id = self.image_token_id
-
         super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
 
     def prepare_inputs_layout(self, images=None, text=None, videos=None, audio=None, **kwargs):

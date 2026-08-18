@@ -280,7 +280,7 @@ class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_tensors="pt",
         )
 
-        visual_atom_counts = (inputs.input_ids == processor.visual_atom_token_id).sum(-1).tolist()
+        visual_atom_counts = (inputs.input_ids == processor.image_token_id).sum(-1).tolist()
         helper_counts = processor._get_num_multimodal_tokens(image_sizes=image_sizes)["num_image_tokens"]
         self.assertListEqual(visual_atom_counts, helper_counts)
 
