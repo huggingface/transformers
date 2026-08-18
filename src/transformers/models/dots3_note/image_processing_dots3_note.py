@@ -19,6 +19,7 @@ from PIL import Image
 
 from ...image_processing_backends import PilBackend
 from ...image_utils import PILImageResampling, SizeDict
+from ...utils import auto_docstring
 from ..qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
 
 
@@ -46,6 +47,7 @@ def smart_resize(height: int, width: int, factor: int, min_pixels: int, max_pixe
     return resized_height, resized_width
 
 
+@auto_docstring
 class Dots3NoteImageProcessor(Qwen2VLImageProcessorPil):
     """PIL preprocessing numerically identical to the published Dots 3 Note Preview path."""
 

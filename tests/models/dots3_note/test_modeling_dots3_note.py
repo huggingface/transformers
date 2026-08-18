@@ -445,7 +445,6 @@ class Dots3NoteModelTest(unittest.TestCase):
                 hidden_states,
                 cos,
                 sin,
-                position_ids,
                 attention_mask=torch.full((1, 1, 2, 2), -10_000.0),
                 cache_position=torch.arange(2),
             )

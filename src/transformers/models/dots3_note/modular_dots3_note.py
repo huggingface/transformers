@@ -39,7 +39,7 @@ from ...modeling_outputs import (
     CausalLMOutputWithPast,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...utils import ModelOutput, logging
+from ...utils import ModelOutput, auto_docstring
 from ...utils.generic import get_max_seqlen, is_flash_attention_requested
 from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids
 from .configuration_dots3_note import (
@@ -47,9 +47,6 @@ from .configuration_dots3_note import (
     Dots3NoteConfig,
     Dots3NoteVisionConfig,
 )
-
-
-logger = logging.get_logger(__name__)
 
 
 # -----------------------------------------------------------------------------
@@ -462,6 +459,7 @@ class Dots3NoteTextMoE(nn.Module):
         self.top_k = config.num_experts_per_tok
         self.experts = Dots3NoteTextExperts(config)
         self.gate = MoEGate(config)
+        # CODEPATH: released Dots 3 Note Preview checkpoints use one shared expert; custom tiny configs may disable it.
         if config.n_shared_experts is not None and config.n_shared_experts > 0:
             shared_inter = config.shared_experts_intermediate_size * config.n_shared_experts
             self.shared_experts = Dots3NoteTextMLP(config, intermediate_size=shared_inter)
@@ -646,6 +644,7 @@ class Dots3NoteTextAttention(nn.Module):
             bias=config.attention_bias,
         )
 
+        # CODEPATH: released Dots 3 Note Preview checkpoints enable K-RoPE LayerNorm; custom configs may disable it.
         if config.k_rope_only_layernorm:
             self.k_rope_only_layernorm = _get_norm(self.qk_rope_head_dim, config.rms_norm_eps, norm_type)
         else:
@@ -666,12 +665,19 @@ class Dots3NoteTextAttention(nn.Module):
                 raise ValueError("DSA requires q_lora_rank to construct the indexer query")
             self.indexer = Dots3NoteTextIndexer(config, layer_idx)
 
+    def expand_kv(self, hidden_states):
+        batch_size, sequence_length, _ = hidden_states.shape
+        hidden_states = self.kv_b_proj(hidden_states)
+        hidden_states = hidden_states.view(
+            batch_size, sequence_length, self.num_heads, self.qk_nope_head_dim + self.v_head_dim
+        ).transpose(1, 2)
+        return torch.split(hidden_states, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
+
     def forward(
         self,
         hidden_states,
         cos,
         sin,
-        position_ids,
         attention_mask=None,
         padding_mask=None,
         past_key_value=None,
@@ -700,9 +706,7 @@ class Dots3NoteTextAttention(nn.Module):
         kv_a = self.kv_a_layernorm(kv_a.contiguous())
         if self.apply_lora_scale:
             kv_a = kv_a * (self.hidden_size / self.kv_lora_rank) ** 0.5
-        kv = self.kv_b_proj(kv_a)
-        kv = kv.view(bsz, q_len, self.num_heads, self.qk_nope_head_dim + self.v_head_dim).transpose(1, 2)
-        k_nope, value_states = torch.split(kv, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
+        k_nope, value_states = self.expand_kv(kv_a)
 
         # decoupled rope key: single (mqa) head, shared across heads
         k_pe = k_pe.view(bsz, q_len, 1, self.qk_rope_head_dim).transpose(1, 2)  # [B,1,S,rope]
@@ -836,7 +840,7 @@ def _is_sparse_layer(config, layer_idx):
     return True
 
 
-class Dots3NoteTextDecoderLayer(nn.Module):
+class Dots3NoteTextDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Dots3NoteConfig, layer_idx: int):
         super().__init__()
         self.layer_idx = layer_idx
@@ -863,7 +867,6 @@ class Dots3NoteTextDecoderLayer(nn.Module):
         hidden_states,
         cos,
         sin,
-        position_ids,
         attention_mask=None,
         padding_mask=None,
         past_key_value=None,
@@ -877,7 +880,6 @@ class Dots3NoteTextDecoderLayer(nn.Module):
             hidden_states,
             cos,
             sin,
-            position_ids,
             attention_mask=attention_mask,
             padding_mask=padding_mask,
             past_key_value=past_key_value,
@@ -900,6 +902,7 @@ class Dots3NoteTextDecoderLayer(nn.Module):
 # ---------------------------------------------------------------------------
 # Pretrained base
 # ---------------------------------------------------------------------------
+@auto_docstring
 class Dots3NotePreTrainedModel(PreTrainedModel):
     config_class = Dots3NoteConfig
     base_model_prefix = "model"
@@ -943,6 +946,7 @@ class Dots3NotePreTrainedModel(PreTrainedModel):
 # ---------------------------------------------------------------------------
 # Base model
 # ---------------------------------------------------------------------------
+@auto_docstring
 class Dots3NoteTextModel(Dots3NotePreTrainedModel):
     def __init__(self, config: Dots3NoteConfig):
         super().__init__(config)
@@ -958,7 +962,6 @@ class Dots3NoteTextModel(Dots3NotePreTrainedModel):
         self.rotary_emb = Dots3NoteTextRotaryEmbedding(config.qk_rope_head_dim, base=config.rope_theta)
         self.swa_rotary_emb = Dots3NoteTextRotaryEmbedding(config.swa_qk_rope_head_dim, base=config.swa_rope_theta)
 
-        self.gradient_checkpointing = False
         self.post_init()
 
     def get_input_embeddings(self):
@@ -984,10 +987,12 @@ class Dots3NoteTextModel(Dots3NotePreTrainedModel):
         }
         full_mask = create_causal_mask(**mask_kwargs)
         sliding_mask = (
+            # CODEPATH: released checkpoints alternate SWA and full-attention layers; custom tiny configs may use full only.
             create_sliding_window_causal_mask(**mask_kwargs) if self.config.use_sliding_window else full_mask
         )
         return full_mask, sliding_mask
 
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1017,10 +1022,6 @@ class Dots3NoteTextModel(Dots3NotePreTrainedModel):
 
         bsz, q_len = inputs_embeds.shape[:2]
 
-        if self.gradient_checkpointing and self.training and use_cache:
-            logger.warning_once("`use_cache=True` is incompatible with gradient checkpointing. Disabling cache.")
-            use_cache = False
-
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
@@ -1030,6 +1031,7 @@ class Dots3NoteTextModel(Dots3NotePreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0).expand(bsz, -1)
 
+        # CODEPATH: released checkpoints enable DSA; custom tiny configs may use dense attention only.
         rotary_input = inputs_embeds.float() if self.config.use_dsa else inputs_embeds
         cos, sin = self.rotary_emb(rotary_input, position_ids)
         swa_cos, swa_sin = self.swa_rotary_emb(inputs_embeds, position_ids)
@@ -1049,32 +1051,17 @@ class Dots3NoteTextModel(Dots3NotePreTrainedModel):
                 all_hidden_states += (hidden_states,)
             layer_mask = sliding_mask if layer.is_sliding else full_mask
             layer_cos, layer_sin = (swa_cos, swa_sin) if layer.is_sliding else (cos, sin)
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer.__call__,
-                    hidden_states,
-                    layer_cos,
-                    layer_sin,
-                    position_ids,
-                    layer_mask,
-                    padding_mask,
-                    past_key_values,
-                    cache_position,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = layer(
-                    hidden_states,
-                    layer_cos,
-                    layer_sin,
-                    position_ids,
-                    attention_mask=layer_mask,
-                    padding_mask=padding_mask,
-                    past_key_value=past_key_values,
-                    cache_position=cache_position,
-                    output_attentions=output_attentions,
-                    **kwargs,
-                )
+            layer_outputs = layer(
+                hidden_states,
+                layer_cos,
+                layer_sin,
+                attention_mask=layer_mask,
+                padding_mask=padding_mask,
+                past_key_value=past_key_values,
+                cache_position=cache_position,
+                output_attentions=output_attentions,
+                **kwargs,
+            )
             hidden_states = layer_outputs[0]
             if output_attentions:
                 all_self_attentions += (layer_outputs[1],)
@@ -1100,6 +1087,7 @@ class Dots3NoteTextModel(Dots3NotePreTrainedModel):
 # ---------------------------------------------------------------------------
 # Causal LM head
 # ---------------------------------------------------------------------------
+@auto_docstring
 class Dots3NoteTextForCausalLM(Dots3NotePreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
@@ -1125,6 +1113,7 @@ class Dots3NoteTextForCausalLM(Dots3NotePreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model
 
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1167,14 +1156,7 @@ class Dots3NoteTextForCausalLM(Dots3NotePreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            logits = logits.float()
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            loss = F.cross_entropy(
-                shift_logits.view(-1, self.config.vocab_size),
-                shift_labels.view(-1).to(shift_logits.device),
-                ignore_index=-100,
-            )
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
         if not return_dict:
             output = tuple(
@@ -1389,12 +1371,13 @@ class Dots3NoteAudioAttention(nn.Module):
         return output.transpose(1, 2)
 
 
-class Dots3NoteAudioEncoderLayer(nn.Module):
+class Dots3NoteAudioEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Dots3NoteAudioConfig):
         super().__init__()
         encoder = config.whisper_config
         hidden_size = int(encoder["d_model"])
         ffn_size = int(encoder["encoder_ffn_dim"])
+        # CODEPATH: released checkpoints use RMSNorm; custom audio configs may select LayerNorm.
         norm_class = Dots3NoteAudioRMSNorm if config.use_rms_norm else nn.LayerNorm
         self.self_attn = Dots3NoteAudioAttention(
             hidden_size,
@@ -1445,6 +1428,7 @@ class Dots3NoteSpeechEncoder(nn.Module):
         encoder = config.whisper_config
         hidden_size = int(encoder["d_model"])
         downsample_size = config.downsample_hidden_size
+        # CODEPATH: released checkpoints are non-causal; the causal branch is retained for compatible custom configs.
         conv_padding = (1, 0) if config.use_causal else 1
         self.use_causal = config.use_causal
         self.conv2d1 = nn.Conv2d(1, downsample_size, 3, stride=2, padding=conv_padding)
@@ -1462,6 +1446,7 @@ class Dots3NoteSpeechEncoder(nn.Module):
         self.layers = nn.ModuleList(
             [Dots3NoteAudioEncoderLayer(config) for _ in range(int(encoder["encoder_layers"]))]
         )
+        # CODEPATH: released checkpoints use RMSNorm; custom audio configs may select LayerNorm.
         norm_class = Dots3NoteAudioRMSNorm if config.use_rms_norm else nn.LayerNorm
         self.layer_norm = norm_class(hidden_size)
         self.dropout = float(encoder.get("dropout", 0.0))
@@ -1630,12 +1615,20 @@ class Dots3NoteAudioAdapter(nn.Module):
         return self.proj(hidden_states)
 
 
+@auto_docstring
 @dataclass
 class Dots3NoteAudioOutput(ModelOutput):
+    """
+    Args:
+        audio_embeds (`torch.Tensor`, *optional*): Encoded audio tokens in the language-model width.
+        audio_token_lengths (`torch.Tensor`, *optional*): Number of encoded tokens for each audio input.
+    """
+
     audio_embeds: torch.Tensor | None = None
     audio_token_lengths: torch.Tensor | None = None
 
 
+@auto_docstring
 class Dots3NoteAudioPreTrainedModel(PreTrainedModel):
     config_class = Dots3NoteAudioConfig
     base_model_prefix = "audio_encoder"
@@ -1651,11 +1644,13 @@ class Dots3NoteAudioPreTrainedModel(PreTrainedModel):
             init.copy_(module.inv_freq, inv_freq)
 
 
+@auto_docstring
 class Dots3NoteAudioModel(Dots3NoteAudioPreTrainedModel):
     """Audio tower with checkpoint-compatible module names."""
 
     def __init__(self, config: Dots3NoteAudioConfig):
         super().__init__(config)
+        # CODEPATH: all released checkpoints require merge_factor=1; reject incompatible custom configurations.
         if config.merge_factor != 1:
             raise ValueError("the current Dots 3 Note Preview AE release requires merge_factor=1")
         self.audio_adapter = Dots3NoteAudioAdapter(
@@ -1665,6 +1660,7 @@ class Dots3NoteAudioModel(Dots3NoteAudioPreTrainedModel):
         self.dots_encoder = Dots3NoteAudioEncoder(config)
         self.post_init()
 
+    @auto_docstring
     def forward(
         self,
         input_features: torch.Tensor,
@@ -1674,6 +1670,12 @@ class Dots3NoteAudioModel(Dots3NoteAudioPreTrainedModel):
         return_dict: bool = True,
         **kwargs,
     ) -> Dots3NoteAudioOutput | tuple[torch.Tensor, torch.Tensor]:
+        """
+        Args:
+            chunk_sample_lengths (`torch.Tensor`): Number of waveform samples represented by each feature chunk.
+            chunk_token_lengths (`torch.Tensor`): Number of encoder tokens produced by each feature chunk.
+            audio_chunk_counts (`torch.Tensor`): Number of feature chunks belonging to each audio input.
+        """
         encoder_output = self.dots_encoder.speech_encoder(
             input_features=input_features,
             input_seq_lens=chunk_token_lengths,
@@ -1875,6 +1877,7 @@ class Dots3NoteVisionAttention(nn.Module):
         self.is_causal = config.is_causal
         self.qkv = nn.Linear(config.embed_dim, config.embed_dim * 3, bias=config.use_bias)
         self.proj = nn.Linear(config.embed_dim, config.embed_dim, bias=config.use_bias)
+        # CODEPATH: released checkpoints enable QK normalization; custom vision configs may disable it.
         if config.use_qk_norm:
             self.q_norm = Dots3NoteVisionRMSNorm(self.head_dim, eps=config.rms_norm_eps)
             self.k_norm = Dots3NoteVisionRMSNorm(self.head_dim, eps=config.rms_norm_eps)
@@ -1891,6 +1894,7 @@ class Dots3NoteVisionAttention(nn.Module):
         query, key, value = (
             self.qkv(hidden_states).reshape(seq_length, 3, self.num_heads, self.head_dim).permute(1, 0, 2, 3).unbind(0)
         )
+        # CODEPATH: released checkpoints enable QK normalization; custom vision configs may disable it.
         if self.config.use_qk_norm:
             query, key = self.q_norm(query), self.k_norm(key)
         query, key = apply_rotary_pos_emb_vision(query, key, *position_embeddings)
@@ -1985,6 +1989,7 @@ class Dots3NoteVisionAdapter(nn.Module):
         return self.mlp(self.ln_q(hidden_states).reshape(-1, self.mlp[0].in_features))
 
 
+@auto_docstring
 class Dots3NoteVisionPreTrainedModel(PreTrainedModel):
     config_class = Dots3NoteVisionConfig
     base_model_prefix = "vision_encoder"
@@ -2010,6 +2015,7 @@ class Dots3NoteVisionPreTrainedModel(PreTrainedModel):
             init.zeros_(module.router_bias)
 
 
+@auto_docstring
 class Dots3NoteVisionModel(Dots3NoteVisionPreTrainedModel):
     def __init__(self, config: Dots3NoteVisionConfig):
         super().__init__(config)
@@ -2021,6 +2027,7 @@ class Dots3NoteVisionModel(Dots3NoteVisionPreTrainedModel):
             [Dots3NoteVisionBlock(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.post_trunk_norm = (
+            # CODEPATH: released checkpoints use the post-trunk norm; custom vision configs may disable it.
             Dots3NoteVisionRMSNorm(config.embed_dim, eps=config.rms_norm_eps) if config.post_norm else None
         )
         self.adapter = Dots3NoteVisionAdapter(config)
@@ -2033,6 +2040,7 @@ class Dots3NoteVisionModel(Dots3NoteVisionPreTrainedModel):
     def get_device(self) -> torch.device:
         return self.patch_embed.proj.weight.device
 
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor,
@@ -2041,6 +2049,10 @@ class Dots3NoteVisionModel(Dots3NoteVisionPreTrainedModel):
         return_dict: bool = True,
         **kwargs,
     ) -> BaseModelOutputWithPooling | tuple[torch.Tensor, ...]:
+        """
+        Args:
+            grid_thw (`torch.Tensor`): Temporal, height, and width patch-grid dimensions for each input.
+        """
         position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
         hidden_states = self.patch_embed(pixel_values)
@@ -2075,6 +2087,7 @@ class Dots3NoteVisionModel(Dots3NoteVisionPreTrainedModel):
 # -----------------------------------------------------------------------------
 # Unified multimodal model
 # -----------------------------------------------------------------------------
+@auto_docstring
 class Dots3NoteForCausalLM(Dots3NoteTextForCausalLM):
     config_class = Dots3NoteConfig
     input_modalities = ("image", "video", "audio", "text")
@@ -2089,6 +2102,7 @@ class Dots3NoteForCausalLM(Dots3NoteTextForCausalLM):
         self.vision_encoder = Dots3NoteVisionModel(config.vision_config)
         self.audio_encoder = Dots3NoteAudioModel(config.audio_config)
 
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.Tensor,
@@ -2103,6 +2117,7 @@ class Dots3NoteForCausalLM(Dots3NoteTextForCausalLM):
             **kwargs,
         ).pooler_output
 
+    @auto_docstring
     def get_video_features(
         self,
         pixel_values_videos: torch.Tensor,
@@ -2117,6 +2132,7 @@ class Dots3NoteForCausalLM(Dots3NoteTextForCausalLM):
             **kwargs,
         ).pooler_output
 
+    @auto_docstring
     def get_audio_features(
         self,
         input_features: torch.Tensor,
@@ -2124,7 +2140,12 @@ class Dots3NoteForCausalLM(Dots3NoteTextForCausalLM):
         chunk_token_lengths: torch.Tensor,
         audio_chunk_counts: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Encode log-mel chunks and return flattened embeddings and per-audio lengths."""
+        """
+        Args:
+            chunk_sample_lengths (`torch.Tensor`): Number of waveform samples represented by each feature chunk.
+            chunk_token_lengths (`torch.Tensor`): Number of encoder tokens produced by each feature chunk.
+            audio_chunk_counts (`torch.Tensor`): Number of feature chunks belonging to each audio input.
+        """
         parameter = next(self.audio_encoder.parameters())
         output = self.audio_encoder(
             input_features=input_features.to(device=parameter.device, dtype=parameter.dtype),
@@ -2155,6 +2176,7 @@ class Dots3NoteForCausalLM(Dots3NoteTextForCausalLM):
         multimodal_embeddings = multimodal_embeddings.to(inputs_embeds.device, inputs_embeds.dtype)
         return inputs_embeds.masked_scatter(special_token_mask, multimodal_embeddings)
 
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -2175,6 +2197,14 @@ class Dots3NoteForCausalLM(Dots3NoteTextForCausalLM):
         chunk_audio_indices: torch.Tensor | None = None,
         **kwargs,
     ) -> CausalLMOutputWithPast | tuple:
+        """
+        Args:
+            chunk_sample_lengths (`torch.Tensor`, *optional*): Waveform sample count for each audio feature chunk.
+            chunk_token_lengths (`torch.Tensor`, *optional*): Encoder token count for each audio feature chunk.
+            audio_chunk_counts (`torch.Tensor`, *optional*): Number of feature chunks for each audio input.
+            audio_token_lengths (`torch.Tensor`, *optional*): Expected encoded token count for each audio input.
+            chunk_audio_indices (`torch.Tensor`, *optional*): Audio ownership metadata emitted by the processor.
+        """
         del chunk_audio_indices
         has_multimodal_inputs = any(value is not None for value in (pixel_values, pixel_values_videos, input_features))
         if has_multimodal_inputs:
@@ -2248,6 +2278,7 @@ class Dots3NoteForCausalLM(Dots3NoteTextForCausalLM):
         )
 
 
+@auto_docstring
 class Dots3NoteForConditionalGeneration(Dots3NoteForCausalLM):
     """Alias following the multimodal generation naming convention."""
 
