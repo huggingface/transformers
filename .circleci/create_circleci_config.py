@@ -93,6 +93,7 @@ class EmptyJob:
 class CircleCIJob:
     name: str
     additional_env: dict[str, Any] = None
+    disabled: bool = False  # If True, job is a noop (pipeline parameters still declared)
     docker_image: list[dict[str, str]] = None
     install_steps: list[str] = None
     marker: str | None = None
@@ -144,6 +145,13 @@ class CircleCIJob:
                 print("not Found")
 
     def to_dict(self):
+        if self.disabled:
+            return {
+                "docker": [{"image": "cimg/base:stable"}],
+                "resource_class": "small",
+                "steps": [{"run": f"echo 'Job {self.name} is disabled on this runner'"}],
+            }
+
         env = COMMON_ENV_VARIABLES.copy()
         # fmt: off
         # not critical
@@ -355,6 +363,7 @@ custom_tokenizers_job = CircleCIJob(
 
 examples_torch_job = CircleCIJob(
     "examples_torch",
+    disabled=True,  # examples-torch docker image is too large for the large runner
     additional_env={"OMP_NUM_THREADS": 8},
     docker_image=[{"image": "huggingface/transformers-examples-torch"}],
     # TODO @ArthurZucker remove this once docker is easier to build
@@ -453,7 +462,7 @@ TRAINING_CI_TESTS = [training_ci_job]
 TENSOR_PARALLEL_CI_TESTS = [tensor_parallel_ci_job]
 FSDP_CI_TESTS = [fsdp_ci_job]
 PEFT_INTEGRATION_TESTS = [peft_integration_job]
-ALL_TESTS = REGULAR_TESTS + PIPELINE_TESTS + REPO_UTIL_TESTS + DOC_TESTS + [custom_tokenizers_job] + [exotic_models_job] + TRAINING_CI_TESTS + TENSOR_PARALLEL_CI_TESTS + FSDP_CI_TESTS + PEFT_INTEGRATION_TESTS  # fmt: skip
+ALL_TESTS = REGULAR_TESTS + EXAMPLES_TESTS + PIPELINE_TESTS + REPO_UTIL_TESTS + DOC_TESTS + [custom_tokenizers_job] + [exotic_models_job] + TRAINING_CI_TESTS + TENSOR_PARALLEL_CI_TESTS + FSDP_CI_TESTS + PEFT_INTEGRATION_TESTS  # fmt: skip
 
 
 def create_circleci_config(folder=None):
