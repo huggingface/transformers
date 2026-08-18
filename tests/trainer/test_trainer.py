@@ -1424,4 +1424,3 @@ class TrainerIntegrationTest(TestCasePlus):
         with self.assertRaises(ValueError) as cm:
             validate_quantization_for_training(compiled_quantized)
         self.assertIn("torch.compile()", str(cm.exception))
-
