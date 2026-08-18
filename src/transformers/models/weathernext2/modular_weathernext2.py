@@ -37,6 +37,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -45,7 +46,6 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    is_torch_flex_attn_available,
     logging,
     requires_backends,
 )
@@ -57,10 +57,6 @@ from .configuration_weathernext2 import WeatherNext2Config
 
 if TYPE_CHECKING:
     from .geometry_weathernext2 import WeatherNext2Geometry
-
-
-if is_torch_flex_attn_available():
-    from torch.nn.attention.flex_attention import BlockMask, create_block_mask
 
 
 logger = logging.get_logger(__name__)
@@ -224,15 +220,19 @@ def eager_attention_forward(
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Eager attention with a boolean mask.
+    """Eager attention, taking whichever mask `masking_utils` built for the backend in use.
 
     WeatherNext 2 masks by mesh adjacency rather than by sequence position, and that mask is dense
-    enough that keeping it boolean instead of additive saves several gigabytes at 0.25 degrees, so
-    this differs from the usual additive-mask implementation.
+    enough that its dtype is worth a comment: eager gets the usual additive float mask, while the
+    sdpa path gets a boolean one, which saves several gigabytes at 0.25 degrees. Both are accepted
+    here so that the two backends can be compared on the same weights.
     """
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        attn_weights = attn_weights.masked_fill(~attention_mask, torch.finfo(attn_weights.dtype).min)
+        if attention_mask.dtype == torch.bool:
+            attn_weights = attn_weights.masked_fill(~attention_mask, torch.finfo(attn_weights.dtype).min)
+        else:
+            attn_weights = attn_weights + attention_mask.to(attn_weights.dtype)
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value).transpose(1, 2).contiguous()
@@ -250,26 +250,19 @@ def gather_neighbouring_blocks(states: torch.Tensor) -> torch.Tensor:
     return torch.cat([padded[:, :-2], padded[:, 1:-1], padded[:, 2:]], dim=3)
 
 
-def build_flex_block_mask(attention_mask: torch.Tensor, batch_size: int) -> "BlockMask":
-    """Wraps the banded boolean mask in a `BlockMask` for the flex attention backend.
+def banded_mask_function(attention_mask: torch.Tensor) -> Callable:
+    """Reads the geometry's banded mask as an index function, the form `masking_utils` expects.
 
     The block axis is folded into the batch axis before attention, so entry `b` of the batch
     corresponds to mesh-node block `b % num_blocks`.
     """
-    num_blocks, _, block_size, kv_length = attention_mask.shape
+    num_blocks = attention_mask.shape[0]
     mask = attention_mask[:, 0]
 
-    def mask_mod(batch_idx, head_idx, q_idx, kv_idx):
+    def inner(batch_idx, head_idx, q_idx, kv_idx):
         return mask[batch_idx % num_blocks, q_idx, kv_idx]
 
-    return create_block_mask(
-        mask_mod,
-        B=batch_size * num_blocks,
-        H=None,
-        Q_LEN=block_size,
-        KV_LEN=kv_length,
-        device=attention_mask.device,
-    )
+    return inner
 
 
 class WeatherNext2Attention(nn.Module):
@@ -302,9 +295,9 @@ class WeatherNext2Attention(nn.Module):
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         r"""
         hidden_states (`torch.FloatTensor` of shape `(batch_size, num_blocks, block_size, hidden_size)`)
-        attention_mask (`torch.BoolTensor` of shape `(batch_size * num_blocks, 1, block_size, 3 * block_size)`):
+        attention_mask (`torch.Tensor` or `BlockMask` of shape `(batch_size * num_blocks, 1, block_size, 3 * block_size)`):
             Which of the three candidate blocks each query may attend to, node by node, as prepared by
-            [`WeatherNext2MeshTransformer.build_attention_mask`].
+            [`WeatherNext2MeshTransformer.forward`].
         """
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
@@ -372,25 +365,6 @@ class WeatherNext2MeshTransformer(nn.Module):
             [WeatherNext2Layer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = WeatherNext2ConditionedNorm(config, config.hidden_size)
-        # The mask depends only on the geometry and the batch size, so it is built once per forward
-        # and shared by every layer. `create_block_mask` is expensive enough to be worth caching.
-        self._flex_block_mask = None
-        self._flex_batch_size = None
-
-    def build_attention_mask(self, attention_mask: torch.Tensor, batch_size: int):
-        """Expands the banded per-block mask to the shape the attention interface expects."""
-        # CODEPATH: not a checkpoint difference. Every checkpoint takes both paths depending on the
-        # attention backend it is loaded with, because flex wants a BlockMask where the others want
-        # a dense tensor.
-        if self.config._attn_implementation == "flex_attention":
-            if self._flex_block_mask is None or self._flex_batch_size != batch_size:
-                self._flex_block_mask = build_flex_block_mask(attention_mask, batch_size)
-                self._flex_batch_size = batch_size
-            return self._flex_block_mask
-
-        num_blocks, _, block_size, kv_length = attention_mask.shape
-        mask = attention_mask.unsqueeze(0).expand(batch_size, -1, -1, -1, -1)
-        return mask.reshape(batch_size * num_blocks, 1, block_size, kv_length)
 
     def forward(
         self,
@@ -400,11 +374,26 @@ class WeatherNext2MeshTransformer(nn.Module):
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         batch_size, num_nodes, hidden_size = hidden_states.shape
-        num_blocks, _, block_size, _ = attention_mask.shape
+        num_blocks, _, block_size, kv_length = attention_mask.shape
 
         hidden_states = nn.functional.pad(hidden_states, (0, 0, 0, num_blocks * block_size - num_nodes))
         hidden_states = hidden_states.view(batch_size, num_blocks, block_size, hidden_size)
-        attention_mask = self.build_attention_mask(attention_mask, batch_size)
+
+        # The mask depends only on the geometry, and the block axis is folded into the batch axis
+        # before attention, so it is built once here and shared by every layer. Going through
+        # `masking_utils` is what keeps the model backend-agnostic: flex gets a `BlockMask` and the
+        # others a dense tensor, decided there rather than here.
+        queries = hidden_states.reshape(batch_size * num_blocks, block_size, hidden_size)
+        # Keys span three blocks where queries span one. `encoder_hidden_states` is how that length
+        # is declared; only its batch, length and dtype are read, so it carries no values.
+        keys = queries.new_empty((batch_size * num_blocks, kv_length, 0))
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=queries,
+            encoder_hidden_states=keys,
+            attention_mask=None,
+            and_mask_function=banded_mask_function(attention_mask),
+        )
 
         for layer in self.layers:
             hidden_states = layer(hidden_states, attention_mask, conditioning, **kwargs)
