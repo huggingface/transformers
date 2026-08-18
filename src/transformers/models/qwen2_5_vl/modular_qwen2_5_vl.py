@@ -122,7 +122,7 @@ class Qwen2_5_VisionPatchEmbed(PatchEmbed):
     pass
 
 
-class Qwen2_5_Qwen2VLVisionRotaryEmbedding(Qwen2VLVisionRotaryEmbedding):
+class Qwen2_5_VLVisionRotaryEmbedding(Qwen2VLVisionRotaryEmbedding):
     pass
 
 
@@ -196,7 +196,7 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
             embed_dim=config.hidden_size,
         )
 
-        self.rotary_pos_emb = Qwen2_5_Qwen2VLVisionRotaryEmbedding(config)
+        self.rotary_pos_emb = Qwen2_5_VLVisionRotaryEmbedding(config)
 
         self.blocks = nn.ModuleList([Qwen2_5_VLVisionBlock(config) for _ in range(config.depth)])
         self.merger = Qwen2_5_VLPatchMerger(

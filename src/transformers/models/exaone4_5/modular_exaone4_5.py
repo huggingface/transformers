@@ -33,13 +33,13 @@ from ..exaone4.modeling_exaone4 import Exaone4PreTrainedModel
 from ..qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLVisionConfig
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VisionPatchEmbed,
-    Qwen2_5_VisionRotaryEmbedding,
     Qwen2_5_VisionTransformerPretrainedModel,
     Qwen2_5_VLForConditionalGeneration,
     Qwen2_5_VLMLP,
     Qwen2_5_VLPatchMerger,
     Qwen2_5_VLVisionAttention,
     Qwen2_5_VLVisionBlock,
+    Qwen2_5_VLVisionRotaryEmbedding,
 )
 from ..qwen2_vl.modeling_qwen2_vl import (
     Qwen2VLModel,
@@ -103,7 +103,7 @@ class Exaone4_5_PatchEmbed(Qwen2_5_VisionPatchEmbed):
     pass
 
 
-class Exaone4_5_VisionRotaryEmbedding(Qwen2_5_VisionRotaryEmbedding):
+class Exaone4_5_VisionRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
     pass
 
 

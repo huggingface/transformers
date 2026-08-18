@@ -57,6 +57,9 @@ class Glm46VPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
     _can_record_outputs = None
 
+    def _init_weights(self, module):
+        raise AttributeError("Not needed")
+
 
 @auto_docstring
 @dataclass

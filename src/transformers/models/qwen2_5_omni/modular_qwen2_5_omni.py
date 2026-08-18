@@ -60,13 +60,13 @@ from ...vision_utils import (
 from ..llama.modeling_llama import LlamaRotaryEmbedding, apply_rotary_pos_emb, rotate_half
 from ..qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLVisionConfig
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
-    Qwen2_5_VisionRotaryEmbedding,
     Qwen2_5_VisionTransformerPretrainedModel,
     Qwen2_5_VLAttention,
     Qwen2_5_VLMLP,
     Qwen2_5_VLPreTrainedModel,
     Qwen2_5_VLTextModel,
     Qwen2_5_VLVisionBlock,
+    Qwen2_5_VLVisionRotaryEmbedding,
     eager_attention_forward,
 )
 from ..qwen2_audio.configuration_qwen2_audio import Qwen2AudioEncoderConfig
@@ -777,7 +777,7 @@ class Qwen2_5OmniPreTrainedModel(Qwen2_5_VLPreTrainedModel):
         elif isinstance(module, Qwen2_5OmniDownSample1d):
             filter_tensor = kaiser_sinc_filter1d(module.cutoff, module.half_width, module.kernel_size)
             init.copy_(module.filter, filter_tensor)
-        elif isinstance(module, Qwen2_5_VisionRotaryEmbedding):
+        elif isinstance(module, Qwen2_5_VLVisionRotaryEmbedding):
             inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
             init.copy_(module.inv_freq, inv_freq)
 
@@ -1576,7 +1576,7 @@ class Qwen2_5OmniVisionBlock(Qwen2_5_VLVisionBlock):
         return hidden_states
 
 
-class Qwen2_5_VisionRotaryEmbedding(Qwen2_5_VisionRotaryEmbedding):
+class Qwen2_5_VLVisionRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
     pass
 
 

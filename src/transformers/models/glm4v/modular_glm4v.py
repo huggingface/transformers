@@ -48,7 +48,6 @@ from ...vision_utils import get_vision_attention_seqlens, get_vision_position_id
 from ..glm4.modeling_glm4 import Glm4MLP, Glm4RMSNorm, Glm4RotaryEmbedding, eager_attention_forward
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VisionPatchEmbed,
-    Qwen2_5_VisionRotaryEmbedding,
     Qwen2_5_VLCausalLMOutputWithPast,
     Qwen2_5_VLForConditionalGeneration,
     Qwen2_5_VLMLP,
@@ -57,6 +56,7 @@ from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VLTextModel,
     Qwen2_5_VLVisionAttention,
     Qwen2_5_VLVisionBlock,
+    Qwen2_5_VLVisionRotaryEmbedding,
 )
 from ..qwen2_vl.modeling_qwen2_vl import Qwen2VLModel
 from ..qwen2_vl.processing_qwen2_vl import (
@@ -247,7 +247,7 @@ class Glm4vVisionPatchEmbed(Qwen2_5_VisionPatchEmbed):
         self.proj = nn.Conv3d(self.in_channels, self.embed_dim, kernel_size=kernel_size, stride=kernel_size)
 
 
-class Glm4vVisionRotaryEmbedding(Qwen2_5_VisionRotaryEmbedding):
+class Glm4vVisionRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
     pass
 
 
