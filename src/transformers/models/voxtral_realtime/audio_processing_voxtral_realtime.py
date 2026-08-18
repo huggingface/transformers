@@ -55,10 +55,5 @@ class VoxtralRealtimeAudioProcessor(TorchAudioBackend):
         features = (features + 4.0) / 4.0
         return features
 
-    def _get_features_lengths(self, audio_lengths, spectrogram_config, include_center_frame=False):
-        stft_cfg = spectrogram_config.stft_config
-        win_length = stft_cfg.win_length or stft_cfg.n_fft
-        return (audio_lengths - win_length) // stft_cfg.hop_length + 1
-
 
 __all__ = ["VoxtralRealtimeAudioProcessor"]
