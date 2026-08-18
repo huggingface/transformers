@@ -79,6 +79,7 @@ if TYPE_CHECKING:
     from .cohere2_moe import *
     from .cohere2_vision import *
     from .cohere_asr import *
+    from .cohere_compass import *
     from .colmodernvbert import *
     from .colpali import *
     from .colqwen2 import *
@@ -446,6 +447,7 @@ if TYPE_CHECKING:
     from .squeezebert import *
     from .stablelm import *
     from .starcoder2 import *
+    from .step3p7 import *
     from .superglue import *
     from .superpoint import *
     from .swiftformer import *
