@@ -136,8 +136,6 @@ class Ovis2_5VisionConfig(PreTrainedConfig):
         uses full attention.
     temporal_patch_size (`int`, *optional*, defaults to 1):
         Number of consecutive video frames represented by one temporal patch.
-    use_rope (`bool`, *optional*, defaults to `True`):
-        Whether to apply two-dimensional rotary position embeddings in vision attention.
     vocab_size (`int`, *optional*, defaults to 65536):
         Size of the visual-token vocabulary, including four learned visual-boundary indicators.
     num_visual_indicator_tokens (`int`, *optional*, defaults to 4):
@@ -161,7 +159,6 @@ class Ovis2_5VisionConfig(PreTrainedConfig):
     window_size: int = 112
     layer_types: list[str] | tuple[str, ...] | None = None
     temporal_patch_size: int = 1
-    use_rope: bool = True
     vocab_size: int = 65536
     num_visual_indicator_tokens: int = 4
     initializer_range: float = 0.02
@@ -363,13 +360,6 @@ class Ovis2_5VisionEncoder(nn.Module):
             rotary_cos[window_index].reshape(sequence_length, -1),
             rotary_sin[window_index].reshape(sequence_length, -1),
         )
-        # CODEPATH: AIDC-AI/Ovis2.5-2B and Ovis2.5-9B set `use_rope=True`; `False` supports custom configs
-        # that disable vision RoPE.
-        if not self.config.use_rope:
-            position_embeddings = (
-                torch.ones_like(position_embeddings[0]),
-                torch.zeros_like(position_embeddings[1]),
-            )
         reverse_indices = torch.argsort(window_index)
 
         recorded_hidden_states = None

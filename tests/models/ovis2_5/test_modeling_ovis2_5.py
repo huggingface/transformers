@@ -174,7 +174,6 @@ class Ovis2_5VisionText2TextModelTester(VLMModelTester):
             attention_dropout=self.attention_dropout,
             vocab_size=self.visual_vocab_size,
             num_visual_indicator_tokens=4,
-            use_rope=True,
         )
 
     def get_config(self):
@@ -578,6 +577,7 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         vision_config["fullatt_block_indexes"] = [1]
         vision_config["num_patches"] = -1
         vision_config["preserve_original_pe"] = True
+        vision_config["use_rope"] = True
         original_config = {
             "llm_config": text_config,
             "vit_config": vision_config,
@@ -599,6 +599,7 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         self.assertFalse(hasattr(config.vision_config, "fullatt_block_indexes"))
         self.assertFalse(hasattr(config.vision_config, "num_patches"))
         self.assertFalse(hasattr(config.vision_config, "preserve_original_pe"))
+        self.assertFalse(hasattr(config.vision_config, "use_rope"))
         self.assertEqual(config.architectures, ["Ovis2_5ForConditionalGeneration"])
         self.assertEqual(max_pixels, 1344 * 1792)
 
@@ -614,6 +615,23 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
             (source / "config.json").write_text(json.dumps(original_config), encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "convolutional patch embedding"):
                 convert_config(source)
+
+    def test_converter_rejects_unreleased_vision_options(self):
+        from transformers.models.ovis2_5.convert_ovis2_5_weights_to_hf import convert_config
+
+        for option, message in (
+            ("preserve_original_pe", "learned vision position embeddings"),
+            ("use_rope", "vision rotary position embeddings"),
+        ):
+            original_config = {
+                "llm_config": self.model_tester.get_text_config().to_dict(),
+                "vit_config": {**self.model_tester.get_vision_config().to_dict(), option: False},
+            }
+            with self.subTest(option=option), tempfile.TemporaryDirectory() as tmp_dir:
+                source = Path(tmp_dir)
+                (source / "config.json").write_text(json.dumps(original_config), encoding="utf-8")
+                with self.assertRaisesRegex(ValueError, message):
+                    convert_config(source)
 
     def test_visual_tokenizer_distribution(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()

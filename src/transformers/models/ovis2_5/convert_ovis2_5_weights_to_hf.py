@@ -117,6 +117,8 @@ def _convert_vision_config(config_dict: dict[str, Any]) -> dict[str, Any]:
     config_dict = _clean_subconfig(config_dict, remove_model_type=True)
     if not config_dict.pop("preserve_original_pe", True):
         raise ValueError("The released Ovis2.5 checkpoints require learned vision position embeddings.")
+    if not config_dict.pop("use_rope", True):
+        raise ValueError("The released Ovis2.5 checkpoints require vision rotary position embeddings.")
     num_patches = config_dict.pop("num_patches", -1)
     if num_patches != -1:
         raise ValueError("The converter only supports the convolutional patch embedding used by released checkpoints.")
