@@ -91,12 +91,11 @@ class RadioPatchEmbeddings(nn.Module):
         num_positions = self.max_rows * self.max_cols
 
         self.patch_projection = nn.Linear(config.num_channels * config.patch_size**2, config.hidden_size, bias=False)
-        if config.video_temporal_patch_size is not None:
-            self.video_patch_projection = nn.Linear(
-                config.video_temporal_patch_size * config.num_channels * config.patch_size**2,
-                config.hidden_size,
-                bias=False,
-            )
+        self.video_patch_projection = nn.Linear(
+            config.video_temporal_patch_size * config.num_channels * config.patch_size**2,
+            config.hidden_size,
+            bias=False,
+        )
         self.position_embedding = nn.Parameter(torch.zeros(1, num_positions, config.hidden_size))
         self.cls_register_token = nn.Parameter(
             torch.zeros(config.num_cls_tokens + config.num_registers, config.hidden_size)

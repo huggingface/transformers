@@ -13,8 +13,6 @@
 # limitations under the License.
 from __future__ import annotations
 
-import warnings
-
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
@@ -172,7 +170,6 @@ class NemotronH_Omni_Reasoning_V3VisionProjector(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.downsample_ratio = config.downsample_ratio
-        self.ps_version = config.ps_version
         self.mlp1 = NemotronH_Omni_Reasoning_V3MLP(
             config.vit_hidden_size * int(1 / config.downsample_ratio) ** 2,
             config.projector_hidden_size,
@@ -189,14 +186,7 @@ class NemotronH_Omni_Reasoning_V3VisionProjector(nn.Module):
             int(w * scale_factor),
             int(c / (scale_factor * scale_factor)),
         )
-        if self.ps_version == "v1":
-            warnings.warn(
-                "In ps_version 'v1', the height and width have not been swapped back, "
-                "which results in a transposed image."
-            )
-        else:
-            x = x.permute(0, 2, 1, 3).contiguous()
-        return x
+        return x.permute(0, 2, 1, 3).contiguous()
 
     def forward(self, vit_embeds, height, width):
         vit_embeds = vit_embeds.reshape(vit_embeds.shape[0], height, width, -1)

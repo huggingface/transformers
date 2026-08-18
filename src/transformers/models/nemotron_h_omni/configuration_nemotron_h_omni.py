@@ -39,9 +39,6 @@ class NemotronH_Omni_Reasoning_V3_Config(PreTrainedConfig):
         Fixed input image resolution (in pixels) the vision tower expects.
     downsample_ratio (`float`, *optional*, defaults to 0.5):
         Pixel-shuffle spatial downsample ratio applied to the vision features.
-    ps_version (`str`, *optional*, defaults to `"v1"`):
-        Pixel-shuffle implementation version (`"v2"` swaps height/width back; `"v1"` is the legacy
-        transposed variant).
     projector_hidden_size (`int`, *optional*, defaults to 4096):
         Hidden size of the vision-to-LLM MLP projector.
     vit_hidden_size (`int`, *optional*, defaults to 1280):
@@ -66,7 +63,6 @@ class NemotronH_Omni_Reasoning_V3_Config(PreTrainedConfig):
     sound_config: dict | ParakeetEncoderConfig | None = None
     force_image_size: int | None = None
     downsample_ratio: float = 0.5
-    ps_version: str = "v1"  # Pixel shuffle version
     projector_hidden_size: int = 4096
     vit_hidden_size: int = 1280
     video_pruning_rate: float = 0.0
