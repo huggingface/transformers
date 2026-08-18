@@ -657,3 +657,29 @@ class SiglipModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1200, 768))
 
         self.assertEqual(outputs.vision_model_output.last_hidden_state.shape, expected_shape)
+
+    def test_output_hidden_states_and_attentions(self):
+        config = SiglipConfig(_attn_implementation="eager")
+        config.text_config.num_hidden_layers = 2
+        config.vision_config.num_hidden_layers = 2
+        model = SiglipModel(config)
+
+        input_ids = torch.randint(0, 1000, (1, 8))
+        pixel_values = torch.randn(1, 3, 224, 224)
+
+        outputs = model(
+            input_ids=input_ids,
+            pixel_values=pixel_values,
+            output_hidden_states=True,
+            output_attentions=True,
+        )
+
+        self.assertIsNotNone(outputs.text_model_output.hidden_states)
+        self.assertEqual(len(outputs.text_model_output.hidden_states), config.text_config.num_hidden_layers + 1)
+        self.assertIsNotNone(outputs.text_model_output.attentions)
+        self.assertEqual(len(outputs.text_model_output.attentions), config.text_config.num_hidden_layers)
+
+        self.assertIsNotNone(outputs.vision_model_output.hidden_states)
+        self.assertEqual(len(outputs.vision_model_output.hidden_states), config.vision_config.num_hidden_layers + 1)
+        self.assertIsNotNone(outputs.vision_model_output.attentions)
+        self.assertEqual(len(outputs.vision_model_output.attentions), config.vision_config.num_hidden_layers)
