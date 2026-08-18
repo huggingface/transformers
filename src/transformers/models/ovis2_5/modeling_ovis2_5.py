@@ -582,7 +582,6 @@ class Ovis2_5VisionModel(Ovis2_5PreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         grid_thw: torch.LongTensor,
-        output_hidden_states: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -598,9 +597,6 @@ class Ovis2_5VisionModel(Ovis2_5PreTrainedModel):
             hidden_states,
             grid_thw=grid_thw,
             position_embeddings=position_embeddings,
-            output_hidden_states=(
-                self.config.output_hidden_states if output_hidden_states is None else output_hidden_states
-            ),
             **kwargs,
         )
         pre_layernorm_hidden_state = encoder_outputs.last_hidden_state
