@@ -576,15 +576,13 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-# Adapted from transformers.models.glm.modular_glm.apply_rotary_pos_emb
-def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
+def apply_rotary_pos_emb(hidden_states, cos, sin, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the `hidden_states` tensors.
 
     Removes the interleaving of cos and sin from GLM
 
     Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
+        hidden_states (`torch.Tensor`): The input tensor.
         cos (`torch.Tensor`): The cosine part of the rotary embedding.
         sin (`torch.Tensor`): The sine part of the rotary embedding.
         unsqueeze_dim (`int`, *optional*, defaults to 1):
@@ -602,17 +600,13 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
 
     # Keep half or full tensor for later concatenation
     rotary_dim = cos.shape[-1]
-    q_rot, q_pass = q[..., :rotary_dim], q[..., rotary_dim:]
-    k_rot, k_pass = k[..., :rotary_dim], k[..., rotary_dim:]
+    rope, nope = hidden_states[..., :rotary_dim], hidden_states[..., rotary_dim:]
 
     # Apply rotary embeddings on the first half or full tensor
-    q_embed = (q_rot * cos) + (rotate_half(q_rot) * sin)
-    k_embed = (k_rot * cos) + (rotate_half(k_rot) * sin)
+    rope = (rope * cos) + (rotate_half(rope) * sin)
 
     # Concatenate back to full shape
-    q_embed = torch.cat([q_embed, q_pass], dim=-1)
-    k_embed = torch.cat([k_embed, k_pass], dim=-1)
-    return q_embed, k_embed
+    return torch.cat([rope, nope], dim=-1)
 
 
 class Qwen4ExpQSAIndexer(nn.Module):
@@ -635,22 +629,6 @@ class Qwen4ExpQSAIndexer(nn.Module):
         self.q_layernorm = Qwen4ExpRMSNorm(self.index_head_dim, eps=config.rms_norm_eps)
         self.k_layernorm = Qwen4ExpRMSNorm(self.index_head_dim, eps=config.rms_norm_eps)
 
-    @staticmethod
-    def _apply_rope(
-        hidden_states: torch.Tensor,
-        cos: torch.Tensor,
-        sin: torch.Tensor,
-        unsqueeze_dim: int,
-    ) -> torch.Tensor:
-        hidden_states, _ = apply_rotary_pos_emb(
-            hidden_states,
-            hidden_states,
-            cos,
-            sin,
-            unsqueeze_dim=unsqueeze_dim,
-        )
-        return hidden_states
-
     def project_qk(
         self,
         hidden_states: torch.Tensor,
@@ -669,7 +647,7 @@ class Qwen4ExpQSAIndexer(nn.Module):
         )
         q = q_raw.view(batch_size, sequence_length, self.index_n_heads, self.index_head_dim)
         q = self.q_layernorm(q)
-        q = self._apply_rope(q, cos, sin, unsqueeze_dim=2)
+        q = apply_rotary_pos_emb(q, cos, sin, unsqueeze_dim=2)
         token_k = token_k.view(batch_size, sequence_length, self.index_kv_heads, self.index_head_dim)
         return q, token_k.squeeze(2)
 
@@ -685,7 +663,7 @@ class Qwen4ExpQSAIndexer(nn.Module):
         pooled_keys = key_groups.float().mean(dim=1).to(raw_keys.dtype)
         pooled_keys = self.k_layernorm(pooled_keys)
         group_starts = block_token_indices[:, 0]
-        return self._apply_rope(
+        return apply_rotary_pos_emb(
             pooled_keys.unsqueeze(1),
             key_cos.index_select(0, group_starts),
             key_sin.index_select(0, group_starts),

@@ -40,9 +40,9 @@ from ..qwen3_5.modeling_qwen3_5 import (
     Qwen3_5RMSNorm,
     Qwen3_5TextRotaryEmbedding,
     Qwen3_5VisionRotaryEmbedding,
-    apply_rotary_pos_emb,
     causal_conv1d_fn,
     causal_conv1d_update,
+    rotate_half,
     torch_chunk_gated_delta_rule,
     torch_recurrent_gated_delta_rule,
 )
@@ -332,6 +332,39 @@ class Qwen4ExpGatedDeltaNet(Qwen3_5GatedDeltaNet):
         )
 
 
+def apply_rotary_pos_emb(hidden_states, cos, sin, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the `hidden_states` tensors.
+
+    Removes the interleaving of cos and sin from GLM
+
+    Args:
+        hidden_states (`torch.Tensor`): The input tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+
+    # Keep half or full tensor for later concatenation
+    rotary_dim = cos.shape[-1]
+    rope, nope = hidden_states[..., :rotary_dim], hidden_states[..., rotary_dim:]
+
+    # Apply rotary embeddings on the first half or full tensor
+    rope = (rope * cos) + (rotate_half(rope) * sin)
+
+    # Concatenate back to full shape
+    return torch.cat([rope, nope], dim=-1)
+
+
 class Qwen4ExpQSAIndexer(nn.Module):
     """Select QSA token indices from compressed key blocks."""
 
@@ -352,22 +385,6 @@ class Qwen4ExpQSAIndexer(nn.Module):
         self.q_layernorm = Qwen4ExpRMSNorm(self.index_head_dim, eps=config.rms_norm_eps)
         self.k_layernorm = Qwen4ExpRMSNorm(self.index_head_dim, eps=config.rms_norm_eps)
 
-    @staticmethod
-    def _apply_rope(
-        hidden_states: torch.Tensor,
-        cos: torch.Tensor,
-        sin: torch.Tensor,
-        unsqueeze_dim: int,
-    ) -> torch.Tensor:
-        hidden_states, _ = apply_rotary_pos_emb(
-            hidden_states,
-            hidden_states,
-            cos,
-            sin,
-            unsqueeze_dim=unsqueeze_dim,
-        )
-        return hidden_states
-
     def project_qk(
         self,
         hidden_states: torch.Tensor,
@@ -386,7 +403,7 @@ class Qwen4ExpQSAIndexer(nn.Module):
         )
         q = q_raw.view(batch_size, sequence_length, self.index_n_heads, self.index_head_dim)
         q = self.q_layernorm(q)
-        q = self._apply_rope(q, cos, sin, unsqueeze_dim=2)
+        q = apply_rotary_pos_emb(q, cos, sin, unsqueeze_dim=2)
         token_k = token_k.view(batch_size, sequence_length, self.index_kv_heads, self.index_head_dim)
         return q, token_k.squeeze(2)
 
@@ -402,7 +419,7 @@ class Qwen4ExpQSAIndexer(nn.Module):
         pooled_keys = key_groups.float().mean(dim=1).to(raw_keys.dtype)
         pooled_keys = self.k_layernorm(pooled_keys)
         group_starts = block_token_indices[:, 0]
-        return self._apply_rope(
+        return apply_rotary_pos_emb(
             pooled_keys.unsqueeze(1),
             key_cos.index_select(0, group_starts),
             key_sin.index_select(0, group_starts),
