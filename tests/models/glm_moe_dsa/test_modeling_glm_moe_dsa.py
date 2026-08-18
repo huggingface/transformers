@@ -95,6 +95,15 @@ class GlmMoeDsaModelTest(CausalLMModelTest, unittest.TestCase):
             ["full", "full", "full", "shared", "shared", "shared", "full", "shared"],
         )
 
+    def test_n_routed_experts_not_overridden_by_legacy_num_experts(self):
+        # When both n_routed_experts and legacy num_experts are present, explicit n_routed_experts wins
+        config = GlmMoeDsaConfig(n_routed_experts=168, num_experts=256)
+        self.assertEqual(config.n_routed_experts, 168)
+
+        # When only legacy num_experts is provided, BC fallback still works
+        config_bc = GlmMoeDsaConfig(num_experts=128)
+        self.assertEqual(config_bc.n_routed_experts, 128)
+
     # DSA selects tokens with a hard top-k, which is discontinuous: a tiny numerical difference in the
     # indexer scores (attention backend, padding, batching, sequence packing) can flip which tokens are
     # selected and thus change the output, so these exact-equivalence tests do not hold for DSA.

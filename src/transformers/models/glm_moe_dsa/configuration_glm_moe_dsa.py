@@ -99,7 +99,7 @@ class GlmMoeDsaConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     num_attention_heads: int = 64
     num_key_value_heads: int = 64
     n_shared_experts: int = 1
-    n_routed_experts: int = 256
+    n_routed_experts: int | None = None
     routed_scaling_factor: float = 2.5
     kv_lora_rank: int = 512
     q_lora_rank: int = 2048
@@ -159,8 +159,8 @@ class GlmMoeDsaConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         if self.layer_types is None:
             self.layer_types = ["deepseek_sparse_attention"] * self.num_hidden_layers
         # BC: re-route `num_experts` to `n_routed_experts`
-        if (num_experts := kwargs.get("num_experts")) is not None:
-            self.n_routed_experts = num_experts
+        if self.n_routed_experts is None:
+            self.n_routed_experts = kwargs.get("num_experts", 256)
         # Default to MoE from the second layer and on
         if self.mlp_layer_types is None:
             self.mlp_layer_types = ["dense"] + ["sparse"] * (self.num_hidden_layers - 1)

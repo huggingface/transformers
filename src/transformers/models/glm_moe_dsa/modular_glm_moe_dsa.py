@@ -87,7 +87,7 @@ class GlmMoeDsaConfig(DeepseekV32Config):
     num_attention_heads: int = 64
     num_key_value_heads: int = 64
     n_shared_experts: int = 1
-    n_routed_experts: int = 256
+    n_routed_experts: int | None = None
     routed_scaling_factor: float = 2.5
     kv_lora_rank: int = 512
     q_lora_rank: int = 2048

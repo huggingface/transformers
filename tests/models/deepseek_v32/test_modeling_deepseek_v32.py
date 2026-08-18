@@ -33,6 +33,7 @@ if is_torch_available():
 
     from transformers import (
         AutoTokenizer,
+        DeepseekV32Config,
         DeepseekV32ForCausalLM,
         DeepseekV32Model,
     )
@@ -151,6 +152,15 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
 
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = DeepseekV32ForCausalLM if is_torch_available() else None
+
+    def test_n_routed_experts_not_overridden_by_legacy_num_experts(self):
+        # When both n_routed_experts and legacy num_experts are present, explicit n_routed_experts wins
+        config = DeepseekV32Config(n_routed_experts=168, num_experts=256)
+        self.assertEqual(config.n_routed_experts, 168)
+
+        # When only legacy num_experts is provided, BC fallback still works
+        config_bc = DeepseekV32Config(num_experts=128)
+        self.assertEqual(config_bc.n_routed_experts, 128)
 
     @unittest.skip("DeepseekV32 applies RoPE to qk_rope_head_dim; generic rope scaling tests assume config.head_dim")
     def test_model_rope_scaling_frequencies(self):
