@@ -271,3 +271,123 @@ class Sapiens2ImageProcessingTest(
         # mismatched batch size raises ValueError
         with self.assertRaises(ValueError):
             image_processor.post_process_image_matting(outputs, target_sizes=[(100, 100)])
+
+    def test_pose_estimation_keypoint_preprocessing(self):
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+        image = image_inputs[0]
+
+        for image_processing_class in self.image_processing_classes.values():
+            image_processor = image_processing_class()
+
+            boxes = [[[50.0, 50.0, 200.0, 400.0]]]
+            keypoints = [[[[60.0, 70.0, 1.0], [80.0, 90.0, 0.0]]]]
+
+            inputs = image_processor(images=image, boxes=boxes, keypoints=keypoints, return_tensors="pt")
+
+            self.assertEqual(inputs["pixel_values"].shape, (1, 3, 1024, 768))
+            self.assertEqual(inputs["labels"].shape, (1, 2, 256, 192))
+            self.assertEqual(inputs["label_weights"].shape, (1, 2))
+
+            self.assertEqual(inputs["label_weights"][0, 1].max().item(), 0.0)
+
+            with self.assertRaises(ValueError):
+                image_processor(images=image, keypoints=keypoints, return_tensors="pt")
+
+    def test_generate_udp_gaussian_heatmaps_parity(self):
+        from itertools import product
+
+        import numpy as np
+        import torch
+
+        from transformers.models.sapiens2.image_processing_sapiens2 import (
+            box_xywh_to_cxcywh,
+            boxes_to_crop_params,
+            generate_udp_gaussian_heatmaps,
+        )
+
+        # 1. Original Meta Implementation for exact parity testing
+        def original_generate_udp_gaussian_heatmaps(heatmap_size, keypoints, keypoints_visible, sigma):
+            N, K, _ = keypoints.shape
+            W, H = heatmap_size
+            heatmaps = np.zeros((K, H, W), dtype=np.float32)
+            keypoint_weights = keypoints_visible.copy()
+            radius = sigma * 3
+            gaussian_size = 2 * radius + 1
+            x = np.arange(0, gaussian_size, 1, dtype=np.float32)
+            y = x[:, None]
+
+            for n, k in product(range(N), range(K)):
+                if keypoints_visible[n, k] < 0.5:
+                    continue
+                mu = (keypoints[n, k] + 0.5).astype(np.int64)
+                left, top = (mu - radius).astype(np.int64)
+                right, bottom = (mu + radius + 1).astype(np.int64)
+
+                if left >= W or top >= H or right < 0 or bottom < 0:
+                    keypoint_weights[n, k] = 0
+                    continue
+
+                mu_ac = keypoints[n, k]
+                x0 = y0 = gaussian_size // 2
+                x0 += mu_ac[0] - mu[0]
+                y0 += mu_ac[1] - mu[1]
+                gaussian = np.exp(-((x - x0) ** 2 + (y - y0) ** 2) / (2 * sigma**2))
+
+                g_x1, g_x2 = max(0, -left), min(W, right) - left
+                g_y1, g_y2 = max(0, -top), min(H, bottom) - top
+                h_x1, h_x2 = max(0, left), min(W, right)
+                h_y1, h_y2 = max(0, top), min(H, bottom)
+
+                heatmap_region = heatmaps[k, h_y1:h_y2, h_x1:h_x2]
+                gaussian_regsion = gaussian[g_y1:g_y2, g_x1:g_x2]
+                _ = np.maximum(heatmap_region, gaussian_regsion, out=heatmap_region)
+
+            return heatmaps, keypoint_weights
+
+        # 2. Setup dummy inputs
+        output_size = (1024, 768)
+        downscale_factor = 4
+        sigma = 6.0
+
+        heatmap_height = output_size[0] // downscale_factor
+        heatmap_width = output_size[1] // downscale_factor
+        heatmap_size_array = np.array([heatmap_width - 1, heatmap_height - 1], dtype=np.float32)
+
+        # 1 box, 2 keypoints (one in bounds, one completely out of bounds to test the mask)
+        boxes = [[[50.0, 50.0, 200.0, 400.0]]]
+        keypoints = [[[[100.0, 150.0, 1.0], [3000.0, 4000.0, 1.0]]]]
+
+        # 3. Run our PyTorch implementation
+        pt_heatmaps, pt_weights = generate_udp_gaussian_heatmaps(
+            boxes=boxes,
+            keypoints=keypoints,
+            output_size=output_size,
+            downscale_factor=downscale_factor,
+            sigma=sigma,
+            device="cpu",
+        )
+        pt_heatmaps = pt_heatmaps[0].numpy()
+        pt_weights = pt_weights[0].numpy()
+
+        # 4. Prepare inputs for the original NumPy function
+        boxes_tensor = box_xywh_to_cxcywh(torch.tensor(boxes[0], dtype=torch.float32))
+        centers, scales = boxes_to_crop_params(boxes_tensor, output_size=output_size)
+
+        raw_coords = np.array(keypoints[0][0])[:, :2]
+        visibilities = np.array(keypoints[0][0])[:, 2]
+
+        center = centers[0].numpy()
+        scale = scales[0].numpy()
+        heatmap_coords = ((raw_coords - center) / scale + 0.5) * heatmap_size_array
+
+        # 5. Run the original Meta NumPy implementation
+        np_heatmaps, np_weights = original_generate_udp_gaussian_heatmaps(
+            heatmap_size=(heatmap_width, heatmap_height),
+            keypoints=np.expand_dims(heatmap_coords, axis=0),
+            keypoints_visible=np.expand_dims(visibilities, axis=0),
+            sigma=sigma,
+        )
+
+        # 6. Assert strict parity
+        np.testing.assert_allclose(pt_heatmaps, np_heatmaps, atol=1e-5)
+        np.testing.assert_allclose(pt_weights, np_weights[0], atol=1e-5)
