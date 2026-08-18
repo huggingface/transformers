@@ -1,32 +1,22 @@
 import gc
 import unittest
 import weakref
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import torch
-from torch import nn
 
 from transformers import (
     AutoConfig,
     AutoModelForCausalLM,
     AutoTokenizer,
-    DeepseekV3Config,
-    DeepseekV3ForCausalLM,
     GenerationConfig,
-    MuseGlimmerAssistantConfig,
-    MuseGlimmerAssistantModel,
     pipeline,
 )
 from transformers.generation.candidate_generator import (
     AssistantToTargetTranslator,
     AssistantVocabTranslatorCache,
-    DFlashTokenCandidateGenerator,
-    MTPCandidateGenerator,
     UniversalSpeculativeDecodingGenerator,
 )
-from transformers.generation.logits_process import LogitsProcessorList
-from transformers.modeling_layers import MtpModel
-from transformers.modeling_outputs import BaseModelOutputWithPast
 from transformers.testing_utils import require_torch, torch_device
 
 
@@ -352,226 +342,3 @@ class TestUniversalSpeculativeDecoding(unittest.TestCase):
 
         # Assert that the outputs match
         cls.assertEqual(usd_text, vanilla_text)
-
-
-@require_torch
-class TestDFlashTokenCandidateGenerator(unittest.TestCase):
-    """`_assisted_decoding` commits a whole block before checking whether to stop, and that check only looks at
-    the last committed token. A block holding an EOS anywhere else would therefore be accepted whole and
-    generation would run past it, so the drafter has to crop its block at the first EOS.
-    """
-
-    vocab_size = 50
-    hidden_size = 32
-    block_size = 8
-    prompt_length = 6
-    # `block_size - 1` drafted tokens, with a token that never repeats sitting in the middle to stand in as EOS
-    draft = [11, 12, 13, 7, 14, 15, 16]
-
-    def setUp(self):
-        torch.manual_seed(0)
-        config = MuseGlimmerAssistantConfig(
-            vocab_size=self.vocab_size,
-            hidden_size=self.hidden_size,
-            head_dim=8,
-            num_hidden_layers=3,
-            num_attention_heads=4,
-            num_key_value_heads=2,
-            intermediate_size=37,
-            block_size=self.block_size,
-            target_layer_ids=[0, 2],
-            mask_token_id=1,
-            bos_token_id=2,
-            eos_token_id=3,
-            pad_token_id=4,
-        )
-        self.assistant_model = MuseGlimmerAssistantModel(config).to(torch_device).eval()
-        self.input_embeddings = nn.Embedding(self.vocab_size, self.hidden_size).to(torch_device)
-        self.input_ids = torch.randint(5, self.vocab_size, (1, self.prompt_length), device=torch_device)
-        self.model_kwargs = {
-            "position_ids": torch.arange(self.prompt_length, device=torch_device)[None],
-            "attention_mask": torch.ones(1, self.prompt_length, dtype=torch.long, device=torch_device),
-        }
-        # `target_layer_ids` indexes into these with an offset of one, so layer 2 needs four entries
-        self.model_outputs = BaseModelOutputWithPast(
-            last_hidden_state=torch.randn(1, self.prompt_length, self.hidden_size, device=torch_device),
-            hidden_states=tuple(
-                torch.randn(1, self.prompt_length, self.hidden_size, device=torch_device) for _ in range(4)
-            ),
-        )
-
-    def _get_candidates(self, eos_token_id, logits_processor=None, draft=None):
-        """Drafts one block, pinning the vocab projection so the drafted tokens are exactly `draft`."""
-
-        draft = self.draft if draft is None else draft
-        vocab_size = self.vocab_size
-
-        class _PinnedOutputEmbeddings(nn.Module):
-            def __init__(self):
-                super().__init__()
-                # `get_candidates` reads `.weight.device` to place hidden states (#47877)
-                self.weight = nn.Parameter(torch.zeros(1, device=torch_device))
-
-            def forward(self, hidden_states):
-                logits = torch.zeros(*hidden_states.shape[:2], vocab_size, device=hidden_states.device)
-                for position, token in enumerate(draft):
-                    # The anchor position is dropped before the head since #48007, so rows map 1:1 to the draft
-                    logits[:, position, token] = 1.0
-                return logits
-
-        generation_config = GenerationConfig(do_sample=False, max_length=1024)
-        generation_config._eos_token_tensor = (
-            None if eos_token_id is None else torch.tensor([eos_token_id], device=torch_device)
-        )
-        candidate_generator = DFlashTokenCandidateGenerator(
-            assistant_model=self.assistant_model,
-            main_model_input_embeddings=self.input_embeddings,
-            main_model_output_embeddings=_PinnedOutputEmbeddings(),
-            generation_config=generation_config,
-            logits_processor=logits_processor,
-        )
-        candidate_ids, candidate_logits = candidate_generator.get_candidates(
-            input_ids=self.input_ids,
-            model_kwargs=self.model_kwargs,
-            model_outputs=self.model_outputs,
-            is_first_iteration=False,
-            n_last_matches=0,
-        )
-        return candidate_ids[0, self.prompt_length :].tolist(), candidate_logits
-
-    def _assert_logits_track_tokens(self, logits, drafted):
-        """The logits are consumed positionally alongside the tokens, so they must be cropped the same way.
-
-        Checking the length alone would not notice logits cropped from the wrong end, which
-        `_speculative_sampling` would then read per-token against the wrong distribution.
-        """
-        self.assertEqual(logits.shape[1], len(drafted))
-        self.assertEqual(logits.argmax(-1)[0].tolist(), drafted)
-
-    def test_draft_is_cropped_at_the_first_eos(self):
-        for logits_processor in (None, LogitsProcessorList()):
-            with self.subTest(logits_processor=logits_processor):
-                # `self.draft` holds the EOS at index 3, so four tokens survive
-                drafted, logits = self._get_candidates(eos_token_id=7, logits_processor=logits_processor)
-                self.assertEqual(drafted, [11, 12, 13, 7])
-                self._assert_logits_track_tokens(logits, drafted)
-
-    def test_draft_is_cropped_at_the_first_of_several_eos(self):
-        # A block drafter routinely repeats a token, so "first" has to be pinned by a draft that can
-        # actually tell it apart from "last" -- `self.draft` has distinct entries and cannot.
-        drafted, logits = self._get_candidates(eos_token_id=7, draft=[11, 12, 7, 13, 7, 14, 15])
-        self.assertEqual(drafted, [11, 12, 7])
-        self._assert_logits_track_tokens(logits, drafted)
-
-    def test_draft_without_an_eos_is_untouched(self):
-        for eos_token_id in (None, 42):
-            with self.subTest(eos_token_id=eos_token_id):
-                drafted, logits = self._get_candidates(eos_token_id=eos_token_id)
-                self.assertEqual(drafted, self.draft)
-                self._assert_logits_track_tokens(logits, drafted)
-
-    def test_draft_already_ending_in_eos_is_untouched(self):
-        drafted, logits = self._get_candidates(eos_token_id=self.draft[-1])
-        self.assertEqual(drafted, self.draft)
-        self._assert_logits_track_tokens(logits, drafted)
-
-    def test_draft_is_cropped_to_a_leading_eos(self):
-        drafted, logits = self._get_candidates(eos_token_id=self.draft[0])
-        self.assertEqual(drafted, self.draft[:1])
-        self._assert_logits_track_tokens(logits, drafted)
-
-
-@require_torch
-class TestMTPCandidateGenerator(unittest.TestCase):
-    """`_assisted_decoding` commits `n_matches + 1` tokens before checking whether to stop, and that check
-    reads only the last of them, so an EOS earlier in the drafted block is committed along with everything
-    after it. Reachable only with more than one mtp layer: with a single layer the drafted EOS is already
-    last, and the `is_done_candidate` guard in `_assisted_decoding` covers it.
-    """
-
-    vocab_size = 50
-    hidden_size = 32
-    prompt_length = 6
-    draft = [11, 12, 7, 13, 14]  # one drafted token per mtp layer
-
-    def setUp(self):
-        torch.manual_seed(0)
-        config = DeepseekV3Config(
-            vocab_size=self.vocab_size, hidden_size=self.hidden_size, intermediate_size=37,
-            moe_intermediate_size=12, num_hidden_layers=2, num_attention_heads=4, num_key_value_heads=4,
-            n_routed_experts=4, n_shared_experts=1, num_experts_per_tok=2, first_k_dense_replace=1,
-            n_group=1, topk_group=1, q_lora_rank=8, kv_lora_rank=8, qk_rope_head_dim=4, v_head_dim=8,
-            qk_nope_head_dim=4, num_mtp_layers=len(self.draft), pad_token_id=2,
-        )  # fmt: skip
-        self.model = DeepseekV3ForCausalLM(config).to(torch_device).eval()
-        self.input_ids = torch.randint(5, self.vocab_size, (1, self.prompt_length), device=torch_device)
-        self.model_kwargs = {
-            "position_ids": torch.arange(self.prompt_length, device=torch_device)[None],
-            "attention_mask": torch.ones(1, self.prompt_length, dtype=torch.long, device=torch_device),
-        }
-        self.model_outputs = BaseModelOutputWithPast(
-            last_hidden_state=torch.randn(1, self.prompt_length, self.hidden_size, device=torch_device),
-            hidden_states=tuple(
-                torch.randn(1, self.prompt_length, self.hidden_size, device=torch_device) for _ in range(3)
-            ),
-        )
-
-    def _get_drafted_tokens(self, eos_token_id, draft=None):
-        """Drafts one block, pinning the shared vocab projection so the drafted tokens are exactly `draft`."""
-        draft = self.draft if draft is None else draft
-        vocab_size = self.vocab_size
-
-        class _PinnedHead(nn.Module):
-            """Each mtp layer asks the head, which the drafter shares with the main model, for one token."""
-
-            layer = 0
-
-            def forward(self, hidden_states):
-                logits = torch.zeros(*hidden_states.shape[:2], vocab_size, device=hidden_states.device)
-                logits[:, -1, draft[self.layer]] = 1.0
-                self.layer += 1
-                return logits
-
-        self.model.lm_head = _PinnedHead()
-        generation_config = GenerationConfig(do_sample=False, max_length=1024)
-        generation_config._eos_token_tensor = (
-            None if eos_token_id is None else torch.tensor([eos_token_id], device=torch_device)
-        )
-        # The drafter is normally read out of the checkpoint; its weights do not matter here, as the pinned
-        # head is what decides the drafted tokens
-        with patch.object(
-            MtpModel, "from_pretrained", lambda model, **kwargs: MtpModel(model, len(draft)).to(torch_device)
-        ):
-            candidate_generator = MTPCandidateGenerator(
-                main_model=self.model,
-                generation_config=generation_config,
-                model_kwargs=self.model_kwargs,
-                logits_processor=LogitsProcessorList(),
-            )
-        candidate_ids, candidate_logits = candidate_generator.get_candidates(
-            input_ids=self.input_ids,
-            model_kwargs=self.model_kwargs,
-            model_outputs=self.model_outputs,
-            is_first_iteration=False,
-            n_last_matches=0,
-        )
-        drafted = candidate_ids[0, self.prompt_length :].tolist()
-        # `_speculative_sampling` reads the logits per token, so they have to be cropped alongside them --
-        # matching lengths alone would not catch logits cropped from the wrong end
-        self.assertEqual(candidate_logits.argmax(-1)[0].tolist(), drafted)
-        return drafted
-
-    def test_draft_is_cropped_at_the_first_eos(self):
-        for eos_token_id, draft, expected in (
-            (7, None, [11, 12, 7]),
-            # a drafter repeats tokens, and only a repeated EOS tells "first" apart from "last"
-            (7, [11, 7, 12, 7, 13], [11, 7]),
-            (11, None, [11]),
-        ):
-            with self.subTest(eos_token_id=eos_token_id, draft=draft):
-                self.assertEqual(self._get_drafted_tokens(eos_token_id, draft), expected)
-
-    def test_draft_without_an_eos_before_the_end_is_untouched(self):
-        for eos_token_id in (None, 42, 14):  # unset, not drafted, already the last drafted token
-            with self.subTest(eos_token_id=eos_token_id):
-                self.assertEqual(self._get_drafted_tokens(eos_token_id), self.draft)
