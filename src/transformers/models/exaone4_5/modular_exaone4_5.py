@@ -224,8 +224,7 @@ class Exaone4_5_VisionModel(Exaone4_5_PreTrainedModel, Qwen2_5_VisionTransformer
             in_channels=config.in_channels,
             embed_dim=config.hidden_size,
         )
-        head_dim = config.hidden_size // config.num_heads
-        self.rotary_pos_emb = Exaone4_5_VisionRotaryEmbedding(head_dim // 2)
+        self.rotary_pos_emb = Exaone4_5_VisionRotaryEmbedding(config)
         self.blocks = nn.ModuleList([Exaone4_5_VisionBlock(config) for _ in range(config.depth)])
         self.merger = Exaone4_5_PatchMerger(
             dim=config.out_hidden_size,

@@ -1630,10 +1630,12 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5_VisionTransformerPretrainedModel):
         hidden_states = hidden_states[window_index, :, :]
         hidden_states = hidden_states.reshape(seq_len, -1)
 
-        rotary_pos_emb = self.rotary_pos_emb(position_ids)
-        rotary_pos_emb = rotary_pos_emb.reshape(seq_len // self.spatial_merge_unit, self.spatial_merge_unit, -1)
-        rotary_pos_emb = rotary_pos_emb[window_index, :, :]
-        rotary_pos_emb = rotary_pos_emb.reshape(seq_len, -1)
+        position_embeddings = self.rotary_pos_emb(hidden_states, position_ids)
+        position_embeddings = position_embeddings.reshape(
+            seq_len // self.spatial_merge_unit, self.spatial_merge_unit, -1
+        )
+        position_embeddings = position_embeddings[window_index, :, :]
+        position_embeddings = position_embeddings.reshape(seq_len, -1)
 
         # Modification here
         for layer_num, blk in enumerate(self.blocks):
@@ -1648,7 +1650,7 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5_VisionTransformerPretrainedModel):
                 hidden_states,
                 cu_seqlens=cu_seqlens_now,
                 max_seqlen=max_seqlen_now,
-                position_embeddings=rotary_pos_emb,
+                position_embeddings=position_embeddings,
                 **kwargs,
             )
 

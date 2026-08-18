@@ -351,10 +351,8 @@ class MLCDVisionModel(CLIPVisionModel):
             torch.arange(num_patches_width, device=pixel_values.device).unsqueeze(0).expand(num_patches_height, -1)
         )
         pos_ids = torch.stack([hpos_ids.flatten(), wpos_ids.flatten()], dim=-1)
-        rotary_pos_emb = self.vision_rotary_embedding(pos_ids)
-        rotary_pos_emb = torch.cat([self.class_pos_emb, rotary_pos_emb], dim=0)
-        emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
-        position_embeddings = (emb.cos(), emb.sin())
+        position_embeddings = self.vision_rotary_embedding(pos_ids)
+        position_embeddings = torch.cat([self.class_pos_emb, position_embeddings], dim=0)
 
         hidden_states = self.embeddings(pixel_values)
         hidden_states = self.pre_layrnorm(hidden_states)

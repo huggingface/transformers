@@ -556,10 +556,7 @@ class PaddleOCRVisionEncoderLayer(VideoLlama3VisionEncoderLayer):
 class PaddleOCRVisionEncoder(VideoLlama3VisionEncoder):
     def __init__(self, config: PaddleOCRVisionConfig):
         super().__init__()
-        embed_dim = config.hidden_size
-        num_heads = config.num_attention_heads
-        head_dim = embed_dim // num_heads
-        self.rotary_pos_emb = PaddleOCRQwen2VLVisionRotaryEmbedding(head_dim // 2)
+        self.rotary_pos_emb = PaddleOCRQwen2VLVisionRotaryEmbedding(config)
 
     @can_return_tuple
     @auto_docstring
