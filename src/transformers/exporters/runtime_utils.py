@@ -75,10 +75,6 @@ class ModelRunner(ABC):
     runner, so nobody has to pass them in.
     """
 
-    # Shapes of the cache tensors this graph expects, when the backend's handle exposes them —
-    # read off the runtime, never supplied by whoever builds the runner.
-    cache_input_shapes: list[tuple[int | None, ...]] | None = None
-
     # Rank the graph's single `attention_mask` input was traced with, when the backend's handle exposes it.
     # `generate` upgrades a 2D padding mask to the 4D causal mask for any compileable cache, on the
     # assumption the model's forward wants one — but an exported graph starts *after* whatever mask building
@@ -185,39 +181,6 @@ def _cache_length(cache) -> int:
         return 1 if started else 0
 
 
-def _fresh_recurrent_cache(prototype):
-    """A generation-start copy of a recurrent cache: same structure, states dropped, flags cleared.
-
-    A real model creates this in its `prepare_inputs_for_generation`; the runtime has no model, so it
-    starts from the cache the graphs were traced with and resets it the way a fresh one looks. The states
-    are then filled and the flags flipped by `_advance_cache`, step by step.
-    """
-    cache = copy.deepcopy(prototype)
-    for layer in getattr(cache, "layers", []):
-        for attr in ("conv_states", "recurrent_states"):
-            states = getattr(layer, attr, None)
-            if isinstance(states, dict):
-                # a fresh recurrent layer holds *no* state — the prefill graph was traced against `None`
-                # here, and it is the step that produces them
-                for key in states:
-                    states[key] = None
-        for flag in ("is_conv_states_initialized", "is_recurrent_states_initialized", "has_previous_state"):
-            marks = getattr(layer, flag, None)
-            if isinstance(marks, dict):
-                for key in marks:
-                    marks[key] = False
-            elif marks is True:
-                setattr(layer, flag, False)
-        # the scalars its `lazy_initialization` records go back to unset too — a fresh layer knows
-        # neither its kernel size nor where its states will live
-        if isinstance(getattr(layer, "conv_kernel_size", None), dict):
-            for key in layer.conv_kernel_size:
-                layer.conv_kernel_size[key] = None
-        if hasattr(layer, "dtype"):
-            layer.dtype, layer.device = None, None
-    return cache
-
-
 def _advance_cache(past_key_values, outputs: dict[str, torch.Tensor], num_new_tokens: int):
     """Advance the cache with a decode step's outputs (the `past_key_values.…` entries, in cache-leaf
     order). A fixed-size cache keeps its shapes, so `copy_` in place — preserving the cache object and its
@@ -314,21 +277,23 @@ def _advance_cache(past_key_values, outputs: dict[str, torch.Tensor], num_new_to
     return past_key_values
 
 
-def _traced_mask_dict_ranks(module) -> dict[str, int] | None:
-    """`{attention type: rank}` the graph's `attention_mask` dict was traced with, or `None` for a plain mask.
+def _traced_mask_ranks(module) -> tuple[int | None, dict[str, int] | None]:
+    """`(rank, per-type ranks)` the graph's `attention_mask` input was traced with.
 
-    A mixed-attention model builds that dict inside its forward, which the graph starts after, so the
-    runtime has to hand one in — and the ranks differ per type (a full-attention entry is the 4D causal
-    mask, a linear-attention one the 2D padding mask), so only the graph can say what each slot wants.
+    `rank` is what a single mask input carried: `generate` upgrades a 2D padding mask to the 4D causal mask
+    for any compileable cache, on the assumption the model's forward wants one — but an exported graph starts
+    *after* whatever mask building its model does, so only the trace can say which it took. An alibi model
+    (bloom) reads the 2D padding mask directly and compares its width to the cache length, so handing it a 4D
+    mask fails a guard on `attention_mask.size()[1]` rather than mismatching a shape.
+
+    The dict is for a mixed-attention model, which builds `{attention type: mask}` inside its forward — the
+    graph starts after that, so the runtime hands one in, and the ranks differ per type (a full-attention
+    entry is the 4D causal mask, a linear-attention one the 2D padding mask). Exactly one of the two is set.
     """
     kwargs_spec = module._in_spec.child(1)
     names = list(kwargs_spec.context or [])
     if "attention_mask" not in names:
-        return None
-    child = kwargs_spec.children_specs[names.index("attention_mask")]
-    keys = getattr(child, "context", None)
-    if not (isinstance(keys, list) and keys):
-        return None
+        return None, None
     ranks = [
         len(node.meta["val"].shape)
         for node in getattr(getattr(module, "graph", None), "nodes", [])
@@ -336,38 +301,10 @@ def _traced_mask_dict_ranks(module) -> dict[str, int] | None:
         and node.name.startswith("attention_mask")
         and hasattr(node.meta.get("val"), "shape")
     ]
-    return dict(zip(keys, ranks)) if len(ranks) == len(keys) else dict.fromkeys(keys, 4)
-
-
-def _traced_mask_rank(module) -> int | None:
-    """The rank the graph's single `attention_mask` input was traced with, or `None` if it takes no mask.
-
-    `generate` upgrades a 2D padding mask to the 4D causal mask whenever the cache is compileable, on the
-    assumption that the model's forward wants one — but an exported graph starts *after* whatever mask
-    building its model does, so only the trace can say which it took. An alibi model (bloom) reads the 2D
-    padding mask directly and compares its width to the cache length, so handing it a 4D mask fails the
-    guard on `attention_mask.size()[1]` rather than mismatching a shape.
-    """
-    kwargs_spec = module._in_spec.child(1)
-    names = list(kwargs_spec.context or [])
-    if "attention_mask" not in names:
-        return None
-    for node in getattr(getattr(module, "graph", None), "nodes", []):
-        if node.op == "placeholder" and node.name.startswith("attention_mask"):
-            value = node.meta.get("val")
-            if hasattr(value, "shape"):
-                return len(value.shape)
-    return None
-
-
-def _traced_cache_input_shapes(module) -> list[tuple[int | None, ...]] | None:
-    """Shapes of the cache tensors the traced graph expects, in leaf order — `None` per symbolic axis.
-
-    Read off the runtime handle itself (here the exported module's placeholder metadata), so the runtime
-    reproduces whatever the model cached without deriving it: standard keys/values, MLA's single latent
-    head, or a recurrent layer's `conv_states` / `recurrent_states`, which no config formula covers.
-    """
-    return [shape for _, shape in sorted(_traced_cache_leaf_shapes(module).items())] or None
+    keys = getattr(kwargs_spec.children_specs[names.index("attention_mask")], "context", None)
+    if not (isinstance(keys, list) and keys):
+        return (ranks[0] if ranks else None), None
+    return None, (dict(zip(keys, ranks)) if len(ranks) == len(keys) else dict.fromkeys(keys, 4))
 
 
 def _traced_cache_leaf_shapes(module) -> dict[int, tuple[int | None, ...]]:
@@ -427,10 +364,8 @@ class DynamoModelRunner(ModelRunner):
         # The module requires the exact kwarg set it was traced with (including baked scalars like
         # `max_seqlen` that aren't graph placeholders) — its input pytree spec carries those kwarg names.
         self.input_names = tuple(module._in_spec.child(1).context)
-        self.cache_input_shapes = _traced_cache_input_shapes(module)
         self.kv_geometry = _traced_kv_geometry(module)
-        self.mask_dict_ranks = _traced_mask_dict_ranks(module)
-        self.mask_rank = _traced_mask_rank(module)
+        self.mask_rank, self.mask_dict_ranks = _traced_mask_ranks(module)
         # Outputs land wherever the exported weights live.
         weight = next(self._module.parameters(), None)
         if weight is not None:
@@ -483,7 +418,6 @@ class OnnxModelRunner(ModelRunner):
         # ORT rejects a feed whose dtype differs from the declared one, and the masks the runtime builds are
         # not always the type the graph was traced with (a bool padding mask vs a float causal one).
         self._input_dtypes = {i.name: _ORT_TO_TORCH_DTYPE.get(i.type) for i in session.get_inputs()}
-        self.cache_input_shapes = [shapes[name] for name in self._cache_names] or None
         self.kv_geometry = _session_kv_geometry(shapes)
         # Same contract as the dynamo runner's: the rank the single `attention_mask` input was traced with,
         # so the generation loop feeds the mask kind this graph took rather than assuming 4D.
@@ -552,11 +486,6 @@ class ExecutorchModelRunner(ModelRunner):
         total_outputs = self._method.metadata.num_outputs()
         self._user_output_indices = range(total_outputs - num_user_outputs, total_outputs)
         self._cache_names = [n for n in self.input_names if n.startswith(self.cache_input or "\0")]
-        self.cache_input_shapes = [
-            tuple(self._method.metadata.input_tensor_meta(index).sizes())
-            for index, name in enumerate(self.input_names)
-            if name in self._cache_names
-        ] or None
         # Baked by the exporter (`_signature_constant_methods`): a `.pte` keeps shapes but nothing saying
         # which leaf is a layer's keys, so the geometry rides along as `layer, heads, key_dim, value_dim`.
         self.kv_geometry = _baked_kv_geometry(program)
