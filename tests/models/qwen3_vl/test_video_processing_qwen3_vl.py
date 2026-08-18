@@ -338,18 +338,30 @@ class Qwen3VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
         return video_processing(video, return_tensors="pt")[self.input_name]
 
     def test_max_pixels_per_frame_caps_short_videos(self):
-        size = {"longest_edge": 64 * 32 * 32, "shortest_edge": 32 * 32}
-        cap = size["longest_edge"] // 8
+        size = {"longest_edge": 64 * 32 * 32 * 16, "shortest_edge": 32 * 32}
+        cap = 4096
         for video_processing_class in self.video_processor_list:
-            uncapped = self._process_frames(video_processing_class, 4, size)
-            capped = self._process_frames(video_processing_class, 4, size, max_pixels_per_frame=cap)
+            uncapped = self._process_frames(video_processing_class, 64, size)
+            capped = self._process_frames(video_processing_class, 64, size, max_pixels_per_frame=cap)
 
             expected_height, expected_width = smart_resize(
-                4, 256, 256, factor=32, min_pixels=size["shortest_edge"], max_pixels=4 * cap
+                64, 256, 256, factor=32, min_pixels=size["shortest_edge"], max_pixels=64 * cap
             )
-            expected_seq_len = (4 // 2) * (expected_height // 16) * (expected_width // 16)
+            expected_seq_len = (64 // 2) * (expected_height // 16) * (expected_width // 16)
             self.assertEqual(capped.shape[0], expected_seq_len)
             self.assertLess(capped.shape[0], uncapped.shape[0])
+
+    def test_max_pixels_per_frame_floor_protects_tiny_clips(self):
+        size = {"longest_edge": 64 * 32 * 32 * 16, "shortest_edge": 32 * 32}
+        cap = 1024
+        for video_processing_class in self.video_processor_list:
+            capped = self._process_frames(video_processing_class, 2, size, max_pixels_per_frame=cap)
+
+            expected_height, expected_width = smart_resize(
+                2, 256, 256, factor=32, min_pixels=size["shortest_edge"], max_pixels=32 * cap
+            )
+            expected_seq_len = (2 // 2) * (expected_height // 16) * (expected_width // 16)
+            self.assertEqual(capped.shape[0], expected_seq_len)
 
     def test_max_pixels_per_frame_noop_when_not_binding(self):
         size = {"longest_edge": 64 * 32 * 32, "shortest_edge": 32 * 32}
@@ -360,22 +372,22 @@ class Qwen3VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
             self.assertEqual(list(capped.shape), list(uncapped.shape))
 
     def test_max_pixels_per_frame_call_time_override(self):
-        size = {"longest_edge": 64 * 32 * 32, "shortest_edge": 32 * 32}
-        cap = size["longest_edge"] // 8
+        size = {"longest_edge": 64 * 32 * 32 * 16, "shortest_edge": 32 * 32}
+        cap = 4096
         for video_processing_class in self.video_processor_list:
             video_processor_dict = self.video_processor_dict.copy()
             video_processor_dict["size"] = size
             video_processor_dict["do_sample_frames"] = False
             video_processing = video_processing_class(**video_processor_dict)
-            video = [np.random.randint(0, 256, (256, 256, 3), dtype=np.uint8) for _ in range(4)]
+            video = [np.random.randint(0, 256, (256, 256, 3), dtype=np.uint8) for _ in range(64)]
 
             default_out = video_processing(video, return_tensors="pt")[self.input_name]
             capped_out = video_processing(video, return_tensors="pt", max_pixels_per_frame=cap)[self.input_name]
 
             expected_height, expected_width = smart_resize(
-                4, 256, 256, factor=32, min_pixels=size["shortest_edge"], max_pixels=4 * cap
+                64, 256, 256, factor=32, min_pixels=size["shortest_edge"], max_pixels=64 * cap
             )
-            expected_seq_len = (4 // 2) * (expected_height // 16) * (expected_width // 16)
+            expected_seq_len = (64 // 2) * (expected_height // 16) * (expected_width // 16)
             self.assertEqual(capped_out.shape[0], expected_seq_len)
             self.assertLess(capped_out.shape[0], default_out.shape[0])
 

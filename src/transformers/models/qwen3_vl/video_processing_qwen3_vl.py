@@ -47,11 +47,13 @@ class Qwen3VLVideoProcessorInitKwargs(VideosKwargs, total=False):
     merge_size (`int`, *optional*, defaults to 2):
         The merge size of the vision encoder to llm encoder.
     max_pixels_per_frame (`int`, *optional*):
-        Caps the total pixel budget (`size["longest_edge"]`) at `num_frames * max_pixels_per_frame` per video.
-        Without a cap, videos that sample fewer than `max_frames` frames spend the whole budget on those frames
-        and keep near-native per-frame resolution, so a short clip can cost almost as many tokens as a long
-        video. Set this to `size["longest_edge"] // max_frames` to make token cost scale with clip duration.
-        Videos sampling `max_frames` or more frames are unaffected.
+        Caps the total pixel budget (`size["longest_edge"]`) at `max(num_frames, 32) * max_pixels_per_frame`
+        per video. Without a cap, videos that sample fewer than `max_frames` frames spend the whole budget on
+        those frames and keep near-native per-frame resolution, so a short clip can cost almost as many tokens
+        as a long video. Set this to `size["longest_edge"] // max_frames` to make token cost scale with clip
+        duration. Videos sampling `max_frames` or more frames are unaffected. The frame count is floored at 32
+        when applying the cap, so tiny synthetic clips (for example 2-frame memory-profiling probes) keep a
+        usable budget instead of collapsing to near-minimum resolution.
     """
 
     patch_size: int
@@ -192,7 +194,7 @@ class Qwen3VLVideoProcessor(BaseVideoProcessor):
         num_frames = videos.shape[1]
         max_pixels = size.longest_edge
         if max_pixels_per_frame is not None:
-            max_pixels = min(max_pixels, num_frames * max_pixels_per_frame)
+            max_pixels = min(max_pixels, max(num_frames, 32) * max_pixels_per_frame)
 
         height, width = videos.shape[-2:]
         resized_height, resized_width = smart_resize(
