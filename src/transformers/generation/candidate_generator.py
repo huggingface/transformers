@@ -1455,6 +1455,9 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
         self.do_sample = generation_config.do_sample
         self.logits_processor = logits_processor
 
+        # Same tensor the stopping criteria are built from, so a draft cropped here stops generation
+        self.eos_token_id = getattr(generation_config, "_eos_token_tensor", None)
+
         self.is_main_model_prefill = True
 
     def get_candidates(
@@ -1538,6 +1541,17 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
         # Once we arrive here the first time, it's no longer the case
         self.is_main_model_prefill = False
 
+        # Crop the draft after the first EOS, otherwise the target model may accept eos and the rest as valid,
+        # thus not stopping generation after "eos" -- the block is committed before the stopping criteria run,
+        # and they only look at the last committed token. Cropping leaves EOS last, so they fire unchanged.
+        if self.eos_token_id is not None:
+            drafted_tokens = candidate_ids[0]
+            eos_positions = (torch.isin(drafted_tokens, self.eos_token_id.to(drafted_tokens.device))).nonzero()
+            if eos_positions.numel() > 0:
+                num_drafted = eos_positions[0].item() + 1
+                candidate_ids = candidate_ids[:, :num_drafted]
+                candidate_logits = candidate_logits[:, :num_drafted]
+
         # cat everything back together (we need to return the full ids here)
         candidate_ids = torch.cat([input_ids, candidate_ids], dim=-1)
         return candidate_ids, candidate_logits
@@ -1600,6 +1614,9 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
         # Save those to allow logits manipulations
         self.do_sample = generation_config.do_sample
         self.logits_processor = logits_processor
+
+        # Same tensor the stopping criteria are built from, so a draft cropped here stops generation
+        self.eos_token_id = getattr(generation_config, "_eos_token_tensor", None)
 
         self.is_main_model_prefill = True
 
@@ -1680,22 +1697,23 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
 
         candidate_logits = self.main_model_output_embeddings(
             outputs.last_hidden_state[:, 1:].to(self.main_model_output_embeddings.weight.device)
-        )
+        ).to(input_ids.device)
 
         # Potentially allow some logits manipulation and sampling - in this case we need to loop over new tokens to correctly apply processors
         if self.logits_processor is not None:
             candidate_ids = input_ids
+            # Upcast for logit manipulations
+            candidate_logits = candidate_logits.to(dtype=torch.float32)
             # We need to sample 1 by 1 for the processors
             for i in range(candidate_logits.shape[1]):
-                next_token_logits = self.logits_processor(
-                    candidate_ids, candidate_logits[:, i, :].to(device=input_ids.device, dtype=torch.float32)
-                )
+                # Re-assign so we later return the correct logits
+                candidate_logits[:, i, :] = self.logits_processor(candidate_ids, candidate_logits[:, i, :])
                 if self.do_sample:
-                    probs = nn.functional.softmax(next_token_logits, dim=-1, dtype=torch.float32)
+                    probs = nn.functional.softmax(candidate_logits[:, i, :], dim=-1, dtype=torch.float32)
                     next_token = torch.multinomial(probs, num_samples=1)
                 else:
-                    next_token = torch.argmax(next_token_logits, dim=-1, keepdim=True)
-                # Append it to the full sequence
+                    next_token = torch.argmax(candidate_logits[:, i, :], dim=-1, keepdim=True)
+                # Append it to the full sequence to be used by the next round of `self.logits_processor`
                 candidate_ids = torch.cat([candidate_ids, next_token], dim=-1)
         # Here we can vectorize as we don't have any processors
         else:
@@ -1705,7 +1723,18 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
                 candidate_ids = torch.multinomial(probs.squeeze(0), num_samples=1)
             else:
                 candidate_ids = candidate_logits.argmax(dim=-1)
-            candidate_ids = torch.cat([input_ids, candidate_ids.to(input_ids.device)], dim=-1)
+            candidate_ids = torch.cat([input_ids, candidate_ids], dim=-1)
+
+        # Crop the draft after the first EOS, otherwise the target model may accept eos and the rest as valid,
+        # thus not stopping generation after "eos" -- the block is committed before the stopping criteria run,
+        # and they only look at the last committed token. Cropping leaves EOS last, so they fire unchanged.
+        if self.eos_token_id is not None:
+            drafted_tokens = candidate_ids[0, input_ids.shape[1] :]
+            eos_positions = (torch.isin(drafted_tokens, self.eos_token_id.to(drafted_tokens.device))).nonzero()
+            if eos_positions.numel() > 0:
+                num_drafted = eos_positions[0].item() + 1
+                candidate_ids = candidate_ids[:, : input_ids.shape[1] + num_drafted]
+                candidate_logits = candidate_logits[:, :num_drafted]
 
         return candidate_ids, candidate_logits
 
