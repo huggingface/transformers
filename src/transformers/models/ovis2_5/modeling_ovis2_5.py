@@ -767,11 +767,12 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
                     boundary_mask = (merged_inputs_embeds == boundary_embedding).all(dim=-1)
                 else:
                     boundary_mask = input_ids == boundary_token_id
+                num_boundary_tokens = boundary_mask.sum()
                 torch_compilable_check(
-                    boundary_mask.sum() == num_visual_inputs,
+                    num_boundary_tokens == num_visual_inputs,
                     lambda: (
                         f"Expected {num_visual_inputs} visual boundary tokens with id {boundary_token_id}, but found "
-                        f"{boundary_mask.sum().item()}."
+                        f"{num_boundary_tokens}."
                     ),
                 )
                 boundary_features = visual_indicator_features[indicator_index].to(
