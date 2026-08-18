@@ -251,11 +251,7 @@ def convert_checkpoint(checkpoint_path, output_dir, push_to_hub, bfloat16, max_s
     logger.info(f"Number of parameters in model state dict: {len(model.state_dict())}")
 
     logger.info("Loading weights into model")
-    load_result = model.load_state_dict(converted_state_dict, strict=False)
-    if load_result.missing_keys:
-        logger.warning(f"{len(load_result.missing_keys)} missing keys: {load_result.missing_keys}")
-    if load_result.unexpected_keys:
-        logger.warning(f"{len(load_result.unexpected_keys)} unexpected keys: {load_result.unexpected_keys}")
+    model.load_state_dict(converted_state_dict, strict=True)
 
     logger.info(f"Saving model to {output_path}")
     model.save_pretrained(str(output_path), max_shard_size=max_shard_size)
