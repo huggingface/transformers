@@ -72,7 +72,7 @@ class VideoFrameSamplingTest(unittest.TestCase):
         ):
             self.assertEqual(len(indices), num_frames)
             self.assertEqual(indices[0], 0)
-            self.assertEqual(indices[-1], total_num_frames - 1)
+            np.testing.assert_array_equal(indices, np.arange(num_frames) * total_num_frames // num_frames)
 
 
 @require_vision
