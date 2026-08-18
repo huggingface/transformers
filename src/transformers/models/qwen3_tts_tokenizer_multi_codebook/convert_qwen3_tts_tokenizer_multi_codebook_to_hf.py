@@ -113,12 +113,20 @@ def convert(checkpoint_path, output_dir, push_to_hub, bfloat16, max_shard_size):
     model = Qwen3TTSTokenizerMultiCodebookModel(config).to(dtype)
 
     load_result = model.load_state_dict(converted_state_dict, strict=False)
-    if load_result.missing_keys:
-        logger.warning(f"Missing keys ({len(load_result.missing_keys)}): {load_result.missing_keys}")
     if load_result.unexpected_keys:
         logger.warning(f"Unexpected keys ({len(load_result.unexpected_keys)}): {load_result.unexpected_keys}")
 
-    # Mark codebook entries as initialized (not stored in original checkpoint)
+    # The codebooks' `initialized` flags record whether a codebook has been populated, so they are
+    # runtime state rather than trained weights and are absent from the original checkpoint; they
+    # are set below. Anything else missing is a gap in the key mapping that would leave the
+    # parameter randomly initialized, which produces correctly shaped but meaningless output.
+    unmapped_keys = [key for key in load_result.missing_keys if not key.endswith(".initialized")]
+    if unmapped_keys:
+        raise RuntimeError(
+            f"{len(unmapped_keys)} parameters were not found in the checkpoint and would be randomly "
+            f"initialized: {unmapped_keys}"
+        )
+
     for module in model.modules():
         if hasattr(module, "initialized"):
             module.initialized.fill_(1.0)
