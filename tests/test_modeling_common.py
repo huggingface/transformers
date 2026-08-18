@@ -52,7 +52,6 @@ from transformers.integrations.deepspeed import (
     is_deepspeed_zero3_enabled,
     unset_hf_deepspeed_config,
 )
-from transformers.integrations.hub_kernels import preserve_module_forwards
 from transformers.integrations.moe import (
     batched_mm_experts_forward,
     deepgemm_bf16_experts_forward,
@@ -92,6 +91,7 @@ from transformers.testing_utils import (
     get_device_properties,
     hub_retry,
     is_flaky,
+    preserve_module_forwards,
     require_accelerate,
     require_bitsandbytes,
     require_deepspeed,
