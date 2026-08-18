@@ -451,6 +451,15 @@ class Qwen3TTSConfig(PreTrainedConfig):
 
 __all__ = [
     "Qwen3TTSConfig",
+    def get_text_config(self, *args, **kwargs):
+        """Defaulting to the talker config: it is the decoder that generates codec tokens and owns the cache."""
+        # `super().__init__` runs the config validators before `talker_config` is assigned, so this has to
+        # stay callable on a partially constructed config.
+        talker_config = getattr(self, "talker_config", None)
+        if talker_config is None:
+            return super().get_text_config(*args, **kwargs)
+        return talker_config
+
     "Qwen3TTSTalkerConfig",
     "Qwen3TTSSpeakerEncoderConfig",
     "Qwen3TTSTalkerCodePredictorConfig",
