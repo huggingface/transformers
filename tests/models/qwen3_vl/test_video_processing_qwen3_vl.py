@@ -328,6 +328,57 @@ class Qwen3VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
             if prev_max_resolution is not None:
                 self.video_processor_tester.max_resolution = prev_max_resolution
 
+    def _process_frames(self, video_processing_class, num_frames, size, **processor_kwargs):
+        video_processor_dict = self.video_processor_dict.copy()
+        video_processor_dict["size"] = size
+        video_processor_dict["do_sample_frames"] = False
+        video_processor_dict.update(processor_kwargs)
+        video_processing = video_processing_class(**video_processor_dict)
+        video = [np.random.randint(0, 256, (256, 256, 3), dtype=np.uint8) for _ in range(num_frames)]
+        return video_processing(video, return_tensors="pt")[self.input_name]
+
+    def test_max_pixels_per_frame_caps_short_videos(self):
+        size = {"longest_edge": 64 * 32 * 32, "shortest_edge": 32 * 32}
+        cap = size["longest_edge"] // 8
+        for video_processing_class in self.video_processor_list:
+            uncapped = self._process_frames(video_processing_class, 4, size)
+            capped = self._process_frames(video_processing_class, 4, size, max_pixels_per_frame=cap)
+
+            expected_height, expected_width = smart_resize(
+                4, 256, 256, factor=32, min_pixels=size["shortest_edge"], max_pixels=4 * cap
+            )
+            expected_seq_len = (4 // 2) * (expected_height // 16) * (expected_width // 16)
+            self.assertEqual(capped.shape[0], expected_seq_len)
+            self.assertLess(capped.shape[0], uncapped.shape[0])
+
+    def test_max_pixels_per_frame_noop_when_not_binding(self):
+        size = {"longest_edge": 64 * 32 * 32, "shortest_edge": 32 * 32}
+        cap = size["longest_edge"] // 8
+        for video_processing_class in self.video_processor_list:
+            uncapped = self._process_frames(video_processing_class, 8, size)
+            capped = self._process_frames(video_processing_class, 8, size, max_pixels_per_frame=cap)
+            self.assertEqual(list(capped.shape), list(uncapped.shape))
+
+    def test_max_pixels_per_frame_call_time_override(self):
+        size = {"longest_edge": 64 * 32 * 32, "shortest_edge": 32 * 32}
+        cap = size["longest_edge"] // 8
+        for video_processing_class in self.video_processor_list:
+            video_processor_dict = self.video_processor_dict.copy()
+            video_processor_dict["size"] = size
+            video_processor_dict["do_sample_frames"] = False
+            video_processing = video_processing_class(**video_processor_dict)
+            video = [np.random.randint(0, 256, (256, 256, 3), dtype=np.uint8) for _ in range(4)]
+
+            default_out = video_processing(video, return_tensors="pt")[self.input_name]
+            capped_out = video_processing(video, return_tensors="pt", max_pixels_per_frame=cap)[self.input_name]
+
+            expected_height, expected_width = smart_resize(
+                4, 256, 256, factor=32, min_pixels=size["shortest_edge"], max_pixels=4 * cap
+            )
+            expected_seq_len = (4 // 2) * (expected_height // 16) * (expected_width // 16)
+            self.assertEqual(capped_out.shape[0], expected_seq_len)
+            self.assertLess(capped_out.shape[0], default_out.shape[0])
+
     def test_num_frames_equal_temporal_patch_size_plus_two(self):
         for video_processing_class in self.video_processor_list:
             video_processor_dict = self.video_processor_dict.copy()
