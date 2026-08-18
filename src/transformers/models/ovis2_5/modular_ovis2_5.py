@@ -136,8 +136,6 @@ class Ovis2_5VisionConfig(PreTrainedConfig):
         uses full attention.
     temporal_patch_size (`int`, *optional*, defaults to 1):
         Number of consecutive video frames represented by one temporal patch.
-    preserve_original_pe (`bool`, *optional*, defaults to `True`):
-        Whether to interpolate and add the learned 32 by 32 positional embedding.
     use_rope (`bool`, *optional*, defaults to `True`):
         Whether to apply two-dimensional rotary position embeddings in vision attention.
     vocab_size (`int`, *optional*, defaults to 65536):
@@ -163,7 +161,6 @@ class Ovis2_5VisionConfig(PreTrainedConfig):
     window_size: int = 112
     layer_types: list[str] | tuple[str, ...] | None = None
     temporal_patch_size: int = 1
-    preserve_original_pe: bool = True
     use_rope: bool = True
     vocab_size: int = 65536
     num_visual_indicator_tokens: int = 4
@@ -257,11 +254,8 @@ class Ovis2_5VisionEmbeddings(nn.Module):
             padding="valid",
             bias=True,
         )
-        # CODEPATH: AIDC-AI/Ovis2.5-2B and Ovis2.5-9B set `preserve_original_pe=True`; `False` supports
-        # custom configs without the learned position embedding.
-        if config.preserve_original_pe:
-            self.position_embedding_size = config.image_size // config.patch_size
-            self.position_embedding = nn.Embedding(self.position_embedding_size**2, config.hidden_size)
+        self.position_embedding_size = config.image_size // config.patch_size
+        self.position_embedding = nn.Embedding(self.position_embedding_size**2, config.hidden_size)
 
     def forward(self, pixel_values: torch.FloatTensor, grid_thw: torch.LongTensor) -> torch.Tensor:
         target_dtype = self.patch_embedding.weight.dtype
@@ -272,11 +266,6 @@ class Ovis2_5VisionEmbeddings(nn.Module):
             self.patch_size,
         )
         patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype)).reshape(-1, self.embed_dim)
-
-        # CODEPATH: AIDC-AI/Ovis2.5-2B and Ovis2.5-9B set `preserve_original_pe=True`; `False` supports
-        # custom configs without the learned position embedding.
-        if not self.config.preserve_original_pe:
-            return patch_embeds
 
         position_embeddings = self.position_embedding.weight.reshape(
             1,

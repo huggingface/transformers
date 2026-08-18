@@ -72,11 +72,8 @@ class Ovis2_5VisionEmbeddings(nn.Module):
             padding="valid",
             bias=True,
         )
-        # CODEPATH: AIDC-AI/Ovis2.5-2B and Ovis2.5-9B set `preserve_original_pe=True`; `False` supports
-        # custom configs without the learned position embedding.
-        if config.preserve_original_pe:
-            self.position_embedding_size = config.image_size // config.patch_size
-            self.position_embedding = nn.Embedding(self.position_embedding_size**2, config.hidden_size)
+        self.position_embedding_size = config.image_size // config.patch_size
+        self.position_embedding = nn.Embedding(self.position_embedding_size**2, config.hidden_size)
 
     def forward(self, pixel_values: torch.FloatTensor, grid_thw: torch.LongTensor) -> torch.Tensor:
         target_dtype = self.patch_embedding.weight.dtype
@@ -87,11 +84,6 @@ class Ovis2_5VisionEmbeddings(nn.Module):
             self.patch_size,
         )
         patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype)).reshape(-1, self.embed_dim)
-
-        # CODEPATH: AIDC-AI/Ovis2.5-2B and Ovis2.5-9B set `preserve_original_pe=True`; `False` supports
-        # custom configs without the learned position embedding.
-        if not self.config.preserve_original_pe:
-            return patch_embeds
 
         position_embeddings = self.position_embedding.weight.reshape(
             1,

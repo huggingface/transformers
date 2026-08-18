@@ -76,7 +76,6 @@ class Ovis2_5VisionModelTester:
             attention_dropout=0.0,
             vocab_size=12,
             num_visual_indicator_tokens=4,
-            preserve_original_pe=True,
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -175,7 +174,6 @@ class Ovis2_5VisionText2TextModelTester(VLMModelTester):
             attention_dropout=self.attention_dropout,
             vocab_size=self.visual_vocab_size,
             num_visual_indicator_tokens=4,
-            preserve_original_pe=True,
             use_rope=True,
         )
 
@@ -579,6 +577,7 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         vision_config["num_hidden_layers"] = 3
         vision_config["fullatt_block_indexes"] = [1]
         vision_config["num_patches"] = -1
+        vision_config["preserve_original_pe"] = True
         original_config = {
             "llm_config": text_config,
             "vit_config": vision_config,
@@ -599,6 +598,7 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         )
         self.assertFalse(hasattr(config.vision_config, "fullatt_block_indexes"))
         self.assertFalse(hasattr(config.vision_config, "num_patches"))
+        self.assertFalse(hasattr(config.vision_config, "preserve_original_pe"))
         self.assertEqual(config.architectures, ["Ovis2_5ForConditionalGeneration"])
         self.assertEqual(max_pixels, 1344 * 1792)
 
@@ -808,9 +808,7 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         )
         self.assertEqual(outputs.pooler_output.shape[0], int(grid_thw.prod()))
 
-        config.preserve_original_pe = False
-        model = Ovis2_5VisionModel(config)
-        self.assertNotIn("position_embedding.weight", model.embeddings.state_dict())
+        self.assertFalse(hasattr(config, "preserve_original_pe"))
 
     def test_visual_modules_use_native_state_dict_layout(self):
         model = Ovis2_5ForConditionalGeneration(self.model_tester.get_config())

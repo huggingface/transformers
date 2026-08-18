@@ -38,8 +38,6 @@ class Ovis2_5VisionConfig(PreTrainedConfig):
         uses full attention.
     temporal_patch_size (`int`, *optional*, defaults to 1):
         Number of consecutive video frames represented by one temporal patch.
-    preserve_original_pe (`bool`, *optional*, defaults to `True`):
-        Whether to interpolate and add the learned 32 by 32 positional embedding.
     use_rope (`bool`, *optional*, defaults to `True`):
         Whether to apply two-dimensional rotary position embeddings in vision attention.
     vocab_size (`int`, *optional*, defaults to 65536):
@@ -65,7 +63,6 @@ class Ovis2_5VisionConfig(PreTrainedConfig):
     window_size: int = 112
     layer_types: list[str] | tuple[str, ...] | None = None
     temporal_patch_size: int = 1
-    preserve_original_pe: bool = True
     use_rope: bool = True
     vocab_size: int = 65536
     num_visual_indicator_tokens: int = 4
