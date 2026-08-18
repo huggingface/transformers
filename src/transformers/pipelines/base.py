@@ -243,7 +243,7 @@ def load_model(
             except (OSError, ValueError, TypeError, RuntimeError):
                 # `from_pretrained` may raise a `TypeError` or `RuntimeError` when the requested `dtype`
                 # is not supported on the execution device (e.g. bf16 on a consumer GPU). We capture those so
-                # we can transparently retry the load in float32 before surfaces an error to the user.
+                # we can transparently retry the load in float32 before surfacing an error to the user.
                 fallback_tried = False
                 if "dtype" in kwargs:
                     import torch
