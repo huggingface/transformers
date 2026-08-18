@@ -32,18 +32,6 @@ class Qwen3ASRAudioKwargs(AudioKwargs, total=False):
 
 
 class Qwen3ASRAudioProcessorNumpy(NumpyAudioBackend):
-    """NumPy sibling of [`Qwen3ASRAudioProcessor`]. Required to produce bit-exact outputs
-    against the torch sibling (ADR 0001).
-
-    Whisper-style 128-bin log-mel features with three Qwen3-ASR-specific twists:
-
-    - clips shorter than ``min_length`` samples are zero-padded up to it (and counted as
-      valid in the padding mask, matching the original Qwen3-ASR library),
-    - the padding mask lives on the mel-frame axis (sample mask strided by ``hop_length``),
-    - the mel time axis (features and mask) is right-padded to a multiple of
-      ``2 * n_window`` frames, as required by ``Qwen3ASREncoder``'s chunked attention.
-    """
-
     sampling_rate = 16000
     force_mono = True
     padding = "max_length"
@@ -68,6 +56,8 @@ class Qwen3ASRAudioProcessorNumpy(NumpyAudioBackend):
         clip_max_offset=8.0,
         post_log_shift=4.0,
         post_log_scale=0.25,
+        # legacy masks by striding the sample mask -> boundary-straddling frames count as valid
+        count_partial_frames=True,
     )
 
     legacy_field_mapping = {
@@ -85,24 +75,17 @@ class Qwen3ASRAudioProcessorNumpy(NumpyAudioBackend):
 
     def _extract_spectrogram(self, audio, *, spectrogram_config, **kwargs):
         features = super()._extract_spectrogram(audio, spectrogram_config=spectrogram_config, **kwargs)
-        # Drop the trailing center frame *before* the mel projection, like the legacy FE
-        # (`stft[..., :-1]`); see the NOTE on `spectrogram_config`.
+        # drop the trailing center frame before the mel projection
         return features[..., :-1]
 
     def _apply_mel_scale(self, features, *, spectrogram_config, **kwargs):
-        # `filters_first` matmul order with mel_floor clamp, matching the torch sibling.
         return np.maximum(spectrogram_config.mel_floor, np.matmul(self.mel_filters.T, features))
 
-    def _get_features_lengths(self, audio_lengths, spectrogram_config, include_center_frame=False):
-        hop_length = spectrogram_config.stft_config.hop_length
-        if include_center_frame:
-            # Mask width over the padded batch: the legacy FE strides the sample-level mask
-            # by hop_length and trims the tail column when it doesn't divide evenly, i.e.
-            # padded_length // hop_length — the feature width after `skip_last_frame`.
-            return audio_lengths // hop_length
-        # Per-utterance valid frames: strided sample-mask indices 0, hop, 2*hop, ... below
-        # the valid length, i.e. ceil(length / hop_length).
-        return (audio_lengths + hop_length - 1) // hop_length
+    def _get_mask_width(self, padded_length, spectrogram_config) -> int:
+        # The legacy FE strides the sample-level mask by hop_length and trims the tail column
+        # when it doesn't divide evenly, so the feature width is `padded_length // hop_length`
+        # (this model drops its trailing frame pre-mel rather than via `skip_last_frame`).
+        return int(padded_length // spectrogram_config.stft_config.hop_length)
 
     def _postprocess_output(self, output, audio_ranges=None, n_window=None, **kwargs):
         # Right-pad the mel time axis (features and mask) to a multiple of `2 * n_window`
