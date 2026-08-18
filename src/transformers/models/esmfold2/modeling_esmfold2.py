@@ -743,15 +743,11 @@ class EsmFold2DiffusionConditioning(nn.Module):
 
         self.pair_input_norm = EsmFold2LayerNorm(2 * config.pairwise_hidden_size)
         self.pair_proj = nn.Linear(2 * config.pairwise_hidden_size, config.pairwise_hidden_size, bias=False)
-        self.pair_transitions = nn.ModuleList(
-            [
-                EsmFold2Transition(
-                    config.pairwise_hidden_size,
-                    diffusion_config.pair_intermediate_size,
-                    chunk_size=None,
-                )
-                for _ in range(2)
-            ]
+        self.pair_transition_0 = EsmFold2Transition(
+            config.pairwise_hidden_size, diffusion_config.pair_intermediate_size, chunk_size=None
+        )
+        self.pair_transition_1 = EsmFold2Transition(
+            config.pairwise_hidden_size, diffusion_config.pair_intermediate_size, chunk_size=None
         )
 
         self.single_input_norm = EsmFold2LayerNorm(config.single_inputs_size)
@@ -759,15 +755,11 @@ class EsmFold2DiffusionConditioning(nn.Module):
         self.fourier = EsmFold2FourierEmbedding(diffusion_config.fourier_dim)
         self.noise_norm = EsmFold2LayerNorm(diffusion_config.fourier_dim)
         self.noise_proj = nn.Linear(diffusion_config.fourier_dim, diffusion_config.hidden_size, bias=False)
-        self.single_transitions = nn.ModuleList(
-            [
-                EsmFold2Transition(
-                    diffusion_config.hidden_size,
-                    diffusion_config.intermediate_size,
-                    chunk_size=None,
-                )
-                for _ in range(2)
-            ]
+        self.single_transition_0 = EsmFold2Transition(
+            diffusion_config.hidden_size, diffusion_config.intermediate_size, chunk_size=None
+        )
+        self.single_transition_1 = EsmFold2Transition(
+            diffusion_config.hidden_size, diffusion_config.intermediate_size, chunk_size=None
         )
 
     def compute_pair_repr(self, pair_trunk: Tensor, relative_position_encoding: Tensor) -> Tensor:
@@ -776,8 +768,8 @@ class EsmFold2DiffusionConditioning(nn.Module):
         # ``pair_trunk`` is fp32, so the concat and the norm stay fp32; z_proj downcasts.
         pair_states = torch.cat([pair_trunk, relative_position_encoding], dim=-1)
         pair_states = self.pair_proj(self.pair_input_norm(pair_states).to(self.pair_proj.weight.dtype))
-        for layer in self.pair_transitions:
-            pair_states = layer(pair_states)
+        pair_states = self.pair_transition_0(pair_states)
+        pair_states = self.pair_transition_1(pair_states)
         return pair_states
 
     def compute_single_repr(self, single_inputs: Tensor) -> Tensor:
@@ -796,9 +788,8 @@ class EsmFold2DiffusionConditioning(nn.Module):
         noise_embeds = self.noise_proj(self.noise_norm(noise_embeds).to(self.noise_proj.weight.dtype))
         single_states = single_states + noise_embeds.unsqueeze(1)
 
-        for layer in self.single_transitions:
-            single_states = layer(single_states)
-
+        single_states = self.single_transition_0(single_states)
+        single_states = self.single_transition_1(single_states)
         return single_states
 
 

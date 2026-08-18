@@ -175,10 +175,12 @@ _WEIGHT_KEY_RENAMES = (
     # Diffusion conditioning and denoiser: ``z_`` is the pair stream, ``s_`` the single stream.
     (".z_input_norm.", ".pair_input_norm."),
     (".z_proj.", ".pair_proj."),
-    (".z_transitions.", ".pair_transitions."),
+    (".z_transitions.0.", ".pair_transition_0."),
+    (".z_transitions.1.", ".pair_transition_1."),
     (".s_input_norm.", ".single_input_norm."),
     (".s_proj.", ".single_proj."),
-    (".s_transitions.", ".single_transitions."),
+    (".s_transitions.0.", ".single_transition_0."),
+    (".s_transitions.1.", ".single_transition_1."),
     (".s_to_token.", ".single_to_token."),
     (".s_step_norm.", ".single_step_norm."),
     (".g_proj.", ".gate_proj."),
@@ -396,13 +398,15 @@ def _standardize_attention_keys(renamed: dict[str, torch.Tensor]) -> dict[str, t
 
 
 def _fuse_transition_swiglu(renamed: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
-    """Consolidate the diffusion-conditioning transitions (``pair_transitions``/``single_transitions``,
-    post-rename) onto the shared ``EsmFold2SwiGLU``: fuse the unfused gate/up projections into
-    ``mlp.gate_up_proj`` (gate first, matching ``EsmFold2SwiGLU``'s split) and rename the output
-    projection to ``mlp.down_proj``. Scoped to the transitions so it never touches the attention
-    ``out_proj``, and it runs before _standardize_attention_keys so these never reach that pass."""
+    """Consolidate the diffusion-conditioning transitions (``pair_transition_{0,1}`` /
+    ``single_transition_{0,1}``, post-rename) onto the shared ``EsmFold2SwiGLU``: fuse the unfused
+    gate/up projections into ``mlp.gate_up_proj`` (gate first, matching ``EsmFold2SwiGLU``'s split) and
+    rename the output projection to ``mlp.down_proj``. Scoped to the transitions so it never touches the
+    attention ``out_proj``, and it runs before _standardize_attention_keys so these never reach that
+    pass."""
     for key in list(renamed):
-        is_transition = ".pair_transitions." in key or ".single_transitions." in key
+        # The trailing underscore keeps the trunk's own ``.pair_transition.`` modules out of this.
+        is_transition = ".pair_transition_" in key or ".single_transition_" in key
         if is_transition and key.endswith(".a_proj.weight"):
             base = key[: -len("a_proj.weight")]
             gate = renamed.pop(base + "a_proj.weight")
