@@ -385,28 +385,6 @@ class Qwen4ExpQSAIndexer(nn.Module):
         self.q_layernorm = Qwen4ExpRMSNorm(self.index_head_dim, eps=config.rms_norm_eps)
         self.k_layernorm = Qwen4ExpRMSNorm(self.index_head_dim, eps=config.rms_norm_eps)
 
-    def project_qk(
-        self,
-        hidden_states: torch.Tensor,
-        cos: torch.Tensor,
-        sin: torch.Tensor,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        batch_size, sequence_length, _ = hidden_states.shape
-        qk = self.index_qk_proj(hidden_states)
-        q_raw, token_k = torch.split(
-            qk,
-            [
-                self.index_n_heads * self.index_head_dim,
-                self.index_kv_heads * self.index_head_dim,
-            ],
-            dim=-1,
-        )
-        q = q_raw.view(batch_size, sequence_length, self.index_n_heads, self.index_head_dim)
-        q = self.q_layernorm(q)
-        q = apply_rotary_pos_emb(q, cos, sin, unsqueeze_dim=2)
-        token_k = token_k.view(batch_size, sequence_length, self.index_kv_heads, self.index_head_dim)
-        return q, token_k.squeeze(2)
-
     def _compress_keys(
         self,
         raw_keys: torch.Tensor,
@@ -521,28 +499,26 @@ class Qwen4ExpQSAIndexer(nn.Module):
         key_length: int,
     ) -> torch.Tensor:
         batch_size, sequence_length, _ = hidden_states.shape
+        hidden_shape = (batch_size, sequence_length, -1, self.index_head_dim)
         cos, sin = position_embeddings
 
-        q, token_k = self.project_qk(hidden_states, cos, sin)
-
-        rotary_dim = cos.shape[-1]
-        indexer_states = torch.cat(
-            [
-                token_k,
-                cos.to(token_k.dtype),
-                sin.to(token_k.dtype),
-            ],
+        qk = self.index_qk_proj(hidden_states)
+        q, token_k = torch.split(
+            qk,
+            [self.index_n_heads * self.index_head_dim, self.index_kv_heads * self.index_head_dim],
             dim=-1,
         )
+        q, token_k = q.reshape(*hidden_shape), token_k.reshape(*hidden_shape)
+        q = self.q_layernorm(q)
+        q = apply_rotary_pos_emb(q, cos, sin, unsqueeze_dim=2)
+
+        rotary_dim = cos.shape[-1]
+        indexer_states = torch.cat([token_k, cos.to(token_k.dtype), sin.to(token_k.dtype)], dim=-1)
         if past_key_values is not None:
             indexer_states = past_key_values.update_indexer(indexer_states, self.layer_idx)
         indexer_states = indexer_states[:, :key_length]
 
-        raw_keys, key_cos, key_sin = torch.split(
-            indexer_states,
-            [self.index_head_dim, rotary_dim, rotary_dim],
-            dim=-1,
-        )
+        raw_keys, key_cos, key_sin = torch.split(indexer_states, [self.index_head_dim, rotary_dim, rotary_dim], dim=-1)
 
         selected_token_indices = torch.full(
             (batch_size, sequence_length, self.token_budget + self.compress_ratio - 1),
