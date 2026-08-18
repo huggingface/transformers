@@ -440,7 +440,6 @@ class AudioKwargs(TypedDict, total=False):
     """
 
     sampling_rate: Annotated[int | None, positive_int()]
-    raw_speech: Union["np.ndarray", list[float], list["np.ndarray"], list[list[float]]] | None
     padding: Annotated[bool | str | PaddingStrategy | None, padding_validator()]
     max_length: Annotated[int | None, positive_int()]
     truncation: Annotated[bool | str | TruncationStrategy | None, truncation_validator()]
