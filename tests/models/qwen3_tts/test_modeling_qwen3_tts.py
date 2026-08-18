@@ -1,4 +1,4 @@
-# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
+﻿# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -101,6 +101,10 @@ class Qwen3TTSModelTester:
 @require_torch
 class Qwen3TTSForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Qwen3TTSForConditionalGeneration,) if is_torch_available() else ()
+    # `generate` is provided by `Qwen3TTSGenerationMixin`, whose signature takes a list of prompts plus
+    # `languages`/`speakers` and returns codec codes rather than token ids, so the generic `generate`
+    # tests do not apply to it.
+    all_generative_model_classes = ()
     _is_composite = True
     test_pruning = False
     test_resize_embeddings = False
@@ -123,7 +127,10 @@ class Qwen3TTSForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestC
             "test_capture_outputs_decorator",
         )
         if any(name in self._testMethodName for name in _no_forward_tests):
-            self.skipTest("Qwen3TTSForConditionalGeneration has no standard forward()")
+            self.skipTest(
+                "`forward` requires `past_hidden` from the preceding generation step, which the common "
+                "tester does not provide"
+            )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -146,77 +153,35 @@ class Qwen3TTSForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestC
                     f"Mismatch in key: {key}",
                 )
 
-    @unittest.skip(reason="Qwen3TTS uses a custom generation mixin, not standard generate()")
-    def test_generate_without_input_ids(self):
-        pass
+    # `forward` runs one step of the talker loop and expects `past_hidden` from the previous step, which
+    # only the generation loop produces; the common testers call it with standard inputs, so it raises on
+    # `torch.cat((past_hidden, last_id_hidden))` with `past_hidden=None`.
+    _forward_needs_generation_state = (
+        "`forward` requires `past_hidden` from the preceding generation step, which the common tester "
+        "does not provide"
+    )
 
-    @unittest.skip(reason="Qwen3TTS has a composite architecture with sub-models")
-    def test_model_base_model_prefix(self):
-        pass
-
-    @unittest.skip(reason="Qwen3TTSForConditionalGeneration uses a custom generation mixin, not GenerationMixin")
-    def test_generation_tester_mixin_inheritance(self):
-        pass
-
-    @unittest.skip(reason="Composite model config attn implementation not propagated uniformly")
-    def test_config_attn_implementation_setter(self):
-        pass
-
-    @unittest.skip(reason="Qwen3TTSForConditionalGeneration does not expose get_input_embeddings directly")
-    def test_model_get_set_embeddings(self):
-        pass
-
-    @unittest.skip(reason="main_input_name requires converter re-run to propagate to modeling file")
-    def test_model_main_input_name(self):
-        pass
-
-    @unittest.skip(reason="Qwen3TTS generation is non-standard (two-stage talker + code predictor)")
-    def test_training(self):
-        pass
-
-    @unittest.skip(reason="Qwen3TTS forward is generation-only; determinism not guaranteed across batch")
-    def test_determinism(self):
-        pass
-
-    @unittest.skip(reason="Qwen3TTS forward requires generation-stage inputs not covered by batching test")
-    def test_batching_equivalence(self):
-        pass
-
-    @unittest.skip(reason="Qwen3TTS forward is non-standard; model outputs equivalence not applicable")
-    def test_model_outputs_equivalence(self):
-        pass
-
-    @unittest.skip(reason="Compile not yet supported for Qwen3TTS")
-    def test_sdpa_can_compile_dynamic(self):
-        pass
-@require_torch
-
-    @unittest.skip(reason="Compile not yet supported for Qwen3TTS")
-    def test_sdpa_can_dispatch_on_flash(self):
-        pass
-
-    @unittest.skip(reason="Qwen3TTS right-padding equivalence not applicable")
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        pass
-
-    @unittest.skip(reason="Qwen3TTSForConditionalGeneration has no standard forward; uses custom generation mixin")
+    @unittest.skip(reason=_forward_needs_generation_state)
     def test_all_tensors_are_parameter_or_buffer(self):
         pass
 
-    @unittest.skip(reason="Qwen3TTSForConditionalGeneration has no standard forward")
-    def test_sdpa_can_dispatch_composite_models(self):
+    @unittest.skip(reason=_forward_needs_generation_state)
+    def test_batching_equivalence(self):
         pass
 
-    @unittest.skip(reason="Qwen3TTSForConditionalGeneration has no standard forward")
-    def test_left_padding_compatibility(self):
+    @unittest.skip(reason=_forward_needs_generation_state)
+    def test_determinism(self):
         pass
 
-    @unittest.skip(reason="Qwen3TTSForConditionalGeneration has no standard forward")
-    def test_torch_fx(self):
+    @unittest.skip(reason=_forward_needs_generation_state)
+    def test_model_outputs_equivalence(self):
         pass
 
-    @unittest.skip(reason="Qwen3TTSForConditionalGeneration has no standard forward")
-    def test_torch_fx_output_loss(self):
+    @unittest.skip(
+        reason="`attn_implementation` set on Qwen3TTSConfig is not propagated to `talker_config`, so the "
+        "sub-config reports None instead of the requested value"
+    )
+    def test_config_attn_implementation_setter(self):
         pass
 
 
@@ -224,6 +189,7 @@ def _build_assistant_text(text: str) -> str:
     return f"<|im_start|>assistant\n{text}<|im_end|>\n<|im_start|>assistant\n"
 
 
+@require_torch
 class Qwen3TTSForConditionalGenerationIntegrationTest(unittest.TestCase):
     """
     Integration tests that run against a real converted checkpoint.
