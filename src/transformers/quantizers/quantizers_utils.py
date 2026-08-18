@@ -13,7 +13,11 @@
 # limitations under the License.
 import re
 from contextlib import contextmanager
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+
+if TYPE_CHECKING:
+    import torch
 
 
 def get_module_from_name(module, tensor_name: str) -> tuple[Any, str]:
@@ -21,6 +25,20 @@ def get_module_from_name(module, tensor_name: str) -> tuple[Any, str]:
         module_name, tensor_name = tensor_name.rsplit(".", 1)
         module = module.get_submodule(module_name)
     return module, tensor_name
+
+
+def is_packed_experts_module(module: "torch.nn.Module") -> bool:
+    """Returns whether `module` is a fused-experts module whose weights can be swapped for packed (quantized) ones. This
+    requires the module to have the right projects (gate_up_proj, down_proj), to be decorated with the
+    `use_experts_implementation` (which sets the `has_gate` and `num_experts` attributes), and to not be transposed.
+    """
+    return (
+        hasattr(module, "gate_up_proj")
+        and hasattr(module, "down_proj")
+        and hasattr(module, "has_gate")
+        and hasattr(module, "num_experts")
+        and not getattr(module, "is_transposed", False)
+    )
 
 
 def should_convert_module(full_name, patterns: list[str] | None = None):

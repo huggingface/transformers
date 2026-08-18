@@ -17,6 +17,7 @@ from .base import HfQuantizer
 
 
 if TYPE_CHECKING:
+    from ..core_model_loading import WeightTransform
     from ..modeling_utils import PreTrainedModel
     from ..utils.quantization_config import Mxfp4Config
 
@@ -51,6 +52,8 @@ class Mxfp4HfQuantizer(HfQuantizer):
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
         self.triton_kernels_hub = None
+        # This tracks the experts modules which projections run packed. Set after inspecting the model.
+        self.packed_experts_modules: list[str] = []
 
     def _lazy_import_kernels(self):
         """Lazy import and initialize kernels only when needed"""
@@ -163,12 +166,26 @@ class Mxfp4HfQuantizer(HfQuantizer):
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
         from ..integrations import Mxfp4GptOssExperts
 
+        # GPT-OSS has a legacy Mxfp4GptOssExperts that is tailored to the model, so treat the edge case first
         module, tensor_name = get_module_from_name(model, param_name)
         if isinstance(module, Mxfp4GptOssExperts):
-            if tensor_name in ["down_proj_bias", "gate_up_proj_bias"]:
-                return False
-            return True
-        return False
+            return tensor_name not in ["down_proj_bias", "gate_up_proj_bias"]
+
+        # Every other MoE keeps its own experts module and uses `ExpertsInterface`. Only the expert projections are
+        # quantized, biases and everything else stay dense.
+        module_name = param_name.rpartition(".")[0]
+        return module_name in self.packed_experts_modules and tensor_name in ("gate_up_proj", "up_proj", "down_proj")
+
+    def param_element_size(self, model: "PreTrainedModel", param_name: str, param: "torch.Tensor") -> float:
+        """Returns the bytes per weight value, used to size the caching-allocator warmup. Since generic MoE modules keep
+        declaring their experts as dense parameters (only gpt-oss gets a module whose which are already blocks-shaped),
+        we need to make sure that the warmup does not reserve for the the dense size for weights that load packed."""
+        module_name, _, attribute = param_name.rpartition(".")
+        # Only change the element size for pre-quantized packed experts modules
+        if self.pre_quantized and module_name in self.packed_experts_modules:
+            if attribute in ("gate_up_proj", "up_proj", "down_proj"):
+                return 0.5 + 1 / 32  # half a byte per value plus one e8m0 scale per group of 32
+        return param.element_size()
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         # clean cache due to triton ops
@@ -182,20 +199,24 @@ class Mxfp4HfQuantizer(HfQuantizer):
         model: "PreTrainedModel",
         use_kernels: bool = False,
         **kwargs,
-    ):
-        from ..integrations import replace_with_mxfp4_linear
-
-        # if we are using kernels, we can't use the quantized model, since the forward pass is different and needs special handling
-        # only CPU kernels can work with pre-quantized models
+    ) -> None:
+        """Performs several tasks related to mxfp4 before weight loading:
+        - Turns off quantization if the device and `use_kernels` clash
+        - If this is a gpt-oss model, replaces the module to use mxfp4 + gpt-oss specific modules
+        - If not, sets the experts implementation to mxfp4 so the model can run with packed mxfp4 kernels
+        """
         device = torch.accelerator.current_accelerator() or torch.device("cpu")
-        if use_kernels and device.type not in ["cpu"]:
+        device_is_cpu = device.type == "cpu"
+
+        # The quantized model is compatible with the `kernels` package only if the device is CPU
+        if use_kernels and not device_is_cpu:
             logger.warning_once(
                 "You are using full precision kernels, we will dequantize the model to bf16. "
                 "To use the quantized model with quantization kernels, please set use_kernels=False"
             )
             self.quantization_config.dequantize = True
-
-        if not use_kernels and device.type in ["cpu"]:
+        # Conversly, the quantized model cannot work on CPU without the `kernels` package
+        if not use_kernels and device_is_cpu:
             logger.warning_once(
                 "MXFP4 inference on CPU requires use_kernels=True, but use_kernels is disabled. "
                 "We will dequantize the model to bf16. To run MXFP4 natively on CPU, please set use_kernels=True."
@@ -206,9 +227,71 @@ class Mxfp4HfQuantizer(HfQuantizer):
             model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
 
+        from ..integrations import replace_with_mxfp4_linear
+
+        # This replacement only affects gpt-oss models
         model = replace_with_mxfp4_linear(
             model, modules_to_not_convert=self.modules_to_not_convert, quantization_config=self.quantization_config
         )
+        # This is the general case replacement, which acts in place
+        self._setup_packed_experts(model)
+
+    def _setup_packed_experts(self, model: "PreTrainedModel") -> None:
+        """Route the model's fused-experts modules through the packed mxfp4 runtime.
+
+        gpt-oss models were already given `Mxfp4GptOssExperts` by `replace_with_mxfp4_linear` (its fused
+        swiglu epilogue is specific to that architecture); every other MoE keeps its own experts module
+        and dispatches through `ExpertsInterface`, exactly like packed compressed-tensors checkpoints do.
+        The kernel-ready weights are attached at load time, by `Mxfp4Quantize` when quantizing on the fly
+        and by `Mxfp4Deserialize` when the checkpoint already holds `blocks` / `scales`.
+        """
+        if self.quantization_config.dequantize:
+            return
+
+        from ..integrations import Mxfp4GptOssExperts
+        from .quantizers_utils import is_packed_experts_module, should_convert_module
+
+        has_gpt_oss_modules = False
+        experts_modules = []
+        for name, module in model.named_modules():
+            # keep track of gpt-oss modules to avoid warning if this is a gpt-oss model
+            if isinstance(module, Mxfp4GptOssExperts):
+                has_gpt_oss_modules = True
+            # find all the experts modules that support packed mxfp4 at runtime
+            elif (
+                name.endswith(".experts")
+                and is_packed_experts_module(module)
+                and should_convert_module(name, self.modules_to_not_convert)
+            ):
+                experts_modules.append(name)
+
+        # Stop if no experts modules were found. This is expected for non-gpt-oss models, throw a warning otherwise
+        if not experts_modules:
+            if not has_gpt_oss_modules:
+                logger.warning_once(
+                    "You are loading your model in mxfp4 but no fused MoE experts modules were found: nothing "
+                    "will be quantized. Please double check your model architecture, or submit an issue on "
+                    "github if you think this is a bug."
+                )
+            return None
+
+        # Try setting the experts implementation to mxfp4 and dequantize the model if that fails
+        model.set_experts_implementation("mxfp4")
+        failed_to_switch_implem = any(
+            model.get_submodule(name).config._experts_implementation != "mxfp4"  # type: ignore
+            for name in experts_modules
+        )
+        if failed_to_switch_implem:
+            logger.warning_once(
+                f"{model.__class__.__name__} cannot dispatch its MoE experts to the mxfp4 kernels, so its "
+                "experts will not be quantized and stay in the model dtype."
+            )
+            if self.pre_quantized:
+                self.quantization_config.dequantize = True
+            return None
+
+        # If successful, we can successfully route the experts modules to the mxfp4 kernels, and we keep track of those
+        self.packed_experts_modules = experts_modules
 
     def update_tp_plan(self, config):
         if "GptOssConfig" in config.__class__.__name__:
@@ -236,37 +319,21 @@ class Mxfp4HfQuantizer(HfQuantizer):
                 )
         return config
 
-    def get_state_dict_and_metadata(self, model):
-        from ..integrations import Mxfp4GptOssExperts
+    def get_state_dict_and_metadata(self, model: "PreTrainedModel") -> tuple[dict[str, "torch.Tensor"], dict]:
+        from ..integrations.mxfp4 import make_packed_mxfp4_proj, unswizzle_mxfp4_proj
 
         state_dict = model.state_dict()
-        num_local_experts = getattr(model.config, "num_local_experts", 32)
-        hidden_size = getattr(model.config, "hidden_size", 2880)
-
         for name, module in model.named_modules():
-            if not (
-                isinstance(module, Mxfp4GptOssExperts)
-                and hasattr(module, "gate_up_proj")
-                and hasattr(module, "down_proj")
-            ):
-                continue
-
-            for proj in ("gate_up_proj", "down_proj"):
-                triton_tensor = getattr(module, proj)
-                precision_config = getattr(module, f"{proj}_precision_config")
-
-                blocks = triton_tensor.storage.layout.unswizzle_data(triton_tensor.storage.data).transpose(-1, -2)
-                if proj == "gate_up_proj":
-                    blocks = blocks.reshape(num_local_experts, -1, 90, 16)
-                else:
-                    blocks = blocks.reshape(num_local_experts, hidden_size, 90, -1)
-
-                scales = precision_config.weight_scale.storage.layout.unswizzle_data(
-                    precision_config.weight_scale.storage.data
-                ).transpose(-1, -2)
-
+            for proj in ("gate_up_proj", "up_proj", "down_proj"):
+                if make_packed_mxfp4_proj(module, proj)[1] is None:
+                    continue
+                blocks, scales = unswizzle_mxfp4_proj(module, proj)
                 state_dict[f"{name}.{proj}_blocks"] = blocks
                 state_dict[f"{name}.{proj}_scales"] = scales
+                # The registered parameters hold the swizzled bytes, whose physical layout is
+                # hardware-specific: checkpoints keep the canonical blocks/scales instead.
+                state_dict.pop(f"{name}.{proj}_swizzled", None)
+                state_dict.pop(f"{name}.{proj}_swizzled_scales", None)
 
         metadata = {}
         return state_dict, metadata
@@ -286,32 +353,66 @@ class Mxfp4HfQuantizer(HfQuantizer):
 
         return Mxfp4Quantize(self)
 
+    def update_weight_conversions(self, weight_conversions: list["WeightTransform"]) -> list["WeightTransform"]:
+        """Updates the weight conversions for the experts modules.
+        If the model is pre-quantized and it is being dequantized, this only adds the dequantize op at the start of the
+        chain. If the model is running quantized, and is not a gpt-oss model, this replaces the experts weight
+        conversion from the normal list of ops (usually merge + concatenate) to the packed mxfp4 ops, which applies the
+        normal list of ops to packed weights and scales separately."""
+        from ..integrations.mxfp4 import DequantizeMxfp4Experts, LoadPackedMxfp4Experts
+
+        updated: list = []
+        for conv in weight_conversions:
+            # Only update the experts weight conversions
+            is_experts_conv = all("experts" in p for p in conv.source_patterns)
+            if not self.pre_quantized or not isinstance(conv, WeightConverter) or not is_experts_conv:
+                updated.append(conv)
+                continue
+
+            # Extract the weight sources and other sources
+            weight_sources, other_sources = [], []
+            for p in conv.source_patterns:
+                if p.endswith(".weight"):
+                    weight_sources.append(p)
+                else:
+                    other_sources.append(p)
+            # Infer the new sources, which differentiate between blocks and scales
+            new_sources = (
+                [p + "_blocks$" for p in weight_sources] + [p + "_scales$" for p in weight_sources] + other_sources
+            )
+            # Now update the weight conversions, only if weight sources were found
+            if weight_sources:
+                if self.quantization_config.dequantize:
+                    new_ops = [DequantizeMxfp4Experts(self)] + list(conv.operations)
+                else:
+                    new_ops = [LoadPackedMxfp4Experts(self, operations=list(conv.operations))]
+                conv = WeightConverter(
+                    source_patterns=new_sources,
+                    target_patterns=conv._original_target_patterns,
+                    operations=new_ops,
+                )
+            updated.append(conv)
+
+        # Adds quantizer weight conversions, like the ones that handle gpt-oss models
+        updated.extend(self.get_weight_conversions())
+        return updated
+
     def get_weight_conversions(self):
         from ..integrations.mxfp4 import Mxfp4Dequantize, Mxfp4Deserialize
 
-        if self.pre_quantized and self.quantization_config.dequantize:
-            return [
-                WeightConverter(
-                    source_patterns=["down_proj_blocks", "down_proj_scales"],
-                    target_patterns=r"down_proj$",
-                    operations=[Mxfp4Dequantize(self)],
-                ),
-                WeightConverter(
-                    source_patterns=["gate_up_proj_blocks", "gate_up_proj_scales"],
-                    target_patterns=["gate_up_proj$"],
-                    operations=[Mxfp4Dequantize(self)],
-                ),
-            ]
-
+        operation = Mxfp4Dequantize if self.pre_quantized and self.quantization_config.dequantize else Mxfp4Deserialize
+        # Non-gated MoEs (those with `has_gate = False`) have a `up_proj` projection module, which we do not want to
+        # match to "gate_up_proj", hence the negative lookbehind "(?<!gate_)"
+        projections = (
+            ("gate_up_proj", "gate_up_proj"),
+            (r"(?<!gate_)up_proj", "up_proj"),
+            ("down_proj", "down_proj"),
+        )
         return [
             WeightConverter(
-                source_patterns=["gate_up_proj_blocks", "gate_up_proj_scales"],
-                target_patterns=r"gate_up_proj$",
-                operations=[Mxfp4Deserialize(self)],
-            ),
-            WeightConverter(
-                source_patterns=["down_proj_blocks", "down_proj_scales"],
-                target_patterns=r"down_proj$",
-                operations=[Mxfp4Deserialize(self)],
-            ),
+                source_patterns=[f"{source}_blocks", f"{source}_scales"],
+                target_patterns=rf"{target}$",
+                operations=[operation(self)],
+            )
+            for source, target in projections
         ]
