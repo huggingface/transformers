@@ -259,8 +259,6 @@ class Ovis2_5VisionModelTest(ModelTesterMixin, unittest.TestCase):
     additional_model_inputs = ["grid_thw"]
     # The vision input embedding is a patch projection, not a resizable token embedding.
     test_resize_embeddings = False
-    # Inherited VideoLlama3 attention turns packed sequence lengths into a Python list during export.
-    test_torch_exportable = False
 
     def setUp(self):
         self.model_tester = Ovis2_5VisionModelTester(self)
@@ -449,8 +447,6 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = Ovis2_5VisionText2TextModelTester
     # The visual-tokenizer head consumes the encoder state before post_layernorm.
     test_all_params_have_gradient = False
-    # Inherited VideoLlama3 attention turns packed sequence lengths into a Python list during export.
-    test_torch_exportable = False
 
     def test_reverse_loading_mapping(self):
         # The official-key mapping targets the conditional model's `model.*` subtree.
