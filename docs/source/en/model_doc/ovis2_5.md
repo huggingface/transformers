@@ -31,42 +31,37 @@ Two checkpoints are available:
 - [AIDC-AI/Ovis2.5-9B](https://huggingface.co/AIDC-AI/Ovis2.5-9B)
 
 > [!IMPORTANT]
-> The original checkpoint repositories were exported for a custom `trust_remote_code` implementation. The native
-> `Ovis2_5*` classes require a checkpoint revision or local directory with native configuration, tokenizer special
-> tokens, and processor metadata. Converting model weight names alone does not convert those supporting files. The
-> examples below assume that the selected checkpoint has been converted to the native Transformers format.
-
-Convert either released checkpoint without executing its remote modeling code:
-
-```bash
-python src/transformers/models/ovis2_5/convert_ovis2_5_weights_to_hf.py \
-    --input_model_id AIDC-AI/Ovis2.5-2B \
-    --output_dir Ovis2.5-2B-hf
-
-python src/transformers/models/ovis2_5/convert_ovis2_5_weights_to_hf.py \
-    --input_model_id AIDC-AI/Ovis2.5-9B \
-    --output_dir Ovis2.5-9B-hf
-```
-
-The conversion requires the Transformers vision dependencies, including Torchvision. It applies the registered native
-weight mapping, fails on missing, unexpected, or mismatched weights, registers the five native visual special tokens
-without resizing the text embedding matrix, writes native image and video processor metadata, and reloads the converted
-checkpoint.
+> The released repositories still contain legacy SigLIP processor metadata, so [`AutoProcessor`] cannot select the
+> native Ovis2.5 components yet. Instantiate the native image and video processors explicitly and pass them to
+> [`Ovis2_5Processor`], as shown below. The model weights are converted on the fly by the registered loading mapping.
 
 ## Image inference
 
 Use [`Ovis2_5Processor.apply_chat_template`] to load the image, format the conversation, and tokenize it in one call.
-Replace the 2B directory with the converted 9B directory to use the larger model.
+For the 9B checkpoint, replace the model ID and set `longest_edge` to `1792 * 1792`.
 
 ```python
-from transformers import Ovis2_5ForConditionalGeneration, Ovis2_5Processor
+from transformers import (
+    Ovis2_5ForConditionalGeneration,
+    Ovis2_5ImageProcessor,
+    Ovis2_5Processor,
+    Ovis2_5VideoProcessor,
+)
 
 
-model_id = "./Ovis2.5-2B-hf"  # or "./Ovis2.5-9B-hf"
-processor = Ovis2_5Processor.from_pretrained(model_id)
+model_id = "AIDC-AI/Ovis2.5-2B"
+size = {"shortest_edge": 448 * 448, "longest_edge": 1344 * 1792}
+processor = Ovis2_5Processor.from_pretrained(
+    model_id,
+    image_processor=Ovis2_5ImageProcessor(size=size),
+    video_processor=Ovis2_5VideoProcessor(size=size),
+    trust_remote_code=False,
+)
 model = Ovis2_5ForConditionalGeneration.from_pretrained(
     model_id,
+    dtype="auto",
     device_map="auto",
+    trust_remote_code=False,
 )
 
 messages = [
