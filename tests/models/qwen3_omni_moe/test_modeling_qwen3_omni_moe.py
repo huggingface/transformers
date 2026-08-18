@@ -451,10 +451,7 @@ class Qwen3OmniMoeThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gen
     def test_generate_with_quant_cache(self):
         pass
 
-    @unittest.skip(
-        "The tester config uses sliding attention, so the sliding layers cache is capped at `sliding_window`, "
-        "while the test expects all layers to hold `max_cache_len` tokens"
-    )
+    @unittest.skip("Sliding layers cap their cache at `sliding_window`, but the test expects `max_cache_len`")
     def test_generate_with_static_cache(self):
         pass
 

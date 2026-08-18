@@ -2022,10 +2022,8 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
                 video_second_per_grid,
             )
             self.rope_deltas = rope_deltas
-        # Use pre-calculated rope-deltas to infer correct 3D position ids during incremental
-        # generation (past_key_values_length > 0) or when only inputs_embeds is provided (no input_ids
-        # to recompute from). Skip when input_ids is provided without past_key_values to avoid shape
-        # mismatches from stale rope_deltas (e.g., training forward pass after generation).
+        # Reuse the cached rope-deltas while decoding, or when only `inputs_embeds` is given. Recomputing above
+        # instead avoids stale deltas (e.g. a training forward right after generation).
         elif self.rope_deltas is not None and (past_key_values_length > 0 or input_ids is None):
             batch_size, seq_length = inputs_embeds.shape[:2]
             if attention_mask is not None:
