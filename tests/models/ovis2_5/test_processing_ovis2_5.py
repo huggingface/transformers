@@ -146,7 +146,7 @@ class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.get_processor()
         inputs = processor(
             images=self.prepare_image_inputs(),
-            text=f"{processor.image_token} lower newer",
+            text="<image> lower newer",
             return_tensors="pt",
         )
 
@@ -161,19 +161,29 @@ class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertListEqual(input_ids[image_start : image_start + num_visual_tokens + 2], expected_image_ids)
 
     def test_prepare_inputs_layout_normalizes_visual_inputs(self):
-        """Nested images and raw video frames are normalized before validation."""
+        """Raw placeholders and nested visual inputs are normalized before validation."""
         processor = self.get_processor()
         image = self.prepare_image_inputs()
         video = self.prepare_video_inputs()
 
-        images, *_ = processor.prepare_inputs_layout(images=[[image]])
-        _, _, videos, _ = processor.prepare_inputs_layout(videos=video)
-        empty_images, _, empty_videos, _ = processor.prepare_inputs_layout(images=[], videos=[])
+        images, image_text, _, image_audio = processor.prepare_inputs_layout(images=[[image]], text="<image>")
+        _, video_text, videos, video_audio = processor.prepare_inputs_layout(videos=video, text="<video>")
 
         self.assertEqual(len(images), 1)
         self.assertEqual(len(videos), 1)
+        self.assertListEqual(image_text, [processor.image_token])
+        self.assertListEqual(video_text, [processor.video_token])
+        self.assertIsNone(image_audio)
+        self.assertIsNone(video_audio)
+
+    def test_prepare_inputs_layout_handles_empty_visual_inputs(self):
+        processor = self.get_processor()
+
+        empty_images, _, empty_videos, audio = processor.prepare_inputs_layout(images=[], videos=[], audio=[0.0])
+
         self.assertListEqual(empty_images, [])
         self.assertListEqual(empty_videos, [])
+        self.assertIsNone(audio)
 
     def test_multiple_images(self):
         """Each image placeholder gets its own start and end boundary tokens."""
@@ -181,7 +191,7 @@ class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image = self.prepare_image_inputs()
         inputs = processor(
             images=[image, image.copy()],
-            text=f"{processor.image_token}{processor.image_token} lower newer",
+            text="<image><image> lower newer",
             return_tensors="pt",
         )
 
@@ -194,7 +204,7 @@ class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.get_processor()
         inputs = processor(
             videos=self.prepare_video_inputs(),
-            text=f"{processor.video_token} lower newer",
+            text="<video> lower newer",
             do_sample_frames=False,
             return_tensors="pt",
         )
@@ -216,7 +226,7 @@ class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Mismatch in `image` token count"):
             processor(
                 images=self.prepare_image_inputs(),
-                text=f"{processor.image_token} lower newer",
+                text="<image> lower newer",
                 truncation=True,
                 max_length=3,
                 return_tensors="pt",
@@ -300,11 +310,7 @@ class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.get_processor()
         image = self.prepare_image_inputs()
         inputs = processor(
-            text=[
-                "lower newer",
-                f"{processor.image_token} lower newer",
-                f"{processor.image_token} lower newer",
-            ],
+            text=["lower newer", "<image> lower newer", "<image> lower newer"],
             images=[[], [image], [image.copy()]],
             padding=True,
             return_tensors="pt",
