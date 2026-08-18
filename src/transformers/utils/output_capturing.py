@@ -111,7 +111,6 @@ def install_output_capuring_hook(
 
         if capture_initial_hidden_state and key == "hidden_states" and len(collected_outputs[key]) == 0:
             collected_outputs[key].append(args[0])
-
         if not isinstance(output, tuple):
             collected_outputs[key].append(output)
         elif output[index] is not None:

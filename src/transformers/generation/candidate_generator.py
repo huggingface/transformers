@@ -1651,7 +1651,6 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
         num_last_main_model_tokens = n_last_matches + 1 if not self.is_main_model_prefill else input_ids.shape[1] - 1
         # The hidden states hold all tokens from the last main model's forward on all the candidates. We need the
         # hidden states of only accepted tokens thus crop out the rest
-
         context_hidden_states: torch.Tensor = torch.cat(
             [
                 model_outputs.hidden_states[i + 1][:, :num_last_main_model_tokens].to(self.device)
