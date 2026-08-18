@@ -64,34 +64,26 @@ class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Ovis2_5Processor
 
     @classmethod
-    def _build_tokenizer(cls, named_visual_tokens=True):
-        vocab = {
-            "<unk>": 0,
-            "<pad>": 1,
-            "<bos>": 2,
-            "<eos>": 3,
-            "<ovis_visual_atom>": 4,
-            "<ovis_image_start>": 5,
-            "<ovis_image_end>": 6,
-            "<ovis_video_start>": 7,
-            "<ovis_video_end>": 8,
-            "lower": 9,
-            "newer": 10,
-            "upper": 11,
-            "older": 12,
-            "longer": 13,
-            "string": 14,
-        }
+    def _build_tokenizer(cls, named_visual_tokens=True, include_visual_tokens=True):
+        tokens = ["<unk>", "<pad>", "<bos>", "<eos>"]
+        if include_visual_tokens:
+            tokens.extend(VISUAL_TOKENS)
+        tokens.extend(["lower", "newer", "upper", "older", "longer", "string"])
+        vocab = {token: index for index, token in enumerate(tokens)}
         tokenizer = Tokenizer(WordLevel(vocab=vocab, unk_token="<unk>"))
         tokenizer.pre_tokenizer = Whitespace()
-        extra_special_tokens = NAMED_VISUAL_TOKENS if named_visual_tokens else list(VISUAL_TOKENS)
+        tokenizer_kwargs = {}
+        if include_visual_tokens:
+            tokenizer_kwargs["extra_special_tokens"] = (
+                NAMED_VISUAL_TOKENS if named_visual_tokens else list(VISUAL_TOKENS)
+            )
         return PreTrainedTokenizerFast(
             tokenizer_object=tokenizer,
             unk_token="<unk>",
             pad_token="<pad>",
             bos_token="<bos>",
             eos_token="<eos>",
-            extra_special_tokens=extra_special_tokens,
+            **tokenizer_kwargs,
         )
 
     @classmethod
@@ -129,6 +121,22 @@ class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         for token_attribute, expected_token in NAMED_VISUAL_TOKENS.items():
             self.assertEqual(getattr(processor, token_attribute), expected_token)
         self.assertEqual(processor.image_token_id, processor.video_token_id)
+
+    def test_missing_visual_tokens_are_registered(self):
+        tokenizer = self._build_tokenizer(include_visual_tokens=False)
+        original_vocab_size = len(tokenizer)
+        processor = self.processor_class(
+            image_processor=self.get_component("image_processor"),
+            tokenizer=tokenizer,
+            video_processor=self.get_component("video_processor"),
+        )
+
+        expected_ids = list(range(original_vocab_size, original_vocab_size + len(VISUAL_TOKENS)))
+        actual_ids = [processor.tokenizer.convert_tokens_to_ids(token) for token in VISUAL_TOKENS]
+        self.assertListEqual(actual_ids, expected_ids)
+        self.assertEqual(processor.image_token_id, processor.video_token_id)
+        for token, token_id in zip(VISUAL_TOKENS, expected_ids):
+            self.assertListEqual(processor.tokenizer.encode(token, add_special_tokens=False), [token_id])
 
     def test_visual_tokens_survive_processor_reload(self):
         for named_visual_tokens in (True, False):

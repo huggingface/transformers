@@ -15,6 +15,7 @@
 
 from ...image_utils import make_flat_list_of_images
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
+from ...tokenization_utils_base import AddedToken
 from ...utils import auto_docstring
 from ...video_utils import make_batched_videos
 
@@ -38,16 +39,35 @@ class Ovis2_5Processor(ProcessorMixin):
         self._image_placeholder = "<image>"
         self._video_placeholder = "<video>"
 
-        visual_token = getattr(tokenizer, "image_token", getattr(tokenizer, "video_token", "<ovis_visual_atom>"))
-        self.image_token = visual_token
-        self.video_token = visual_token
-        self.image_token_id = tokenizer.convert_tokens_to_ids(visual_token)
-        self.video_token_id = self.image_token_id
+        self.image_token = (
+            getattr(tokenizer, "image_token", None) or getattr(tokenizer, "video_token", None) or "<ovis_visual_atom>"
+        )
+        self.video_token = self.image_token
+        self.image_start_token = getattr(tokenizer, "image_start_token", None) or "<ovis_image_start>"
+        self.image_end_token = getattr(tokenizer, "image_end_token", None) or "<ovis_image_end>"
+        self.video_start_token = getattr(tokenizer, "video_start_token", None) or "<ovis_video_start>"
+        self.video_end_token = getattr(tokenizer, "video_end_token", None) or "<ovis_video_end>"
 
-        self.image_start_token = getattr(tokenizer, "image_start_token", "<ovis_image_start>")
-        self.image_end_token = getattr(tokenizer, "image_end_token", "<ovis_image_end>")
-        self.video_start_token = getattr(tokenizer, "video_start_token", "<ovis_video_start>")
-        self.video_end_token = getattr(tokenizer, "video_end_token", "<ovis_video_end>")
+        tokenizer.add_special_tokens(
+            {
+                "additional_special_tokens": [
+                    AddedToken(token, special=True, normalized=False)
+                    for token in dict.fromkeys(
+                        [
+                            self.image_token,
+                            self.image_start_token,
+                            self.image_end_token,
+                            self.video_start_token,
+                            self.video_end_token,
+                        ]
+                    )
+                ]
+            },
+            replace_extra_special_tokens=False,
+        )
+
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
+        self.video_token_id = self.image_token_id
         self.image_start_token_id = tokenizer.convert_tokens_to_ids(self.image_start_token)
         self.image_end_token_id = tokenizer.convert_tokens_to_ids(self.image_end_token)
         self.video_start_token_id = tokenizer.convert_tokens_to_ids(self.video_start_token)
