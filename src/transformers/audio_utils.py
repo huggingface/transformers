@@ -153,6 +153,11 @@ class SpectrogramConfig:
     waveform_scale: float | None = None
     computation_dtype: str | None = None
     skip_last_frame: bool = False
+    # A frame straddling the audio/padding boundary starts in real audio but ends in padding.
+    # False: only frames lying entirely within the real audio count as valid (the default).
+    # True: frames that merely *start* within it count too, i.e. `ceil(length / hop_length)` —
+    # the convention of extractors that mask by striding the sample mask (Gemma3n, Qwen3-ASR).
+    count_partial_frames: bool = False
     # Emit features as (..., frames, mels) instead of (..., mels, frames), as the ASR
     # extractors (Parakeet/Cohere-ASR) do. Applied last, after all log-stage normalization.
     transpose_features: bool = False

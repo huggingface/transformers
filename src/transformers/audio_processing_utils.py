@@ -204,9 +204,9 @@ class BaseAudioProcessor(AudioProcessingMixin):
             if do_extract_spectrogram and self.mask_level != "audio":
                 spec_cfg = spectrogram_config or self.spectrogram_config
                 audio_lengths = np.array([end - start for start, end in audio_ranges])
-                feature_lengths = self._get_features_lengths(audio_lengths, spec_cfg)
+                feature_lengths = self._get_valid_feature_lengths(audio_lengths, spec_cfg)
                 mask_ranges = [(0, int(length)) for length in feature_lengths]
-                mask_length = int(self._get_features_lengths(padded_length, spec_cfg, include_center_frame=True))
+                mask_length = self._get_mask_width(padded_length, spec_cfg)
             else:
                 mask_ranges = audio_ranges
                 mask_length = padded_length
@@ -478,37 +478,42 @@ class BaseAudioProcessor(AudioProcessingMixin):
         """Cast STFT output to the desired output dtype. Default: no-op."""
         return magnitudes
 
-    def _get_features_lengths(self, audio_lengths, spectrogram_config, include_center_frame=False):
-        """
-        Convert raw audio sample lengths to the number of feature frames after spectrogram extraction.
-
-        For centered STFT returns `audio_lengths // hop_length` (plus 1 when
-        `include_center_frame=True`); for non-centered STFT returns the exact frame count
-        `(audio_lengths - frame_size) // hop_length + 1`, where `frame_size` is
-        `win_length + frame_extension` — the width the framing actually unfolds at.
-
-        Override this method in subclasses that use non-standard STFT framing (e.g.,
-        unfold-based with extra samples, or model-specific frame counting).
-        """
-        stft_cfg = spectrogram_config.stft_config
+    def _frame_count(self, lengths, stft_cfg):
+        """Frames the framing yields for `lengths` samples, excluding the extra centered frame."""
         win_length = stft_cfg.win_length or stft_cfg.n_fft
         hop_length = stft_cfg.hop_length or win_length // 2
-        # `skip_last_frame` drops the trailing frame from the features, so the mask width
-        # (`include_center_frame=True`) has to shrink with it. Per-utterance validity is
-        # unaffected — those frames sit at the start of each row — and any overflow past the
-        # width is clipped when the mask is built.
-        trim = 1 if include_center_frame and spectrogram_config.skip_last_frame else 0
         if stft_cfg.center == "left":
-            lengths = (
-                audio_lengths + win_length // 2 - (win_length + stft_cfg.frame_extension)
-            ) // hop_length + 1 - trim
-            return max(0, lengths) if isinstance(lengths, int) else lengths.clip(min=0)
+            count = (lengths + win_length // 2 - (win_length + stft_cfg.frame_extension)) // hop_length + 1
+            return max(0, count) if isinstance(count, int) else count.clip(min=0)
         if not stft_cfg.center:
-            return (audio_lengths - (win_length + stft_cfg.frame_extension)) // hop_length + 1 - trim
-        lengths = audio_lengths // hop_length
-        if include_center_frame:
-            lengths = lengths + 1 - trim
-        return lengths
+            return (lengths - (win_length + stft_cfg.frame_extension)) // hop_length + 1
+        return lengths // hop_length
+
+    def _get_mask_width(self, padded_length, spectrogram_config) -> int:
+        """Width of the extracted features' frame axis, and therefore of the padding mask.
+
+        Override when the framing produces a frame count the geometry above can't express
+        (e.g. a model that right-pads to a whole number of hops).
+        """
+        stft_cfg = spectrogram_config.stft_config
+        width = self._frame_count(padded_length, stft_cfg)
+        if stft_cfg.center and stft_cfg.center != "left":
+            width += 1  # a centered STFT emits the extra frame centered at t=0
+        if spectrogram_config.skip_last_frame:
+            width -= 1  # the log stage drops the trailing frame
+        return int(width)
+
+    def _get_valid_feature_lengths(self, audio_lengths, spectrogram_config):
+        """Per-utterance number of frames covered by real (non-padding) audio.
+
+        Honours `count_partial_frames`; override only for framing a config can't describe.
+        """
+        stft_cfg = spectrogram_config.stft_config
+        if spectrogram_config.count_partial_frames:
+            win_length = stft_cfg.win_length or stft_cfg.n_fft
+            hop_length = stft_cfg.hop_length or win_length // 2
+            return (audio_lengths + hop_length - 1) // hop_length
+        return self._frame_count(audio_lengths, stft_cfg)
 
     # ── Spectrogram backend ──────────────────────────────────────────────
 

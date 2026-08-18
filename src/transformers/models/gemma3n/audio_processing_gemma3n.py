@@ -12,24 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import torch
-
 from ...audio_processing_backends import TorchAudioBackend
-from .audio_processing_numpy_gemma3n import Gemma3nAudioProcessorMixin
+from .audio_processing_numpy_gemma3n import Gemma3nAudioProcessorNumpy
 
 
-class Gemma3nAudioProcessor(Gemma3nAudioProcessorMixin, TorchAudioBackend):
-    """Torch sibling of [`Gemma3nAudioProcessorNumpy`]. USM-style unfold-based STFT framed
-    at `win_length + 1` samples with HTK-flavor preemphasis, driven by `spectrogram_config`."""
+class Gemma3nAudioProcessor(TorchAudioBackend):
+    sampling_rate = 16000
+    force_mono = True
+    max_length = 480000  # 30 seconds
+    truncation = True
+    pad_to_multiple_of = 128
 
-    def _normalize_magnitude(self, features, *, spectrogram_config, **kwargs):
-        result = super()._normalize_magnitude(features, spectrogram_config=spectrogram_config, **kwargs)
-        # stats cast to float32 BEFORE subtracting (legacy rounding, unlike the numpy sibling)
-        if self.per_bin_mean is not None:
-            result = result - self.per_bin_mean.to(device=result.device, dtype=result.dtype)
-        if self.per_bin_stddev is not None:
-            result = result / self.per_bin_stddev.to(device=result.device, dtype=result.dtype)
-        return result.to(torch.float32)
+    spectrogram_config = Gemma3nAudioProcessorNumpy.spectrogram_config
+    legacy_field_mapping = Gemma3nAudioProcessorNumpy.legacy_field_mapping
 
 
 __all__ = ["Gemma3nAudioProcessor"]
