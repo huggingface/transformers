@@ -25,7 +25,7 @@ from ...generation import GenerationConfig, GenerationMixin
 from ...modeling_utils import PreTrainedModel
 from ...utils import PaddingStrategy, TensorType, logging
 from ..auto import AutoModel
-from ..encodec.feature_extraction_encodec import EncodecFeatureExtractor
+from ..encodec.audio_processing_encodec import EncodecAudioProcessor
 from ..llama.modeling_llama import LlamaForCausalLM
 from ..mimi.modeling_mimi import MimiConv1dPaddingCache
 from ..moshi.modeling_moshi import MoshiModel, MoshiPreTrainedModel
@@ -34,7 +34,7 @@ from ..moshi.modeling_moshi import MoshiModel, MoshiPreTrainedModel
 logger = logging.get_logger(__name__)
 
 
-class KyutaiSpeechToTextFeatureExtractor(EncodecFeatureExtractor):
+class KyutaiSpeechToTextFeatureExtractor(EncodecAudioProcessor):
     r"""
     Constructs an KyutaiSpeechToText feature extractor.
 
@@ -239,7 +239,7 @@ class KyutaiSpeechToTextEmbeddings(nn.Module):
         audio_tokens_offsets = nn.functional.pad(
             audio_tokens_offsets, (1, 0)
         )  # pad one 0 to the left for the text token
-        self.audio_tokens_offsets = nn.Buffer(audio_tokens_offsets, persistent=False)
+        self.register_buffer("audio_tokens_offsets", audio_tokens_offsets, persistent=False)
 
     def forward(self, input_ids):
         input_ids = torch.where(
@@ -428,9 +428,7 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
                     )
                     new_audio_tokens = codec_model_output.audio_codes.transpose(1, 2)
 
-                # last window can be shorter than audio_window_size, copy only the overlap
-                n = min(audio_tokens.shape[1], new_audio_tokens.shape[1])
-                audio_tokens[:, :n].copy_(new_audio_tokens[:, :n])
+                audio_tokens.copy_(new_audio_tokens)
 
                 start = end.clone()
                 end = end + audio_window_size
