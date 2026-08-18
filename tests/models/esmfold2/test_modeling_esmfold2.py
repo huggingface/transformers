@@ -329,9 +329,19 @@ class EsmFold2ModelTest(unittest.TestCase):
         batch, single = self._build_padded_batch()
 
         def conditioning_for(features, samples):
-            feature_kwargs = {k: v for k, v in features.items() if k != "distogram_atom_idx"}
+            trunk_features = dict(features)
+            atom_inputs = EsmFold2AtomInputs(
+                ref_pos=trunk_features.pop("ref_pos"),
+                ref_charge=trunk_features.pop("ref_charge"),
+                atom_attention_mask=trunk_features.pop("atom_attention_mask"),
+                ref_element=trunk_features.pop("ref_element"),
+                ref_atom_name_chars=trunk_features.pop("ref_atom_name_chars"),
+                ref_space_uid=trunk_features.pop("ref_space_uid"),
+                atom_to_token=trunk_features.pop("atom_to_token"),
+            )
+            trunk_features.pop("distogram_atom_idx")
             with torch.no_grad():
-                trunk = model(**feature_kwargs)
+                trunk = model(atom_inputs=atom_inputs, **trunk_features)
                 return denoiser.prepare_conditioning(
                     atom_inputs=trunk.atom_inputs,
                     pair_trunk=trunk.pair_states,

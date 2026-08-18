@@ -117,7 +117,7 @@ class EsmFold2FoldingMixin:
         diffusion structure head, and score them with the confidence head.
 
         Only the arguments the sampler and the confidence head need are named here; the rest are
-        forwarded to the trunk untouched, so ``fold(**features)`` takes the same dict as ``forward``.
+        forwarded to the trunk untouched, so ``fold`` takes the same arguments as ``forward``.
 
         attention_mask (`torch.Tensor` of shape `(batch_size, num_tokens)`):
             Mask marking valid tokens (``1``) versus padding (``0``). Also forwarded to the trunk.
@@ -134,10 +134,10 @@ class EsmFold2FoldingMixin:
         num_sampling_steps (`int`, *optional*):
             Number of diffusion sampling steps. Defaults to `config.structure_head.inference_num_steps`.
         trunk_kwargs:
-            The remaining featurized inputs (and `num_loops`), forwarded verbatim to
-            [`EsmFold2Model.forward`], which documents them.
+            The remaining featurized inputs (`num_loops` included, plus the raw per-atom tensors bundled
+            below into `atom_inputs`), forwarded to [`EsmFold2Model.forward`], which documents them.
         """
-        from .modeling_esmfold2 import EsmFold2Output
+        from .modeling_esmfold2 import EsmFold2AtomInputs, EsmFold2Output
 
         num_samples: int = (
             num_diffusion_samples
@@ -145,10 +145,20 @@ class EsmFold2FoldingMixin:
             else self.config.structure_head.num_diffusion_samples
         )
 
+        atom_inputs = EsmFold2AtomInputs(
+            ref_pos=trunk_kwargs.pop("ref_pos"),
+            ref_charge=trunk_kwargs.pop("ref_charge"),
+            atom_attention_mask=trunk_kwargs.pop("atom_attention_mask"),
+            ref_element=trunk_kwargs.pop("ref_element"),
+            ref_atom_name_chars=trunk_kwargs.pop("ref_atom_name_chars"),
+            ref_space_uid=trunk_kwargs.pop("ref_space_uid"),
+            atom_to_token=trunk_kwargs.pop("atom_to_token"),
+        )
         trunk = self(
             attention_mask=attention_mask,
             asym_id=asym_id,
             mol_type=mol_type,
+            atom_inputs=atom_inputs,
             **trunk_kwargs,
         )
 

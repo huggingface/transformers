@@ -14,7 +14,7 @@
 
 import math
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import torch
 import torch.nn as nn
@@ -42,9 +42,11 @@ from .generation_esmfold2 import EsmFold2FoldingMixin
 class EsmFold2AtomInputs:
     """Featurized reference-conformer atom inputs, bundled so the atom stack takes one argument.
 
-    Built by ``EsmFold2Model._prepare_features``, which one-hot encodes the categorical fields and
-    zeroes the padding. Returned on [`EsmFold2TrunkOutput`] so the diffusion sampler and the
-    confidence head reuse the trunk's featurization rather than redoing it.
+    Taken as one argument by [`EsmFold2Model.forward`], holding the raw featurizer tensors.
+    ``EsmFold2Model._prepare_features`` then one-hot encodes the categorical fields and zeroes the
+    padding, and ``forward`` swaps those in with `dataclasses.replace`, so every consumer downstream of
+    that point sees the encoded forms documented below. Returned on [`EsmFold2TrunkOutput`] so the
+    diffusion sampler and the confidence head reuse the trunk's featurization rather than redoing it.
 
     A plain dataclass rather than a [`~utils.ModelOutput`]: every field here is required and is read
     unconditionally downstream, and ``ModelOutput`` permits at most one required field (the rest must
@@ -876,15 +878,6 @@ class EsmFold2RowAttentionPooling(nn.Module):
         return self.out_proj(pooled)
 
 
-def _relative_position_one_hot(diff: Tensor, num_bins: int, keep_mask: Tensor) -> Tensor:
-    """One-hot encode a relative index difference into ``2 * num_bins + 2`` classes: the clipped offset,
-    plus a final "out-of-context" bin wherever ``keep_mask`` is False (e.g. a cross-chain pair).
-    """
-    binned = torch.clip(diff + num_bins, 0, 2 * num_bins)
-    binned = torch.where(keep_mask, binned, 2 * num_bins + 1)
-    return F.one_hot(binned, 2 * num_bins + 2)
-
-
 class EsmFold2RelativePositionEncoding(nn.Module):
     """Pair encoding of relative residue index, token index, chain (sym_id) offset and same-entity.
 
@@ -905,6 +898,17 @@ class EsmFold2RelativePositionEncoding(nn.Module):
         num_features = num_residue_features + num_token_features + num_chain_features + num_same_entity_features
         self.embed = nn.Linear(num_features, config.pairwise_hidden_size, bias=False)
 
+    def _relative_position_one_hot(self, diff: Tensor, num_bins: int, keep_mask: Tensor) -> Tensor:
+        """One-hot encode a relative index difference into ``2 * num_bins + 2`` classes, at the dtype
+        ``embed`` expects: the clipped offset, plus a final "out-of-context" bin wherever ``keep_mask``
+        is False (e.g. a cross-chain pair).
+        """
+        binned = torch.clip(diff + num_bins, 0, 2 * num_bins)
+        binned = torch.where(keep_mask, binned, 2 * num_bins + 1)
+        # ``F.one_hot`` would build this in int64 first; scattering into the target dtype skips that.
+        one_hot = binned.new_zeros(*binned.shape, 2 * num_bins + 2, dtype=self.embed.weight.dtype)
+        return one_hot.scatter_(-1, binned.unsqueeze(-1), 1)
+
     def forward(
         self,
         residue_index: Tensor,
@@ -919,24 +923,21 @@ class EsmFold2RelativePositionEncoding(nn.Module):
 
         # Residue, token and chain offsets; the last keeps cross-chain pairs, so its mask is inverted.
         residue_bins, chain_bins = self.num_relative_residx_bins, self.num_relative_chain_bins
-        relative_residue_one_hot = _relative_position_one_hot(
+        relative_residue_one_hot = self._relative_position_one_hot(
             residue_index.unsqueeze(2) - residue_index.unsqueeze(1), residue_bins, same_chain
         )
-        relative_token_one_hot = _relative_position_one_hot(
+        relative_token_one_hot = self._relative_position_one_hot(
             token_index.unsqueeze(2) - token_index.unsqueeze(1), residue_bins, same_chain & same_residue
         )
-        relative_chain_one_hot = _relative_position_one_hot(
+        relative_chain_one_hot = self._relative_position_one_hot(
             sym_id.unsqueeze(2) - sym_id.unsqueeze(1), chain_bins, ~same_chain
         )
-
-        # Cast the 0/1 one-hots straight to the projection dtype: exact, and skips a large fp32 tensor.
-        dtype = self.embed.weight.dtype
         features = torch.cat(
             [
-                relative_residue_one_hot.to(dtype),
-                relative_token_one_hot.to(dtype),
-                same_entity.to(dtype).unsqueeze(-1),
-                relative_chain_one_hot.to(dtype),
+                relative_residue_one_hot,
+                relative_token_one_hot,
+                same_entity.unsqueeze(-1).to(self.embed.weight.dtype),
+                relative_chain_one_hot,
             ],
             dim=-1,
         )
@@ -2071,13 +2072,7 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2FoldingMixin):
         res_type: Tensor,
         token_bonds: Tensor,
         attention_mask: Tensor,
-        ref_pos: Tensor,
-        ref_element: Tensor,
-        ref_charge: Tensor,
-        ref_atom_name_chars: Tensor,
-        ref_space_uid: Tensor,
-        atom_attention_mask: Tensor,
-        atom_to_token: Tensor,
+        atom_inputs: EsmFold2AtomInputs,
         deletion_mean: Tensor | None = None,
         msa: Tensor | None = None,
         has_deletion: Tensor | None = None,
@@ -2107,20 +2102,10 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2FoldingMixin):
             Pairwise inter-token covalent-bond feature.
         attention_mask (`torch.Tensor` of shape `(batch_size, num_tokens)`):
             Mask marking valid tokens (``1``) versus padding (``0``). Inputs must be right-padded.
-        ref_pos (`torch.Tensor` of shape `(batch_size, num_atoms, 3)`):
-            Reference-conformer Cartesian coordinates for each atom.
-        ref_element (`torch.Tensor` of shape `(batch_size, num_atoms)`):
-            Atomic number of each atom.
-        ref_charge (`torch.Tensor` of shape `(batch_size, num_atoms)`):
-            Formal charge of each atom.
-        ref_atom_name_chars (`torch.Tensor` of shape `(batch_size, num_atoms, 4)`):
-            Encoded four-character atom name for each atom.
-        ref_space_uid (`torch.Tensor` of shape `(batch_size, num_atoms)`):
-            Per-atom group ID (the atom's token index), used by the atom-encoder 3D RoPE.
-        atom_attention_mask (`torch.Tensor` of shape `(batch_size, num_atoms)`):
-            Mask marking valid atoms (``1``) versus padding (``0``).
-        atom_to_token (`torch.Tensor` of shape `(batch_size, num_atoms)`):
-            Index of the token each atom belongs to (a token's atoms are contiguous).
+        atom_inputs ([`EsmFold2AtomInputs`]):
+            The raw reference-conformer atom tensors, bundled: positions, atomic numbers, formal
+            charges, encoded atom names, per-atom group IDs, the atom padding mask and the atom->token
+            map.
         deletion_mean (`torch.Tensor` of shape `(batch_size, num_tokens)`, *optional*):
             Mean MSA deletion count per column. Defaults to zeros (no MSA).
         msa (`torch.Tensor` of shape `(batch_size, msa_depth, num_tokens)`, *optional*):
@@ -2150,20 +2135,17 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2FoldingMixin):
                 msa=msa,
                 msa_attention_mask=msa_attention_mask,
                 deletion_mean=deletion_mean,
-                ref_element=ref_element,
-                ref_atom_name_chars=ref_atom_name_chars,
-                atom_attention_mask=atom_attention_mask,
-                atom_to_token=atom_to_token,
+                ref_element=atom_inputs.ref_element,
+                ref_atom_name_chars=atom_inputs.ref_atom_name_chars,
+                atom_attention_mask=atom_inputs.atom_attention_mask,
+                atom_to_token=atom_inputs.atom_to_token,
             )
         )
 
-        atom_inputs = EsmFold2AtomInputs(
-            ref_pos=ref_pos,
-            ref_charge=ref_charge,
-            atom_attention_mask=atom_attention_mask,
+        atom_inputs = replace(
+            atom_inputs,
             ref_element=ref_element_one_hot,
             ref_atom_name_chars=ref_atom_name_chars_one_hot,
-            ref_space_uid=ref_space_uid,
             atom_to_token=atom_to_token,
         )
 
@@ -2171,10 +2153,10 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2FoldingMixin):
         atom_embeds, position_embeddings = self.inputs_atom_encoder.embed_atoms(atom_inputs)
         atom_encoding = self.inputs_atom_encoder(
             atom_embeds=atom_embeds,
-            attention_mask=self.inputs_atom_encoder.build_attention_mask(atom_attention_mask, atom_embeds),
+            attention_mask=self.inputs_atom_encoder.build_attention_mask(atom_inputs.atom_attention_mask, atom_embeds),
             position_embeddings=position_embeddings,
-            atom_mask=atom_attention_mask,
-            atom_to_token=atom_to_token,
+            atom_mask=atom_inputs.atom_attention_mask,
+            atom_to_token=atom_inputs.atom_to_token,
             num_tokens=attention_mask.shape[1],
         )[0]
         # Fold the fp32 input features into the atom encoding's dtype, so single_inputs is one dtype.
