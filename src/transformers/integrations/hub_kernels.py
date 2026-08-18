@@ -580,6 +580,7 @@ _HUB_KERNEL_MAPPING: dict[str, dict[str, str]] = {
     "finegrained-fp8": {"repo_id": "kernels-community/finegrained-fp8", "version": 4},
     "deep-gemm": {"repo_id": "kernels-community/deep-gemm", "version": 2},
     "sonic-moe": {"repo_id": "kernels-community/sonic-moe", "revision": "ep-support"},
+    "nvfp4": {"repo_id": "kernels-community/nvfp4-gemm", "version": 1},
 }
 
 # Flash attention version -> major version of its hub kernel repo. Flash attention flavors that are not
