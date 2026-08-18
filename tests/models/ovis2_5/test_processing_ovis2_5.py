@@ -12,12 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
 import tempfile
 import unittest
+from pathlib import Path
 
 import numpy as np
 
-from transformers import Ovis2_5Processor
+from transformers import Ovis2_5Config, Ovis2_5Processor
 from transformers.testing_utils import require_tokenizers, require_torch, require_torchvision, require_vision
 from transformers.utils import is_tokenizers_available, is_torch_available, is_torchvision_available
 
@@ -154,6 +156,42 @@ class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 self.assertEqual(getattr(reloaded_processor, token_attribute), getattr(processor, token_attribute))
                 self.assertNotIn(token_attribute, processor.to_dict())
             self.assertEqual(reloaded_processor.image_token_id, reloaded_processor.video_token_id)
+
+    def test_explicit_processor_loads_legacy_hub_metadata(self):
+        tokenizer = self._build_tokenizer(include_visual_tokens=False)
+        native_size = {"shortest_edge": 64 * 64, "longest_edge": 64 * 1024}
+        legacy_preprocessor_config = {
+            "do_normalize": True,
+            "do_rescale": True,
+            "do_resize": True,
+            "image_mean": [0.5, 0.5, 0.5],
+            "image_processor_type": "SiglipImageProcessor",
+            "image_std": [0.5, 0.5, 0.5],
+            "processor_class": "SiglipProcessor",
+            "resample": 2,
+            "rescale_factor": 1 / 255,
+            "size": {"height": 512, "width": 512},
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            tokenizer.save_pretrained(tmpdirname)
+            Ovis2_5Config().save_pretrained(tmpdirname)
+            Path(tmpdirname, "preprocessor_config.json").write_text(json.dumps(legacy_preprocessor_config))
+            processor = self.processor_class.from_pretrained(
+                tmpdirname,
+                image_processor=Ovis2_5ImageProcessor(size=native_size),
+                video_processor=Ovis2_5VideoProcessor(size=native_size),
+            )
+
+        self.assertIsInstance(processor.image_processor, Ovis2_5ImageProcessor)
+        self.assertIsInstance(processor.video_processor, Ovis2_5VideoProcessor)
+        for visual_processor in (processor.image_processor, processor.video_processor):
+            self.assertEqual(visual_processor.size.shortest_edge, native_size["shortest_edge"])
+            self.assertEqual(visual_processor.size.longest_edge, native_size["longest_edge"])
+        self.assertNotEqual(processor.image_token_id, processor.tokenizer.unk_token_id)
+
+        inputs = processor(images=np.zeros((64, 64, 3), dtype=np.uint8), text="<image> lower", return_tensors="pt")
+        self.assertSetEqual(set(inputs), {"input_ids", "attention_mask", "pixel_values", "image_grid_thw"})
 
     def test_image_prompt_expansion_matches_patch_grid(self):
         """An image placeholder expands to boundary tokens and one visual atom per merged patch."""
