@@ -338,7 +338,13 @@ class TorchAudioBackend(BaseAudioProcessor):
         return torch.zeros(shape, dtype=torch.int32)
 
     def _as_backend_array(self, x):
-        return torch.from_numpy(x) if isinstance(x, np.ndarray) else x
+        if isinstance(x, np.ndarray):
+            return torch.from_numpy(x)
+        if isinstance(x, torch.Tensor):
+            return x
+        # Sequences (e.g. `list[list[float]]`) are a documented input type; convert through numpy
+        # so the torch backend accepts everything the numpy one does.
+        return torch.from_numpy(np.asarray(x))
 
     def _mean_axis0(self, x):
         return x.mean(dim=0)

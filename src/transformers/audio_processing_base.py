@@ -14,9 +14,10 @@
 
 import os
 import warnings
+from dataclasses import fields, replace
 from typing import Any, ClassVar, TypeVar
 
-from .audio_utils import is_valid_audio, load_audio
+from .audio_utils import MelScaleConfig, is_valid_audio, load_audio
 from .preprocessing_base import BatchFeature as BaseBatchFeature
 from .preprocessing_base import PreprocessingMixin
 from .utils import (
@@ -176,7 +177,41 @@ class AudioProcessingMixin(PreprocessingMixin):
     def from_dict(cls, config_dict: dict[str, Any], **kwargs):
         config_dict = dict(config_dict)
         cls._apply_legacy_field_mapping(config_dict)
+        cls._merge_spectrogram_config(config_dict)
         return super().from_dict(config_dict, **kwargs)
+
+    @classmethod
+    def _merge_spectrogram_config(cls, config_dict: dict[str, Any]) -> None:
+        """Merge an incoming (usually partial) ``spectrogram_config`` onto the class-level one.
+
+        Legacy hub configs only carry a handful of flat keys, which `_apply_legacy_field_mapping`
+        turns into a *partial* nested dict such as ``{"stft_config": {"hop_length": 160}}``.
+        Instantiating from that alone would fall back to bare `SpectrogramConfig` defaults and
+        silently drop everything the model class defines (mel scale, log mode, dtypes, ...), so
+        the incoming values are layered on top of the class config instead.
+        """
+        incoming = config_dict.get("spectrogram_config")
+        default = getattr(cls, "spectrogram_config", None)
+        if not isinstance(incoming, dict) or default is None:
+            return
+
+        incoming = dict(incoming)
+        merged = default
+        for key, nested_cls in (("stft_config", None), ("mel_scale_config", MelScaleConfig)):
+            nested = incoming.pop(key, None)
+            if not isinstance(nested, dict):
+                continue
+            current = getattr(merged, key)
+            if current is None:
+                # No class-level nested config (e.g. a raw-audio model gaining a mel scale).
+                if nested_cls is None:
+                    continue
+                current = nested_cls()
+            valid = {f.name for f in fields(current)}
+            merged = replace(merged, **{key: replace(current, **{k: v for k, v in nested.items() if k in valid})})
+
+        valid = {f.name for f in fields(merged)}
+        config_dict["spectrogram_config"] = replace(merged, **{k: v for k, v in incoming.items() if k in valid})
 
     @classmethod
     def get_audio_processor_dict(
