@@ -443,6 +443,10 @@ class TorchAudioBackend(BaseAudioProcessor):
         return magnitudes.float()
 
     def _compute_magnitudes(self, stft_out, power, spectrogram_config=None):
+        if spectrogram_config and spectrogram_config.stft_config.magnitude_mode == "sqrt_sum_squares":
+            # NeMo-derived form; differs from `abs()` in the last ulp
+            magnitudes = torch.view_as_real(stft_out).pow(2).sum(-1).sqrt()
+            return magnitudes.pow(power) if power != 1.0 else magnitudes
         return stft_out.abs() ** power
 
     # ── Mel scale & normalization ─────────────────────────────────────────
@@ -533,17 +537,26 @@ class TorchAudioBackend(BaseAudioProcessor):
         """Standard (non-kaldi) triangular mel filter bank, torchaudio-ecosystem semantics.
 
         Bit-exact against ``torchaudio.functional.melscale_fbanks`` in the default-dtype
-        case. The numpy leaf owns librosa's rounding pattern instead (float64 linspace
-        bins, per-band float32 casts); the two leaves are numerically equivalent, not
-        bit-identical.
+        case; the numpy leaf owns librosa's rounding pattern instead, so the two leaves are
+        numerically equivalent but not bit-identical.
+
+        ``bank_rounding="librosa"`` opts this leaf into librosa's pattern too, for models
+        whose legacy extractor built its filters with ``librosa.filters.mel`` (Parakeet,
+        Cohere-ASR): float64 ``linspace`` bins regardless of ``frequency_bin_mode``, cast to
+        float32 *before* the slaney norm, then a second float32 rounding after it — the only
+        order that reproduces those filters bit-exactly.
         """
-        dtype = getattr(torch, computation_dtype) if computation_dtype else None
+        librosa_rounding = mel_cfg.bank_rounding == "librosa"
+        if librosa_rounding:
+            dtype = torch.float64
+        else:
+            dtype = getattr(torch, computation_dtype) if computation_dtype else None
         mel_min = hertz_to_mel(min_frequency, mel_scale=mel_cfg.mel_scale)
         mel_max = hertz_to_mel(max_frequency, mel_scale=mel_cfg.mel_scale)
         mel_freqs = torch.linspace(mel_min, mel_max, num_mel_filters + 2, dtype=dtype)
         filter_freqs = mel_to_hertz(mel_freqs, mel_scale=mel_cfg.mel_scale)
 
-        if mel_cfg.frequency_bin_mode == "rfft":
+        if mel_cfg.frequency_bin_mode == "rfft" and not librosa_rounding:
             fft_freqs = torch.fft.rfftfreq(n=n_fft, d=1.0 / sampling_rate)
         else:
             fft_freqs = torch.linspace(0, sampling_rate // 2, num_frequency_bins)
@@ -551,10 +564,14 @@ class TorchAudioBackend(BaseAudioProcessor):
             fft_freqs = fft_freqs.to(dtype)
 
         mel_filters = _create_triangular_filter_bank(fft_freqs, filter_freqs)
+        if librosa_rounding:
+            mel_filters = mel_filters.to(torch.float32)
 
         if mel_cfg.norm == "slaney":
             enorm = 2.0 / (filter_freqs[2 : num_mel_filters + 2] - filter_freqs[:num_mel_filters])
             mel_filters = mel_filters * enorm[None, :]
+            if librosa_rounding:
+                mel_filters = mel_filters.to(torch.float32)
 
         if mel_cfg.bands_to_zero > 0:
             mel_filters = torch.nn.functional.pad(mel_filters, (0, 0, mel_cfg.bands_to_zero, 0))
@@ -565,8 +582,12 @@ class TorchAudioBackend(BaseAudioProcessor):
 
     def _apply_mel_scale(self, features, *, spectrogram_config, **kwargs):
         mel_filters = self.mel_filters.to(device=features.device)
-        if spectrogram_config.mel_scale_config.matmul_order == "features_first":
+        matmul_order = spectrogram_config.mel_scale_config.matmul_order
+        if matmul_order == "features_first":
             mel_spec = torch.matmul(features.transpose(-2, -1), mel_filters)
+        elif matmul_order == "filters_first_matmul":
+            # legacy `mel_filters @ magnitudes`; differs from F.linear in the last ulp
+            mel_spec = torch.matmul(mel_filters.T, features)
         else:
             # F.linear matches torchaudio's MelScale implementation exactly
             mel_spec = torch.nn.functional.linear(features.transpose(-2, -1), mel_filters.T).transpose(-2, -1)

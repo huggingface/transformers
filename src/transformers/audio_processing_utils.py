@@ -49,6 +49,9 @@ class BaseAudioProcessor(AudioProcessingMixin):
     do_batch_spectrogram = True
     model_input_names = ["audio"]
     dither: float = 0.0
+    # Output keys left untouched by `convert_to_tensors`, for non-array metadata a model
+    # returns alongside its features (e.g. Cohere-ASR's `audio_chunk_index`).
+    skip_tensor_conversion: list[str] = []
 
     def __init__(
         self,
@@ -102,9 +105,6 @@ class BaseAudioProcessor(AudioProcessingMixin):
         return value
 
     def __call__(self, audio: AudioInput, *args, **kwargs: Unpack[AudioKwargs]) -> BatchFeature:
-        return self.preprocess(audio, *args, **kwargs)
-
-    def preprocess(self, audio: AudioInput, *args, **kwargs: Unpack[AudioKwargs]) -> BatchFeature:
         return super().preprocess(audio, *args, **kwargs)
 
     def _preprocess_like_inputs(self, audio: AudioInput, *args, **kwargs) -> BatchFeature:
@@ -177,7 +177,9 @@ class BaseAudioProcessor(AudioProcessingMixin):
             if self.return_padding_mask:
                 output["audio_features_mask"] = self._get_mask(feature_ranges, features[0].shape[0])
             output = self._postprocess_output(output, feature_ranges=feature_ranges, **kwargs)
-            return BatchFeature(data=output, tensor_type=return_tensors)
+            return BatchFeature(
+                data=output, tensor_type=return_tensors, skip_tensor_conversion=self.skip_tensor_conversion
+            )
 
         # Path 2: pad audio first, then optionally extract a spectrogram on the padded batch.
         audio, audio_ranges = self.pad(audio, padding, max_length, truncation, pad_to_multiple_of)
@@ -212,7 +214,9 @@ class BaseAudioProcessor(AudioProcessingMixin):
             output[mask_key] = self._get_mask(mask_ranges, mask_length)
 
         output = self._postprocess_output(output, audio_ranges=audio_ranges, **kwargs)
-        return BatchFeature(data=output, tensor_type=return_tensors)
+        return BatchFeature(
+            data=output, tensor_type=return_tensors, skip_tensor_conversion=self.skip_tensor_conversion
+        )
 
     def _postprocess_features(self, features, feature_lengths):
         """Hook: per-utterance feature processing after extraction, before feature-level padding.
@@ -587,7 +591,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
     ):
         log_mel = spectrogram_config.log_mode
         if log_mel is None:
-            return self._astype(features, "float32")
+            return self._maybe_transpose_features(self._astype(features, "float32"), spectrogram_config)
 
         if spectrogram_config.pre_log_offset is not None:
             result = features + spectrogram_config.pre_log_offset
@@ -612,7 +616,15 @@ class BaseAudioProcessor(AudioProcessingMixin):
 
         if spectrogram_config.skip_last_frame:
             result = result[..., :-1]
-        return self._apply_post_log_normalization(result, spectrogram_config)
+        result = self._apply_post_log_normalization(result, spectrogram_config)
+        return self._maybe_transpose_features(result, spectrogram_config)
+
+    def _maybe_transpose_features(self, result, spectrogram_config):
+        """Swap the mel and frame axes when ``transpose_features`` is set. Backend-agnostic:
+        ``swapaxes`` is spelled the same on numpy arrays and torch tensors."""
+        if spectrogram_config.transpose_features:
+            result = result.swapaxes(-2, -1)
+        return result
 
     def _apply_post_log_normalization(self, result, spectrogram_config):
         if spectrogram_config.clip_max_offset is not None:

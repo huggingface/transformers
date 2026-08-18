@@ -63,7 +63,7 @@ if is_torchaudio_available():
 if is_torchcodec_available():
     TORCHCODEC_VERSION = version.parse(importlib.metadata.version("torchcodec"))
 
-AudioInput = Union[np.ndarray, "torch.Tensor", Sequence[np.ndarray], Sequence["torch.Tensor"]]
+AudioInput = Union[np.ndarray, "torch.Tensor", list[np.ndarray], list["torch.Tensor"]]
 
 
 @dataclass(frozen=True)
@@ -90,6 +90,11 @@ class StftConfig:
     # "float64": both backends; "native": each backend's own (numpy float64, torch float32).
     # Complements `computation_dtype` (which still controls magnitude dtype).
     fft_dtype: str | None = None
+    # How the complex STFT becomes a real magnitude. None: each backend's native `abs()`.
+    # "sqrt_sum_squares": `sqrt(re**2 + im**2)` via `view_as_real`, the form NeMo-derived
+    # extractors use — it differs from torch's `abs()` in the last ulp, so it is a
+    # bit-exactness knob, not a stylistic one. No-op for numpy (its `abs()` already agrees).
+    magnitude_mode: str | None = None
 
     def to_dict(self) -> dict:
         return {f.name: getattr(self, f.name) for f in fields(self) if getattr(self, f.name) is not None}
@@ -112,7 +117,16 @@ class MelScaleConfig:
     computation_dtype: str | None = None
     bands_to_zero: int = 0
     # Precision knob only; `_apply_mel_scale` input is always `(..., freq, time)`.
+    # "filters_first" uses each backend's ecosystem-native op (numpy `matmul`, torch
+    # `F.linear`, matching torchaudio); "filters_first_matmul" forces a plain `matmul` in
+    # both, which is what NeMo-derived extractors (`mel_filters @ magnitudes`) need — the
+    # two torch forms differ in the last ulp.
     matmul_order: str = "filters_first"
+    # Rounding order used to build the filter bank. None: each backend's ecosystem default
+    # (numpy = librosa, torch = torchaudio). "librosa": build in float64, cast to float32,
+    # then apply the slaney norm with a *second* float32 rounding — the only order that
+    # reproduces librosa's filters bit-exactly. No-op for numpy (already its default).
+    bank_rounding: str | None = None
 
     def to_dict(self) -> dict:
         return {f.name: getattr(self, f.name) for f in fields(self) if getattr(self, f.name) is not None}
@@ -139,6 +153,9 @@ class SpectrogramConfig:
     waveform_scale: float | None = None
     computation_dtype: str | None = None
     skip_last_frame: bool = False
+    # Emit features as (..., frames, mels) instead of (..., mels, frames), as the ASR
+    # extractors (Parakeet/Cohere-ASR) do. Applied last, after all log-stage normalization.
+    transpose_features: bool = False
     clip_max_offset: float | None = None
     post_log_shift: float | None = None
     post_log_scale: float | None = None

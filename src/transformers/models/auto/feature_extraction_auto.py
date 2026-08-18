@@ -396,9 +396,12 @@ def _resolve_audio_processor_from_pretrained(pretrained_model_name_or_path, *, b
 
     audio_processor_class = None
     if class_name_in_config is not None:
-        # Translate legacy → modern, then dispatch to the requested backend
-        modern_name = _legacy_name_candidates(class_name_in_config)[-1]
-        audio_processor_class = _load_backend_class(modern_name, backend)
+        # Try the modern (translated) name first so the backend mapping applies, then the
+        # literal name (covers registered custom classes that keep a legacy-style name).
+        for candidate in reversed(_legacy_name_candidates(class_name_in_config)):
+            audio_processor_class = _load_backend_class(candidate, backend)
+            if audio_processor_class is not None:
+                break
 
     has_remote_code = audio_processor_auto_map is not None
     has_local_code = audio_processor_class is not None or type(config) in FEATURE_EXTRACTOR_MAPPING

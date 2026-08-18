@@ -52,6 +52,7 @@ class InklingAudioProcessor(TorchAudioBackend):
         ),
         log_mode="log10",
         mel_floor=1e-10,
+        transpose_features=True,
     )
 
     def _stft(self, audio, *, spectrogram_config, audio_ranges=None, **kwargs):
@@ -70,10 +71,8 @@ class InklingAudioProcessor(TorchAudioBackend):
             magnitudes = magnitudes.pow(power)
         return magnitudes
 
-    def _normalize_magnitude(self, features, *, spectrogram_config, **kwargs):
-        # Pointwise log10 (ADR 0005), then transpose to (batch, frames, mels).
-        features = features.clamp_min(spectrogram_config.mel_floor).log10()
-        return features.transpose(1, 2)
+    # Pointwise log10 (ADR 0005) and the (batch, frames, mels) layout are the base
+    # `log_mode="log10"` / `transpose_features` path; no `_normalize_magnitude` override needed.
 
     def _get_features_lengths(self, audio_lengths, spectrogram_config, include_center_frame=False):
         # Inkling emits ceil(audio_length / hop) frames (its right-pad rounds up to a hop multiple).

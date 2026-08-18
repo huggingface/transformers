@@ -18,9 +18,6 @@ from ...audio_processing_backends import NumpyAudioBackend
 from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig, _array_namespace
 
 
-EPSILON = 1e-5
-
-
 class CohereAsrAudioProcessorMixin:
     """Backend-agnostic Cohere-ASR logic shared by the numpy and torch siblings; only the
     RNG-dependent dither and the torch mel/magnitude leaves live in the sibling classes."""
@@ -33,6 +30,8 @@ class CohereAsrAudioProcessorMixin:
     max_audio_clip_s: float = 35.0
     overlap_chunk_second: float = 5.0
     min_energy_window_samples: int = 1600
+    # `(sample_idx, chunk_idx | None)` tuples; `None` must survive to `_reassemble_chunk_texts`
+    skip_tensor_conversion = ["audio_chunk_index"]
 
     legacy_field_mapping = {
         "feature_size": "spectrogram_config.mel_scale_config.n_mels",
@@ -47,36 +46,30 @@ class CohereAsrAudioProcessorMixin:
             power=2.0,
             pad_mode="constant",
             periodic=False,
+            magnitude_mode="sqrt_sum_squares",
         ),
         mel_scale_config=MelScaleConfig(
             n_mels=128,
             f_min=0.0,
             norm="slaney",
             mel_scale="slaney",
+            matmul_order="filters_first_matmul",
+            bank_rounding="librosa",
         ),
         preemphasis=0.97,
         preemphasis_mode="waveform",
         log_mode="log",
         mel_floor=0.0,  # no clamp; the log guard is pre_log_offset
         pre_log_offset=2**-24,
+        transpose_features=True,
     )
-
-    def _normalize_magnitude(self, features, *, spectrogram_config, **kwargs):
-        # transpose to (batch, frames, mels)
-        features = super()._normalize_magnitude(features, spectrogram_config=spectrogram_config, **kwargs)
-        return features.swapaxes(-2, -1)
 
     def _postprocess_output(self, output, audio_ranges=None, **kwargs):
         if audio_ranges is None or "audio_features" not in output:
             return output
-        stft_cfg = self.spectrogram_config.stft_config
-        feature_lengths = [
-            (end - start + stft_cfg.n_fft // 2 * 2 - stft_cfg.n_fft) // stft_cfg.hop_length
-            for start, end in audio_ranges
-        ]
-        output["audio_features"] = self._masked_mean_var_normalize(
-            output["audio_features"], feature_lengths, epsilon=EPSILON
-        )
+        audio_lengths = np.asarray([end - start for start, end in audio_ranges])
+        feature_lengths = self._get_features_lengths(audio_lengths, self.spectrogram_config)
+        output["audio_features"] = self._masked_mean_var_normalize(output["audio_features"], feature_lengths)
         return output
 
     def _preprocess_audio_like_inputs(self, audio, *args, sampling_rate=None, **kwargs):
@@ -84,17 +77,8 @@ class CohereAsrAudioProcessorMixin:
         prepared = self._prepare_audio_like_inputs(audio=audio, sampling_rate=sampling_rate)
         chunked, audio_chunk_index = self._split_audio_chunks(prepared)
         result = self._preprocess(chunked, *args, **kwargs)
-        result["audio_chunk_index"] = self._encode_chunk_index(audio_chunk_index, kwargs.get("return_tensors"))
+        result["audio_chunk_index"] = audio_chunk_index
         return result
-
-    def _encode_chunk_index(self, audio_chunk_index, return_tensors):
-        # integer-encode so it survives `convert_to_tensors`; no-chunking marker None -> -1
-        encoded = [[s, -1 if c is None else c] for s, c in audio_chunk_index]
-        if return_tensors == "pt":
-            import torch
-
-            return torch.tensor(encoded, dtype=torch.long)
-        return np.asarray(encoded, dtype=np.int64)
 
     def _split_audio_chunks(self, prepared_audio):
         """Split audio longer than ``max_audio_clip_s - overlap_chunk_second`` at the

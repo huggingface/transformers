@@ -98,6 +98,11 @@ class AudioProcessingTestMixin:
             return x
         return torch.as_tensor(x)
 
+    def _metadata_keys(self):
+        """Output keys the processors declare as non-array metadata via `skip_tensor_conversion`
+        (e.g. Cohere-ASR's `audio_chunk_index`), compared verbatim instead of as tensors."""
+        return {key for cls in self.audio_processing_classes.values() for key in cls.skip_tensor_conversion}
+
     def _assert_outputs_bit_exact(self, output_a, output_b, *, atol=1e-5, rtol=1e-5):
         """Per ADR 0001, sibling backends must agree within the float32 noise floor —
         `torch.allclose(atol=1e-5, rtol=1e-5)`. The bar is intentionally not stricter
@@ -105,7 +110,11 @@ class AudioProcessingTestMixin:
         keys_a = set(output_a.keys())
         keys_b = set(output_b.keys())
         self.assertEqual(keys_a, keys_b, f"Output keys differ: {keys_a} vs {keys_b}")
+        metadata_keys = self._metadata_keys()
         for key in keys_a:
+            if key in metadata_keys:
+                self.assertEqual(output_a[key], output_b[key], f"Metadata mismatch for {key!r}")
+                continue
             a = self._to_torch(output_a[key])
             b = self._to_torch(output_b[key])
             self.assertEqual(a.shape, b.shape, f"Shape mismatch for {key!r}: {a.shape} vs {b.shape}")

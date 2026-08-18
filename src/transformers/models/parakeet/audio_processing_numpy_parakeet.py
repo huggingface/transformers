@@ -33,28 +33,26 @@ class ParakeetAudioProcessorNumpy(NumpyAudioBackend):
             power=2.0,
             pad_mode="constant",
             periodic=False,
+            magnitude_mode="sqrt_sum_squares",
         ),
         mel_scale_config=MelScaleConfig(
             n_mels=80,
             f_min=0.0,
             norm="slaney",
             mel_scale="slaney",
+            matmul_order="filters_first_matmul",
+            bank_rounding="librosa",
         ),
         preemphasis=0.97,
         preemphasis_mode="waveform",
         log_mode="log",
         mel_floor=0.0,  # base clamp is a no-op; the log guard is pre_log_offset
         pre_log_offset=2**-24,
+        transpose_features=True,
     )
 
     # The base numpy backend already builds librosa's per-band float32 filters and applies
     # the mel matmul / magnitude / `log(x + pre_log_offset)` forms this model needs.
-
-    def _normalize_magnitude(self, features, *, spectrogram_config, **kwargs):
-        # Base handles the legacy `log(x + guard)` form via `pre_log_offset`;
-        # transpose to (batch, frames, mels).
-        features = super()._normalize_magnitude(features, spectrogram_config=spectrogram_config, **kwargs)
-        return np.transpose(features, axes=(0, 2, 1))
 
     def _postprocess_output(self, output, audio_ranges=None, **kwargs):
         if audio_ranges is None or "audio_features" not in output:

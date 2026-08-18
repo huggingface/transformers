@@ -229,6 +229,7 @@ def make_legacy_audio_processor_alias(new_class: type, legacy_name: str) -> type
 
     Removal target: transformers v5.15. See [ADR 0002](docs/adr/0002-legacy-field-mapping.md).
     """
+
     def __init__(self, *args, **kwargs):
         warnings.warn(
             f"`{legacy_name}` is deprecated and will be removed in transformers v5.15. "
@@ -240,7 +241,9 @@ def make_legacy_audio_processor_alias(new_class: type, legacy_name: str) -> type
 
     def to_dict(self):
         output = new_class.to_dict(self)
-        output[self._type_key] = new_class.__name__
+        # Migrate only direct alias instances; user subclasses keep their own class name.
+        if type(self).__name__ == legacy_name:
+            output[self._type_key] = new_class.__name__
         return output
 
     return type(
