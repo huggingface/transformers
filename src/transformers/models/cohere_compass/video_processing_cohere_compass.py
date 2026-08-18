@@ -43,6 +43,14 @@ class CohereCompassVideoProcessorInitKwargs(VideosKwargs, total=False):
         The temporal patch size of the vision encoder.
     merge_size (`int`, *optional*, defaults to 2):
         The merge size of the vision encoder to llm encoder.
+    max_pixels_per_frame (`int`, *optional*):
+        Caps the total pixel budget (`size["longest_edge"]`) at `max(num_frames, 32) * max_pixels_per_frame`
+        per video. Without a cap, videos that sample fewer than `max_frames` frames spend the whole budget on
+        those frames and keep near-native per-frame resolution, so a short clip can cost almost as many tokens
+        as a long video. Set this to `size["longest_edge"] // max_frames` to make token cost scale with clip
+        duration. Videos sampling `max_frames` or more frames are unaffected. The frame count is floored at 32
+        when applying the cap, so tiny synthetic clips (for example 2-frame memory-profiling probes) keep a
+        usable budget instead of collapsing to near-minimum resolution.
     """
 
     patch_size: int
@@ -50,6 +58,7 @@ class CohereCompassVideoProcessorInitKwargs(VideosKwargs, total=False):
     merge_size: int
     min_frames: int
     max_frames: int
+    max_pixels_per_frame: int
 
 
 def smart_resize(
@@ -111,6 +120,7 @@ class CohereCompassVideoProcessor(BaseVideoProcessor):
     model_input_names = ["pixel_values_videos", "video_grid_thw"]
     min_frames = 4
     max_frames = 768
+    max_pixels_per_frame = None
 
     def __init__(self, **kwargs: Unpack[CohereCompassVideoProcessorInitKwargs]):
         super().__init__(**kwargs)
@@ -171,21 +181,27 @@ class CohereCompassVideoProcessor(BaseVideoProcessor):
         resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         factor: int,
         temporal_factor: int,
+        max_pixels_per_frame: int | None = None,
         **kwargs,
     ) -> "torch.Tensor":
         """Resize dynamically based on input video aspect ratio."""
         if not size.shortest_edge or not size.longest_edge:
             raise ValueError(f"`size` dict must contain 'shortest_edge' and 'longest_edge' keys but got {size}.")
 
+        num_frames = videos.shape[1]
+        max_pixels = size.longest_edge
+        if max_pixels_per_frame is not None:
+            max_pixels = min(max_pixels, max(num_frames, 32) * max_pixels_per_frame)
+
         height, width = videos.shape[-2:]
         resized_height, resized_width = smart_resize(
             height=height,
             width=width,
-            num_frames=videos.shape[1],
+            num_frames=num_frames,
             factor=factor,
             temporal_factor=temporal_factor,
             min_pixels=size.shortest_edge,
-            max_pixels=size.longest_edge,
+            max_pixels=max_pixels,
         )
         return super().resize(
             image=videos,
@@ -235,7 +251,7 @@ class CohereCompassVideoProcessor(BaseVideoProcessor):
 
     def _preprocess(
         self,
-        videos: list[torch.Tensor],
+        videos: list["torch.Tensor"],
         do_convert_rgb: bool = True,
         do_resize: bool = True,
         size: SizeDict | None = None,
@@ -248,6 +264,7 @@ class CohereCompassVideoProcessor(BaseVideoProcessor):
         patch_size: int | None = None,
         temporal_patch_size: int | None = None,
         merge_size: int | None = None,
+        max_pixels_per_frame: int | None = None,
         return_tensors: str | TensorType | None = None,
         **kwargs,
     ):
@@ -264,6 +281,7 @@ class CohereCompassVideoProcessor(BaseVideoProcessor):
                     resample=resample,
                     factor=patch_size * merge_size,
                     temporal_factor=temporal_patch_size,
+                    max_pixels_per_frame=max_pixels_per_frame,
                 )
             resized_videos_grouped[shape] = stacked_videos
         resized_videos = reorder_videos(resized_videos_grouped, grouped_videos_index)
