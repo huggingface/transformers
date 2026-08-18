@@ -125,7 +125,10 @@ inputs = processor.apply_chat_template(
     return_dict=True,
     return_tensors="pt",
     enable_thinking=False,
-    processor_kwargs={"num_frames": 8, "max_pixels": 896 * 896},
+    processor_kwargs={
+        "num_frames": 8,
+        "size": {"shortest_edge": 448 * 448, "longest_edge": 896 * 896},
+    },
 ).to(model.device, dtype=model.dtype)
 
 generated_ids = model.generate(**inputs, max_new_tokens=256)
