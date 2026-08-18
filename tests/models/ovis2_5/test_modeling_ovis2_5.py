@@ -816,6 +816,9 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         state_dict = model.state_dict()
 
         self.assertIn("model.vision_tower.embeddings.patch_embedding.weight", state_dict)
-        self.assertIn("model.visual_tokenizer.head.0.weight", state_dict)
+        self.assertIn("model.visual_tokenizer.head_linear.weight", state_dict)
+        self.assertIn("model.visual_tokenizer.head_norm.weight", state_dict)
+        self.assertIn("model.visual_tokenizer.head_norm.bias", state_dict)
         self.assertFalse(any("vision_tower.transformer" in key for key in state_dict))
         self.assertFalse(any("vision_tower.head_" in key for key in state_dict))
+        self.assertFalse(any("visual_tokenizer.head." in key for key in state_dict))
