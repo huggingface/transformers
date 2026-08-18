@@ -1276,21 +1276,17 @@ class SyntheticCacheTest(unittest.TestCase):
             "DynamicCache Scenario 2 layer 1 failed",
         )
 
-    def test_dynamic_cache_from_layers(self):
-        # Pre-created layers define a fixed cache layout instead of creating DynamicLayers automatically.
-        layers = [DynamicSlidingWindowLayer(4), DynamicLayer()]
-        cache = DynamicCache(layers=layers)
-        self.assertListEqual(cache.layers, layers)
-        self.assertIsNone(cache.layer_class_to_replicate)
+    def test_dynamic_cache_from_uninitialized_ddp_data(self):
+        cache = DynamicCache([(None, None, torch.tensor([4])), (None, None)])
 
-        # An explicitly empty list still defines a fixed layout rather than enabling automatic layer creation.
-        empty_cache = DynamicCache(layers=[])
-        self.assertListEqual(empty_cache.layers, [])
-        self.assertIsNone(empty_cache.layer_class_to_replicate)
+        self.assertIs(type(cache.layers[0]), DynamicSlidingWindowLayer)
+        self.assertEqual(cache.layers[0].sliding_window, 4)
+        self.assertFalse(cache.layers[0].is_initialized)
+        self.assertIs(type(cache.layers[1]), DynamicLayer)
+        self.assertFalse(cache.layers[1].is_initialized)
 
-        # Explicit layers and config-based initialization are mutually exclusive, even when the list is empty.
-        with self.assertRaisesRegex(ValueError, "cannot be used together"):
-            DynamicCache(config=LlamaConfig(), layers=[])
+        with self.assertRaises(ValueError):
+            DynamicCache([(None, torch.tensor([1]))])
 
     def test_dynamic_cache_batch_select_indices(self):
         """Select a subset of batches in-place using batch_select_indices."""
