@@ -1586,10 +1586,6 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
         self.block_size = assistant_model.config.block_size
         self.mask_token_id = assistant_model.config.mask_token_id
         self.noise_ids_mask = torch.tensor([self.mask_token_id] * (self.block_size - 1))[None, ...]
-        self.model_kwargs_overrides = {
-            **self.model_kwargs_overrides,
-            "output_hidden_states_layers": self.target_layer_ids,
-        }
 
         # Prepare a cache for the assistant, and activate the past recording
         self.cache = DFlashCache(config=self.assistant_model.config)
@@ -1602,39 +1598,7 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
         self.is_main_model_prefill = True
 
     def _prepare_noise_embeds(self, noise_ids: torch.LongTensor) -> torch.Tensor:
-        if hasattr(self.main_model_input_embeddings, "embed_norm"):
-            return self.main_model_input_embeddings(noise_ids, apply_norm=False)
-        return torch.nn.functional.embedding(noise_ids, self.main_model_input_embeddings.weight)
-
-    def _prepare_context_hidden_states(
-        self, model_outputs: ModelOutput, num_last_main_model_tokens: int
-    ) -> torch.Tensor:
-        hidden_states = model_outputs["hidden_states"]
-        context_hidden_states = [hidden_states[i + 1][:, :num_last_main_model_tokens] for i in self.target_layer_ids]
-
-        encoder_fc = getattr(getattr(self.assistant_model, "encoder", None), "fc", None)
-        device_mesh = getattr(encoder_fc, "_hf_device_mesh", None)
-        if getattr(encoder_fc, "_hf_tp_plan", None) != "rowwise" or device_mesh is None or device_mesh.size() == 1:
-            return torch.cat(context_hidden_states, dim=-1)
-
-        rank = device_mesh.get_local_rank()
-        world_size = device_mesh.size()
-        hidden_size = context_hidden_states[0].shape[-1]
-        total_size = hidden_size * len(context_hidden_states)
-        local_size = (total_size + world_size - 1) // world_size
-        start = rank * local_size
-        end = min(start + local_size, total_size)
-        shards = []
-        for layer_idx, hidden_states in enumerate(context_hidden_states):
-            layer_start = layer_idx * hidden_size
-            layer_end = layer_start + hidden_size
-            slice_start = max(start, layer_start)
-            slice_end = min(end, layer_end)
-            if slice_start < slice_end:
-                shards.append(hidden_states[..., slice_start - layer_start : slice_end - layer_start])
-        if len(shards) == 0:
-            return context_hidden_states[0][..., :0]
-        return torch.cat(shards, dim=-1)
+        return self.main_model_input_embeddings(noise_ids, apply_norm=False)
 
     def get_candidates(
         self,
@@ -1664,7 +1628,9 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
         num_last_main_model_tokens = n_last_matches + 1 if not self.is_main_model_prefill else input_ids.shape[1] - 1
         # The hidden states hold all tokens from the last main model's forward on all the candidates. We need the
         # hidden states of only accepted tokens thus crop out the rest
-        context_hidden_states = self._prepare_context_hidden_states(model_outputs, num_last_main_model_tokens)
+        hidden_states = model_outputs["hidden_states"]
+        context_hidden_states = [hidden_states[i + 1][:, :num_last_main_model_tokens] for i in self.target_layer_ids]
+        context_hidden_states = torch.cat(context_hidden_states, dim=-1)
 
         # We need to tell the cache how many new states to expect into its k/v states, additional to the "noise" or "diffusion window"
         self.cache.set_previous_accepted_tokens(num_last_main_model_tokens)

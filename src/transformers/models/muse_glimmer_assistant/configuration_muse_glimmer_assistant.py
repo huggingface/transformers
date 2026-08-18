@@ -51,7 +51,7 @@ class MuseGlimmerAssistantConfig(PreTrainedConfig):
     model_type = "muse_glimmer_assistant"
     default_theta = 500000.0
     base_model_tp_plan = {
-        "encoder.fc": "rowwise",
+        "encoder.fc": "rowwise_split_input",
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
