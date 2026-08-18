@@ -30,7 +30,7 @@ if is_vision_available():
 
 
 if is_torchvision_available():
-    from transformers import Ovis2_5VideoProcessor
+    from transformers import Glm4vVideoProcessor, Ovis2_5VideoProcessor
     from transformers.models.ovis2_5.image_processing_ovis2_5 import smart_resize
 
 
@@ -255,3 +255,13 @@ class Ovis2_5VideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
         self.assertEqual(tuple(output.pixel_values_videos.shape), (48, 1536))
         self.assertEqual(output.video_grid_thw.tolist(), [[2, 4, 6]])
         self.assertEqual(video_processor.get_number_of_video_patches(3, 64, 96), 48)
+
+    def test_patchify_order_matches_glm4v(self):
+        video = torch.arange(3 * 3 * 64 * 96, dtype=torch.float32).reshape(1, 3, 3, 64, 96)
+        kwargs = {"patch_size": 16, "merge_size": 2, "temporal_patch_size": 2}
+
+        actual = self.video_processor.patchify(video, **kwargs)
+        expected = Glm4vVideoProcessor().patchify(video, **kwargs)
+
+        torch.testing.assert_close(actual[0], expected[0])
+        self.assertEqual(actual[1:], expected[1:])
