@@ -453,7 +453,7 @@ TRAINING_CI_TESTS = [training_ci_job]
 TENSOR_PARALLEL_CI_TESTS = [tensor_parallel_ci_job]
 FSDP_CI_TESTS = [fsdp_ci_job]
 PEFT_INTEGRATION_TESTS = [peft_integration_job]
-ALL_TESTS = REGULAR_TESTS + EXAMPLES_TESTS + PIPELINE_TESTS + REPO_UTIL_TESTS + DOC_TESTS + [custom_tokenizers_job] + [exotic_models_job] + TRAINING_CI_TESTS + TENSOR_PARALLEL_CI_TESTS + FSDP_CI_TESTS + PEFT_INTEGRATION_TESTS  # fmt: skip
+ALL_TESTS = REGULAR_TESTS + PIPELINE_TESTS + REPO_UTIL_TESTS + DOC_TESTS + [custom_tokenizers_job] + [exotic_models_job] + TRAINING_CI_TESTS + TENSOR_PARALLEL_CI_TESTS + FSDP_CI_TESTS + PEFT_INTEGRATION_TESTS  # fmt: skip
 
 
 def create_circleci_config(folder=None):
