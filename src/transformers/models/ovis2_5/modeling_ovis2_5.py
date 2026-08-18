@@ -42,7 +42,6 @@ from ...utils.generic import (
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids, get_vision_window_index
 from ..auto import AutoModel
-from ..qwen3 import Qwen3Config
 from .configuration_ovis2_5 import Ovis2_5Config, Ovis2_5VisionConfig
 
 
@@ -598,15 +597,14 @@ class Ovis2_5VisionModel(Ovis2_5PreTrainedModel):
 class Ovis2_5Model(Ovis2_5PreTrainedModel):
     def __init__(self, config: Ovis2_5Config):
         super().__init__(config)
-        vision_config: Ovis2_5VisionConfig = config.vision_config
-        text_config: Qwen3Config = config.text_config
-        self.vision_tower = Ovis2_5VisionModel(vision_config)
-        self.visual_tokenizer = Ovis2_5VisualTokenProjector(vision_config)
+        self.vision_tower = Ovis2_5VisionModel(config.vision_config)
+        self.visual_tokenizer = Ovis2_5VisualTokenProjector(config.vision_config)
+        text_hidden_size = getattr(config.text_config, "hidden_size")
         self.visual_embeddings_table = nn.Embedding(
             config.visual_vocab_size,
-            text_config.hidden_size,
+            text_hidden_size,
         )
-        self.language_model = AutoModel.from_config(text_config)
+        self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()
 
     @accepts_precomputed_kwargs(modality="image")
@@ -828,8 +826,9 @@ class Ovis2_5ForConditionalGeneration(Ovis2_5PreTrainedModel, GenerationMixin):
     def __init__(self, config: Ovis2_5Config):
         super().__init__(config)
         self.model = Ovis2_5Model(config)
-        text_config: Qwen3Config = config.text_config
-        self.lm_head = nn.Linear(text_config.hidden_size, text_config.vocab_size, bias=False)
+        text_hidden_size = getattr(config.text_config, "hidden_size")
+        text_vocab_size = getattr(config.text_config, "vocab_size")
+        self.lm_head = nn.Linear(text_hidden_size, text_vocab_size, bias=False)
         self.post_init()
 
     def get_output_embeddings(self) -> nn.Module:

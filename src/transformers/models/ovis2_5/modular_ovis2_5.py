@@ -36,11 +36,10 @@ from ...vision_utils import (
     get_vision_position_ids,
     get_vision_window_index,
 )
-from ..auto import AutoConfig, AutoModel
+from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..ovis2.modeling_ovis2 import Ovis2ForConditionalGeneration, Ovis2Model
 from ..qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, Qwen2VLImageProcessorKwargs
-from ..qwen3 import Qwen3Config
 from ..video_llama_3.modeling_video_llama_3 import (
     VideoLlama3CausalLMOutputWithPast,
     VideoLlama3ModelOutputWithPast,
@@ -196,7 +195,7 @@ class Ovis2_5Config(PreTrainedConfig):
     sub_configs = {"vision_config": Ovis2_5VisionConfig, "text_config": AutoConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
 
-    text_config: Qwen3Config | dict | None = None
+    text_config: PreTrainedConfig | dict | None = None
     vision_config: Ovis2_5VisionConfig | dict | None = None
     visual_vocab_size: int = 65536
     image_token_id: int = 151669
@@ -209,27 +208,22 @@ class Ovis2_5Config(PreTrainedConfig):
 
     # Ignore copy
     def __post_init__(self, **kwargs):
-        vision_config = self.vision_config
-        if isinstance(vision_config, dict):
-            vision_config = dict(vision_config)
-            vision_config.pop("model_type", None)
-            vision_config = Ovis2_5VisionConfig(**vision_config)
-        elif vision_config is None:
-            vision_config = Ovis2_5VisionConfig()
-        self.vision_config = vision_config
+        if isinstance(self.vision_config, dict):
+            # Released configs label this remote-code tower as `siglip2_navit`; the native tower type is fixed here.
+            self.vision_config.pop("model_type", None)
+            self.vision_config = Ovis2_5VisionConfig(**self.vision_config)
+        elif self.vision_config is None:
+            self.vision_config = Ovis2_5VisionConfig()
 
-        text_config = self.text_config
-        if isinstance(text_config, dict):
-            text_config = dict(text_config)
-            text_config.pop("model_type", None)
-            text_config = Qwen3Config(**text_config)
-        elif text_config is None:
-            text_config = Qwen3Config()
-        self.text_config = text_config
+        if isinstance(self.text_config, dict):
+            model_type = self.text_config.pop("model_type", "qwen3")
+            self.text_config = CONFIG_MAPPING[model_type](**self.text_config)
+        elif self.text_config is None:
+            self.text_config = CONFIG_MAPPING["qwen3"]()
 
-        vision_config.vocab_size = self.visual_vocab_size
-        if not self.tie_word_embeddings and text_config.tie_word_embeddings:
-            self.tie_word_embeddings = text_config.tie_word_embeddings
+        self.vision_config.vocab_size = self.visual_vocab_size
+        if not self.tie_word_embeddings and self.text_config.tie_word_embeddings:
+            self.tie_word_embeddings = self.text_config.tie_word_embeddings
         super().__post_init__(**kwargs)
 
 
@@ -498,15 +492,14 @@ class Ovis2_5VisionModel(Ovis2_5PreTrainedModel):
 class Ovis2_5Model(Ovis2Model):
     def __init__(self, config: Ovis2_5Config):
         PreTrainedModel.__init__(self, config)
-        vision_config: Ovis2_5VisionConfig = config.vision_config
-        text_config: Qwen3Config = config.text_config
-        self.vision_tower = Ovis2_5VisionModel(vision_config)
-        self.visual_tokenizer = Ovis2_5VisualTokenProjector(vision_config)
+        self.vision_tower = Ovis2_5VisionModel(config.vision_config)
+        self.visual_tokenizer = Ovis2_5VisualTokenProjector(config.vision_config)
+        text_hidden_size = getattr(config.text_config, "hidden_size")
         self.visual_embeddings_table = nn.Embedding(
             config.visual_vocab_size,
-            text_config.hidden_size,
+            text_hidden_size,
         )
-        self.language_model = AutoModel.from_config(text_config)
+        self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()
 
     @accepts_precomputed_kwargs(modality="image")
@@ -693,8 +686,9 @@ class Ovis2_5ForConditionalGeneration(Ovis2ForConditionalGeneration):
     def __init__(self, config: Ovis2_5Config):
         PreTrainedModel.__init__(self, config)
         self.model = Ovis2_5Model(config)
-        text_config: Qwen3Config = config.text_config
-        self.lm_head = nn.Linear(text_config.hidden_size, text_config.vocab_size, bias=False)
+        text_hidden_size = getattr(config.text_config, "hidden_size")
+        text_vocab_size = getattr(config.text_config, "vocab_size")
+        self.lm_head = nn.Linear(text_hidden_size, text_vocab_size, bias=False)
         self.post_init()
 
     @auto_docstring
