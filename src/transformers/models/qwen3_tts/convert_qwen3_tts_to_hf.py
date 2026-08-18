@@ -162,10 +162,11 @@ def create_config_from_checkpoint(checkpoint_path: Path) -> Qwen3TTSConfig:
         rope_theta = talker_dict.get("rope_theta")
         if rope_theta is not None:
             rope_params["rope_theta"] = rope_theta
-        # The talker feeds identical position ids to all mRoPE sections, so the interleaved and non-interleaved
-        # layouts are numerically equivalent. We use the standard (non-interleaved) implementation from Qwen2-VL,
-        # so force the flag off to keep the config consistent with the modeling code.
-        rope_params["interleaved"] = False
+        # The original applies mRoPE with an interleaved section layout. The talker feeds identical position
+        # ids to all three sections, so both layouts assign every frequency the same position and are
+        # numerically equivalent; the modeling code therefore uses Qwen2-VL's standard (non-interleaved)
+        # `apply_multimodal_rotary_pos_emb` and the flag is dropped rather than carried as a dead config field.
+        rope_params.pop("interleaved", None)
         talker_filtered["rope_parameters"] = rope_params
 
     # The code predictor declares no `rope_scaling`, only a `rope_theta`, so the two are merged
