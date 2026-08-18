@@ -16,6 +16,7 @@ Feature extraction saving/loading class for common feature extractors.
 """
 
 import os
+import warnings
 from typing import TYPE_CHECKING, Any, TypeVar, Union
 
 from .preprocessing_base import BatchFeature as BatchFeature
@@ -41,15 +42,13 @@ SpecificFeatureExtractorType = TypeVar("SpecificFeatureExtractorType", bound="Fe
 
 class FeatureExtractionMixin(PreprocessingMixin):
     """
-    Saving/loading mixin for feature extractors.
-
-    All the shared config resolution / serialization / hub logic now lives in [`PreprocessingMixin`];
-    this class only carries the feature-extractor identity attributes and the legacy method aliases.
+    Deprecated saving/loading mixin for feature extractors. Subclass [`PreprocessingMixin`] directly
+    (or, for audio, [`BaseAudioProcessor`]) and set the identity attributes below on your own class.
     """
 
     _config_name = FEATURE_EXTRACTOR_NAME
     _type_key = "feature_extractor_type"
-    _nested_config_keys = ["feature_extractor"]
+    _nested_config_keys = ["feature_extractor", "audio_processor"]
     _auto_class_default = "AutoFeatureExtractor"
     _file_type_label = "feature extractor"
     _excluded_dict_keys = {"mel_filters", "window"}
@@ -59,6 +58,14 @@ class FeatureExtractionMixin(PreprocessingMixin):
     _extra_init_pops = []
     _config_filename_kwarg = None
     _subfolder_default = None
+
+    def __init__(self, **kwargs):
+        warnings.warn(
+            "`FeatureExtractionMixin` is deprecated and will be removed in transformers v5.15. Subclass "
+            "`PreprocessingMixin` instead (or `BaseAudioProcessor` for audio models).",
+            FutureWarning,
+        )
+        super().__init__(**kwargs)
 
     @classmethod
     def get_feature_extractor_dict(
