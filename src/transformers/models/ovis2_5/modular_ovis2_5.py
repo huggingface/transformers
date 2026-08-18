@@ -395,7 +395,6 @@ class Ovis2_5VisionEncoder(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
-        output_hidden_states = kwargs.pop("output_hidden_states", self.config.output_hidden_states)
         spatial_merge_size = self.config.hidden_stride
         spatial_merge_unit = spatial_merge_size**2
         window_index, cu_window_seqlens = get_vision_window_index(
@@ -419,7 +418,6 @@ class Ovis2_5VisionEncoder(nn.Module):
         )
         reverse_indices = torch.argsort(window_index)
 
-        recorded_hidden_states = None
         for layer_index, encoder_layer in enumerate(self.layers):
             use_full_attention = self.config.layer_types[layer_index] == "full_attention"
             layer_cu_seqlens = cu_seqlens if use_full_attention else cu_window_seqlens
@@ -430,14 +428,9 @@ class Ovis2_5VisionEncoder(nn.Module):
                 max_seqlen=max_seqlen if use_full_attention else None,
                 **kwargs,
             )
-            if output_hidden_states:
-                recorded_hidden_states = self.hidden_state_recorder(hidden_states, reverse_indices, spatial_merge_unit)
 
-        if recorded_hidden_states is not None:
-            hidden_states = recorded_hidden_states
-        else:
-            hidden_states = hidden_states.reshape(sequence_length // spatial_merge_unit, spatial_merge_unit, -1)
-            hidden_states = hidden_states[reverse_indices].reshape(sequence_length, -1)
+        hidden_states = hidden_states.reshape(sequence_length // spatial_merge_unit, spatial_merge_unit, -1)
+        hidden_states = hidden_states[reverse_indices].reshape(sequence_length, -1)
         return BaseModelOutput(last_hidden_state=hidden_states)
 
 
