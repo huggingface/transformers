@@ -1028,6 +1028,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("vibevoice_acoustic_tokenizer", "VibeVoiceAcousticTokenizerFeatureExtractor"),
         ("voxtral_realtime", "VoxtralRealtimeFeatureExtractor"),
         ("wav2vec2", "Wav2Vec2FeatureExtractor"),
+        ("weathernext2", "WeatherNext2FeatureExtractor"),
         ("whisper", "WhisperFeatureExtractor"),
         ("xcodec2", "Xcodec2FeatureExtractor"),
     ]
