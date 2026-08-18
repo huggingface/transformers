@@ -5116,15 +5116,6 @@ class ModelTesterMixin(ExportTesterMixin):
                     hasattr(outputs, "pooler_output"),
                     "get_text_features() must return a BaseModelOutput with pooler_output",
                 )
-                self.assertTrue(
-                    hasattr(outputs, "hidden_states"),
-                    "get_text_features() must return a BaseModelOutput with hidden_states",
-                )
-                if self.has_attentions:
-                    self.assertTrue(
-                        hasattr(outputs, "attentions"),
-                        "get_text_features() must return a BaseModelOutput with attentions",
-                    )
 
                 # Test against (batch_size, seq_len, hidden_size)
                 last_hidden_state = outputs.last_hidden_state
@@ -5147,6 +5138,11 @@ class ModelTesterMixin(ExportTesterMixin):
 
             with torch.no_grad():
                 outputs = model.get_text_features(**inputs_dict)
+            self.assertTrue(
+                hasattr(outputs, "hidden_states"),
+                "get_text_features() must return a BaseModelOutput with hidden_states",
+            )
+
             # hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
             hidden_states = outputs.hidden_states
             expected_num_hidden_states = self._text_features_get_expected_num_hidden_states()
@@ -5180,6 +5176,11 @@ class ModelTesterMixin(ExportTesterMixin):
 
             with torch.no_grad():
                 outputs = model.get_text_features(**inputs_dict)
+            self.assertTrue(
+                hasattr(outputs, "attentions"),
+                "get_text_features() must return a BaseModelOutput with attentions",
+            )
+
             attentions = outputs.attentions
             # model.text_model(**inputs_dict) also no attentions for aimv2
             expected_num_attentions = self._text_features_get_expected_num_attentions()
@@ -5234,16 +5235,6 @@ class ModelTesterMixin(ExportTesterMixin):
                     hasattr(outputs, "pooler_output"),
                     "get_image_features() must return a BaseModelOutput with pooler_output",
                 )
-                self.assertTrue(
-                    hasattr(outputs, "hidden_states"),
-                    "get_image_features() must return a BaseModelOutput with hidden_states",
-                )
-                if self.has_attentions:
-                    self.assertTrue(
-                        hasattr(outputs, "attentions"),
-                        "get_image_features() must return a BaseModelOutput with attentions",
-                    )
-
                 if getattr(self, "skip_test_image_features_output_shape", False):
                     return
 
@@ -5272,6 +5263,7 @@ class ModelTesterMixin(ExportTesterMixin):
                     "out_hidden_size",
                     "hidden_size",
                     "hidden_dim",
+                    "mm_embed_dim",  # gemma4-only
                 ]
                 hidden_size = None
                 for attr in attribute_candidates:
@@ -5317,6 +5309,11 @@ class ModelTesterMixin(ExportTesterMixin):
             with torch.no_grad():
                 outputs = model.get_image_features(**inputs_dict)
             # hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+            self.assertTrue(
+                hasattr(outputs, "hidden_states"),
+                "get_image_features() must return a BaseModelOutput with hidden_states",
+            )
+
             hidden_states = outputs.hidden_states
             expected_num_hidden_states = self._image_features_get_expected_num_hidden_states()
             self.assertIsNotNone(hidden_states, "hidden_states should not be None")
@@ -5352,6 +5349,11 @@ class ModelTesterMixin(ExportTesterMixin):
 
             with torch.no_grad():
                 outputs = model.get_image_features(**inputs_dict)
+
+            self.assertTrue(
+                hasattr(outputs, "attentions"),
+                "get_image_features() must return a BaseModelOutput with attentions",
+            )
             attentions = outputs.attentions
             # model.text_model(**inputs_dict) also no attentions for aimv2
             expected_num_attentions = self._image_features_get_expected_num_attentions()
@@ -5411,16 +5413,6 @@ class ModelTesterMixin(ExportTesterMixin):
                     hasattr(outputs, "pooler_output"),
                     "get_audio_features() must return a BaseModelOutputWithPooling with pooler_output",
                 )
-                self.assertTrue(
-                    hasattr(outputs, "hidden_states"),
-                    "get_audio_features() must return a BaseModelOutputWithPooling with hidden_states",
-                )
-                if self.has_attentions:
-                    self.assertTrue(
-                        hasattr(outputs, "attentions"),
-                        "get_audio_features() must return a BaseModelOutputWithPooling with attentions",
-                    )
-
                 if getattr(self, "skip_test_audio_features_output_shape", False):
                     return
 
@@ -5465,6 +5457,11 @@ class ModelTesterMixin(ExportTesterMixin):
 
             with torch.no_grad():
                 outputs = model.get_audio_features(**inputs_dict)
+
+            self.assertTrue(
+                hasattr(outputs, "hidden_states"),
+                "get_audio_features() must return a BaseModelOutputWithPooling with hidden_states",
+            )
             hidden_states = outputs.hidden_states
             expected_num_hidden_states = self._audio_features_get_expected_num_hidden_states()
             self.assertIsNotNone(hidden_states, "hidden_states should not be None")
@@ -5497,6 +5494,12 @@ class ModelTesterMixin(ExportTesterMixin):
 
             with torch.no_grad():
                 outputs = model.get_audio_features(**inputs_dict)
+
+            self.assertTrue(
+                hasattr(outputs, "attentions"),
+                "get_audio_features() must return a BaseModelOutputWithPooling with attentions",
+            )
+
             attentions = outputs.attentions
             expected_num_attentions = self._audio_features_get_expected_num_attentions()
             self.assertIsNotNone(attentions, "attentions should not be None")
@@ -5550,16 +5553,6 @@ class ModelTesterMixin(ExportTesterMixin):
                     hasattr(outputs, "pooler_output"),
                     "get_video_features() must return a BaseModelOutput with pooler_output",
                 )
-                self.assertTrue(
-                    hasattr(outputs, "hidden_states"),
-                    "get_video_features() must return a BaseModelOutput with hidden_states",
-                )
-                if self.has_attentions:
-                    self.assertTrue(
-                        hasattr(outputs, "attentions"),
-                        "get_video_features() must return a BaseModelOutput with attentions",
-                    )
-
                 if getattr(self, "skip_test_video_features_output_shape", False):
                     return
 
@@ -5614,6 +5607,12 @@ class ModelTesterMixin(ExportTesterMixin):
 
             with torch.no_grad():
                 outputs = model.get_video_features(**inputs_dict)
+
+            self.assertTrue(
+                hasattr(outputs, "hidden_states"),
+                "get_video_features() must return a BaseModelOutput with hidden_states",
+            )
+
             hidden_states = outputs.hidden_states
             expected_num_hidden_states = self._video_features_get_expected_num_hidden_states()
             self.assertIsNotNone(hidden_states, "hidden_states should not be None")
@@ -5646,6 +5645,12 @@ class ModelTesterMixin(ExportTesterMixin):
 
             with torch.no_grad():
                 outputs = model.get_video_features(**inputs_dict)
+
+            self.assertTrue(
+                hasattr(outputs, "attentions"),
+                "get_video_features() must return a BaseModelOutput with attentions",
+            )
+
             attentions = outputs.attentions
             expected_num_attentions = self._video_features_get_expected_num_attentions()
             self.assertIsNotNone(attentions, "attentions should not be None")

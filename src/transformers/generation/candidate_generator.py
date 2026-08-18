@@ -294,15 +294,11 @@ class AssistedCandidateGenerator(CandidateGenerator):
         """Update past key values and attention masks for subsequent generation rounds."""
         has_past_key_values = self.assistant_kwargs.get("past_key_values", None) is not None
         if has_past_key_values:
-            # Crop the cache to align with the next round's input_ids. The target size is
-            # input_ids.shape[-1] - 1 - remove_from_pkv - num_added_tokens (= num_added_tokens worth
-            # of tokens are the "bonus" token added by the main model and processed next round).
-            # We compute how many tokens to remove rather than cropping to an absolute index to
-            # comply with the current Cache.crop() API (negative = remove from end).
-            target_size = input_ids.shape[-1] - 1 - remove_from_pkv - num_added_tokens
-            current_size = self.assistant_kwargs["past_key_values"].get_seq_length()
-            if current_size > target_size:
-                self.assistant_kwargs["past_key_values"].crop(target_size - current_size)
+            target_cache_size = input_ids.shape[-1] - 1 - remove_from_pkv - num_added_tokens
+            current_cache_size = self.assistant_kwargs["past_key_values"].get_seq_length()
+            tokens_to_remove = current_cache_size - target_cache_size
+            if tokens_to_remove >= 0:
+                self.assistant_kwargs["past_key_values"].crop(-tokens_to_remove)
             self.assistant_kwargs = _prepare_attention_mask(
                 self.assistant_kwargs, input_ids.shape[-1], self.assistant_model.config.is_encoder_decoder
             )
@@ -1586,6 +1582,7 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
 
         # Get the assistant model and the embeddings of the main model
         self.assistant_model = assistant_model
+        self.device = self.assistant_model.device
         self.main_model_max_length = generation_config.max_length
         self.main_model_input_embeddings = main_model_input_embeddings
         self.main_model_output_embeddings = main_model_output_embeddings
@@ -1635,7 +1632,11 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
         # The hidden states hold all tokens from the last main model's forward on all the candidates. We need the
         # hidden states of only accepted tokens thus crop out the rest
         context_hidden_states: torch.Tensor = torch.cat(
-            [model_outputs.hidden_states[i + 1][:, :num_last_main_model_tokens] for i in self.target_layer_ids], dim=-1
+            [
+                model_outputs.hidden_states[i + 1][:, :num_last_main_model_tokens].to(self.device)
+                for i in self.target_layer_ids
+            ],
+            dim=-1,
         )
 
         # We need to tell the cache how many new states to expect into its k/v states, additional to the "noise" or "diffusion window"
@@ -1667,30 +1668,35 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
 
         # Get assistant model outputs
         outputs = self.assistant_model(
-            noise_embeds=noise_embeds,
+            noise_embeds=noise_embeds.to(self.device),
             context_hidden_states=context_hidden_states,
-            position_ids=position_ids,
-            attention_mask=attention_mask,
+            position_ids=position_ids.to(self.device),
+            attention_mask=attention_mask.to(self.device),
             past_key_values=self.cache,
         )
 
         # Once we arrive here the first time, it's no longer the case
         self.is_main_model_prefill = False
 
-        candidate_logits = self.main_model_output_embeddings(outputs.last_hidden_state)[:, 1:]
+        candidate_logits = self.main_model_output_embeddings(
+            outputs.last_hidden_state[:, 1:].to(self.main_model_output_embeddings.weight.device)
+        ).to(input_ids.device)
 
         # Potentially allow some logits manipulation and sampling - in this case we need to loop over new tokens to correctly apply processors
         if self.logits_processor is not None:
             candidate_ids = input_ids
+            # Upcast for logit manipulations
+            candidate_logits = candidate_logits.to(dtype=torch.float32)
             # We need to sample 1 by 1 for the processors
             for i in range(candidate_logits.shape[1]):
-                next_token_logits = self.logits_processor(candidate_ids, candidate_logits[:, i, :].float())
+                # Re-assign so we later return the correct logits
+                candidate_logits[:, i, :] = self.logits_processor(candidate_ids, candidate_logits[:, i, :])
                 if self.do_sample:
-                    probs = nn.functional.softmax(next_token_logits, dim=-1, dtype=torch.float32)
+                    probs = nn.functional.softmax(candidate_logits[:, i, :], dim=-1, dtype=torch.float32)
                     next_token = torch.multinomial(probs, num_samples=1)
                 else:
-                    next_token = torch.argmax(next_token_logits, dim=-1, keepdim=True)
-                # Append it to the full sequence
+                    next_token = torch.argmax(candidate_logits[:, i, :], dim=-1, keepdim=True)
+                # Append it to the full sequence to be used by the next round of `self.logits_processor`
                 candidate_ids = torch.cat([candidate_ids, next_token], dim=-1)
         # Here we can vectorize as we don't have any processors
         else:
