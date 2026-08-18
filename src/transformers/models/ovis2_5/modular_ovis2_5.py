@@ -175,8 +175,6 @@ class Ovis2_5VisionConfig(PreTrainedConfig):
 @strict
 class Ovis2_5Config(PreTrainedConfig):
     r"""
-    visual_vocab_size (`int`, *optional*, defaults to 65536):
-        Size of the visual-token vocabulary shared by the visual tokenizer and visual embedding table.
     image_token_id (`int`, *optional*, defaults to 151669):
         Text-vocabulary token used as the placeholder for one image atom.
     video_token_id (`int`, *optional*, defaults to 151669):
@@ -197,7 +195,6 @@ class Ovis2_5Config(PreTrainedConfig):
 
     text_config: PreTrainedConfig | dict | None = None
     vision_config: Ovis2_5VisionConfig | dict | None = None
-    visual_vocab_size: int = 65536
     image_token_id: int = 151669
     video_token_id: int = 151669
     image_start_token_id: int = 151670
@@ -221,7 +218,6 @@ class Ovis2_5Config(PreTrainedConfig):
         elif self.text_config is None:
             self.text_config = CONFIG_MAPPING["qwen3"]()
 
-        self.vision_config.vocab_size = self.visual_vocab_size
         if not self.tie_word_embeddings and self.text_config.tie_word_embeddings:
             self.tie_word_embeddings = self.text_config.tie_word_embeddings
         super().__post_init__(**kwargs)
@@ -495,8 +491,9 @@ class Ovis2_5Model(Ovis2Model):
         self.vision_tower = Ovis2_5VisionModel(config.vision_config)
         self.visual_tokenizer = Ovis2_5VisualTokenProjector(config.vision_config)
         text_hidden_size = getattr(config.text_config, "hidden_size")
+        visual_vocab_size = getattr(config.vision_config, "vocab_size")
         self.visual_embeddings_table = nn.Embedding(
-            config.visual_vocab_size,
+            visual_vocab_size,
             text_hidden_size,
         )
         self.language_model = AutoModel.from_config(config.text_config)
@@ -523,10 +520,10 @@ class Ovis2_5Model(Ovis2Model):
         )
         visual_tokens = self.visual_tokenizer(vision_outputs.pooler_output)
         visual_features = torch.matmul(visual_tokens, self.visual_embeddings_table.weight)
-        indicator_start = self.config.visual_vocab_size - self.vision_tower.config.num_visual_indicator_tokens
+        indicator_start = self.vision_tower.config.vocab_size - self.vision_tower.config.num_visual_indicator_tokens
         indicator_token_ids = torch.arange(
             indicator_start,
-            self.config.visual_vocab_size,
+            self.vision_tower.config.vocab_size,
             dtype=torch.long,
             device=visual_features.device,
         )

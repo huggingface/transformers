@@ -600,8 +600,9 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
         self.vision_tower = Ovis2_5VisionModel(config.vision_config)
         self.visual_tokenizer = Ovis2_5VisualTokenProjector(config.vision_config)
         text_hidden_size = getattr(config.text_config, "hidden_size")
+        visual_vocab_size = getattr(config.vision_config, "vocab_size")
         self.visual_embeddings_table = nn.Embedding(
-            config.visual_vocab_size,
+            visual_vocab_size,
             text_hidden_size,
         )
         self.language_model = AutoModel.from_config(config.text_config)
@@ -628,10 +629,10 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
         )
         visual_tokens = self.visual_tokenizer(vision_outputs.pooler_output)
         visual_features = torch.matmul(visual_tokens, self.visual_embeddings_table.weight)
-        indicator_start = self.config.visual_vocab_size - self.vision_tower.config.num_visual_indicator_tokens
+        indicator_start = self.vision_tower.config.vocab_size - self.vision_tower.config.num_visual_indicator_tokens
         indicator_token_ids = torch.arange(
             indicator_start,
-            self.config.visual_vocab_size,
+            self.vision_tower.config.vocab_size,
             dtype=torch.long,
             device=visual_features.device,
         )

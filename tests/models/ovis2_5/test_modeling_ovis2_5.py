@@ -180,7 +180,6 @@ class Ovis2_5VisionText2TextModelTester(VLMModelTester):
         return Ovis2_5Config(
             text_config=self.get_text_config(),
             vision_config=self.get_vision_config(),
-            visual_vocab_size=self.visual_vocab_size,
             image_token_id=self.image_token_id,
             video_token_id=self.video_token_id,
             image_start_token_id=self.image_start_token_id,
@@ -532,7 +531,6 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         config = Ovis2_5Config(
             text_config=text_config,
             vision_config=vision_config,
-            visual_vocab_size=self.model_tester.visual_vocab_size,
             image_token_id=self.model_tester.image_token_id,
             video_token_id=self.model_tester.video_token_id,
             image_start_token_id=self.model_tester.image_start_token_id,
@@ -548,7 +546,9 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         self.assertIn("vision_config", serialized_config)
         self.assertNotIn("llm_config", serialized_config)
         self.assertNotIn("vit_config", serialized_config)
+        self.assertNotIn("visual_vocab_size", serialized_config)
         self.assertNotIn("visual_atom_token_id", serialized_config)
+        self.assertEqual(config.vision_config.vocab_size, self.model_tester.visual_vocab_size)
         self.assertEqual(config.image_token_id, config.video_token_id)
 
     def test_vision_layer_types_validation(self):
@@ -592,6 +592,7 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         self.assertIsInstance(config.text_config, Qwen3Config)
         self.assertIsInstance(config.vision_config, Ovis2_5VisionConfig)
         self.assertEqual(config.text_config.hidden_size, 2048)
+        self.assertEqual(config.vision_config.vocab_size, self.model_tester.visual_vocab_size)
         self.assertEqual(
             config.vision_config.layer_types,
             ["sliding_attention", "full_attention", "sliding_attention"],

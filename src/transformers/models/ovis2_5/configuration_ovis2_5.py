@@ -77,8 +77,6 @@ class Ovis2_5VisionConfig(PreTrainedConfig):
 @strict
 class Ovis2_5Config(PreTrainedConfig):
     r"""
-    visual_vocab_size (`int`, *optional*, defaults to 65536):
-        Size of the visual-token vocabulary shared by the visual tokenizer and visual embedding table.
     image_token_id (`int`, *optional*, defaults to 151669):
         Text-vocabulary token used as the placeholder for one image atom.
     video_token_id (`int`, *optional*, defaults to 151669):
@@ -99,7 +97,6 @@ class Ovis2_5Config(PreTrainedConfig):
 
     text_config: PreTrainedConfig | dict | None = None
     vision_config: Ovis2_5VisionConfig | dict | None = None
-    visual_vocab_size: int = 65536
     image_token_id: int = 151669
     video_token_id: int = 151669
     image_start_token_id: int = 151670
@@ -123,7 +120,6 @@ class Ovis2_5Config(PreTrainedConfig):
         elif self.text_config is None:
             self.text_config = CONFIG_MAPPING["qwen3"]()
 
-        self.vision_config.vocab_size = self.visual_vocab_size
         if not self.tie_word_embeddings and self.text_config.tie_word_embeddings:
             self.tie_word_embeddings = self.text_config.tie_word_embeddings
         super().__post_init__(**kwargs)

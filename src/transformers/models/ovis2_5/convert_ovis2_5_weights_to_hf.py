@@ -142,10 +142,11 @@ def convert_config(source: Path) -> tuple[Ovis2_5Config, int]:
     if "llm_config" not in original_config or "vit_config" not in original_config:
         raise ValueError("The source config must contain `llm_config` and `vit_config`.")
 
+    vision_config = _convert_vision_config(original_config["vit_config"])
+    vision_config["vocab_size"] = original_config.get("visual_vocab_size", 65536)
     config = Ovis2_5Config(
         text_config=_clean_subconfig(original_config["llm_config"]),
-        vision_config=_convert_vision_config(original_config["vit_config"]),
-        visual_vocab_size=original_config.get("visual_vocab_size", 65536),
+        vision_config=vision_config,
         dtype=original_config.get("torch_dtype", "bfloat16"),
     )
     config.architectures = ["Ovis2_5ForConditionalGeneration"]
