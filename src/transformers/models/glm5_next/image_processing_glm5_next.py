@@ -21,23 +21,19 @@
 import copy
 import math
 
-import numpy as np
 import torch
 from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
-from ...image_utils import ChannelDimension, PILImageResampling, SizeDict, get_image_size
-from ...processing_utils import Unpack, VideosKwargs
+from ...image_transforms import group_images_by_shape, reorder_images
+from ...image_utils import PILImageResampling, SizeDict
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, auto_docstring
-from ...video_processing_utils import BaseVideoProcessor
-from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 
 
-class Glm5NextVideoProcessorInitKwargs(VideosKwargs, total=False):
+class Glm5NextImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
-    max_image_size (`dict`):
-        Maximum image size metadata retained for processor compatibility.
     patch_size (`int`):
         Spatial patch size of the vision encoder.
     temporal_patch_size (`int`):
@@ -46,34 +42,21 @@ class Glm5NextVideoProcessorInitKwargs(VideosKwargs, total=False):
         Spatial merge size used before the language model.
     patch_expand_factor (`int`):
         Additional spatial alignment factor.
-    max_frames (`int`, *optional*):
-        Per-call frame cap. Defaults to `max_frame_count_dynamic` when unset.
-    max_duration (`int`, *optional*, defaults to 0):
-        Maximum video duration in seconds. A non-positive value disables the duration cap.
     min_image_tokens (`int`):
-        Minimum spatial token budget for a video.
+        Minimum number of tokens per image.
     max_image_tokens (`int`):
-        Maximum spatial token budget for a video.
-    fps_interval (`float`, *optional*, defaults to 2.0):
-        Target raw frame sampling rate in frames per second.
-    max_frame_count_dynamic (`int`, *optional*, defaults to 2048):
-        Maximum number of dynamically sampled frames.
+        Maximum number of tokens per image.
     resize_mode (`str`, *optional*, defaults to `"pad"`):
         Whether to distort to the aligned canvas (`"resize"`) or preserve aspect ratio and pad (`"pad"`).
     """
 
-    max_image_size: dict[str, int]
     patch_size: int
     temporal_patch_size: int
     merge_size: int
     patch_expand_factor: int
-    max_frames: int
 
-    max_duration: int
     min_image_tokens: int
     max_image_tokens: int
-    fps_interval: float
-    max_frame_count_dynamic: int
     resize_mode: str
 
 
@@ -221,124 +204,64 @@ def _validate_processor(processor):
         raise ValueError("resize_mode must be either 'resize' or 'pad'.")
 
 
+def _get_number_of_image_patches(processor, height: int, width: int, images_kwargs: dict | None = None) -> int:
+    processor = _with_processor_overrides(processor, images_kwargs or {})
+    factor = processor.patch_size * processor.merge_size * processor.patch_expand_factor
+    resized_height, resized_width, _ = _get_resize_dimensions(
+        processor,
+        processor.temporal_patch_size,
+        height,
+        width,
+        processor.temporal_patch_size,
+        factor,
+    )
+    return resized_height // processor.patch_size * (resized_width // processor.patch_size)
+
+
 @auto_docstring
-class Glm5NextVideoProcessor(BaseVideoProcessor):
+class Glm5NextImageProcessor(TorchvisionBackend):
+    do_resize = True
     resample = PILImageResampling.BICUBIC
     size = {"longest_edge": 1}
-    max_image_size = {"longest_edge": 28 * 28 * 2 * 30000}
+    default_to_square = False
+    do_rescale = True
+    rescale_factor = 1 / 255
+    do_normalize = True
     image_mean = None
     image_std = None
-    do_resize = True
-    do_rescale = True
-    do_normalize = True
     do_convert_rgb = True
-    do_sample_frames = True
     patch_size = None
     temporal_patch_size = None
-    max_duration = 0
     merge_size = None
-    valid_kwargs = Glm5NextVideoProcessorInitKwargs
-    num_frames = 16
-    fps = None
-
-    model_input_names = ["pixel_values_videos", "video_grid_thw"]
+    valid_kwargs = Glm5NextImageProcessorKwargs
+    model_input_names = ["pixel_values", "image_grid_thw"]
     patch_expand_factor = None
-    max_frames = None
     min_image_tokens = None
     max_image_tokens = None
-    fps_interval = 2.0
-    max_frame_count_dynamic = 2048
     resize_mode = "pad"
 
-    def __init__(self, **kwargs: Unpack[Glm5NextVideoProcessorInitKwargs]):
-        super().__init__(**kwargs)
+    @auto_docstring
+    def preprocess(self, images, **kwargs) -> BatchFeature:
+        self = _with_processor_overrides(self, kwargs)
         _validate_processor(self)
+        return super().preprocess(images, **kwargs)
 
-    def sample_frames(self, metadata: VideoMetadata, fps: int | float | None = None, **kwargs):
-        """
-        Args:
-            metadata (`VideoMetadata`):
-                Metadata of the video containing information about total duration, fps and total number of frames.
-            fps (`int` or `float`, *optional*):
-                Target frames to sample per second. Defaults to `self.fps`.
-        Returns:
-            np.ndarray:
-                Indices to sample video frames.
-        """
-        if metadata is None or getattr(metadata, "fps", None) is None:
-            raise ValueError(
-                "Asked to sample frames per second but no video metadata was provided. Pass a VideoMetadata object "
-                "or set do_sample_frames=False."
-            )
-
-        total_frames = metadata.total_num_frames
-        duration = metadata.duration
-        if not duration:
-            duration = round((total_frames - 1) / metadata.fps) + 1 if metadata.fps else 0
-
-        max_frames = kwargs.get("max_frames")
-        if max_frames is None:
-            max_frames = self.max_frame_count_dynamic
-        effective_duration = duration if self.max_duration <= 0 else min(duration, self.max_duration)
-        target_fps = fps if fps is not None else self.fps_interval
-        extract_t = min(int(effective_duration * target_fps), max_frames)
-
-        timestamps = [index / metadata.fps for index in range(total_frames)]
-        max_second = int(duration)
-        if total_frames < extract_t:
-            frame_indices = np.linspace(0, total_frames - 1, extract_t, dtype=int).tolist()
-        else:
-            frame_indices = []
-            current_second = 0
-            inverse_fps = 1 / target_fps
-            for frame_index, timestamp in enumerate(timestamps):
-                if timestamp >= current_second:
-                    current_second += inverse_fps
-                    frame_indices.append(frame_index)
-                    if current_second >= max_second:
-                        break
-
-        if len(frame_indices) < extract_t:
-            if frame_indices:
-                start, end = frame_indices[0], frame_indices[-1]
-            else:
-                start, end = 0, max(total_frames - 1, 0)
-            frame_indices = np.linspace(start, end, extract_t, dtype=int).tolist()
-        elif len(frame_indices) > extract_t:
-            frame_indices = np.linspace(0, total_frames - 1, extract_t, dtype=int).tolist()
-
-        frame_indices = list(dict.fromkeys(frame_indices))
-        if len(frame_indices) & 1:
-            frame_indices.append(frame_indices[-1])
-        return np.array(frame_indices)
-
-    def resize(self, videos, size, resample, factor, temporal_factor, **kwargs) -> "torch.Tensor":
-        """Resize dynamically based on input video aspect ratio."""
-        return _resize_torchvision(self, videos, videos.shape[1], resample, factor, temporal_factor)
+    def resize(self, images, size, resample, factor, temporal_factor, **kwargs) -> "torch.Tensor":
+        """Resize dynamically based on input image aspect ratio."""
+        return _resize_torchvision(self, images, temporal_factor, resample, factor, temporal_factor)
 
     def patchify(
         self,
-        videos: "torch.Tensor",
+        images: "torch.Tensor",
         patch_size: int,
         merge_size: int,
         temporal_patch_size: int,
     ) -> tuple["torch.Tensor", int, int]:
-        "Patchifies each video into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."
-        batch_size, num_frames, channel, resized_height, resized_width = videos.shape
-
-        # Check that videos have `num_frames` divisible by `temporal_patch_size`
-        if pad := -num_frames % temporal_patch_size:
-            repeats = videos[:, -1:].expand(-1, pad, -1, -1, -1)
-            videos = torch.cat((videos, repeats), dim=1)
-            num_frames += pad
-
-        grid_t = num_frames // temporal_patch_size
+        """Patchifies each image into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."""
+        batch_size, channel, resized_height, resized_width = images.shape
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
-
-        patches = videos.view(
+        patches = images.reshape(
             batch_size,
-            grid_t,
-            temporal_patch_size,
             channel,
             grid_h // merge_size,
             merge_size,
@@ -347,84 +270,98 @@ class Glm5NextVideoProcessor(BaseVideoProcessor):
             merge_size,
             patch_size,
         )
-        patches = patches.permute(0, 1, 4, 7, 5, 8, 3, 2, 6, 9)
-        flatten_patches = patches.reshape(
-            batch_size,
-            grid_t * grid_h * grid_w,
-            channel * temporal_patch_size * patch_size * patch_size,
+        patches = patches.permute(0, 2, 5, 3, 6, 1, 4, 7)
+        flatten_patches = (
+            patches.unsqueeze(6)
+            .expand(-1, -1, -1, -1, -1, -1, temporal_patch_size, -1, -1)
+            .reshape(
+                batch_size,
+                grid_h * grid_w,
+                channel * temporal_patch_size * patch_size * patch_size,
+            )
         )
-
-        return flatten_patches, grid_t, grid_h, grid_w
+        return flatten_patches, grid_h, grid_w
 
     def _preprocess(
         self,
-        videos,
-        do_convert_rgb: bool = True,
-        do_resize: bool = True,
-        size: SizeDict | None = None,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None" = PILImageResampling.BICUBIC,
-        do_rescale: bool = True,
-        rescale_factor: float = 1 / 255.0,
-        do_normalize: bool = True,
-        image_mean: float | list[float] | None = None,
-        image_std: float | list[float] | None = None,
-        patch_expand_factor: int | None = None,
-        patch_size: int | None = None,
-        temporal_patch_size: int | None = None,
-        merge_size: int | None = None,
-        return_tensors: str | TensorType | None = None,
+        images: list["torch.Tensor"],
+        do_resize: bool,
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        patch_size: int,
+        temporal_patch_size: int,
+        merge_size: int,
+        patch_expand_factor: int,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
-    ):
-        self = _with_processor_overrides(self, locals())
-        grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
-        resized_videos_grouped = {}
+    ) -> BatchFeature:
+        """
+        Preprocess an image or batch of images.
+        """
 
-        for shape, stacked_videos in grouped_videos.items():
-            if do_convert_rgb:
-                stacked_videos = self.convert_to_rgb(stacked_videos)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        resized_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
             if do_resize:
-                stacked_videos = self.resize(
-                    videos=stacked_videos,
+                stacked_images = self.resize(
+                    images=stacked_images,
                     size=size,
                     resample=resample,
                     factor=patch_size * merge_size * patch_expand_factor,
                     temporal_factor=temporal_patch_size,
                 )
-            resized_videos_grouped[shape] = stacked_videos
-        resized_videos = reorder_videos(resized_videos_grouped, grouped_videos_index)
+            resized_images_grouped[shape] = stacked_images
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
-        # Group videos by size for further processing
-        # Needed in case do_resize is False, or resize returns videos with different sizes
-        grouped_videos, grouped_videos_index = group_videos_by_shape(resized_videos)
-        processed_videos_grouped = {}
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
+        processed_images_grouped = {}
         processed_grids = {}
-        for shape, stacked_videos in grouped_videos.items():
-            resized_height, resized_width = get_image_size(stacked_videos[0], channel_dim=ChannelDimension.FIRST)
 
-            # Fused rescale and normalize
-            stacked_videos = self.rescale_and_normalize(
-                stacked_videos, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+        for shape, stacked_images in grouped_images.items():
+            stacked_images = self.rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
-            patches, grid_t, grid_h, grid_w = self.patchify(
-                stacked_videos,
+            patches, grid_h, grid_w = self.patchify(
+                stacked_images,
                 patch_size=patch_size,
                 merge_size=merge_size,
                 temporal_patch_size=temporal_patch_size,
             )
 
-            processed_videos_grouped[shape] = patches
-            processed_grids[shape] = [[grid_t, grid_h, grid_w]] * len(stacked_videos)
+            processed_images_grouped[shape] = patches
+            processed_grids[shape] = [[1, grid_h, grid_w]] * len(stacked_images)
 
-        processed_videos = reorder_videos(processed_videos_grouped, grouped_videos_index)
-        processed_grids = reorder_videos(processed_grids, grouped_videos_index)
-        pixel_values_videos = torch.cat(processed_videos, dim=0)
-        video_grid_thw = torch.tensor(processed_grids)
-        data = {
-            "pixel_values_videos": pixel_values_videos,
-            "video_grid_thw": video_grid_thw,
-        }
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+        processed_grids = reorder_images(processed_grids, grouped_images_index)
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        pixel_values = processed_images[0] if len(processed_images) == 1 else torch.cat(processed_images, dim=0)
+        image_grid_thw = torch.tensor(processed_grids)
+
+        return BatchFeature(
+            data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
+        )
+
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None) -> int:
+        """
+        A utility that returns number of image patches for a given image size.
+
+        Args:
+            height (`int`):
+                Height of the input image.
+            width (`int`):
+                Width of the input image.
+            images_kwargs (`dict`, *optional*)
+                Any kwargs to override defaults of the image processor.
+        Returns:
+            `int`: Number of image patches per image.
+        """
+        return _get_number_of_image_patches(self, height, width, images_kwargs)
 
 
-__all__ = ["Glm5NextVideoProcessor"]
+__all__ = ["Glm5NextImageProcessor"]

@@ -219,6 +219,31 @@ class Glm5NextModelTest(VLMModelTest, unittest.TestCase):
                 expected_shapes,
             )
 
+    def test_image_and_video_placeholder_masks_are_disjoint(self):
+        config = self.model_tester.get_config()
+        model = Glm5NextModel(config).to(torch_device).eval()
+        input_ids = torch.tensor(
+            [[config.image_token_id, config.video_token_id, config.image_token_id, config.text_config.pad_token_id]],
+            device=torch_device,
+        )
+        inputs_embeds = model.get_input_embeddings()(input_ids)
+        hidden_size = inputs_embeds.shape[-1]
+        image_features = torch.zeros(2, hidden_size, device=torch_device)
+        video_features = torch.zeros(1, hidden_size, device=torch_device)
+
+        expected_image_mask = input_ids == config.image_token_id
+        expected_video_mask = input_ids == config.video_token_id
+        for ids in (input_ids, None):
+            image_mask, video_mask = model.get_placeholder_mask(
+                ids,
+                inputs_embeds,
+                image_features=image_features,
+                video_features=video_features,
+            )
+            self.assertTrue(torch.equal(image_mask.squeeze(-1), expected_image_mask))
+            self.assertTrue(torch.equal(video_mask.squeeze(-1), expected_video_mask))
+            self.assertFalse(torch.logical_and(image_mask, video_mask).any())
+
     def test_attention_outputs(self):
         """Needs to be overwritten as GLM5 Next VL alternates between attention layers and KDA layers."""
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

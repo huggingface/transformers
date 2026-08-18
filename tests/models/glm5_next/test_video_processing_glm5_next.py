@@ -12,324 +12,135 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import hashlib
+import tempfile
 import unittest
 
-import numpy as np
-
-from transformers.image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
-
-from ...test_video_processing_common import VideoProcessingTestMixin, prepare_video_inputs
+from transformers.utils import is_torch_available, is_torchvision_available
 
 
 if is_torch_available():
-    from PIL import Image
+    import torch
 
-if is_vision_available():
-    if is_torchvision_available():
-        from transformers import Glm5NextVideoProcessor
-        from transformers.models.glm46v.video_processing_glm46v import smart_resize
-
-
-class Glm5NextVideoProcessingTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=5,
-        num_frames=8,
-        num_channels=3,
-        min_resolution=30,
-        max_resolution=80,
-        temporal_patch_size=2,
-        patch_size=14,
-        merge_size=2,
-        do_resize=True,
-        size=None,
-        do_normalize=True,
-        image_mean=IMAGENET_STANDARD_MEAN,
-        image_std=IMAGENET_STANDARD_STD,
-        do_convert_rgb=True,
-    ):
-        size = size if size is not None else {"longest_edge": 20, "shortest_edge": 10}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_frames = num_frames
-        self.num_channels = num_channels
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.size = size
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.do_convert_rgb = do_convert_rgb
-        self.temporal_patch_size = temporal_patch_size
-        self.patch_size = patch_size
-        self.merge_size = merge_size
-
-    def prepare_video_processor_dict(self):
-        return {
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_convert_rgb": self.do_convert_rgb,
-            "do_sample_frames": True,
-        }
-
-    def prepare_video_metadata(self, videos):
-        video_metadata = []
-        for video in videos:
-            if isinstance(video, list):
-                num_frames = len(video)
-            elif hasattr(video, "shape"):
-                if len(video.shape) == 4:  # (T, H, W, C)
-                    num_frames = video.shape[0]
-                else:
-                    num_frames = 1
-            else:
-                num_frames = self.num_frames
-
-            # Glm5Next samples frames at fps=1, so use a 1-fps, full-length metadata here to keep
-            # every frame. Frame down-sampling itself is exercised by `test_call_sample_frames`.
-            metadata = {
-                "fps": 1,
-                "duration": num_frames,
-                "total_num_frames": num_frames,
-            }
-            video_metadata.append(metadata)
-        return video_metadata
-
-    def expected_output_video_shape(self, videos):
-        grid_t = self.num_frames // self.temporal_patch_size
-        hidden_dim = self.num_channels * self.temporal_patch_size * self.patch_size * self.patch_size
-        seq_len = 0
-        for video in videos:
-            if isinstance(video, list) and isinstance(video[0], Image.Image):
-                video = np.stack([np.array(frame) for frame in video])
-            elif hasattr(video, "shape"):
-                pass
-            else:
-                video = np.array(video)
-
-            if hasattr(video, "shape") and len(video.shape) >= 3:
-                if len(video.shape) == 4:
-                    t, height, width = video.shape[:3]
-                elif len(video.shape) == 3:
-                    height, width = video.shape[:2]
-                    t = 1
-                else:
-                    t, height, width = self.num_frames, self.min_resolution, self.min_resolution
-            else:
-                t, height, width = self.num_frames, self.min_resolution, self.min_resolution
-
-            resized_height, resized_width = smart_resize(
-                t,
-                height,
-                width,
-                factor=self.patch_size * self.merge_size,
-                min_pixels=self.size["shortest_edge"],
-                max_pixels=self.size["longest_edge"],
-            )
-            grid_h, grid_w = resized_height // self.patch_size, resized_width // self.patch_size
-            seq_len += grid_t * grid_h * grid_w
-        return [seq_len, hidden_dim]
-
-    def prepare_video_inputs(self, equal_resolution=False, return_tensors="pil"):
-        videos = prepare_video_inputs(
-            batch_size=self.batch_size,
-            num_frames=self.num_frames,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            return_tensors=return_tensors,
-        )
-        return videos
+if is_torchvision_available():
+    from transformers import AutoVideoProcessor, Glm5NextVideoProcessor
+    from transformers.video_utils import VideoMetadata
 
 
 @require_torch
 @require_vision
-class Glm5NextVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
-    fast_video_processing_class = Glm5NextVideoProcessor if is_torchvision_available() else None
-    input_name = "pixel_values_videos"
+class Glm5NextVideoProcessingTest(unittest.TestCase):
+    def get_processor_kwargs(self, **overrides):
+        kwargs = {
+            "patch_size": 2,
+            "temporal_patch_size": 2,
+            "merge_size": 2,
+            "patch_expand_factor": 2,
+            "min_image_tokens": 1,
+            "max_image_tokens": 64,
+            "fps_interval": 1,
+            "max_frame_count_dynamic": 16,
+            "image_mean": [0.48145466, 0.4578275, 0.40821073],
+            "image_std": [0.26862954, 0.26130258, 0.27577711],
+        }
+        return kwargs | overrides
 
-    def setUp(self):
-        super().setUp()
-        self.video_processor_tester = Glm5NextVideoProcessingTester(self)
+    def test_bit_exact_reference_output(self):
+        processor = Glm5NextVideoProcessor(**self.get_processor_kwargs(do_sample_frames=False))
+        video = torch.arange(4 * 3 * 5 * 9, dtype=torch.uint8).reshape(4, 3, 5, 9)
+        output = processor(video, return_tensors="pt")
+        digest = hashlib.sha256(output.pixel_values_videos.contiguous().numpy().tobytes()).hexdigest()
+        self.assertEqual(output.video_grid_thw.tolist(), [[2, 4, 8]])
+        self.assertEqual(digest, "a9efa48c76635694a691f715667a9f40c5ddf6bdb12556a653705e1c883476f8")
 
-    @property
-    def video_processor_dict(self):
-        return self.video_processor_tester.prepare_video_processor_dict()
+    def test_sample_frames_reference_cases(self):
+        processor = Glm5NextVideoProcessor(**self.get_processor_kwargs())
+        cases = [
+            (VideoMetadata(total_num_frames=3, fps=1, duration=3), None, None, [0, 1, 2, 2]),
+            (VideoMetadata(total_num_frames=20, fps=4, duration=5), None, None, [0, 4, 8, 12, 16, 16]),
+            (VideoMetadata(total_num_frames=20, fps=4, duration=5), 2, None, list(range(0, 20, 2))),
+            (VideoMetadata(total_num_frames=120, fps=24, duration=5), 3, 8, [0, 17, 34, 51, 68, 85, 102, 119]),
+        ]
+        for metadata, target_fps, max_frames, expected in cases:
+            self.assertEqual(
+                processor.sample_frames(metadata, fps=target_fps, max_frames=max_frames).tolist(),
+                expected,
+            )
 
-    def test_video_processor_from_dict_with_kwargs(self):
-        video_processor = self.fast_video_processing_class.from_dict(self.video_processor_dict)
-        self.assertEqual(video_processor.size, {"longest_edge": 20, "shortest_edge": 10})
+        capped = Glm5NextVideoProcessor(**self.get_processor_kwargs(max_duration=5))
+        metadata = VideoMetadata(total_num_frames=1000, fps=10, duration=100)
+        self.assertEqual(capped.sample_frames(metadata).tolist(), [0, 249, 499, 749, 999, 999])
 
-        video_processor = self.fast_video_processing_class.from_dict(
-            self.video_processor_dict, size={"longest_edge": 42, "shortest_edge": 42}
+    def test_new_processor_config_bit_exact(self):
+        processor = Glm5NextVideoProcessor(
+            patch_size=14,
+            temporal_patch_size=2,
+            merge_size=2,
+            patch_expand_factor=1,
+            min_image_tokens=16,
+            max_image_tokens=240000,
+            resize_mode="pad",
+            fps_interval=2,
+            max_frame_count_dynamic=2048,
+            image_mean=[0.48145466, 0.4578275, 0.40821073],
+            image_std=[0.26862954, 0.26130258, 0.27577711],
+            do_sample_frames=False,
         )
-        self.assertEqual(video_processor.size, {"longest_edge": 42, "shortest_edge": 42})
+        video = torch.arange(4 * 3 * 37 * 53, dtype=torch.uint8).reshape(4, 3, 37, 53)
+        output = processor(video, return_tensors="pt")
+        digest = hashlib.sha256(output.pixel_values_videos.contiguous().numpy().tobytes()).hexdigest()
+        self.assertEqual(output.video_grid_thw.tolist(), [[2, 6, 8]])
+        self.assertEqual(digest, "dd5878e0f611c4a8200355322f124b9af348649b4fd028905adad4ca8e998fad")
 
-    def test_call_pil(self):
-        for video_processing_class in self.video_processor_list:
-            video_processing = video_processing_class(**self.video_processor_dict)
-            video_inputs = self.video_processor_tester.prepare_video_inputs(
-                equal_resolution=False, return_tensors="pil"
+    def test_numpy_input(self):
+        processor = Glm5NextVideoProcessor(**self.get_processor_kwargs(do_sample_frames=False))
+        video = torch.zeros(4, 3, 5, 9, dtype=torch.uint8).numpy()
+        output = processor(video, return_tensors="pt")
+        self.assertEqual(tuple(output.pixel_values_videos.shape), (64, 24))
+        self.assertEqual(output.video_grid_thw.tolist(), [[2, 4, 8]])
+
+    def test_per_call_resize_overrides(self):
+        processor = Glm5NextVideoProcessor(**self.get_processor_kwargs(do_sample_frames=False))
+        video = torch.arange(4 * 3 * 37 * 53, dtype=torch.uint8).reshape(4, 3, 37, 53)
+        overrides = {"max_image_tokens": 8, "patch_expand_factor": 1, "resize_mode": "resize"}
+        actual = processor(video, return_tensors="pt", **overrides)
+        expected = Glm5NextVideoProcessor(**self.get_processor_kwargs(do_sample_frames=False, **overrides))(
+            video, return_tensors="pt"
+        )
+        self.assertTrue(torch.equal(actual.pixel_values_videos, expected.pixel_values_videos))
+        self.assertTrue(torch.equal(actual.video_grid_thw, expected.video_grid_thw))
+
+    def test_auto_video_processor_round_trip(self):
+        processor = Glm5NextVideoProcessor(**self.get_processor_kwargs())
+        with tempfile.TemporaryDirectory() as tmpdir:
+            processor.save_pretrained(tmpdir)
+            loaded = AutoVideoProcessor.from_pretrained(tmpdir)
+        self.assertIsInstance(loaded, Glm5NextVideoProcessor)
+        self.assertEqual(loaded.to_dict(), processor.to_dict())
+
+    def test_sglang_processor_defaults(self):
+        processor = Glm5NextVideoProcessor(
+            **self.get_processor_kwargs(
+                fps_interval=2,
+                max_frame_count_dynamic=2048,
+            )
+        )
+        self.assertEqual(processor.fps_interval, 2)
+        self.assertEqual(processor.max_frame_count_dynamic, 2048)
+        self.assertEqual(processor.max_duration, 0)
+
+    def test_required_token_bounds(self):
+        with self.assertRaisesRegex(ValueError, "min_image_tokens and max_image_tokens"):
+            Glm5NextVideoProcessor(
+                patch_size=2,
+                temporal_patch_size=2,
+                merge_size=2,
+                patch_expand_factor=2,
+                fps_interval=1,
+                max_frame_count_dynamic=16,
             )
 
-            for video in video_inputs:
-                self.assertIsInstance(video[0], Image.Image)
 
-            video_metadata = self.video_processor_tester.prepare_video_metadata(video_inputs)
-            encoded_videos = video_processing(
-                video_inputs[0], video_metadata=[video_metadata[0]], return_tensors="pt"
-            )[self.input_name]
-            expected_output_video_shape = self.video_processor_tester.expected_output_video_shape([video_inputs[0]])
-            self.assertEqual(list(encoded_videos.shape), expected_output_video_shape)
-            encoded_videos = video_processing(video_inputs, video_metadata=video_metadata, return_tensors="pt")[
-                self.input_name
-            ]
-            expected_output_video_shape = self.video_processor_tester.expected_output_video_shape(video_inputs)
-            self.assertEqual(list(encoded_videos.shape), expected_output_video_shape)
-
-    def test_call_numpy(self):
-        for video_processing_class in self.video_processor_list:
-            video_processing = video_processing_class(**self.video_processor_dict)
-            video_inputs = self.video_processor_tester.prepare_video_inputs(
-                equal_resolution=False, return_tensors="np"
-            )
-
-            video_metadata = self.video_processor_tester.prepare_video_metadata(video_inputs)
-            encoded_videos = video_processing(
-                video_inputs[0], video_metadata=[video_metadata[0]], return_tensors="pt"
-            )[self.input_name]
-            expected_output_video_shape = self.video_processor_tester.expected_output_video_shape([video_inputs[0]])
-            self.assertEqual(list(encoded_videos.shape), expected_output_video_shape)
-
-            encoded_videos = video_processing(video_inputs, video_metadata=video_metadata, return_tensors="pt")[
-                self.input_name
-            ]
-            expected_output_video_shape = self.video_processor_tester.expected_output_video_shape(video_inputs)
-            self.assertEqual(list(encoded_videos.shape), expected_output_video_shape)
-
-    def test_call_pytorch(self):
-        for video_processing_class in self.video_processor_list:
-            video_processing = video_processing_class(**self.video_processor_dict)
-            video_inputs = self.video_processor_tester.prepare_video_inputs(
-                equal_resolution=False, return_tensors="pt"
-            )
-            video_metadata = self.video_processor_tester.prepare_video_metadata(video_inputs)
-            encoded_videos = video_processing(
-                video_inputs[0], video_metadata=[video_metadata[0]], return_tensors="pt"
-            )[self.input_name]
-            expected_output_video_shape = self.video_processor_tester.expected_output_video_shape([video_inputs[0]])
-            self.assertEqual(list(encoded_videos.shape), expected_output_video_shape)
-            encoded_videos = video_processing(video_inputs, video_metadata=video_metadata, return_tensors="pt")[
-                self.input_name
-            ]
-            expected_output_video_shape = self.video_processor_tester.expected_output_video_shape(video_inputs)
-            self.assertEqual(list(encoded_videos.shape), expected_output_video_shape)
-
-    @unittest.skip("Skip for now, the test needs adjustment for GLM-4.1V")
-    def test_call_numpy_4_channels(self):
-        for video_processing_class in self.video_processor_list:
-            # Test that can process videos which have an arbitrary number of channels
-            # Initialize video_processing
-            video_processor = video_processing_class(**self.video_processor_dict)
-
-            # create random numpy tensors
-            self.video_processor_tester.num_channels = 4
-            video_inputs = self.video_processor_tester.prepare_video_inputs(
-                equal_resolution=False, return_tensors="np"
-            )
-
-            # Test not batched input
-            encoded_videos = video_processor(
-                video_inputs[0],
-                return_tensors="pt",
-                input_data_format="channels_last",
-                image_mean=(0.0, 0.0, 0.0, 0.0),
-                image_std=(1.0, 1.0, 1.0, 1.0),
-            )[self.input_name]
-            expected_output_video_shape = self.video_processor_tester.expected_output_video_shape([video_inputs[0]])
-            self.assertEqual(list(encoded_videos.shape), expected_output_video_shape)
-
-            # Test batched
-            encoded_videos = video_processor(
-                video_inputs,
-                return_tensors="pt",
-                input_data_format="channels_last",
-                image_mean=(0.0, 0.0, 0.0, 0.0),
-                image_std=(1.0, 1.0, 1.0, 1.0),
-            )[self.input_name]
-            expected_output_video_shape = self.video_processor_tester.expected_output_video_shape(video_inputs)
-            self.assertEqual(list(encoded_videos.shape), expected_output_video_shape)
-
-    def test_nested_input(self):
-        """Tests that the processor can work with nested list where each video is a list of arrays"""
-        for video_processing_class in self.video_processor_list:
-            video_processing = video_processing_class(**self.video_processor_dict)
-            video_inputs = self.video_processor_tester.prepare_video_inputs(
-                equal_resolution=False, return_tensors="np"
-            )
-
-            video_inputs_nested = [list(video) for video in video_inputs]
-            video_metadata = self.video_processor_tester.prepare_video_metadata(video_inputs)
-
-            # Test not batched input
-            encoded_videos = video_processing(
-                video_inputs_nested[0], video_metadata=[video_metadata[0]], return_tensors="pt"
-            )[self.input_name]
-            expected_output_video_shape = self.video_processor_tester.expected_output_video_shape([video_inputs[0]])
-            self.assertEqual(list(encoded_videos.shape), expected_output_video_shape)
-
-            # Test batched
-            encoded_videos = video_processing(video_inputs_nested, video_metadata=video_metadata, return_tensors="pt")[
-                self.input_name
-            ]
-            expected_output_video_shape = self.video_processor_tester.expected_output_video_shape(video_inputs)
-            self.assertEqual(list(encoded_videos.shape), expected_output_video_shape)
-
-    def test_call_sample_frames(self):
-        for video_processing_class in self.video_processor_list:
-            video_processor_dict = self.video_processor_dict.copy()
-            video_processing = video_processing_class(**video_processor_dict)
-
-            prev_num_frames = self.video_processor_tester.num_frames
-            self.video_processor_tester.num_frames = 8
-            prev_min_resolution = getattr(self.video_processor_tester, "min_resolution", None)
-            prev_max_resolution = getattr(self.video_processor_tester, "max_resolution", None)
-            self.video_processor_tester.min_resolution = 56
-            self.video_processor_tester.max_resolution = 112
-
-            video_inputs = self.video_processor_tester.prepare_video_inputs(
-                equal_resolution=False,
-                return_tensors="torch",
-            )
-
-            metadata = [[{"total_num_frames": 8, "fps": 4}]]
-            batched_metadata = metadata * len(video_inputs)
-
-            encoded_videos = video_processing(video_inputs[0], return_tensors="pt", video_metadata=metadata)[
-                self.input_name
-            ]
-            encoded_videos_batched = video_processing(
-                video_inputs, return_tensors="pt", video_metadata=batched_metadata
-            )[self.input_name]
-
-            self.assertIsNotNone(encoded_videos)
-            self.assertIsNotNone(encoded_videos_batched)
-            self.assertEqual(len(encoded_videos.shape), 2)
-            self.assertEqual(len(encoded_videos_batched.shape), 2)
-
-            with self.assertRaises(ValueError):
-                video_processing(video_inputs[0], return_tensors="pt")[self.input_name]
-
-            self.video_processor_tester.num_frames = prev_num_frames
-            if prev_min_resolution is not None:
-                self.video_processor_tester.min_resolution = prev_min_resolution
-            if prev_max_resolution is not None:
-                self.video_processor_tester.max_resolution = prev_max_resolution
+if __name__ == "__main__":
+    unittest.main()

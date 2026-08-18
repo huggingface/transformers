@@ -1217,6 +1217,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("gemma4_unified", {"torchvision": "Gemma4UnifiedImageProcessor"}),
         ("glm46v", {"pil": "Glm46VImageProcessorPil", "torchvision": "Glm46VImageProcessor"}),
         ("glm4v", {"pil": "Glm4vImageProcessorPil", "torchvision": "Glm4vImageProcessor"}),
+        ("glm5_next", {"pil": "Glm5NextImageProcessorPil", "torchvision": "Glm5NextImageProcessor"}),
         ("glm_image", {"pil": "GlmImageImageProcessorPil", "torchvision": "GlmImageImageProcessor"}),
         ("glmga", {"pil": "GlmgaImageProcessorPil", "torchvision": "GlmgaImageProcessor"}),
         ("glpn", {"pil": "GLPNImageProcessorPil", "torchvision": "GLPNImageProcessor"}),
