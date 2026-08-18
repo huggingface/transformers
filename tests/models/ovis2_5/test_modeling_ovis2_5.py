@@ -782,6 +782,7 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
 
         self.assertEqual(len(outputs.hidden_states), config.num_hidden_layers)
         torch.testing.assert_close(outputs.last_hidden_state, baseline.last_hidden_state)
+        torch.testing.assert_close(outputs.pooler_output, outputs.hidden_states[-1])
         torch.testing.assert_close(
             model.post_layernorm(outputs.hidden_states[-1]),
             outputs.last_hidden_state,

@@ -334,7 +334,7 @@ class Ovis2_5VisionEncoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class Ovis2_5VisionHiddenStateRecorder(nn.Module):
+class Ovis2_5VisionPatchOrderRestorer(nn.Module):
     """Restore encoder states from window order before output hooks record them."""
 
     def forward(
@@ -353,7 +353,7 @@ class Ovis2_5VisionEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.layers = nn.ModuleList([Ovis2_5VisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.hidden_state_recorder = Ovis2_5VisionHiddenStateRecorder()
+        self.hidden_state_recorder = Ovis2_5VisionPatchOrderRestorer()
 
     def forward(
         self,
@@ -535,7 +535,7 @@ class Ovis2_5VisionModel(Ovis2_5PreTrainedModel):
     _input_embed_layer = "patch_embedding"
     _can_record_outputs = {
         "hidden_states": OutputRecorder(
-            Ovis2_5VisionHiddenStateRecorder,
+            Ovis2_5VisionPatchOrderRestorer,
             capture_initial_hidden_state=False,
         ),
         "attentions": Ovis2_5VisionAttention,
@@ -579,6 +579,7 @@ class Ovis2_5VisionModel(Ovis2_5PreTrainedModel):
         )
         pre_layernorm_hidden_state = encoder_outputs.last_hidden_state
         last_hidden_state = self.post_layernorm(pre_layernorm_hidden_state)
+        # The released visual tokenizer consumes the final encoder state before this output normalization.
         return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
             pooler_output=pre_layernorm_hidden_state,
