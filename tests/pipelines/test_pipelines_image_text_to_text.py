@@ -80,6 +80,36 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
             {"stop_strings": ["."], "tokenizer": tokenizer, "max_new_tokens": 3},
         )
 
+    def test_preprocess_empty_processor_kwargs_not_leaked(self):
+        # An explicit empty `processor_kwargs={}` must stay empty and must not fall back to the
+        # remaining processing kwargs, which would leak unrelated arguments into the processor call.
+        class RecordingModelInputs(dict):
+            def to(self, *args, **kwargs):
+                return self
+
+        class RecordingProcessor:
+            def __init__(self):
+                self.captured_kwargs = None
+
+            def __call__(self, images=None, text=None, return_tensors=None, **kwargs):
+                self.captured_kwargs = kwargs
+                return RecordingModelInputs()
+
+        pipe = object.__new__(ImageTextToTextPipeline)
+        # `dtype` is a read-only property that reads from `self.model`; a no-op `.to()` above
+        # means the concrete dtype value is irrelevant here.
+        pipe.model = SimpleNamespace(dtype=None)
+
+        # Empty dict is explicit: nothing extra should reach the processor.
+        pipe.processor = RecordingProcessor()
+        pipe.preprocess("a single prompt", processor_kwargs={}, unrelated_kwarg=True)
+        self.assertEqual(pipe.processor.captured_kwargs, {})
+
+        # When `processor_kwargs` is omitted, the remaining kwargs are forwarded as before.
+        pipe.processor = RecordingProcessor()
+        pipe.preprocess("a single prompt", unrelated_kwarg=True)
+        self.assertEqual(pipe.processor.captured_kwargs, {"unrelated_kwarg": True})
+
     @require_torch
     def test_small_model_pt_token_text_only(self):
         pipe = pipeline("image-text-to-text", model="llava-hf/llava-interleave-qwen-0.5b-hf")
