@@ -1452,16 +1452,24 @@ class Cache:
         head_dim: int | list[int],
         dtype: torch.dtype,
         device: torch.device,
+        value_head_dim: int | list[int] | None = None,
     ):
         """
         Initialize all the layers in advance (it's otherwise lazily initialized on the first `update` call).
         This is useful for our `export` recipes, as `export` needs everything in advance.
+
+        `value_head_dim` is for the caches whose values are not keys-shaped (latent attention caches the
+        rope keys against the compressed latent); it defaults to `head_dim`.
         """
         # To allow different num_heads and head_dim depending on layers, we accept lists
         if isinstance(num_heads, int):
             num_heads = [num_heads] * len(self)
         if isinstance(head_dim, int):
             head_dim = [head_dim] * len(self)
+        if value_head_dim is None:
+            value_head_dim = head_dim
+        if isinstance(value_head_dim, int):
+            value_head_dim = [value_head_dim] * len(self)
 
         if len(num_heads) != len(self.layers):
             raise ValueError(
@@ -1472,15 +1480,20 @@ class Cache:
                 f"`head_dim` was provided as a list of length {len(num_heads)}, but the Cache currently has {len(self.layers)} layers"
             )
 
-        for layer, layer_num_heads, layer_head_dim in zip(self.layers, num_heads, head_dim):
+        for layer, layer_num_heads, layer_head_dim, layer_value_dim in zip(
+            self.layers, num_heads, head_dim, value_head_dim
+        ):
             if not layer.supports_early_init or layer.is_initialized:
                 continue
             # Note that the initialization needs all dimensions (except -2), as well as device and dtype, so we use
             # this fake tensor approach. It has size 0 on the -2 dimension, so it does not allocate any data (it only
             # creates an empty tensor with correct shape, dtype and device), which is very efficient and practical
-            fake_kv_tensor = torch.zeros((batch_size, layer_num_heads, 0, layer_head_dim), dtype=dtype, device=device)
+            fake_key_tensor = torch.zeros((batch_size, layer_num_heads, 0, layer_head_dim), dtype=dtype, device=device)
+            fake_value_tensor = torch.zeros(
+                (batch_size, layer_num_heads, 0, layer_value_dim), dtype=dtype, device=device
+            )
             # Init the layer
-            layer.lazy_initialization(fake_kv_tensor, fake_kv_tensor)
+            layer.lazy_initialization(fake_key_tensor, fake_value_tensor)
 
     def get_seq_length(self, layer_idx: int = 0) -> int:
         """Returns the sequence length of the cache for the given layer."""

@@ -52,6 +52,7 @@ from .utils import (
     apply_fx_node_fixes,
     apply_fx_program_fixes,
     apply_patches,
+    get_leaf_tensors,
     module_dtype,
     register_fx_node_fix,
     register_fx_program_fix,
@@ -158,22 +159,37 @@ class ExecutorchExporter(DynamoExporter):
         return executorch_programs_manager
 
 
+def _traced_output_names(exported_program: ExportedProgram) -> list[str]:
+    """The model's own output leaf names, in output order, read off the program's output pytree.
+
+    The exported call spec holds the output structure the trace returned; unflattening placeholders through
+    it and walking them with `get_leaf_tensors` yields exactly the `{name: tensor}` keys the dynamo runner
+    computes on the real outputs at run time — so the `.pte` can carry them for a runner that only ever sees
+    positional tensors."""
+    spec = exported_program.call_spec.out_spec
+    placeholders = [torch.empty(0) for _ in range(spec.num_leaves)]
+    return list(get_leaf_tensors(torch.utils._pytree.tree_unflatten(placeholders, spec)))
+
+
 def _signature_constant_methods(exported_program: ExportedProgram) -> dict[str, list]:
     """Baked-in methods that make the ``.pte`` self-describing, so a runner needs nothing but the loaded
     program (`ExecutorchModelRunner`).
 
     A ``.pte`` otherwise keeps only positional inputs, and a loaded method's metadata carries just counts
     and tensor shapes — no names, and no way to tell the model's own outputs from the mutated-input copies
-    ExecuTorch emits. Both facts live in the source graph signature, so they ride along as constant methods
-    (the mechanism llama.pte uses for ``get_vocab_size`` & co.): ``input_names`` in flat input order, and
-    ``num_user_outputs`` — the model's own outputs are the LAST that many (lowering emits the
-    mutated-input copies first, and adds its own, so only the count survives from here; the runner turns it
-    into positions using the loaded method's output count).
+    ExecuTorch emits. Those facts live in the source graph signature (or, for the output names, in its
+    output pytree), so they ride along as constant methods (the mechanism llama.pte uses for
+    ``get_vocab_size`` & co.): ``input_names`` in flat input order, ``num_user_outputs`` — the model's own
+    outputs are the LAST that many (lowering emits the mutated-input copies first, and adds its own, so only
+    the count survives from here; the runner turns it into positions using the loaded method's output count)
+    — and ``output_names`` for those outputs, so the runner names them rather than guessing what the graph
+    computed.
     """
     signature = exported_program.graph_signature
     constant_methods = {
         "input_names": [name for name in signature.user_inputs if isinstance(name, str)],
         "num_user_outputs": [sum(spec.kind.name == "USER_OUTPUT" for spec in signature.output_specs)],
+        "output_names": _traced_output_names(exported_program),
     }
     # The cache's per-layer geometry travels too. A `.pte`'s metadata gives shapes but nothing that says
     # which leaf is a layer's keys, and the pytree context the other backends read is not in the program —
@@ -1294,8 +1310,15 @@ def _drop_runtime_asserts(exported_program: ExportedProgram) -> None:
             feeder = stack.pop()
             if feeder in erased or feeder.op in ("placeholder", "output") or feeder.users or feeder.is_impure():
                 continue
+            # Best effort: on some graphs (glmasr / musicflamingo audio towers) erasing a dead `sym_size`
+            # feeder trips a C-level fx bug (`SystemError` in `_update_args_kwargs`, an arg already nulled).
+            # A leftover dead `sym_size` is harmless — the tracer only chokes on the `Piecewise` cast/eq
+            # chain, which erases fine — so skip the node and keep the rest of the cleanup.
+            try:
+                module.graph.erase_node(feeder)
+            except SystemError:
+                continue
             stack.extend(feeder.all_input_nodes)
-            module.graph.erase_node(feeder)
             erased.add(feeder)
         module.recompile()
 

@@ -15,6 +15,7 @@ from collections.abc import Callable
 
 import torch
 import torch.nn.functional as F
+from torch.fx.experimental.symbolic_shapes import has_free_unbacked_symbols
 
 from .cache_utils import Cache
 from .configuration_utils import PreTrainedConfig
@@ -208,11 +209,16 @@ def prepare_padding_mask(attention_mask: torch.Tensor | None, kv_length: int, kv
     """
     local_padding_mask = attention_mask
     if attention_mask is not None:
-        # Pad it if necessary. `sym_max` rather than a `> 0` branch: a model that sizes its own mask from the
-        # cache length (opt) gives an *unbacked* width here, which cannot be compared — while padding by a
-        # symbolic zero is just a copy, so the branch buys nothing that the clamp does not.
-        padding_length = torch.sym_max(kv_length + kv_offset - attention_mask.shape[-1], 0)
-        local_padding_mask = torch.nn.functional.pad(attention_mask, (0, padding_length))
+        # Pad it if necessary
+        padding_length = kv_length + kv_offset - attention_mask.shape[-1]
+        if has_free_unbacked_symbols(padding_length):
+            # A model that sizes its own mask from the cache length (opt) makes this width *unbacked*, so it
+            # cannot be compared at all. Clamp instead of branching — padding by a symbolic zero is just a
+            # copy, so nothing is lost. Only here: `sym_max` is an op some backends cannot lower
+            # (ExecuTorch's prim registry has no `sym_max`), so the ordinary branch stays the default.
+            local_padding_mask = torch.nn.functional.pad(attention_mask, (0, torch.sym_max(padding_length, 0)))
+        elif padding_length > 0:
+            local_padding_mask = torch.nn.functional.pad(attention_mask, (0, padding_length))
     return local_padding_mask
 
 

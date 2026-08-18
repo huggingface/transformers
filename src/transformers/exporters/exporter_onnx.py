@@ -893,6 +893,38 @@ def _values_broadcast_to_self(values: TReal, self: TReal) -> bool:
     return True
 
 
+@register_onnx_translation("torch.ops.aten.mul.Scalar")
+def _aten_mul_scalar(self: TReal, other: float) -> TReal:
+    """`aten.mul.Scalar` has no torchlib lowering, so any multiply the decompositions leave in that overload
+    reaches translation and fails to dispatch. What gets there is the type-promoting case — an integer tensor
+    times a float scalar (bros scales an int64 `bbox`) — which PyTorch computes in the promoted float type
+    while ONNX has no promotion of its own, so make the cast explicit and multiply there."""
+    if not isinstance(other, (bool, int, float)):
+        # A symbolic scalar (a dynamic dim folded into the multiply) arrives as a graph value rather than a
+        # python number, carrying its own dtype — line it up with the tensor's and multiply there.
+        return op.Mul(self, op.CastLike(other, self))
+    scalar = op.Constant(value_float=float(other))
+    if isinstance(other, float) and not self.dtype.is_floating_point():
+        return op.Mul(op.Cast(self, to=onnx_ir.DataType.FLOAT), scalar)
+    return op.Mul(self, op.CastLike(scalar, self))
+
+
+@register_onnx_translation("torch.ops.aten.rsub.Scalar")
+def _aten_rsub_scalar(self: TReal, other: float, alpha: float = 1.0) -> TReal:
+    """`aten.rsub.Scalar` (`scalar - tensor`, big_bird's `1.0 - to_mask`) has no torchlib lowering, and its
+    decomposition emits `aten.sub(scalar, tensor)` — a scalar-first call no `sub` overload accepts, which
+    the decomposition step's own type promotion then chokes on. Registering it here keeps the op out of the
+    decomposition entirely and lowers it directly, promoting the same way `_aten_mul_scalar` does."""
+    scalar = op.Constant(value_float=float(other))
+    if isinstance(other, float) and not self.dtype.is_floating_point():
+        self = op.Cast(self, to=onnx_ir.DataType.FLOAT)
+    else:
+        scalar = op.CastLike(scalar, self)
+    if alpha != 1.0:
+        self = op.Mul(self, op.CastLike(op.Constant(value_float=float(alpha)), self))
+    return op.Sub(scalar, self)
+
+
 @register_onnx_translation("torch.ops.aten.index_put.default")
 def _aten_index_put(
     self: TReal,

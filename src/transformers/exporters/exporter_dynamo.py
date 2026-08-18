@@ -596,11 +596,20 @@ def _flatten_to_context(obj: Any, tensors: list) -> Any:
         # skipped until the binding is refactored away (e.g. into a `Cache` subclass).
         raise TypeError("Cannot flatten a bound method for pytree context")
     if hasattr(obj, "__dict__"):
-        state = {k: _flatten_to_context(v, tensors) for k, v in vars(obj).items()}
+        attributes = dict(vars(obj))
         # A growing sliding layer's `cumulative_length` counts steps, so leaving it here pins the graph to the
         # step it was traced at. `_patch_sliding_window_length` makes the traced arithmetic read the length off
         # the keys tensor instead, so the counter is no longer load-bearing — normalise it and a graph traced
         # at one step accepts a cache at another.
+        # A *scalar* counter is normalised before the walk, not after: while tracing it is a dynamic `SymInt`,
+        # which the walk would collect as a graph leaf (and so a graph output), leaving that leaf orphaned
+        # once the context is zeroed — flatten then reports one more leaf than unflatten consumes. Dynamo
+        # carries the stray symbolic output regardless; ExecuTorch's lowering has no symbolic-int output to
+        # put it in and drops it, surfacing the gap as a `treespec.unflatten` length mismatch. A tensor
+        # counter still rides along as a leaf, exactly as before.
+        if "sliding_window" in attributes and not isinstance(attributes.get("cumulative_length", 0), torch.Tensor):
+            attributes["cumulative_length"] = 0
+        state = {k: _flatten_to_context(v, tensors) for k, v in attributes.items()}
         if "sliding_window" in state and "cumulative_length" in state:
             state["cumulative_length"] = 0
         return {"_t": "obj", "p": _class_to_path(cls), "s": state}

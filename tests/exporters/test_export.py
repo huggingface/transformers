@@ -154,6 +154,74 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "(`kwarg keyword mismatch`). TODO: refactor Reformer onto a `Cache` subclass."
         ),
     },
+    # Generate path, the *runtime* half only: these export fine, and the export assertions still run —
+    # what fails is driving the exported graphs through `generate`.
+    "generate.runtime": {
+        "KyutaiSpeechToTextForConditionalGeneration": (
+            "Encodes its audio window-by-window inside `prepare_inputs_for_generation` — slicing "
+            "`input_values` by a moving `current_window`, running the codec model with its own "
+            "`encoder_past_key_values` and `padding_cache`, and copying the new tokens in-place — so "
+            "driving the exported graphs takes that model-specific loop, not the generic one (the runtime "
+            "never consumes `input_values`, and the eager side's codec state has no exported counterpart)."
+        ),
+        "MiniMaxForCausalLM": (
+            "`MiniMaxCache` grows its `layers` lazily and holds the lightning-attention state in a separate "
+            "`linear_cache` list, so a *traced* cache has entries only for the attention layers. Building it "
+            "from the config instead — which is all the runtime has — pre-sizes one layer per "
+            "`config.layer_types` entry and so invents the `LinearAttentionLayer`s this model never fills, "
+            "so the input tree spec cannot match however the class is swapped in. TODO: give the lightning "
+            "layers a real `LinearAttentionLayer` (dropping `linear_cache`), or a config-aware pre-size that "
+            "skips them."
+        ),
+        "xLSTMForCausalLM": (
+            "`xLSTMCache` is not a full `Cache`: it keeps its state in `rnn_state` with no `layers` list, and "
+            "lacks API `generate` expects (`is_compileable`), so every step of building and driving it "
+            "surfaces as the next `AttributeError`. TODO: bring the class up to the `Cache` API rather than "
+            "special-case it in the runtime."
+        ),
+        "VibeVoiceAsrForConditionalGeneration": (
+            "Keeps two co-equal audio encoders (`acoustic_tokenizer_encoder`, `semantic_tokenizer_encoder`) "
+            'and so has no single `get_encoder(modality="audio")` to report; without that the model is not '
+            "detected as multi-modal and never splits, leaving the audio path — and its data-dependent "
+            "relation between the placeholder-token count and the waveform length — inside the text prefill "
+            "graph, whose deferred assert (`Eq(u0, s2//2)`) then fires on the runtime's own feed. Splitting "
+            "it needs the model to name an audio encoder, not the exporter to guess one."
+        ),
+        "DeepseekV4ForCausalLM": (
+            "Its HCA/CSA cache layers keep dict-keyed state whose entries the model's own update path "
+            "creates lazily (the traced cache carries `entry_count: {'compressor': 1, 'indexer': 1}` and the "
+            "matching `buffer_kv`/`compressed_kv` tensors; a fresh one starts with `compressor` alone), so a "
+            "config-built cache cannot match the traced input tree spec — the same lazily-grown-state "
+            "problem as `MiniMaxCache`. Export itself passes, and so do the static-cache generate variants."
+        ),
+        "CsmForConditionalGeneration": (
+            "Generates a *frame* at a time: `input_ids` is `[batch, sequence, codebooks]` and each step runs "
+            "the backbone then the depth decoder to fill the codebooks, so `generate`'s loop cannot append "
+            "the next token (`torch.cat([input_ids, next_tokens[:, None]], dim=-1)` sees 3 dims and 2). "
+            "Driving it needs the model's own two-stage loop, not a generic one; the graphs themselves "
+            "export and match eager (the non-generate variants cover them)."
+        ),
+        "XLMWithLMHeadModel": (
+            "Its `prepare_inputs_for_generation` appends a mask token to `input_ids` every step and builds a "
+            "`langs` tensor from `config.lang_id`, so the graph takes a per-step input only that model can "
+            "produce (and a step is one token wider than `generate`'s). Export itself is covered by the "
+            "non-generate variants."
+        ),
+        "XLNetLMHeadModel": (
+            "Its `prepare_inputs_for_generation` builds a fresh `perm_mask` and `target_mapping` for every "
+            "step and appends a dummy token, so a decode step is three tokens wide over `mems` rather than "
+            "one over a `Cache`. Those tensors are model-specific per-step inputs the graph declares but no "
+            "generic runner can synthesize. The model is already on the deprecation list in "
+            "`_supports_default_dynamic_cache`; export itself is covered by the non-generate variants."
+        ),
+        "BltForCausalLM": (
+            "Reads `past_key_values.self_attention_cache`, i.e. wants an `EncoderDecoderCache` pair, but "
+            "`config.is_encoder_decoder` is False so `generate` builds a plain `DynamicCache`. Handing it a "
+            "pair of fresh `DynamicCache`s gets past the attribute error and then mismatches the input tree "
+            "spec, because the traced pair's halves are not both empty. TODO: derive the pair's shape from "
+            "the trace rather than guessing it."
+        ),
+    },
     # Generate path, multi-token decode capture only — the two decode steps merged by
     # `_merge_decode_calls` into one graph whose query axis stays symbolic, so a single graph serves both
     # the prompt and every decode step. Backend-agnostic. The single-token capture, which exports prefill
@@ -665,15 +733,24 @@ class ExportTesterMixin:
                 self.skipTest(reason="Model architecture uses eager MoE implementation which is not torch exportable")
 
     def _should_skip(
-        self, model_class, generate=False, dynamic=False, backend=None, multi_token=False, generation_config=None
+        self,
+        model_class,
+        generate=False,
+        dynamic=False,
+        backend=None,
+        multi_token=False,
+        generation_config=None,
+        runtime=False,
     ):
         """Return True if this model class should be skipped for export tests.
 
         Walks the scopes in ``EXPORT_SKIPS`` from broad to specific that match the current
         ``(backend, generate, dynamic)`` triple — ``"all"`` always applies, ``"generate"`` only
         for generate tests, ``"dynamic"`` / ``"static"`` for that shape variant on every backend,
-        ``"generate.multi_token"`` for the merged multi-token decode capture, ``"<backend>"`` for that
-        backend, and
+        ``"generate.multi_token"`` for the merged multi-token decode capture,
+        ``"generate.runtime"`` for driving the exported graphs through `generate` (the export itself still
+        runs — use it when a model exports fine and only the runtime cannot serve it), ``"<backend>"`` for
+        that backend, and
         ``"<backend>.<variant>"`` for the more-specific intersections. Also skips static-cache variants
         (a ``generation_config`` requesting one) on models that can't compile fullgraph — they don't
         support a static cache.
@@ -688,6 +765,8 @@ class ExportTesterMixin:
                 scopes.append("generate.dynamic")
             if multi_token:
                 scopes.append("generate.multi_token")
+            if runtime:
+                scopes.append("generate.runtime")
         scopes.append("dynamic" if dynamic else "static")
         if backend:
             scopes.append(backend)
@@ -1147,9 +1226,12 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             # which export no standalone prefill graph).
             can_split_prefill = "prefill" in exported and (dynamic or _needs_static_cache(generation_config))
             if (can_split_prefill or (dynamic and multi_token_decode)) and components.keys() <= exported.keys():
-                self._assert_generate_matches_eager(
-                    components, exported, "dynamo", generation_config, dynamic, multi_token_decode
-                )
+                if not self._should_skip(
+                    model_class, generate=True, runtime=True, generation_config=generation_config
+                ):
+                    self._assert_generate_matches_eager(
+                        components, exported, "dynamo", generation_config, dynamic, multi_token_decode
+                    )
 
     # ──────────────────────── ONNX tests ─────────────────────────
 
@@ -1198,9 +1280,12 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             # the dynamo call site for the gate.
             can_split_prefill = "prefill" in exported and (dynamic or _needs_static_cache(generation_config))
             if (can_split_prefill or (dynamic and multi_token_decode)) and components.keys() <= exported.keys():
-                self._assert_generate_matches_eager(
-                    components, exported, "onnx", generation_config, dynamic, multi_token_decode
-                )
+                if not self._should_skip(
+                    model_class, generate=True, runtime=True, generation_config=generation_config
+                ):
+                    self._assert_generate_matches_eager(
+                        components, exported, "onnx", generation_config, dynamic, multi_token_decode
+                    )
 
     # ──────────────────── ExecuTorch tests ───────────────────────
 
@@ -1254,6 +1339,9 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             # runner's device. See the dynamo call site for the gate.
             can_split_prefill = "prefill" in exported and (dynamic or _needs_static_cache(generation_config))
             if (can_split_prefill or (dynamic and multi_token_decode)) and components.keys() <= exported.keys():
-                self._assert_generate_matches_eager(
-                    components, exported, "executorch", generation_config, dynamic, multi_token_decode
-                )
+                if not self._should_skip(
+                    model_class, generate=True, runtime=True, generation_config=generation_config
+                ):
+                    self._assert_generate_matches_eager(
+                        components, exported, "executorch", generation_config, dynamic, multi_token_decode
+                    )

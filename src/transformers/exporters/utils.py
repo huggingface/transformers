@@ -928,6 +928,26 @@ def materialize_cache_layers(
     """
     kv_geometry = kv_geometry or {}
     for cache_half, _ in _cache_halves(cache):
+        # A model-specific cache may keep its state in fields of its own rather than a `layers` list
+        # (xLSTM's `rnn_state`); there is nothing layer-shaped to fill in that case.
+        if not hasattr(cache_half, "layers"):
+            continue
+        # `Cache.early_initialization` is the API's own answer to "export needs everything in advance": it
+        # feeds each layer a rank-4 zero-length hint, which is exactly the shape a growing layer must be given
+        # (its own lazy init would make a rank-1 empty and bake a rank-1 guard). Let it do the layers, and let
+        # a cache with state of its own size that state by overriding it (`MiniMaxCache.linear_cache`).
+        geometry = [
+            kv_geometry.get(index) or _cache_kv_geometry(config, index) for index in range(len(cache_half.layers))
+        ]
+        if all(entry is not None for entry in geometry) and geometry:
+            cache_half.early_initialization(
+                batch_size,
+                [entry[0] for entry in geometry],
+                [entry[1] for entry in geometry],
+                dtype,
+                device,
+                value_head_dim=[entry[2] for entry in geometry],
+            )
         _materialize_layers(cache_half, batch_size, config, dtype, device, kv_geometry)
 
 
@@ -1270,7 +1290,14 @@ if is_torch_available():
                 return inputs_embeds
             pad_token_id = self.model.config.get_text_config().pad_token_id or 0
             per_layer_ids = input_ids.masked_fill(placeholder, pad_token_id)
-            per_layer_inputs = self.model.get_per_layer_inputs(per_layer_ids, None)
+            # The signature differs by model: gemma4 takes `(input_ids, inputs_embeds)` with no defaults,
+            # gemma3n only `(input_ids)`. Pass the ids, and the embeds slot only if there is one.
+            takes_embeds = len(inspect.signature(self.model.get_per_layer_inputs).parameters) > 1
+            per_layer_inputs = (
+                self.model.get_per_layer_inputs(per_layer_ids, None)
+                if takes_embeds
+                else (self.model.get_per_layer_inputs(per_layer_ids))
+            )
             return {"inputs_embeds": inputs_embeds, "per_layer_inputs": per_layer_inputs}
 
 
@@ -1597,6 +1624,25 @@ def decompose_for_generation(
     # nothing produces.
     if "encoder" in stages:
         components["encoder"] = stages["encoder"]
+        # The decoder-side first step too: by then the images are consumed (`generate` precomputes
+        # `encoder_outputs` before the loop), so the captured prefill is pixel-free and is the one graph
+        # that *writes* the cross-attention cache — the decode graph, captured post-prefill, only reads it
+        # (`is_updated` bakes as trace-time context), so without this the first runtime step has no writer.
+        # Its captured cache is the pre-forward, lazily-uninitialized one; materialize it exactly as the
+        # text path does — safe here because the submodule split above has already captured everything.
+        if "prefill" in stages:
+            prefill_stage_inputs = stages["prefill"][1]
+            if (cache := prefill_stage_inputs.get("past_key_values")) is not None:
+                batch_size = next(t for t in prefill_stage_inputs.values() if isinstance(t, torch.Tensor)).shape[0]
+                materialize_cache_layers(
+                    cache,
+                    batch_size,
+                    model.config,
+                    module_dtype(model),
+                    module_device(model),
+                    kv_geometry=kv_geometry_of(stages["decode"][1].get("past_key_values")),
+                )
+            components["prefill"] = stages["prefill"]
 
     # Feed the decode graph `inputs_embeds` (not `input_ids`) so the runtime can scatter the encoder embeds
     # into the embeddings before the text stack; the full forward accepts `inputs_embeds` and — with no

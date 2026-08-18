@@ -1162,9 +1162,10 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
                 rope_deltas = rope_deltas - delta0
                 self.rope_deltas = rope_deltas
             else:
-                batch_size, seq_length = input_ids.shape
-                delta = (past_key_values_length + self.rope_deltas).to(input_ids.device)
-                position_ids = torch.arange(seq_length, device=input_ids.device)
+                tokens = inputs_embeds if input_ids is None else input_ids
+                batch_size, seq_length = tokens.shape[:2]
+                delta = (past_key_values_length + self.rope_deltas).to(tokens.device)
+                position_ids = torch.arange(seq_length, device=tokens.device)
                 position_ids = position_ids.view(1, -1).expand(batch_size, -1)
                 position_ids = position_ids.add(delta)
                 position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
@@ -1583,9 +1584,10 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3MoeForCausalLM):
                 rope_deltas = rope_deltas - delta0
                 self.rope_deltas = rope_deltas
             else:
-                batch_size, seq_length = input_ids.shape
-                delta = (past_key_values_length + self.rope_deltas).to(input_ids.device)
-                position_ids = torch.arange(seq_length, device=input_ids.device)
+                tokens = inputs_embeds if input_ids is None else input_ids
+                batch_size, seq_length = tokens.shape[:2]
+                delta = (past_key_values_length + self.rope_deltas).to(tokens.device)
+                position_ids = torch.arange(seq_length, device=tokens.device)
                 position_ids = position_ids.view(1, -1).expand(batch_size, -1)
                 position_ids = position_ids.add(delta)
                 position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
