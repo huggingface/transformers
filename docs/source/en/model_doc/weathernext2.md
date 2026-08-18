@@ -175,6 +175,50 @@ for step in range(1, 21):  # 5 days
 
 Passing numpy arrays instead works exactly the same way and returns numpy, at the cost of two transfers per step.
 
+### Tropical cyclones
+
+`kashif/weathernext-cyclones` predicts 17 cyclone diagnostics alongside the usual atmospheric
+fields: a per-gridpoint existence probability, `cyclone_exists_gaussian_unit_mode`, plus intensity,
+radius of maximum winds, and the twelve wind radii, one per quadrant at 34, 50 and 64 knots. They
+come out of [`~WeatherNext2FeatureExtractor.postprocess`] under the names the upstream tracker in
+[weathernext](https://github.com/google-deepmind/weathernext) already looks for, so a rollout can be
+tracked without renaming anything:
+
+```python
+import numpy as np
+import xarray
+from weathernext.cyclones import direct_tracker_6h_v1_config
+
+# `frames` holds one postprocessed forecast per step, and `analysis` the state it started from.
+cyclone_fields = [name for name in processor.target_variables if name.startswith("cyclone_")]
+gridded = xarray.Dataset(
+    {
+        name: (("time", "lat", "lon"), np.stack([analysis[name]] + [frame[name] for frame in frames]))
+        for name in cyclone_fields
+    },
+    coords={
+        # lead time, not valid time, and lead 0 has to be present
+        "time": np.arange(0, 6 * (len(frames) + 1), 6).astype("timedelta64[h]").astype("timedelta64[ns]"),
+        "lat": latitudes,
+        "lon": longitudes,
+        "init_time": np.datetime64("2024-10-07T00:00:00"),
+    },
+)
+
+config = direct_tracker_6h_v1_config.get_config()
+tracker = config.tracker_constructor(**config.tracker_kwargs)
+tracks = tracker(gridded_ds=gridded, initial_storms_df=initial_storms, do_cyclogenesis=True)
+```
+
+`initial_storms_df` is the frame the tracks are initialized from, one row per storm present at lead
+time 0 with `track_id`, `lat`, `lon` and `valid_time`; upstream builds it from IBTrACS observations.
+Storms that appear later are picked up by cyclogenesis from the existence field.
+
+Tracking does not have to use the cyclone head at all. earth2studio's `TCTrackerWuDuan` finds
+cyclones from vorticity and pressure, so it needs only `10m_u_component_of_wind`,
+`10m_v_component_of_wind`, `mean_sea_level_pressure` and the 850 hPa winds, and runs on any of these
+checkpoints.
+
 ## Notes
 
 - The mesh, both grid↔mesh graphs and the attention mask follow deterministically from the configuration, but they are
