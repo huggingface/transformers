@@ -1,4 +1,4 @@
-# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
+﻿# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -100,7 +100,7 @@ class Qwen3TTSTokenizerMultiCodebookModelTester:
         )
 
     def prepare_config_and_inputs(self):
-        # top-level encode expects (batch, channels, seq) — channels=1
+        # top-level encode expects (batch, channels, seq) â€” channels=1
         input_values = torch.randn([self.batch_size, 1, self.audio_samples], device=torch_device)
         padding_mask = torch.ones([self.batch_size, 1, self.audio_samples], dtype=torch.bool, device=torch_device)
         # top-level decode expects (batch, seq_length, num_quantizers)
@@ -188,96 +188,46 @@ class Qwen3TTSTokenizerMultiCodebookModelTest(ModelTesterMixin, unittest.TestCas
             output = model.decode(codes.to(torch_device))
         self.assertEqual(len(output.audio_values), self.model_tester.batch_size)
 
-    @unittest.skip(reason="Composite model — base model prefix test not applicable")
-    def test_model_base_model_prefix(self):
-        pass
+    # The model exposes `encode`/`decode` and defines no `forward`, so anything the common tester
+    # routes through `model(**inputs)` reaches `nn.Module._forward_unimplemented`.
+    _no_forward = "model defines `encode`/`decode` and no `forward`, which the common tester calls"
 
-    @unittest.skip(reason="No standard generate() — codec model, not a language model")
-    def test_generate_without_input_ids(self):
-        pass
-
-    @unittest.skip(reason="Qwen3TTSTokenizerMultiCodebookModel has no standard training forward")
-    def test_training(self):
-        pass
-
-    @unittest.skip(reason="Batching equivalence not applicable — audio codec output depends on padding")
-    def test_batching_equivalence(self):
-        pass
-
-    @unittest.skip(reason="Determinism not guaranteed across runs for codec models")
-    def test_determinism(self):
-        pass
-
-    @unittest.skip(reason="No standard model outputs equivalence for codec models")
-    def test_model_outputs_equivalence(self):
-        pass
-
-    @unittest.skip(reason="Compile not yet supported")
-    def test_sdpa_can_compile_dynamic(self):
-        pass
-
-    @unittest.skip(reason="Compile not yet supported")
-    def test_sdpa_can_dispatch_on_flash(self):
-        pass
-
-    @unittest.skip(reason="Flash attention right-padding equivalence not applicable")
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        pass
-
-    @unittest.skip(reason="No standard forward — all_tensors test not applicable")
+    @unittest.skip(reason=_no_forward)
     def test_all_tensors_are_parameter_or_buffer(self):
         pass
 
-    @unittest.skip(reason="No standard get_input_embeddings for codec model")
-    def test_model_get_set_embeddings(self):
+    @unittest.skip(reason=_no_forward)
+    def test_batching_equivalence(self):
         pass
 
-    @unittest.skip(reason="main_input_name requires converter re-run to propagate to modeling file")
+    @unittest.skip(reason=_no_forward)
+    def test_determinism(self):
+        pass
+
+    @unittest.skip(reason=_no_forward)
+    def test_model_outputs_equivalence(self):
+        pass
+
+    @unittest.skip(reason=f"{_no_forward}, so `main_input_name` cannot be inferred from its signature")
     def test_model_main_input_name(self):
         pass
 
-    @unittest.skip(reason="Composite config attn implementation not propagated uniformly across sub-configs")
-    def test_config_attn_implementation_setter(self):
+    @unittest.skip(reason=_no_forward)
+    def test_torch_export(self):
         pass
 
-    @unittest.skip(reason="Codec model has no tied weights")
-    def test_tied_weights_keys(self):
-        pass
-
-    @unittest.skip(reason="EuclideanCodebook buffers (embed_sum, cluster_usage) not reinitializable on meta device")
+    @unittest.skip(
+        reason="`_init_weights` does not cover the EuclideanCodebook buffers (`embed_sum`, `cluster_usage`), "
+        "so they cannot be reinitialized from the meta device"
+    )
     def test_can_init_all_missing_weights(self):
         pass
 
-    @unittest.skip(reason="EuclideanCodebook buffers (embed_sum, cluster_usage) not reinitializable on meta device")
-    def test_init_weights_can_init_buffers(self):
-        pass
-
-    @unittest.skip(reason="No standard forward — left padding test not applicable")
-    def test_left_padding_compatibility(self):
-        pass
-    def _load_fixture(self, name):
-        path = Path(__file__).parent.parent.parent / f"fixtures/qwen3_tts_tokenizer_multi_codebook/{name}"
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
-
-
-        """Decode with soundfile and resample with torchaudio.
-
-        `reproduce_qwen3_tts_tokenizer_mc_from_original.py` loads the same samples the same
-        way, so both sides see bit-identical audio: resampling differences between backends
-        would change the codes.
-        """
-    @unittest.skip(reason="No standard forward — torch fx not applicable")
-    def test_torch_fx(self):
-        pass
-
-        import torchaudio
-    @unittest.skip(reason="No standard forward — torch fx not applicable")
-    def test_torch_fx_output_loss(self):
-        pass
-
-    @unittest.skip(reason="No standard forward — sdpa dispatch not applicable")
-    def test_sdpa_can_dispatch_composite_models(self):
+    @unittest.skip(
+        reason="`attn_implementation` set on Qwen3TTSTokenizerMultiCodebookConfig is not propagated to the "
+        "encoder sub-config, which reports None instead of the requested value"
+    )
+    def test_config_attn_implementation_setter(self):
         pass
 
     @unittest.skip(reason="codec model has no token embeddings, so `get_input_embeddings` is not implemented")
@@ -305,11 +255,23 @@ class Qwen3TTSTokenizerMultiCodebookIntegrationTest(unittest.TestCase):
 
         cleanup(torch_device, gc_collect=True)
 
+    def _load_fixture(self, name):
+        path = Path(__file__).parent.parent.parent / f"fixtures/qwen3_tts_tokenizer_multi_codebook/{name}"
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+
     def _load_datasamples(self, num_samples):
+        """Decode with soundfile and resample with torchaudio.
+
+        `reproduce_qwen3_tts_tokenizer_mc_from_original.py` loads the same samples the same
+        way, so both sides see bit-identical audio: resampling differences between backends
+        would change the codes.
+        """
         import io
 
         import numpy as np
         import soundfile as sf
+        import torchaudio
         from datasets import load_dataset
 
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
@@ -321,7 +283,6 @@ class Qwen3TTSTokenizerMultiCodebookIntegrationTest(unittest.TestCase):
                 if audio_bytes
                 else sf.read(raw["path"], dtype="float32")
             )
-        expected_slice = torch.tensor(expected["audio_values_slice"][0], dtype=torch.float32)
             if array.ndim > 1:
                 array = array.mean(axis=1)
             if sr != self.TARGET_SAMPLE_RATE:
@@ -335,8 +296,6 @@ class Qwen3TTSTokenizerMultiCodebookIntegrationTest(unittest.TestCase):
     def test_single(self):
         """
         Ground truth generated from the original Qwen3-TTS tokenizer by
-        import numpy as np
-
         `reproduce_qwen3_tts_tokenizer_mc_from_original.py`.
         """
         set_seed(42)
@@ -362,6 +321,7 @@ class Qwen3TTSTokenizerMultiCodebookIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             decoded = model.decode(codes.unsqueeze(0))
 
+        expected_slice = torch.tensor(expected["audio_values_slice"][0], dtype=torch.float32)
         torch.testing.assert_close(
             decoded.audio_values[0].cpu().float()[..., : expected_slice.shape[-1]],
             expected_slice,
@@ -369,13 +329,14 @@ class Qwen3TTSTokenizerMultiCodebookIntegrationTest(unittest.TestCase):
             rtol=1e-3,
         )
 
-            expected_slice = torch.tensor(exp_slice, dtype=torch.float32)
     @slow
     def test_batch(self):
         """
         Ground truth generated from the original Qwen3-TTS tokenizer by
         `reproduce_qwen3_tts_tokenizer_mc_from_original.py`.
         """
+        import numpy as np
+
         set_seed(42)
         expected = self._load_fixture("expected_results_batch.json")
 
@@ -408,6 +369,7 @@ class Qwen3TTSTokenizerMultiCodebookIntegrationTest(unittest.TestCase):
         for i, (codes, exp_slice) in enumerate(zip(codes_list, expected["audio_values_slice"])):
             with torch.no_grad():
                 decoded = model.decode(codes.unsqueeze(0))
+            expected_slice = torch.tensor(exp_slice, dtype=torch.float32)
             torch.testing.assert_close(
                 decoded.audio_values[0].cpu().float()[..., : expected_slice.shape[-1]],
                 expected_slice,
