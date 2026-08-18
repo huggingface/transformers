@@ -49,17 +49,6 @@ from ..generation import GenerationConfig, GenerationMixin
 from ..modeling_outputs import BaseModelOutput, CausalLMOutputWithPast
 
 
-_ORT_TO_TORCH_DTYPE = {
-    "tensor(bool)": torch.bool,
-    "tensor(int32)": torch.int32,
-    "tensor(int64)": torch.int64,
-    "tensor(float)": torch.float32,
-    "tensor(float16)": torch.float16,
-    "tensor(bfloat16)": torch.bfloat16,
-    "tensor(double)": torch.float64,
-}
-
-
 class ModelRunner(ABC):
     """Wraps one exported artifact so it forwards like the module it was exported from:
     `runner(**kwargs) -> {name: tensor}`, torch tensors in and out.
@@ -389,6 +378,26 @@ class DynamoModelRunner(ModelRunner):
         return get_leaf_tensors(output)
 
 
+def _ort_to_torch_dtype(ort_type: str | None) -> torch.dtype | None:
+    """torch dtype for an ORT input/output type string (`"tensor(float)"`), or `None` if it names no tensor.
+
+    ORT spells the element type in ONNX's own vocabulary, so go through ONNX's enum and torch's mapping
+    instead of keeping a table by hand: that covers every dtype ONNX has (fp8, int4, …) rather than the few
+    someone happened to add, and a missing entry can't quietly become `None`. `onnx` / `onnxruntime` are
+    optional dependencies, hence the local import — only an ONNX runner ever asks.
+    """
+    import onnx
+    from torch.onnx import JitScalarType
+
+    match = re.fullmatch(r"tensor\((\w+)\)", ort_type or "")
+    if match is None:
+        return None
+    try:
+        return JitScalarType.from_onnx_type(onnx.TensorProto.DataType.Value(match.group(1).upper())).dtype()
+    except (ValueError, KeyError):
+        return None
+
+
 def _session_kv_geometry(shapes: dict[str, tuple]) -> dict[int, tuple[int, int, int]]:
     """`{layer index: (num_kv_heads, key_head_dim, value_head_dim)}` from an ORT session's input shapes.
 
@@ -422,7 +431,7 @@ class OnnxModelRunner(ModelRunner):
         shapes = {i.name: tuple(i.shape) for i in session.get_inputs()}
         # ORT rejects a feed whose dtype differs from the declared one, and the masks the runtime builds are
         # not always the type the graph was traced with (a bool padding mask vs a float causal one).
-        self._input_dtypes = {i.name: _ORT_TO_TORCH_DTYPE.get(i.type) for i in session.get_inputs()}
+        self._input_dtypes = {i.name: _ort_to_torch_dtype(i.type) for i in session.get_inputs()}
         self.kv_geometry = _session_kv_geometry(shapes)
         # Same contract as the dynamo runner's: the rank the single `attention_mask` input was traced with,
         # so the generation loop feeds the mask kind this graph took rather than assuming 4D.
@@ -437,7 +446,7 @@ class OnnxModelRunner(ModelRunner):
         # feeds to CPU, outputs back to this device.
         self.device = "cuda" if any("CUDA" in p for p in session.get_providers()) else "cpu"
         logits = next((o for o in session.get_outputs() if o.name == "logits"), None)
-        self.dtype = _ORT_TO_TORCH_DTYPE.get(logits.type, torch.float32) if logits is not None else torch.float32
+        self.dtype = (logits is not None and _ort_to_torch_dtype(logits.type)) or torch.float32
 
     def __call__(self, **kwargs) -> dict[str, torch.Tensor]:
         from .utils import get_leaf_tensors
