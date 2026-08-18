@@ -172,7 +172,7 @@ class TestWeightGlobMatching(unittest.TestCase):
         ]
 
         key = "unrelated.key"
-        renamed_key, _ = rename_source_key(key, renamings, [])
+        renamed_key, _, _ = rename_source_key(key, renamings, [])
         self.assertEqual(renamed_key, key)
 
 
