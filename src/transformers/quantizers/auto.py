@@ -138,6 +138,7 @@ LOADING_ATTRIBUTES_CONFIG_TYPES = (
     Mxfp4Config,
     MetalConfig,
     FineGrainedFP8Config,
+    BitsAndBytesConfig,
 )
 
 logger = logging.get_logger(__name__)

@@ -569,6 +569,9 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
         else:
             return None
 
+    def get_loading_attributes(self):
+        return {"bnb_4bit_compute_dtype": self.bnb_4bit_compute_dtype}
+
     def to_dict(self) -> dict[str, Any]:
         """
         Serializes this instance to a Python dictionary. Returns:
