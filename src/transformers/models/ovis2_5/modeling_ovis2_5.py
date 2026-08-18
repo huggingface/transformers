@@ -610,10 +610,6 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
         image_grid_thw: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Ovis2_5VisualFeaturesOutput:
-        r"""
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
-            Temporal, height, and width patch-grid dimensions for each packed image.
-        """
         vision_outputs = self.vision_tower(
             pixel_values=pixel_values,
             grid_thw=image_grid_thw,
@@ -679,12 +675,6 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Ovis2_5ModelOutputWithPast:
-        r"""
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            Temporal, height, and width patch-grid dimensions for each packed image.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            Temporal, height, and width patch-grid dimensions for each packed video.
-        """
         if (input_ids is None) == (inputs_embeds is None):
             raise ValueError("You must specify exactly one of `input_ids` or `inputs_embeds`.")
         if pixel_values is not None and pixel_values_videos is not None:
@@ -791,10 +781,6 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
         video_grid_thw: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Ovis2_5VisualFeaturesOutput:
-        r"""
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`):
-            Temporal, height, and width patch-grid dimensions for each packed video.
-        """
         return self.get_image_features(
             pixel_values=pixel_values_videos,
             image_grid_thw=video_grid_thw,
@@ -861,10 +847,6 @@ class Ovis2_5ForConditionalGeneration(Ovis2_5PreTrainedModel, GenerationMixin):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the causal language modeling loss. Token indices set to `-100` are ignored.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            Temporal, height, and width patch-grid dimensions for each packed image.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            Temporal, height, and width patch-grid dimensions for the packed video.
         """
         outputs = self.model(
             input_ids=input_ids,

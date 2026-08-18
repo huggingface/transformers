@@ -77,10 +77,6 @@ class Ovis2_5VisionConfig(PreTrainedConfig):
 @strict
 class Ovis2_5Config(PreTrainedConfig):
     r"""
-    image_token_id (`int`, *optional*, defaults to 151669):
-        Text-vocabulary token used as the placeholder for one image atom.
-    video_token_id (`int`, *optional*, defaults to 151669):
-        Text-vocabulary token used as the placeholder for one video atom.
     image_start_token_id (`int`, *optional*, defaults to 151670):
         Text-vocabulary token replaced by the learned image-begin visual embedding.
     image_end_token_id (`int`, *optional*, defaults to 151671):
