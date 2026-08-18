@@ -107,6 +107,56 @@ def test_host_port_blocking(cli):
         server_instance.run.assert_called_once()
 
 
+class TestServeThreadLifecycle(unittest.TestCase):
+    """Unit tests for background uvicorn thread lifecycle (no network)."""
+
+    def test_start_server_uses_daemon_thread(self):
+        serve = object.__new__(Serve)
+        serve.server = MagicMock()
+
+        async def immediate_serve():
+            return None
+
+        serve.server.serve = immediate_serve
+        serve.start_server()
+        try:
+            self.assertTrue(
+                serve._thread.daemon,
+                "non-blocking uvicorn thread must be daemon so process exit cannot hang forever",
+            )
+            serve._thread.join(timeout=2)
+            self.assertFalse(serve._thread.is_alive())
+        finally:
+            if serve._thread.is_alive():
+                serve.server.should_exit = True
+                serve.server.force_exit = True
+                serve._thread.join(timeout=2)
+
+    def test_kill_server_sets_force_exit(self):
+        serve = object.__new__(Serve)
+        serve._generation_state = MagicMock()
+        serve._model_manager = MagicMock()
+        serve.server = MagicMock()
+        serve.server.should_exit = False
+        serve.server.force_exit = False
+
+        # Pretend a live non-daemon-ish thread that finishes quickly
+        import threading
+
+        done = threading.Event()
+
+        def worker():
+            done.wait(timeout=1)
+
+        serve._thread = threading.Thread(target=worker, name="uvicorn-thread", daemon=True)
+        serve._thread.start()
+        serve.kill_server()
+        self.assertTrue(serve.server.should_exit)
+        self.assertTrue(serve.server.force_exit)
+        done.set()
+        serve._thread.join(timeout=2)
+
+
 class TestProcessorInputsFromMessages(unittest.TestCase):
     def test_llm_string_content(self):
         get_processor_inputs_from_messages = BaseHandler.get_processor_inputs_from_messages
