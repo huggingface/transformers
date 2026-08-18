@@ -49,8 +49,7 @@ class Siglip2TextConfig(PreTrainedConfig):
 
     model_type = "siglip2_text_model"
     base_config_key = "text_config"
-
-    vocab_size: int = 32000
+    vocab_size: int = 256000
     hidden_size: int = 768
     intermediate_size: int = 3072
     num_hidden_layers: int = 12
@@ -59,8 +58,6 @@ class Siglip2TextConfig(PreTrainedConfig):
     hidden_act: str = "gelu_pytorch_tanh"
     layer_norm_eps: float = 1e-6
     attention_dropout: float | int = 0.0
-    # This differs from `CLIPTokenizer`'s default and from openai/siglip2
-    # See https://github.com/huggingface/transformers/pull/24773#issuecomment-1632287538
     pad_token_id: int | None = 1
     bos_token_id: int | None = 49406
     eos_token_id: int | list[int] | None = 49407

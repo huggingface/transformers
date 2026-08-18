@@ -755,6 +755,14 @@ class Siglip2ModelIntegrationTest(unittest.TestCase):
             ],
         })
         EXPECTED_LOGITS_PER_TEXT = torch.tensor(expected_logits_per_texts.get_expectation()).to(torch_device)
-        # fmt: on
-
         torch.testing.assert_close(outputs.logits_per_text, EXPECTED_LOGITS_PER_TEXT, rtol=1e-3, atol=1e-3)
+
+    def test_config_token_ids_within_vocab(self):
+        config = Siglip2Config()
+        text_config = config.text_config
+        if text_config.bos_token_id is not None:
+            self.assertTrue(0 <= text_config.bos_token_id < text_config.vocab_size)
+        if text_config.eos_token_id is not None:
+            self.assertTrue(0 <= text_config.eos_token_id < text_config.vocab_size)
+        if text_config.pad_token_id is not None:
+            self.assertTrue(0 <= text_config.pad_token_id < text_config.vocab_size)

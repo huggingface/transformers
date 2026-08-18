@@ -655,5 +655,14 @@ class SiglipModelIntegrationTest(unittest.TestCase):
         # patch size = 16
         # batch size 1, (640/16) * (480/16) = 1200 patches, 768 hidden size
         expected_shape = torch.Size((1, 1200, 768))
-
         self.assertEqual(outputs.vision_model_output.last_hidden_state.shape, expected_shape)
+
+    def test_config_token_ids_within_vocab(self):
+        config = SiglipConfig()
+        text_config = config.text_config
+        if text_config.bos_token_id is not None:
+            self.assertTrue(0 <= text_config.bos_token_id < text_config.vocab_size)
+        if text_config.eos_token_id is not None:
+            self.assertTrue(0 <= text_config.eos_token_id < text_config.vocab_size)
+        if text_config.pad_token_id is not None:
+            self.assertTrue(0 <= text_config.pad_token_id < text_config.vocab_size)
