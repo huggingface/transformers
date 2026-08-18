@@ -127,7 +127,20 @@ trainer = Trainer(
 )
 ```
 
+### MoERouterHealthCallback
+
+[`MoERouterHealthCallback`] logs MoE router-health scalars through the normal trainer logging path. It is designed for MoE training telemetry, not for routing replay or transport debugging.
+
+The callback:
+
+- aggregates expert counts during router forwards instead of storing full routing tensors
+- logs flat scalar keys that work with W&B, TensorBoard, and other integrated reporters
+- uses an automatic reduction policy so distributed replica training gets global metrics by default, while tensor-parallel MoE runs avoid overcounting replicated router state
+
+See the [MoE telemetry](./moe_telemetry) guide for the metric definitions and distributed semantics.
+
 ## Next steps
 
 - See all available [integrated callbacks](./main_classes/callback#available-callbacks) for logging to experiment trackers.
+- The [MoE telemetry](./moe_telemetry) guide shows how to log router health metrics through a callback without changing model outputs.
 - The [Subclassing Trainer methods](./trainer_customize) guide covers overriding [`Trainer`] methods when you need to change what the training loop computes.
