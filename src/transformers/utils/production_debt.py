@@ -1,4 +1,16 @@
-from __future__ import annotations
+# Copyright 2026 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 import hashlib
 import json
@@ -7,13 +19,11 @@ import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
-log: logging.Logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
-GENESIS_HASH: str = (
-    "0000000000000000000000000000000000000000000000000000000000000000"
-)
+GENESIS_HASH = "0000000000000000000000000000000000000000000000000000000000000000"
 
 
 @dataclass
@@ -50,7 +60,8 @@ class TechnicalDueDiligenceLedger:
         index = len(self._entries)
 
         meta_bytes = json.dumps(metadata, sort_keys=True).encode("utf-8")
-        canonical_content = f"{index}|{self._last_hash}|{model_id}|{event_type}|{readiness_index}|{timestamp}|{hashlib.sha256(meta_bytes).hexdigest()}"
+        meta_hash = hashlib.sha256(meta_bytes).hexdigest()
+        canonical_content = f"{index}|{self._last_hash}|{model_id}|{event_type}|{readiness_index}|{timestamp}|{meta_hash}"
         curr_hash = hashlib.sha256(canonical_content.encode("utf-8")).hexdigest()
 
         entry = {
@@ -85,10 +96,10 @@ class ProductionDebtEvaluator:
     """
     A2Z SOC Production Debt & Technical Due Diligence Evaluator for Hugging Face Transformers.
 
-    Quantifies model inference quality against 4 Enterprise Forward Deployed Engineering KPIs:
+    Quantifies foundation model inference pipelines against 4 Enterprise KPIs:
     1. Model Debt Index (MDI <= 12.0)
-    2. KV Cache Memory Inflation (KVI <= 1.08x)
-    3. P99 Token Generation Latency (<= 35ms/tok)
+    2. KV Cache Memory Inflation Multiplier (KVM <= 1.08x)
+    3. P99 Token Latency Ceiling (<= 35ms/tok)
     4. Deterministic Mutation Boundaries (never_equate_intent_to_approval)
     """
 
@@ -104,17 +115,14 @@ class ProductionDebtEvaluator:
     def check_kill_switch(self) -> bool:
         if os.environ.get("AAG_KILL_SWITCH", "").lower() in ("true", "1", "yes"):
             return True
-        for path_str in ("artifacts/KILL", "/tmp/KILL"):
-            if Path(path_str).exists():
-                return True
-        return False
+        return any(Path(p).exists() for p in ("artifacts/KILL", "/tmp/KILL"))
 
     def evaluate_inference(
         self,
         model_id: str,
         allocated_kv_cache_mb: float = 2048.0,
         utilized_kv_cache_mb: float = 1950.0,
-        latency_ms_per_token: float = 22.5,
+        latency_ms_per_token: float = 25.0,
         autoregressive_loop_count: int = 0,
         un_gated_mutations: int = 0,
     ) -> ModelDebtReport:
@@ -128,21 +136,21 @@ class ProductionDebtEvaluator:
                 metadata={"reason": "AAG_KILL_SWITCH is set"},
             )
             raise PermissionError(
-                "A2Z SOC ActionGate: Emergency kill switch is engaged. Model inference halted."
+                "A2Z SOC ActionGate: Emergency kill switch is engaged. Foundation model inference halted."
             )
 
         critical_smells: List[str] = []
 
         # KPI 2: KV Cache Memory Inflation Multiplier
         memory_ratio = allocated_kv_cache_mb / max(1.0, utilized_kv_cache_mb)
-        if memory_ratio > 1.5:
+        if memory_ratio > 1.8:
             critical_smells.append(f"HIGH_KV_CACHE_INFLATION_{memory_ratio:.2f}X")
 
         # KPI 3: Latency Ceiling
-        if latency_ms_per_token > 80.0:
+        if latency_ms_per_token > 60.0:
             critical_smells.append(f"HIGH_TOKEN_LATENCY_{latency_ms_per_token:.1f}MS")
 
-        # Autoregressive loops
+        # Repetitive autoregressive loop count
         if autoregressive_loop_count > 2:
             critical_smells.append(f"DETECTED_{autoregressive_loop_count}_REPETITIVE_GENERATION_LOOPS")
 
@@ -154,7 +162,7 @@ class ProductionDebtEvaluator:
         mdi = (
             max(0.0, (memory_ratio - 1.0) * 20.0)
             + max(0.0, (latency_ms_per_token - 35.0) * 0.5)
-            + (autoregressive_loop_count * 12.0)
+            + (autoregressive_loop_count * 15.0)
             + (un_gated_mutations * 30.0)
         )
         mdi_score = round(min(100.0, mdi), 2)
@@ -174,6 +182,8 @@ class ProductionDebtEvaluator:
             metadata={
                 "mdi_score": mdi_score,
                 "memory_ratio": memory_ratio,
+                "allocated_kv_cache_mb": allocated_kv_cache_mb,
+                "utilized_kv_cache_mb": utilized_kv_cache_mb,
                 "latency_ms_per_token": latency_ms_per_token,
                 "autoregressive_loop_count": autoregressive_loop_count,
                 "un_gated_mutations": un_gated_mutations,
