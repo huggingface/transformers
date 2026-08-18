@@ -19,7 +19,6 @@
 # limitations under the License.
 
 import math
-from collections.abc import Iterable
 
 import torch
 from torchvision.transforms.v2 import functional as tvF
@@ -34,10 +33,6 @@ from ...utils import TensorType, auto_docstring
 
 class Ovis2_5ImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
-    min_pixels (`int`, *optional*, defaults to `448 * 448`):
-        The minimum number of pixels in the resized image.
-    max_pixels (`int`, *optional*, defaults to `1344 * 1792`):
-        The maximum number of pixels in the resized image.
     patch_size (`int`, *optional*, defaults to 16):
         The spatial patch size of the vision encoder.
     temporal_patch_size (`int`, *optional*, defaults to 1):
@@ -46,8 +41,6 @@ class Ovis2_5ImageProcessorKwargs(ImagesKwargs, total=False):
         The spatial merge size used by the visual tokenizer.
     """
 
-    min_pixels: int
-    max_pixels: int
     patch_size: int
     temporal_patch_size: int
     merge_size: int
@@ -61,6 +54,7 @@ def smart_resize(
     max_pixels: int = 1344 * 1792,
 ) -> tuple[int, int]:
     """Resize an image according to the native Ovis2.5 preprocessing policy."""
+    # Unlike Qwen, Ovis expands dimensions below the factor and clamps aspect ratios above 200.
     if height < factor or width < factor:
         if height < width:
             width = round(factor / height * width)
@@ -94,6 +88,7 @@ class Ovis2_5ImageProcessor(TorchvisionBackend):
     size = {"shortest_edge": 448 * 448, "longest_edge": 1344 * 1792}
     default_to_square = False
     do_rescale = True
+    rescale_factor = 1 / 255
     do_normalize = True
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
@@ -104,49 +99,20 @@ class Ovis2_5ImageProcessor(TorchvisionBackend):
     valid_kwargs = Ovis2_5ImageProcessorKwargs
     model_input_names = ["pixel_values", "image_grid_thw"]
 
-    def __init__(self, **kwargs: Unpack[Ovis2_5ImageProcessorKwargs]):
-        # backward compatibility: override size with min_pixels and max_pixels if they are provided
-        size = kwargs.pop("size", None)
-        size = self.size if size is None else size
-        if (min_pixels := kwargs.pop("min_pixels", None)) is not None:
-            size["shortest_edge"] = min_pixels
-            size.pop("min_pixels", None)
-        if (max_pixels := kwargs.pop("max_pixels", None)) is not None:
-            size["longest_edge"] = max_pixels
-            size.pop("max_pixels", None)
-        super().__init__(size=size, **kwargs)
-
-    def _standardize_kwargs(
-        self,
-        size: int | Iterable[int] | dict[str, int] | SizeDict | None = None,
-        min_pixels: int | None = None,
-        max_pixels: int | None = None,
-        **kwargs,
-    ) -> dict:
-        if min_pixels is not None and max_pixels is not None:
-            size = SizeDict(shortest_edge=min_pixels, longest_edge=max_pixels)
-        return super()._standardize_kwargs(size=size, **kwargs)
-
     @auto_docstring
-    def preprocess(
-        self,
-        images: ImageInput,
-        **kwargs: Unpack[Ovis2_5ImageProcessorKwargs],
-    ) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[Ovis2_5ImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def resize(
         self,
-        images: "torch.Tensor",
+        images: torch.Tensor,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: PILImageResampling | int | None,
         factor: int,
+        temporal_factor: int,
         **kwargs,
-    ) -> "torch.Tensor":
+    ) -> torch.Tensor:
         """Resize dynamically based on input image aspect ratio."""
-        if not size.shortest_edge or not size.longest_edge:
-            raise ValueError(f"`size` dict must contain 'shortest_edge' and 'longest_edge' keys but got {size}.")
-
         height, width = images.shape[-2:]
         resized_height, resized_width = smart_resize(
             height,
@@ -181,10 +147,7 @@ class Ovis2_5ImageProcessor(TorchvisionBackend):
             merge_size,
             patch_size,
         )
-        # Reorder dimensions to group grid and patch information for subsequent flattening.
-        # [batch, grid_h/merge, grid_w/merge, merge, merge, channel, patch, patch]
         patches = patches.permute(0, 2, 5, 3, 6, 1, 4, 7)
-
         flatten_patches = (
             patches.unsqueeze(6)
             .expand(-1, -1, -1, -1, -1, -1, temporal_patch_size, -1, -1)
@@ -214,6 +177,10 @@ class Ovis2_5ImageProcessor(TorchvisionBackend):
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
+        """
+        Preprocess an image or batch of images.
+        """
+
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
@@ -223,17 +190,21 @@ class Ovis2_5ImageProcessor(TorchvisionBackend):
                     size=size,
                     resample=resample,
                     factor=patch_size * merge_size,
+                    temporal_factor=temporal_patch_size,
                 )
             resized_images_grouped[shape] = stacked_images
+
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
         grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
         processed_grids = {}
+
         for shape, stacked_images in grouped_images.items():
             stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
+
             patches, grid_h, grid_w = self.patchify(
                 stacked_images,
                 patch_size=patch_size,
@@ -245,9 +216,10 @@ class Ovis2_5ImageProcessor(TorchvisionBackend):
             processed_grids[shape] = [[1, grid_h, grid_w]] * len(stacked_images)
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-        processed_grids_ordered = reorder_images(processed_grids, grouped_images_index)
+        processed_grids = reorder_images(processed_grids, grouped_images_index)
+
         pixel_values = processed_images[0] if len(processed_images) == 1 else torch.cat(processed_images, dim=0)
-        image_grid_thw = torch.tensor(processed_grids_ordered, dtype=torch.long)
+        image_grid_thw = torch.tensor(processed_grids)
 
         return BatchFeature(
             data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
@@ -256,9 +228,6 @@ class Ovis2_5ImageProcessor(TorchvisionBackend):
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:
         """
         A utility that returns number of image patches for a given image size.
-
-        Note: Do not remove this method! It is used by vLLM to infer the number of patches and placeholders
-        without an image input.
 
         Args:
             height (`int`):
@@ -271,17 +240,19 @@ class Ovis2_5ImageProcessor(TorchvisionBackend):
             `int`: Number of image patches per image.
         """
         images_kwargs = images_kwargs or {}
-        min_pixels = images_kwargs["min_pixels"] if "min_pixels" in images_kwargs else self.size["shortest_edge"]
-        max_pixels = images_kwargs["max_pixels"] if "max_pixels" in images_kwargs else self.size["longest_edge"]
         patch_size = images_kwargs.get("patch_size", self.patch_size)
         merge_size = images_kwargs.get("merge_size", self.merge_size)
-
-        factor = patch_size * merge_size
+        size = images_kwargs.get("size", self.size)
+        min_pixels = size["shortest_edge"] if isinstance(size, dict) else size.shortest_edge
+        max_pixels = size["longest_edge"] if isinstance(size, dict) else size.longest_edge
         resized_height, resized_width = smart_resize(
-            height, width, factor, min_pixels=min_pixels, max_pixels=max_pixels
+            height,
+            width,
+            factor=patch_size * merge_size,
+            min_pixels=min_pixels,
+            max_pixels=max_pixels,
         )
-        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
-        return grid_h * grid_w
+        return (resized_height // patch_size) * (resized_width // patch_size)
 
 
 __all__ = ["Ovis2_5ImageProcessor"]

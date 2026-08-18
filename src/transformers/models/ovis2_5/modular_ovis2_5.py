@@ -23,7 +23,8 @@ from torch import nn
 
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
-from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling
+from ...image_processing_backends import PilBackend, TorchvisionBackend
+from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling, SizeDict
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
@@ -37,9 +38,9 @@ from ...vision_utils import (
     get_vision_window_index,
 )
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ..glm4v.image_processing_glm4v import Glm4vImageProcessor, Glm4vImageProcessorKwargs
+from ..glm4v.image_processing_pil_glm4v import Glm4vImageProcessorPil
 from ..ovis2.modeling_ovis2 import Ovis2ForConditionalGeneration, Ovis2Model
-from ..qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
-from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, Qwen2VLImageProcessorKwargs
 from ..video_llama_3.modeling_video_llama_3 import (
     VideoLlama3CausalLMOutputWithPast,
     VideoLlama3ModelOutputWithPast,
@@ -51,12 +52,8 @@ from ..video_llama_3.modeling_video_llama_3 import (
 )
 
 
-class Ovis2_5ImageProcessorKwargs(Qwen2VLImageProcessorKwargs, total=False):
+class Ovis2_5ImageProcessorKwargs(Glm4vImageProcessorKwargs, total=False):
     r"""
-    min_pixels (`int`, *optional*, defaults to `448 * 448`):
-        The minimum number of pixels in the resized image.
-    max_pixels (`int`, *optional*, defaults to `1344 * 1792`):
-        The maximum number of pixels in the resized image.
     patch_size (`int`, *optional*, defaults to 16):
         The spatial patch size of the vision encoder.
     temporal_patch_size (`int`, *optional*, defaults to 1):
@@ -74,6 +71,7 @@ def smart_resize(
     max_pixels: int = 1344 * 1792,
 ) -> tuple[int, int]:
     """Resize an image according to the native Ovis2.5 preprocessing policy."""
+    # Unlike Qwen, Ovis expands dimensions below the factor and clamps aspect ratios above 200.
     if height < factor or width < factor:
         if height < width:
             width = round(factor / height * width)
@@ -100,7 +98,7 @@ def smart_resize(
     return resized_height, resized_width
 
 
-class Ovis2_5ImageProcessor(Qwen2VLImageProcessor):
+class Ovis2_5ImageProcessor(Glm4vImageProcessor):
     resample = PILImageResampling.BILINEAR
     size = {"shortest_edge": 448 * 448, "longest_edge": 1344 * 1792}
     image_mean = IMAGENET_STANDARD_MEAN
@@ -110,8 +108,48 @@ class Ovis2_5ImageProcessor(Qwen2VLImageProcessor):
     merge_size = 2
     valid_kwargs = Ovis2_5ImageProcessorKwargs
 
+    def resize(
+        self,
+        images: torch.Tensor,
+        size: SizeDict,
+        resample: PILImageResampling | int | None,
+        factor: int,
+        temporal_factor: int,
+        **kwargs,
+    ) -> torch.Tensor:
+        height, width = images.shape[-2:]
+        resized_height, resized_width = smart_resize(
+            height,
+            width,
+            factor=factor,
+            min_pixels=size.shortest_edge,
+            max_pixels=size.longest_edge,
+        )
+        return TorchvisionBackend.resize(
+            self,
+            image=images,
+            size=SizeDict(height=resized_height, width=resized_width),
+            resample=resample,
+        )
 
-class Ovis2_5ImageProcessorPil(Qwen2VLImageProcessorPil):
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:
+        images_kwargs = images_kwargs or {}
+        patch_size = images_kwargs.get("patch_size", self.patch_size)
+        merge_size = images_kwargs.get("merge_size", self.merge_size)
+        size = images_kwargs.get("size", self.size)
+        min_pixels = size["shortest_edge"] if isinstance(size, dict) else size.shortest_edge
+        max_pixels = size["longest_edge"] if isinstance(size, dict) else size.longest_edge
+        resized_height, resized_width = smart_resize(
+            height,
+            width,
+            factor=patch_size * merge_size,
+            min_pixels=min_pixels,
+            max_pixels=max_pixels,
+        )
+        return (resized_height // patch_size) * (resized_width // patch_size)
+
+
+class Ovis2_5ImageProcessorPil(Glm4vImageProcessorPil):
     resample = PILImageResampling.BILINEAR
     size = {"shortest_edge": 448 * 448, "longest_edge": 1344 * 1792}
     image_mean = IMAGENET_STANDARD_MEAN
@@ -120,6 +158,46 @@ class Ovis2_5ImageProcessorPil(Qwen2VLImageProcessorPil):
     temporal_patch_size = 1
     merge_size = 2
     valid_kwargs = Ovis2_5ImageProcessorKwargs
+
+    def resize(
+        self,
+        image: Any,
+        size: SizeDict,
+        resample: PILImageResampling | int | None,
+        factor: int,
+        temporal_factor: int,
+        **kwargs,
+    ) -> Any:
+        height, width = image.shape[-2:]
+        resized_height, resized_width = smart_resize(
+            height,
+            width,
+            factor=factor,
+            min_pixels=size.shortest_edge,
+            max_pixels=size.longest_edge,
+        )
+        return PilBackend.resize(
+            self,
+            image=image,
+            size=SizeDict(height=resized_height, width=resized_width),
+            resample=resample,
+        )
+
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:
+        images_kwargs = images_kwargs or {}
+        patch_size = images_kwargs.get("patch_size", self.patch_size)
+        merge_size = images_kwargs.get("merge_size", self.merge_size)
+        size = images_kwargs.get("size", self.size)
+        min_pixels = size["shortest_edge"] if isinstance(size, dict) else size.shortest_edge
+        max_pixels = size["longest_edge"] if isinstance(size, dict) else size.longest_edge
+        resized_height, resized_width = smart_resize(
+            height,
+            width,
+            factor=patch_size * merge_size,
+            min_pixels=min_pixels,
+            max_pixels=max_pixels,
+        )
+        return (resized_height // patch_size) * (resized_width // patch_size)
 
 
 @auto_docstring(checkpoint="AIDC-AI/Ovis2.5-2B")

@@ -19,7 +19,7 @@
 # limitations under the License.
 
 import math
-from collections.abc import Iterable
+from typing import Any
 
 import numpy as np
 
@@ -32,10 +32,6 @@ from ...utils import TensorType, auto_docstring
 
 class Ovis2_5ImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
-    min_pixels (`int`, *optional*, defaults to `448 * 448`):
-        The minimum number of pixels in the resized image.
-    max_pixels (`int`, *optional*, defaults to `1344 * 1792`):
-        The maximum number of pixels in the resized image.
     patch_size (`int`, *optional*, defaults to 16):
         The spatial patch size of the vision encoder.
     temporal_patch_size (`int`, *optional*, defaults to 1):
@@ -44,8 +40,6 @@ class Ovis2_5ImageProcessorKwargs(ImagesKwargs, total=False):
         The spatial merge size used by the visual tokenizer.
     """
 
-    min_pixels: int
-    max_pixels: int
     patch_size: int
     temporal_patch_size: int
     merge_size: int
@@ -59,6 +53,7 @@ def smart_resize(
     max_pixels: int = 1344 * 1792,
 ) -> tuple[int, int]:
     """Resize an image according to the native Ovis2.5 preprocessing policy."""
+    # Unlike Qwen, Ovis expands dimensions below the factor and clamps aspect ratios above 200.
     if height < factor or width < factor:
         if height < width:
             width = round(factor / height * width)
@@ -92,6 +87,7 @@ class Ovis2_5ImageProcessorPil(PilBackend):
     size = {"shortest_edge": 448 * 448, "longest_edge": 1344 * 1792}
     default_to_square = False
     do_rescale = True
+    rescale_factor = 1 / 255
     do_normalize = True
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
@@ -102,41 +98,20 @@ class Ovis2_5ImageProcessorPil(PilBackend):
     valid_kwargs = Ovis2_5ImageProcessorKwargs
     model_input_names = ["pixel_values", "image_grid_thw"]
 
-    def __init__(self, **kwargs: Unpack[Ovis2_5ImageProcessorKwargs]):
-        # backward compatibility: override size with min_pixels and max_pixels if they are provided
-        size = kwargs.pop("size", None)
-        size = self.size if size is None else size
-        if (min_pixels := kwargs.pop("min_pixels", None)) is not None:
-            size["shortest_edge"] = min_pixels
-            size.pop("min_pixels", None)
-        if (max_pixels := kwargs.pop("max_pixels", None)) is not None:
-            size["longest_edge"] = max_pixels
-            size.pop("max_pixels", None)
-        super().__init__(size=size, **kwargs)
-
-    def _standardize_kwargs(
-        self,
-        size: int | Iterable[int] | dict[str, int] | SizeDict | None = None,
-        min_pixels: int | None = None,
-        max_pixels: int | None = None,
-        **kwargs,
-    ) -> dict:
-        if min_pixels is not None and max_pixels is not None:
-            size = SizeDict(shortest_edge=min_pixels, longest_edge=max_pixels)
-        return super()._standardize_kwargs(size=size, **kwargs)
+    @auto_docstring
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[Ovis2_5ImageProcessorKwargs]) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
 
     def resize(
         self,
-        image: np.ndarray,
+        image: Any,
         size: SizeDict,
-        resample: "PILImageResampling | int | None",
+        resample: PILImageResampling | int | None,
         factor: int,
+        temporal_factor: int,
         **kwargs,
-    ) -> np.ndarray:
+    ) -> Any:
         """Resize dynamically based on input image aspect ratio."""
-        if not size.shortest_edge or not size.longest_edge:
-            raise ValueError(f"`size` dict must contain 'shortest_edge' and 'longest_edge' keys but got {size}.")
-
         height, width = image.shape[-2:]
         resized_height, resized_width = smart_resize(
             height,
@@ -188,14 +163,6 @@ class Ovis2_5ImageProcessorPil(PilBackend):
         )
         return flatten_patches, grid_h, grid_w
 
-    @auto_docstring
-    def preprocess(
-        self,
-        images: ImageInput,
-        **kwargs: Unpack[Ovis2_5ImageProcessorKwargs],
-    ) -> BatchFeature:
-        return super().preprocess(images, **kwargs)
-
     def _preprocess(
         self,
         images: list[np.ndarray],
@@ -213,8 +180,11 @@ class Ovis2_5ImageProcessorPil(PilBackend):
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
-        all_patches = []
-        all_grids = []
+        """
+        Preprocess images one by one for PIL backend.
+        """
+        processed_images = []
+        processed_grids = []
 
         for image in images:
             if do_resize:
@@ -223,8 +193,10 @@ class Ovis2_5ImageProcessorPil(PilBackend):
                     size=size,
                     resample=resample,
                     factor=patch_size * merge_size,
+                    temporal_factor=temporal_patch_size,
                 )
 
+            # Rescale and normalize
             if do_rescale:
                 image = self.rescale(image, rescale_factor)
             if do_normalize:
@@ -237,11 +209,13 @@ class Ovis2_5ImageProcessorPil(PilBackend):
                 temporal_patch_size=temporal_patch_size,
             )
 
-            all_patches.append(patches)
-            all_grids.append([1, grid_h, grid_w])
+            # Remove batch dimension and append: shape is (seq_len, hidden_dim)
+            processed_images.append(patches)
+            processed_grids.append([1, grid_h, grid_w])
 
-        pixel_values = np.concatenate(all_patches, axis=0)
-        image_grid_thw = np.array(all_grids, dtype=np.int64)
+        # Concatenate all images along sequence dimension: (total_seq_len, hidden_dim)
+        pixel_values = np.concatenate(processed_images, axis=0)
+        image_grid_thw = np.array(processed_grids)
 
         return BatchFeature(
             data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
@@ -250,9 +224,6 @@ class Ovis2_5ImageProcessorPil(PilBackend):
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:
         """
         A utility that returns number of image patches for a given image size.
-
-        Note: Do not remove this method! It is used by vLLM to infer the number of patches and placeholders
-        without an image input.
 
         Args:
             height (`int`):
@@ -265,17 +236,19 @@ class Ovis2_5ImageProcessorPil(PilBackend):
             `int`: Number of image patches per image.
         """
         images_kwargs = images_kwargs or {}
-        min_pixels = images_kwargs["min_pixels"] if "min_pixels" in images_kwargs else self.size["shortest_edge"]
-        max_pixels = images_kwargs["max_pixels"] if "max_pixels" in images_kwargs else self.size["longest_edge"]
         patch_size = images_kwargs.get("patch_size", self.patch_size)
         merge_size = images_kwargs.get("merge_size", self.merge_size)
-
-        factor = patch_size * merge_size
+        size = images_kwargs.get("size", self.size)
+        min_pixels = size["shortest_edge"] if isinstance(size, dict) else size.shortest_edge
+        max_pixels = size["longest_edge"] if isinstance(size, dict) else size.longest_edge
         resized_height, resized_width = smart_resize(
-            height, width, factor, min_pixels=min_pixels, max_pixels=max_pixels
+            height,
+            width,
+            factor=patch_size * merge_size,
+            min_pixels=min_pixels,
+            max_pixels=max_pixels,
         )
-        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
-        return grid_h * grid_w
+        return (resized_height // patch_size) * (resized_width // patch_size)
 
 
 __all__ = ["Ovis2_5ImageProcessorPil"]
