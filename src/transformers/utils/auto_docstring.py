@@ -43,7 +43,7 @@ AUTODOC_FILES = [
     "processing_*.py",
     "image_processing_pil_*.py",
     "image_processing_*.py",
-    "feature_extractor_*.py",
+    "feature_extraction_*.py",
 ]
 
 PLACEHOLDER_TO_AUTO_MODULE = {
@@ -390,6 +390,14 @@ class ProcessorArgs:
     The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
     (pretokenized string). If you pass a pretokenized input, set `is_split_into_words=True` to avoid ambiguity with batched inputs.
     """,
+    }
+
+    videos = {
+        "description": """
+    Video to preprocess. Expects a single or batch of videos with pixel values ranging from 0 to 255. If
+    passing in videos with pixel values between 0 and 1, set `do_rescale=False`.
+    """,
+        "shape": None,
     }
 
     audio = {
@@ -1639,6 +1647,36 @@ class ConfigArgs:
     temporal_patch_size = {
         "description": """
     Temporal patch size used in the 3D patch embedding for video inputs.
+    """,
+    }
+
+    do_sample_frames = {
+        "description": """
+    Whether to sample frames from the video before processing or to process the whole video.
+    """,
+    }
+
+    video_metadata = {
+        "description": """
+    Metadata of the video containing information about total duration, fps and total number of frames.
+    """,
+    }
+
+    num_frames = {
+        "description": """
+    Maximum number of frames to sample when `do_sample_frames=True`.
+    """,
+    }
+
+    fps = {
+        "description": """
+    Target frames to sample per second when `do_sample_frames=True`.
+    """,
+    }
+
+    return_metadata = {
+        "description": """
+    Whether to return video metadata or not.
     """,
     }
 
@@ -4586,10 +4624,10 @@ def auto_docstring(obj=None, *, custom_intro=None, custom_args=None, checkpoint=
 
         Using with ModelOutput classes:
         ```python
-        @dataclass
         @auto_docstring(
             custom_intro="Custom model outputs with additional fields."
         )
+        @dataclass
         class MyModelOutput(ImageClassifierOutput):
             r'''
             loss (`torch.FloatTensor`, *optional*):
