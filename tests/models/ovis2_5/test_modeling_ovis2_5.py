@@ -509,6 +509,25 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
             two_prompt_inputs["image_grid_thw"] = one_image_inputs["image_grid_thw"].repeat(2, 1)
             model(**two_prompt_inputs)
 
+    def test_visual_input_counts_from_embeddings(self):
+        """Visual start-token counts are identical when generation receives embeddings instead of token IDs."""
+        model = Ovis2_5ForConditionalGeneration(self.model_tester.get_config()).to(torch_device).eval()
+        input_ids = torch.tensor(
+            [
+                [self.model_tester.image_start_token_id, 1, self.model_tester.video_start_token_id, 2],
+                [self.model_tester.image_start_token_id, self.model_tester.image_start_token_id, 1, 2],
+            ],
+            dtype=torch.long,
+            device=torch_device,
+        )
+        inputs_embeds = model.get_input_embeddings()(input_ids)
+
+        counts_from_ids = model._get_image_nums_and_video_nums(input_ids)
+        counts_from_embeds = model._get_image_nums_and_video_nums(None, inputs_embeds)
+
+        for actual, expected in zip(counts_from_embeds, counts_from_ids):
+            torch.testing.assert_close(actual, expected)
+
     def test_native_subconfig_names(self):
         text_config = self.model_tester.get_text_config().to_dict()
         vision_config = self.model_tester.get_vision_config().to_dict()

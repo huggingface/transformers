@@ -810,14 +810,16 @@ class Ovis2_5ForConditionalGeneration(Ovis2ForConditionalGeneration):
         # available so beam expansion still sees the multimodal boundaries.
         if inputs_embeds is not None:
             image_start_embedding = self.get_input_embeddings()(
-                torch.tensor(
+                torch.full(
+                    (),
                     self.config.image_start_token_id,
                     dtype=torch.long,
                     device=inputs_embeds.device,
                 )
             )
             video_start_embedding = self.get_input_embeddings()(
-                torch.tensor(
+                torch.full(
+                    (),
                     self.config.video_start_token_id,
                     dtype=torch.long,
                     device=inputs_embeds.device,
