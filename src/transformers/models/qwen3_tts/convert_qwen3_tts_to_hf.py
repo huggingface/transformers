@@ -230,6 +230,18 @@ def convert_checkpoint(checkpoint_path, output_dir, push_to_hub, bfloat16, max_s
         new_key = new_key.removeprefix("talker.")
         converted_state_dict[new_key] = value
 
+    # The code predictor projects every codec group with a single fused `nn.Linear` of shape
+    # `((num_code_groups - 1) * vocab_size, hidden_size)` rather than a `ModuleList` of per-group
+    # heads, so the checkpoint's `lm_head.{i}.weight` tensors are concatenated in group order.
+    # `forward` reverses this by reshaping to `(..., num_code_groups - 1, vocab_size)`.
+    lm_head_keys = sorted(
+        (key for key in converted_state_dict if key.startswith("code_predictor.lm_head.")),
+        key=lambda key: int(key.split(".")[-2]),
+    )
+    converted_state_dict["code_predictor.lm_head.weight"] = torch.cat(
+        [converted_state_dict.pop(key) for key in lm_head_keys], dim=0
+    )
+
     if bfloat16:
         dtype = torch.bfloat16
     else:
