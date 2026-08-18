@@ -109,13 +109,32 @@ same ensemble on any accelerator.
 
 ### Ensembles
 
-Each member is one draw of the 32-dimensional noise vector through the same weights. Members are fully independent, so
-the usual way to run them is one at a time, seeding each from its own index:
+Each member is one draw of the 32-dimensional noise vector through the same weights, so an ensemble is a batch: stack
+one vector per member and run a single forward.
 
 ```python
 members = 8
 inputs = processor(state, seconds_since_epoch=valid_time).to(model.device)
+batched = {key: value.repeat(members, *([1] * (value.ndim - 1))) for key, value in inputs.items()}
 
+noise = torch.stack(
+    [
+        torch.randn(model.config.noise_channels, generator=torch.Generator().manual_seed(member))
+        for member in range(members)
+    ]
+)
+with torch.no_grad():
+    outputs = model(**batched, noise=noise.to(model.device))
+```
+
+Seeding per member rather than drawing from one stream means the first `n` members are the same however large the
+ensemble is - the property the original implementation gets from `jax.random.fold_in`. Passing `generator=` instead of
+`noise=` lets the model draw every member from one stream, which is shorter to write but gives up that property.
+
+At 0.25° a member needs roughly 50 GB, so there the members have to go one at a time. That is also what the reference
+implementation does, one member per device, looping or sharding rather than batching:
+
+```python
 predictions = []
 for member in range(members):
     noise = torch.randn(1, model.config.noise_channels, generator=torch.Generator().manual_seed(member))
@@ -123,21 +142,8 @@ for member in range(members):
         predictions.append(model(**inputs, noise=noise.to(model.device)).prediction)
 ```
 
-Seeding per member rather than drawing from one stream means the first `n` members are the same however large the
-ensemble is - the property the original implementation gets from `jax.random.fold_in`. The reference implementation
-also runs one member per device, looping or sharding over them rather than batching.
-
-At 0.25° a member needs roughly 50 GB, so looping is usually the only option. Where the model is small enough, the
-members can instead ride on the batch axis, which is what [`WeatherNext2ForWeatherForecasting`] draws noise for when
-`noise` is not passed:
-
-```python
-inputs = processor(state, seconds_since_epoch=valid_time).to(model.device)
-batched = {key: value.repeat(members, *([1] * (value.ndim - 1))) for key, value in inputs.items()}
-
-with torch.no_grad():
-    outputs = model(**batched, generator=torch.Generator().manual_seed(0))
-```
+Both give the same ensemble, agreeing to within float noise rather than bit-exactly, since a batched matmul reduces in
+a different order than a batch of one.
 
 Note that the batch axis serves double duty: it carries ensemble members here, and independent initialization times
 when several forecasts are run together. The reference implementation keeps these as separate `sample` and `batch`
@@ -171,9 +177,10 @@ Passing numpy arrays instead works exactly the same way and returns numpy, at th
 
 ## Notes
 
-- The mesh, both grid↔mesh graphs and the attention mask follow deterministically from the configuration, so they are
-  computed at instantiation rather than stored in the checkpoint. At 0.25° this takes tens of seconds the first time;
-  the result is cached under `HF_HOME`.
+- The mesh, both grid↔mesh graphs and the attention mask follow deterministically from the configuration, but they are
+  stored as buffers in the checkpoint and travel with the weights, so loading one needs no geometry library. Deriving
+  them instead, for a configuration that does not carry them, needs `scipy` and `trimesh` and takes about two minutes
+  at 0.25°.
 - Attention is computed over the three block-diagonals induced by the reverse Cuthill-McKee ordering of the mesh. This
   is exactly equivalent to masking the full attention matrix, but avoids materializing a mask that would be 1.7 GB at
   0.25°.
