@@ -32,6 +32,8 @@ from transformers.testing_utils import (
     require_vision,
 )
 from transformers.video_utils import (
+    default_sample_indices_fn,
+    get_uniform_frame_indices,
     group_videos_by_shape,
     is_torchvision_video_decoding_available,
     make_batched_videos,
@@ -56,6 +58,21 @@ def get_random_video(height, width, num_frames=8, return_torch=False):
         # move channel first
         return torch.from_numpy(video).permute(0, 3, 1, 2)
     return video
+
+
+class VideoFrameSamplingTest(unittest.TestCase):
+    def test_requested_frame_count(self):
+        # Float-step arange can return an extra index, for example 14 instead of 13 here.
+        total_num_frames, num_frames = 15, 13
+        metadata = type("Metadata", (), {"total_num_frames": total_num_frames, "fps": 30})()
+
+        for indices in (
+            get_uniform_frame_indices(total_num_frames, num_frames),
+            default_sample_indices_fn(metadata, num_frames=num_frames),
+        ):
+            self.assertEqual(len(indices), num_frames)
+            self.assertEqual(indices[0], 0)
+            self.assertEqual(indices[-1], total_num_frames - 1)
 
 
 @require_vision
