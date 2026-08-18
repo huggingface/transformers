@@ -656,12 +656,53 @@ class Qwen4ExpGatedResidual(nn.Module):
         return hyper_input + injection.flatten(-2)
 
 
+_MASK64 = (1 << 64) - 1
+_SPLITMIX_GAMMA = 0x9E3779B97F4A7C15
+_SPLITMIX_M1 = 0xBF58476D1CE4E5B9
+_SPLITMIX_M2 = 0x94D049BB133111EB
+_PRIME_1 = 10007
+
+
+def _splitmix64(value: int) -> int:
+    value = (value + _SPLITMIX_GAMMA) & _MASK64
+    value = ((value ^ (value >> 30)) * _SPLITMIX_M1) & _MASK64
+    value = ((value ^ (value >> 27)) * _SPLITMIX_M2) & _MASK64
+    return (value ^ (value >> 31)) & _MASK64
+
+
+def _build_layer_multipliers(unigram_vocab_size, ngram_size, ple_layer_index, seed: int) -> torch.Tensor:
+    max_long = (1 << 63) - 1
+    multiplier_max = max_long // max(unigram_vocab_size, 1)
+    half_bound = max(1, multiplier_max // 2)
+    base_seed = seed + _PRIME_1 * ple_layer_index
+    multipliers = []
+    for index in range(ngram_size):
+        value = (base_seed + _SPLITMIX_GAMMA * (index + 1)) & _MASK64
+        multipliers.append(2 * (_splitmix64(value) % half_bound) + 1)
+    return torch.tensor(multipliers, dtype=torch.long)
+
+
+def _is_prime(value: int) -> bool:
+    if value < 2:
+        return False
+    if value % 2 == 0:
+        return value == 2
+    for divisor in range(3, math.isqrt(value) + 1, 2):
+        if value % divisor == 0:
+            return False
+    return True
+
+
+def _find_nth_prime_after(start: int, count: int) -> int:
+    prime = start
+    for _ in range(count):
+        prime += 1
+        while not _is_prime(prime):
+            prime += 1
+    return prime
+
+
 class Qwen4ExpNGramEmbedding(nn.Module):
-    _MASK64 = (1 << 64) - 1
-    _SPLITMIX_GAMMA = 0x9E3779B97F4A7C15
-    _SPLITMIX_M1 = 0xBF58476D1CE4E5B9
-    _SPLITMIX_M2 = 0x94D049BB133111EB
-    _PRIME_1 = 10007
     _CONTEXT_STATE_IDX = 2
 
     def __init__(self, config: Qwen4ExpTextConfig, embedding_dim: int, ple_layer_index: int = 0):
@@ -673,77 +714,27 @@ class Qwen4ExpNGramEmbedding(nn.Module):
         self.unigram_vocab_size = config.vocab_size
         self.ngram_vocab_size_base = config.ngram_vocab_size_base
         head_dim_per_ngram = embedding_dim // self.ngram_heads
+        self.seed = config.seed
         self.eos_token_id = config.eos_token_id[0] if isinstance(config.eos_token_id, list) else config.eos_token_id
 
-        self.layer_multipliers = nn.Buffer(self._build_layer_multipliers(config.seed))
-        head_vocab_sizes, head_offsets, total_vocab_size = self._build_head_vocab_and_offsets()
-        self.ngram_heads_vocab_sizes = nn.Buffer(torch.tensor(head_vocab_sizes, dtype=torch.long))
-        self.ngram_heads_offsets = nn.Buffer(torch.tensor(head_offsets, dtype=torch.long))
-        ngram_vocab_divisor = config.make_ngram_vocab_size_divisible_by
-        padded_vocab_size = math.ceil(total_vocab_size / ngram_vocab_divisor) * ngram_vocab_divisor
-        self.ngram_embedding = nn.Embedding(padded_vocab_size, head_dim_per_ngram)
-
-    def _reset_derived_buffers(self, seed: int) -> None:
-        head_vocab_sizes, head_offsets, _ = self._build_head_vocab_and_offsets()
-        init.copy_(self.layer_multipliers, self._build_layer_multipliers(seed).to(self.layer_multipliers.device))
-        init.copy_(
-            self.ngram_heads_vocab_sizes,
-            torch.tensor(head_vocab_sizes, dtype=torch.long, device=self.ngram_heads_vocab_sizes.device),
-        )
-        init.copy_(
-            self.ngram_heads_offsets,
-            torch.tensor(head_offsets, dtype=torch.long, device=self.ngram_heads_offsets.device),
-        )
-
-    @classmethod
-    def _splitmix64(cls, value: int) -> int:
-        value = (value + cls._SPLITMIX_GAMMA) & cls._MASK64
-        value = ((value ^ (value >> 30)) * cls._SPLITMIX_M1) & cls._MASK64
-        value = ((value ^ (value >> 27)) * cls._SPLITMIX_M2) & cls._MASK64
-        return (value ^ (value >> 31)) & cls._MASK64
-
-    def _build_layer_multipliers(self, seed: int) -> torch.Tensor:
-        max_long = (1 << 63) - 1
-        multiplier_max = max_long // max(self.unigram_vocab_size, 1)
-        half_bound = max(1, multiplier_max // 2)
-        base_seed = seed + self._PRIME_1 * self.ple_layer_index
-        multipliers = []
-        for index in range(self.ngram_size):
-            value = (base_seed + self._SPLITMIX_GAMMA * (index + 1)) & self._MASK64
-            multipliers.append(2 * (self._splitmix64(value) % half_bound) + 1)
-        return torch.tensor(multipliers, dtype=torch.long)
-
-    @staticmethod
-    def _is_prime(value: int) -> bool:
-        if value < 2:
-            return False
-        if value % 2 == 0:
-            return value == 2
-        for divisor in range(3, math.isqrt(value) + 1, 2):
-            if value % divisor == 0:
-                return False
-        return True
-
-    @classmethod
-    def _find_nth_prime_after(cls, start: int, count: int) -> int:
-        prime = start
-        for _ in range(count):
-            prime += 1
-            while not cls._is_prime(prime):
-                prime += 1
-        return prime
-
-    def _build_head_vocab_and_offsets(self) -> tuple[list[int], list[int], int]:
-        sizes = []
-        offsets = []
-        total = 0
+        self.head_vocab_sizes = []
+        self.head_offsets = []
+        self.total_vocab_size = 0
         for head_idx in range(self.ngram_heads):
             global_head_idx = self.ple_layer_index * self.ngram_heads + head_idx
-            size = self._find_nth_prime_after(self.ngram_vocab_size_base - 1, global_head_idx + 1)
-            sizes.append(size)
-            offsets.append(total)
-            total += size
-        return sizes, offsets, total
+            size = _find_nth_prime_after(self.ngram_vocab_size_base - 1, global_head_idx + 1)
+            self.head_vocab_sizes.append(size)
+            self.head_offsets.append(self.total_vocab_size)
+            self.total_vocab_size += size
+
+        self.layer_multipliers = nn.Buffer(
+            _build_layer_multipliers(self.unigram_vocab_size, self.ngram_size, self.ple_layer_index, self.seed)
+        )
+        self.ngram_heads_vocab_sizes = nn.Buffer(torch.tensor(self.head_vocab_sizes, dtype=torch.long))
+        self.ngram_heads_offsets = nn.Buffer(torch.tensor(self.head_offsets, dtype=torch.long))
+        ngram_vocab_divisor = config.make_ngram_vocab_size_divisible_by
+        padded_vocab_size = math.ceil(self.total_vocab_size / ngram_vocab_divisor) * ngram_vocab_divisor
+        self.ngram_embedding = nn.Embedding(padded_vocab_size, head_dim_per_ngram)
 
     def _shift_right_ignore_eos(self, token_ids: torch.Tensor, shift: int) -> torch.Tensor:
         if shift == 0:
@@ -966,7 +957,14 @@ class Qwen4ExpPreTrainedModel(Qwen3_5MoePreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Qwen4ExpNGramEmbedding):
-            module._reset_derived_buffers(self.config.get_text_config().seed)
+            init.copy_(
+                module.layer_multipliers,
+                _build_layer_multipliers(
+                    module.unigram_vocab_size, module.ngram_size, module.ple_layer_index, module.seed
+                ),
+            )
+            init.copy_(module.ngram_heads_vocab_sizes, torch.tensor(module.head_vocab_sizes, dtype=torch.long))
+            init.copy_(module.ngram_heads_offsets, torch.tensor(module.head_offsets, dtype=torch.long))
         elif isinstance(module, Qwen4ExpGroupedRMSNorm):
             init.zeros_(module.weight)
         elif isinstance(module, Qwen4ExpPLELayer):
