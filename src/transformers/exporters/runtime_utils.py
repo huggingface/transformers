@@ -81,6 +81,11 @@ class ModelRunner(ABC):
     # its model does, so only the trace can say which it took (an alibi model reads the 2D mask directly).
     mask_rank: int | None = None
 
+    # `{attention type: rank}` when the graph took a *dict* of masks instead (mixed full/sliding attention),
+    # which a model builds inside its forward — so the runtime has to hand one in. Exactly one of the two is
+    # set, and the graph is the only thing that can say which.
+    mask_dict_ranks: dict[str, int] | None = None
+
     input_names: tuple[str, ...] = ()
     device: torch.device | str = "cpu"
     dtype: torch.dtype = torch.float32
@@ -847,7 +852,7 @@ class ExportedGenerator(GenerationMixin):
         # A mixed-attention model (nemotron_h, jamba, …) builds its per-layer-type mask dict *inside* its
         # forward, which the graph starts after — so when the graph takes one mask per type and `generate`
         # handed us a single tensor, build the dict here, keyed the way the config declares its layers.
-        mask_ranks = getattr(runner, "mask_dict_ranks", None)
+        mask_ranks = runner.mask_dict_ranks
         if mask_ranks and not isinstance(attention_mask, dict):
             padding_mask = attention_mask if getattr(attention_mask, "dim", lambda: 0)() == 2 else None
             attention_mask = {
@@ -977,7 +982,6 @@ class ExportedGenerator(GenerationMixin):
         # (`input_values`, `input_values_cutoffs`) directly rather than through a modality component. Dynamo
         # wants the exact kwarg set it was traced with, so pass through whatever `generate` still carries
         # under a name this graph declares — never overwriting what the feed already resolved.
-        feed.update({name: kwargs[name] for name in runner.input_names if name not in feed and name in kwargs})
 
         # Only what this graph declares: a model whose decode graph takes its text some other way
         # (higgs_audio_v2 embeds it upstream) would otherwise be handed an `input_ids` it never had.

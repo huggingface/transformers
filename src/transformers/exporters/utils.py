@@ -1419,15 +1419,13 @@ def decompose_multimodal(
 
     # Each active modality's `get_*_features` is invoked on the base model during `forward` (the outer
     # `ForConditionalGeneration` getter just delegates), so capture — and later export — from there.
-    base = model.base_model
     # `inputs` says which modalities this forward carries. A model that consumed them earlier — an
     # encoder-decoder feeds its images through the encoder, so by prefill they are gone — has none left to
     # find, and the caller instead hands over what it recorded the getters doing during the same generate.
     recorded_features = recorded_features or {}
     active_modalities = []
     for name, getter, input_keys, grid_key, _token_field in _MODALITY_SPECS:
-        owner = base if hasattr(base, getter) else (model if hasattr(model, getter) else None)
-        if owner is None:
+        if (owner := _modality_owner(model, getter)) is None:
             continue
         if _present_input_key(inputs, input_keys) is not None or recorded_features.get(name):
             active_modalities.append((name, getter, owner, grid_key))
