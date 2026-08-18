@@ -123,8 +123,11 @@ class BaseVideoProcessor(TorchvisionBackend):
         """
 
         video = tvF.grayscale_to_rgb(video)
-        if video.shape[-3] == 3 or not (video[..., 3, :, :] < 255).any():
+        if video.shape[-3] == 3:
             return video
+
+        if not (video[..., 3, :, :] < 255).any():
+            return video[..., :3, :, :]
 
         # There is a transparency layer, blend it with a white background.
         # Calculate the alpha proportion for blending.
