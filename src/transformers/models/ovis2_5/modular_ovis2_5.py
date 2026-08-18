@@ -447,7 +447,6 @@ class Ovis2_5VisualTokenProjector(nn.Module):
     def __init__(self, config: Ovis2_5VisionConfig):
         super().__init__()
         self.spatial_merge_unit = config.hidden_stride**2
-        self.num_visual_indicator_tokens = config.num_visual_indicator_tokens
         visual_token_vocab_size = config.vocab_size - config.num_visual_indicator_tokens
         self.head_linear = nn.Linear(
             config.hidden_size * self.spatial_merge_unit,
@@ -455,16 +454,13 @@ class Ovis2_5VisualTokenProjector(nn.Module):
             bias=False,
         )
         self.head_norm = nn.LayerNorm(visual_token_vocab_size)
+        self.indicator_padding = nn.Buffer(torch.zeros(config.num_visual_indicator_tokens), persistent=False)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = hidden_states.reshape(hidden_states.shape[0] // self.spatial_merge_unit, -1)
         logits = self.head_norm(self.head_linear(hidden_states))
         visual_tokens = torch.softmax(logits, dim=-1, dtype=torch.float32).to(logits.dtype)
-        indicator_padding = torch.zeros(
-            (visual_tokens.shape[0], self.num_visual_indicator_tokens),
-            dtype=visual_tokens.dtype,
-            device=visual_tokens.device,
-        )
+        indicator_padding = self.indicator_padding.expand(visual_tokens.shape[0], -1)
         return torch.cat((visual_tokens, indicator_padding), dim=-1)
 
 

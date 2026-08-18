@@ -883,3 +883,4 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         self.assertFalse(any("vision_tower.transformer" in key for key in state_dict))
         self.assertFalse(any("vision_tower.head_" in key for key in state_dict))
         self.assertFalse(any("visual_tokenizer.head." in key for key in state_dict))
+        self.assertNotIn("model.visual_tokenizer.indicator_padding", state_dict)
