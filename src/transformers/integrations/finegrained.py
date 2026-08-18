@@ -1030,11 +1030,16 @@ def interleave_gate_up_after_loading(model: nn.Module, *, already_interleaved: b
             local = to_local(t)
             axis = -1 if local.ndim == 1 or name.endswith("bias") else -2
             n = local.shape[axis] // 2
+            # The reorder is byte-level, so run it on a uint8 view for the 1-byte float8
+            # scale/weight dtypes: `torch.stack` lowers to `cat`, and "cat_cuda" is not
+            # implemented for float8_e8m0fnu (nor e4m3) — it raises mid-load under TP/EP.
+            byte_view = local.element_size() == 1 and local.dtype.is_floating_point
+            src = local.view(torch.uint8) if byte_view else local
             if axis == -1:
-                rows = torch.stack([local[..., :n], local[..., n:]], dim=-1)
+                rows = torch.stack([src[..., :n], src[..., n:]], dim=-1)
             else:
-                rows = torch.stack([local[..., :n, :], local[..., n:, :]], dim=-2)
-            local.data.copy_(rows.reshape(local.shape))
+                rows = torch.stack([src[..., :n, :], src[..., n:, :]], dim=-2)
+            src.copy_(rows.reshape(src.shape))
 
 
 def swizzle_scales_after_loading(model: nn.Module) -> None:
