@@ -120,4 +120,5 @@ class Ovis2_5Processor(ProcessorMixin):
 
         return MultiModalData(**vision_data)
 
+
 __all__ = ["Ovis2_5Processor"]
