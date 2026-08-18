@@ -384,18 +384,18 @@ class EsmFold2RotaryEmbedding(nn.Module):
 
     def __init__(self, atom_config: EsmFold2AtomEncoderConfig) -> None:
         super().__init__()
-        self.head_dim = atom_config.head_dim
         self.num_spatial_pairs_per_axis = atom_config.num_spatial_rope_pairs_per_axis
         self.num_uid_pairs = atom_config.num_uid_rope_pairs
         self.spatial_rope_base_frequency = atom_config.spatial_rope_base_frequency
         self.uid_rope_base_frequency = atom_config.uid_rope_base_frequency
+        # Channels past the last UID frequency are inactive: they take frequency 0 below, which is an
+        # identity rotation whatever position they read.
+        self.num_inactive_channels = (
+            atom_config.head_dim // 2 - 3 * self.num_spatial_pairs_per_axis - self.num_uid_pairs
+        )
 
     def forward(self, ref_pos: Tensor, ref_space_uid: Tensor, dtype: torch.dtype) -> tuple[Tensor, Tensor]:
         device = ref_pos.device
-        batch_size, num_atoms = ref_pos.shape[:2]
-        half_dim = self.head_dim // 2
-        num_spatial_frequencies = 3 * self.num_spatial_pairs_per_axis
-
         spatial_inv_freq = 1.0 / (
             self.spatial_rope_base_frequency
             ** (
@@ -407,18 +407,23 @@ class EsmFold2RotaryEmbedding(nn.Module):
             self.uid_rope_base_frequency
             ** (torch.arange(0, self.num_uid_pairs, dtype=torch.float32, device=device) / self.num_uid_pairs)
         )
-
-        spatial_freqs = (ref_pos.unsqueeze(-1) * spatial_inv_freq).reshape(
-            batch_size, num_atoms, num_spatial_frequencies
+        # One frequency per half-head channel: the spatial ladder once per spatial axis, then the UID
+        # ladder, then the inactive tail.
+        inv_freq = torch.cat(
+            [spatial_inv_freq.repeat(3), uid_inv_freq, spatial_inv_freq.new_zeros(self.num_inactive_channels)]
         )
-        uid_freqs = ref_space_uid.float().unsqueeze(-1) * uid_inv_freq
-
-        freqs = torch.cat([spatial_freqs, uid_freqs], dim=-1)
-        num_active_frequencies = num_spatial_frequencies + self.num_uid_pairs
-        if num_active_frequencies < half_dim:
-            freqs = torch.cat(
-                [freqs, freqs.new_zeros(batch_size, num_atoms, half_dim - num_active_frequencies)], dim=-1
-            )
+        # The position each channel rotates, in the same layout: x/y/z each held for a full spatial
+        # ladder, then the space UID for the UID ladder and the inactive tail.
+        positions = torch.cat(
+            [
+                ref_pos.float().repeat_interleave(self.num_spatial_pairs_per_axis, dim=-1),
+                ref_space_uid.float()
+                .unsqueeze(-1)
+                .expand(*ref_space_uid.shape, self.num_uid_pairs + self.num_inactive_channels),
+            ],
+            dim=-1,
+        )
+        freqs = positions * inv_freq
 
         # Duplicate to the full head dim; angles are built in fp32 and returned at the caller's dtype.
         emb = torch.cat([freqs, freqs], dim=-1)
@@ -813,16 +818,6 @@ class EsmFold2DiffusionConditioning(nn.Module):
         return single_states
 
 
-def _expand_samples(num_diffusion_samples: int, *tensors: Tensor) -> tuple[Tensor, ...]:
-    """Repeat each tensor along its batch axis onto the sampler's replica batch.
-
-    ``num_diffusion_samples`` is a replica axis, not a batch axis: the diffusion module and the
-    confidence head both run at ``batch_size * num_diffusion_samples``, so every per-fold tensor they
-    consume has to be interleaved to match.
-    """
-    return tuple(tensor.repeat_interleave(num_diffusion_samples, 0) for tensor in tensors)
-
-
 class EsmFold2DiffusionModule(nn.Module):
     """Diffusion denoising module for structure prediction."""
 
@@ -874,19 +869,17 @@ class EsmFold2DiffusionModule(nn.Module):
         pair_states = self.conditioning.compute_pair_repr(pair_trunk, relative_position_encoding)
         token_attention_bias = self.token_transformer.compute_pair_biases(pair_states, attention_mask)
         if not masks_broadcastable:
-            atom_window_mask, *token_attention_bias = _expand_samples(samples, atom_window_mask, *token_attention_bias)
+            atom_window_mask = atom_window_mask.repeat_interleave(samples, 0)
+            token_attention_bias = [bias.repeat_interleave(samples, 0) for bias in token_attention_bias]
 
         # --- everything else: batch_size -> batch_size * num_diffusion_samples ---
         cos, sin = position_embeddings
-        atom_embeds, cos, sin, atom_mask, atom_to_token, expanded_single_inputs = _expand_samples(
-            samples,
-            atom_embeds,
-            cos,
-            sin,
-            atom_inputs.atom_attention_mask,
-            atom_inputs.atom_to_token,
-            single_inputs,
-        )
+        atom_embeds = atom_embeds.repeat_interleave(samples, 0)
+        cos = cos.repeat_interleave(samples, 0)
+        sin = sin.repeat_interleave(samples, 0)
+        atom_mask = atom_inputs.atom_attention_mask.repeat_interleave(samples, 0)
+        atom_to_token = atom_inputs.atom_to_token.repeat_interleave(samples, 0)
+        expanded_single_inputs = single_inputs.repeat_interleave(samples, 0)
         return EsmFold2DenoiserConditioning(
             atom_embeds=atom_embeds,
             attention_mask=atom_window_mask,
@@ -972,7 +965,7 @@ class EsmFold2RowAttentionPooling(nn.Module):
         # softmax, without three extra `[batch, num_tokens, num_tokens]` temporaries.
         scores = scores.masked_fill(~attention_mask[:, None, :], torch.finfo(scores.dtype).min)
         weights = F.softmax(scores, dim=-1, dtype=torch.float32).to(scores.dtype)
-        pooled = torch.einsum("bnm,bnmd->bnd", weights, pair_states)
+        pooled = (weights.unsqueeze(-2) @ pair_states).squeeze(-2)
         return self.out_proj(pooled)
 
 
@@ -1211,10 +1204,16 @@ class EsmFold2OuterProductMean(nn.Module):
         # Chunk along the left (i) axis, shrinking the peak intermediate to [B, chunk, L, c, d].
         seq_len = left.shape[1]
         chunk_size = self.chunk_size or seq_len
+        outer_dim = left.shape[-1]
+        # The right operand is the same for every chunk, so lay it out for the matmul once.
+        right_flat = right.permute(0, 2, 1, 3).flatten(2, 3)  # [B, msa_depth, num_tokens * d]
         out_chunks: list[Tensor] = []
         for start in range(0, seq_len, chunk_size):
             window = slice(start, start + chunk_size)
-            outer = torch.einsum("bimc,bjmd->bijcd", left[:, window], right).flatten(-2)
+            # Contract the MSA-depth axis, then split the two flattened axes back apart and move the
+            # c/d pair into the minor position: [B, chunk, num_tokens, c * d].
+            outer = left[:, window].transpose(2, 3).flatten(1, 2) @ right_flat
+            outer = outer.unflatten(1, (-1, outer_dim)).unflatten(-1, (-1, outer_dim)).transpose(2, 3).flatten(-2)
             if self.divide_outer_before_proj:
                 out_chunks.append(self.output_proj(outer / num_valid_pairs[:, window]))
             else:
@@ -1378,16 +1377,12 @@ class EsmFold2ConfidenceInputEmbedder(nn.Module):
         self,
         single_inputs: Tensor,
         pair_states: Tensor,
-        relative_position_encoding: Tensor | None,
-        token_bonds_encoding: Tensor | None,
+        relative_position_encoding: Tensor,
+        token_bonds_encoding: Tensor,
     ) -> Tensor:
         single_inputs_normed = self.single_inputs_norm(single_inputs)
 
-        pair_states = self.pair_norm(pair_states)
-        if relative_position_encoding is not None:
-            pair_states = pair_states + relative_position_encoding
-        if token_bonds_encoding is not None:
-            pair_states = pair_states + token_bonds_encoding
+        pair_states = self.pair_norm(pair_states) + relative_position_encoding + token_bonds_encoding
         pair_states = pair_states + self.single_to_pair(single_inputs_normed).unsqueeze(2)
         pair_states = pair_states + self.single_to_pair_transpose(single_inputs_normed).unsqueeze(1)
         pair_states = pair_states + self.single_to_pair_prod_out(
@@ -1466,8 +1461,8 @@ class EsmFold2ConfidenceHead(nn.Module):
         atom_to_token: Tensor,
         atom_attention_mask: Tensor,
         num_diffusion_samples: int,
-        relative_position_encoding: Tensor | None,
-        token_bonds_encoding: Tensor | None,
+        relative_position_encoding: Tensor,
+        token_bonds_encoding: Tensor,
     ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, int]:
         """Build the per-sample pair + single representations shared by every confidence head.
 
@@ -1477,14 +1472,11 @@ class EsmFold2ConfidenceHead(nn.Module):
         """
         pair_states = self.input_embedder(single_inputs, pair_states, relative_position_encoding, token_bonds_encoding)
 
-        pair_states, atom_to_token_expanded, atom_mask_expanded, rep_idx_expanded, token_mask = _expand_samples(
-            num_diffusion_samples,
-            pair_states,
-            atom_to_token,
-            atom_attention_mask,
-            distogram_atom_idx,
-            attention_mask,
-        )
+        pair_states = pair_states.repeat_interleave(num_diffusion_samples, 0)
+        atom_to_token_expanded = atom_to_token.repeat_interleave(num_diffusion_samples, 0)
+        atom_mask_expanded = atom_attention_mask.repeat_interleave(num_diffusion_samples, 0)
+        rep_idx_expanded = distogram_atom_idx.repeat_interleave(num_diffusion_samples, 0)
+        token_mask = attention_mask.repeat_interleave(num_diffusion_samples, 0)
         flat_predicted_coords = (
             predicted_coords.reshape(-1, *predicted_coords.shape[-2:])
             if predicted_coords.ndim == 4
@@ -1641,9 +1633,9 @@ class EsmFold2ConfidenceHead(nn.Module):
         atom_attention_mask: Tensor,
         asym_id: Tensor,
         mol_type: Tensor,
+        relative_position_encoding: Tensor,
+        token_bonds_encoding: Tensor,
         num_diffusion_samples: int = 1,
-        relative_position_encoding: Tensor | None = None,
-        token_bonds_encoding: Tensor | None = None,
     ) -> dict[str, Tensor]:
         (
             single_states,
@@ -1667,7 +1659,8 @@ class EsmFold2ConfidenceHead(nn.Module):
             token_bonds_encoding=token_bonds_encoding,
         )
 
-        expanded_type, expanded_asym = _expand_samples(num_diffusion_samples, mol_type, asym_id)
+        expanded_type = mol_type.repeat_interleave(num_diffusion_samples, 0)
+        expanded_asym = asym_id.repeat_interleave(num_diffusion_samples, 0)
         atom_confidences = self._compute_atom_confidences(
             single_states=single_states,
             atom_to_token_expanded=atom_to_token_expanded,
@@ -1708,21 +1701,24 @@ class EsmFold2MSAEncoderLayer(EsmFold2PairUpdateLayer):
 
     The pair half is exactly an `EsmFold2PairUpdateLayer`, so it is inherited rather than repeated.
 
-    The final layer updates only the pair stream, so it does not build the two MSA-stream submodules:
-    the released checkpoints carry no weights for them (the MSA representation it would produce is
-    never read), and `nn.Identity` is not a substitute -- these sit on residuals, so an identity would
-    double the stream rather than leave it alone.
+    The last layer updates only the pair stream, so its two MSA-stream submodules are `None`: the
+    released checkpoints carry no weights for them (the MSA representation they would produce is never
+    read), and `nn.Identity` is not a substitute -- these sit on residuals, so an identity would double
+    the stream rather than leave it alone.
     """
 
-    def __init__(self, config: EsmFold2Config, is_final_layer: bool = False) -> None:
+    def __init__(self, config: EsmFold2Config, layer_idx: int) -> None:
         super().__init__(config)
-        self.is_final_layer = is_final_layer
         self.outer_product_mean = EsmFold2OuterProductMean(config)
-        if not is_final_layer:
-            self.msa_pair_weighted_averaging = EsmFold2MSAPairWeightedAveraging(config)
-            self.msa_transition = EsmFold2Transition(
+        is_last_layer = layer_idx == config.msa_encoder.num_hidden_layers - 1
+        self.msa_pair_weighted_averaging = None if is_last_layer else EsmFold2MSAPairWeightedAveraging(config)
+        self.msa_transition = (
+            None
+            if is_last_layer
+            else EsmFold2Transition(
                 config.msa_encoder.hidden_size, config.msa_encoder.intermediate_size, config.chunk_size
             )
+        )
 
     def forward(
         self,
@@ -1732,7 +1728,7 @@ class EsmFold2MSAEncoderLayer(EsmFold2PairUpdateLayer):
         pair_attention_mask: Tensor,
     ) -> tuple[Tensor, Tensor]:
         pair_states = pair_states + self.outer_product_mean(msa_states, msa_attention_mask)
-        if not self.is_final_layer:
+        if self.msa_pair_weighted_averaging is not None:
             msa_states = msa_states + self.msa_pair_weighted_averaging(msa_states, pair_states, pair_attention_mask)
             msa_states = self.msa_transition(msa_states)
         return msa_states, super().forward(pair_states, pair_attention_mask)
@@ -1747,10 +1743,7 @@ class EsmFold2MSAEncoder(nn.Module):
         self.embed = nn.Linear(config.num_res_types + 2, config.msa_encoder.hidden_size, bias=False)
         self.project_inputs = nn.Linear(config.single_inputs_size, config.msa_encoder.hidden_size, bias=False)
         self.layers = nn.ModuleList(
-            [
-                EsmFold2MSAEncoderLayer(config, is_final_layer=(i == config.msa_encoder.num_hidden_layers - 1))
-                for i in range(config.msa_encoder.num_hidden_layers)
-            ]
+            [EsmFold2MSAEncoderLayer(config, layer_idx) for layer_idx in range(config.msa_encoder.num_hidden_layers)]
         )
 
     def forward(
