@@ -92,31 +92,6 @@ class Ovis2_5Processor(ProcessorMixin):
         num_visual_tokens = video_inputs["video_grid_thw"][video_idx].prod() // merge_length
         return self.video_start_token + self.video_token * num_visual_tokens + self.video_end_token
 
-    def _check_special_mm_tokens(self, text: list[str], text_inputs, modalities: list[str]):
-        super()._check_special_mm_tokens(text, text_inputs, modalities)
-        input_ids = text_inputs["input_ids"]
-        if hasattr(input_ids, "tolist"):
-            input_ids = input_ids.tolist()
-        if input_ids and isinstance(input_ids[0], int):
-            input_ids = [input_ids]
-
-        tokens_and_ids = (
-            (self.visual_atom_token, self.visual_atom_token_id),
-            (self.image_start_token, self.image_start_token_id),
-            (self.image_end_token, self.image_end_token_id),
-            (self.video_start_token, self.video_start_token_id),
-            (self.video_end_token, self.video_end_token_id),
-        )
-        for token, token_id in tokens_and_ids:
-            text_counts = [sample.count(token) for sample in text]
-            input_counts = [sample_ids.count(token_id) for sample_ids in input_ids]
-            if text_counts != input_counts:
-                raise ValueError(
-                    f"Mismatch in `{token}` count between expanded text and `input_ids`: "
-                    f"got text={text_counts} and input_ids={input_counts}. "
-                    "Visual tokens were likely truncated; disable truncation or increase `max_length`."
-                )
-
     def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
         """Compute multimodal token counts without materializing pixel values."""
         vision_data = {}
