@@ -334,12 +334,15 @@ class ProcessorTesterMixin:
             else:
                 component_class = component_class[0] if component_class[0] is not None else component_class[1]
         elif isinstance(component_class, dict):
-            if not use_fast:
-                component_class = component_class["pil"]
+            # Image processors are keyed by {"pil": ..., "torchvision": ...}; audio processors
+            # by {"torch": ..., "numpy": ...}. Pick the preferred key present in the mapping.
+            if "pil" in component_class or "torchvision" in component_class:
+                if not use_fast:
+                    component_class = component_class["pil"]
+                else:
+                    component_class = component_class.get("torchvision") or component_class["pil"]
             else:
-                component_class = (
-                    component_class["torchvision"] if "torchvision" in component_class else component_class["pil"]
-                )
+                component_class = component_class.get("torch") or next(iter(component_class.values()))
         return component_class
 
     @staticmethod
