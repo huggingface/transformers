@@ -367,20 +367,6 @@ class Ovis2_5VisionEncoderLayer(VideoLlama3VisionEncoderLayer, GradientCheckpoin
     pass
 
 
-class Ovis2_5VisionPatchOrderRestorer(nn.Module):
-    """Restore encoder states from window order before output hooks record them."""
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        reverse_indices: torch.LongTensor,
-        spatial_merge_unit: int,
-    ) -> torch.Tensor:
-        sequence_length = hidden_states.shape[0]
-        hidden_states = hidden_states.reshape(sequence_length // spatial_merge_unit, spatial_merge_unit, -1)
-        return hidden_states[reverse_indices].reshape(sequence_length, -1)
-
-
 class Ovis2_5VisionEncoder(nn.Module):
     def __init__(self, config: Ovis2_5VisionConfig):
         super().__init__()
