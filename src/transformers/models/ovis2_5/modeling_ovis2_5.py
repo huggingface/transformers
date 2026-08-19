@@ -133,15 +133,6 @@ class Ovis2_5VisionEmbeddings(nn.Module):
             grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
                 The temporal, height and width of feature shape of each image in LLM.
         """
-        target_dtype = self.patch_embedding.weight.dtype
-        pixel_values = pixel_values.view(
-            -1,
-            self.config.num_channels * self.config.temporal_patch_size,
-            self.patch_size,
-            self.patch_size,
-        )
-        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype)).reshape(-1, self.embed_dim)
-
         interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
             grid_thw,
             self.num_grid_per_side,
@@ -150,12 +141,34 @@ class Ovis2_5VisionEmbeddings(nn.Module):
             spatial_merge_size=self.spatial_merge_size,
             kwargs=kwargs,
         )
-        position_embeddings = self.position_embedding(interp_indices)
-        interpolated_positions = (
-            position_embeddings * interp_weights.to(position_embeddings.dtype).unsqueeze(-1)
-        ).sum(dim=1)
+        pixel_values = pixel_values.view(
+            -1,
+            1,
+            self.config.num_channels * self.config.temporal_patch_size,
+            self.patch_size,
+            self.patch_size,
+        )
+        kwargs["interp_indices"] = interp_indices
+        kwargs["interp_weights"] = interp_weights.to(self.position_embedding.weight.dtype)
+        batch_size, sequence_len, channel, height, width = pixel_values.shape
+        target_dtype = self.patch_embedding.weight.dtype
+        pixel_values = pixel_values.reshape(batch_size * sequence_len, channel, height, width)
+        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
+        embeddings = patch_embeds.flatten(-2).squeeze(-1)
+        embeddings = embeddings.reshape(batch_size * sequence_len, -1)
 
-        return patch_embeds + interpolated_positions
+        interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
+            grid_thw,
+            num_grid_per_side=self.num_grid_per_side,
+            mode=self.interpolation_mode,
+            align_corners=self.interpolation_align_corners,
+            spatial_merge_size=1,
+            kwargs=kwargs,
+        )
+        pos_embeds = (self.position_embedding(interp_indices) * interp_weights[:, :, None]).sum(1)
+        embeddings = embeddings + pos_embeds.to(embeddings.dtype)
+
+        return embeddings
 
 
 class Ovis2_5VisionMLP(nn.Module):
