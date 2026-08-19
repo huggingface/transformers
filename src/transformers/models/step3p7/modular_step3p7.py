@@ -329,11 +329,22 @@ class Step3p7Config(PreTrainedConfig):
     image_token_id: int = 151679
 
     def __post_init__(self, **kwargs):
-        # Force default model-type - hub has a remote-code format config
-        if isinstance(self.vision_config, dict):
-            self.vision_config.pop("model_type", None)
-        if isinstance(self.text_config, dict):
-            self.text_config.pop("model_type", None)
+        if self.vision_config is None:
+            self.vision_config = Step3p7VisionConfig()
+        elif isinstance(self.vision_config, dict):
+            self.vision_config = Step3p7VisionConfig(
+                **{k: v for k, v in self.vision_config.items() if k != "model_type"}
+            )
+        elif not isinstance(self.vision_config, Step3p7VisionConfig):
+            self.vision_config = Step3p7VisionConfig(
+                **{k: v for k, v in self.vision_config.to_dict().items() if k != "model_type"}
+            )
+
+        if self.text_config is None:
+            self.text_config = Step3p7TextConfig()
+        elif isinstance(self.text_config, dict):
+            self.text_config = Step3p7TextConfig(**{k: v for k, v in self.text_config.items() if k != "model_type"})
+
         super().__post_init__(**kwargs)
 
 
