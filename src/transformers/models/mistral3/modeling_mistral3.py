@@ -28,7 +28,13 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_layers import GenericForSequenceClassification
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    ModelOutput,
+    SequenceClassifierOutputWithPast,
+)
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, torch_compilable_check
@@ -324,6 +330,103 @@ class Mistral3Model(Mistral3PreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
+    The Mistral3 model with a sequence classification head on top.
+    """
+)
+class Mistral3ForSequenceClassification(GenericForSequenceClassification, Mistral3PreTrainedModel):
+    r"""Sequence classification head.
+
+    Projects every position with the score layer then pools according to config.pooling:
+
+    - ``eos`` (default when ``pooling`` is ``None``): the rightmost non-pad token.
+    - ``bos``: the first token. Meaningful only when the text backbone is bidirectional.
+    - ``mean``: masked mean over non-pad tokens.
+    """
+
+    config: Mistral3Config
+
+    def __init__(self, config: Mistral3Config):
+        super().__init__(config)
+        self.pooling = config.pooling or "eos"
+        if self.pooling not in {"bos", "eos", "mean"}:
+            raise ValueError(f"Unsupported pooling {self.pooling!r}; expected one of bos|eos|mean.")
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        image_sizes: torch.Tensor | None = None,
+        vision_feature_layer: int | list[int] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> SequenceClassifierOutputWithPast:
+        if self.pooling == "eos":
+            return super().forward(
+                input_ids=input_ids,
+                pixel_values=pixel_values,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                past_key_values=past_key_values,
+                inputs_embeds=inputs_embeds,
+                labels=labels,
+                use_cache=use_cache,
+                image_sizes=image_sizes,
+                vision_feature_layer=vision_feature_layer,
+                **kwargs,
+            )
+
+        outputs = self.model(
+            input_ids=input_ids,
+            pixel_values=pixel_values,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            image_sizes=image_sizes,
+            vision_feature_layer=vision_feature_layer,
+            **kwargs,
+        )
+        logits = self.score(outputs.last_hidden_state)
+
+        if self.pooling == "bos":
+            pooled_logits = logits[:, 0, :]
+        else:
+            if attention_mask is not None:
+                non_pad_mask = attention_mask.to(logits.device, torch.bool)
+            elif input_ids is not None and self.config.get_text_config().pad_token_id is not None:
+                non_pad_mask = (input_ids != self.config.get_text_config().pad_token_id).to(logits.device)
+            else:
+                non_pad_mask = None
+
+            if non_pad_mask is None:
+                pooled_logits = logits.mean(dim=1)
+            else:
+                mask = non_pad_mask.to(logits.dtype).unsqueeze(-1)
+                pooled_logits = (logits * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1)
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(logits=logits, labels=labels, pooled_logits=pooled_logits, config=self.config)
+
+        return SequenceClassifierOutputWithPast(
+            loss=loss,
+            logits=pooled_logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+@auto_docstring(
+    custom_intro="""
     The MISTRAL3 model which consists of a vision backbone and a language model.
     """
 )
@@ -429,4 +532,9 @@ class Mistral3ForConditionalGeneration(Mistral3PreTrainedModel, GenerationMixin)
         )
 
 
-__all__ = ["Mistral3Model", "Mistral3PreTrainedModel", "Mistral3ForConditionalGeneration"]
+__all__ = [
+    "Mistral3Model",
+    "Mistral3PreTrainedModel",
+    "Mistral3ForConditionalGeneration",
+    "Mistral3ForSequenceClassification",
+]

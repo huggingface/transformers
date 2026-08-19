@@ -25,6 +25,9 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 @strict
 class Mistral3Config(PreTrainedConfig):
     r"""
+    pooling (`str`, *optional*):
+        The pooling strategy (`bos` | `eos` | `mean`); `None` defaults to `eos`.
+
     Example:
 
     ```python
@@ -60,6 +63,7 @@ class Mistral3Config(PreTrainedConfig):
     vision_feature_layer: int | list[int] = -1
     multimodal_projector_bias: bool = False
     spatial_merge_size: int = 2
+    pooling: str | None = None
     tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
