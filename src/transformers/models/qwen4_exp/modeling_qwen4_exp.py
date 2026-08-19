@@ -627,26 +627,6 @@ class Qwen4ExpQSAIndexer(nn.Module):
         self.q_layernorm = Qwen4ExpRMSNorm(self.index_head_dim, eps=config.rms_norm_eps)
         self.k_layernorm = Qwen4ExpRMSNorm(self.index_head_dim, eps=config.rms_norm_eps)
 
-    @staticmethod
-    def build_sparse_attention_mask(
-        selected_token_indices: torch.Tensor,
-        target_length: int,
-        dtype: torch.dtype,
-    ) -> torch.Tensor:
-        additive_attention_mask = torch.full(
-            (*selected_token_indices.shape[:-1], target_length + 1),
-            torch.finfo(dtype).min,
-            device=selected_token_indices.device,
-            dtype=dtype,
-        )
-        scatter_indices = torch.where(
-            selected_token_indices >= 0,
-            selected_token_indices.long(),
-            target_length,
-        )
-        additive_attention_mask.scatter_(-1, scatter_indices, 0)
-        return additive_attention_mask[..., :target_length].unsqueeze(1)
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -720,7 +700,15 @@ class Qwen4ExpQSAIndexer(nn.Module):
                 selected_tokens = torch.cat([selected_tokens, tail]).to(torch.int32)
                 selected_token_indices[batch_idx, query_idx, : selected_tokens.numel()] = selected_tokens
 
-        return selected_token_indices
+        # Create the additive mask to be added to the main causal mask
+        selected_token_mask = torch.zeros_like(attention_mask, dtype=torch.bool).squeeze(1)
+        selected_token_mask = selected_token_mask.scatter(-1, selected_token_indices, True).unsqueeze(1)
+        # if using eager, convert to float mask
+        if attention_mask.is_floating_point():
+            min_dtype = torch.finfo(attention_mask.dtype).min
+            selected_token_mask = torch.where(selected_token_mask, attention_mask.new_zeros((0,)), min_dtype)
+
+        return selected_token_indices, selected_token_mask
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -796,19 +784,14 @@ class Qwen4ExpAttention(nn.Module):
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        query_length = hidden_states.shape[1]
-        past_length = 0
-        target_length = query_length
-        if past_key_values is not None:
-            past_length = past_key_values.get_seq_length(self.layer_idx)
-            past_length = int(past_length.item()) if isinstance(past_length, torch.Tensor) else past_length
-            target_length, _ = past_key_values.get_mask_sizes(query_length, self.layer_idx)
-        selected_token_indices = self.indexer(hidden_states, position_embeddings, attention_mask, past_key_values)
-        attention_mask = self.indexer.build_sparse_attention_mask(
-            selected_token_indices,
-            target_length=target_length,
-            dtype=hidden_states.dtype,
+        selected_token_indices, selected_token_mask = self.indexer(
+            hidden_states, position_embeddings, attention_mask, past_key_values
         )
+        # Combine both masks (they are never None, and are always 4D with either bool for sdpa, or float for eager)
+        if attention_mask.is_floating_point():
+            attention_mask = attention_mask + selected_token_mask
+        else:
+            attention_mask = attention_mask & selected_token_mask
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
