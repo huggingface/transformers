@@ -730,7 +730,6 @@ class Qwen4ExpQSAIndexer(nn.Module):
                 visible &= mask_row if mask_row.dtype == torch.bool else mask_row == 0
         return torch.nonzero(visible, as_tuple=False).flatten()
 
-    @torch.no_grad()
     def forward(
         self,
         hidden_states: torch.Tensor,
