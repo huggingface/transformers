@@ -69,7 +69,11 @@ def _read_pr_state(pr_body):
 
 def _delete_old_review_comments(review_id, pulls_url, token):
     """Delete all inline comments from a previous mlinter review to prevent accumulation."""
-    comments = get_github_json(f"{pulls_url}/reviews/{review_id}/comments", token=token) or []
+    try:
+        comments = get_github_json(f"{pulls_url}/reviews/{review_id}/comments", token=token) or []
+    except RuntimeError as exc:
+        print(f"Could not fetch comments for review {review_id}: {exc}; skipping cleanup.", file=sys.stderr)
+        return
     repo_api_url = pulls_url.split("/pulls/")[0]
     for comment in comments:
         try:
