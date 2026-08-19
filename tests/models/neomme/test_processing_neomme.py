@@ -47,6 +47,15 @@ if is_torch_available():
 class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = NeoMMEProcessor if is_vision_available() else None
     patch_size = 4
+    chat_template = (
+        "{% if task not in ['query', 'document'] %}{{ raise_exception(\"task must be 'query' or 'document'\") }}"
+        "{% elif task == 'query' %}{{ query_token }}{% else %}{{ document_token }}{% endif %}"
+        "{% set content = messages[-1]['content'] %}"
+        "{% if content is string %}{{ content }}{% else %}{% for item in content %}"
+        "{% if item['type'] == 'text' %}{{ item['text'] }}{% else %}{{ image_placeholder }}{% endif %}"
+        "{% endfor %}{% endif %}"
+        "{% if task == 'query' %}{% for _ in range(10) %}{{ mask_token }}{% endfor %}{% endif %}"
+    )
     # Frozen special-token block: each special's id is its index in this list.
     special_tokens = ["<pad>", "<bos>", "<eos>", "<unk>", "<mask>", "<doc>", "<img>", "<query>", "<row>"]
 
@@ -86,7 +95,9 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def setUpClass(cls):
         cls.tmpdirname = tempfile.mkdtemp()
         processor = cls.processor_class(
-            image_processor=NeoMMEImageProcessor(patch_size=cls.patch_size), tokenizer=cls._setup_tokenizer()
+            image_processor=NeoMMEImageProcessor(patch_size=cls.patch_size),
+            tokenizer=cls._setup_tokenizer(),
+            chat_template=cls.chat_template,
         )
         cls._setup_test_attributes(processor)
         processor.save_pretrained(cls.tmpdirname)
@@ -107,15 +118,16 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_tokenizer_decode_defaults(self):
         pass
 
+    @unittest.skip(reason="NeoMME chat templates must declare the retrieval task")
+    def test_apply_chat_template_assistant_mask(self):
+        pass
+
+    @unittest.skip(reason="NeoMME chat templates must declare the retrieval task")
+    def test_chat_template_jinja_kwargs(self):
+        pass
+
     def _set_retrieval_chat_template(self, processor):
-        processor.chat_template = (
-            "{% if task not in ['query', 'document'] %}{{ raise_exception(\"task must be 'query' or 'document'\") }}"
-            "{% elif task == 'query' %}{{ query_token }}{% else %}{{ document_token }}{% endif %}"
-            "{% for message in messages %}{% for item in message['content'] %}"
-            "{% if item['type'] == 'text' %}{{ item['text'] }}{% endif %}"
-            "{% endfor %}{% endfor %}"
-            "{% if task == 'query' %}{% for _ in range(10) %}{{ mask_token }}{% endfor %}{% endif %}"
-        )
+        processor.chat_template = self.chat_template
 
     def test_apply_chat_template_query(self):
         processor = self.get_processor()
@@ -130,6 +142,8 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(ids.count(self.marker_ids["<query>"]), 1)
         self.assertIn(processor.tokenizer.convert_tokens_to_ids("hello"), ids)
         self.assertEqual(ids[-processor.query_expand :], [self.marker_ids["<mask>"]] * processor.query_expand)
+        direct = processor(text=["hello"], task="query", return_tensors="pt")
+        torch.testing.assert_close(inputs["input_ids"], direct["input_ids"])
 
     def test_apply_chat_template_text_document(self):
         processor = self.get_processor()
@@ -144,6 +158,8 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(ids.count(self.marker_ids["<doc>"]), 1)
         self.assertIn(processor.tokenizer.convert_tokens_to_ids("hello"), ids)
         self.assertNotIn(self.marker_ids["<mask>"], ids)
+        direct = processor(text=["hello"], task="document", return_tensors="pt")
+        torch.testing.assert_close(inputs["input_ids"], direct["input_ids"])
 
     @parameterized.expand([(1, "pt"), (2, "pt")])
     def test_apply_chat_template_image(self, batch_size, return_tensors):
@@ -161,6 +177,10 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(inputs["position_ids"].shape[1], batch_size)
         self.assertNotIn("image_grid_hw", inputs)
         self.assertIn("pixel_values", inputs)
+        direct = processor(images=[image] * batch_size, return_tensors=return_tensors)
+        torch.testing.assert_close(inputs["input_ids"], direct["input_ids"])
+        torch.testing.assert_close(inputs["position_ids"], direct["position_ids"])
+        torch.testing.assert_close(inputs["pixel_values"], direct["pixel_values"])
 
     def test_apply_chat_template_requires_task_variable(self):
         processor = self.get_processor()
@@ -224,6 +244,30 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "do not support `return_assistant_tokens_mask`"):
             processor.apply_chat_template(messages, task="document", tokenize=True, return_assistant_tokens_mask=True)
+
+    def test_image_placeholder_is_reserved_and_required(self):
+        processor = self.get_processor()
+        placeholder = processor.image_placeholder
+
+        with self.assertRaisesRegex(ValueError, "reserved"):
+            processor(text=[f"hello {placeholder}"], task="query")
+
+        image = Image.fromarray(np.random.randint(0, 255, (8, 8, 3), dtype=np.uint8))
+        messages = [{"role": "user", "content": [{"type": "image", "image": image}]}]
+        processor.chat_template = (
+            "{% if task == 'document' %}{{ document_token }}{% else %}{{ query_token }}{% endif %}"
+        )
+        with self.assertRaisesRegex(ValueError, "image_placeholder"):
+            processor.apply_chat_template(messages, task="document", tokenize=True)
+
+    def test_zero_query_expansion_template(self):
+        processor = self.get_processor()
+        processor.query_expand = 0
+        processor.chat_template = self.chat_template.replace("range(10)", "range(0)")
+
+        inputs = processor(text=["hello"], task="query", return_tensors="pt")
+        hello_id = processor.tokenizer.convert_tokens_to_ids("hello")
+        self.assertEqual(inputs["input_ids"][0].tolist(), [self.marker_ids["<query>"], hello_id])
 
     def test_tokenizer_defaults_preserved_by_kwargs(self):
         processor_components = self.prepare_components()
@@ -464,7 +508,9 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         """A missing marker used to resolve to `unk_token_id` and silently open every document with `<unk>`."""
         stripped = self._setup_tokenizer(specials=[token for token in self.special_tokens if token != "<row>"])
         processor = NeoMMEProcessor(
-            image_processor=NeoMMEImageProcessor(patch_size=self.patch_size), tokenizer=stripped
+            image_processor=NeoMMEImageProcessor(patch_size=self.patch_size),
+            tokenizer=stripped,
+            chat_template=self.chat_template,
         )
 
         with self.assertRaises(ValueError) as raised:

@@ -103,14 +103,18 @@ class NeoMMEProcessor(ProcessorMixin):
         tokenizer=None,
         chat_template=None,
         query_expand: int = 10,
+        image_placeholder: str = "<|image_placeholder|>",
         **kwargs,
     ):
         r"""
         query_expand (`int`, *optional*, defaults to 10):
             Number of `<mask>` buffer tokens appended to every query.
+        image_placeholder (`str`, *optional*, defaults to `"<|image_placeholder|>"`):
+            Temporary string emitted by the chat template for one image. It is replaced before tokenization.
         """
         super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
         self.query_expand = query_expand
+        self.image_placeholder = image_placeholder
 
     @property
     def image_token(self) -> str | None:
@@ -139,14 +143,19 @@ class NeoMMEProcessor(ProcessorMixin):
     ):
         """Apply the configured template and prepare the selected retrieval side when tokenizing."""
         template = self._resolve_chat_template(chat_template)
-        if "task" not in _get_template_variables(template):
+        template_variables = _get_template_variables(template)
+        if "task" not in template_variables:
             raise ValueError("NeoMME chat templates must use the `task` variable to distinguish retrieval sides.")
 
         modality = self._validate_chat_conversation(conversation, task)
+        if modality == "image" and "image_placeholder" not in template_variables:
+            raise ValueError("NeoMME image chat templates must use the `image_placeholder` variable.")
         if modality == "image" and kwargs.get("return_assistant_tokens_mask"):
             raise ValueError("Image document templates do not support `return_assistant_tokens_mask`.")
 
         processor_kwargs = {**(processor_kwargs or {}), "task": task, "_chat_template_applied": True}
+        if "image_placeholder" in template_variables:
+            kwargs["image_placeholder"] = self.image_placeholder
         return super().apply_chat_template(
             conversation,
             chat_template=chat_template,
@@ -177,6 +186,7 @@ class NeoMMEProcessor(ProcessorMixin):
             A [`BatchFeature`] with `input_ids` and `attention_mask`. Image inputs also return `position_ids`,
             and `pixel_values`.
         """
+        rendered_text = text if _chat_template_applied else None
         if _chat_template_applied and images is not None:
             text = None
         images, text, _, _ = self.prepare_inputs_layout(images=images, text=text, **kwargs)
@@ -188,18 +198,18 @@ class NeoMMEProcessor(ProcessorMixin):
             NeoMMEProcessorKwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs
         )
         if images is not None:
-            return self.process_images(images, **output_kwargs["images_kwargs"])
+            return self.process_images(images, rendered_text=rendered_text, **output_kwargs["images_kwargs"])
 
         if isinstance(text, str):
             text = [text]
         if text and not isinstance(text[0], str):
             raise ValueError("Pretokenized text is not supported")
-        if _chat_template_applied:
-            return self.tokenizer(text, **{**output_kwargs["text_kwargs"], "add_special_tokens": False})
 
         # What the caller actually named, flat or nested, as opposed to what `_merge_kwargs` injected.
         requested = set(kwargs) | set(kwargs.get("text_kwargs", {}))
         text_kwargs = self._supported_text_kwargs(output_kwargs["text_kwargs"], requested)
+        if _chat_template_applied:
+            return self._tokenize_rendered_text(text, task=task, **text_kwargs)
         if task == "query":
             return self.process_queries(text, **text_kwargs)
         if task == "document":
@@ -237,12 +247,15 @@ class NeoMMEProcessor(ProcessorMixin):
             for message in messages:
                 content = message.get("content") or []
                 if isinstance(content, str):
+                    self._validate_user_text(content)
                     has_text |= bool(content)
                     continue
                 for item in content:
                     content_type = item.get("type")
                     if content_type == "text":
-                        has_text |= bool(item.get("text"))
+                        item_text = item.get("text") or ""
+                        self._validate_user_text(item_text)
+                        has_text |= bool(item_text)
                     elif content_type in {"image", "image_url"}:
                         image_count += 1
                     else:
@@ -260,6 +273,69 @@ class NeoMMEProcessor(ProcessorMixin):
             raise ValueError("A NeoMME chat template batch cannot mix text and image documents.")
         return modalities.pop()
 
+    def _validate_user_text(self, text: str) -> None:
+        if self.image_placeholder in text:
+            raise ValueError(
+                f"{self.image_placeholder!r} is reserved for internal image processing and cannot appear "
+                "in user text."
+            )
+
+    def _render_template(self, conversations: list[list[dict]], task: Literal["query", "document"]) -> list[str]:
+        template = self._resolve_chat_template(None)
+        if "task" not in _get_template_variables(template):
+            raise ValueError("NeoMME chat templates must use the `task` variable to distinguish retrieval sides.")
+        return self.tokenizer.apply_chat_template(
+            conversations,
+            chat_template=template,
+            task=task,
+            image_placeholder=self.image_placeholder,
+            tokenize=False,
+        )
+
+    def _render_text(self, text: list[str], task: Literal["query", "document"]) -> list[str]:
+        for value in text:
+            self._validate_user_text(value)
+        conversations = [[{"role": "user", "content": value}] for value in text]
+        return self._render_template(conversations, task)
+
+    def _tokenize_rendered_text(
+        self,
+        text: list[str],
+        task: Literal["query", "document"],
+        max_length: int | None = None,
+        padding: bool | str = "longest",
+        return_tensors: str | None = "pt",
+    ) -> BatchFeature:
+        marker_ids = self._marker_ids()
+        encodings = self.tokenizer(text, add_special_tokens=False)["input_ids"]
+        sequences = []
+
+        for ids in encodings:
+            prefix_id = marker_ids["query"] if task == "query" else marker_ids["document"]
+            if not ids or ids[0] != prefix_id or ids.count(prefix_id) != 1:
+                raise ValueError(f"NeoMME chat template must render exactly one leading {task} token.")
+
+            expansion_length = self.query_expand if task == "query" else 0
+            if expansion_length:
+                expansion = [marker_ids["mask"]] * expansion_length
+                if ids[-expansion_length:] != expansion or ids.count(marker_ids["mask"]) != expansion_length:
+                    raise ValueError(
+                        f"NeoMME query template must render exactly {expansion_length} trailing mask tokens."
+                    )
+                content = ids[1:-expansion_length]
+            else:
+                expansion = []
+                content = ids[1:]
+
+            content_limit = None if max_length is None else max_length - 1 - expansion_length
+            if content_limit is not None and content_limit < 0:
+                raise ValueError(
+                    f"query_expand={expansion_length} leaves no room for content inside max_length={max_length}"
+                )
+            sequences.append([prefix_id, *content[:content_limit], *expansion])
+
+        return self._pad_sequences(sequences, padding=padding, max_length=max_length, return_tensors=return_tensors)
+
     def process_queries(
         self,
         text: list[str] | str,
@@ -275,20 +351,8 @@ class NeoMMEProcessor(ProcessorMixin):
         """
         if isinstance(text, str):
             text = [text]
-        marker_ids = self._marker_ids()
-        expansion = [marker_ids["mask"]] * self.query_expand
-
-        content_limit = None
-        if max_length is not None:
-            content_limit = max_length - 1 - self.query_expand
-            if content_limit < 0:
-                raise ValueError(
-                    f"query_expand={self.query_expand} leaves no room for content inside max_length={max_length}"
-                )
-
-        encodings = self._tokenize_content(list(text), content_limit)
-        sequences = [[marker_ids["query"]] + list(ids)[:content_limit] + expansion for ids in encodings]
-        return self._pad_sequences(sequences, padding=padding, max_length=max_length, return_tensors=return_tensors)
+        rendered = self._render_text(list(text), task="query")
+        return self._tokenize_rendered_text(rendered, "query", max_length, padding, return_tensors)
 
     def process_text_documents(
         self,
@@ -305,15 +369,10 @@ class NeoMMEProcessor(ProcessorMixin):
         """
         if isinstance(text, str):
             text = [text]
-        marker_ids = self._marker_ids()
-        content_limit = None if max_length is None else max_length - 1
+        rendered = self._render_text([passage or " " for passage in text], task="document")
+        return self._tokenize_rendered_text(rendered, "document", max_length, padding, return_tensors)
 
-        # An empty string tokenizes to nothing, which would leave a marker-only document.
-        encodings = self._tokenize_content([passage or " " for passage in text], content_limit)
-        sequences = [[marker_ids["document"]] + list(ids)[:content_limit] for ids in encodings]
-        return self._pad_sequences(sequences, padding=padding, max_length=max_length, return_tensors=return_tensors)
-
-    def process_images(self, images: ImageInput, **kwargs) -> BatchFeature:
+    def process_images(self, images: ImageInput, rendered_text: list[str] | str | None = None, **kwargs) -> BatchFeature:
         """
         Prepare document images as image patch grids with two-axis positions.
 
@@ -328,16 +387,58 @@ class NeoMMEProcessor(ProcessorMixin):
         image_grid_hw = image_inputs.pop("image_grid_hw")
         marker_ids = self._marker_ids()
 
-        sequences: list[list[int]] = []
+        if rendered_text is None:
+            conversations = [
+                [{"role": "user", "content": [{"type": "image"}]}] for _ in range(len(image_grid_hw))
+            ]
+            rendered_text = self._render_template(conversations, task="document")
+        elif isinstance(rendered_text, str):
+            rendered_text = [rendered_text]
+
+        replacements = [self.replace_image_token({"image_grid_hw": image_grid_hw}, index) for index in range(len(image_grid_hw))]
+        rendered_text, _ = self.get_text_with_replacements(list(rendered_text), images_replacements=replacements)
+        sequences = self.tokenizer(rendered_text, add_special_tokens=False)["input_ids"]
+        if len(sequences) != len(image_grid_hw):
+            raise ValueError(f"Got {len(sequences)} image prompts for {len(image_grid_hw)} images.")
+
         positions: list[np.ndarray] = []
-        for grid_height, grid_width in image_grid_hw.tolist():
-            ids, position_ids = self._encode_image_grid(grid_height, grid_width, marker_ids)
-            sequences.append(ids)
+        for ids, (grid_height, grid_width) in zip(sequences, image_grid_hw.tolist()):
+            expected_ids, position_ids = self._encode_image_grid(grid_height, grid_width, marker_ids)
+            if ids != expected_ids:
+                raise ValueError("NeoMME image template and placeholder replacement produced an invalid token layout.")
             positions.append(position_ids)
 
         batch = self._pad_sequences(sequences, positions, return_tensors=return_tensors)
         batch["pixel_values"] = image_inputs["pixel_values"]  # (num_patches, 3 * patch_size ** 2)
         return batch
+
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
+        grid_height, grid_width = image_inputs["image_grid_hw"][image_idx]
+        row = self.tokenizer.image_token * int(grid_width) + self.tokenizer.row_token
+        return self.tokenizer.image_token + row * int(grid_height)
+
+    def get_text_with_replacements(
+        self,
+        text: list[str],
+        images_replacements: list[str] | None = None,
+        videos_replacements: list[str] | None = None,
+        audio_replacements: list[str] | None = None,
+    ) -> tuple[list[str], list[dict[str, Any]]]:
+        """Replace temporary image placeholders with grid-dependent trained image tokens."""
+        images_replacements = images_replacements or []
+        if videos_replacements or audio_replacements:
+            raise ValueError("NeoMME supports image replacements only.")
+        if sum(sample.count(self.image_placeholder) for sample in text) != len(images_replacements):
+            raise ValueError("The number of image placeholders must match the number of images.")
+
+        replacements = iter(images_replacements)
+        for index, sample in enumerate(text):
+            while self.image_placeholder in sample:
+                sample = sample.replace(self.image_placeholder, next(replacements), 1)
+            text[index] = sample
+        if any(self.image_placeholder in sample for sample in text):
+            raise ValueError("An image placeholder remained after replacement.")
+        return text, []
 
     def score_retrieval(
         self,
@@ -418,15 +519,6 @@ class NeoMMEProcessor(ProcessorMixin):
         if missing:
             raise ValueError(f"The tokenizer is missing NeoMME marker tokens: {missing}")
         return ids
-
-    def _tokenize_content(self, text: list[str], max_length: int | None) -> list[list[int]]:
-        """Tokenize text content without warning about tokens the NeoMME layout will truncate."""
-        if max_length == 0:
-            return [[] for _ in text]
-        kwargs: dict[str, Any] = {"add_special_tokens": False}
-        if max_length is not None:
-            kwargs.update(truncation=True, max_length=max_length)
-        return self.tokenizer(text, **kwargs)["input_ids"]
 
     def _encode_image_grid(
         self, grid_height: int, grid_width: int, marker_ids: dict[str, int]
