@@ -87,7 +87,6 @@ class Ovis2_5VisionEmbeddings(nn.Module):
         self.num_patches = (self.image_size // self.patch_size) ** 2
         self.num_positions = self.num_patches
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
-        self.position_ids = nn.Buffer(torch.arange(self.num_positions).expand((1, -1)), persistent=False)
         # How the (square) learned position grid is resampled to each image's grid.
         self.num_grid_per_side = int(self.num_positions**0.5)
         self.interpolation_align_corners = False
