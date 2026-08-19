@@ -833,8 +833,8 @@ class NeoMMEForRetrieval(NeoMMEPreTrainedModel):
         if attention_mask is None:
             attention_mask = torch.ones(hidden_states.shape[:2], dtype=torch.bool, device=hidden_states.device)
 
-        embeddings = self._multivector(hidden_states, attention_mask) if output_multivector else None
-        dense_embeddings = self._dense(hidden_states, attention_mask, dense_dim) if output_dense else None
+        embeddings = self._forward_late_head(hidden_states, attention_mask) if output_multivector else None
+        dense_embeddings = self._forward_dense_head(hidden_states, attention_mask, dense_dim) if output_dense else None
         return NeoMMEForRetrievalOutput(
             embeddings=embeddings,
             dense_embeddings=dense_embeddings,
@@ -843,7 +843,8 @@ class NeoMMEForRetrieval(NeoMMEPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    def _multivector(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
+    def _forward_late_head(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
+        """Project and normalize token embeddings, then zero padding positions."""
         proj_dtype = self.embedding_proj_layer.weight.dtype
         # (batch_size, sequence_length, embedding_dim)
         embeddings = self.embedding_proj_layer(hidden_states.to(proj_dtype))
@@ -851,9 +852,10 @@ class NeoMMEForRetrieval(NeoMMEPreTrainedModel):
         # Overwrite padding rows rather than multiply them out, so a non-finite value cannot survive.
         return embeddings.masked_fill(~attention_mask.bool().unsqueeze(-1), 0.0)
 
-    def _dense(
+    def _forward_dense_head(
         self, hidden_states: torch.Tensor, attention_mask: torch.Tensor, dense_dim: int | None = None
     ) -> torch.Tensor:
+        """Mean-pool non-padding states and normalize the requested Matryoshka prefix."""
         expanded_mask = attention_mask.unsqueeze(-1).expand(hidden_states.shape).to(hidden_states.dtype)
         pooled = (hidden_states * expanded_mask).sum(1) / expanded_mask.sum(1).clamp_min(1e-9)
         if dense_dim is None:
