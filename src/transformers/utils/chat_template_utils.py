@@ -483,6 +483,11 @@ def _cached_compile_jinja_template(chat_template):
         # We also expose some options like custom indents and separators
         return json.dumps(x, ensure_ascii=ensure_ascii, indent=indent, separators=separators, sort_keys=sort_keys)
 
+    def fromjson(x):
+        if isinstance(x, (dict, list)):
+            return x
+        return json.loads(x)
+
     def strftime_now(format):
         return datetime.now().strftime(format)
 
@@ -490,6 +495,7 @@ def _cached_compile_jinja_template(chat_template):
         trim_blocks=True, lstrip_blocks=True, extensions=[AssistantTracker, jinja2.ext.loopcontrols]
     )
     jinja_env.filters["tojson"] = tojson
+    jinja_env.filters["fromjson"] = fromjson
     jinja_env.globals["raise_exception"] = raise_exception
     jinja_env.globals["strftime_now"] = strftime_now
     return jinja_env.from_string(chat_template)

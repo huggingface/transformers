@@ -16,6 +16,7 @@ import unittest
 from typing import Literal
 
 from transformers.utils import DocstringParsingException, TypeHintParsingException, get_json_schema
+from transformers.utils.chat_template_utils import _compile_jinja_template
 
 
 class JsonSchemaGeneratorTest(unittest.TestCase):
@@ -646,3 +647,13 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             },
         }
         self.assertEqual(schema["function"], expected_schema)
+
+
+class JinjaChatTemplateFilterTest(unittest.TestCase):
+    def test_fromjson_parses_object_string(self):
+        compiled = _compile_jinja_template("{% for k, v in payload|fromjson|items %}{{ k }}={{ v }}{% endfor %}")
+        self.assertEqual(compiled.render(payload='{"city": "Paris"}'), "city=Paris")
+
+    def test_fromjson_passthrough_mapping(self):
+        compiled = _compile_jinja_template("{% for k, v in payload|fromjson|items %}{{ k }}={{ v }}{% endfor %}")
+        self.assertEqual(compiled.render(payload={"city": "Paris"}), "city=Paris")
