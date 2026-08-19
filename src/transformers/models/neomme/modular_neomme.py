@@ -574,11 +574,12 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
             [NeoMMEEncoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         global_layers = [i for i, layer_type in enumerate(config.layer_types) if layer_type == "full_attention"]
-        self.value_embeddings = (
-            nn.Embedding(config.vocab_size, config.num_key_value_heads * config.head_dim)
-            if config.use_value_embeds and global_layers
-            else None
-        )
+        # CODEPATH: Hcompany/NeoMME-260M and Hcompany/NeoMME-260M-Retriever use value embeddings;
+        # custom disabled or all-sliding configurations omit them.
+        if config.use_value_embeds and global_layers:
+            self.value_embeddings = nn.Embedding(config.vocab_size, config.num_key_value_heads * config.head_dim)
+        else:
+            self.value_embeddings = None
         self.value_embedding_layers = (
             {global_layers[0], global_layers[-1]} if self.value_embeddings is not None else set()
         )
@@ -655,7 +656,7 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
         self, input_ids: torch.LongTensor, hidden_states: torch.Tensor, pixel_values: torch.Tensor
     ) -> torch.Tensor:
         """Scatter patch embeddings into image placeholder tokens."""
-        if pixel_values.shape[-1] != self.config.patch_dim:
+        if pixel_values.shape[-1] != self.config.patch_dim:  # trf-ignore: TRF041
             raise ValueError(
                 f"pixel_values has patch width {pixel_values.shape[-1]} but the model expects "
                 f"{self.config.patch_dim} (= 3 * patch_size ** 2 with patch_size={self.config.patch_size})"
