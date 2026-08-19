@@ -87,7 +87,7 @@ class Ovis2_5Processor(ProcessorMixin):
         if images is not None:
             images = make_flat_list_of_images(images)
         if videos is not None:
-            videos = [] if isinstance(videos, (list, tuple)) and len(videos) == 0 else make_batched_videos(videos)
+            videos = make_batched_videos(videos)
         return images, text, videos, None
 
     def validate_inputs(self, images=None, text=None, videos=None, **kwargs):

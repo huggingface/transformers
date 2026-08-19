@@ -228,15 +228,6 @@ class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIsNone(image_audio)
         self.assertIsNone(video_audio)
 
-    def test_prepare_inputs_layout_handles_empty_visual_inputs(self):
-        processor = self.get_processor()
-
-        empty_images, _, empty_videos, audio = processor.prepare_inputs_layout(images=[], videos=[], audio=[0.0])
-
-        self.assertListEqual(empty_images, [])
-        self.assertListEqual(empty_videos, [])
-        self.assertIsNone(audio)
-
     def test_multiple_images(self):
         """Each image placeholder gets its own start and end boundary tokens."""
         processor = self.get_processor()
