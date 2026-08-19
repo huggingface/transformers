@@ -23,6 +23,9 @@ import github
 from github import Github
 
 
+MAX_REVIEWERS = 2
+
+
 def pattern_to_regex(pattern):
     if pattern.startswith("/"):
         start_anchor = True
@@ -71,6 +74,40 @@ def pr_author_is_in_hf(pr_author, codeowners_lines):
             return True
     return False
 
+def warn(message):
+    # Surfaced on the workflow run itself. Without it an unassignable reviewer is a
+    # line in a step log on a green job, which is how #48070 ended up with none.
+    print(f"::warning::{message}")
+
+def is_collaborator(repo, login):
+    # A review can only be requested from a collaborator, and GitHub rejects the
+    # WHOLE request rather than the offending name -- so one codeowner who has left
+    # takes their valid co-owners down with them. Check before asking.
+    try:
+        return repo.has_in_collaborators(login)
+    except github.GithubException as e:
+        warn(f"Could not check whether {login} is a collaborator: {e}")
+        return False
+
+def request_reviews(repo, pr, candidates, limit=MAX_REVIEWERS):
+    # Request up to `limit` reviews, in ranked order, one name per call so a
+    # rejection cannot cancel the others. Owners who cannot be asked are skipped
+    # and the next-ranked owner takes the slot. Returns the logins requested.
+    requested = []
+    for login in candidates:
+        if len(requested) == limit:
+            break
+        if not is_collaborator(repo, login):
+            warn(f"Skipping {login}: not a collaborator of {repo.full_name} (stale codeowners entry?)")
+            continue
+        try:
+            pr.create_review_request([login])
+        except github.GithubException as e:
+            warn(f"Failed to request review from {login}: {e}")
+            continue
+        requested.append(login)
+    return requested
+
 def main():
     script_dir = Path(__file__).parent.absolute()
     with open(script_dir / "codeowners_for_review_action") as f:
@@ -108,13 +145,15 @@ def main():
 
     # Assign the top 2 based on locs changed as reviewers, but skip the owner if present
     locs_per_owner.pop(pr_author, None)
-    top_owners = locs_per_owner.most_common(2)
-    print("Top owners", top_owners)
-    top_owners = [owner[0] for owner in top_owners]
-    try:
-        pr.create_review_request(top_owners)
-    except github.GithubException as e:
-        print(f"Failed to request review for {top_owners}: {e}")
+    ranked_owners = [owner for owner, _ in locs_per_owner.most_common()]
+    print("Top owners", locs_per_owner.most_common(MAX_REVIEWERS))
+    requested = request_reviews(repo, pr, ranked_owners)
+    if requested:
+        print(f"Requested review from {requested}")
+    elif ranked_owners:
+        warn(f"No reviewer could be requested for #{pr_number} out of {ranked_owners}")
+    else:
+        warn(f"No codeowner matched the files changed in #{pr_number}")
 
 
 

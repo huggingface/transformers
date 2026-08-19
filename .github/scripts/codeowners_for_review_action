@@ -12,12 +12,12 @@ docs/ @stevhliu
 /src/transformers/models/*/image_processing_*_fast* @yonigozlan
 
 # Owners of subsections of the library
-/src/transformers/generation/ @gante
+/src/transformers/generation/ @Cyrilvallez
 /src/transformers/pipeline/ @Rocketknight1 @yonigozlan
 /src/transformers/integrations/ @SunMarc @MekkCyber @zach-huggingface
 /src/transformers/quantizers/ @SunMarc @MekkCyber
 tests/ @ydshieh
-tests/generation/ @gante
+tests/generation/ @Cyrilvallez
 
 /src/transformers/models/auto/ @ArthurZucker
 /src/transformers/utils/ @ArthurZucker @Rocketknight1
@@ -29,6 +29,8 @@ tests/generation/ @gante
 trainer.py @zach-huggingface @SunMarc
 trainer_utils.py @zach-huggingface @SunMarc
 /utils/modular_model_converter.py @Cyrilvallez @ArthurZucker
+/src/transformers/generation/continuous_batching/ @remi-or
+tests/generation/test_continuous_batching.py @remi-or
 
 # Owners of individual models are specific / high priority, and so they come last
 # mod* captures modeling and modular files
