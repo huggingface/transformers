@@ -293,10 +293,21 @@ class AutoProcessor:
                 processor_class = getattr(config, "processor_class", None)
                 if hasattr(config, "auto_map") and "AutoProcessor" in config.auto_map:
                     processor_auto_map = config.auto_map["AutoProcessor"]
-            except ValueError:
-                # Config loading failed (unrecognized model_type, invalid config, etc.)
-                # Continue to fallback logic below (AutoTokenizer, AutoImageProcessor, etc.)
-                pass
+            except (ValueError, OSError) as config_error:
+                # Native Mistral checkpoints use params.json and tekken.json instead of config.json.
+                from ...integrations.mistral import resolve_mistral_format
+
+                mistral_format = kwargs.pop("mistral_format", None)
+                use_mistral, _ = resolve_mistral_format(
+                    pretrained_model_name_or_path,
+                    mistral_format=mistral_format,
+                    **cached_file_kwargs,
+                )
+                if use_mistral:
+                    processor_class = "PixtralProcessor"
+                    kwargs["mistral_format"] = mistral_format if mistral_format is not None else True
+                elif isinstance(config_error, OSError):
+                    raise
 
         if processor_class is not None:
             processor_class = processor_class_from_name(processor_class)
