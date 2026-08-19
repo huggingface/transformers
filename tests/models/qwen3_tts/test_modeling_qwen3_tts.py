@@ -1,4 +1,4 @@
-﻿# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -196,16 +196,11 @@ class Qwen3TTSForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     The fixtures hold the codes produced by the original Qwen3-TTS implementation for the same
     prompts and generation settings, so these tests assert that the port reproduces the reference
-    exactly rather than merely reproducing itself. Regenerate them with:
+    exactly rather than merely reproducing itself.
 
-        python reproduce_qwen3_tts_from_original.py \
-            --original_repo ../Qwen3-TTS \
-            --original_weights qwen3_tts_original \
-            --processor_checkpoint qwen3_tts_converted
-
-    The generation settings below must stay in step with `GENERATE_KWARGS` in that script: greedy
-    decoding makes the codes reproducible, and the short horizon keeps them clear of the repeated
-    tail that greedy decoding falls into on longer runs.
+    The generation settings below must stay in step with `GENERATE_KWARGS` in the reproducer:
+    greedy decoding makes the codes reproducible, and the short horizon keeps them clear of the
+    repeated tail that greedy decoding falls into on longer runs.
     """
 
     @classmethod
@@ -222,6 +217,9 @@ class Qwen3TTSForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     @slow
     def test_single(self):
+        """
+        reproducer: https://gist.github.com/ShahVandit/cab13f3b7232c52b4ff93cce592950c4#file-reproducer_qwen3_tts-py
+        """
         set_seed(42)
 
         path = Path(__file__).parent.parent.parent / "fixtures/qwen3_tts/expected_results_single.json"
@@ -257,6 +255,9 @@ class Qwen3TTSForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     @slow
     def test_batch(self):
+        """
+        reproducer: https://gist.github.com/ShahVandit/cab13f3b7232c52b4ff93cce592950c4#file-reproducer_qwen3_tts-py
+        """
         set_seed(42)
 
         path = Path(__file__).parent.parent.parent / "fixtures/qwen3_tts/expected_results_batch.json"
