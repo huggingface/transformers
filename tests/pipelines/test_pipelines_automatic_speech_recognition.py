@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import unittest
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
@@ -32,7 +33,7 @@ from transformers import (
     WhisperForConditionalGeneration,
 )
 from transformers.pipelines import AutomaticSpeechRecognitionPipeline, pipeline
-from transformers.pipelines.audio_utils import chunk_bytes_iter, ffmpeg_microphone_live
+from transformers.pipelines.audio_utils import _ffmpeg_stream, chunk_bytes_iter, ffmpeg_microphone_live
 from transformers.pipelines.automatic_speech_recognition import chunk_iter
 from transformers.testing_utils import (
     Expectations,
@@ -1884,3 +1885,26 @@ class AudioUtilsTest(unittest.TestCase):
     def test_ffmpeg_additional_args(self):
         mic = ffmpeg_microphone_live(16000, 2.0, ffmpeg_additional_args=["-nostdin"])
         mic.close()
+
+
+class FFmpegStreamExitStatusTest(unittest.TestCase):
+    def test_ffmpeg_stream_raises_on_nonzero_exit(self):
+        mock_proc = MagicMock()
+        mock_proc.stdout.read.side_effect = [b"abc", b""]
+        mock_proc.wait.return_value = 1
+        mock_proc.__enter__.return_value = mock_proc
+        mock_proc.__exit__.return_value = None
+
+        with patch("subprocess.Popen", return_value=mock_proc):
+            with self.assertRaisesRegex(ValueError, "non-zero exit status 1"):
+                list(_ffmpeg_stream(["ffmpeg", "-i", "bad"], 3))
+
+    def test_ffmpeg_stream_ok_on_zero_exit(self):
+        mock_proc = MagicMock()
+        mock_proc.stdout.read.side_effect = [b"abc", b""]
+        mock_proc.wait.return_value = 0
+        mock_proc.__enter__.return_value = mock_proc
+        mock_proc.__exit__.return_value = None
+
+        with patch("subprocess.Popen", return_value=mock_proc):
+            self.assertEqual(list(_ffmpeg_stream(["ffmpeg", "-i", "ok"], 3)), [b"abc"])
