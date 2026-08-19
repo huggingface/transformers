@@ -75,6 +75,25 @@ class Ovis2_5Processor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
 
+    @classmethod
+    def _get_arguments_from_pretrained(cls, pretrained_model_name_or_path, processor_dict=None, **kwargs):
+        image_processor, tokenizer, video_processor = super()._get_arguments_from_pretrained(
+            pretrained_model_name_or_path, processor_dict, **kwargs
+        )
+        processor_dict = processor_dict or {}
+
+        # Released checkpoints only contain legacy SigLIP metadata, so use native defaults when no composite config exists.
+        if "image_processor" not in processor_dict:
+            from .image_processing_ovis2_5 import Ovis2_5ImageProcessor
+
+            image_processor = Ovis2_5ImageProcessor()
+        if "video_processor" not in processor_dict:
+            from .video_processing_ovis2_5 import Ovis2_5VideoProcessor
+
+            video_processor = Ovis2_5VideoProcessor()
+
+        return [image_processor, tokenizer, video_processor]
+
     def prepare_inputs_layout(self, images=None, text=None, videos=None, **kwargs):
         images, text, videos, _ = super().prepare_inputs_layout(images=images, text=text, videos=videos, **kwargs)
         if text is not None:
