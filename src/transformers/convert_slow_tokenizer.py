@@ -18,6 +18,7 @@ All the conversions are grouped here to gather SentencePiece dependencies outsid
 allow to make our dependency on SentencePiece optional.
 """
 
+import os
 import warnings
 from collections.abc import Collection
 
@@ -25,6 +26,7 @@ from packaging import version
 from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE, Unigram, WordPiece
 
+from .integrations.mistral.constants import is_tekken_vocab_filename
 from .utils import is_protobuf_available, is_sentencepiece_available, logging, requires_backends
 from .utils.import_utils import PROTOBUF_IMPORT_ERROR
 
@@ -479,8 +481,8 @@ class HerbertConverter(Converter):
         tokenizer.pre_tokenizer = pre_tokenizers.BertPreTokenizer()
         tokenizer.decoder = decoders.BPEDecoder(suffix=token_suffix)
         tokenizer.post_processor = processors.BertProcessing(
-            sep=(self.original_tokenizer.sep_token, self.original_tokenizer.sep_token_id),
-            cls=(self.original_tokenizer.cls_token, self.original_tokenizer.cls_token_id),
+            (self.original_tokenizer.sep_token, self.original_tokenizer.sep_token_id),
+            (self.original_tokenizer.cls_token, self.original_tokenizer.cls_token_id),
         )
 
         return tokenizer
@@ -550,10 +552,10 @@ class RobertaConverter(Converter):
         tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=ot.add_prefix_space)
         tokenizer.decoder = decoders.ByteLevel()
         tokenizer.post_processor = processors.RobertaProcessing(
-            sep=(ot.sep_token, ot.sep_token_id),
-            cls=(ot.cls_token, ot.cls_token_id),
-            add_prefix_space=ot.add_prefix_space,
-            trim_offsets=True,  # True by default on Roberta (historical)
+            (ot.sep_token, ot.sep_token_id),
+            (ot.cls_token, ot.cls_token_id),
+            True,  # trim_offsets: True by default on Roberta (historical)
+            ot.add_prefix_space,
         )
 
         return tokenizer
@@ -1457,10 +1459,10 @@ class CLIPConverter(Converter):
 
         # Hack to have a ByteLevel and TemplateProcessor
         tokenizer.post_processor = processors.RobertaProcessing(
-            sep=(self.original_tokenizer.eos_token, self.original_tokenizer.eos_token_id),
-            cls=(self.original_tokenizer.bos_token, self.original_tokenizer.bos_token_id),
-            add_prefix_space=False,
-            trim_offsets=False,
+            (self.original_tokenizer.eos_token, self.original_tokenizer.eos_token_id),
+            (self.original_tokenizer.bos_token, self.original_tokenizer.bos_token_id),
+            False,  # trim_offsets
+            False,  # add_prefix_space
         )
         return tokenizer
 
@@ -2056,12 +2058,14 @@ def convert_slow_tokenizer(transformer_tokenizer, from_tiktoken=False) -> Tokeni
     if tokenizer_class_name in SLOW_TO_FAST_CONVERTERS and not from_tiktoken:
         converter_class = SLOW_TO_FAST_CONVERTERS[tokenizer_class_name]
         return converter_class(transformer_tokenizer).converted()
-    elif transformer_tokenizer.vocab_file.endswith("tekken.json"):
+
+    vocab_file = transformer_tokenizer.vocab_file
+    if isinstance(vocab_file, str) and os.path.isfile(vocab_file) and is_tekken_vocab_filename(vocab_file):
         from .integrations.mistral.tokenizer import MistralConverter
 
         transformer_tokenizer.original_tokenizer = transformer_tokenizer
         logger.info("Converting from Mistral tekken.json")
-        return MistralConverter(transformer_tokenizer.vocab_file).converted()
+        return MistralConverter(vocab_file).converted()
     else:
         try:
             logger.info("Converting from Tiktoken")

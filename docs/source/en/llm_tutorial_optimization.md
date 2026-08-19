@@ -5,7 +5,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 -->
 
@@ -111,10 +111,10 @@ def bytes_to_giga_bytes(bytes):
   return bytes / 1024 / 1024 / 1024
 ```
 
-Let's call [`torch.cuda.memory.max_memory_allocated`](https://docs.pytorch.org/docs/stable/generated/torch.cuda.memory.max_memory_allocated.html) to measure the peak GPU memory allocation.
+Let's call [`torch.accelerator.memory.max_memory_allocated`](https://docs.pytorch.org/docs/main/generated/torch.accelerator.memory.max_memory_allocated.html) to measure the peak accelerator memory allocation.
 
 ```python
-bytes_to_giga_bytes(torch.cuda.max_memory_allocated())
+bytes_to_giga_bytes(torch.accelerator.max_memory_allocated())
 ```
 
 **Output**:
@@ -141,8 +141,8 @@ import torch
 
 def flush():
   gc.collect()
-  torch.cuda.empty_cache()
-  torch.cuda.reset_peak_memory_stats()
+  torch.accelerator.empty_cache()
+  torch.accelerator.reset_peak_memory_stats()
 ```
 
 Let's call it now for the next experiment.
@@ -215,7 +215,7 @@ Here is a Python function that transforms bytes to Giga bytes:\n\n```python\ndef
 Nice, we're getting the same result as before, so no loss in accuracy! Let's look at how much memory was used this time.
 
 ```python
-bytes_to_giga_bytes(torch.cuda.max_memory_allocated())
+bytes_to_giga_bytes(torch.accelerator.max_memory_allocated())
 ```
 
 **Output**:
@@ -258,7 +258,7 @@ Here is a Python function that transforms bytes to Giga bytes:\n\n```\ndef bytes
 We're almost seeing the same output text as before - just the `python` is missing just before the code snippet. Let's see how much memory was required.
 
 ```python
-bytes_to_giga_bytes(torch.cuda.max_memory_allocated())
+bytes_to_giga_bytes(torch.accelerator.max_memory_allocated())
 ```
 
 **Output**:
@@ -442,7 +442,7 @@ Please have a look at [Transformer's Generate Text Tutorial](https://huggingface
 Let's run a quick code snippet to show how auto-regressive works in practice. We will simply take the most likely next token via `torch.argmax`.
 
 ```python
-input_ids = tokenizer(prompt, return_tensors="pt")["input_ids"].to("cuda")
+input_ids = tokenizer(prompt, return_tensors="pt")["input_ids"].to(model.device)
 
 for _ in range(5):
   next_logits = model(input_ids)["logits"][:, -1:]
@@ -478,7 +478,7 @@ In Transformers, we can retrieve the key-value cache by passing the `use_cache` 
 ```python
 past_key_values = None # past_key_values is the key-value cache
 generated_tokens = []
-next_token_id = tokenizer(prompt, return_tensors="pt")["input_ids"].to("cuda")
+next_token_id = tokenizer(prompt, return_tensors="pt")["input_ids"].to(model.device)
 
 for _ in range(5):
   next_logits, past_key_values = model(next_token_id, past_key_values=past_key_values, use_cache=True).to_tuple()
