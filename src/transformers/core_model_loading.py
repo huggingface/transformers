@@ -1633,9 +1633,9 @@ def convert_and_load_state_dict_in_model(
             # 3. Handle dtype casting
             materialize_dtype = dtype
 
-            if hasattr(tensor, "get_dtype"):
+            if hasattr(tensor, "get_dtype"):  # if `tensor` is a safetensors object, this is how we get the dtype
                 is_floating_point = tensor.get_dtype().startswith(("F", "BF"))
-            else:
+            else:  # otherwise tensor is a torch.Tensor
                 is_floating_point = tensor.is_floating_point()
 
             # Only quantize the parameter if it needs to be quantized and it isn't already
