@@ -9,7 +9,6 @@ docs/ @stevhliu
 # More high-level globs catch cases when specific rules later don't apply
 /src/transformers/models/*/processing* @molbap
 /src/transformers/models/*/image_processing* @molbap @guarin
-/src/transformers/models/*/image_processing_*_fast* @molbap @guarin
 /src/transformers/models/*/video_processing_* @zucchini-nlp
 
 # Fallback by modality for any model file with no rule of its own, so a new model reaches someone
@@ -28,7 +27,7 @@ docs/ @stevhliu
 
 # Owners of subsections of the library
 /src/transformers/generation/ @Cyrilvallez
-/src/transformers/pipeline/ @Rocketknight1
+/src/transformers/pipelines/ @Rocketknight1
 /src/transformers/integrations/ @SunMarc
 /src/transformers/quantizers/ @SunMarc
 tests/ @ydshieh
@@ -65,7 +64,6 @@ tests/generation/test_continuous_batching.py @remi-or
 /src/transformers/models/layoutlmv3/mod*_layoutlmv3* @NielsRogge
 /src/transformers/models/layoutxlm/mod*_layoutxlm* @NielsRogge
 /src/transformers/models/llava/mod*_llava* @zucchini-nlp @ArthurZucker
-/src/transformers/models/nougat/mod*_nougat* @NielsRogge
 /src/transformers/models/paligemma/mod*_paligemma* @zucchini-nlp @molbap
 /src/transformers/models/pixtral/mod*_pixtral* @zucchini-nlp @ArthurZucker
 /src/transformers/models/qwen2_audio/mod*_qwen2_audio* @zucchini-nlp @ArthurZucker
@@ -74,6 +72,12 @@ tests/generation/test_continuous_batching.py @remi-or
 /src/transformers/models/tapas/mod*_tapas* @NielsRogge
 /src/transformers/models/vision_encoder_decoder/mod*_vision_encoder_decoder* @Rocketknight1
 /src/transformers/models/vision_text_dual_encoder/mod*_vision_text_dual_encoder* @Rocketknight1
+
+# Directories the modality fallback cannot place: their doc page is named differently, they have no
+# doc page yet, or they are not a model. Everything else under models/ is routed by @@modality.
+/src/transformers/models/openai/ @ArthurZucker
+/src/transformers/models/timm_backbone/ @molbap @guarin
+/src/transformers/models/deprecated/
 
 # Finally, files with no owners that shouldn't generate pings, usually automatically generated and checked in the CI
 utils/dummy*
