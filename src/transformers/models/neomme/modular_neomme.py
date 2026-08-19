@@ -99,9 +99,6 @@ class NeoMMEImageProcessorKwargs(ImagesKwargs, total=False):
         Side, in pixels, of one patch token. The image is padded to a whole multiple of it.
     max_side (`int`, *optional*):
         Longest-side cap in pixels. Unset means no longest-side resize.
-    size (`dict[str, int]`, *optional*):
-        Pixel-area resize bounds with `min_pixels` and `max_pixels` keys. Bounds apply before patch-grid padding.
-        Unset means no area-based resize.
     """
 
     patch_size: int
