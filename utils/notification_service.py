@@ -1174,6 +1174,15 @@ if __name__ == "__main__":
     job_name = os.getenv("CI_TEST_JOB")
     report_name_prefix = job_name
 
+    # [DEBUG] temporary - to be removed
+    print(f"[DEBUG] job_name: {job_name}")
+    print(f"[DEBUG] report_name_prefix: {report_name_prefix}")
+    print(f"[DEBUG] job_matrix: {job_matrix}")
+    print(f"[DEBUG] available_artifacts keys: {sorted(available_artifacts.keys())}")
+    for matrix_name in job_matrix:
+        key = f"{report_name_prefix}_{matrix_name}_test_reports"
+        print(f"[DEBUG] checking artifact key: '{key}' -> found: {key in available_artifacts}")
+
     # This dict will contain all the information relative to each model:
     # - Failures: the total, as well as the number of failures per-category defined above
     # - Success: total
