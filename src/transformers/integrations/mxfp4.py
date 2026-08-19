@@ -125,7 +125,7 @@ class Mxfp4Deserialize(ConversionOps):
         blocks, scales = (
             x[0] if isinstance(x, list) else x for x in (input_dict[f"{proj}_blocks"], input_dict[f"{proj}_scales"])
         )
-        swizzle_mxfp4_convertops(blocks, scales, module, proj, blocks.device, get_triton_kernels_hub())
+        attach_packed_mxfp4_proj(module, proj, blocks, scales)
         if missing_keys is not None:
             missing_keys.discard(f"{full_layer_name}")
         module._is_hf_initialized = True
@@ -155,13 +155,18 @@ def unswizzle_mxfp4_proj(module: "nn.Module", proj: str) -> tuple[torch.Tensor, 
 
 
 class LoadPackedMxfp4Experts(ConversionOps):
-    """Load per-expert `weight_blocks` / `weight_scales` MoE projections without dequantizing them.
+    """Load per-expert packed-weight / scale MoE projections without dequantizing them.
 
+    This loader is shared between native mxfp4 checkpoints (`weight_blocks` / `weight_scales`) and compressed-tensors
+    `mxfp4-pack-quantized` checkpoints (`weight_packed` / `weight_scale`): both formats encode two e2m1 values per byte,
+    they just store the tensor under a different shape and name, both of which `attach_packed_mxfp4_proj` handles.
     Saving a generic mxfp4-quantized MoE runs the model's reverse conversions on the packed tensors, so the checkpoint
-    holds one `(blocks, scales)` pair per expert projection (the same per-expert layout compressed-tensors checkpoints
-    use). Loading replays the model's own expert-merging operations on the blocks and the scales separately, and
-    attaches the merged stacks to the experts module swizzled for the kernels.
+    holds one `(weight, scale)` pair per expert projection. Loading replays the model's own expert-merging operations on
+    the weights and the scales separately, and attaches the merged stacks to the experts module swizzled for the kernels.
     """
+
+    # Subclasses override this to match their checkpoint's naming for weight and scales
+    component_names: tuple[str, str] = ("weight_blocks", "weight_scales")
 
     def __init__(self, hf_quantizer: "Mxfp4HfQuantizer", operations: list[ConversionOps]):
         self.hf_quantizer = hf_quantizer
@@ -172,13 +177,16 @@ class LoadPackedMxfp4Experts(ConversionOps):
         input_dict: dict[str, torch.Tensor],
         source_patterns: list[str],
         target_patterns: list[str],
-        model=None,
+        model: nn.Module | None = None,
         full_layer_name: str | None = None,
         missing_keys: set[str] | None = None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
-        merged = {}
-        for component in ("weight_blocks", "weight_scales"):
+        """Merges the packed weights, and then the scales, using the model's converter, and attaches a mxfp4-quantized
+        experts to the module."""
+        # Merges the packed weights and scales separately
+        merged = []
+        for component in self.component_names:
             component_sources = [p for p in source_patterns if p.rstrip("$").endswith(component)]
             component_dict = {p: input_dict[p] for p in component_sources if p in input_dict}
             if not component_dict:
@@ -192,13 +200,14 @@ class LoadPackedMxfp4Experts(ConversionOps):
                     model=model,
                     **kwargs,
                 )
-            # there should be only one item left in the dictionary
-            merged[component] = component_dict.popitem()[1]
+            # At this point, there should be only one key left in the dictionary: the merged component
+            merged_component = component_dict.popitem()[1]
+            merged.append(merged_component)
 
         module, proj = get_module_from_name(model, full_layer_name)
-        blocks, scales = merged["weight_blocks"], merged["weight_scales"]
-        swizzle_mxfp4_convertops(blocks, scales, module, proj, blocks.device, get_triton_kernels_hub())
+        attach_packed_mxfp4_proj(module, proj, *merged)
 
+        # We just updated the module in place, so we manually finish the loader's work and return a {} so it stops
         if missing_keys is not None:
             missing_keys.discard(full_layer_name)
         module._is_hf_initialized = True
@@ -322,7 +331,7 @@ def make_packed_mxfp4_proj(module: "nn.Module", proj: str) -> tuple[Any, Any]:
     return weight, PrecisionConfig(weight_scale=scale, flex_ctx=FlexCtx(rhs_data=InFlexData()))
 
 
-def swizzle_mxfp4(w, w_scale, triton_kernels_hub):
+def swizzle_mxfp4(w: torch.Tensor, w_scale: torch.Tensor, triton_kernels_hub: Any) -> tuple[Any, Any]:
     """
     Changes the layout of the tensors depending on the hardware
     """
@@ -583,65 +592,36 @@ def mlp_forward(self, hidden_states):
     routed_out = routed_out.reshape(batch_size, -1, self.router.hidden_dim)
     return routed_out, router_logits
 
-
-def swizzle_mxfp4_convertops(
-    blocks: torch.Tensor,
-    scales: torch.Tensor,
-    module: "nn.Module",
-    proj: str,
-    target_device: "torch.device | str",
-    triton_kernels_hub: Any,
+def attach_packed_mxfp4_proj(
+    module: "nn.Module", proj: str, packed: torch.Tensor, scales: torch.Tensor,
 ) -> None:
-    """Swizzle and attach the `(blocks, scales)` packed expert projections to the module. Args:
-        - blocks (torch.Tensor): weights packed in blocks, shaped as [local_experts, out_dim, in_dim // 32, 16] in uint8
-        with two e2m1 values per byte, 16 bytes per group of 32
-        - scales (torch.Tensor): the e8m0 exponents [local_experts, out_dim, in_dim // 32] for each block
+    """Attach one mxfp4-packed expert projection to the module in the layout the triton kernels expect. Args:
         - module (nn.Module): the module to attach the packed expert projections to
         - proj (str): the name of the projection
-        - target_device (torch.device | str): the device to swizzle on
-        - triton_kernels_hub (Any): hub kernel object
-    """
-    # If the target device is a CPU and an accelerator is present, use the accelerator instead
-    is_cpu = getattr(target_device, "type", target_device) == "cpu"
-    if is_cpu and hasattr(torch, "accelerator"):
-        accelerator = torch.accelerator.current_accelerator()
-        target_device = accelerator.type if accelerator is not None else target_device
-    # Ensure device, layout and shape are correct
-    local_experts, out_dim = blocks.shape[:2]
-    blocks = blocks.to(target_device).contiguous().reshape(local_experts, out_dim, -1)
-    scales = scales.to(target_device).contiguous()
-    in_dim = blocks.shape[-1] * 2
-    # Actual swizzling operation
-    with on_device(target_device):
-        blocks = blocks.transpose(-1, -2)
-        scales = scales.transpose(-1, -2)
-        triton_weight_tensor, weight_scale = swizzle_mxfp4(blocks, scales, triton_kernels_hub)
-    # The swizzled storage is an opaque triton tensor, so we set its shape explicitly
-    triton_weight_tensor.shape = torch.Size([local_experts, in_dim, out_dim])
-    _register_packed_proj(module, proj, triton_weight_tensor, weight_scale)
-
-
-def attach_packed_mxfp4_proj(module: "nn.Module", proj: str, packed: torch.Tensor, scales: torch.Tensor) -> None:
-    """Attach one mxfp4-packed expert projection to `module` in the layout the triton kernels expect.
-
-    `packed` is a stack of `weight_packed` tensors, `(num_experts, out_dim, in_dim // 2)` uint8, and `scales` the
-    matching e8m0 stack, `(num_experts, out_dim, in_dim // 32)`. Both keep the two-e2m1-values-per-byte encoding they
-    have on disk; only their layout changes. The kernels read the weights column-major as
-    `(num_experts, in_dim, out_dim)`, hence the transpose before the swizzle.
+        - packed (torch.Tensor): the packed weights, shaped as [num_experts, out_dim, in_dim // 2] or
+            [num_experts, out_dim, in_dim // 32, 16] in uint8 (two e2m1 values per byte)
+        - scales (torch.Tensor): the scales, shaped as [num_experts, out_dim, in_dim // 32] in e8m0
     """
     hub = get_triton_kernels_hub()
-
+    # If an accelerator is present, use it to swizzle the weights
     device = packed.device
     if device.type == "cpu" and hasattr(torch, "accelerator") and torch.accelerator.current_accelerator() is not None:
-        device = torch.device(torch.accelerator.current_accelerator().type)
-    packed = packed.to(device).contiguous()
-    scales = scales.to(device).contiguous()
+        device = torch.accelerator.current_accelerator()
 
+    # Flatten the packed weights to match the layout the triton kernels expect. Wheter the packed tensor ends with
+    # [in_dim // 2] or [in_dim // 32, 16], the shape is [num_experts, out_dim, in_dim // 2] after this.
+    packed = packed.to(device).contiguous().flatten(start_dim=2)
+    scales = scales.to(device).contiguous()
     num_experts, out_dim, packed_in_dim = packed.shape
+
+    # Actual swizzling operation
     with on_device(device):
-        weight, weight_scale = swizzle_mxfp4(packed.transpose(-2, -1), scales.transpose(-2, -1), hub)
-    # The swizzled storage is opaque, so the logical shape the kernels index with is set explicitly.
-    weight.shape = torch.Size([num_experts, packed_in_dim * 2, out_dim])
+        packed = packed.transpose(-1, -2)
+        scales = scales.transpose(-1, -2)
+        weight, weight_scale = swizzle_mxfp4(packed, scales, hub)
+
+    # The swizzled storage is an opaque triton tensor, so we set its shape explicitly
+    weight.shape = torch.Size([num_experts, 2 * packed_in_dim, out_dim])
     _register_packed_proj(module, proj, weight, weight_scale)
 
 

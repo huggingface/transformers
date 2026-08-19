@@ -19,7 +19,7 @@ import torch
 from torch import nn
 
 from ..core_model_loading import ConversionOps, _IdentityOp
-from ..quantizers.quantizers_utils import get_module_from_name
+from ..integrations.mxfp4 import LoadPackedMxfp4Experts
 from ..utils import logging
 from ..utils.import_utils import is_torch_greater_or_equal
 
@@ -72,19 +72,13 @@ def is_runnable_expert_format(quantization_config: "QuantizationConfig") -> str 
     return format if format in RUNNABLE_EXPERTS_FORMATS else None
 
 
-class LoadPackedFp4Experts(ConversionOps):
-    """Load packed-fp4 MoE expert weights without decompressing them.
-
-    The checkpoint holds one `weight_packed` / `weight_scale` pair per expert projection. The goal is to fuse all packed
-    weights together, and all weight scales togeher, without fusing a packed weight with a scale. To do this, we apply
-    the conversion ops to packed weights and scales separately: this fuses the packed weights (or scales) for all
-    experts into 2 tensors: gate/up and down packed weights (or scales). This is the usual with experts.
-
-    The newly fused weights and scales are then attached to the experts module in the layout the triton kernel expects.
-
-    Nothing is handed back to the loader: like the GPT-OSS mxfp4 path, the module is updated in place, with different
-    parameters from the meta paramters the loader expected.
+class LoadPackedFp4Experts(LoadPackedMxfp4Experts):
+    """`LoadPackedMxfp4Experts` for compressed-tensors `mxfp4-pack-quantized` checkpoints, which hold one
+    `weight_packed` / `weight_scale` pair per expert projection instead of native mxfp4's `weight_blocks` /
+    `weight_scales`. Only the checkpoint's component names differ: everything else stays the same.
     """
+
+    component_names: tuple[str, str] = ("weight_packed", "weight_scale")
 
     def __init__(
         self,
@@ -92,51 +86,8 @@ class LoadPackedFp4Experts(ConversionOps):
         scheme: "QuantizationScheme",
         operations: list[ConversionOps],
     ):
-        self.hf_quantizer = hf_quantizer
         self.scheme = scheme
-        # The model's own converter ops (e.g. `MergeModulelist` + `Concatenate`), that will be replayed per component
-        self.operations = operations
-
-    def convert(
-        self,
-        input_dict: dict[str, torch.Tensor],
-        source_patterns: list[str],
-        target_patterns: list[str],
-        model: nn.Module | None = None,
-        full_layer_name: str | None = None,
-        missing_keys: set[str] | None = None,
-        **kwargs,
-    ) -> dict[str, torch.Tensor]:
-        """Merges the packed weights, and then the scales, using the model's converter, and attaches a compressed tensor
-        fp4-quantized experts to the module."""
-        # Merges the packed weights and scales separately
-        merged = {}
-        for component in ("weight_packed", "weight_scale"):
-            component_sources = [p for p in source_patterns if p.rstrip("$").endswith(component)]
-            component_dict = {p: input_dict[p] for p in component_sources if p in input_dict}
-            for operation in self.operations:
-                component_dict = operation.convert(
-                    component_dict,
-                    source_patterns=component_sources,
-                    target_patterns=target_patterns,
-                    full_layer_name=full_layer_name,
-                    model=model,
-                    **kwargs,
-                )
-            # At this point, there should be only one key left in the dictionary: the merged weights or scales
-            merged[component] = component_dict.popitem()[1]
-
-        # Lazy import to avoid circular import: `quantizers/__init__` -> compressed-tensors quantizer -> here
-        from ..integrations.mxfp4 import attach_packed_mxfp4_proj
-
-        module, proj = get_module_from_name(model, full_layer_name)
-        attach_packed_mxfp4_proj(module, proj, merged["weight_packed"], merged["weight_scale"])
-
-        # We just updated the module in place, so we manually finish the loader's work and return a {} so it stops
-        if missing_keys is not None:
-            missing_keys.discard(full_layer_name)
-        module._is_hf_initialized = True
-        return {}
+        super().__init__(hf_quantizer, operations)
 
     @property
     def reverse_op(self) -> "ConversionOps":
