@@ -13,7 +13,9 @@
 # limitations under the License.
 
 import unittest
+from unittest.mock import MagicMock, patch
 
+import numpy as np
 from huggingface_hub import VideoClassificationOutputElement, hf_hub_download
 
 from transformers import MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING, VideoMAEImageProcessor
@@ -26,6 +28,7 @@ from transformers.testing_utils import (
     require_torch,
     require_vision,
 )
+from transformers.video_utils import VideoMetadata
 
 from .test_pipelines_common import ANY
 
@@ -122,3 +125,31 @@ class VideoClassificationPipelineTests(unittest.TestCase):
         for output in outputs:
             for element in output:
                 compare_pipeline_output_to_hub_spec(element, VideoClassificationOutputElement)
+
+    @require_torch
+    def test_frame_sampling_rate_honored_with_video_processor(self):
+        """`frame_sampling_rate` must not be silently ignored when a video_processor is used."""
+        pipe = MagicMock()
+        pipe.image_processor = None
+        pipe.dtype = "float32"
+        pipe.model.config.num_frames = 8
+
+        processed = MagicMock()
+        processed.to.return_value = {"pixel_values_videos": "ok"}
+        pipe.video_processor = MagicMock(return_value=processed)
+
+        captured = {}
+
+        def fake_load_video(video, sample_indices_fn=None, **kwargs):
+            metadata = VideoMetadata(total_num_frames=100, fps=25.0, duration=4.0, video_backend="pyav")
+            indices = sample_indices_fn(metadata=metadata)
+            captured["indices"] = indices
+            return np.zeros((len(indices), 8, 8, 3), dtype=np.uint8), metadata
+
+        with patch("transformers.pipelines.video_classification.load_video", side_effect=fake_load_video):
+            VideoClassificationPipeline.preprocess(pipe, "dummy.mp4", num_frames=8, frame_sampling_rate=4)
+
+        expected = np.linspace(0, 8 * 4 - 1, num=8, dtype=np.int64)
+        np.testing.assert_array_equal(captured["indices"], expected)
+        pipe.video_processor.assert_called_once()
+        self.assertFalse(pipe.video_processor.call_args.kwargs.get("do_sample_frames", True))

@@ -23,6 +23,7 @@ from ..utils import (
     logging,
     requires_backends,
 )
+from ..video_utils import load_video
 from .base import Pipeline, build_pipeline_init_args
 
 
@@ -161,6 +162,25 @@ class VideoClassificationPipeline(Pipeline):
             video = read_video_pyav(container, indices)
             video = list(video)
             model_inputs = self.image_processor(video, return_tensors="pt").to(self.dtype)
+        elif frame_sampling_rate != 1:
+            # Video processors sample uniformly across the whole video by default and have no
+            # `frame_sampling_rate` argument. When a non-default rate is requested, sample with the
+            # same windowed linspace logic as the legacy image-processor path, then process frames
+            # without re-sampling.
+            def sample_indices_fn(metadata, **kwargs):
+                total = metadata.total_num_frames
+                if total is None or total <= 0:
+                    raise ValueError(
+                        f"Cannot apply `frame_sampling_rate={frame_sampling_rate}` because video "
+                        f"metadata reports `total_num_frames={total}`."
+                    )
+                end_idx = min(num_frames * frame_sampling_rate - 1, total - 1)
+                return np.linspace(0, end_idx, num=num_frames, dtype=np.int64)
+
+            sampled_video, _ = load_video(video, sample_indices_fn=sample_indices_fn)
+            model_inputs = self.video_processor(sampled_video, do_sample_frames=False, return_tensors="pt").to(
+                self.dtype
+            )
         else:
             processing_kwargs = {"num_frames": num_frames, "do_sample_frames": True}
             model_inputs = self.video_processor(video, **processing_kwargs, return_tensors="pt").to(self.dtype)
