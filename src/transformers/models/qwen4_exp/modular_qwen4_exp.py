@@ -451,12 +451,11 @@ class Qwen4ExpQSAIndexer(nn.Module):
             dtype=torch.int32,
             device=hidden_states.device,
         )
+        num_complete_blocks = visible_token_indices.shape[-1] // self.compress_ratio
         for batch_idx in range(batch_size):
             for query_idx in range(sequence_length):
                 local_visible_indices = visible_token_indices[batch_idx, 0, query_idx]
                 # Compute selected tokens
-                num_complete_blocks = local_visible_indices.numel() // self.compress_ratio
-                selected_tokens = local_visible_indices.new_empty((0,))
                 if num_complete_blocks > 0:
                     block_token_indices = local_visible_indices[: num_complete_blocks * self.compress_ratio].view(
                         num_complete_blocks, self.compress_ratio
@@ -481,6 +480,8 @@ class Qwen4ExpQSAIndexer(nn.Module):
                     selected_block_indices = scores.topk(min(self.block_topk, num_complete_blocks), dim=0).indices
                     selected_tokens = block_token_indices.index_select(0, selected_block_indices).flatten()
                     selected_tokens = selected_tokens[: self.token_budget]
+                else:
+                    selected_tokens = torch.tensor([], device=hidden_states.device)
                 tail = local_visible_indices[num_complete_blocks * self.compress_ratio :]
                 selected_tokens = torch.cat([selected_tokens, tail]).to(torch.int32)
                 selected_token_indices[batch_idx, query_idx, : selected_tokens.numel()] = selected_tokens
