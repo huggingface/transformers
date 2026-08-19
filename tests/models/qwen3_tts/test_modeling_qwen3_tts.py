@@ -157,8 +157,7 @@ class Qwen3TTSForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestC
     # only the generation loop produces; the common testers call it with standard inputs, so it raises on
     # `torch.cat((past_hidden, last_id_hidden))` with `past_hidden=None`.
     _forward_needs_generation_state = (
-        "`forward` requires `past_hidden` from the preceding generation step, which the common tester "
-        "does not provide"
+        "`forward` requires `past_hidden` from the preceding generation step, which the common tester does not provide"
     )
 
     @unittest.skip(reason=_forward_needs_generation_state)
