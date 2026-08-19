@@ -122,8 +122,6 @@ class NeoMMEConfig(PreTrainedConfig):
         if not math.isfinite(self.residual_scale) or self.residual_scale <= 0:
             raise ValueError("residual_scale must be finite and positive")
 
-        self._validate_rotary_dims()
-
     def convert_rope_params_to_dict(self, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
         rope_theta = kwargs.pop("rope_theta", None)
@@ -145,6 +143,7 @@ class NeoMMEConfig(PreTrainedConfig):
             layer_params.setdefault("partial_rotary_factor", self.default_partial_rotary_factor[layer_type])
 
         self.standardize_rope_params()
+        self._validate_rotary_dims()
         return kwargs
 
     def validate_layer_types(self) -> None:

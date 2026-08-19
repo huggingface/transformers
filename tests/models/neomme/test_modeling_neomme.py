@@ -300,9 +300,9 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_rope_theta_must_be_positive(self):
         for theta in (0.0, -1.0, float("inf"), float("nan")):
-            with self.subTest(theta=theta), self.assertRaises(StrictDataclassClassValidationError):
+            with self.subTest(theta=theta), self.assertRaises(ValueError):
                 NeoMMEConfig(rope_theta=theta)
-            with self.subTest(theta=theta, nested=True), self.assertRaises(StrictDataclassClassValidationError):
+            with self.subTest(theta=theta, nested=True), self.assertRaises(ValueError):
                 NeoMMEConfig(rope_parameters={"sliding_attention": {"rope_theta": theta}})
 
     def test_architecture_dimensions_must_be_positive(self):
@@ -326,11 +326,11 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_partial_rotary_factor_multiple_of_four(self):
         """Rotating dims must be a multiple of 4 (two M-RoPE axes × pairs); used to silently round down."""
-        with self.assertRaisesRegex(StrictDataclassClassValidationError, "needs at least 4"):
+        with self.assertRaisesRegex(ValueError, "needs at least 4"):
             NeoMMEConfig(head_dim=8)
-        with self.assertRaisesRegex(StrictDataclassClassValidationError, "not a multiple of 4"):
+        with self.assertRaisesRegex(ValueError, "not a multiple of 4"):
             NeoMMEConfig(head_dim=64, rope_parameters={"full_attention": {"partial_rotary_factor": 0.3}})
-        with self.assertRaisesRegex(StrictDataclassClassValidationError, "needs at least 4"):
+        with self.assertRaisesRegex(ValueError, "needs at least 4"):
             NeoMMEConfig(head_dim=2, layer_types=["full_attention"] * 17)
 
         # `0.75 * 64 = 48`, a valid rotary width.
@@ -339,7 +339,7 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_partial_rotary_factor_unit_interval(self):
         for factor in (2.0, 0.0, -0.25):
-            with self.assertRaisesRegex(StrictDataclassClassValidationError, r"outside \(0.0, 1.0\]"):
+            with self.assertRaisesRegex(ValueError, r"outside \(0.0, 1.0\]"):
                 NeoMMEConfig(rope_parameters={"sliding_attention": {"partial_rotary_factor": factor}})
 
     def test_config_dict_roundtrip(self):
