@@ -36,6 +36,7 @@ from transformers import (
 from transformers.models.gpt2.tokenization_gpt2 import GPT2Tokenizer
 from transformers.testing_utils import (
     CaptureStderr,
+    require_rjieba,
     require_sentencepiece,
     require_tokenizers,
     require_torch,
@@ -394,3 +395,46 @@ class TokenizerUtilsTest(unittest.TestCase):
                     raise ValueError("real error")
                 except import_protobuf_decode_error():
                     pass
+
+
+@require_tokenizers
+class TokenTypeIdsDefaultReturnTest(unittest.TestCase):
+    """Tokenizers of models that consume `token_type_ids` (segment embeddings) must return them by default,
+    without requiring an explicit `return_token_type_ids=True`, as they did in v4."""
+
+    def _check_pair_encoding_returns_token_type_ids(self, tokenizer):
+        encoding_default = tokenizer("hello", "world")
+        encoding_explicit = tokenizer("hello", "world", return_token_type_ids=True)
+
+        self.assertIn("token_type_ids", encoding_default)
+        self.assertEqual(encoding_default["token_type_ids"], encoding_explicit["token_type_ids"])
+        # The second sequence of a pair must be tagged as segment 1
+        self.assertIn(1, encoding_default["token_type_ids"])
+
+    def test_pair_encoding_returns_token_type_ids_by_default(self):
+        from transformers import (
+            AlbertTokenizer,
+            FunnelTokenizer,
+            HerbertTokenizer,
+            RemBertTokenizer,
+            SplinterTokenizer,
+            XLNetTokenizer,
+        )
+
+        for tokenizer_class in [
+            AlbertTokenizer,
+            FunnelTokenizer,
+            HerbertTokenizer,
+            RemBertTokenizer,
+            SplinterTokenizer,
+            XLNetTokenizer,
+        ]:
+            with self.subTest(f"{tokenizer_class.__name__}"):
+                self._check_pair_encoding_returns_token_type_ids(tokenizer_class())
+
+    @require_rjieba
+    def test_roformer_pair_encoding_returns_token_type_ids_by_default(self):
+        from transformers import RoFormerTokenizer
+
+        vocab = {"[PAD]": 0, "[UNK]": 1, "[CLS]": 2, "[SEP]": 3, "[MASK]": 4, "hello": 5, "world": 6}
+        self._check_pair_encoding_returns_token_type_ids(RoFormerTokenizer(vocab=vocab))

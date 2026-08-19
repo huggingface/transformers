@@ -75,7 +75,7 @@ class SplinterTokenizer(TokenizersBackend):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    model_input_names = ["input_ids", "attention_mask"]
+    model_input_names = ["input_ids", "token_type_ids", "attention_mask"]
     model = WordPiece
 
     def __init__(

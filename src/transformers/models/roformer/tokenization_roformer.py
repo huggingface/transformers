@@ -45,6 +45,7 @@ class RoFormerTokenizer(PreTrainedTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
+    model_input_names = ["input_ids", "token_type_ids", "attention_mask"]
 
     def __init__(
         self,
