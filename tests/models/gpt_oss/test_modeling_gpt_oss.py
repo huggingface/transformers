@@ -374,6 +374,7 @@ if __name__ == "__main__":
     # Non-distributed test
     # ------------------------
     @parameterized.expand(PARAMETERS)
+    @require_kernels
     @require_deterministic_for_xpu
     def test_model_outputs(self, quantized, model, kernels, attn_impl, mode):
         if torch_device == "cpu":
