@@ -121,13 +121,11 @@ class NeoMMEImageProcessor(TorchvisionBackend):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
-
     do_convert_rgb = True
     do_resize = True
     do_rescale = True
     rescale_factor = 1 / 255
     do_normalize = True
-
     patch_size = 32
     # Checkpoints may set resize limits; unset limits preserve native resolution.
     max_side = None
