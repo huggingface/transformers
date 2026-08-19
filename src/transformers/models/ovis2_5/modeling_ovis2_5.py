@@ -537,31 +537,6 @@ class Ovis2_5PreTrainedModel(PreTrainedModel):
             init.copy_(module.inv_freq, inv_freq)
 
 
-def get_vision_pixel_shuffle_index(
-    grid_thw: torch.Tensor, merge_size: int, kwargs: dict | None = None
-) -> torch.Tensor:
-    """Gather index that groups each `merge_size x merge_size` spatial block (per frame/image) into
-    `merge_size**2` consecutive rows for `pixel_shuffle` to fold into the channel dim. Popped from
-    `kwargs` when precomputed, so the encoder avoids a per-image `grid_thw.tolist()` loop under export.
-    """
-    if kwargs is not None and (index := kwargs.pop("pixel_shuffle_index", None)) is not None:
-        return index
-    indices = []
-    offset = 0
-    for frames, height, width in grid_thw.tolist():
-        frames, height, width = int(frames), int(height), int(width)
-        permutation = torch.arange(height * width, device=grid_thw.device)
-        permutation = permutation.view(height // merge_size, merge_size, width // merge_size, merge_size)
-        permutation = permutation.permute(0, 2, 1, 3).reshape(-1)
-        if frames > 1:
-            # offset the permutation per frame so it indexes into the flattened `(frames*height*width)` sequence
-            frame_offsets = (torch.arange(frames, device=grid_thw.device) * height * width).view(frames, 1)
-            permutation = (permutation.unsqueeze(0) + frame_offsets).reshape(-1)
-        indices.append(permutation + offset)
-        offset += frames * height * width
-    return torch.cat(indices, dim=0)
-
-
 @auto_docstring(custom_intro="The Ovis2.5 vision tower, without the visual tokenizer or language model.")
 class Ovis2_5VisionModel(Ovis2_5PreTrainedModel):
     config: Ovis2_5VisionConfig
@@ -584,13 +559,6 @@ class Ovis2_5VisionModel(Ovis2_5PreTrainedModel):
         head_dim = config.hidden_size // config.num_attention_heads
         self.rotary_pos_emb = Ovis2_5VisionRotaryEmbedding(head_dim // 2)
         self.post_init()
-
-    def pixel_shuffle(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs) -> torch.Tensor:
-        factor = self.merge_size
-        dim = hidden_states.shape[-1]
-        shuffle_index = get_vision_pixel_shuffle_index(grid_thw, factor, kwargs=kwargs)
-        hidden_states = hidden_states[shuffle_index.to(hidden_states.device)]
-        return hidden_states.view(-1, factor * factor, dim).permute(0, 2, 1).reshape(-1, dim * factor * factor)
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)

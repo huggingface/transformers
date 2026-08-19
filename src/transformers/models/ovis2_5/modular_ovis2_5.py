@@ -615,6 +615,9 @@ class Ovis2_5VisionModel(Ovis2_5PreTrainedModel, MuseGlimmerVisionModel):
         self.rotary_pos_emb = Ovis2_5VisionRotaryEmbedding(head_dim // 2)
         self.post_init()
 
+    def pixel_shuffle(self):
+        raise AttributeError("Not needed for Ovis2.5")
+
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
