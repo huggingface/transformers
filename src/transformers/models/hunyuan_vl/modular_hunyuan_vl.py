@@ -161,6 +161,7 @@ def _mrope_index_indexed_images(
     return position_ids, rope_deltas
 
 
+@auto_docstring
 @dataclass
 class HunYuanVLModelOutputWithPast(BaseModelOutputWithPast):
     r"""
@@ -540,6 +541,7 @@ class HunYuanVLImageProcessor(Qwen2VLImageProcessor):
 
 
 @requires(backends=("vision", "torchvision"))
+@auto_docstring
 class HunYuanVLImageProcessorPil(Qwen2VLImageProcessorPil):
     size = {"shortest_edge": 512 * 512, "longest_edge": 2048 * 2048}
     patch_size = 16
@@ -1326,12 +1328,17 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixi
         self.vocab_size = config.text_config.vocab_size
         self.post_init()
 
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.FloatTensor`):
+            Flat per-patch pixel features produced by the image processor.
+        """
         return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
     @can_return_tuple
