@@ -516,6 +516,44 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         for actual, expected in zip(counts_from_embeds, counts_from_ids):
             torch.testing.assert_close(actual, expected)
 
+    def test_generation_expands_packed_visual_inputs(self):
+        """Beam expansion keeps each packed image or video aligned with its owning prompt."""
+        model = Ovis2_5ForConditionalGeneration(self.model_tester.get_config()).to(torch_device).eval()
+        grid_thw = torch.tensor(
+            [[1, 1, 2], [1, 2, 1], [1, 1, 1]],
+            dtype=torch.long,
+            device=torch_device,
+        )
+        pixel_values = torch.arange(5, dtype=torch.float, device=torch_device).unsqueeze(-1)
+        expected_patch_indices = torch.tensor([0, 1, 0, 1, 2, 3, 4, 2, 3, 4], device=torch_device)
+        expected_grid_indices = torch.tensor([0, 0, 1, 2, 1, 2], device=torch_device)
+
+        for modality in ("image", "video"):
+            with self.subTest(modality=modality):
+                start_token_id = getattr(self.model_tester, f"{modality}_start_token_id")
+                input_ids = torch.tensor(
+                    [[start_token_id, 1, 2, 3], [start_token_id, start_token_id, 1, 2]],
+                    dtype=torch.long,
+                    device=torch_device,
+                )
+                pixel_key = "pixel_values" if modality == "image" else "pixel_values_videos"
+                grid_key = "image_grid_thw" if modality == "image" else "video_grid_thw"
+
+                expanded_ids, expanded_kwargs = model._expand_inputs_for_generation(
+                    expand_size=2,
+                    input_ids=input_ids,
+                    attention_mask=torch.ones_like(input_ids),
+                    **{pixel_key: pixel_values, grid_key: grid_thw},
+                )
+
+                torch.testing.assert_close(expanded_ids, input_ids.repeat_interleave(2, dim=0))
+                torch.testing.assert_close(
+                    expanded_kwargs["attention_mask"],
+                    torch.ones_like(input_ids).repeat_interleave(2, dim=0),
+                )
+                torch.testing.assert_close(expanded_kwargs[pixel_key], pixel_values[expected_patch_indices])
+                torch.testing.assert_close(expanded_kwargs[grid_key], grid_thw[expected_grid_indices])
+
     def test_generation_uses_text_position_ids(self):
         """Generation keeps the Qwen3 text backbone's one-dimensional position IDs."""
         model = Ovis2_5ForConditionalGeneration(self.model_tester.get_config()).to(torch_device).eval()

@@ -832,59 +832,6 @@ class Ovis2_5ForConditionalGeneration(Qwen2VLForConditionalGeneration):
             raise ValueError("Either `input_ids` or `inputs_embeds` is required to expand multimodal inputs.")
         return image_start_mask.sum(dim=1), video_start_mask.sum(dim=1)
 
-    def _expand_inputs_for_generation(
-        self,
-        expand_size: int = 1,
-        is_encoder_decoder: bool = False,
-        input_ids: torch.LongTensor | None = None,
-        **model_kwargs: Any,
-    ) -> tuple[torch.LongTensor | None, dict[str, Any]]:
-        if expand_size == 1:
-            return input_ids, model_kwargs
-
-        visual_keys = {"pixel_values", "image_grid_thw", "pixel_values_videos", "video_grid_thw"}
-        image_grid_thw = model_kwargs.get("image_grid_thw")
-        video_grid_thw = model_kwargs.get("video_grid_thw")
-        image_nums, video_nums = self._get_image_nums_and_video_nums(
-            input_ids,
-            inputs_embeds=model_kwargs.get("inputs_embeds"),
-        )
-
-        def repeat_packed_samples(tensor, lengths):
-            samples = torch.split(tensor, [int(length) for length in lengths])
-            repeats = [expand_size] + [1] * (tensor.ndim - 1)
-            return torch.cat([sample.repeat(*repeats) for sample in samples], dim=0)
-
-        if model_kwargs.get("pixel_values") is not None:
-            grid_samples = torch.split(image_grid_thw, [int(length) for length in image_nums])
-            patch_lengths = [sample.prod(dim=1).sum().item() for sample in grid_samples]
-            model_kwargs["pixel_values"] = repeat_packed_samples(model_kwargs["pixel_values"], patch_lengths)
-        if image_grid_thw is not None:
-            model_kwargs["image_grid_thw"] = repeat_packed_samples(image_grid_thw, image_nums)
-        if model_kwargs.get("pixel_values_videos") is not None:
-            grid_samples = torch.split(video_grid_thw, [int(length) for length in video_nums])
-            patch_lengths = [sample.prod(dim=1).sum().item() for sample in grid_samples]
-            model_kwargs["pixel_values_videos"] = repeat_packed_samples(
-                model_kwargs["pixel_values_videos"], patch_lengths
-            )
-        if video_grid_thw is not None:
-            model_kwargs["video_grid_thw"] = repeat_packed_samples(video_grid_thw, video_nums)
-
-        if input_ids is not None:
-            input_ids = input_ids.repeat_interleave(expand_size, dim=0)
-        for key, value in model_kwargs.items():
-            if value is not None and isinstance(value, torch.Tensor) and key not in visual_keys:
-                model_kwargs[key] = value.repeat_interleave(expand_size, dim=0)
-
-        if is_encoder_decoder:
-            if model_kwargs.get("encoder_outputs") is None:
-                raise ValueError("`encoder_outputs` must be provided for an encoder-decoder model.")
-            model_kwargs["encoder_outputs"] = {
-                key: value.repeat_interleave(expand_size, dim=0)
-                for key, value in model_kwargs["encoder_outputs"].items()
-            }
-        return input_ids, model_kwargs
-
 
 __all__ = [
     "Ovis2_5Config",
