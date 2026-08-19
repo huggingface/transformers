@@ -429,8 +429,8 @@ class MtpModel(PreTrainedModel):
         self, layer_idx: int, inputs_embeds: torch.Tensor, mtp_cache: MtpCache, position_ids: torch.Tensor
     ):
         """
-        Create the (potentially several) masks required for layer `layer_idx`. This relies on the layer type
-        of the mtp layer if any, otherwise simply create a causal mask for full attention.
+        Create the (potentially several) masks required for layer `layer_idx`. This relies on the `layer_type`
+        attribute of the mtp layer if any, otherwise simply create a causal mask for full attention.
         """
         # Note that `_assisted_decoding` raises on batch_size > 1, so there is no padding mask to add
         mask_kwargs = {
@@ -502,6 +502,7 @@ class MtpModel(PreTrainedModel):
         loss = None
         mtp_layer_types = getattr(self.config, "layer_types", None)
         for i, mtp_layer in enumerate(self.layers):
+            # We need to recompute those every layer since they change
             inputs_embeds = self.embed_tokens(input_ids).to(last_hidden_states.device)
             position_embeddings = (
                 self.rotary_emb(inputs_embeds, position_ids=position_ids, layer_type=mtp_layer_types[i] if mtp_layer_types is not None else None)
