@@ -481,16 +481,17 @@ def read_video_pyav(
     import av
 
     container = av.open(video_path)
-    total_num_frames = container.streams.video[0].frames
-    video_fps = container.streams.video[0].average_rate  # should we better use `av_guess_frame_rate`?
+    stream = container.streams.video[0]
+    video_fps = stream.average_rate  # should we better use `av_guess_frame_rate`?
+    total_num_frames = _get_pyav_total_num_frames(container, stream, video_fps)
     duration = total_num_frames / video_fps if video_fps else 0
     metadata = VideoMetadata(
         total_num_frames=int(total_num_frames),
-        fps=float(video_fps),
+        fps=float(video_fps) if video_fps is not None else None,
         duration=float(duration),
         video_backend="pyav",
-        height=container.streams.video[0].height,
-        width=container.streams.video[0].width,
+        height=stream.height,
+        width=stream.width,
     )
 
     indices = sample_indices_fn(metadata=metadata, **kwargs)
@@ -506,6 +507,35 @@ def read_video_pyav(
     video = np.stack([x.to_ndarray(format="rgb24") for x in frames])
     metadata.frames_indices = indices
     return video, metadata
+
+
+def _get_pyav_total_num_frames(container, stream, video_fps) -> int:
+    """
+    Resolve the number of frames for a PyAV video stream.
+
+    `stream.frames` is often `0` for containers that omit `nb_frames` (common for
+    webm/mkv and some mp4 encodes). Fall back to duration-based estimates, then to
+    an explicit decode count as a last resort.
+    """
+    import av
+
+    total_num_frames = int(stream.frames or 0)
+    if total_num_frames > 0:
+        return total_num_frames
+
+    if stream.duration is not None and stream.time_base is not None and video_fps is not None:
+        total_num_frames = int(stream.duration * stream.time_base * video_fps)
+        if total_num_frames > 0:
+            return total_num_frames
+
+    if container.duration is not None and video_fps is not None:
+        total_num_frames = int(container.duration / av.time_base * float(video_fps))
+        if total_num_frames > 0:
+            return total_num_frames
+
+    total_num_frames = sum(1 for _ in container.decode(video=0))
+    container.seek(0)
+    return total_num_frames
 
 
 # `torchvision.io.read_video` removed in `torchvision==0.26` (https://github.com/pytorch/vision/releases#release-v0.26.0),

@@ -387,3 +387,43 @@ class LoadVideoTester(unittest.TestCase):
                 fps=1,
                 num_frames=10,
             )
+
+
+@require_av
+class PyAVFrameCountTester(unittest.TestCase):
+    def test_get_pyav_total_num_frames_falls_back_when_stream_frames_is_zero(self):
+        from fractions import Fraction
+
+        from transformers.video_utils import _get_pyav_total_num_frames
+
+        class FakeStream:
+            frames = 0
+            duration = 300300
+            time_base = Fraction(1, 30000)
+
+        class FakeContainer:
+            duration = None
+
+            def decode(self, video=0):
+                raise AssertionError("decode count fallback should not be needed")
+
+            def seek(self, *args, **kwargs):
+                raise AssertionError("seek should not be needed")
+
+        stream = FakeStream()
+        fps = 29.97002997002997
+        total = _get_pyav_total_num_frames(FakeContainer(), stream, fps)
+        self.assertEqual(total, int(stream.duration * stream.time_base * fps))
+
+    def test_get_pyav_total_num_frames_uses_stream_frames_when_present(self):
+        from transformers.video_utils import _get_pyav_total_num_frames
+
+        class FakeStream:
+            frames = 243
+            duration = None
+            time_base = None
+
+        class FakeContainer:
+            duration = None
+
+        self.assertEqual(_get_pyav_total_num_frames(FakeContainer(), FakeStream(), 25.0), 243)
