@@ -94,11 +94,6 @@ class HyperCLOVAXVisionV2Config(PreTrainedConfig):
 class HyperCLOVAXVisionV2PreTrainedModel(VideoLlama3PreTrainedModel):
     config: HyperCLOVAXVisionV2Config
     input_modalities = ("image", "video", "text")
-    _no_split_modules = ["HyperCLOVAXDecoderLayer"]
-    _can_record_outputs = {
-        "hidden_states": "HyperCLOVAXDecoderLayer",
-        "attentions": "HyperCLOVAXAttention",
-    }
 
 
 @auto_docstring
