@@ -69,7 +69,6 @@ def _validate_image_dimensions(height: int, width: int) -> None:
 
 def get_resize_output_size(height: int, width: int, max_side: int | None, size: SizeDict | None) -> tuple[int, int]:
     """Compute integer height and width from the configured image size targets."""
-    _validate_image_dimensions(height, width)
     min_pixels = size.min_pixels if size is not None else None
     max_pixels = size.max_pixels if size is not None else None
     scale = (min_pixels / (height * width)) ** 0.5 if min_pixels is not None and height * width < min_pixels else 1.0
