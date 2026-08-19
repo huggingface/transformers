@@ -536,19 +536,25 @@ class HYV4Experts(nn.Module):
 
 
 class HYV4MoE(nn.Module):
+    """
+    A mixed expert module containing shared experts.
+    """
+
     def __init__(self, config: HYV4Config):
         super().__init__()
+        self.config = config
         self.gate = HYV4TopKRouter(config)
         self.experts = HYV4Experts(config)
         self.shared_experts = HYV4MLP(config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        batch_size, sequence_length, hidden_dim = hidden_states.shape
-        flat_states = hidden_states.reshape(-1, hidden_dim)
-        _, top_k_weights, top_k_indices = self.gate(flat_states)
-        routed_output = self.experts(flat_states, top_k_indices, top_k_weights)
-        output = routed_output.float() + self.shared_experts(flat_states).float()
-        return output.to(hidden_states.dtype).reshape(batch_size, sequence_length, hidden_dim)
+        residuals = hidden_states
+        orig_shape = hidden_states.shape
+        _, topk_weights, topk_indices = self.gate(hidden_states)
+        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
+        hidden_states = hidden_states + self.shared_experts(residuals)
+        return hidden_states
 
 
 def _hc_rms_gated_logits(hidden_states: torch.Tensor, mix_weight: torch.Tensor, rms_eps: float) -> torch.Tensor:
