@@ -849,9 +849,11 @@ class NeoMMEForRetrieval(NeoMMEPreTrainedModel):
         if attention_mask is None:
             attention_mask = torch.ones(hidden_states.shape[:2], dtype=torch.bool, device=hidden_states.device)
 
+        embeddings = self._multivector(hidden_states, attention_mask) if output_multivector else None
+        dense_embeddings = self._dense(hidden_states, attention_mask, dense_dim) if output_dense else None
         return NeoMMEForRetrievalOutput(
-            embeddings=self._multivector(hidden_states, attention_mask) if output_multivector else None,
-            dense_embeddings=self._dense(hidden_states, attention_mask, dense_dim) if output_dense else None,
+            embeddings=embeddings,
+            dense_embeddings=dense_embeddings,
             last_hidden_state=hidden_states,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
