@@ -502,9 +502,12 @@ class MtpModel(PreTrainedModel):
         for i, mtp_layer in enumerate(self.layers):
             # We need to recompute those every layer since they change
             inputs_embeds = self.embed_tokens(input_ids).to(last_hidden_states.device)
-            position_embeddings = (
-                self.rotary_emb(inputs_embeds, position_ids=position_ids) if self.rotary_emb is not None else None
+            # For models with per-layer-type RoPE, read the layer type from the decoder so rotary_emb
+            # can dispatch to correct inv_freq.
+            layer_type = getattr(mtp_layer.mtp_block, "attention_type", None) or getattr(
+                mtp_layer.mtp_block, "layer_type", None
             )
+            position_embeddings = self.rotary_emb(inputs_embeds, position_ids=position_ids, layer_type=layer_type)
 
             # In full generality, we may need to recompute masks for every layer due to the position offset of each layer
             masks = self.create_masks_for_mtp_layer(i, inputs_embeds, mtp_cache, position_ids)

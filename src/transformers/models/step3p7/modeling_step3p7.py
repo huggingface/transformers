@@ -486,7 +486,19 @@ class Step3p7RotaryEmbedding(nn.Module):
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids, layer_type):
+    def forward(self, x, position_ids, layer_type=None):
+        if layer_type is None:
+            # `MtpModel` calls rotary_emb without `layer_type`; Step3p7's MTP layers are always
+            # `full_attention. Otherwise the single-type model
+            if "full_attention" in self.layer_types:
+                layer_type = "full_attention"
+            elif len(self.layer_types) == 1:
+                layer_type = self.layer_types[0]
+            else:
+                raise ValueError(
+                    f"`layer_type` must be provided when multiple layer types are registered and none is "
+                    f"`full_attention`: {self.layer_types}"
+                )
         inv_freq = getattr(self, f"{layer_type}_inv_freq")
         attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
 
@@ -1121,6 +1133,16 @@ class Step3p7CausalLMOutputWithPast(ModelOutput):
 class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     config: Step3p7Config
+    # Class-level patterns for the real checkpoint's trailing MTP layers (layers 45–47 on the
+    # 45-layer Flash checkpoint). `test_generate_with_mtp` reads the class attribute to decide
+    # whether to run; `Step3p7TextModel.__init__` extends the set with the config-specific indices.
+    # Note: dots are intentionally unescaped so the skip-check regex `re.search(r"layers\.\d+", x)`
+    # matches the literal substring; as regexes they still filter the correct weight keys.
+    _keys_to_ignore_on_load_unexpected = [
+        "model.language_model.layers.45.",
+        "model.language_model.layers.46.",
+        "model.language_model.layers.47.",
+    ]
 
     def __init__(self, config: Step3p7Config):
         super().__init__(config)

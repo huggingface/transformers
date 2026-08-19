@@ -81,13 +81,9 @@ class Step3p7VisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("n_routed_experts", 4)
         kwargs.setdefault("num_experts_per_tok", 2)
         kwargs.setdefault("share_expert_dim", 8)
-        # layer_types is required (Step3p7Attention accesses it by index)
-        kwargs.setdefault("layer_types", ["full_attention", "full_attention"])
-        # mlp_layer_types default heuristic (MoE from layer index 3 onward) never fires for a
-        # 2-layer model; set explicitly so at least one layer builds a real `experts` submodule
-        # (needed for `base_model_tp_plan`'s `mlp.experts.*` entries to match a real parameter).
-        kwargs.setdefault("mlp_layer_types", ["dense", "sparse"])
-        # sliding_window required by create_sliding_window_causal_mask even when no sliding layers are used
+        kwargs.setdefault("layer_types", ["full_attention", "full_attention", "full_attention"])
+        kwargs.setdefault("mlp_layer_types", ["dense", "sparse", "sparse"])
+        kwargs.setdefault("num_nextn_predict_layers", 1)
         kwargs.setdefault("sliding_window", 64)
         super().__init__(parent, **kwargs)
 
@@ -122,6 +118,7 @@ class Step3p7VisionText2TextModelTester(VLMModelTester):
             layer_types=self.layer_types,
             mlp_layer_types=self.mlp_layer_types,
             sliding_window=self.sliding_window,
+            num_nextn_predict_layers=self.num_nextn_predict_layers,
         )
 
 
