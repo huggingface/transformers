@@ -48,7 +48,6 @@ from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring, can_return_tuple, logging
 from ...utils.generic import (
     TransformersKwargs,
-    accepts_precomputed_kwargs,
     get_max_seqlen,
     merge_with_config_defaults,
 )
@@ -570,7 +569,7 @@ class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig):
     @property
     def layer_types(self):
         """
-        All layer in code2wav should be sliding attention
+        All layers in code2wav should be sliding attention
         """
         return ["sliding_attention"] * self.num_hidden_layers
 
@@ -769,7 +768,7 @@ class Qwen3OmniMoePreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedM
                 fps (Frames Per Second): The video's frame rate, set to 1. This means one frame is processed each second.
                 tokens_per_second: This is a crucial parameter. It dictates how many "time-steps" or "temporal tokens" are conceptually packed into a one-second interval of the video. In this case, we have 25 tokens per second. So each second of the video will be represented with 25 separate time points. It essentially defines the temporal granularity.
                 temporal_patch_size: The number of frames that compose one temporal patch. Here, it's 2 frames.
-                interval: The step size for the temporal position IDs, calculated as tokens_per_second * temporal_patch_size / fps. In this case, 25 * 2 / 1 = 50. This means that each temporal patch will be have a difference of 50 in the temporal position IDs.
+                interval: The step size for the temporal position IDs, calculated as tokens_per_second * temporal_patch_size / fps. In this case, 25 * 2 / 1 = 50. This means that each temporal patch will have a difference of 50 in the temporal position IDs.
                 input_ids: [V V V V V V V V V V V V T T T T T], here V is for vision.
                 vision temporal position_ids: [0, 0, 0, 0, 50, 50, 50, 50, 100, 100, 100, 100]
                 vision height position_ids: [0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1]
@@ -1163,7 +1162,7 @@ class Qwen3OmniMoeThinkerTextDecoderLayer(Qwen3MoeDecoderLayer):
 
 class Qwen3OmniMoeThinkerTextPreTrainedModel(Qwen3MoePreTrainedModel):
     config_class = Qwen3OmniMoeTextConfig
-    config = Qwen3OmniMoeTextConfig
+    config: Qwen3OmniMoeTextConfig
 
 
 class Qwen3OmniMoeThinkerTextModel(Qwen3VLMoeTextModel):
@@ -1212,21 +1211,12 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
         self.num_experts_per_tok = config.text_config.num_experts_per_tok
         self.router_aux_loss_coef = config.text_config.router_aux_loss_coef
 
-    @accepts_precomputed_kwargs(modality="video")
-    @can_return_tuple
-    @auto_docstring
     def get_video_features(
         self,
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithDeepstackFeatures:
-        r"""
-        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input videos.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
-        """
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
         split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
@@ -1234,21 +1224,12 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
         vision_outputs.pooler_output = list(video_embeds)
         return vision_outputs
 
-    @accepts_precomputed_kwargs(modality="image")
-    @can_return_tuple
-    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithDeepstackFeatures:
-        r"""
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input images.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-        """
         pixel_values = pixel_values.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
@@ -1795,10 +1776,6 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3MoeForCausalLM):
             The length of feature shape of each audio in LLM.
         video_second_per_grid (`torch.LongTensor` of shape `(num_videos)`, *optional*):
             Number of seconds per grid for each video, used for temporal feature mapping.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
         residual_codes (`torch.Tensor`):
             The predicted residual codes of previous step.
         trailing_text_hidden (`torch.Tensor`):

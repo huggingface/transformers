@@ -802,7 +802,7 @@ class ProcessorMixin(PushToHubMixin):
 
         return processed_audio, audio_replacements
 
-    # To be overriden by each model's processor if they need to add placeholder tokens
+    # To be overridden by each model's processor if they need to add placeholder tokens
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         raise NotImplementedError
 
@@ -861,7 +861,7 @@ class ProcessorMixin(PushToHubMixin):
                     - `"text"` (`str`): the original placeholder token string that was matched
                     - `"replacement"` (`str`): the string it was replaced with
         """
-        # Early exit if no special tokens found, nothing to replace
+        # Early exit if no special tokens found, nothing to replace or if text is not a list
         if not self.all_special_multimodal_tokens:
             return text, []
 

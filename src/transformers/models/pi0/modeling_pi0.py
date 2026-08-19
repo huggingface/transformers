@@ -258,7 +258,7 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
         pixel_attention_mask (`torch.Tensor`, *optional*):
             The mask indicating padded positions in the input image.
         actions (`torch.Tensor`, *optional*):
-            Input actions that need to be predicted. Used only when training to compiute loss.
+            Input actions that need to be predicted. Used only when training to compute loss.
         """
         batch_size = state.shape[0]
 

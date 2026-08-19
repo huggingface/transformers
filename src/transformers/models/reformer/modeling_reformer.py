@@ -569,7 +569,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
                 sequence_length, buckets, num_hashes
             )
 
-            # make sure bucket idx is not longer then sequence length
+            # make sure bucket idx is not longer than sequence length
             sorted_bucket_idx_per_hash = sorted_bucket_idx % sequence_length
 
             # cluster query key value vectors according to hashed buckets
@@ -1382,7 +1382,7 @@ class ReformerAttention(nn.Module):
     ):
         hidden_states = self.layer_norm(hidden_states)
 
-        # use cached buckets for backprob if buckets not None for LSHSelfAttention
+        # use cached buckets for backprop if buckets not None for LSHSelfAttention
         self_attention_outputs = self.self_attention(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -1625,7 +1625,7 @@ class ReformerLayer(nn.Module):
             # set seed to have correct dropout
             torch.manual_seed(self.attention_seed)
             # f(X_2)
-            # use cached buckets for backprob if buckets not None for LSHSelfAttention
+            # use cached buckets for backprop if buckets not None for LSHSelfAttention
             output = self.attention(
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,

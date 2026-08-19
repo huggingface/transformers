@@ -722,7 +722,7 @@ class Xcodec2FiniteScalarQuantization(nn.Module):
         return (hidden_states + shift).tanh() * half_range - offset
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        # NOTE: could rerwite to pass tensor to a decorator such that device type is handled internally
+        # NOTE: could rewrite to pass tensor to a decorator such that device type is handled internally
         original_dtype = hidden_states.dtype
         device_type = (
             hidden_states.device.type

@@ -694,7 +694,7 @@ class KosmosTextAttention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
-        # End opy
+        # End copy
         self.inner_attn_ln = None
         if add_inner_attn_layernorm:
             self.inner_attn_ln = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
@@ -995,7 +995,7 @@ class Kosmos2TextTransformer(Kosmos2PreTrainedModel):
         image_embeds (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of `Kosmos2ImageToTextProjection`.
         image_embeds_position_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to indicate the location in a sequence to insert the image features . Mask values selected in `[0,
+            Mask to indicate the location in a sequence to insert the image features. Mask values selected in `[0,
             1]`:
 
             - 1 for places where to put the image features,
@@ -1134,7 +1134,7 @@ class Kosmos2TextModel(Kosmos2PreTrainedModel):
         image_embeds (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of `Kosmos2ImageToTextProjection`.
         image_embeds_position_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to indicate the location in a sequence to insert the image features . Mask values selected in `[0,
+            Mask to indicate the location in a sequence to insert the image features. Mask values selected in `[0,
             1]`:
 
             - 1 for places where to put the image features,
@@ -1202,7 +1202,7 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel, GenerationMixin):
         image_embeds (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of `Kosmos2ImageToTextProjection`.
         image_embeds_position_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to indicate the location in a sequence to insert the image features . Mask values selected in `[0,
+            Mask to indicate the location in a sequence to insert the image features. Mask values selected in `[0,
             1]`:
 
             - 1 for places where to put the image features,
@@ -1410,7 +1410,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
     ) -> tuple | Kosmos2ModelOutput:
         r"""
         image_embeds_position_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to indicate the location in a sequence to insert the image features . Mask values selected in `[0,
+            Mask to indicate the location in a sequence to insert the image features. Mask values selected in `[0,
             1]`:
 
             - 1 for places where to put the image features,
@@ -1538,7 +1538,7 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel, GenerationMixin):
     ) -> tuple | Kosmos2ForConditionalGenerationModelOutput:
         r"""
         image_embeds_position_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to indicate the location in a sequence to insert the image features . Mask values selected in `[0,
+            Mask to indicate the location in a sequence to insert the image features. Mask values selected in `[0,
             1]`:
 
             - 1 for places where to put the image features,

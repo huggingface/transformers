@@ -143,12 +143,14 @@ qmodel = AutoModelForCausalLM.from_pretrained(hf_hub_model)
 Below is a minimal example showing how to evaluate a SINQ-quantized model on a benchmark dataset:
 
 ```python
+import torch
 from lm_eval import evaluator
 from lm_eval.models.huggingface import HFLM
 
+device = torch.accelerator.current_accelerator().type if torch.accelerator.is_available() else "cpu"
+
 # Wrap the already quantized model and tokenizer with HFLM
 lm = HFLM(pretrained=qmodel, tokenizer=tok, device=device)
-device = "cuda:0"
 
 # Evaluate (many tasks available on lm-eval such as MMLU and HellaSwag)
 results = evaluator.simple_evaluate(

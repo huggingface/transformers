@@ -103,15 +103,16 @@ class SonicMoeLoaderTest(unittest.TestCase):
                 side_effect=lambda *a, **k: capability if _in_loader() else real_capability(),
             )
         )
-        # Report each build dependency at its validated max when ok, one major past it when not; delegate
+        # Report each build dependency at its minimum when ok, one major below it when not; delegate
         # unknown distributions to the real lookup so nothing else the process imports is disturbed.
         real_version = importlib.metadata.version
 
         def _version(distribution):
-            max_version = sm.SONICMOE_DEPENDENCIES.get(distribution)
-            if max_version is None:
+            min_version = sm.SONICMOE_DEPENDENCIES.get(distribution)
+            if min_version is None:
                 return real_version(distribution)
-            return max_version if versions_ok else f"{int(max_version.split('.')[0]) + 1}.0.0"
+            # Too-old is the only way these gates fail now, so report one major below the minimum.
+            return min_version if versions_ok else f"{int(min_version.split('.')[0]) - 1}.0.0"
 
         stack.enter_context(mock.patch.object(importlib.metadata, "version", side_effect=_version))
         stack.enter_context(mock.patch.object(sm, "lazy_load_kernel", return_value=kernel))
@@ -129,7 +130,7 @@ class SonicMoeLoaderTest(unittest.TestCase):
             ("no_kernels", {"kernels_available": False}, "`kernels` package"),
             ("no_cuda", {"cuda_available": False}, "requires CUDA"),
             ("bad_arch", {"capability": (8, 0)}, "requires a Hopper"),
-            ("incompatible_versions", {"versions_ok": False}, "unvalidated"),
+            ("outdated_versions", {"versions_ok": False}, "requires"),
         ]
     )
     def test_is_sonicmoe_loadable(self, _name, env_kwargs, pattern):

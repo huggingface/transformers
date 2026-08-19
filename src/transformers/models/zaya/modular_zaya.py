@@ -514,7 +514,7 @@ class ZayaSparseMoeBlock(nn.Module):
 
 class ZayaPreTrainedModel(LlamaPreTrainedModel):
     config: ZayaConfig
-    # ZAYA generation uses the native hybrid dynamic cache, which is not a compileable cache.
+    # ZAYA generation uses the native hybrid dynamic cache, which is not a compilable cache.
     _can_compile_fullgraph = False
     _can_record_outputs = {
         "router_logits": OutputRecorder(ZayaRouter, index=0),

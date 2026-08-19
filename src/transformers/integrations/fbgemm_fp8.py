@@ -280,7 +280,7 @@ def replace_with_fbgemm_fp8_linear(
             Names of the modules to not convert. In practice we keep the `lm_head` in full precision for numerical stability reasons.
         quantization_config (`FbgemmFp8Config`):
             The quantization config object that contains the quantization parameters.
-        pre_quantized (`book`, defaults to `False`):
+        pre_quantized (`bool`, defaults to `False`):
             Whether the model is pre-quantized or not
     """
     global quantize_fp8_per_row

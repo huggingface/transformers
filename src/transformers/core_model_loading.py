@@ -740,7 +740,7 @@ def process_source_pattern(source_pattern: str, target_pattern: str) -> str:
     """
     Process a source pattern for reverse mapping (when sources become targets).
     This is useful because usually if the original source (so now the target in reverse mode) had a `^` or `$`
-    to restrict to start/end of string, we should do the same in reverse mode. This is why this method in conditioned
+    to restrict to start/end of string, we should do the same in reverse mode. This is why this method is conditioned
     on the target pattern, we want to do it only for pairs (source, target) when the original source (so the current target
     in reverse mode) had it.
     """
@@ -906,17 +906,12 @@ class WeightTransform:
         source_pattern_that_matched = self.source_patterns[int(matching_group_name[1:])]
         # If we matched, we always replace with the first target pattern, in case we have several (one to many transform)
         replacement = self.target_patterns[0]
-        # Allow capturing groups in patterns, i.e. to add a prefix to all keys (e.g. timm_wrapper, sam3).
-        # Backreferences `\1..\9` in the target are substituted from the matched source pattern's
-        # inner capturing groups, indexed off the matched named group so they stay correct under the
-        # `(?P<g0>...)|(?P<g1>...)|...` alternation `compiled_sources` builds.
-        if re.search(r"\\\d", replacement):
-            group_start = self.compiled_sources.groupindex[matching_group_name]
-            replacement = re.sub(
-                r"\\(\d+)",
-                lambda m: match_object.group(group_start + int(m.group(1))),
-                replacement,
-            )
+        # Allow capturing groups in patterns, i.e. to add a prefix to all keys (e.g. timm_wrapper, sam3)
+        if r"\1" in replacement:
+            # The index of the internal group we need to replace is the index of the matched named group as it comes
+            # inside that matched named group
+            replaced_group_idx = self.compiled_sources.groupindex[matching_group_name] + 1
+            replacement = replacement.replace(r"\1", match_object.group(replaced_group_idx))
         renamed_key = key_to_match.replace(match_object.group(0), replacement, 1)
         if prefix_dot is not None:
             renamed_key = prefix_dot + renamed_key

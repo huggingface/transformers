@@ -31,8 +31,8 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import Unpack, VideosKwargs
-from ...utils import TensorType, add_start_docstrings
-from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING, BaseVideoProcessor
+from ...utils import TensorType, auto_docstring
+from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 
 
@@ -67,6 +67,25 @@ def smart_resize(
 
 
 class Qwen2VLVideoProcessorInitKwargs(VideosKwargs, total=False):
+    r"""
+    min_pixels (`int`, *optional*, defaults to `56 * 56`):
+        The min pixels of the image to resize the image.
+    max_pixels (`int`, *optional*, defaults to `28 * 28 * 1280`):
+        The max pixels of the image to resize the image.
+    patch_size (`int`, *optional*, defaults to 14):
+        The spatial patch size of the vision encoder.
+    temporal_patch_size (`int`, *optional*, defaults to 1):
+        The temporal patch size of the vision encoder.
+    merge_size (`int`, *optional*, defaults to 2):
+        The merge size of the vision encoder to llm encoder.
+    min_frames (`int`, *optional*, defaults to 4):
+        The minimum number of frames that can be sampled.
+    max_frames (`int`, *optional*, defaults to 768):
+        The maximum number of frames that can be sampled.
+    use_token_compression (`bool`, *optional*, defaults to `True`):
+        Whether to compress videos when processing or not.
+    """
+
     min_pixels: int
     max_pixels: int
     patch_size: int
@@ -76,26 +95,7 @@ class Qwen2VLVideoProcessorInitKwargs(VideosKwargs, total=False):
     max_frames: int
 
 
-@add_start_docstrings(
-    "Constructs a fast Qwen2-VL image processor that dynamically resizes videos based on the original videos.",
-    BASE_VIDEO_PROCESSOR_DOCSTRING,
-    """
-        min_pixels (`int`, *optional*, defaults to `56 * 56`):
-            The min pixels of the image to resize the image.
-        max_pixels (`int`, *optional*, defaults to `28 * 28 * 1280`):
-            The max pixels of the image to resize the image.
-        patch_size (`int`, *optional*, defaults to 14):
-            The spatial patch size of the vision encoder.
-        temporal_patch_size (`int`, *optional*, defaults to 2):
-            The temporal patch size of the vision encoder.
-        merge_size (`int`, *optional*, defaults to 2):
-            The merge size of the vision encoder to llm encoder.
-        min_frames (`int`, *optional*, defaults to 4):
-            The minimum number of frames that can be sampled.
-        max_frames (`int`, *optional*, defaults to 768):
-            The maximum number of frames that can be sampled.
-    """,
-)
+@auto_docstring
 class Qwen2VLVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
     size = {"shortest_edge": 128 * 28 * 28, "longest_edge": 28 * 28 * 768}

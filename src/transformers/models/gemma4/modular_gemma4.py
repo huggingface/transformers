@@ -45,7 +45,6 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    is_accelerate_available,
     logging,
     torch_compilable_check,
 )
@@ -76,10 +75,6 @@ from ..llama.modeling_llama import LlamaRotaryEmbedding
 from ..mixtral.modeling_mixtral import MixtralExperts
 from ..moonshine_streaming.modeling_moonshine_streaming import sliding_window_mask_function
 from .configuration_gemma4 import Gemma4AudioConfig, Gemma4Config, Gemma4TextConfig, Gemma4VisionConfig
-
-
-if is_accelerate_available():
-    pass
 
 
 logger = logging.get_logger(__name__)
@@ -1718,7 +1713,7 @@ class Gemma4AudioModel(Gemma4PreTrainedModel):
 class Gemma4VisionModel(Gemma4PreTrainedModel):
     """The Gemma 4 Vision Encoder."""
 
-    config = Gemma4VisionConfig
+    config: Gemma4VisionConfig
     _can_record_outputs = {
         "hidden_states": Gemma4VisionEncoderLayer,
         "attentions": Gemma4VisionAttention,
@@ -2007,7 +2002,7 @@ class Gemma4Model(Gemma3nModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> Gemma4ModelOutputWithPast:
         r"""
-        input_features_mask (`torch.FloatTensor]` of shape `(num_images, seq_length)`):
+        input_features_mask (`torch.FloatTensor` of shape `(num_images, seq_length)`):
             The attention mask for the input audio.
         image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
             2D patch position coordinates from the image processor, with `(-1, -1)` indicating padding.
@@ -2066,7 +2061,7 @@ class Gemma4Model(Gemma3nModel):
             video_features = self.get_video_features(
                 pixel_values_videos, video_position_ids, return_dict=True
             ).pooler_output
-            video_features = video_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            video_features = torch.cat(video_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
 
             # Confirm the number of soft tokens from the vision tower matches the number of slots in the embeddings.
             n_video_tokens = video_mask.sum()
@@ -2163,9 +2158,9 @@ class Gemma4Model(Gemma3nModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Gemma4AudioModelOutput:
         r"""
-        input_features (`torch.FloatTensor]` of shape `(num_images, seq_length, num_features)`):
+        input_features (`torch.FloatTensor` of shape `(num_images, seq_length, num_features)`):
             The tensors corresponding to the input audio.
-        input_features_mask (`torch.FloatTensor]` of shape `(num_images, seq_length)`):
+        input_features_mask (`torch.FloatTensor` of shape `(num_images, seq_length)`):
             The attention mask for the input audio.
         """
         if self.audio_tower is None:
@@ -2216,7 +2211,7 @@ class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration):
         **kwargs: Unpack[TransformersKwargs],
     ) -> Gemma4CausalLMOutputWithPast:
         r"""
-        input_features_mask (`torch.FloatTensor]` of shape `(num_images, seq_length)`):
+        input_features_mask (`torch.FloatTensor` of shape `(num_images, seq_length)`):
             The attention mask for the input audio.
         image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
             2D patch position coordinates from the image processor, with `(-1, -1)` indicating padding.

@@ -562,7 +562,7 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_frames, channels, height, width)`)
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_frames, channels, height, width)`)
             The tensors corresponding to the input video.
         vision_feature_layer (`Union[int, list[int]], *optional*, defaults to -2`):
             The index of the layer to select the vision feature. If multiple indices are provided,
@@ -788,9 +788,9 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_frames, channels, height, width)`)
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_frames, channels, height, width)`)
             The tensors corresponding to the input video.
-        vision_feature_layer (`Union[int, list[int]]`, *optional;*):
+        vision_feature_layer (`Union[int, list[int]]`, *optional*):
             The index of the layer to select the vision feature. If multiple indices are provided,
             the vision feature of the corresponding indices will be concatenated to form the
             vision features.

@@ -646,7 +646,7 @@ class ZayaPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    # ZAYA generation uses the native hybrid dynamic cache, which is not a compileable cache.
+    # ZAYA generation uses the native hybrid dynamic cache, which is not a compilable cache.
     _can_compile_fullgraph = False
     _supports_attention_backend = True
     _can_record_outputs = {

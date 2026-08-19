@@ -344,7 +344,7 @@ class LlavaNextModel(LlavaNextPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_patches, channels, height, width)`)
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_patches, channels, height, width)`)
             The tensors corresponding to the input images.
         image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
             Actual image size of each images (H, W).
@@ -525,7 +525,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_patches, channels, height, width)`)
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_patches, channels, height, width)`)
             The tensors corresponding to the input images.
         image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
             Actual image size of each images (H, W).

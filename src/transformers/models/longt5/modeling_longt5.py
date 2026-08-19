@@ -118,7 +118,7 @@ def _split_into_blocks(x: torch.Tensor, block_len: int, dim: int) -> torch.Tenso
 
 
 def _concatenate_3_blocks(x: torch.Tensor, block_dim: int, sequence_dim: int, pad_value: int = 0) -> torch.Tensor:
-    """Concatenate three consecutive blocks for each input block for local attentiont.
+    """Concatenate three consecutive blocks for each input block for local attention.
 
     For more information, see: https://huggingface.co/papers/2112.07916.
     """
@@ -725,7 +725,7 @@ class LongT5TransientGlobalAttention(nn.Module):
         if self.has_relative_attention_bias:
             self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)
 
-        # Relativen attention bias & Layer norm for global attention
+        # Relative attention bias & Layer norm for global attention
         if self.has_relative_attention_bias:
             self.global_relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)
         self.global_input_layer_norm = LongT5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)

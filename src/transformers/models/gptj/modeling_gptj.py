@@ -284,7 +284,7 @@ class GPTJFlashAttention2(GPTJAttention):
             key = apply_rotary_pos_emb(key, sin, cos)
             query = apply_rotary_pos_emb(query, sin, cos)
 
-        # tanspose to have the desired shape
+        # transpose to have the desired shape
         # before transpose: batch_size x seq_length x num_attention_heads x head_dim
         # after transpose: batch_size x num_attention_heads x seq_length x head_dim
         key = key.permute(0, 2, 1, 3)
