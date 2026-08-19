@@ -51,11 +51,9 @@ if is_torch_available():
 
 
 def _patch_residual_init(test_case: unittest.TestCase) -> None:
-    """Refill NeoMME's zero-init residual exits so mixin output comparisons actually exercise the model.
+    """Activate NeoMME's zero-initialized paths for mixin comparisons.
 
-    NeoMME starts `o_proj`, `down_proj`, XSA `alpha`, and value embeddings at zero, so its residual branches
-    begin as no-ops. Eager-vs-SDPA and similar checks would otherwise match without exercising those branches.
-    This patch fills the tensors for the duration of `test_case` only.
+    Attention and MLP outputs, XSA scaling, value embeddings, and initial-state mixing otherwise begin as no-ops.
     """
     initialize = NeoMMEPreTrainedModel._init_weights
 
@@ -65,7 +63,7 @@ def _patch_residual_init(test_case: unittest.TestCase) -> None:
         if isinstance(module, NeoMMEAttention):
             init.normal_(module.o_proj.weight, mean=0.0, std=self.config.initializer_range)
             if module.alpha is not None:
-                # XSA scales by `tanh(alpha)`, so a small standard deviation would barely exercise the branch.
+                # Use O(1) values so `tanh(alpha)` exercises the XSA branch.
                 init.normal_(module.alpha, mean=0.0, std=1.0)
         elif isinstance(module, NeoMMEMLP):
             init.normal_(module.down_proj.weight, mean=0.0, std=self.config.initializer_range)
@@ -105,8 +103,7 @@ class NeoMMEModelTester:
         num_hidden_layers=2,
         num_attention_heads=4,
         num_key_value_heads=2,
-        # 16, not 8: the default `partial_rotary_factor` of 0.25 has to leave a multiple of 4 rotating dims
-        # on full-attention layers (4 here), which is also the smallest width that exercises both M-RoPE axes.
+        # 16 ensures the default 0.25 rotary factor yields four dimensions, enough for both M-RoPE axes.
         head_dim=16,
         layer_types=None,
         sliding_window_short=3,
@@ -171,7 +168,7 @@ class NeoMMEModelTester:
         return NeoMMEConfig(**config_kwargs)
 
     def prepare_config_and_inputs(self):
-        # Keep the ids clear of the frozen special-token block so no text token doubles as a marker.
+        # Keep random text IDs above the reserved special-token range.
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size - 64) + 64
         input_mask = random_attention_mask([self.batch_size, self.seq_length]) if self.use_input_mask else None
         token_labels = ids_tensor([self.batch_size, self.seq_length], self.vocab_size) if self.use_labels else None
@@ -182,7 +179,7 @@ class NeoMMEModelTester:
         return config, {"input_ids": input_ids, "attention_mask": input_mask}
 
     def prepare_image_config_and_inputs(self, grid_height=2, grid_width=3):
-        """One image per row, laid out exactly as [`NeoMMEProcessor`] emits it."""
+        """Build one processor-style image sequence per batch item."""
         config = self.get_config()
         sequence = [config.document_token_id, config.image_token_id]
         for _ in range(grid_height):
@@ -276,7 +273,7 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertEqual(config.layer_types, pattern)
 
     def test_window_widths_validated(self):
-        """One band is two equal widths; research used `sliding_window_long = 0` for 'uniform'."""
+        """Equal widths select one band; runtime configs reject the research zero encoding."""
         base = {"num_hidden_layers": 3, "layer_types": _layer_types(3, 3)}
         uniform = NeoMMEConfig(**base, sliding_window_short=256, sliding_window_long=256)
         self.assertEqual([w for w in uniform.layer_window_sizes if w is not None], [256, 256])
@@ -286,11 +283,9 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
                 NeoMMEConfig(**base, sliding_window_short=short, sliding_window_long=long)
 
     def test_rope_parameters_follow_layer_types(self):
-        """Only layer types present in the pattern get rope parameters."""
         self.assertEqual(list(NeoMMEConfig(num_hidden_layers=1).rope_parameters), ["full_attention"])
 
     def test_flat_rope_theta(self):
-        """Flat `rope_theta` reaches every layer type and is not written back to `config.json`."""
         config = NeoMMEConfig(rope_theta=123456.0)
         self.assertEqual(
             {layer_type: params["rope_theta"] for layer_type, params in config.rope_parameters.items()},
@@ -298,7 +293,6 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
         )
         self.assertNotIn("rope_theta", config.to_dict())
 
-        # An explicit per-layer-type value still wins over the flat one.
         explicit = NeoMMEConfig(rope_theta=123456.0, rope_parameters={"sliding_attention": {"rope_theta": 7.0}})
         self.assertEqual(explicit.rope_parameters["sliding_attention"]["rope_theta"], 7.0)
         self.assertEqual(explicit.rope_parameters["full_attention"]["rope_theta"], 123456.0)
@@ -338,12 +332,11 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
         with self.assertRaisesRegex(StrictDataclassClassValidationError, "needs at least 4"):
             NeoMMEConfig(head_dim=2, layer_types=["full_attention"] * 17)
 
-        # A factor that lands on a multiple of 4 is fine, on either layer type.
+        # `0.75 * 64 = 48`, a valid rotary width.
         config = NeoMMEConfig(head_dim=64, rope_parameters={"full_attention": {"partial_rotary_factor": 0.75}})
         self.assertEqual(config.rope_parameters["full_attention"]["partial_rotary_factor"], 0.75)
 
     def test_partial_rotary_factor_unit_interval(self):
-        """`partial_rotary_factor` must lie in (0, 1]."""
         for factor in (2.0, 0.0, -0.25):
             with self.assertRaisesRegex(StrictDataclassClassValidationError, r"outside \(0.0, 1.0\]"):
                 NeoMMEConfig(rope_parameters={"sliding_attention": {"partial_rotary_factor": factor}})
@@ -371,7 +364,6 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_bidirectional_attention_windows(self):
         """Each layer is bidirectional; sliding layers are zero outside `abs(i - j) <= window`."""
-        # Three layers so both short and long sliding bands are checked, not only the default [S, G] stack.
         config = self.model_tester.get_config(num_hidden_layers=3, layer_types=_layer_types(3, 3))
         config._attn_implementation = "eager"  # only the eager path returns attention probabilities
         model = NeoMMEModel(config).to(torch_device).eval()
@@ -510,7 +502,7 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertEqual(missing, [])
 
     def test_padded_row_stays_finite(self):
-        """The sliding band intersected with padding can leave a padding query row with no key."""
+        """A padded query can have no keys after intersecting padding with a sliding window."""
         config = self.model_tester.get_config()
         model = NeoMMEModel(config).to(torch_device).eval()
         seq_length = 4 * config.sliding_window_long
@@ -602,7 +594,7 @@ class NeoMMEForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
 
         self.assertEqual(truncated.shape[-1], 8)
         torch.testing.assert_close(truncated.norm(dim=-1), torch.ones_like(truncated[:, 0]), rtol=1e-4, atol=1e-4)
-        # Truncating a unit vector's prefix and renormalizing is NOT the same as slicing the full vector.
+        # Renormalizing a truncated prefix differs from slicing the normalized full vector.
         self.assertFalse(torch.allclose(truncated, full[:, :8], atol=1e-3))
 
     def test_retrieval_head_selection(self):
@@ -655,7 +647,6 @@ class NeoMMEForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
 @require_vision
 class NeoMMEModelIntegrationTest(unittest.TestCase):
     model_name: ClassVar[str] = "Hcompany/NeoMME-260M-Retriever"
-    # Parity is only ever gated in float32; bf16 drift is documented separately and never asserted on.
     model_dtype: ClassVar["torch.dtype"] = torch.float32 if is_torch_available() else None
 
     TEXT_QUERIES: ClassVar[list[str]] = [
@@ -692,12 +683,12 @@ class NeoMMEModelIntegrationTest(unittest.TestCase):
         self.assertFalse(self.loading_info["error_msgs"])
 
     def test_multivector_image_retrieval(self):
-        """MaxSim: each query ranks its own image document first."""
+        """Each query ranks its paired image first with MaxSim."""
         queries, images = self._embed_image_pair(head="multivector")
         self._assert_diagonal_retrieval(self.processor.score_retrieval(queries, images))
 
     def test_dense_image_retrieval(self):
-        """Dense cosine: each query ranks its own image document first."""
+        """Each query ranks its paired image first with dense cosine similarity."""
         queries, images = self._embed_image_pair(head="dense")
 
         self.assertEqual(images.shape, (len(self.dataset), self.model.config.hidden_size))
@@ -705,38 +696,35 @@ class NeoMMEModelIntegrationTest(unittest.TestCase):
         self._assert_diagonal_retrieval(self.processor.score_retrieval(queries, images))
 
     def test_multivector_text_retrieval(self):
-        """MaxSim: each query ranks its own text document first."""
+        """Each query ranks its paired text first with MaxSim."""
         queries, documents = self._embed_text_pair(head="multivector")
         self._assert_diagonal_retrieval(self.processor.score_retrieval(queries, documents))
 
     def test_dense_text_retrieval(self):
-        """Dense cosine: each query ranks its own text document first."""
+        """Each query ranks its paired text first with dense cosine similarity."""
         queries, documents = self._embed_text_pair(head="dense")
 
         torch.testing.assert_close(documents.norm(dim=-1), torch.ones_like(documents[:, 0]), rtol=1e-3, atol=1e-3)
         self._assert_diagonal_retrieval(self.processor.score_retrieval(queries, documents))
 
     def _embed(self, batch, head: str) -> "torch.Tensor":
-        """Embeddings for one retrieval side, computing only `head` so the other costs nothing."""
+        """Compute only the requested retrieval head."""
         only_this_head = {"output_multivector": False} if head == "dense" else {"output_dense": False}
         with torch.inference_mode():
             outputs = self.model(**batch.to(torch_device), **only_this_head)
         return outputs.dense_embeddings if head == "dense" else outputs.embeddings
 
     def _embed_image_pair(self, head: str) -> tuple["torch.Tensor", "torch.Tensor"]:
-        """`(queries, image documents)` from hf-internal-testing/document-visual-retrieval-test."""
         queries = self.processor(text=self.dataset["query"][:], task="query")
         images = self.processor(images=self.dataset["image"][:])
         return self._embed(queries, head), self._embed(images, head)
 
     def _embed_text_pair(self, head: str) -> tuple["torch.Tensor", "torch.Tensor"]:
-        """`(queries, text documents)`: the same retrieval task with `<doc>` passages instead of pages."""
         queries = self.processor(text=self.TEXT_QUERIES, task="query")
         documents = self.processor(text=self.TEXT_DOCUMENTS, task="document")
         return self._embed(queries, head), self._embed(documents, head)
 
     def _assert_diagonal_retrieval(self, scores: "torch.Tensor") -> None:
-        """Every query ranks its paired document first."""
         self.assertEqual(scores.shape[0], scores.shape[1])
         self.assertTrue((scores.argmax(dim=1) == torch.arange(len(scores), device=scores.device)).all())
         self.assertTrue(((scores >= -1.0) & (scores <= 1.0)).all())

@@ -53,14 +53,13 @@ class NeoMMEImageProcessingTester:
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.do_normalize = do_normalize
-        # `image_mean` is a SHIFT and `image_std` a no-op here: together with rescale_factor they express
-        # `pixel / 127.5 - 1`. They are not dataset statistics.
+        # These values implement `pixel / 127.5 - 1`; they are not dataset statistics.
         self.image_mean = image_mean if image_mean is not None else [1.0, 1.0, 1.0]
         self.image_std = image_std if image_std is not None else [1.0, 1.0, 1.0]
         self.patch_size = patch_size
 
     def prepare_image_processor_dict(self):
-        """Init kwargs for the mixin; budgets stay unset (`None`) and are tested explicitly below."""
+        """Return mixin kwargs without resolution budgets."""
         return {
             "do_resize": self.do_resize,
             "do_rescale": self.do_rescale,
@@ -72,7 +71,7 @@ class NeoMMEImageProcessingTester:
         }
 
     def expected_num_patches(self, image) -> int:
-        """Patch count for one image at native resolution: the grid is ceil(side / patch_size)."""
+        """Return the native-resolution patch count."""
         if isinstance(image, Image.Image):
             width, height = image.size
         elif isinstance(image, np.ndarray):
@@ -82,7 +81,7 @@ class NeoMMEImageProcessingTester:
         return -(-height // self.patch_size) * (-(-width // self.patch_size))
 
     def expected_output_image_shape(self, images) -> tuple[int, int]:
-        """`pixel_values` is FLAT: patches of every image concatenated, never padded to a common count."""
+        """Return the shape of the concatenated, unpadded patch table."""
         return sum(self.expected_num_patches(image) for image in images), 3 * self.patch_size**2
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
@@ -120,7 +119,7 @@ class NeoMMEImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.patch_size, self.image_processor_tester.patch_size)
-            self.assertIsNone(image_processor.max_side)  # no budget unless asked for: native resolution
+            self.assertIsNone(image_processor.max_side)
             self.assertIsNone(image_processor.size)
 
             image_processor = image_processing_class.from_dict(
@@ -134,7 +133,6 @@ class NeoMMEImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(dict(image_processor.size), {"min_pixels": 256, "max_pixels": 1024})
 
     def _check_call(self, image_inputs) -> None:
-        """Assert single and batched image-processor outputs for NeoMME's flat patch table."""
         for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
 
@@ -151,7 +149,6 @@ class NeoMMEImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 self.image_processor_tester.expected_output_image_shape(image_inputs),
             )
             self.assertEqual(tuple(batched.image_grid_hw.shape), (len(image_inputs), 2))
-            # The flat table must be the per-image tables concatenated in batch order.
             self.assertEqual(int(batched.image_grid_hw.prod(dim=-1).sum()), batched.pixel_values.shape[0])
 
     def test_call_pil(self):
@@ -225,7 +222,7 @@ class NeoMMEImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 capped = processor(images=[image], max_side=16, return_tensors="np")
                 self.assertEqual(capped["image_grid_hw"].tolist(), [[4, 2]])
 
-                # max_side only ever shrinks; min_pixels is the one setting that grows an image.
+                # `max_side` only shrinks images; `min_pixels` can enlarge them.
                 self.assertEqual(
                     processor(images=[small], max_side=1024, return_tensors="np")["image_grid_hw"].tolist(), [[1, 1]]
                 )

@@ -55,12 +55,11 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         "{% endfor %}{% endif %}"
         "{% if task == 'query' %}{% for _ in range(10) %}{{ mask_token }}{% endfor %}{% endif %}"
     )
-    # Frozen special-token block: each special's id is its index in this list.
+    # Each token's ID must equal its index in this list.
     special_tokens = ["<pad>", "<bos>", "<eos>", "<unk>", "<mask>", "<doc>", "<img>", "<query>", "<row>"]
 
     @classmethod
     def _setup_tokenizer(cls, specials: list[str] | None = None) -> "PreTrainedTokenizerFast":
-        """Build a local word-level tokenizer with frozen special-token ids."""
         specials = specials if specials is not None else cls.special_tokens
         vocab_words = ["hello", "world", "a", "document", "query", "text", "lower", "newer"]
         vocabulary = {token: index for index, token in enumerate(specials)}
@@ -77,7 +76,7 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 eos_token="<eos>",
                 unk_token="<unk>",
                 mask_token="<mask>",
-                # Only the markers this vocabulary really has: naming one here would add it back.
+                # Passing a missing marker here would add it to the vocabulary.
                 extra_special_tokens={
                     name: token
                     for name, token in {
@@ -358,7 +357,6 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(inputs[self.text_input_name].shape[-1], self.image_unstructured_max_length)
 
     def test_structured_kwargs_nested_from_dict(self):
-        """Same merge path as nested kwargs, but via a single dict of dicts."""
         processor = self.processor_class(**self.prepare_components())
         self.skip_processor_without_typed_kwargs(processor)
 
@@ -370,7 +368,7 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(inputs[self.text_input_name].shape[-1], self.image_unstructured_max_length)
 
     def test_flat_kwarg_applied_when_modality_dict_lacks_it(self):
-        """Flat `return_tensors` must survive next to a `text_kwargs` dict that omits it (regression #46192)."""
+        """A flat `return_tensors` still applies when `text_kwargs` omits it (regression #46192)."""
         processor = self.get_processor()
         self.skip_processor_without_typed_kwargs(processor)
 
@@ -378,7 +376,7 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIsInstance(inputs[self.text_input_name], np.ndarray)
 
     def test_image_processor_defaults_preserved_by_image_kwargs(self):
-        """`rescale_factor=-1.0` drives every pixel negative, so a preserved default shows up in the mean."""
+        """A negative mean confirms that `rescale_factor=-1.0` was preserved."""
         processor_components = self.prepare_components()
         processor_components["image_processor"] = self.get_component(
             "image_processor", do_rescale=True, rescale_factor=-1.0
@@ -429,7 +427,7 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_inputs = processor(images=self.prepare_image_inputs())
         self.assertSetEqual(set(image_inputs.keys()), set(processor.model_input_names))
 
-        # Text queries are the other retrieval side: no vision keys.
+        # Text queries must not include vision inputs.
         query_inputs = processor(text=["hello"], task="query")
         self.assertSetEqual(set(query_inputs.keys()), {"input_ids", "attention_mask"})
         self.assertListEqual(processor(text=["hello"])["input_ids"].tolist(), query_inputs["input_ids"].tolist())
@@ -454,19 +452,19 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_unsupported_text_kwargs_raise(self):
         processor = self.get_processor()
 
-        with self.assertRaises(ValueError):  # would corrupt the marker layout
+        with self.assertRaises(ValueError):  # extra special tokens would change the marker layout
             processor(text=["hello"], add_special_tokens=True)
-        with self.assertRaises(ValueError):  # a max_length always truncates the content
+        with self.assertRaises(ValueError):  # max_length cannot override truncation=False
             processor(text=["hello world text"], max_length=4, truncation=False)
         with self.assertRaises(ValueError):  # ragged rows cannot become one tensor
             processor(text=["hello world", "a"], padding=False)
-        with self.assertRaises(ValueError):  # nothing to pad to
+        with self.assertRaises(ValueError):  # padding="max_length" requires max_length
             processor(text=["hello"], padding="max_length")
         with self.assertRaisesRegex(ValueError, "top-level processor argument"):
             processor(text=["hello"], text_kwargs={"task": "document"})
 
     def test_tokenizer_init_padding_side(self):
-        """`tokenizer.init_kwargs` padding_side must not be treated as a caller kwarg and refuse every text call."""
+        """Ignore `tokenizer.init_kwargs["padding_side"]` because it is not a caller argument."""
         processor = self.get_processor()
 
         for side in ("right", "left"):
@@ -474,7 +472,7 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             self.assertEqual(processor(text=["hello"], task="query")["input_ids"].shape[0], 1)
 
         processor.tokenizer.init_kwargs.pop("padding_side", None)
-        # Asking for it explicitly still raises: this processor always right-pads.
+        # Explicit `padding_side` still raises because this processor always right-pads.
         with self.assertRaises(ValueError):
             processor(text=["hello"], padding_side="left")
         with self.assertRaises(ValueError):
@@ -555,7 +553,7 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             processor(text=["hello"], images=[image])
 
     def test_missing_markers_raise(self):
-        """A missing marker used to resolve to `unk_token_id` and silently open every document with `<unk>`."""
+        """A missing marker must raise instead of resolving to `unk_token_id`."""
         stripped = self._setup_tokenizer(specials=[token for token in self.special_tokens if token != "<row>"])
         processor = NeoMMEProcessor(
             image_processor=NeoMMEImageProcessor(patch_size=self.patch_size),
@@ -592,7 +590,7 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(batch["pixel_values"].shape, (grid_height * grid_width, 3 * patch_size**2))
         self.assertNotIn("image_grid_hw", batch)
 
-        # The two markers take diagonal positions, then the grid starts at (2, 2).
+        # The document and image markers precede the grid at (2, 2).
         self.assertEqual(positions[:, 0].tolist(), [0, 0])
         self.assertEqual(positions[:, 1].tolist(), [1, 1])
         self.assertEqual(positions[:, 2].tolist(), [2, 2])
@@ -608,7 +606,7 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         ]
         batch = processor(images=images)
 
-        # A running offset across the batch would shift every image after the first.
+        # Each image's positions restart instead of continuing across the batch.
         self.assertEqual(batch["position_ids"][:, 1, 0].tolist(), [0, 0])
         self.assertEqual(batch["position_ids"][:, 1, 1].tolist(), [1, 1])
         self.assertEqual(batch["pixel_values"].shape[0], 2 * 3 + 1)
@@ -622,7 +620,7 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             passages = torch.tensor([[[1.0, 0.0], [0.0, 0.0]], [[0.0, 1.0], [0.0, 1.0]]])
             scores = processor.score_retrieval(query, passages)
             self.assertEqual(scores.shape, (1, 2))
-            # Passage 0 has a padding token (a zero row); its max must ignore it.
+            # The zero row in passage 0 is padding and must be excluded from MaxSim.
             torch.testing.assert_close(scores[0], torch.tensor([0.5, 0.5]))
 
         with self.subTest(mode="maxsim_normalize"):
