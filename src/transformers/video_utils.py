@@ -769,7 +769,7 @@ def convert_to_rgb(
 
     # np.array usually comes with ChannelDimension.LAST so let's convert it
     if input_data_format is None:
-        input_data_format = infer_channel_dimension_format(video)
+        input_data_format = infer_channel_dimension_format(video, num_channels=(1, 3, 4))
     video = to_channel_dimension_format(video, ChannelDimension.FIRST, input_channel_dim=input_data_format)
 
     # 3 channels for RGB already
@@ -781,12 +781,12 @@ def convert_to_rgb(
         return video.repeat(3, -3)
 
     if not (video[..., 3, :, :] < 255).any():
-        return video
+        return video[..., :3, :, :]
 
     # There is a transparency layer, blend it with a white background.
     # Calculate the alpha proportion for blending.
     alpha = video[..., 3, :, :] / 255.0
-    video = (1 - alpha[..., None, :, :]) * 255 + alpha[..., None, :, :] * video[..., 3, :, :]
+    video = (1 - alpha[..., None, :, :]) * 255 + alpha[..., None, :, :] * video[..., :3, :, :]
     return video
 
 
