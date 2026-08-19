@@ -1620,9 +1620,6 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
 
         self.is_main_model_prefill = True
 
-    def _prepare_noise_embeds(self, noise_ids: torch.LongTensor) -> torch.Tensor:
-        return self.main_model_input_embeddings(noise_ids, apply_norm=False)
-
     def get_candidates(
         self,
         input_ids: torch.LongTensor,
@@ -1676,7 +1673,7 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
         # Create the new inputs corresponding to only the "noise", or "diffusion window". It's the last bonus token (or "anchor") from
         # the main model, and the noise tokens
         noise_ids = torch.cat([input_ids[:, -1:], self.noise_ids_mask.to(input_ids.device)], dim=-1)
-        noise_embeds = self._prepare_noise_embeds(noise_ids)
+        noise_embeds = self.main_model_input_embeddings(noise_ids, apply_norm=False)
 
         # Append positions and mask for the noise tokens, because they correspond to positions beyond the last `num_last_main_model_tokens`
         # that will first be used to populate the assistant kv cache at those positions through the `context_hidden_states`
