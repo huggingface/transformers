@@ -29,7 +29,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
@@ -371,51 +371,6 @@ class Ovis2_5VisionEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.layers = nn.ModuleList([Ovis2_5VisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        grid_thw: torch.LongTensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutput:
-        spatial_merge_size = self.config.hidden_stride
-        spatial_merge_unit = spatial_merge_size**2
-        window_index, cu_window_seqlens = get_vision_window_index(
-            grid_thw,
-            spatial_merge_size=spatial_merge_size,
-            window_size=self.config.window_size,
-            patch_size=self.config.patch_size,
-            kwargs=kwargs,
-        )
-        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
-
-        sequence_length = hidden_states.shape[0]
-        hidden_states = hidden_states.reshape(sequence_length // spatial_merge_unit, spatial_merge_unit, -1)
-        hidden_states = hidden_states[window_index].reshape(sequence_length, -1)
-        rotary_cos, rotary_sin = position_embeddings
-        rotary_cos = rotary_cos.reshape(sequence_length // spatial_merge_unit, spatial_merge_unit, -1)
-        rotary_sin = rotary_sin.reshape(sequence_length // spatial_merge_unit, spatial_merge_unit, -1)
-        position_embeddings = (
-            rotary_cos[window_index].reshape(sequence_length, -1),
-            rotary_sin[window_index].reshape(sequence_length, -1),
-        )
-        reverse_indices = torch.argsort(window_index)
-
-        for layer_index, encoder_layer in enumerate(self.layers):
-            use_full_attention = self.config.layer_types[layer_index] == "full_attention"
-            layer_cu_seqlens = cu_seqlens if use_full_attention else cu_window_seqlens
-            hidden_states = encoder_layer(
-                hidden_states,
-                cu_seqlens=layer_cu_seqlens,
-                position_embeddings=position_embeddings,
-                max_seqlen=max_seqlen if use_full_attention else None,
-                **kwargs,
-            )
-
-        hidden_states = hidden_states.reshape(sequence_length // spatial_merge_unit, spatial_merge_unit, -1)
-        hidden_states = hidden_states[reverse_indices].reshape(sequence_length, -1)
-        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 class Ovis2_5VisualTokenProjector(nn.Module):
