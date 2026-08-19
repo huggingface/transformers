@@ -77,6 +77,30 @@ The repository consistency check is similar to `make check-repo`, except it stop
 | Docstrings and docs | Argument docstrings match function signatures and documentation table of contents | `make fix-repo` |
 | Auto-generated files | Dummies, pipeline typing, doctest list, metadata, dependency table | `make fix-repo` |
 | Config validation | Config classes have valid checkpoints in docstrings and config attributes match modeling file | Manual |
+| Reviewer assignment | Every model directory, and every rule in the reviewer file, still reaches a reviewer | Manual |
+
+## Reviewer assignment
+
+When a pull request is marked ready for review, the `Assign PR Reviewers` workflow requests up to two reviewers, ranked by how many lines the pull request changes in the files they own. A draft pull request gets no reviewers until it leaves draft.
+
+Ownership is resolved per file, most specific first.
+
+| Where | Looks like | Use it for |
+|---|---|---|
+| The model file | `# Reviewers: @login` in the leading comment block of `modular_<model>.py` or `modeling_<model>.py` | a model that needs someone other than its modality owner. The modular converter copies the header into the generated modeling file, so the tag survives regeneration |
+| A path rule | `/src/transformers/<area>/ @login` in `.github/scripts/codeowners_for_review_action` | anything that is not a model |
+| The modality table | `@@modality/vision @login`, in the same file | every model whose doc page sits in that section of `docs/source/en/_toctree.yml` |
+| The catch-all | `* @Rocketknight1 @ArthurZucker` | whatever nothing else claims |
+
+A new model needs no entry anywhere: adding its documentation page to `_toctree.yml`, which the documentation table of contents check already requires, places it in a modality, and the modality table covers it from there.
+
+A review can only be requested from a repository collaborator. The workflow requests each reviewer in a separate call and skips anyone it cannot ask, so an entry naming someone who has left costs one reviewer instead of all of them, and every skip is reported as a warning on the workflow run.
+
+`make check-repository-consistency` runs `utils/check_reviewers.py`, which fails when a model reaches nobody but the catch-all, when a rule matches no file any more, or when the modality table disagrees with the table of contents. Paths outside `src/transformers/models` that have no owner are reported as a note; list them with:
+
+```bash
+python utils/check_reviewers.py --strict
+```
 
 ## Tests
 
