@@ -39,7 +39,7 @@ from ...utils import (
     torch_compilable_check,
 )
 from ...utils.constants import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
-from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.generic import can_return_tuple, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..gemma4.modeling_gemma4 import Gemma4RMSNorm
 from ..gpt_neox.modeling_gpt_neox import apply_rotary_pos_emb
@@ -361,12 +361,18 @@ class NeoMMERotaryEmbedding(nn.Module):
         inv_freq = getattr(self, f"{layer_type}_inv_freq")  # (rotary_dim // 2,)
         attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
 
-        row_angles = position_ids[0].float().unsqueeze(-1) * inv_freq[0::2]  # (batch, seq, rotary_dim // 4)
-        column_angles = position_ids[1].float().unsqueeze(-1) * inv_freq[1::2]  # (batch, seq, rotary_dim // 4)
+        device_type = (
+            hidden_states.device.type
+            if isinstance(hidden_states.device.type, str) and hidden_states.device.type != "mps"
+            else "cpu"
+        )
+        with maybe_autocast(device_type=device_type, enabled=False):
+            row_angles = position_ids[0].float().unsqueeze(-1) * inv_freq[0::2]  # (batch, seq, rotary_dim // 4)
+            column_angles = position_ids[1].float().unsqueeze(-1) * inv_freq[1::2]  # (batch, seq, rotary_dim // 4)
 
-        angles = torch.stack([row_angles, column_angles], dim=-1).flatten(-2)  # (batch, seq, rotary_dim // 2)
-        cos = (angles.cos() * attention_scaling).to(hidden_states.dtype)
-        sin = (angles.sin() * attention_scaling).to(hidden_states.dtype)
+            angles = torch.stack([row_angles, column_angles], dim=-1).flatten(-2)  # (batch, seq, rotary_dim // 2)
+            cos = (angles.cos() * attention_scaling).to(hidden_states.dtype)
+            sin = (angles.sin() * attention_scaling).to(hidden_states.dtype)
         return torch.cat([cos, cos], dim=-1), torch.cat([sin, sin], dim=-1)
 
 
