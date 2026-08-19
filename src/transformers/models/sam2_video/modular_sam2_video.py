@@ -44,7 +44,7 @@ from ...utils.output_capturing import OutputRecorder
 from ...video_utils import VideoInput
 from ...vision_utils import get_vision_position_ids
 from ..auto import CONFIG_MAPPING, AutoConfig
-from ..edgetam_video.modeling_edgetam_video import EdgeTamVideoVisionRotaryEmbedding
+from ..qwen2_vl.modeling_qwen2_vl import Qwen2VLVisionRotaryEmbedding
 from ..sam2.configuration_sam2 import (
     Sam2MaskDecoderConfig,
     Sam2PromptEncoderConfig,
@@ -943,8 +943,29 @@ class Sam2VideoPreTrainedModel(PreTrainedModel):
             init.normal_(module.positional_embedding, std=module.scale)
 
 
-class Sam2VideoVisionRotaryEmbedding(EdgeTamVideoVisionRotaryEmbedding):
-    pass
+class Sam2VideoVisionRotaryEmbedding(Qwen2VLVisionRotaryEmbedding):
+    def __init__(self, config: Sam2VideoConfig, device=None):
+        super().__init__(config, device=device)
+
+    def compute_default_rope_parameters(config: Sam2VideoConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        dim = config.memory_attention_hidden_size // (
+            config.memory_attention_downsample_rate * config.memory_attention_num_attention_heads
+        )
+        spatial_dim = dim // 2
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+        inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
+        return inv_freq.to(device), attention_factor
 
 
 def rotate_pairwise(x):

@@ -737,6 +737,7 @@ class Sam2VideoPreTrainedModel(PreTrainedModel):
             init.normal_(module.positional_embedding, std=module.scale)
 
 
+# Simple axial 2D rope as in sam3/edgetam/etc with same freq of head-dim//2 for H and W
 class Sam2VideoVisionRotaryEmbedding(nn.Module):
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Sam2VideoConfig, device=None):
@@ -780,12 +781,12 @@ class Sam2VideoVisionRotaryEmbedding(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        position_ids_expanded = position_ids[..., None].float()  # (positions, 2, 1)
         inv_freq_expanded = self.inv_freq[None, ...].float()
+        position_ids_expanded = position_ids.transpose(0, 1)[..., None].float()  # (positions, 2, 1)
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = position_ids_expanded.float() @ inv_freq_expanded
+            freqs = position_ids_expanded @ inv_freq_expanded
             cos = freqs.cos() * self.attention_scaling
             sin = freqs.sin() * self.attention_scaling
 
@@ -794,9 +795,10 @@ class Sam2VideoVisionRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
     def recomposition_to_2d(self, freq):
-        freq_h, freq_w = freq[:, 0], freq[:, 1]
-        freq_hw = torch.cat([freq_h, freq_w], dim=-1)[None, ...]
-        return freq_hw.repeat_interleave(2, dim=-1)
+        # take each grid's (N, D), the full frequency range
+        freq_h, freq_w = freq[0], freq[1]
+        freq_hw = torch.cat([freq_h, freq_w], dim=-1)
+        return torch.cat([freq_hw, freq_hw], dim=-1)
 
 
 def rotate_pairwise(x):

@@ -28,7 +28,7 @@ from ...masking_utils import (
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GenericForSequenceClassification
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters, dynamic_rope_update
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
@@ -154,49 +154,80 @@ class CohereCompassProcessor(Qwen3VLProcessor):
         self.vision_end_token = "<|VISION_END|>"
 
 
+# Same as Qwen3VL with layer-types
 class CohereCompassRotaryEmbedding(Gemma3RotaryEmbedding):
-    """Gemma3 rotary embedding adapted to Compass's multi-axis position IDs."""
+    def __init__(self, **super_kwargs):
+        super().__init__(**super_kwargs)
+        self.mrope_section = {
+            layer_type: self.rope_type[layer_type].get("mrope_section", [22, 22, 20])
+            for layer_type in self.layer_types
+        }
 
-    # Copied from: Qwen3VLTextRotaryEmbedding.apply_interleaved_mrope, added supported for layer_types
-    @torch.no_grad()
-    @dynamic_rope_update
+    def compute_default_rope_parameters(
+        config, device=None, layer_type: str | None = None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+            layer_type (`str`):
+                The current layer type if the model has different RoPE parameters per type.
+                Should not be used unless `config.layer_types is not None`
+
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters[layer_type]["rope_theta"]
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+
+        # Special to ernie, we prerotate on the hw dim
+        mrope_section = config.rope_parameters[layer_type].get("mrope_section", [22, 22, 20])
+        hw_dim = mrope_section[0] + mrope_section[1]
+        t_dim = mrope_section[2]
+
+        inv_freq_3d = torch.empty_like(inv_freq)
+        # (Pre-)Rotate to avoid another rotation during the forward
+        inv_freq_3d[:hw_dim] = torch.cat([inv_freq[:-t_dim][0::2], inv_freq[:-t_dim][1::2]])
+        inv_freq_3d[-t_dim:] = inv_freq[-t_dim:]
+
+        return inv_freq.to(device), attention_factor
+
     def forward(self, x, position_ids, layer_type=None):
         inv_freq = getattr(self, f"{layer_type}_inv_freq")
         attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
 
-        # In contrast to other models, Cohere has different position ids for the grids
-        # So we expand the inv_freq to shape (3, ...)
-        inv_freq_expanded = inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1).to(x.device)
+        inv_freq_expanded = (
+            inv_freq[None, None, :, None]
+            .expand(3, position_ids.shape[1], -1, 1)
+            .to(dtype=torch.float, device=x.device)
+        )
         position_ids_expanded = position_ids[:, :, None, :].float()  # shape (3, bs, 1, positions)
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
-            mrope_section = self.config.rope_parameters[layer_type].get("mrope_section", [24, 20, 20])
-            freqs = self.apply_interleaved_mrope(freqs, mrope_section)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * attention_scaling
-            sin = emb.sin() * attention_scaling
+            freqs = (inv_freq_expanded @ position_ids_expanded).transpose(2, 3)
+            cos = freqs.cos() * attention_scaling
+            sin = freqs.sin() * attention_scaling
+
+        sin = self.recomposition_to_3d(sin, layer_type)
+        cos = self.recomposition_to_3d(cos, layer_type)
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
-    # Copied from: Qwen3VLTextRotaryEmbedding.apply_interleaved_mrope
-    def apply_interleaved_mrope(self, freqs, mrope_section):
-        """Apply interleaved MRoPE to 3D rotary embeddings.
-        Reorganizes frequency layout from chunked [TTT...HHH...WWW] to
-        interleaved [THWTHWTHW...TT], preserving frequency continuity.
-        args:
-            x: (3, bs, seq_len, head_dim // 2)
-            mrope_section: (3,)
-        returns:
-            x_t: (bs, seq_len, head_dim // 2)
-        """
-        freqs_t = freqs[0]  # just overwrite the first dimension T
-        for dim, offset in enumerate((1, 2), start=1):  # H, W
-            length = mrope_section[dim] * 3
-            idx = slice(offset, length, 3)
-            freqs_t[..., idx] = freqs[dim, ..., idx]
-        return freqs_t
+    def recomposition_to_3d(self, freq, layer_type):
+        freq_h, freq_w, freq_t = (
+            m[(i + 1) % 3] for i, m in enumerate(freq.split([*self.mrope_section[layer_type]], dim=-1))
+        )
+        freq_hw = torch.cat([freq_h, freq_w], dim=-1)
+        freq_hwt = torch.cat([freq_hw, freq_t], dim=-1)
+        return torch.cat([freq_hwt, freq_hwt], dim=-1)
 
 
 class CohereCompassMLP(Cohere2MLP):

@@ -742,6 +742,7 @@ class MuseGlimmerVisionPatchEmbedder(nn.Module):
         return embeddings
 
 
+# Simple axial 2D rope as in sam3/edgetam/etc with same freq of head-dim//2 for H and W
 class MuseGlimmerVisionRotaryEmbedding(nn.Module):
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: MuseGlimmerVisionConfig, device=None):
@@ -776,14 +777,10 @@ class MuseGlimmerVisionRotaryEmbedding(nn.Module):
         """
         base = config.rope_parameters["rope_theta"]
         dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-
-        # The reference implementation computes RoPE frequencies INDEPENDENTLY
-        # for each spatial dimension using the partitioned head_dim (head_dim // ndim),
-        # so both x and y dimensions get identical frequency ranges.
-        # This is different from splitting the global inv_freq between dimensions.
         spatial_dim = dim // 2
 
         attention_factor = 1.0  # Unused in this type of RoPE
+        # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
         return inv_freq.to(device), attention_factor
 

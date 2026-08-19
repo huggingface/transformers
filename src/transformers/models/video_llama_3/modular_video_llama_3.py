@@ -43,31 +43,23 @@ from ...utils.generic import (
 )
 from ...utils.output_capturing import capture_outputs
 from ...video_processing_utils import BaseVideoProcessor
-from ...video_utils import (
-    group_videos_by_shape,
-    reorder_videos,
-)
+from ...video_utils import group_videos_by_shape, reorder_videos
 from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..auto.modeling_auto import AutoModel
+from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLVisionRotaryEmbedding
 from ..qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, Qwen2VLImageProcessorKwargs, smart_resize
 from ..qwen2_vl.modeling_qwen2_vl import (
     Qwen2VLForConditionalGeneration,
     Qwen2VLModel,
     Qwen2VLPreTrainedModel,
-    Qwen2VLVisionRotaryEmbedding,
     TransformersKwargs,
     apply_rotary_pos_emb_vision,
     eager_attention_forward,
 )
-from ..qwen2_vl.processing_qwen2_vl import (
-    Qwen2VLProcessorKwargs,
-)
-from ..qwen2_vl.video_processing_qwen2_vl import (
-    Qwen2VLVideoProcessor,
-    Qwen2VLVideoProcessorInitKwargs,
-)
+from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessorKwargs
+from ..qwen2_vl.video_processing_qwen2_vl import Qwen2VLVideoProcessor, Qwen2VLVideoProcessorInitKwargs
 from ..qwen3_vl.processing_qwen3_vl import Qwen3VLProcessor
 from ..siglip.configuration_siglip import SiglipVisionConfig
 from ..siglip.modeling_siglip import (
@@ -125,7 +117,7 @@ class VideoLlama3Config(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-class VideoLlama3Qwen2VLVisionRotaryEmbedding(Qwen2VLVisionRotaryEmbedding):
+class VideoLlama3VisionRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
     pass
 
 
@@ -331,7 +323,7 @@ class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
 
     def __init__(self, config: VideoLlama3VisionConfig):
         super().__init__(config)
-        self.rotary_pos_emb = VideoLlama3Qwen2VLVisionRotaryEmbedding(config)
+        self.rotary_pos_emb = VideoLlama3VisionRotaryEmbedding(config)
         self.embeddings = VideoLlama3VisionEmbeddings(config)
         self.encoder = VideoLlama3VisionEncoder(config)
         self.post_layernorm = LayerNorm(config.hidden_size, eps=config.layer_norm_eps)

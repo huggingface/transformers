@@ -154,6 +154,7 @@ class MiniMaxM3VLTextConfig(PreTrainedConfig):
             self.mlp_layer_types = ["sparse"] * self.num_hidden_layers
 
 
+# NOTE: can copy from qwen vision config!
 @auto_docstring(checkpoint="MiniMaxAI/MiniMax-M3")
 @strict
 class MiniMaxM3VLVisionConfig(PreTrainedConfig):

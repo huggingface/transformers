@@ -69,6 +69,7 @@ from ..auto.modeling_auto import AutoModel
 from .configuration_qwen3_5 import Qwen3_5Config, Qwen3_5TextConfig, Qwen3_5VisionConfig
 
 
+# Simple axial 2D rope as in sam3/edgetam/etc with same freq of head-dim//2 for H and W
 class Qwen3_5VisionRotaryEmbedding(nn.Module):
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Qwen3_5VisionConfig, device=None):

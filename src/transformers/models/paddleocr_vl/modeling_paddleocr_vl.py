@@ -64,11 +64,7 @@ from ...vision_utils import (
     get_vision_interpolation_indices_and_weights,
     get_vision_position_ids,
 )
-from .configuration_paddleocr_vl import (
-    PaddleOCRTextConfig,
-    PaddleOCRVisionConfig,
-    PaddleOCRVLConfig,
-)
+from .configuration_paddleocr_vl import PaddleOCRTextConfig, PaddleOCRVisionConfig, PaddleOCRVLConfig
 
 
 logger = logging.get_logger(__name__)

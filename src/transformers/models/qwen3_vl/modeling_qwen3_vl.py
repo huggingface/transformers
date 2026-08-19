@@ -106,6 +106,7 @@ class Qwen3VLVisionPatchEmbed(nn.Module):
         return hidden_states
 
 
+# Simple axial 2D rope as in sam3/edgetam/etc with same freq of head-dim//2 for H and W
 class Qwen3VLVisionRotaryEmbedding(nn.Module):
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Qwen3VLVisionConfig, device=None):
@@ -357,7 +358,6 @@ class Qwen3VLVisionBlock(GradientCheckpointingLayer):
         return hidden_states
 
 
-# conceptually same as ernie but this has block-split rope as llama!
 class Qwen3VLTextRotaryEmbedding(nn.Module):
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config, device=None):
@@ -379,7 +379,9 @@ class Qwen3VLTextRotaryEmbedding(nn.Module):
 
     @staticmethod
     @deprecate_kwarg("device", version="5.18")
-    def compute_default_rope_parameters(config, device=None, **kwargs) -> tuple[torch.Tensor, float]:
+    def compute_default_rope_parameters(
+        config: Qwen3VLTextConfig, device=None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -401,14 +403,13 @@ class Qwen3VLTextRotaryEmbedding(nn.Module):
         mrope_section = config.rope_parameters.get("mrope_section", [22, 22, 20])
         hw_dim = mrope_section[0] + mrope_section[1]
         t_dim = mrope_section[2]
-        print(mrope_section, inv_freq.shape)
 
         inv_freq_3d = torch.empty_like(inv_freq)
         # (Pre-)Rotate to avoid another rotation during the forward
         inv_freq_3d[:hw_dim] = torch.cat([inv_freq[:-t_dim][0::2], inv_freq[:-t_dim][1::2]])
         inv_freq_3d[-t_dim:] = inv_freq[-t_dim:]
 
-        return inv_freq.to(device), attention_factor
+        return inv_freq_3d.to(device), attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)

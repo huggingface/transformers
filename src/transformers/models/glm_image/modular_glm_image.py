@@ -112,6 +112,8 @@ class GlmImageVisionConfig(Glm4vVisionConfig):
     out_hidden_size = AttributeError()
     rms_norm_eps = AttributeError()
     temporal_patch_size = AttributeError()
+    max_position_embeddings = AttributeError()
+    rope_parameters = AttributeError()
 
 
 @auto_docstring(checkpoint="zai-org/GLM-Image")

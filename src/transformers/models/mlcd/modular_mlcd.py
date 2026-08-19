@@ -32,7 +32,7 @@ from ..clip.modeling_clip import (
     CLIPVisionModel,
 )
 from ..llama.modeling_llama import eager_attention_forward
-from ..qwen2_vl.modeling_qwen2_vl import Qwen2VLVisionRotaryEmbedding, apply_rotary_pos_emb_vision
+from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLVisionRotaryEmbedding, apply_rotary_pos_emb_vision
 
 
 logger = logging.get_logger(__name__)
@@ -84,7 +84,7 @@ class MLCDMLP(CLIPMLP):
     pass
 
 
-class MLCDRotaryEmbedding(Qwen2VLVisionRotaryEmbedding):
+class MLCDRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
     pass
 
 

@@ -22,7 +22,6 @@ import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 from torch import Tensor
 
-from ... import initialization as init
 from ...activations import ACT2FN
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -31,6 +30,7 @@ from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import auto_docstring
 from ...utils.output_capturing import OutputRecorder
+from ...vision_utils import get_vision_position_ids
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..sam2.modeling_sam2 import eager_attention_forward, window_partition
 from ..sam2_video.configuration_sam2_video import (
@@ -113,8 +113,6 @@ class EdgeTamVideoConfig(PreTrainedConfig):
         The non-linear activation function in the feedforward network in the memory attention module.
     memory_attention_dropout (`float`, *optional*, defaults to 0.1):
         The dropout rate for the memory attention module.
-    memory_attention_rope_theta (`float`, *optional*, defaults to 10000):
-        The Rope theta parameter.
     memory_attention_rope_feat_sizes (`Tuple[int, int]`, *optional*, defaults to `[64, 64]`):
         The feature sizes for the Rope positional encoding.
     memory_attention_rope_k_sizes (`List[int]`, *optional*, defaults to `[16, 16]`):
@@ -232,10 +230,12 @@ class EdgeTamVideoConfig(PreTrainedConfig):
     memory_attention_mlp_hidden_size: int = 2048
     memory_attention_mlp_hidden_act: str = "relu"
     memory_attention_dropout: float | int = 0.1
-    memory_attention_rope_theta: float | int = 10000
     memory_attention_rope_feat_sizes: list | None = None
     memory_attention_rope_k_sizes: list | None = None
     memory_attention_rope_dropout: float | int = 0.1
+    max_position_embeddings: int | None = None
+    # ig should be `memory_rope_parameters` though not sure if the utilities will catch up
+    rope_parameters: dict | None = None
 
     # spatial perceiver resampler
     perceiver_resampler_num_latents: int = 256
@@ -306,21 +306,7 @@ class EdgeTamVideoVisionEncoderOutput(Sam2VideoVisionEncoderOutput):
 
 
 class EdgeTamVideoVisionRotaryEmbedding(Sam2VideoVisionRotaryEmbedding):
-    def __init__(self, config: EdgeTamVideoConfig, end_x: int | None = None, end_y: int | None = None):
-        nn.Module.__init__()
-        self.dim = config.memory_attention_hidden_size // (
-            config.memory_attention_downsample_rate * config.memory_attention_num_attention_heads
-        )
-        # Ensure even dimension for proper axial splitting
-        if self.dim % 4 != 0:
-            raise ValueError("Dimension must be divisible by 4 for axial RoPE")
-        self.end_x, self.end_y = config.memory_attention_rope_feat_sizes if end_x is None else (end_x, end_y)
-        self.memory_attention_rope_theta = config.memory_attention_rope_theta
-
-        # directly register the cos and sin embeddings as we have a fixed feature shape
-        inv_freq = self.create_inv_freq()
-        self.rope_embeddings_cos = nn.Buffer(inv_freq.cos(), persistent=False)
-        self.rope_embeddings_sin = nn.Buffer(inv_freq.sin(), persistent=False)
+    pass
 
 
 class EdgeTamVideoAttention(Sam2VideoAttention):
@@ -589,12 +575,7 @@ class EdgeTamVideoFeedForward(Sam2VideoFeedForward):
 
 
 class EdgeTamVideoPreTrainedModel(Sam2VideoPreTrainedModel):
-    def _init_weights(self, module):
-        super()._init_weights()
-        if isinstance(module, EdgeTamVideoVisionRotaryEmbedding):
-            inv_freq = module.create_inv_freq()
-            init.copy_(module.rope_embeddings_cos, inv_freq.cos())
-            init.copy_(module.rope_embeddings_sin, inv_freq.sin())
+    pass
 
 
 class EdgeTamVideoInferenceSession(Sam2VideoInferenceSession):
@@ -670,9 +651,8 @@ class EdgeTamVideoMemoryAttentionLayer(nn.Module):
 class EdgeTamVideoMemoryAttention(Sam2VideoMemoryAttention):
     def __init__(self, config: EdgeTamVideoConfig):
         super().__init__()
-        self.rotary_emb_k = EdgeTamVideoVisionRotaryEmbedding(
-            config, end_x=config.memory_attention_rope_k_sizes[0], end_y=config.memory_attention_rope_k_sizes[1]
-        )
+        self.rotary_emb_k = EdgeTamVideoVisionRotaryEmbedding(config)
+        self.grid_thw_k = (1, config.memory_attention_rope_k_sizes[1], config.memory_attention_rope_k_sizes[0])
 
     def forward(
         self,
@@ -704,8 +684,17 @@ class EdgeTamVideoMemoryAttention(Sam2VideoMemoryAttention):
         output = output.transpose(0, 1)
         memory = memory.transpose(0, 1).unsqueeze(1)
         memory_posision_embeddings = memory_posision_embeddings.transpose(0, 1).unsqueeze(1)
-        rope_position_embeddings = self.rotary_emb()
-        rope_position_embeddings_k = self.rotary_emb_k()
+
+        grid_thw = torch.tensor([self.grid_thw], device=output.device)
+        position_ids = get_vision_position_ids(grid_thw, spatial_merge_size=1)
+        position_ids = position_ids.flip(-1)
+        rope_position_embeddings = self.rotary_emb(output, position_ids)
+
+        grid_thw_k = torch.tensor([self.grid_thw_k], device=output.device)
+        position_ids_k = get_vision_position_ids(grid_thw_k, spatial_merge_size=1)
+        position_ids_k = position_ids_k.flip(-1)
+        rope_position_embeddings_k = self.rotary_emb(output, position_ids_k)
+
         for layer in self.layers:
             output = layer(
                 queries=output.unsqueeze(1) if output.ndim == 3 else output,

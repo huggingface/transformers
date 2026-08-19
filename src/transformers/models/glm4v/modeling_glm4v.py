@@ -107,6 +107,7 @@ class Glm4vVisionPatchEmbed(nn.Module):
         return hidden_states
 
 
+# Simple axial 2D rope as in sam3/edgetam/etc with same freq of head-dim//2 for H and W
 class Glm4vVisionRotaryEmbedding(nn.Module):
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Glm4vVisionConfig, device=None):

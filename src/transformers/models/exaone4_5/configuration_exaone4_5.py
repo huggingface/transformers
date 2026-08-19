@@ -54,9 +54,9 @@ class Exaone4_5_VisionConfig(PreTrainedConfig):
     out_hidden_size: int = 3584
     fullatt_block_indexes: list[int] | tuple[int, ...] = (7, 15, 23, 31)
     initializer_range: float = 0.02
-    num_key_value_heads: int = 8
     max_position_embeddings: int | None = None
     rope_parameters: dict | None = None
+    num_key_value_heads: int = 8
 
 
 @auto_docstring(checkpoint="LGAI-EXAONE/EXAONE-4.5-33B")

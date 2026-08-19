@@ -839,6 +839,7 @@ class Ernie4_5_VLMoePatchEmbed(nn.Module):
         return self.proj(hidden_states.to(target_dtype))
 
 
+# Simple axial 2D rope as in sam3/edgetam/etc with same freq of head-dim//2 for H and W
 class Ernie4_5_VLMoeVisionRotaryEmbedding(nn.Module):
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Ernie4_5_VLMoeVisionConfig, device=None):

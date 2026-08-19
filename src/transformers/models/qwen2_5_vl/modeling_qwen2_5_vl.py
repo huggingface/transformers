@@ -120,6 +120,7 @@ class Qwen2_5_VisionPatchEmbed(nn.Module):
         return hidden_states
 
 
+# Simple axial 2D rope as in sam3/edgetam/etc with same freq of head-dim//2 for H and W
 class Qwen2_5_VLVisionRotaryEmbedding(nn.Module):
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Qwen2_5_VLVisionConfig, device=None):

@@ -48,8 +48,8 @@ from ..auto.modeling_auto import AutoModel
 from .configuration_video_llama_3 import VideoLlama3Config, VideoLlama3VisionConfig
 
 
-# Simple axial rope as in sam3/edgetam/etc with same freq of head-dim//2 for H and W
-class VideoLlama3Qwen2VLVisionRotaryEmbedding(nn.Module):
+# Simple axial 2D rope as in sam3/edgetam/etc with same freq of head-dim//2 for H and W
+class VideoLlama3VisionRotaryEmbedding(nn.Module):
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: VideoLlama3VisionConfig, device=None):
         super().__init__()
@@ -424,7 +424,7 @@ class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
 
     def __init__(self, config: VideoLlama3VisionConfig):
         super().__init__(config)
-        self.rotary_pos_emb = VideoLlama3Qwen2VLVisionRotaryEmbedding(config)
+        self.rotary_pos_emb = VideoLlama3VisionRotaryEmbedding(config)
         self.embeddings = VideoLlama3VisionEmbeddings(config)
         self.encoder = VideoLlama3VisionEncoder(config)
         self.post_layernorm = LayerNorm(config.hidden_size, eps=config.layer_norm_eps)

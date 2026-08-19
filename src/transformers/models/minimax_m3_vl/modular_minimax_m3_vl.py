@@ -747,7 +747,7 @@ class MiniMaxM3VLVisionEmbeddings(Qwen2_5_VisionPatchEmbed):
         )
 
 
-class MiniMaxM3VL3DRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
+class MiniMaxM3VLVisionRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
     pass
 
 
@@ -845,7 +845,7 @@ class MiniMaxM3VLVisionModel(MiniMaxM3VLPreTrainedModel):
         self.embeddings = MiniMaxM3VLVisionEmbeddings(config)
         self.pre_layrnorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layers = nn.ModuleList([MiniMaxM3VLVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.rotary_emb = MiniMaxM3VL3DRotaryEmbedding(config)
+        self.rotary_emb = MiniMaxM3VLVisionRotaryEmbedding(config)
         self.post_init()
 
     @merge_with_config_defaults

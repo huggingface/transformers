@@ -333,7 +333,8 @@ class Sam3TrackerVideoPreTrainedModel(Sam2VideoPreTrainedModel):
 
 
 class Sam3TrackerVideoVisionRotaryEmbedding(Sam2VideoVisionRotaryEmbedding):
-    pass
+    def __init__(self, config: Sam3TrackerVideoConfig, device=None):
+        super(config, device=device)
 
 
 class Sam3TrackerVideoRoPEAttention(Sam2VideoRoPEAttention):
