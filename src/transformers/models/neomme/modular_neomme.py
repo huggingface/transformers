@@ -38,6 +38,7 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
+from ...utils.constants import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..gemma4.modeling_gemma4 import Gemma4RMSNorm
@@ -118,8 +119,8 @@ class NeoMMEImageProcessor(TorchvisionBackend):
     valid_kwargs = NeoMMEImageProcessorKwargs
 
     resample = PILImageResampling.BILINEAR
-    image_mean = [0.5, 0.5, 0.5]
-    image_std = [0.5, 0.5, 0.5]
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
 
     do_convert_rgb = True
     do_resize = True

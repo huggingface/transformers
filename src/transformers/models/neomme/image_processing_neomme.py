@@ -28,6 +28,7 @@ from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
+from ...utils.constants import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 
 
 class NeoMMEImageProcessorKwargs(ImagesKwargs, total=False):
@@ -111,8 +112,8 @@ class NeoMMEImageProcessor(TorchvisionBackend):
     valid_kwargs = NeoMMEImageProcessorKwargs
 
     resample = PILImageResampling.BILINEAR
-    image_mean = [0.5, 0.5, 0.5]
-    image_std = [0.5, 0.5, 0.5]
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
 
     do_convert_rgb = True
     do_resize = True
