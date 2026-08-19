@@ -37,7 +37,7 @@ from ..mimi.modeling_mimi import (
     MimiSplitResidualVectorQuantizer,
     MimiVectorQuantization,
 )
-from ..qwen2_5_omni.modeling_qwen2_5_omni import SnakeBeta
+from ..qwen2_5_omni.modeling_qwen2_5_omni import Qwen2_5OmniSnakeBeta
 from ..qwen3.modeling_qwen3 import Qwen3RotaryEmbedding
 from ..qwen3_omni_moe.configuration_qwen3_omni_moe import Qwen3OmniMoeCode2WavConfig
 from ..qwen3_omni_moe.modeling_qwen3_omni_moe import (
@@ -343,6 +343,10 @@ class Qwen3TTSTokenizerMultiCodebookDecoderTransformerModel(Qwen3TTSTokenizerMul
 
 
 class Qwen3TTSTokenizerMultiCodebookDecoderBlock(Qwen3OmniMoeCode2WavDecoderBlock):
+    pass
+
+
+class Qwen3TTSTokenizerMultiCodebookSnakeBeta(Qwen2_5OmniSnakeBeta):
     pass
 
 
