@@ -132,6 +132,7 @@ if is_torch_available():
         FLASH_ATTN_KERNEL_FALLBACK,
         _find_disjoint,
         _find_identical,
+        caching_allocator_warmup,
         get_total_byte_count,
     )
 
@@ -436,6 +437,28 @@ class ModelUtilsTest(TestCasePlus):
         mock_world_size.assert_not_called()
         self.assertIn(torch.device("cpu"), total_byte_count)
         self.assertGreater(total_byte_count[torch.device("cpu")], 0)
+
+    @require_torch
+    def test_caching_allocator_warmup_skips_device_that_cannot_report_free_memory(self):
+        # Some accelerators cannot answer `mem_get_info`, e.g. Intel integrated GPUs under WSL2. The warmup is only
+        # a speed optimization, so such a device must be skipped instead of bringing down the whole model loading.
+        model = BaseModel(PreTrainedConfig())
+        expanded_device_map = {name: "xpu:0" for name, _ in model.named_parameters()}
+        unsupported = RuntimeError(
+            "The device (Intel(R) Graphics [0xb080]) doesn't support querying the available free memory."
+        )
+
+        with (
+            patch.object(torch.xpu, "current_device", return_value=0),
+            patch.object(torch.xpu, "mem_get_info", side_effect=unsupported),
+            patch.object(torch.xpu, "memory_reserved", return_value=0),
+            patch.object(torch.xpu, "memory_allocated", return_value=0),
+            patch("transformers.modeling_utils.torch.empty") as mock_empty,
+        ):
+            caching_allocator_warmup(model, expanded_device_map, None)
+
+        # The device was skipped, so no pre-allocation was attempted on it
+        mock_empty.assert_not_called()
 
     def test_hub_retry(self):
         @hub_retry(max_attempts=2)

@@ -5047,7 +5047,13 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
         if device.type in ["cuda", "xpu"]:
             accelerator_module = getattr(torch, device.type)
             index = device.index if device.index is not None else accelerator_module.current_device()
-            free_device_memory, total_device_memory = accelerator_module.mem_get_info(index)
+            try:
+                free_device_memory, total_device_memory = accelerator_module.mem_get_info(index)
+            except RuntimeError:
+                # Some devices cannot report their free memory, e.g. Intel integrated GPUs under WSL2, where the
+                # driver raises `RuntimeError: The device ... doesn't support querying the available free memory`.
+                # Since the warmup is only a speed optimization, skip it instead of failing the whole model loading.
+                continue
             unused_memory = accelerator_module.memory_reserved(index) - accelerator_module.memory_allocated(index)
             # If we have reserved but unused memory, we can lower the allocation we want to make, but only if it's still
             # higher than the unused memory. This is because otherwise torch will use that unused memory when performing
