@@ -89,9 +89,7 @@ class LoadPackedFp4Experts(LoadPackedMxfp4Experts):
         self.scheme = scheme
         super().__init__(hf_quantizer, operations)
 
-    @property
-    def reverse_op(self) -> "ConversionOps":
-        return _IdentityOp()  # TODO: if the compressed tensor format becomes serializable, this will be needed
+    # TODO: if the compressed tensor format becomes serializable, a reverse op will be needed
 
 
 class DecompressExperts(ConversionOps):
