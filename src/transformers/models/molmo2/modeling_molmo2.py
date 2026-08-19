@@ -260,6 +260,7 @@ class Molmo2VisionEncoder(nn.Module):
     def __init__(self, config: Molmo2VisionConfig):
         super().__init__()
         self.config = config
+        # trf-ignore: TRF034 (false positive: Siglip2EncoderLayer subclasses GradientCheckpointingLayer)
         self.layers = nn.ModuleList([Molmo2VisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
@@ -719,6 +720,7 @@ class Molmo2TextModel(Molmo2PreTrainedModel):
         # (see `conversion_mapping.py`), so the embedding covers `vocab_size + additional_vocab_size`.
         self.embed_tokens = nn.Embedding(config.vocab_size + (config.additional_vocab_size or 0), config.hidden_size)
         self.embedding_dropout = nn.Dropout(config.embedding_dropout)
+        # trf-ignore: TRF034 (false positive: Phi3DecoderLayer subclasses GradientCheckpointingLayer)
         self.layers = nn.ModuleList(
             [Molmo2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
