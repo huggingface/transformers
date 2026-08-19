@@ -45,6 +45,7 @@ from ..exaone4_5.modeling_exaone4_5 import Exaone4_5_ForConditionalGeneration
 from ..glm4v.image_processing_glm4v import Glm4vImageProcessor, Glm4vImageProcessorKwargs
 from ..glm4v.image_processing_pil_glm4v import Glm4vImageProcessorPil
 from ..glm4v.video_processing_glm4v import Glm4vVideoProcessor
+from ..muse_glimmer.modeling_muse_glimmer import MuseGlimmerVisionModel
 from ..ovis2.modeling_ovis2 import Ovis2Model
 from ..paddleocr_vl.modeling_paddleocr_vl import PaddleOCRVisionEmbeddings
 from ..video_llama_3.modeling_video_llama_3 import (
@@ -592,7 +593,7 @@ class Ovis2_5PreTrainedModel(VideoLlama3PreTrainedModel):
 
 
 @auto_docstring(custom_intro="The Ovis2.5 vision tower, without the visual tokenizer or language model.")
-class Ovis2_5VisionModel(Ovis2_5PreTrainedModel):
+class Ovis2_5VisionModel(Ovis2_5PreTrainedModel, MuseGlimmerVisionModel):
     config: Ovis2_5VisionConfig
     main_input_name = "pixel_values"
     input_modalities = ("image", "video")
@@ -603,7 +604,7 @@ class Ovis2_5VisionModel(Ovis2_5PreTrainedModel):
     }
 
     def __init__(self, config: Ovis2_5VisionConfig):
-        super().__init__(config)
+        Ovis2_5PreTrainedModel.__init__(self, config)
         self.spatial_merge_size = config.hidden_stride
         self.window_size = config.window_size
         self.patch_size = config.patch_size
