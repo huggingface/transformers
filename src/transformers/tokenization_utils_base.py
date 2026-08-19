@@ -3046,7 +3046,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             sanitize_special_tokens (`bool`, defaults to `False`):
                 Whether to isolate message content from the chat structure, so that special tokens in
                 user-supplied content (a typed `<|im_end|>`, say) cannot act as control tokens. Message
-                content is wrapped in an `UntrustedInput` object and encoded by the
+                content is replaced by an opaque marker and encoded by the
                 tokenizer with `split_special_tokens=True`, while the special tokens the template itself
                 emits are unaffected. The text is preserved, not stripped or escaped. Requires
                 `tokenize=True`, since the guarantee is a property of the encoding rather than of the
@@ -3132,7 +3132,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                     "`sanitize_special_tokens=True` is not compatible with `return_assistant_tokens_mask`, "
                     "which needs character offsets into the rendered chat."
                 )
-            conversations = wrap_untrusted_content(conversations, self)
+            conversations, untrusted_contents = wrap_untrusted_content(conversations, self)
 
         template_kwargs = {**self.special_tokens_map, **kwargs}  # kwargs overwrite special tokens if both are present
         rendered_chat, generation_indices = render_jinja_template(
@@ -3151,10 +3151,11 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         if tokenize:
             if sanitize_special_tokens:
-                # Message content was already encoded, as ordinary tokens, by `UntrustedInput`. Only the
-                # template text around it still needs encoding, with its own control tokens kept special.
+                # Message content was already encoded, as ordinary tokens, by `wrap_untrusted_content`. Only
+                # the template text around it still needs encoding, with its own control tokens kept special.
                 input_ids = [
-                    encode_untrusted_chat(self, chat) for chat in (rendered_chat if is_batched else [rendered_chat])
+                    encode_untrusted_chat(self, chat, untrusted_contents)
+                    for chat in (rendered_chat if is_batched else [rendered_chat])
                 ]
                 if truncation and max_length is not None:
                     input_ids = [
