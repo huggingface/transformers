@@ -42,11 +42,11 @@ from ...vision_utils import (
     get_vision_window_index,
 )
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ..exaone4_5.modeling_exaone4_5 import Exaone4_5_ForConditionalGeneration
 from ..glm4v.image_processing_glm4v import Glm4vImageProcessor, Glm4vImageProcessorKwargs
 from ..glm4v.image_processing_pil_glm4v import Glm4vImageProcessorPil
 from ..glm4v.video_processing_glm4v import Glm4vVideoProcessor
 from ..ovis2.modeling_ovis2 import Ovis2Model
-from ..qwen2_vl.modeling_qwen2_vl import Qwen2VLForConditionalGeneration
 from ..video_llama_3.modeling_video_llama_3 import (
     VideoLlama3CausalLMOutputWithPast,
     VideoLlama3ModelOutputWithPast,
@@ -837,13 +837,17 @@ class Ovis2_5Model(Ovis2Model):
 
 
 @auto_docstring(custom_intro="The Ovis2.5 multimodal model with a language modeling head.")
-class Ovis2_5ForConditionalGeneration(Qwen2VLForConditionalGeneration):
+class Ovis2_5ForConditionalGeneration(Ovis2_5PreTrainedModel, Exaone4_5_ForConditionalGeneration):
+    """Ovis2.5 multimodal conditional generation model."""
+
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: Ovis2_5Config):
-        text_config = config.get_text_config()
-        super().__init__(config)  # just to add type hint on config
-        self.lm_head = nn.Linear(text_config.hidden_size, text_config.vocab_size, bias=False)
+        super().__init__(config)
+        self.model = Ovis2_5Model(config)
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+
+        self.post_init()
 
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
         return GenerationMixin._prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs)

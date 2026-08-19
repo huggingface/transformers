@@ -767,13 +767,16 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
 
 @auto_docstring(custom_intro="The Ovis2.5 multimodal model with a language modeling head.")
 class Ovis2_5ForConditionalGeneration(Ovis2_5PreTrainedModel, GenerationMixin):
+    """Ovis2.5 multimodal conditional generation model."""
+
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    # Reference: fix gemma3 grad acc #37208
+    accepts_loss_kwargs = False
 
     def __init__(self, config: Ovis2_5Config):
         super().__init__(config)
-        text_config = config.get_text_config()
         self.model = Ovis2_5Model(config)
-        self.lm_head = nn.Linear(text_config.hidden_size, text_config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
 
         self.post_init()
 
@@ -862,25 +865,17 @@ class Ovis2_5ForConditionalGeneration(Ovis2_5PreTrainedModel, GenerationMixin):
             video_hidden_states=outputs.video_hidden_states,
         )
 
-    def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
-        return super()._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
-
     def _get_image_nums_and_video_nums(
         self,
         input_ids: torch.LongTensor | None,
         inputs_embeds: torch.FloatTensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Get the number of images and videos for each sample to calculate the separation length of the sample tensor.
-        These parameters are not passed through the processor to avoid unpredictable impacts from interface modifications.
+        Returns per-sample counts of image and video placeholder tokens.
 
-        Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary.
-
-        Returns:
-            image_nums (`torch.LongTensor` of shape `(batch_size, num_images_sample)`)
-            video_nums (`torch.LongTensor` of shape `(batch_size, num_videos_sample)`)
+        If `inputs_embeds` are provided, placeholder positions are inferred by comparing against
+        the embedding vectors of `image_token_id` and `video_token_id`. Otherwise, counts are
+        computed directly from `input_ids`.
         """
         # Generation creates placeholder `input_ids` when the caller supplies
         # only `inputs_embeds`. Prefer the real embeddings whenever they are
@@ -998,6 +993,15 @@ class Ovis2_5ForConditionalGeneration(Ovis2_5PreTrainedModel, GenerationMixin):
             model_kwargs["encoder_outputs"] = _expand_dict_for_generation(model_kwargs["encoder_outputs"])
 
         return input_ids, model_kwargs
+
+    def prepare_inputs_for_generation(self, input_ids, **kwargs):
+        model_inputs = super().prepare_inputs_for_generation(input_ids, **kwargs)
+        # Force recomputation of 2D-RoPE and ignore rope_deltas
+        model_inputs["position_ids"] = None
+        return model_inputs
+
+    def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
+        return super()._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
 
 
 __all__ = ["Ovis2_5VisionModel", "Ovis2_5PreTrainedModel", "Ovis2_5Model", "Ovis2_5ForConditionalGeneration"]
