@@ -19,7 +19,7 @@ from unittest.mock import patch
 
 import pytest
 from datasets import load_dataset
-from huggingface_hub.errors import StrictDataclassClassValidationError
+from huggingface_hub.errors import StrictDataclassClassValidationError, StrictDataclassFieldValidationError
 
 from transformers import NeoMMEConfig, is_torch_available
 from transformers.modeling_outputs import BaseModelOutput
@@ -255,9 +255,10 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     def test_grouped_query_heads_validated(self):
-        for num_key_value_heads in (0, 3):
-            with self.assertRaisesRegex(StrictDataclassClassValidationError, "must divide"):
-                NeoMMEConfig(num_attention_heads=4, num_key_value_heads=num_key_value_heads)
+        with self.assertRaises(StrictDataclassFieldValidationError):
+            NeoMMEConfig(num_attention_heads=4, num_key_value_heads=0)
+        with self.assertRaisesRegex(StrictDataclassClassValidationError, "must divide"):
+            NeoMMEConfig(num_attention_heads=4, num_key_value_heads=3)
 
     def test_layer_types_validated(self):
         base = {"num_hidden_layers": 3}
@@ -313,7 +314,7 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
             "patch_size",
             "embedding_dim",
         ):
-            with self.subTest(name=name), self.assertRaises((ValueError, StrictDataclassClassValidationError)):
+            with self.subTest(name=name), self.assertRaises(StrictDataclassFieldValidationError):
                 NeoMMEConfig(**{name: 0})
 
     def test_legacy_rope_scaling_type_alias(self):

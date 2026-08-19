@@ -20,6 +20,7 @@ from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, logging
+from ...utils.type_validators import interval
 
 
 logger = logging.get_logger(__name__)
@@ -64,17 +65,17 @@ class NeoMMEConfig(PreTrainedConfig):
     default_theta = {"full_attention": 1_000_000.0, "sliding_attention": 10_000.0}
     default_partial_rotary_factor = {"full_attention": 0.25, "sliding_attention": 1.0}
 
-    vocab_size: int = 131072
-    embedding_rank: int = 256
-    hidden_size: int = 1024
-    intermediate_size: int = 3584
+    vocab_size: int = interval(min=1)(default=131072)
+    embedding_rank: int = interval(min=1)(default=256)
+    hidden_size: int = interval(min=1)(default=1024)
+    intermediate_size: int = interval(min=1)(default=3584)
     hidden_act: Literal["relu2"] = "relu2"
     mlp_bias: bool = False
-    num_hidden_layers: int = 17
-    num_attention_heads: int = 16
-    num_key_value_heads: int = 4
-    head_dim: int = 64
-    max_position_embeddings: int = 16384
+    num_hidden_layers: int = interval(min=1)(default=17)
+    num_attention_heads: int = interval(min=1)(default=16)
+    num_key_value_heads: int = interval(min=1)(default=4)
+    head_dim: int = interval(min=1)(default=64)
+    max_position_embeddings: int = interval(min=1)(default=16384)
     norm_eps: float = 1e-6
     initializer_range: float = 0.02
     attention_dropout: float | int = 0.0
@@ -86,8 +87,8 @@ class NeoMMEConfig(PreTrainedConfig):
 
     residual_scale: float | None = None
 
-    patch_size: int = 32
-    embedding_dim: int = 128
+    patch_size: int = interval(min=1)(default=32)
+    embedding_dim: int = interval(min=1)(default=128)
 
     pad_token_id: int | None = 0
     document_token_id: int | None = 5
@@ -95,8 +96,6 @@ class NeoMMEConfig(PreTrainedConfig):
     tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
-        if self.num_hidden_layers <= 0:
-            raise ValueError("num_hidden_layers must be positive")
         if self.layer_types is None:
             self.layer_types = [
                 "full_attention" if (i + 1) % 6 == 0 or i == self.num_hidden_layers - 1 else "sliding_attention"
@@ -111,23 +110,8 @@ class NeoMMEConfig(PreTrainedConfig):
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
-        if self.num_key_value_heads <= 0 or self.num_attention_heads % self.num_key_value_heads:
+        if self.num_attention_heads % self.num_key_value_heads:
             raise ValueError("num_key_value_heads must divide num_attention_heads")
-
-        for name in (
-            "vocab_size",
-            "embedding_rank",
-            "hidden_size",
-            "intermediate_size",
-            "num_attention_heads",
-            "head_dim",
-            "max_position_embeddings",
-            "patch_size",
-        ):
-            if getattr(self, name) <= 0:
-                raise ValueError(f"{name} must be positive")
-        if self.embedding_dim <= 0:
-            raise ValueError("embedding_dim must be positive")
 
         if not 0 < self.sliding_window_short <= self.sliding_window_long:
             raise ValueError(
