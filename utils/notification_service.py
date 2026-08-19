@@ -1178,6 +1178,8 @@ if __name__ == "__main__":
     print(f"[DEBUG] job_name: {job_name}")
     print(f"[DEBUG] report_name_prefix: {report_name_prefix}")
     print(f"[DEBUG] job_matrix: {job_matrix}")
+    print(f"[DEBUG] os.getcwd(): {os.getcwd()}")
+    print(f"[DEBUG] os.listdir() (all): {sorted(os.listdir())}")
     print(f"[DEBUG] available_artifacts keys: {sorted(available_artifacts.keys())}")
     for matrix_name in job_matrix:
         key = f"{report_name_prefix}_{matrix_name}_test_reports"
