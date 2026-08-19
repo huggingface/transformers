@@ -368,7 +368,14 @@ class Molmo2Adapter(PreTrainedModel):
         self.image_feature_dropout = nn.Dropout(config.image_feature_dropout)
         self.post_init()
 
+    @auto_docstring
     def forward(self, image_features: torch.Tensor, pooled_patches_idx: torch.Tensor, **kwargs) -> torch.Tensor:
+        r"""
+        image_features (`torch.Tensor` of shape `(num_crops, num_patches, hidden_size * len(vit_layers))`):
+            Concatenated intermediate ViT features of every crop.
+        pooled_patches_idx (`torch.Tensor` of shape `(num_tokens, pool_h * pool_w)`):
+            Indices into the flattened patch sequence pooled by each output token; `-1` marks padding slots.
+        """
         image_features = self.image_feature_dropout(image_features)
         flat_features = image_features.reshape(-1, image_features.shape[-1])
 
@@ -718,6 +725,8 @@ class Molmo2TextModel(Molmo2PreTrainedModel):
         self.norm = Molmo2RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.rotary_emb = Molmo2RotaryEmbedding(config)
         self.rotary_emb_unscaled = (
+            # CODEPATH: O-7B ships `rope_scaling_layers` (YaRN on that subset, plain RoPE elsewhere); 4B/8B leave
+            # it None and use the single scaled table for every layer.
             Molmo2RotaryEmbedding(config, scaled=False) if config.rope_scaling_layers is not None else None
         )
         scaling_layers = config.rope_scaling_layers
