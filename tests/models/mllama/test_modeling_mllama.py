@@ -28,7 +28,7 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
-from transformers.cache_utils import Cache
+from transformers.cache_utils import Cache, StaticCache, StaticLayer
 from transformers.models.mllama.configuration_mllama import MllamaTextConfig
 from transformers.testing_utils import (
     Expectations,
@@ -432,6 +432,39 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
             del inputs["pixel_values"]
 
             model.generate(input_ids, use_cache=True)
+
+    def test_generate_with_static_cache_and_images(self):
+        """
+        Tests that generation with a `StaticCache` works. The cross-attention layers cache the vision encoder states,
+        so they must be preallocated from the image length rather than from `max_cache_len` like the self-attention
+        layers: sizing them from `max_cache_len` used to write out of bounds and crash generation.
+        """
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        cross_attention_layers = self.model_tester.text_config["cross_attention_layers"]
+
+        for model_class in self.all_generative_model_classes:
+            model = model_class(config).to(torch_device).eval()
+            inputs = self._prepare_for_class(inputs_dict, model_class)
+
+            output = model.generate(
+                **inputs,
+                do_sample=False,
+                max_new_tokens=4,
+                cache_implementation="static",
+                return_dict_in_generate=True,
+            )
+
+            past_key_values = output.past_key_values
+            self.assertIsInstance(past_key_values, StaticCache)
+            self.assertTrue(past_key_values.is_compileable)
+            # `generate` sizes the static cache to `max_length - 1`
+            max_cache_len = inputs["input_ids"].shape[1] + 4 - 1
+            for layer_idx, layer in enumerate(past_key_values.layers):
+                self.assertIsInstance(layer, StaticLayer)
+                expected_length = (
+                    self.model_tester.image_length if layer_idx in cross_attention_layers else max_cache_len
+                )
+                self.assertEqual(layer.keys.shape[-2], expected_length)
 
     @pytest.mark.generate
     def test_left_padding_compatibility(self):

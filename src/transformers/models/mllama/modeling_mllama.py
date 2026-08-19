@@ -22,7 +22,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache
+from ...cache_utils import Cache, DynamicCache, StaticLayer
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -769,7 +769,8 @@ class MllamaPreTrainedModel(PreTrainedModel):
         "MllamaCrossAttentionDecoderLayer",
         "MllamaSelfAttentionDecoderLayer",
     ]
-    _can_compile_fullgraph = False  # static cache cannot have different shapes for each layer
+    # `cross_attention_mask` gains a row at every decoding step, so `forward` never sees a stable input shape
+    _can_compile_fullgraph = False
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
@@ -782,6 +783,16 @@ class MllamaPreTrainedModel(PreTrainedModel):
         # Mllama captures everything under the `attentions` key for BC reasons.
         "attentions": [MllamaTextSelfAttention, MllamaTextCrossAttention],
     }
+
+    def _valid_auto_compile_criteria(self, *args, **kwargs) -> bool:
+        # `generate` gates auto-compilation on `Cache.is_compileable` alone, which is `True` for a `StaticCache`.
+        # Mllama appends a row to `cross_attention_mask` at every decoding step, so `forward` sees a new input shape
+        # each step and dynamo recompiles the whole graph (measured ~17x slower than eager on the 11B checkpoint).
+        # Honour `_can_compile_fullgraph` here, as its documentation states, so that only `MllamaForCausalLM` -- the
+        # text stack alone, without cross-attention -- is auto-compiled.
+        if not self._can_compile_fullgraph:
+            return False
+        return super()._valid_auto_compile_criteria(*args, **kwargs)
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -1516,6 +1527,26 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+    def _prepare_static_cache(self, *args, model_kwargs, **kwargs) -> Cache:
+        cache = super()._prepare_static_cache(*args, model_kwargs=model_kwargs, **kwargs)
+        # `StaticCache` sizes every layer from `max_cache_len`, which counts text tokens and is therefore only correct
+        # for the self-attention layers. Mllama interleaves cross-attention layers in the same layer list, and those
+        # cache the vision states, whose length is `num_images * max_num_tiles * num_patches` instead. Re-allocate them
+        # with that length, mirroring the `is_encoder_decoder` branch of the parent, which likewise sizes the
+        # cross-attention cache from the encoder output rather than from `max_cache_len` -- mllama cannot reuse
+        # `EncoderDecoderCache` directly because it has a single interleaved stack instead of two separate ones.
+        vision_config = self.config.vision_config
+        pixel_values = model_kwargs.get("pixel_values")
+        num_images = pixel_values.shape[1] if pixel_values is not None else 1
+        num_patches = (vision_config.image_size // vision_config.patch_size) ** 2 + 1
+        cross_attention_cache_len = num_images * vision_config.max_num_tiles * num_patches
+
+        cross_attention_layers = set(self.config.get_text_config(decoder=True).cross_attention_layers)
+        for layer_idx in range(len(cache.layers)):
+            if layer_idx in cross_attention_layers:
+                cache.layers[layer_idx] = StaticLayer(max_cache_len=cross_attention_cache_len)
+        return cache
 
     def prepare_inputs_for_generation(
         self,
