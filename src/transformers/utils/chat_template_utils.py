@@ -631,8 +631,8 @@ class Chat:
         self.messages = messages
 
 
-# NUL-delimited digits: NUL cannot appear in a chat template or in rendered text, so a marker can never be
-# confused with template output, and digits survive template filters like `trim` or `upper` unchanged
+# NUL-delimited digits: content holding a NUL is always isolated below, so an unmarked span can never carry
+# one and a marker is never confused with template output. Digits survive filters like `trim` or `upper`
 _UNTRUSTED_SPAN = re.compile("\x00([0-9]+)\x00")
 
 

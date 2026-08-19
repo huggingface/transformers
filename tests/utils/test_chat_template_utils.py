@@ -764,6 +764,13 @@ class ChatInputSanitizationTest(unittest.TestCase):
         self.assertEqual(decoded.count("secret"), 1)
         self.assertIn("\x000\x00", decoded)
 
+    def test_nul_typed_by_a_user_is_text_like_any_other(self):
+        """A NUL is untrusted content, not a placeholder: it forces isolation and survives the round trip."""
+        chat = [{"role": "user", "content": "Hey\x00"}]
+        sanitized = self.apply(chat, sanitize_special_tokens=True)
+        self.assertEqual(sanitized.count(self.bos_id), 1)
+        self.assertIn("Hey\x00", self.tokenizer.decode(sanitized))
+
     def test_multimodal_injected_image_token_stays_text(self):
         """Only the image placeholder the template emits is a control token; ones typed by the user are not."""
         template = (
