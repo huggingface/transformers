@@ -231,9 +231,18 @@ def write_tokenizer(input_dir, output_dir):
         try:
             import pickle
 
+from ...utils import strtobool
+
             from transformers.integrations.tiktoken import convert_tiktoken_to_fast
 
             with open(tokenizer_pkl, "rb") as f:
+            if not strtobool(os.environ.get("TRUST_REMOTE_CODE", "False")):
+                raise ValueError(
+                    "This part uses `pickle.load` which is insecure and will execute arbitrary code that is potentially "
+                    "malicious. It's recommended to never unpickle data that could have come from an untrusted source, or "
+                    "that could have been tampered with. If you already verified the pickle data and decided to use it, "
+                    "you can set the environment variable `TRUST_REMOTE_CODE` to `True` to allow it."
+                )
                 tok_pkl = pickle.load(f)
             convert_tiktoken_to_fast(tok_pkl, output_dir)
             print("Converted tokenizer.pkl to HuggingFace format")
