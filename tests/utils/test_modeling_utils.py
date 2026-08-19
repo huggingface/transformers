@@ -412,6 +412,43 @@ def check_models_equal(model1, model2):
 
 @require_torch
 class ModelUtilsTest(TestCasePlus):
+    def test_init_weights_skips_embedding_without_weight(self):
+        # Pack-quantized embedding modules (e.g. compressed-tensors NVFP4) do not expose a
+        # dense `.weight`; their data lives in packed parameters. `_init_weights` must skip
+        # them instead of crashing, and must still initialize regular embeddings.
+        #
+        # NB: the packed parameters are load-bearing for this test. An embedding with *no*
+        # parameters at all is skipped earlier, by the `is_custom_code` guard in
+        # `_initialize_weights` (`all()` over an empty parameter list is vacuously True), so
+        # it would never reach the `nn.Embedding` branch and the test would pass unpatched.
+        class PackQuantizedEmbedding(nn.Embedding):
+            def __init__(self, num_embeddings, embedding_dim):
+                super().__init__(num_embeddings, embedding_dim)
+                del self.weight
+                self.weight_packed = nn.Parameter(torch.zeros(num_embeddings, embedding_dim // 2))
+                self.weight_scale = nn.Parameter(torch.ones(num_embeddings, 1))
+
+        class ModelWithPackQuantizedEmbedding(PreTrainedModel):
+            config_class = PreTrainedConfig
+
+            def __init__(self, config):
+                super().__init__(config)
+                self.packed = PackQuantizedEmbedding(8, 4)
+                self.regular = nn.Embedding(8, 4, padding_idx=0)
+                self.post_init()  # runs _init_weights; must not raise on the packed embedding
+
+        config = PreTrainedConfig(tie_word_embeddings=False)
+        model = ModelWithPackQuantizedEmbedding(config)
+
+        # the packed embedding is left exactly as-is
+        self.assertFalse(hasattr(model.packed, "weight"))
+        self.assertTrue((model.packed.weight_packed == 0).all())
+        self.assertTrue((model.packed.weight_scale == 1).all())
+
+        # the regular embedding is still initialized as before
+        self.assertTrue(torch.isfinite(model.regular.weight).all())
+        self.assertTrue((model.regular.weight[0] == 0).all())  # padding_idx zeroed
+
     def setUp(self):
         self.old_dtype = torch.get_default_dtype()
         super().setUp()
