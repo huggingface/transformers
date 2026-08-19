@@ -773,6 +773,7 @@ class Cosmos3EdgePatchMerger(nn.Module):
 class Cosmos3EdgeModel(Cosmos3EdgePreTrainedModel, MultiModalPreTrainedModelMixin):
     base_model_prefix = "model"
     accepts_loss_kwargs = False
+
     config_class = Cosmos3EdgeConfig
 
     def __init__(self, config: Cosmos3EdgeConfig):
@@ -918,6 +919,16 @@ class Cosmos3EdgeModel(Cosmos3EdgePreTrainedModel, MultiModalPreTrainedModelMixi
             attentions=outputs.attentions,
         )
 
+    def get_rope_index(self, input_ids, mm_token_type_ids, image_grid_thw=None, video_grid_thw=None, **kwargs):
+        # The processor separates video frames with timestamp text, so each frame is its own visual span:
+        # lay a video out one `T=1` frame grid at a time.
+        if video_grid_thw is not None:
+            video_grid_thw = torch.repeat_interleave(video_grid_thw, video_grid_thw[:, 0], dim=0)
+            video_grid_thw[:, 0] = 1
+        return super().get_rope_index(
+            input_ids, mm_token_type_ids, image_grid_thw=image_grid_thw, video_grid_thw=video_grid_thw, **kwargs
+        )
+
 
 class Cosmos3EdgeForConditionalGeneration(Cosmos3EdgePreTrainedModel, MultiModalGenerationMixin, GenerationMixin):
     _tied_weights_keys = {}
@@ -1045,6 +1056,57 @@ class Cosmos3EdgeForConditionalGeneration(Cosmos3EdgePreTrainedModel, MultiModal
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+    def _get_image_nums_and_video_nums(
+        self,
+        input_ids: torch.LongTensor | None,
+        inputs_embeds: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Get the number of images and videos for each sample to calculate the separation length of the sample tensor.
+        These parameters are not passed through the processor to avoid unpredictable impacts from interface modifications.
+
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary.
+
+        Returns:
+            image_nums (`torch.LongTensor` of shape `(batch_size, num_images_sample)`)
+            video_nums (`torch.LongTensor` of shape `(batch_size, num_videos_sample)`)
+        """
+        image_token_id = self.config.image_token_id
+        video_token_id = self.config.video_token_id
+        vision_start_token_id = self.config.vision_start_token_id
+
+        if inputs_embeds is not None:
+            vision_start_mask = (
+                inputs_embeds
+                == self.get_input_embeddings()(
+                    torch.full((), vision_start_token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+            )[..., 0]
+            image_mask = (
+                inputs_embeds
+                == self.get_input_embeddings()(
+                    torch.full((), image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+            )[..., 0]
+            video_mask = (
+                inputs_embeds
+                == self.get_input_embeddings()(
+                    torch.full((), video_token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+            )[..., 0]
+        else:
+            vision_start_mask = input_ids == vision_start_token_id
+            image_mask = input_ids == image_token_id
+            video_mask = input_ids == video_token_id
+
+        vision_first_mask = torch.roll(vision_start_mask, shifts=1, dims=1)
+        image_nums = torch.sum(vision_first_mask & image_mask, dim=1)
+        video_nums = torch.sum(vision_first_mask & video_mask, dim=1)
+
+        return image_nums, video_nums
 
     def _expand_inputs_for_generation(
         self,

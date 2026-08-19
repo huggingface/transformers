@@ -30,6 +30,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_multimodal_utils import MultiModalPreTrainedModelMixin
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_rope_utils import RopeParameters, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -111,10 +112,6 @@ class Qwen3VLVisionConfig(PreTrainedConfig):
     in_channels: int = 3
     patch_size: int | list[int] | tuple[int, int] = 16
     spatial_merge_size: int = 2
-    # Whether the processor separates video frames with timestamp text, making each frame its own visual
-    # span: the decoder's M-RoPE positions then lay out a video one `T=1` frame at a time
-    # (`modeling_rope_utils.get_mrope_index`).
-    timestamped_video_frames: bool = True
     temporal_patch_size: int | list[int] | tuple[int, int] = 2
     out_hidden_size: int = 3584
     num_position_embeddings: int = 2304
@@ -122,7 +119,6 @@ class Qwen3VLVisionConfig(PreTrainedConfig):
     # `vision_utils.get_vision_interpolation_indices_and_weights` can be called from the config alone.
     interpolation_mode: str = "bilinear"
     interpolation_align_corners: bool = True
-    resample_before_merge: bool = False
     deepstack_visual_indexes: list[int] | tuple[int, ...] = (8, 16, 24)
     initializer_range: float = 0.02
 
@@ -206,8 +202,6 @@ class Qwen3VLConfig(PreTrainedConfig):
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
     image_token_id: int = 151655
-    # Which M-RoPE layout lays out this model's decoder position ids (`modeling_rope_utils.get_mrope_index`).
-    mrope_layout: str = "interleaved_runs"
     video_token_id: int = 151656
     vision_start_token_id: int = 151652
     vision_end_token_id: int = 151653
@@ -450,7 +444,6 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
         self.num_grid_per_side = config.num_grid_per_side
         self.interpolation_align_corners = config.interpolation_align_corners
         self.interpolation_mode = config.interpolation_mode
-        self.resample_merge_size = 1 if config.resample_before_merge else config.spatial_merge_size
 
         head_dim = config.hidden_size // config.num_heads
         self.rotary_pos_emb = Qwen3VLVisionRotaryEmbedding(head_dim // 2)
@@ -497,7 +490,7 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
             num_grid_per_side=self.num_grid_per_side,
             mode=self.interpolation_mode,
             align_corners=self.interpolation_align_corners,
-            spatial_merge_size=self.resample_merge_size,
+            spatial_merge_size=self.spatial_merge_size,
         )
         return (self.pos_embed(interp_indices) * interp_weights[:, :, None]).sum(1)
 
@@ -521,7 +514,7 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
             num_grid_per_side=self.num_grid_per_side,
             mode=self.interpolation_mode,
             align_corners=self.interpolation_align_corners,
-            spatial_merge_size=self.resample_merge_size,
+            spatial_merge_size=self.spatial_merge_size,
             kwargs=kwargs,
         )
         position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
@@ -677,6 +670,16 @@ class Qwen3VLTextModel(Qwen3VLPreTrainedModel, Qwen3Model):
 
 @auto_docstring
 class Qwen3VLModel(Qwen2VLModel):
+    def get_rope_index(self, input_ids, mm_token_type_ids, image_grid_thw=None, video_grid_thw=None, **kwargs):
+        # The processor separates video frames with timestamp text, so each frame is its own visual span:
+        # lay a video out one `T=1` frame grid at a time.
+        if video_grid_thw is not None:
+            video_grid_thw = torch.repeat_interleave(video_grid_thw, video_grid_thw[:, 0], dim=0)
+            video_grid_thw[:, 0] = 1
+        return MultiModalPreTrainedModelMixin.get_rope_index(
+            self, input_ids, mm_token_type_ids, image_grid_thw=image_grid_thw, video_grid_thw=video_grid_thw, **kwargs
+        )
+
     def __init__(self, config):
         super().__init__(config)
         self.visual = AutoModel.from_config(config.vision_config)

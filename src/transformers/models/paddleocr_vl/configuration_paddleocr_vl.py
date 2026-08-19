@@ -68,7 +68,6 @@ class PaddleOCRVisionConfig(PreTrainedConfig):
     spatial_merge_size: int = 2
     interpolation_mode: str = "bilinear"
     interpolation_align_corners: bool = True
-    resample_before_merge: bool = True
 
     @property
     def num_grid_per_side(self) -> int:
@@ -172,8 +171,6 @@ class PaddleOCRVLConfig(PreTrainedConfig):
     vision_config: dict | PreTrainedConfig | None = None
 
     image_token_id: int = 100295
-    # Which M-RoPE layout lays out this model's decoder position ids (`modeling_rope_utils.get_mrope_index`).
-    mrope_layout: str = "interleaved_runs"
     video_token_id: int = 100296
     vision_start_token_id: int = 101305
     vision_end_token_id: int = 101306

@@ -97,10 +97,6 @@ class Qwen3OmniMoeVisionEncoderConfig(PreTrainedConfig):
     in_channels: int = 3
     patch_size: int | list[int] | tuple[int, int] = 16
     spatial_merge_size: int = 2
-    # Whether the processor separates video frames with timestamp text, making each frame its own visual
-    # span: the decoder's M-RoPE positions then lay out a video one `T=1` frame at a time
-    # (`modeling_rope_utils.get_mrope_index`).
-    timestamped_video_frames: bool = True
     temporal_patch_size: int | list[int] | tuple[int, int] = 2
     out_hidden_size: int = 3584
     num_position_embeddings: int = 2304
@@ -108,7 +104,6 @@ class Qwen3OmniMoeVisionEncoderConfig(PreTrainedConfig):
     # `vision_utils.get_vision_interpolation_indices_and_weights` can be called from the config alone.
     interpolation_mode: str = "bilinear"
     interpolation_align_corners: bool = True
-    resample_before_merge: bool = False
     deepstack_visual_indexes: list[int] | tuple[int, ...] = (8, 16, 24)
     initializer_range: float = 0.02
 
@@ -242,7 +237,6 @@ class Qwen3OmniMoeThinkerConfig(PreTrainedConfig):
     user_token_id: int = 872
     initializer_range: float = 0.02
     tie_word_embeddings: bool = False
-    mrope_layout: str = "audio_merged"
 
     audio_token_id: int = 151646
     image_token_id: int = 151655
@@ -502,7 +496,6 @@ class Qwen3OmniMoeTalkerConfig(PreTrainedConfig):
     vision_start_token_id: int = 151652
     position_id_per_seconds: int = 25
     audio_start_token_id: int = 151669
-    mrope_layout: str = "audio_merged"
     speaker_id: dict | None = None
     initializer_range: float = 0.02
     tie_word_embeddings: bool = False

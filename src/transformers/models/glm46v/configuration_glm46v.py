@@ -59,8 +59,6 @@ class Glm46VConfig(PreTrainedConfig):
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
     image_token_id: int = 151343
-    # Which M-RoPE layout lays out this model's decoder position ids (`modeling_rope_utils.get_mrope_index`).
-    mrope_layout: str = "interleaved_runs"
     video_token_id: int = 151344
     image_start_token_id: int = 151339
     image_end_token_id: int = 151340

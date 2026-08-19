@@ -910,7 +910,6 @@ class MuseGlimmerVisionPatchEmbedder(PaddleOCRVisionEmbeddings):
         self.interpolation_mode = config.interpolation_mode
         self.interpolation_align_corners = config.interpolation_align_corners
         self.interpolation_padding = config.interpolation_padding
-        self.resample_merge_size = 1 if config.resample_before_merge else config.spatial_merge_size
 
     def forward(
         self,
@@ -933,7 +932,8 @@ class MuseGlimmerVisionPatchEmbedder(PaddleOCRVisionEmbeddings):
             num_grid_per_side=self.num_grid_per_side,
             mode=self.interpolation_mode,
             align_corners=self.interpolation_align_corners,
-            spatial_merge_size=self.resample_merge_size,
+            # the learned position grid is resampled *before* the spatial merge — indices over the unmerged grid
+            spatial_merge_size=1,
             padding=self.interpolation_padding,
             kwargs=kwargs,
         )

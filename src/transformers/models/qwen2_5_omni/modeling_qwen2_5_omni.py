@@ -19,6 +19,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import itertools
 import math
 import warnings
 from collections.abc import Callable
@@ -39,7 +40,12 @@ from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_multimodal_utils import get_mrope_index, get_mrope_text_positions
+from ...modeling_multimodal_utils import (
+    _mrope_place_positions,
+    _mrope_positions_block,
+    get_mrope_text_positions,
+    get_mrope_vision_positions,
+)
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
@@ -159,6 +165,198 @@ class Qwen2_5OmniPreTrainedModel(PreTrainedModel):
             init.copy_(module.inv_freq, inv_freq)
 
 
+def _mrope_audio_length_pooled(audio_seqlen: torch.Tensor | int) -> torch.Tensor | int:
+    """Decoder tokens one audio takes in the chunked layout: two stride-2 convs, then a stride-2 pooler."""
+    return ((audio_seqlen - 1) // 2 + 1 - 2) // 2 + 1
+
+
+def _mrope_temporal_chunks(
+    temporal_positions: torch.Tensor, positions_per_chunk: int, start_position: int | torch.Tensor
+) -> list[tuple[int, int]]:
+    """`(start, end)` slices cutting a monotonic temporal axis into successive `positions_per_chunk` ranges.
+
+    Used to interleave a video and its own audio track in time: both are cut at the same chunk boundaries
+    (`position_id_per_seconds * seconds_per_chunk` positions ≈ one chunk of wall-clock time), then emitted
+    chunk by chunk. `start_position` is the span's own origin, subtracted before chunking.
+    """
+    chunks = []
+    chunk_start, chunk_index = 0, 1
+    for index in range(len(temporal_positions)):
+        if temporal_positions[index] - start_position >= chunk_index * positions_per_chunk:
+            chunks.append((chunk_start, index))
+            chunk_start = index
+            chunk_index += 1
+    chunks.append((chunk_start, len(temporal_positions)))
+    return chunks
+
+
+def _mrope_index_audio_chunked(
+    input_ids: torch.LongTensor,
+    mm_token_type_ids: torch.IntTensor | None = None,
+    *,
+    spatial_merge_size: int,
+    image_token_id: int,
+    video_token_id: int,
+    audio_token_id: int,
+    vision_start_token_id: int,
+    audio_start_token_id: int,
+    position_id_per_seconds: float,
+    seconds_per_chunk: float,
+    attention_mask: torch.Tensor | None = None,
+    image_grid_thw: torch.LongTensor | None = None,
+    video_grid_thw: torch.LongTensor | None = None,
+    second_per_grid_ts: torch.Tensor | None = None,
+    audio_seqlens: torch.LongTensor | None = None,
+    use_audio_in_video: bool = False,
+    **unused,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Qwen2.5-Omni's M-RoPE: image/video/audio spans located by their placeholder tokens (no
+    `mm_token_type_ids`), audio 1D in time, vision 3D, the temporal axis counting
+    `position_id_per_seconds` per second of media. With `use_audio_in_video`, a video and its soundtrack
+    share one span, interleaved in `seconds_per_chunk` chunks.
+    """
+    image_idx, video_idx, audio_idx = 0, 0, 0
+
+    def positions_for_sequence(token_ids, _token_types):
+        nonlocal image_idx, video_idx, audio_idx
+        device = token_ids.device
+        input_tokens = token_ids.tolist()
+        blocks = []
+
+        def next_position():
+            return blocks[-1].max() + 1 if blocks else 0
+
+        def block(length, start_position=None):
+            start_position = next_position() if start_position is None else start_position
+            return _mrope_positions_block(length, start_position, device=device)
+
+        vision_start_indices = torch.argwhere(token_ids == vision_start_token_id).squeeze(1)
+        vision_tokens = token_ids[vision_start_indices + 1]
+        num_audios = (token_ids == audio_start_token_id).sum()
+        num_images = (vision_tokens == image_token_id).sum()
+        num_videos = (
+            (vision_tokens == audio_start_token_id).sum()
+            if use_audio_in_video
+            else (vision_tokens == video_token_id).sum()
+        )
+        remain_images, remain_videos, remain_audios = num_images, num_videos, num_audios
+        num_spans = num_images + num_audios if use_audio_in_video else num_images + num_videos + num_audios
+
+        st = 0
+        for _ in range(num_spans):
+            unreachable = len(input_tokens) + 1
+            ed_image = (
+                input_tokens.index(image_token_id, st)
+                if image_token_id in input_tokens and remain_images > 0
+                else unreachable
+            )
+            ed_video = (
+                input_tokens.index(video_token_id, st)
+                if video_token_id in input_tokens and remain_videos > 0
+                else unreachable
+            )
+            ed_audio = (
+                input_tokens.index(audio_token_id, st)
+                if audio_token_id in input_tokens and remain_audios > 0
+                else unreachable
+            )
+            min_ed = min(ed_image, ed_video, ed_audio)
+            # the span's own opening token sits between the text run and the placeholders (two of them for
+            # audio-in-video, which opens with both a vision and an audio start token)
+            text_len = min_ed - st - (2 if min_ed == ed_video and use_audio_in_video else 1)
+            if text_len != 0:
+                blocks.append(block(text_len))
+            bos_len = eos_len = 1
+
+            if min_ed == ed_audio:
+                blocks.append(block(bos_len))
+                audio_len = _mrope_audio_length_pooled(audio_seqlens[audio_idx])
+                blocks.append(block(audio_len))
+                blocks.append(block(eos_len))
+                st += int(text_len + bos_len + audio_len + eos_len)
+                audio_idx += 1
+                remain_audios -= 1
+
+            elif min_ed == ed_image:
+                blocks.append(block(bos_len))
+                grid_thw = image_grid_thw[image_idx]
+                blocks.append(
+                    get_mrope_vision_positions(
+                        next_position(),
+                        grid_thw,
+                        spatial_merge_size=spatial_merge_size,
+                        time_interval=position_id_per_seconds,
+                        device=device,
+                    )
+                )
+                image_len = grid_thw.prod() // (spatial_merge_size**2)
+                blocks.append(block(eos_len))
+                st += int(text_len + bos_len + image_len + eos_len)
+                image_idx += 1
+                remain_images -= 1
+
+            elif min_ed == ed_video and not use_audio_in_video:
+                blocks.append(block(bos_len))
+                grid_thw = video_grid_thw[video_idx]
+                blocks.append(
+                    get_mrope_vision_positions(
+                        next_position(),
+                        grid_thw,
+                        spatial_merge_size=spatial_merge_size,
+                        time_interval=float(second_per_grid_ts[video_idx]) * position_id_per_seconds,
+                        device=device,
+                    )
+                )
+                video_len = grid_thw.prod() // (spatial_merge_size**2)
+                blocks.append(block(eos_len))
+                st += int(text_len + bos_len + video_len + eos_len)
+                video_idx += 1
+                remain_videos -= 1
+
+            elif min_ed == ed_video and use_audio_in_video:
+                bos_position = next_position()
+                blocks.append(block(bos_len, bos_position))
+                blocks.append(block(bos_len, bos_position))
+
+                span_start = next_position()
+                grid_thw = video_grid_thw[video_idx]
+                audio_len = _mrope_audio_length_pooled(audio_seqlens[audio_idx])
+                audio_positions = block(audio_len, span_start)
+                video_positions = get_mrope_vision_positions(
+                    span_start,
+                    grid_thw,
+                    spatial_merge_size=spatial_merge_size,
+                    time_interval=float(second_per_grid_ts[video_idx]) * position_id_per_seconds,
+                    device=device,
+                )
+                positions_per_chunk = int(position_id_per_seconds * seconds_per_chunk)
+                video_chunks = _mrope_temporal_chunks(video_positions[0], positions_per_chunk, span_start)
+                audio_chunks = _mrope_temporal_chunks(audio_positions[0], positions_per_chunk, span_start)
+                for video_chunk, audio_chunk in itertools.zip_longest(video_chunks, audio_chunks):
+                    if video_chunk is not None:
+                        blocks.append(video_positions[:, video_chunk[0] : video_chunk[1]])
+                    if audio_chunk is not None:
+                        blocks.append(audio_positions[:, audio_chunk[0] : audio_chunk[1]])
+                video_len = grid_thw.prod() // (spatial_merge_size**2)
+
+                eos_position = next_position()
+                blocks.append(block(eos_len, eos_position))
+                blocks.append(block(eos_len, eos_position))
+                st += int(text_len + 2 * bos_len + audio_len + video_len + 2 * eos_len)
+                audio_idx += 1
+                video_idx += 1
+                remain_videos -= 1
+                remain_audios -= 1
+
+        if st < len(input_tokens):
+            blocks.append(block(len(input_tokens) - st))
+        return torch.cat(blocks, dim=1).reshape(3, -1)
+
+    return _mrope_place_positions(
+        input_ids, mm_token_type_ids, 3, attention_mask, positions_for_sequence, padded_position=1
+    )
+
+
 class Qwen2_5OmniPreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedModel):
     input_modalities = ("image", "video", "audio", "text")
 
@@ -175,7 +373,7 @@ class Qwen2_5OmniPreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedMo
         """
         Calculate the 3D rope index for a `vision + audio + text` sequence: vision spans use 3D RoPE
         (temporal, height, width) and audio spans are laid out along the temporal axis, interleaved with the
-        video they belong to when `use_audio_in_video` (see [`~modeling_rope_utils.get_mrope_index`]). A
+        video they belong to when `use_audio_in_video` (`_mrope_index_audio_chunked`). A
         sequence with no vision falls back to plain 1D positions on all three axes.
 
         Args:
@@ -200,9 +398,16 @@ class Qwen2_5OmniPreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedMo
         """
         if input_ids is None or (image_grid_thw is None and video_grid_thw is None):
             return get_mrope_text_positions(attention_mask)
-        return get_mrope_index(
-            self.config,
+        return _mrope_index_audio_chunked(
             input_ids,
+            spatial_merge_size=self.config.vision_config.spatial_merge_size,
+            image_token_id=self.config.image_token_id,
+            video_token_id=self.config.video_token_id,
+            audio_token_id=self.config.audio_token_id,
+            vision_start_token_id=self.config.vision_start_token_id,
+            audio_start_token_id=self.config.audio_start_token_id,
+            position_id_per_seconds=self.config.position_id_per_seconds,
+            seconds_per_chunk=self.config.seconds_per_chunk,
             attention_mask=attention_mask,
             image_grid_thw=image_grid_thw,
             video_grid_thw=video_grid_thw,
@@ -212,18 +417,19 @@ class Qwen2_5OmniPreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedMo
         )
 
 
-############################
-#      Start Thinker       #
-############################
-
-
 @auto_docstring
 @dataclass
 class Qwen2_5OmniThinkerCausalLMOutputWithPast(CausalLMOutputWithPast):
-    r"""
-    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-        The rope index difference between sequence length and multimodal rope.
-        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
+    """3-axis M-RoPE over image, video **and audio** spans, audio-in-video interleaved in time chunks.
+
+    Qwen2.5-Omni's layout. Spans are located by scanning `input_ids` for placeholder tokens rather than by
+    grouping `mm_token_type_ids` (which this family does not produce): at each step the *nearest* upcoming
+    image/video/audio placeholder wins, and its span contributes a one-position `bos` block, the modality's
+    own positions, and a one-position `eos` block, each starting one past the previous block's maximum.
+    Audio is 1D in time, images and videos are 3D (see [`get_mrope_vision_positions`]), and the temporal axis
+    counts `position_id_per_seconds` positions per second of media. With `use_audio_in_video`, a video and
+    its soundtrack share one span: both are cut into `seconds_per_chunk` chunks by
+    [`_mrope_temporal_chunks`] and emitted video-chunk-then-audio-chunk, wrapped in doubled bos/eos blocks.
     """
 
     rope_deltas: torch.LongTensor | None = None

@@ -272,7 +272,6 @@ class Qwen2_5OmniThinkerConfig(PreTrainedConfig):
     user_token_id: int = 872
     initializer_range: float = 0.02
     tie_word_embeddings: bool = False
-    mrope_layout: str = "audio_chunked"
 
     def __post_init__(self, **kwargs):
         if isinstance(self.vision_config, dict):
@@ -386,7 +385,6 @@ class Qwen2_5OmniTalkerConfig(PreTrainedConfig):
     audio_end_token_id: int = 151648
     initializer_range: float = 0.02
     spatial_merge_size: int = 2
-    mrope_layout: str = "audio_chunked"
     layer_types: list[str] | None = None
     pad_token_id: int | None = None
 

@@ -55,7 +55,6 @@ class MuseGlimmerVisionConfig(PreTrainedConfig):
     hidden_act: str = "gelu"
     interpolation_mode: str = "bilinear"
     interpolation_align_corners: bool = False
-    resample_before_merge: bool = True
     # unlike kimi_k25, this encoder attends per frame rather than over the whole clip
     merge_temporal_attention: bool = False
 

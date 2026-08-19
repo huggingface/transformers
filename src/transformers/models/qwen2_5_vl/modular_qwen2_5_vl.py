@@ -29,7 +29,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_multimodal_utils import get_mrope_index
+from ...modeling_multimodal_utils import MultiModalPreTrainedModelMixin
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ProcessingKwargs, Unpack
@@ -375,8 +375,8 @@ class Qwen2_5_VLModel(Qwen2VLModel):
             position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
             mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
         """
-        return get_mrope_index(
-            self.config,
+        return MultiModalPreTrainedModelMixin.get_rope_index(
+            self,
             input_ids,
             mm_token_type_ids,
             image_grid_thw=image_grid_thw,

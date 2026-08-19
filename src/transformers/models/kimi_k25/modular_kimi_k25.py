@@ -133,7 +133,6 @@ class Kimi_K25VisionConfig(PreTrainedConfig):
     # See `Qwen3VLVisionConfig` — the same knobs, for this family's own resampling settings
     interpolation_mode: str = "bicubic"
     interpolation_align_corners: bool = False
-    resample_before_merge: bool = True
     # Packed vision attention spans all frames of a clip jointly rather than one segment per frame
     # (`vision_utils.get_vision_cu_seqlens(..., merge_temporal=...)`)
     merge_temporal_attention: bool = True
@@ -217,7 +216,6 @@ class Kimi_K25VisionPositionEmbeddings(nn.Module):
         self.num_grid_per_side = config.num_grid_per_side
         self.interpolation_align_corners = config.interpolation_align_corners
         self.interpolation_mode = config.interpolation_mode
-        self.resample_merge_size = 1 if config.resample_before_merge else config.spatial_merge_size
 
         # Time-axis pos_emb are an additive sinusoidal table, i.e. add pos to hiddens rather than rotating
         time_position_embeddings = self.compute_pos_embed()
@@ -402,7 +400,6 @@ class Kimi_K25VisionModel(Kimi_K25PreTrainedModel):
     def __init__(self, config: Kimi_K25VisionConfig):
         super().__init__(config)
         self.merge_kernel_size = config.merge_kernel_size
-        self.resample_merge_size = 1 if config.resample_before_merge else config.spatial_merge_size
         self.patch_embed = Kimi_K25VisionPatchEmbed(config)
 
         self.rotary_emb = Kimi_K25VisionRotaryEmbedding(config)
@@ -451,7 +448,7 @@ class Kimi_K25VisionModel(Kimi_K25PreTrainedModel):
             The temporal, height and width of feature shape of each image in LLM.
         """
         hidden_states = self.patch_embed(pixel_values, grid_thw=grid_thw, **kwargs)
-        position_ids = get_vision_position_ids(grid_thw, spatial_merge_size=self.resample_merge_size, kwargs=kwargs)
+        position_ids = get_vision_position_ids(grid_thw, spatial_merge_size=1, kwargs=kwargs)
         position_ids = position_ids.transpose(0, 1).flip(0)  # (2, positions)
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 

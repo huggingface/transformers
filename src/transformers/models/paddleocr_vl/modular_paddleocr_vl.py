@@ -280,7 +280,6 @@ class PaddleOCRVisionConfig(SiglipVisionConfig):
     spatial_merge_size: int = 2
     interpolation_mode: str = "bilinear"
     interpolation_align_corners: bool = True
-    resample_before_merge: bool = True
 
     @property
     def num_grid_per_side(self) -> int:
@@ -494,7 +493,6 @@ class PaddleOCRVisionEmbeddings(SiglipVisionEmbeddings):
         self.num_grid_per_side = config.num_grid_per_side
         self.interpolation_align_corners = config.interpolation_align_corners
         self.interpolation_mode = config.interpolation_mode
-        self.resample_merge_size = 1 if config.resample_before_merge else config.spatial_merge_size
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         warnings.warn(
@@ -509,7 +507,8 @@ class PaddleOCRVisionEmbeddings(SiglipVisionEmbeddings):
             num_grid_per_side=self.num_grid_per_side,
             mode=self.interpolation_mode,
             align_corners=self.interpolation_align_corners,
-            spatial_merge_size=self.resample_merge_size,
+            # the learned position grid is resampled *before* the spatial merge — indices over the unmerged grid
+            spatial_merge_size=1,
         )
         return (self.position_embedding(interp_indices) * interp_weights[:, :, None]).sum(1).unsqueeze(0)
 
@@ -538,7 +537,8 @@ class PaddleOCRVisionEmbeddings(SiglipVisionEmbeddings):
             num_grid_per_side=self.num_grid_per_side,
             mode=self.interpolation_mode,
             align_corners=self.interpolation_align_corners,
-            spatial_merge_size=self.resample_merge_size,
+            # the learned position grid is resampled *before* the spatial merge — indices over the unmerged grid
+            spatial_merge_size=1,
             kwargs=kwargs,
         )
         pos_embeds = (self.position_embedding(interp_indices) * interp_weights[:, :, None]).sum(1)

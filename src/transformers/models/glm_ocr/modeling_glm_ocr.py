@@ -802,6 +802,7 @@ class GlmOcrModel(GlmOcrPreTrainedModel, MultiModalPreTrainedModelMixin):
     base_model_prefix = "model"
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
+
     _no_split_modules = ["GlmOcrTextDecoderLayer", "GlmOcrVisionBlock"]
 
     def __init__(self, config):
@@ -961,6 +962,16 @@ class GlmOcrModel(GlmOcrPreTrainedModel, MultiModalPreTrainedModelMixin):
             rope_deltas=self.rope_deltas,
         )
 
+    def get_rope_index(self, input_ids, mm_token_type_ids, image_grid_thw=None, video_grid_thw=None, **kwargs):
+        # The processor separates video frames with timestamp text, so each frame is its own visual span:
+        # lay a video out one `T=1` frame grid at a time.
+        if video_grid_thw is not None:
+            video_grid_thw = torch.repeat_interleave(video_grid_thw, video_grid_thw[:, 0], dim=0)
+            video_grid_thw[:, 0] = 1
+        return super().get_rope_index(
+            input_ids, mm_token_type_ids, image_grid_thw=image_grid_thw, video_grid_thw=video_grid_thw, **kwargs
+        )
+
 
 @auto_docstring
 @dataclass
@@ -1096,6 +1107,62 @@ class GlmOcrForConditionalGeneration(GlmOcrPreTrainedModel, MultiModalGeneration
             rope_deltas=outputs.rope_deltas,
         )
 
+    def _get_image_nums_and_video_nums(
+        self,
+        input_ids: torch.LongTensor | None,
+        inputs_embeds: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Get the number of images and videos for each sample to calculate the separation length of the sample tensor.
+        These parameters are not passed through the processor to avoid unpredictable impacts from interface modifications.
+
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary.
+
+        Returns:
+            image_nums (`torch.LongTensor` of shape `(batch_size, num_images_sample)`)
+            video_nums (`torch.LongTensor` of shape `(batch_size, num_videos_sample)`)
+        """
+
+        if inputs_embeds is not None:
+            is_image = (
+                inputs_embeds
+                == self.get_input_embeddings()(
+                    torch.full((), self.config.image_start_token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+            )[..., 0]
+            is_video_start = (
+                inputs_embeds
+                == self.get_input_embeddings()(
+                    torch.full((), self.config.video_start_token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+            )[..., 0]
+            is_video_end = (
+                inputs_embeds
+                == self.get_input_embeddings()(
+                    torch.full((), self.config.video_end_token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+            )[..., 0]
+        else:
+            is_image = input_ids == self.config.image_start_token_id
+            is_video_start = input_ids == self.config.video_start_token_id
+            is_video_end = input_ids == self.config.video_end_token_id
+
+        # Cumulative sum to track if we're inside a video span
+        # We'll assume well-formed video tags (i.e. matching starts and ends)
+        video_level = torch.cumsum(is_video_start.int() - is_video_end.int(), dim=1)
+        inside_video = video_level > 0  # shape (batch_size, seq_length)
+
+        # Mask out image tokens that are inside video spans
+        standalone_images = is_image & (~inside_video)
+
+        # Count per batch
+        image_counts = standalone_images.sum(dim=1)
+        video_counts = is_video_start.sum(dim=1)
+
+        return image_counts, video_counts
+
     def _expand_inputs_for_generation(
         self,
         expand_size: int = 1,
@@ -1183,62 +1250,6 @@ class GlmOcrForConditionalGeneration(GlmOcrPreTrainedModel, MultiModalGeneration
             model_kwargs["encoder_outputs"] = _expand_dict_for_generation(model_kwargs["encoder_outputs"])
 
         return input_ids, model_kwargs
-
-    def _get_image_nums_and_video_nums(
-        self,
-        input_ids: torch.LongTensor | None,
-        inputs_embeds: torch.Tensor | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Get the number of images and videos for each sample to calculate the separation length of the sample tensor.
-        These parameters are not passed through the processor to avoid unpredictable impacts from interface modifications.
-
-        Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary.
-
-        Returns:
-            image_nums (`torch.LongTensor` of shape `(batch_size, num_images_sample)`)
-            video_nums (`torch.LongTensor` of shape `(batch_size, num_videos_sample)`)
-        """
-
-        if inputs_embeds is not None:
-            is_image = (
-                inputs_embeds
-                == self.get_input_embeddings()(
-                    torch.full((), self.config.image_start_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-            )[..., 0]
-            is_video_start = (
-                inputs_embeds
-                == self.get_input_embeddings()(
-                    torch.full((), self.config.video_start_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-            )[..., 0]
-            is_video_end = (
-                inputs_embeds
-                == self.get_input_embeddings()(
-                    torch.full((), self.config.video_end_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-            )[..., 0]
-        else:
-            is_image = input_ids == self.config.image_start_token_id
-            is_video_start = input_ids == self.config.video_start_token_id
-            is_video_end = input_ids == self.config.video_end_token_id
-
-        # Cumulative sum to track if we're inside a video span
-        # We'll assume well-formed video tags (i.e. matching starts and ends)
-        video_level = torch.cumsum(is_video_start.int() - is_video_end.int(), dim=1)
-        inside_video = video_level > 0  # shape (batch_size, seq_length)
-
-        # Mask out image tokens that are inside video spans
-        standalone_images = is_image & (~inside_video)
-
-        # Count per batch
-        image_counts = standalone_images.sum(dim=1)
-        video_counts = is_video_start.sum(dim=1)
-
-        return image_counts, video_counts
 
 
 __all__ = [

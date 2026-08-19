@@ -1678,20 +1678,6 @@ class ConfigArgs:
     """,
     }
 
-    timestamped_video_frames = {
-        "description": """
-    Whether the processor separates video frames with timestamp text, making each frame its own visual span.
-    The decoder's M-RoPE positions then lay out a video one `T=1` frame at a time.
-    """,
-    }
-
-    mrope_layout = {
-        "description": """
-    Which M-RoPE layout produces the model's decoder position ids — see
-    [`~transformers.modeling_rope_utils.get_mrope_index`] for the available layouts.
-    """,
-    }
-
     interpolation_mode = {
         "description": """
     Interpolation mode the vision embedding resamples its learned position-embedding grid with.
@@ -1714,13 +1700,6 @@ class ConfigArgs:
         "description": """
     Whether the vision position ids carry a temporal axis in addition to height and width, i.e. the
     encoder's rotary embedding rotates all three.
-    """,
-    }
-
-    resample_before_merge = {
-        "description": """
-    Whether the learned position-embedding grid is resampled at patch resolution, before the spatial merge
-    (so the resampling helpers take a merge size of 1), rather than on the merged grid.
     """,
     }
 

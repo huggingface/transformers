@@ -263,8 +263,6 @@ class HunYuanVLConfig(PreTrainedConfig):
     vision_config: dict | PreTrainedConfig | None = None
 
     image_token_id: int = 120120
-    # Which M-RoPE layout lays out this model's decoder position ids (`modeling_rope_utils.get_mrope_index`).
-    mrope_layout: str = "indexed_images"
     tie_word_embeddings: bool = True
     im_start_id: int = 120118
     im_end_id: int = 120119

@@ -20,11 +20,17 @@ from transformers.testing_utils import is_torch_available, require_torch
 if is_torch_available():
     import torch
 
+    from transformers import Ernie4_5_VLMoeConfig, Qwen2_5_VLConfig, Qwen2VLConfig, Qwen3VLConfig
     from transformers.modeling_multimodal_utils import (
-        _MROPE_LAYOUT_FUNCTIONS,
-        get_mrope_index,
         get_mrope_text_positions,
     )
+    from transformers.models.ernie4_5_vl_moe.modeling_ernie4_5_vl_moe import Ernie4_5_VLMoeModel
+    from transformers.models.hunyuan_vl.modeling_hunyuan_vl import _mrope_index_indexed_images
+    from transformers.models.qwen2_5_omni.modeling_qwen2_5_omni import _mrope_index_audio_chunked
+    from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLModel
+    from transformers.models.qwen2_vl.modeling_qwen2_vl import Qwen2VLModel
+    from transformers.models.qwen3_omni_moe.modeling_qwen3_omni_moe import _mrope_index_audio_merged
+    from transformers.models.qwen3_vl.modeling_qwen3_vl import Qwen3VLModel
 
 
 # NOTE: expected positions below were produced by the per-model `get_rope_index` implementations each
@@ -53,9 +59,10 @@ class MRopeLayoutTest(unittest.TestCase):
 
     def test_interleaved_runs_image(self):
         input_ids, token_types = self.modality_runs([(0, 2), (1, 4), (0, 1)])
-        position_ids, deltas = _MROPE_LAYOUT_FUNCTIONS["interleaved_runs"](
-            input_ids, token_types, spatial_merge_size=1, image_grid_thw=torch.tensor([[1, 2, 2]])
-        )
+        # meta device: the default config is production-sized and `get_rope_index` reads no weights
+        with torch.device("meta"):
+            model = Qwen2VLModel(Qwen2VLConfig(vision_config={"spatial_merge_size": 1}))
+        position_ids, deltas = model.get_rope_index(input_ids, token_types, image_grid_thw=torch.tensor([[1, 2, 2]]))
         # the image's 2x2 patches share one temporal position and span 2 height / 2 width positions, so the
         # text token after them resumes at 4 rather than at 3
         self.assertEqual(
@@ -66,13 +73,14 @@ class MRopeLayoutTest(unittest.TestCase):
 
     def test_interleaved_runs_video_temporal_scaling(self):
         input_ids, token_types = self.modality_runs([(0, 1), (2, 8), (0, 1)])
-        position_ids, deltas = _MROPE_LAYOUT_FUNCTIONS["interleaved_runs"](
+        # meta device: the default config is production-sized and `get_rope_index` reads no weights
+        with torch.device("meta"):
+            model = Qwen2_5_VLModel(Qwen2_5_VLConfig(vision_config={"spatial_merge_size": 1, "tokens_per_second": 2}))
+        position_ids, deltas = model.get_rope_index(
             input_ids,
             token_types,
-            spatial_merge_size=1,
             video_grid_thw=torch.tensor([[2, 2, 2]]),
             second_per_grid_ts=torch.tensor([2.0]),
-            tokens_per_second=2,
         )
         # temporal ids are `tokens_per_second * second_per_grid_ts = 4` apart: 1 for the first frame, 5 for
         # the second (qwen2_5_vl's layout; without `tokens_per_second` they would be 1 apart)
@@ -90,12 +98,18 @@ class MRopeLayoutTest(unittest.TestCase):
         # processors that separate frames with timestamps emit one visual run per frame, so the single
         # `T=2` grid is expanded to two `T=1` grids, one per run
         input_ids, token_types = self.modality_runs([(0, 1), (2, 4), (0, 1), (2, 4), (0, 1)])
-        position_ids, deltas = _MROPE_LAYOUT_FUNCTIONS["interleaved_runs"](
+        # the real qwen3_vl-family override, run on a config-only carrier — every `get_rope_index`
+        # is a pure function of `(self.config, inputs)`, so no weights are needed: an uninitialized
+        # instance (generated overrides call zero-arg `super()`, which wants a real instance) carrying
+        # nothing but a config drives it, which is also how the exporters rebuild positions
+
+        # meta device: the default config is production-sized and `get_rope_index` reads no weights
+        with torch.device("meta"):
+            model = Qwen3VLModel(Qwen3VLConfig(vision_config={"spatial_merge_size": 1}))
+        position_ids, deltas = model.get_rope_index(
             input_ids,
             token_types,
-            spatial_merge_size=1,
             video_grid_thw=torch.tensor([[2, 2, 2]]),
-            split_video_frames=True,
         )
         self.assertEqual(
             position_ids.tolist(),
@@ -110,12 +124,15 @@ class MRopeLayoutTest(unittest.TestCase):
     def test_interleaved_runs_video_temporal_merge(self):
         # ernie's temporal backbone merge: a `T=2` grid collapses to one temporal position (4 tokens)
         input_ids, token_types = self.modality_runs([(0, 1), (2, 4), (0, 1)])
-        position_ids, deltas = _MROPE_LAYOUT_FUNCTIONS["interleaved_runs"](
+        # meta device: the default config is production-sized and `get_rope_index` reads no weights
+        with torch.device("meta"):
+            model = Ernie4_5_VLMoeModel(
+                Ernie4_5_VLMoeConfig(vision_config={"spatial_merge_size": 1, "temporal_merge_size": 2})
+            )
+        position_ids, deltas = model.get_rope_index(
             input_ids,
             token_types,
-            spatial_merge_size=1,
             video_grid_thw=torch.tensor([[2, 2, 2]]),
-            video_temporal_merge_size=2,
         )
         self.assertEqual(
             position_ids.tolist(),
@@ -127,10 +144,12 @@ class MRopeLayoutTest(unittest.TestCase):
         input_ids, token_types = self.modality_runs([(0, 2), (1, 4), (0, 1)])
         attention_mask = torch.ones_like(input_ids)
         attention_mask[:, :2] = 0
-        position_ids, deltas = _MROPE_LAYOUT_FUNCTIONS["interleaved_runs"](
+        # meta device: the default config is production-sized and `get_rope_index` reads no weights
+        with torch.device("meta"):
+            model = Qwen2VLModel(Qwen2VLConfig(vision_config={"spatial_merge_size": 1}))
+        position_ids, deltas = model.get_rope_index(
             input_ids,
             token_types,
-            spatial_merge_size=1,
             image_grid_thw=torch.tensor([[1, 2, 2]]),
             attention_mask=attention_mask,
         )
@@ -146,7 +165,7 @@ class MRopeLayoutTest(unittest.TestCase):
         # 8 image-span tokens for a 6-token grid (2 rows x (2 width + 1 newline)): the span carries the two
         # image-boundary tokens, which keep their 1D positions
         input_ids, token_types = self.modality_runs([(0, 1), (1, 8), (0, 1)])
-        position_ids, deltas = _MROPE_LAYOUT_FUNCTIONS["indexed_images"](
+        position_ids, deltas = _mrope_index_indexed_images(
             input_ids, token_types, num_axes=3, spatial_merge_size=1, image_grid_thw=torch.tensor([[1, 2, 2]])
         )
         self.assertEqual(
@@ -163,7 +182,7 @@ class MRopeLayoutTest(unittest.TestCase):
         # with 4 axes only the last three are replaced; two bare spans consume both grids and the ordinal
         # counts up per image
         input_ids, token_types = self.modality_runs([(0, 1), (1, 6), (0, 1), (1, 6)])
-        position_ids, deltas = _MROPE_LAYOUT_FUNCTIONS["indexed_images"](
+        position_ids, deltas = _mrope_index_indexed_images(
             input_ids,
             token_types,
             num_axes=4,
@@ -184,22 +203,9 @@ class MRopeLayoutTest(unittest.TestCase):
     def test_indexed_images_rejects_span_grid_mismatch(self):
         input_ids, token_types = self.modality_runs([(0, 1), (1, 5)])
         with self.assertRaises(ValueError):
-            _MROPE_LAYOUT_FUNCTIONS["indexed_images"](
+            _mrope_index_indexed_images(
                 input_ids, token_types, num_axes=3, spatial_merge_size=1, image_grid_thw=torch.tensor([[1, 2, 2]])
             )
-
-    def test_unknown_layout_raises(self):
-        # a config naming a layout that is not implemented must fail loudly rather than fall back to
-        # positions that would be silently wrong
-        class UnknownLayoutConfig:
-            model_type = "fictional"
-            mrope_layout = "no_such_layout"
-
-            def get_text_config(self):
-                return self
-
-        with self.assertRaises(NotImplementedError):
-            get_mrope_index(UnknownLayoutConfig(), torch.zeros(1, 2, dtype=torch.long))
 
     def audio_then_image_ids(self):
         """text, an audio span of 3 tokens, a 2x2 image span, then trailing text."""
@@ -213,7 +219,7 @@ class MRopeLayoutTest(unittest.TestCase):
 
     def test_audio_chunked_audio_then_image(self):
         input_ids = self.audio_then_image_ids()
-        position_ids, deltas = _MROPE_LAYOUT_FUNCTIONS["audio_chunked"](
+        position_ids, deltas = _mrope_index_audio_chunked(
             input_ids,
             spatial_merge_size=1,
             position_id_per_seconds=25,
@@ -235,7 +241,7 @@ class MRopeLayoutTest(unittest.TestCase):
 
     def test_audio_chunked_audio_in_video(self):
         input_ids = self.audio_in_video_ids()
-        position_ids, deltas = _MROPE_LAYOUT_FUNCTIONS["audio_chunked"](
+        position_ids, deltas = _mrope_index_audio_chunked(
             input_ids,
             spatial_merge_size=1,
             position_id_per_seconds=25,
@@ -261,7 +267,7 @@ class MRopeLayoutTest(unittest.TestCase):
 
     def test_audio_merged_audio_then_image(self):
         input_ids = self.audio_then_image_ids()
-        position_ids, deltas = _MROPE_LAYOUT_FUNCTIONS["audio_merged"](
+        position_ids, deltas = _mrope_index_audio_merged(
             input_ids,
             spatial_merge_size=1,
             position_id_per_seconds=25,
@@ -284,7 +290,7 @@ class MRopeLayoutTest(unittest.TestCase):
 
     def test_audio_merged_audio_in_video(self):
         input_ids = self.audio_in_video_ids()
-        position_ids, deltas = _MROPE_LAYOUT_FUNCTIONS["audio_merged"](
+        position_ids, deltas = _mrope_index_audio_merged(
             input_ids,
             spatial_merge_size=1,
             position_id_per_seconds=25,

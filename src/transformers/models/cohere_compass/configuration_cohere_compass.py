@@ -47,10 +47,6 @@ class CohereCompassVisionConfig(PreTrainedConfig):
     in_channels: int = 3
     patch_size: int | list[int] | tuple[int, int] = 16
     spatial_merge_size: int = 2
-    # Whether the processor separates video frames with timestamp text, making each frame its own visual
-    # span: the decoder's M-RoPE positions then lay out a video one `T=1` frame at a time
-    # (`modeling_rope_utils.get_mrope_index`).
-    timestamped_video_frames: bool = True
     temporal_patch_size: int | list[int] | tuple[int, int] = 2
     out_hidden_size: int = 3584
     num_position_embeddings: int = 2304
@@ -58,7 +54,6 @@ class CohereCompassVisionConfig(PreTrainedConfig):
     # `vision_utils.get_vision_interpolation_indices_and_weights` can be called from the config alone.
     interpolation_mode: str = "bilinear"
     interpolation_align_corners: bool = True
-    resample_before_merge: bool = False
     deepstack_visual_indexes: list[int] | tuple[int, ...] = (8, 16, 24)
     initializer_range: float = 0.02
 
@@ -172,8 +167,6 @@ class CohereCompassConfig(PreTrainedConfig):
     vision_config: dict | PreTrainedConfig | None = None
 
     image_token_id: int = 255031
-    # Which M-RoPE layout lays out this model's decoder position ids (`modeling_rope_utils.get_mrope_index`).
-    mrope_layout: str = "interleaved_runs"
     video_token_id: int = 255032
     vision_start_token_id: int = 255028
     vision_end_token_id: int = 255029
