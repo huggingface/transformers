@@ -322,13 +322,6 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertEqual(config.residual_multiplier, (2 * 8) ** -0.5)
         self.assertNotIn("residual_scale", config.to_dict())
 
-    def test_legacy_rope_scaling_type_alias(self):
-        config = NeoMMEConfig(rope_scaling={"type": "linear", "factor": 2.0})
-        self.assertEqual(
-            {params["rope_type"] for params in config.rope_parameters.values()},
-            {"linear"},
-        )
-
     def test_partial_rotary_factor_multiple_of_four(self):
         """Rotating dims must be a multiple of 4 (two M-RoPE axes × pairs); used to silently round down."""
         with self.assertRaisesRegex(ValueError, "needs at least 4"):

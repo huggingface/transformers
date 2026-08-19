@@ -123,19 +123,11 @@ class NeoMMEConfig(PreTrainedConfig):
             raise ValueError("residual_multiplier must be finite and positive")
 
     def convert_rope_params_to_dict(self, **kwargs):
-        rope_scaling = kwargs.pop("rope_scaling", None)
         rope_theta = kwargs.pop("rope_theta", None)
         self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else {}
-        if rope_scaling is not None:
-            rope_scaling = dict(rope_scaling)
-            legacy_rope_type = rope_scaling.pop("type", None)
-            if legacy_rope_type is not None:
-                rope_scaling.setdefault("rope_type", legacy_rope_type)
 
         for layer_type in set(self.layer_types):
             layer_params = self.rope_parameters.setdefault(layer_type, {})
-            if rope_scaling is not None:
-                layer_params.update(rope_scaling)
             layer_params.setdefault("rope_type", "default")
             layer_params.setdefault(
                 "rope_theta", rope_theta if rope_theta is not None else self.default_theta[layer_type]
