@@ -526,6 +526,36 @@ class TestDataCollatorForTokenClassification(DataCollatorTestMixin, unittest.Tes
         self.assertEqual(batch["input_ids"].shape, (2, 6))
         self.assertEqual(batch["labels"][0].tolist(), [0, 1, 2, -100, -100, -100])
 
+    def test_numpy_singular_label_key(self):
+        """NumPy path should honor the `label` key like the torch path."""
+        tokenizer = BertTokenizer(self.vocab_file)
+        features = [
+            {"input_ids": [0, 1, 2], "label": [0, 1, 2]},
+            {"input_ids": [0, 1, 2, 3, 4, 5], "label": [0, 1, 2, 3, 4, 5]},
+        ]
+        collator = DataCollatorForTokenClassification(tokenizer, return_tensors="np")
+        batch = collator(features)
+
+        self.assertIn("label", batch)
+        self.assertNotIn("labels", batch)
+        self.assertEqual(batch["label"][0].tolist(), [0, 1, 2, -100, -100, -100])
+
+    def test_truncates_labels_longer_than_inputs(self):
+        """Labels longer than padded/truncated inputs must be truncated to match."""
+        tokenizer = BertTokenizer(self.vocab_file)
+        features = [
+            {"input_ids": [0, 1, 2, 3], "labels": [0, 1, 2, 3, 4, 5, 6, 7]},
+            {"input_ids": [0, 1], "labels": [0, 1, 2]},
+        ]
+
+        for return_tensors in ["pt", "np"]:
+            collator = DataCollatorForTokenClassification(tokenizer, return_tensors=return_tensors)
+            batch = collator(features)
+            self.assertEqual(batch["input_ids"].shape[-1], 4)
+            self.assertEqual(batch["labels"].shape[-1], 4)
+            self.assertEqual(batch["labels"][0].tolist(), [0, 1, 2, 3])
+            self.assertEqual(batch["labels"][1].tolist(), [0, 1, 2, -100])
+
     def test_immutability(self):
         """Test that collation does not mutate input data."""
         tokenizer = BertTokenizer(self.vocab_file)

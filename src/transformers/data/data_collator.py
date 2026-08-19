@@ -305,13 +305,19 @@ class DataCollatorForTokenClassification(DataCollatorMixin):
             return list(tensor_or_iterable)
 
         if padding_side == "right":
-            batch[label_name] = [
-                to_list(label) + [self.label_pad_token_id] * (sequence_length - len(label)) for label in labels
-            ]
+            batch[label_name] = []
+            for label in labels:
+                truncated_label = to_list(label)[:sequence_length]
+                batch[label_name].append(
+                    truncated_label + [self.label_pad_token_id] * (sequence_length - len(truncated_label))
+                )
         else:
-            batch[label_name] = [
-                [self.label_pad_token_id] * (sequence_length - len(label)) + to_list(label) for label in labels
-            ]
+            batch[label_name] = []
+            for label in labels:
+                truncated_label = to_list(label)[:sequence_length]
+                batch[label_name].append(
+                    [self.label_pad_token_id] * (sequence_length - len(truncated_label)) + truncated_label
+                )
 
         batch[label_name] = torch.tensor(batch[label_name], dtype=torch.int64)
         return batch
@@ -319,14 +325,16 @@ class DataCollatorForTokenClassification(DataCollatorMixin):
     def numpy_call(self, features):
         label_name = "label" if "label" in features[0] else "labels"
         labels = [feature[label_name] for feature in features] if label_name in features[0] else None
+
+        no_labels_features = [{k: v for k, v in feature.items() if k != label_name} for feature in features]
+
         batch = pad_without_fast_tokenizer_warning(
             self.tokenizer,
-            features,
+            no_labels_features,
             padding=self.padding,
             max_length=self.max_length,
             pad_to_multiple_of=self.pad_to_multiple_of,
-            # Conversion to tensors will fail if we have labels as they are not of the same length yet.
-            return_tensors="np" if labels is None else None,
+            return_tensors="np",
         )
 
         if labels is None:
@@ -335,13 +343,19 @@ class DataCollatorForTokenClassification(DataCollatorMixin):
         sequence_length = np.array(batch["input_ids"]).shape[1]
         padding_side = self.tokenizer.padding_side
         if padding_side == "right":
-            batch["labels"] = [
-                list(label) + [self.label_pad_token_id] * (sequence_length - len(label)) for label in labels
-            ]
+            batch[label_name] = []
+            for label in labels:
+                truncated_label = list(label)[:sequence_length]
+                batch[label_name].append(
+                    truncated_label + [self.label_pad_token_id] * (sequence_length - len(truncated_label))
+                )
         else:
-            batch["labels"] = [
-                [self.label_pad_token_id] * (sequence_length - len(label)) + list(label) for label in labels
-            ]
+            batch[label_name] = []
+            for label in labels:
+                truncated_label = list(label)[:sequence_length]
+                batch[label_name].append(
+                    [self.label_pad_token_id] * (sequence_length - len(truncated_label)) + truncated_label
+                )
 
         batch = {k: np.array(v, dtype=np.int64) for k, v in batch.items()}
         return batch
