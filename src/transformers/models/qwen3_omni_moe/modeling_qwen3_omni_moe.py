@@ -73,7 +73,6 @@ from .configuration_qwen3_omni_moe import (
     Qwen3OmniMoeTalkerTextConfig,
     Qwen3OmniMoeTextConfig,
     Qwen3OmniMoeThinkerConfig,
-    Qwen3OmniMoeVisionConfig,
     Qwen3OmniMoeVisionEncoderConfig,
 )
 
@@ -984,7 +983,7 @@ class Qwen3OmniMoeVisionPatchMerger(nn.Module):
 
 class Qwen3OmniMoeVisionRotaryEmbedding(nn.Module):
     @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config: Qwen3OmniMoeVisionConfig, device=None):
+    def __init__(self, config: Qwen3OmniMoeVisionEncoderConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -1003,7 +1002,7 @@ class Qwen3OmniMoeVisionRotaryEmbedding(nn.Module):
     @staticmethod
     @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
-        config: Qwen3OmniMoeVisionConfig, device=None, **kwargs
+        config: Qwen3OmniMoeVisionEncoderConfig, device=None, **kwargs
     ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation

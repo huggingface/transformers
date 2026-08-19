@@ -247,10 +247,11 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
         hidden_states = hidden_states.reshape(seq_len, -1)
 
         position_embeddings = self.rotary_pos_emb(hidden_states, position_ids)
-        position_embeddings = position_embeddings.reshape(
-            seq_len // self.spatial_merge_unit, self.spatial_merge_unit, -1
-        )
-        position_embeddings = position_embeddings[window_index, :, :]
+        window_position_embeddings = ()
+        for freq in position_embeddings:
+            freq = freq.reshape(seq_len // self.spatial_merge_unit, self.spatial_merge_unit, -1)
+            freq = freq[window_index, ...].reshape(seq_len, -1)
+            window_position_embeddings += (freq,)
 
         for layer_num, blk in enumerate(self.blocks):
             if layer_num in self.fullatt_block_indexes:
@@ -264,7 +265,7 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
                 hidden_states,
                 cu_seqlens=cu_seqlens_now,
                 max_seqlen=max_seqlen_now,
-                position_embeddings=position_embeddings,
+                position_embeddings=window_position_embeddings,
                 **kwargs,
             )
 

@@ -139,7 +139,7 @@ class Qwen3VLVisionRotaryEmbedding(nn.Module):
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
         base = config.rope_parameters["rope_theta"]
-        dim = getattr(config, "head_dim", None) or config.embed_dim // config.num_attention_heads
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
         spatial_dim = dim // 2
 
         attention_factor = 1.0  # Unused in this type of RoPE
@@ -401,6 +401,7 @@ class Qwen3VLTextRotaryEmbedding(nn.Module):
         mrope_section = config.rope_parameters.get("mrope_section", [22, 22, 20])
         hw_dim = mrope_section[0] + mrope_section[1]
         t_dim = mrope_section[2]
+        print(mrope_section, inv_freq.shape)
 
         inv_freq_3d = torch.empty_like(inv_freq)
         # (Pre-)Rotate to avoid another rotation during the forward
