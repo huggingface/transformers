@@ -17,6 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -73,20 +74,51 @@ class Ovis2_5VisionEmbeddings(nn.Module):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
+        self.image_size = config.image_size
         self.patch_size = config.patch_size
-        self.spatial_merge_size = config.hidden_stride
-        self.num_grid_per_side = config.image_size // config.patch_size
-        self.interpolation_mode = "bicubic"
-        self.interpolation_align_corners = False
+
         self.patch_embedding = nn.Conv2d(
             in_channels=config.num_channels,
-            out_channels=config.hidden_size,
-            kernel_size=config.patch_size,
-            stride=config.patch_size,
+            out_channels=self.embed_dim,
+            kernel_size=self.patch_size,
+            stride=self.patch_size,
             padding="valid",
-            bias=True,
         )
-        self.position_embedding = nn.Embedding(self.num_grid_per_side**2, config.hidden_size)
+
+        self.num_patches = (self.image_size // self.patch_size) ** 2
+        self.num_positions = self.num_patches
+        self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
+        self.position_ids = nn.Buffer(torch.arange(self.num_positions).expand((1, -1)), persistent=False)
+        # How the (square) learned position grid is resampled to each image's grid.
+        self.num_grid_per_side = int(self.num_positions**0.5)
+        self.interpolation_align_corners = False
+        self.interpolation_mode = "bicubic"
+        self.spatial_merge_size = config.hidden_stride
+
+    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        """
+        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
+        images. This method is also adapted to support torch.jit tracing and no class embeddings.
+
+        Adapted from:
+        - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
+        - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
+        """
+        warnings.warn(
+            f"`{self.__class__.__name__}.interpolate_pos_encoding` is deprecated and will be removed in v5.11. "
+            "Use `get_vision_interpolation_indices_and_weights` from `transformers.vision_utils` and apply `self.position_embedding`.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        grid_thw = torch.tensor([[1, height, width]], device=embeddings.device)
+        interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
+            grid_thw,
+            num_grid_per_side=self.num_grid_per_side,
+            mode=self.interpolation_mode,
+            align_corners=self.interpolation_align_corners,
+            spatial_merge_size=1,
+        )
+        return (self.position_embedding(interp_indices) * interp_weights[:, :, None]).sum(1).unsqueeze(0)
 
     def forward(
         self,
@@ -94,6 +126,13 @@ class Ovis2_5VisionEmbeddings(nn.Module):
         grid_thw: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
+        """
+        Args:
+            pixel_values (`torch.FloatTensor` of shape `(batch_size, sequence_length, image_channels, patch_size, patch_size)`):
+                The tensors corresponding to the input images.
+            grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+                The temporal, height and width of feature shape of each image in LLM.
+        """
         target_dtype = self.patch_embedding.weight.dtype
         pixel_values = pixel_values.view(
             -1,

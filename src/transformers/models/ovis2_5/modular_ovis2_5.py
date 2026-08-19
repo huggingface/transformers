@@ -46,6 +46,7 @@ from ..glm4v.image_processing_glm4v import Glm4vImageProcessor, Glm4vImageProces
 from ..glm4v.image_processing_pil_glm4v import Glm4vImageProcessorPil
 from ..glm4v.video_processing_glm4v import Glm4vVideoProcessor
 from ..ovis2.modeling_ovis2 import Ovis2Model
+from ..paddleocr_vl.modeling_paddleocr_vl import PaddleOCRVisionEmbeddings
 from ..video_llama_3.modeling_video_llama_3 import (
     VideoLlama3CausalLMOutputWithPast,
     VideoLlama3ModelOutputWithPast,
@@ -441,25 +442,12 @@ class Ovis2_5VisionRotaryEmbedding(VideoLlama3VisionRotaryEmbedding):
     pass
 
 
-class Ovis2_5VisionEmbeddings(nn.Module):
+class Ovis2_5VisionEmbeddings(PaddleOCRVisionEmbeddings):
     def __init__(self, config: Ovis2_5VisionConfig):
-        super().__init__()
-        self.config = config
-        self.embed_dim = config.hidden_size
-        self.patch_size = config.patch_size
+        super().__init__(config)
         self.spatial_merge_size = config.hidden_stride
-        self.num_grid_per_side = config.image_size // config.patch_size
         self.interpolation_mode = "bicubic"
         self.interpolation_align_corners = False
-        self.patch_embedding = nn.Conv2d(
-            in_channels=config.num_channels,
-            out_channels=config.hidden_size,
-            kernel_size=config.patch_size,
-            stride=config.patch_size,
-            padding="valid",
-            bias=True,
-        )
-        self.position_embedding = nn.Embedding(self.num_grid_per_side**2, config.hidden_size)
 
     def forward(
         self,
