@@ -29,7 +29,12 @@ from ..utils import (
     logging,
 )
 from ..utils.import_utils import KERNELS_MAX_VERSION, KERNELS_MIN_VERSION
-from .quantizers_utils import get_module_from_name
+from .quantizers_utils import (
+    get_module_from_name,
+    is_packed_experts_module,
+    should_convert_module,
+    try_set_experts_implementation,
+)
 
 
 if is_torch_available():
@@ -39,6 +44,27 @@ if is_torch_available():
 
 logger = logging.get_logger(__name__)
 triton_kernels_hub = None
+
+
+def check_mxfp4_kernel_support(allow_cpu: bool = True) -> tuple[bool, bool]:
+    """Returns `(device_supported, triton_available)` for the mxfp4 packed-experts triton kernels: CUDA needs compute
+    capability >= 7.5 + Triton >= 3.4, XPU (and CPU, when `allow_cpu`) need Triton >= 3.5."""
+    if torch.xpu.is_available():
+        return True, is_triton_available("3.5.0")
+    if torch.cuda.is_available():
+        return torch.cuda.get_device_capability() >= (7, 5), is_triton_available("3.4.0")
+    if allow_cpu:
+        return True, is_triton_available("3.5.0")
+    return False, False
+
+
+def packed_experts_param_element_size(param_name: str, param: "torch.Tensor", is_packed: bool) -> float:
+    """Bytes per weight value for a packed mxfp4 expert projection (half a byte plus one e8m0 scale per group of 32)
+    when `is_packed`, else the param's own element size."""
+    attribute = param_name.rpartition(".")[-1]
+    if is_packed and attribute in ("gate_up_proj", "up_proj", "down_proj"):
+        return 0.5 + 1 / 32
+    return param.element_size()
 
 
 class Mxfp4HfQuantizer(HfQuantizer):
@@ -92,23 +118,8 @@ class Mxfp4HfQuantizer(HfQuantizer):
                     f"Quantizing a model using MXFP4 requires model on cuda/xpu/cpu, but found {device}. To use mxfp4, please disable the current accelerator."
                 )
 
-        if torch.xpu.is_available():
-            is_device_supported_mxfp4 = True
-            triton_available = is_triton_available("3.5.0")
-            kernels_installed = is_kernels_available()
-        elif torch.cuda.is_available():
-            compute_capability = torch.cuda.get_device_capability()
-            is_device_supported_mxfp4 = compute_capability >= (7, 5)
-            triton_available = is_triton_available("3.4.0")
-            kernels_installed = is_kernels_available()
-        elif device.type == "cpu":
-            is_device_supported_mxfp4 = True
-            triton_available = is_triton_available("3.5.0")
-            kernels_installed = is_kernels_available()
-        else:
-            is_device_supported_mxfp4 = False
-            triton_available = False
-            kernels_installed = False
+        is_device_supported_mxfp4, triton_available = check_mxfp4_kernel_support()
+        kernels_installed = is_kernels_available()
 
         if self.pre_quantized:
             if not is_device_supported_mxfp4:
@@ -180,12 +191,9 @@ class Mxfp4HfQuantizer(HfQuantizer):
         """Returns the bytes per weight value, used to size the caching-allocator warmup. Since generic MoE modules keep
         declaring their experts as dense parameters (only gpt-oss gets a module whose which are already blocks-shaped),
         we need to make sure that the warmup does not reserve for the the dense size for weights that load packed."""
-        module_name, _, attribute = param_name.rpartition(".")
-        # Only change the element size for pre-quantized packed experts modules
-        if self.pre_quantized and module_name in self.packed_experts_modules:
-            if attribute in ("gate_up_proj", "up_proj", "down_proj"):
-                return 0.5 + 1 / 32  # half a byte per value plus one e8m0 scale per group of 32
-        return param.element_size()
+        module_name = param_name.rpartition(".")[0]
+        is_packed = self.pre_quantized and module_name in self.packed_experts_modules
+        return packed_experts_param_element_size(param_name, param, is_packed)
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         # clean cache due to triton ops
@@ -249,7 +257,6 @@ class Mxfp4HfQuantizer(HfQuantizer):
             return
 
         from ..integrations import Mxfp4GptOssExperts
-        from .quantizers_utils import is_packed_experts_module, should_convert_module
 
         has_gpt_oss_modules = False
         experts_modules = []
@@ -276,12 +283,8 @@ class Mxfp4HfQuantizer(HfQuantizer):
             return None
 
         # Try setting the experts implementation to mxfp4 and dequantize the model if that fails
-        model.set_experts_implementation("mxfp4")
-        failed_to_switch_implem = any(
-            model.get_submodule(name).config._experts_implementation != "mxfp4"  # type: ignore
-            for name in experts_modules
-        )
-        if failed_to_switch_implem:
+        failed_to_switch = try_set_experts_implementation(model, experts_modules, "mxfp4")
+        if failed_to_switch:
             logger.warning_once(
                 f"{model.__class__.__name__} cannot dispatch its MoE experts to the mxfp4 kernels, so its "
                 "experts will not be quantized and stay in the model dtype."

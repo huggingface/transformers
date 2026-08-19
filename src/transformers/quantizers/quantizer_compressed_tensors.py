@@ -19,11 +19,12 @@ from ..utils import (
     is_compressed_tensors_available,
     is_kernels_available,
     is_torch_available,
-    is_triton_available,
     logging,
 )
 from ..utils.quantization_config import CompressedTensorsConfig
 from .base import HfQuantizer
+from .quantizer_mxfp4 import check_mxfp4_kernel_support, packed_experts_param_element_size
+from .quantizers_utils import try_set_experts_implementation
 
 
 if TYPE_CHECKING:
@@ -128,14 +129,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         if format is None:
             return None
 
-        if torch.cuda.is_available():
-            supported_device = torch.cuda.get_device_capability() >= (7, 5)
-            has_triton = is_triton_available("3.4.0")
-        elif torch.xpu.is_available():
-            supported_device = True
-            has_triton = is_triton_available("3.5.0")
-        else:
-            supported_device, has_triton = False, False
+        supported_device, has_triton = check_mxfp4_kernel_support(allow_cpu=False)
 
         if not (supported_device and has_triton and is_kernels_available()):
             logger.warning_once(
@@ -150,11 +144,9 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         """Average bytes per weight value, used to size the caching-allocator warmup. The warmup reserves what the
         loaded model will occupy based on the size of the meta parameters. For experts quantized to packed FP4, it's
         half a byte per value, plus one e8m0 scale per group of 32. For anything else, we use the param size."""
-        module_name, _, attribute = param_name.rpartition(".")
-        if self.packed_experts_format is not None and module_name.endswith(".experts"):
-            if attribute in ("gate_up_proj", "up_proj", "down_proj"):
-                return 0.5 + 1 / 32
-        return param.element_size()
+        module_name = param_name.rpartition(".")[0]
+        is_packed = self.packed_experts_format is not None and module_name.endswith(".experts")
+        return packed_experts_param_element_size(param_name, param, is_packed)
 
     def _setup_packed_experts(self, model: "PreTrainedModel") -> None:
         """Route the model's fused-experts modules to the packed runtime, or give up on it.
@@ -165,14 +157,13 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         to decompressing the experts.
         """
         experts_modules = [
-            module
+            name
             for name, module in model.named_modules()
             if name.endswith(".experts") and is_packed_experts_module(module)
         ]
-        if experts_modules:
-            model.set_experts_implementation("mxfp4")
+        failed_to_switch = try_set_experts_implementation(model, experts_modules, "mxfp4")
 
-        if not experts_modules or any(module.config._experts_implementation != "mxfp4" for module in experts_modules):
+        if not experts_modules or failed_to_switch:
             logger.warning_once(
                 f"This checkpoint stores its MoE experts in `{self.packed_experts_format}`, but "
                 f"{model.__class__.__name__} cannot run them in that format. The experts will be decompressed "

@@ -41,6 +41,22 @@ def is_packed_experts_module(module: "torch.nn.Module") -> bool:
     )
 
 
+def try_set_experts_implementation(model, module_names: list[str], implementation: str) -> list[str]:
+    """Attempts to switch `model`'s named `.experts` modules to `implementation` via `set_experts_implementation`,
+    and returns the subset of `module_names` whose module failed to adopt it (e.g. because the model architecture
+    does not support that implementation). Does nothing and returns `[]` if `module_names` is empty.
+
+    This is not mxfp4-specific: `set_experts_implementation` is the general mechanism MoE modules use to switch
+    between any registered experts implementation (`"eager"`, `"grouped_mm"`, a quantizer-provided one, ...).
+    """
+    if not module_names:
+        return []
+    model.set_experts_implementation(implementation)
+    return [
+        name for name in module_names if model.get_submodule(name).config._experts_implementation != implementation
+    ]
+
+
 def should_convert_module(full_name, patterns: list[str] | None = None):
     if patterns is None:
         return True
