@@ -647,27 +647,38 @@ def sanitize_content(conversations: list[ChatType], tokenizer) -> tuple[list[Cha
     """
     safe_ids: list[list[int]] = []
 
-    def sanitize(node: Any, may_inline: bool = True) -> Any:
-        if isinstance(node, str):
-            ids = tokenizer.encode(node, add_special_tokens=False, split_special_tokens=True)
-            # Content with nothing to hide is left for the template's own encoding call, so ordinary chats
-            # stay byte-identical instead of paying its boundary effects (SentencePiece prepends a dummy
-            # space to every call). Only safe where the neighbours are template text: blocks inside a list
-            # render back to back, so two halves of a control token would fuse into the real thing.
-            if may_inline and "\x00" not in node and ids == tokenizer.encode(node, add_special_tokens=False):
-                return node
-            safe_ids.append(ids)
-            return f"\x00{len(safe_ids) - 1}\x00"
-        elif isinstance(node, dict):
-            # Multimodal blocks: the text is untrusted, the rest of the block is structure
-            return {key: sanitize(value, may_inline) if key == "text" else value for key, value in node.items()}
-        elif isinstance(node, list):
-            return [sanitize(item, may_inline=False) for item in node]
-        return node
+    def sanitize_text(text: str, may_inline: bool) -> str:
+        """A string, either left for the template's own encoding call or replaced by a marker."""
+        ids = tokenizer.encode(text, add_special_tokens=False, split_special_tokens=True)
+        # Inlining keeps ordinary chats byte-identical, instead of paying the boundary effects of a separate
+        # call (SentencePiece prepends a dummy space to every one)
+        if may_inline and "\x00" not in text and ids == tokenizer.encode(text, add_special_tokens=False):
+            return text
+        safe_ids.append(ids)
+        return f"\x00{len(safe_ids) - 1}\x00"
+
+    def sanitize_part(part: Any, may_inline: bool) -> Any:
+        """A content block, of which only the text is untrusted; the rest is structure."""
+        if isinstance(part, str):
+            return sanitize_text(part, may_inline)
+        elif isinstance(part, dict) and isinstance(part.get("text"), str):
+            return {**part, "text": sanitize_text(part["text"], may_inline)}
+        return part
+
+    def sanitize_field(content: Any) -> Any:
+        """The `content` of one message: either a string, or a list of blocks."""
+        # Blocks in a list render back to back, so two inlined halves of a control token would fuse into the
+        # real thing. Only a lone string is safe to inline, since template text is what surrounds it.
+        if isinstance(content, list):
+            return [sanitize_part(part, may_inline=False) for part in content]
+        return sanitize_part(content, may_inline=True)
 
     safe_conversations = [
-        [{key: sanitize(value) if key == "content" else value for key, value in message.items()} for message in chat]
-        for chat in (chat.messages if hasattr(chat, "messages") else chat for chat in conversations)
+        [
+            {key: sanitize_field(value) if key == "content" else value for key, value in message.items()}
+            for message in messages
+        ]
+        for messages in (chat.messages if hasattr(chat, "messages") else chat for chat in conversations)
     ]
     return safe_conversations, safe_ids
 
