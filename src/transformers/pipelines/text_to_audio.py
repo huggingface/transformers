@@ -273,6 +273,9 @@ class TextToAudioPipeline(Pipeline):
         forward_params=None,
         generate_kwargs=None,
     ):
+        forward_params = {} if forward_params is None else forward_params.copy()
+        generate_kwargs = {} if generate_kwargs is None else generate_kwargs.copy()
+
         if getattr(self, "assistant_model", None) is not None:
             generate_kwargs["assistant_model"] = self.assistant_model
         if getattr(self, "assistant_tokenizer", None) is not None:
@@ -280,8 +283,8 @@ class TextToAudioPipeline(Pipeline):
             generate_kwargs["assistant_tokenizer"] = self.assistant_tokenizer
 
         params = {
-            "forward_params": forward_params if forward_params else {},
-            "generate_kwargs": generate_kwargs if generate_kwargs else {},
+            "forward_params": forward_params,
+            "generate_kwargs": generate_kwargs,
         }
 
         if preprocess_params is None:

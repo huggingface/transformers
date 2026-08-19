@@ -41,6 +41,23 @@ class TextToAudioPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING
     # for now only test text_to_waveform and not text_to_spectrogram
 
+    def test_assistant_kwargs_are_added_without_mutating_inputs(self):
+        pipe = object.__new__(TextToAudioPipeline)
+        pipe.assistant_model = object()
+        pipe.assistant_tokenizer = object()
+        pipe.tokenizer = object()
+
+        _, params, _ = pipe._sanitize_parameters()
+        self.assertIs(params["generate_kwargs"]["assistant_model"], pipe.assistant_model)
+        self.assertIs(params["generate_kwargs"]["assistant_tokenizer"], pipe.assistant_tokenizer)
+        self.assertIs(params["generate_kwargs"]["tokenizer"], pipe.tokenizer)
+
+        forward_params = {"speaker_id": 5}
+        generate_kwargs = {"do_sample": True}
+        pipe._sanitize_parameters(forward_params=forward_params, generate_kwargs=generate_kwargs)
+        self.assertEqual(forward_params, {"speaker_id": 5})
+        self.assertEqual(generate_kwargs, {"do_sample": True})
+
     @require_torch
     def test_small_speecht5_pt(self):
         audio_generator = pipeline(task="text-to-audio", model="microsoft/speecht5_tts")
