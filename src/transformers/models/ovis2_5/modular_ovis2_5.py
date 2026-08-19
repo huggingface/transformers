@@ -632,17 +632,48 @@ class Ovis2_5VisionModel(Ovis2_5PreTrainedModel, MuseGlimmerVisionModel):
             Temporal, height, and width patch-grid dimensions for each packed image or video.
         """
         hidden_states = self.embeddings(pixel_values, grid_thw, **kwargs)
+        spatial_merge_unit = self.spatial_merge_size**2
+        window_index, cu_window_seqlens = get_vision_window_index(
+            grid_thw,
+            spatial_merge_size=self.spatial_merge_size,
+            window_size=self.window_size,
+            patch_size=self.patch_size,
+            kwargs=kwargs,
+        )
+        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
+
         position_ids = get_vision_position_ids(grid_thw, self.config.hidden_stride, kwargs=kwargs)
         rotary_pos_emb = self.rotary_pos_emb(position_ids)
         rotary_pos_emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
-        position_embeddings = (rotary_pos_emb.cos(), rotary_pos_emb.sin())
-        encoder_outputs = self.encoder(
-            hidden_states,
-            grid_thw=grid_thw,
-            position_embeddings=position_embeddings,
-            **kwargs,
+        rotary_cos, rotary_sin = rotary_pos_emb.cos(), rotary_pos_emb.sin()
+
+        sequence_length = hidden_states.shape[0]
+        hidden_states = hidden_states.reshape(sequence_length // spatial_merge_unit, spatial_merge_unit, -1)
+        hidden_states = hidden_states[window_index].reshape(sequence_length, -1)
+        rotary_cos = rotary_cos.reshape(sequence_length // spatial_merge_unit, spatial_merge_unit, -1)
+        rotary_sin = rotary_sin.reshape(sequence_length // spatial_merge_unit, spatial_merge_unit, -1)
+        position_embeddings = (
+            rotary_cos[window_index].reshape(sequence_length, -1),
+            rotary_sin[window_index].reshape(sequence_length, -1),
         )
-        pre_layernorm_hidden_state = encoder_outputs.last_hidden_state
+
+        cu_seqlens_mapping = {
+            "full_attention": (cu_seqlens, max_seqlen),
+            "sliding_attention": (cu_window_seqlens, None),
+        }
+        for layer_index, encoder_layer in enumerate(self.encoder.layers):
+            layer_cu_seqlens, layer_max_seqlen = cu_seqlens_mapping[self.config.layer_types[layer_index]]
+            hidden_states = encoder_layer(
+                hidden_states,
+                cu_seqlens=layer_cu_seqlens,
+                position_embeddings=position_embeddings,
+                max_seqlen=layer_max_seqlen,
+                **kwargs,
+            )
+
+        reverse_indices = torch.argsort(window_index)
+        hidden_states = hidden_states.reshape(sequence_length // spatial_merge_unit, spatial_merge_unit, -1)
+        pre_layernorm_hidden_state = hidden_states[reverse_indices].reshape(sequence_length, -1)
         last_hidden_state = self.post_layernorm(pre_layernorm_hidden_state)
         # The released visual tokenizer consumes the final encoder state before this output normalization.
         return BaseModelOutputWithPooling(
