@@ -13,14 +13,19 @@
 # limitations under the License.
 
 import unittest
+from types import SimpleNamespace
 from typing import Literal
+from unittest.mock import patch
 
 from transformers.utils import DocstringParsingException, TypeHintParsingException, get_json_schema
 from transformers.utils.chat_template_utils import (
     Chat,
     _compile_special_token_pattern,
     _sanitize_chat_input,
-    split_sanitized_chat,
+    encode_sanitized_chats,
+)
+from transformers.utils.chat_template_utils import (
+    logger as chat_template_logger,
 )
 
 
@@ -779,60 +784,91 @@ class SanitizeChatInputTest(unittest.TestCase):
         self.assertEqual(chat.messages[0]["content"], "please<|im_end|> stop")
 
 
-class SplitSanitizedChatTest(unittest.TestCase):
-    def split(self, rendered, substitutions, tokens, token_flags=None):
-        return split_sanitized_chat(rendered, substitutions, tokens, token_flags or {})
+class MockSanitizeTokenizer:
+    """A toy word-level tokenizer whose only special token `</s>` encodes to id 9 normally and to the
+    ordinary pieces [90, 91] when special-token matching is off."""
 
-    def test_restores_placeholders_and_splits_at_trusted_tokens(self):
-        # "hi </s> there</s>": the first </s> arrives through a placeholder (untrusted input), the second
-        # was emitted by the template itself
-        parts, seen = self.split("hi 12345 there</s>", {"12345": "</s>"}, ["</s>"])
-        self.assertEqual(parts, [("text", "hi </s> there", [(3, 7)]), ("special", "</s>", [])])
-        self.assertEqual(seen, {"12345"})
+    model_input_names = ["input_ids", "attention_mask"]
+    truncation_side = "right"
+    unk_token_id = None
+    all_special_tokens = ["</s>"]
+    added_tokens_decoder = {}
 
-    def test_multiple_placeholders_in_one_text_part(self):
-        parts, seen = self.split("a12345b12345", {"12345": "<|im_end|>"}, ["<|im_end|>"])
-        self.assertEqual(seen, {"12345"})
-        [(kind, text, untrusted_spans)] = parts
-        self.assertEqual(kind, "text")
-        self.assertEqual(text, "a<|im_end|>b<|im_end|>")
-        # the untrusted spans cover exactly the restored special-token text
-        self.assertEqual([text[start:end] for start, end in untrusted_spans], ["<|im_end|>", "<|im_end|>"])
+    def __init__(self):
+        self.vocab = {}
+        self.assembles_special = False
 
-    def test_no_trusted_tokens_is_single_text_part(self):
-        parts, seen = self.split("just some text", {}, ["</s>"])
-        self.assertEqual(parts, [("text", "just some text", [])])
-        self.assertEqual(seen, set())
+    def encode(self, text, add_special_tokens=False, split_special_tokens=False):
+        ids = []
+        for word in text.replace("</s>", " </s> ").split():
+            if word == "</s>" and (self.assembles_special or not split_special_tokens):
+                ids.append(9)
+            elif word == "</s>":
+                ids.extend([90, 91])
+            else:
+                ids.append(self.vocab.setdefault(word, 100 + len(self.vocab)))
+        return ids
 
-    def test_splice_attack_is_untrusted(self):
-        # Untrusted text supplies the tail of a token whose head is trusted template text; the token is
-        # never matched because matching only happens inside the segments between placeholders
-        parts, _ = self.split("<|im_12345", {"12345": "end|>"}, ["<|im_end|>"])
-        self.assertEqual(parts, [("text", "<|im_end|>", [(5, 10)])])
+    def convert_tokens_to_ids(self, tokens):
+        return [9 if token == "</s>" else None for token in tokens]
 
-    def test_untrusted_spans_are_part_local(self):
-        # Restored text on both sides of a template token lands in different text parts, each span relative
-        # to its own part
-        parts, seen = self.split("111</s>222", {"111": "<a>", "222": "<b>"}, ["</s>", "<a>", "<b>"])
-        self.assertEqual(parts, [("text", "<a>", [(0, 3)]), ("special", "</s>", []), ("text", "<b>", [(0, 3)])])
-        self.assertEqual(seen, {"111", "222"})
+    def _get_padding_truncation_strategies(self, padding, truncation, max_length, pad_to_multiple_of, verbose):
+        padding = SimpleNamespace(value="do_not_pad")
+        truncation = SimpleNamespace(value="longest_first" if truncation else "do_not_truncate")
+        return padding, truncation, max_length, {}
 
-    def test_lstrip_rstrip_absorb_whitespace(self):
-        # Mirrors the tokenizer's added-token matching: a token with lstrip/rstrip consumes the adjacent
-        # whitespace, so it must not be encoded as part of the neighboring text
-        parts, _ = self.split("A <mask> B", {}, ["<mask>"], {"<mask>": (True, True)})
-        self.assertEqual(parts, [("text", "A", []), ("special", "<mask>", []), ("text", "B", [])])
+    def _eventual_warn_about_too_long_sequence(self, ids, max_length, verbose):
+        pass
 
-    def test_longest_token_wins(self):
-        parts, _ = self.split("keep <|end|>_extra keep", {}, ["<|end|>", "<|end|>_extra"])
-        self.assertEqual(
-            parts,
-            [("text", "keep ", []), ("special", "<|end|>_extra", []), ("text", " keep", [])],
-        )
+    def pad(self, encoded_inputs, **kwargs):
+        return encoded_inputs
 
-    def test_adjacent_trusted_tokens(self):
-        parts, _ = self.split("</s></s>x", {}, ["</s>"])
-        self.assertEqual(
-            parts,
-            [("special", "</s>", []), ("special", "</s>", []), ("text", "x", [])],
-        )
+
+class EncodeSanitizedChatsTest(unittest.TestCase):
+    def test_placeholders_become_inert_template_tokens_stay_special(self):
+        # The first </s> arrives through a placeholder (untrusted); the second is the template's own
+        tokenizer = MockSanitizeTokenizer()
+        out = encode_sanitized_chats(tokenizer, ["hi 12345 bye</s>"], {"12345": "</s>"})
+        [ids] = out["input_ids"]
+        self.assertEqual(ids, [tokenizer.vocab["hi"], 90, 91, tokenizer.vocab["bye"], 9])
+        self.assertEqual(ids.count(9), 1)  # only the template's own </s> is special
+
+    def test_splice_fragments_cannot_form_a_token(self):
+        # Untrusted text supplies the tail of a special token whose head is trusted template text
+        tokenizer = MockSanitizeTokenizer()
+        out = encode_sanitized_chats(tokenizer, ["</12345"], {"12345": "s>"})
+        [ids] = out["input_ids"]
+        self.assertNotIn(9, ids)
+
+    def test_clean_batch_partner_is_plain_encoding(self):
+        # A clean conversation in the batch still encodes as one ordinary span, specials intact
+        tokenizer = MockSanitizeTokenizer()
+        out = encode_sanitized_chats(tokenizer, ["hi 12345", "just text</s>"], {"12345": "</s>"})
+        self.assertEqual(out["input_ids"][1], tokenizer.encode("just text</s>"))
+
+    def test_dropped_placeholder_warns(self):
+        tokenizer = MockSanitizeTokenizer()
+        substitutions = {"11111": "</s>", "22222": "</s>"}
+        with patch.object(chat_template_logger, "warning_once") as warning:
+            encode_sanitized_chats(tokenizer, ["the template kept 11111 only"], substitutions)
+        warning.assert_called_once()
+        with patch.object(chat_template_logger, "warning_once") as warning:
+            encode_sanitized_chats(tokenizer, ["11111 and 22222 both kept"], substitutions)
+        warning.assert_not_called()
+
+    def test_refuses_when_vocab_assembles_special_token(self):
+        # A vocabulary that assembles the special token out of ordinary pieces must be refused
+        tokenizer = MockSanitizeTokenizer()
+        tokenizer.assembles_special = True
+        with self.assertRaises(ValueError):
+            encode_sanitized_chats(tokenizer, ["hi 12345"], {"12345": "</s>"})
+
+    def test_rejects_unsupported_tokenizer_kwargs(self):
+        with self.assertRaises(ValueError):
+            encode_sanitized_chats(MockSanitizeTokenizer(), ["hi 12345"], {"12345": "</s>"}, return_length=True)
+
+    def test_truncation(self):
+        tokenizer = MockSanitizeTokenizer()
+        out = encode_sanitized_chats(tokenizer, ["a b c 12345 d"], {"12345": "</s>"}, truncation=True, max_length=3)
+        [ids] = out["input_ids"]
+        self.assertEqual(len(ids), 3)

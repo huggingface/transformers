@@ -2016,8 +2016,7 @@ class ProcessorMixin(PushToHubMixin):
                 chat template is used.
             sanitize_special_tokens (`bool`, defaults to `False`):
                 Sanitization of chat inputs (see [`~PreTrainedTokenizerBase.apply_chat_template`]) is not yet
-                supported for processors, and passing `True` raises an error. The argument exists so that the
-                request fails loudly instead of being silently forwarded to the template as a variable.
+                supported for processors; passing `True` raises an error.
         """
         processor_kwargs = processor_kwargs or {}
 
@@ -2175,8 +2174,7 @@ class ProcessorMixin(PushToHubMixin):
                 batch_videos.append(videos)
 
         if sanitize_special_tokens:
-            # Explicitly rejected rather than left out of the signature: an unknown kwarg would silently
-            # become a template variable via `template_kwargs`, which is a dangerous no-op for a security flag
+            # In the signature only to be rejected: as an unknown kwarg it would silently become a template variable
             raise NotImplementedError(
                 "`sanitize_special_tokens` is not yet supported for processors, only for tokenizers."
             )
