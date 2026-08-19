@@ -115,9 +115,9 @@ class Ernie4_5_VLMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 "input_ids",
                 "attention_mask",
                 "mm_token_type_ids",
-                "moe_mm_token_type_ids",
                 "pixel_values",
                 "image_grid_thw",
+                "moe_mm_token_type_ids",
             ],
         )
 
@@ -126,7 +126,7 @@ class Ernie4_5_VLMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             processor()
 
         # test if it raises when no text is passed
-        with pytest.raises(TypeError):
+        with pytest.raises(KeyError):
             processor(images=image_input)
 
     def test_kwargs_overrides_custom_image_processor_kwargs(self):
