@@ -401,7 +401,6 @@ class Qwen4ExpQSAIndexer(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None,
-        key_length: int,
     ) -> torch.Tensor:
         batch_size, sequence_length, _ = hidden_states.shape
         hidden_shape = (batch_size, sequence_length, -1, self.index_head_dim)
@@ -420,30 +419,13 @@ class Qwen4ExpQSAIndexer(nn.Module):
         indexer_states = torch.cat([token_k, cos.to(token_k.dtype), sin.to(token_k.dtype)], dim=-1)
         if past_key_values is not None:
             indexer_states = past_key_values.update_indexer(indexer_states, self.layer_idx)
-        indexer_states = indexer_states[:, :key_length]
 
         rotary_dim = cos.shape[-1]
         raw_keys, key_cos, key_sin = torch.split(indexer_states, [self.index_head_dim, rotary_dim, rotary_dim], dim=-1)
 
-        # Only eager and sdpa attentions are accepted, so the mask is always either None or 4D here
-        # If it's None, it means that we need to rely on the lengths and offsets to get the valid indices
-        if attention_mask is None:
-            q_length = sequence_length
-            if past_key_values is not None:
-                q_offset = past_key_values.get_query_offset(self.layer_idx)
-                kv_length, kv_offset = past_key_values.get_mask_sizes(q_length, self.layer_idx)
-            else:
-                q_offset = 0
-                kv_length, kv_offset = q_length, 0
-
-            # Create a basic causal mask
-            kv_positions = torch.arange(kv_length, device=hidden_states.device) + kv_offset
-            q_positions = torch.arange(q_length, device=hidden_states.device) + q_offset
-            visible_token_indices = q_positions[:, None] >= kv_positions[None, :]
-            visible_token_indices = visible_token_indices[None, None, :, :].expand(batch_size, -1, -1, -1)
-        # Always 4D with either bool (sdpa) or float (eager) that already gives us the valid indices
-        else:
-            visible_token_indices = attention_mask if attention_mask.dtype == torch.bool else attention_mask == 0
+        # Note that the mask is never None here as we only allow eager and sdpa, and we do not allow sdpa's mask skip
+        # It's always 4D with either bool (sdpa) or float (eager) and already gives us the valid indices
+        visible_token_indices = attention_mask if attention_mask.dtype == torch.bool else attention_mask == 0
 
         selected_token_indices = torch.full(
             (batch_size, sequence_length, self.token_budget + self.compress_ratio - 1),
@@ -498,7 +480,7 @@ class Qwen4ExpAttention(Qwen3_5Attention):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None,
+        attention_mask: torch.Tensor,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
@@ -509,13 +491,7 @@ class Qwen4ExpAttention(Qwen3_5Attention):
             past_length = past_key_values.get_seq_length(self.layer_idx)
             past_length = int(past_length.item()) if isinstance(past_length, torch.Tensor) else past_length
             target_length, _ = past_key_values.get_mask_sizes(query_length, self.layer_idx)
-        selected_token_indices = self.indexer(
-            hidden_states,
-            position_embeddings,
-            attention_mask,
-            past_key_values,
-            key_length=past_length + query_length,
-        )
+        selected_token_indices = self.indexer(hidden_states, position_embeddings, attention_mask, past_key_values)
         attention_mask = self.indexer.build_sparse_attention_mask(
             selected_token_indices,
             target_length=target_length,
@@ -991,6 +967,9 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
                 "attention_mask": attention_mask,
                 "past_key_values": past_key_values,
                 "position_ids": text_position_ids,
+                # Due to the indexer, we always want to create a mask to then simply overlay the indexer mask in each layer - otherwise
+                # we may have to recreate it in each layer if it gets skipped
+                "allow_is_causal_skip": False,
             }
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
@@ -1108,6 +1087,32 @@ class Qwen4ExpForCausalLM(Qwen3_5MoeForCausalLM):
             **kwargs,
         )
 
+    @staticmethod
+    def create_masks_for_generate(
+        config: PreTrainedConfig,
+        inputs_embeds: torch.Tensor,
+        attention_mask: torch.Tensor | None,
+        past_key_values: Cache | None,
+        position_ids: torch.Tensor | None,
+        **kwargs,
+    ) -> dict:
+        # We need to overwrite to add the `allow_is_causal_skip=False` condition
+        mask_kwargs = {
+            "config": config,
+            "inputs_embeds": inputs_embeds,
+            "attention_mask": attention_mask,
+            "past_key_values": past_key_values,
+            "position_ids": position_ids,
+            # Due to the indexer, we always want to create a mask to then simply overlay the indexer mask in each layer - otherwise
+            # we may have to recreate it in each layer if it gets skipped
+            "allow_is_causal_skip": False,
+        }
+        causal_mask_mapping = {
+            "full_attention": create_causal_mask(**mask_kwargs),
+            "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
+        }
+        return causal_mask_mapping
+
 
 class Qwen4ExpForConditionalGeneration(Qwen3_5MoeForConditionalGeneration):
     def forward(
@@ -1147,6 +1152,32 @@ class Qwen4ExpForConditionalGeneration(Qwen3_5MoeForConditionalGeneration):
             logits_to_keep=logits_to_keep,
             **kwargs,
         )
+
+    @staticmethod
+    def create_masks_for_generate(
+        config: PreTrainedConfig,
+        inputs_embeds: torch.Tensor,
+        attention_mask: torch.Tensor | None,
+        past_key_values: Cache | None,
+        position_ids: torch.Tensor | None,
+        **kwargs,
+    ) -> dict:
+        # We need to overwrite to add the `allow_is_causal_skip=False` condition
+        mask_kwargs = {
+            "config": config,
+            "inputs_embeds": inputs_embeds,
+            "attention_mask": attention_mask,
+            "past_key_values": past_key_values,
+            "position_ids": position_ids,
+            # Due to the indexer, we always want to create a mask to then simply overlay the indexer mask in each layer - otherwise
+            # we may have to recreate it in each layer if it gets skipped
+            "allow_is_causal_skip": False,
+        }
+        causal_mask_mapping = {
+            "full_attention": create_causal_mask(**mask_kwargs),
+            "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
+        }
+        return causal_mask_mapping
 
 
 __all__ = [
