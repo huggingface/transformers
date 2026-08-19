@@ -13,6 +13,7 @@
 # limitations under the License.
 """NeoMME model configuration."""
 
+import math
 from typing import Literal
 
 from huggingface_hub.dataclasses import strict
@@ -97,6 +98,8 @@ class NeoMMEConfig(PreTrainedConfig):
     tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
+        if self.num_hidden_layers <= 0:
+            raise ValueError("num_hidden_layers must be positive")
         if self.layer_types is None:
             self.layer_types = [
                 "full_attention" if (i + 1) % 6 == 0 or i == self.num_hidden_layers - 1 else "sliding_attention"
@@ -112,14 +115,28 @@ class NeoMMEConfig(PreTrainedConfig):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
         if self.num_key_value_heads <= 0 or self.num_attention_heads % self.num_key_value_heads:
             raise ValueError("num_key_value_heads must divide num_attention_heads")
+        for name in (
+            "vocab_size",
+            "embedding_rank",
+            "hidden_size",
+            "intermediate_size",
+            "num_attention_heads",
+            "head_dim",
+            "max_position_embeddings",
+            "patch_size",
+        ):
+            if getattr(self, name) <= 0:
+                raise ValueError(f"{name} must be positive")
+        if self.embedding_dim <= 0:
+            raise ValueError("embedding_dim must be positive")
         if not 0 < self.sliding_window_short <= self.sliding_window_long:
             raise ValueError(
                 f"expected 0 < sliding_window_short <= sliding_window_long, got {self.sliding_window_short} "
                 f"and {self.sliding_window_long}. Pass two equal widths for a single band; the research "
                 "encoding of `sliding_window_long = 0` for 'uniform' is resolved by the conversion script."
             )
-        if self.residual_scale <= 0:
-            raise ValueError("residual_scale must be positive")
+        if not math.isfinite(self.residual_scale) or self.residual_scale <= 0:
+            raise ValueError("residual_scale must be finite and positive")
         self._validate_rotary_dims()
 
     def convert_rope_params_to_dict(self, **kwargs):
@@ -137,7 +154,9 @@ class NeoMMEConfig(PreTrainedConfig):
             if rope_scaling is not None:
                 layer_params.update(rope_scaling)
             layer_params.setdefault("rope_type", "default")
-            layer_params.setdefault("rope_theta", rope_theta or self.default_theta[layer_type])
+            layer_params.setdefault(
+                "rope_theta", rope_theta if rope_theta is not None else self.default_theta[layer_type]
+            )
             layer_params.setdefault("partial_rotary_factor", self.default_partial_rotary_factor[layer_type])
 
         self.standardize_rope_params()
@@ -157,6 +176,14 @@ class NeoMMEConfig(PreTrainedConfig):
     def _validate_rotary_dims(self) -> None:
         """Ensure each layer type rotates a multiple of 4 head dimensions."""
         for layer_type in sorted(set(self.layer_types)):
+            rope_theta = self.rope_parameters[layer_type]["rope_theta"]
+            if (
+                not isinstance(rope_theta, (int, float))
+                or isinstance(rope_theta, bool)
+                or not math.isfinite(rope_theta)
+                or rope_theta <= 0
+            ):
+                raise ValueError(f"rope_parameters[{layer_type!r}]['rope_theta'] must be finite and positive")
             partial_rotary_factor = self.rope_parameters[layer_type].get("partial_rotary_factor", 1.0)
             rotary_dim = int(self.head_dim * partial_rotary_factor)
             if not 0.0 < partial_rotary_factor <= 1.0:

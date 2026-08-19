@@ -36,9 +36,10 @@ class NeoMMEImageProcessorKwargs(ImagesKwargs, total=False):
     max_side (`int`, *optional*):
         Longest-side cap in pixels. Unset means no longest-side resize.
     max_pixels (`int`, *optional*):
-        Pixel-area cap. Unset means no area cap.
+        Maximum pixel-area target before integer dimension rounding. Unset means no area target.
     min_pixels (`int`, *optional*):
-        Pixel-area floor; may upscale the image. Caps take precedence when both bounds apply.
+        Minimum pixel-area target before integer dimension rounding; may upscale the image. Maximum targets take
+        precedence when both bounds apply.
     """
 
     patch_size: int
@@ -61,10 +62,18 @@ def convert_image_to_patches(image: "torch.Tensor", patch_size: int) -> "torch.T
     return patched_image
 
 
+def _validate_image_dimensions(height: int, width: int) -> None:
+    if not isinstance(height, int) or isinstance(height, bool) or height <= 0:
+        raise ValueError(f"height must be a positive integer, got {height!r}.")
+    if not isinstance(width, int) or isinstance(width, bool) or width <= 0:
+        raise ValueError(f"width must be a positive integer, got {width!r}.")
+
+
 def get_resize_output_size(
     height: int, width: int, max_side: int | None, max_pixels: int | None, min_pixels: int | None
 ) -> tuple[int, int]:
-    """Compute integer height and width that follow the configured image size limits."""
+    """Compute integer height and width from the configured image size targets."""
+    _validate_image_dimensions(height, width)
     scale = (min_pixels / (height * width)) ** 0.5 if min_pixels is not None and height * width < min_pixels else 1.0
     if max_side is not None:
         scale = min(scale, max_side / max(height, width))
@@ -120,7 +129,23 @@ class NeoMMEImageProcessor(TorchvisionBackend):
         # `size` is computed per image from the resolution budget, so the generic `do_resize` check
         # (which insists on a `size`) does not apply.
         kwargs.pop("do_resize", None)
+        self._validate_size_settings(
+            kwargs.get("patch_size", self.patch_size),
+            kwargs.get("max_side", self.max_side),
+            kwargs.get("max_pixels", self.max_pixels),
+            kwargs.get("min_pixels", self.min_pixels),
+        )
         return super()._validate_preprocess_kwargs(**kwargs)
+
+    @staticmethod
+    def _validate_size_settings(
+        patch_size: int, max_side: int | None, max_pixels: int | None, min_pixels: int | None
+    ) -> None:
+        if not isinstance(patch_size, int) or isinstance(patch_size, bool) or patch_size <= 0:
+            raise ValueError(f"patch_size must be a positive integer, got {patch_size!r}.")
+        for name, value in (("max_side", max_side), ("max_pixels", max_pixels), ("min_pixels", min_pixels)):
+            if value is not None and (not isinstance(value, int) or isinstance(value, bool) or value <= 0):
+                raise ValueError(f"{name} must be a positive integer or None, got {value!r}.")
 
     def _preprocess(
         self,
@@ -155,7 +180,7 @@ class NeoMMEImageProcessor(TorchvisionBackend):
         for image in images:
             if do_resize:
                 image = self._resize_to_budget(image, max_side, max_pixels, min_pixels, resample)
-            # Pad to a whole patch grid on the RAW image, so padded pixels rescale to -1 exactly like the
+            # Pad to a whole patch grid before rescaling, so padded pixels become -1 exactly like the
             # black canvas the reference implementation pastes onto.
             image, grid_height, grid_width = self._pad_to_patch_grid(image, patch_size)
             image = self.rescale_and_normalize(image, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
@@ -178,14 +203,19 @@ class NeoMMEImageProcessor(TorchvisionBackend):
         Values in `images_kwargs` override the processor settings.
         """
         images_kwargs = images_kwargs or {}
-        patch_size = images_kwargs.get("patch_size") or self.patch_size
+        patch_size = images_kwargs.get("patch_size", self.patch_size)
+        max_side = images_kwargs.get("max_side", self.max_side)
+        max_pixels = images_kwargs.get("max_pixels", self.max_pixels)
+        min_pixels = images_kwargs.get("min_pixels", self.min_pixels)
+        _validate_image_dimensions(height, width)
+        self._validate_size_settings(patch_size, max_side, max_pixels, min_pixels)
         if images_kwargs.get("do_resize", self.do_resize):
             height, width = get_resize_output_size(
                 height,
                 width,
-                images_kwargs.get("max_side", self.max_side),
-                images_kwargs.get("max_pixels", self.max_pixels),
-                images_kwargs.get("min_pixels", self.min_pixels),
+                max_side,
+                max_pixels,
+                min_pixels,
             )
         return -(-height // patch_size) * (-(-width // patch_size))
 

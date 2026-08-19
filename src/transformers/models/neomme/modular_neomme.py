@@ -34,7 +34,6 @@ from ...utils import (
     TensorType,
     TransformersKwargs,
     auto_docstring,
-    is_torchdynamo_compiling,
     logging,
     torch_compilable_check,
 )
@@ -51,10 +50,18 @@ from .configuration_neomme import NeoMMEConfig
 logger = logging.get_logger(__name__)
 
 
+def _validate_image_dimensions(height: int, width: int) -> None:
+    if not isinstance(height, int) or isinstance(height, bool) or height <= 0:
+        raise ValueError(f"height must be a positive integer, got {height!r}.")
+    if not isinstance(width, int) or isinstance(width, bool) or width <= 0:
+        raise ValueError(f"width must be a positive integer, got {width!r}.")
+
+
 def get_resize_output_size(
     height: int, width: int, max_side: int | None, max_pixels: int | None, min_pixels: int | None
 ) -> tuple[int, int]:
-    """Compute integer height and width that follow the configured image size limits."""
+    """Compute integer height and width from the configured image size targets."""
+    _validate_image_dimensions(height, width)
     scale = (min_pixels / (height * width)) ** 0.5 if min_pixels is not None and height * width < min_pixels else 1.0
     if max_side is not None:
         scale = min(scale, max_side / max(height, width))
@@ -72,9 +79,10 @@ class NeoMMEImageProcessorKwargs(ImagesKwargs, total=False):
     max_side (`int`, *optional*):
         Longest-side cap in pixels. Unset means no longest-side resize.
     max_pixels (`int`, *optional*):
-        Pixel-area cap. Unset means no area cap.
+        Maximum pixel-area target before integer dimension rounding. Unset means no area target.
     min_pixels (`int`, *optional*):
-        Pixel-area floor; may upscale the image. Caps take precedence when both bounds apply.
+        Minimum pixel-area target before integer dimension rounding; may upscale the image. Maximum targets take
+        precedence when both bounds apply.
     """
 
     patch_size: int
@@ -128,7 +136,23 @@ class NeoMMEImageProcessor(TorchvisionBackend):
         # `size` is computed per image from the resolution budget, so the generic `do_resize` check
         # (which insists on a `size`) does not apply.
         kwargs.pop("do_resize", None)
+        self._validate_size_settings(
+            kwargs.get("patch_size", self.patch_size),
+            kwargs.get("max_side", self.max_side),
+            kwargs.get("max_pixels", self.max_pixels),
+            kwargs.get("min_pixels", self.min_pixels),
+        )
         return super()._validate_preprocess_kwargs(**kwargs)
+
+    @staticmethod
+    def _validate_size_settings(
+        patch_size: int, max_side: int | None, max_pixels: int | None, min_pixels: int | None
+    ) -> None:
+        if not isinstance(patch_size, int) or isinstance(patch_size, bool) or patch_size <= 0:
+            raise ValueError(f"patch_size must be a positive integer, got {patch_size!r}.")
+        for name, value in (("max_side", max_side), ("max_pixels", max_pixels), ("min_pixels", min_pixels)):
+            if value is not None and (not isinstance(value, int) or isinstance(value, bool) or value <= 0):
+                raise ValueError(f"{name} must be a positive integer or None, got {value!r}.")
 
     def _preprocess(
         self,
@@ -163,7 +187,7 @@ class NeoMMEImageProcessor(TorchvisionBackend):
         for image in images:
             if do_resize:
                 image = self._resize_to_budget(image, max_side, max_pixels, min_pixels, resample)
-            # Pad to a whole patch grid on the RAW image, so padded pixels rescale to -1 exactly like the
+            # Pad to a whole patch grid before rescaling, so padded pixels become -1 exactly like the
             # black canvas the reference implementation pastes onto.
             image, grid_height, grid_width = self._pad_to_patch_grid(image, patch_size)
             image = self.rescale_and_normalize(image, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
@@ -186,14 +210,19 @@ class NeoMMEImageProcessor(TorchvisionBackend):
         Values in `images_kwargs` override the processor settings.
         """
         images_kwargs = images_kwargs or {}
-        patch_size = images_kwargs.get("patch_size") or self.patch_size
+        patch_size = images_kwargs.get("patch_size", self.patch_size)
+        max_side = images_kwargs.get("max_side", self.max_side)
+        max_pixels = images_kwargs.get("max_pixels", self.max_pixels)
+        min_pixels = images_kwargs.get("min_pixels", self.min_pixels)
+        _validate_image_dimensions(height, width)
+        self._validate_size_settings(patch_size, max_side, max_pixels, min_pixels)
         if images_kwargs.get("do_resize", self.do_resize):
             height, width = get_resize_output_size(
                 height,
                 width,
-                images_kwargs.get("max_side", self.max_side),
-                images_kwargs.get("max_pixels", self.max_pixels),
-                images_kwargs.get("min_pixels", self.min_pixels),
+                max_side,
+                max_pixels,
+                min_pixels,
             )
         return -(-height // patch_size) * (-(-width // patch_size))
 
@@ -313,7 +342,7 @@ class NeoMMERotaryEmbedding(nn.Module):
             position_ids = position_ids.unsqueeze(0).expand(2, -1, -1)
         elif position_ids.dim() != 3 or position_ids.shape[0] != 2:
             # Otherwise a `(3, B, L)` or `(B, L, 2)` tensor indexes as if it were axis-major and silently
-            # encodes the wrong positions, or dies inside the module on an opaque IndexError.
+            # encodes the wrong positions or raises an opaque `IndexError`.
             raise ValueError(
                 f"position_ids must be (2, batch_size, sequence_length) with the M-RoPE axis leading, or "
                 f"(batch_size, sequence_length) to use one axis for both; got {tuple(position_ids.shape)}."
@@ -454,10 +483,8 @@ class NeoMMEEncoderLayer(GradientCheckpointingLayer):
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
-        # `hidden_states`, `initial_hidden_states` and `value_embeds` are the arguments that carry
-        # gradients, so they MUST stay positional: reentrant gradient checkpointing only re-attaches the
-        # graph for positional inputs, and a shared grad-carrying keyword argument would be backwarded
-        # through twice (the value-embedding table feeds two layers).
+        # These three tensors must remain positional because reentrant checkpointing only reattaches positional inputs.
+        # Capturing the shared value embedding as a keyword would also replay its existing graph for both selected layers.
         mixed_states = self.lambdas[0] * hidden_states + self.lambdas[1] * initial_hidden_states
         normed_states = self.input_layernorm(mixed_states)
         attn_output, _ = self.self_attn(
@@ -493,12 +520,11 @@ class NeoMMEPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
-        # Generic init for whatever the branches below do not name. Safe for the tensors NeoMME needs born
-        # at exactly zero: `apply` visits children before parents, so the parent-level zeroing runs last.
+        # `apply` visits children before parents, so the NeoMME-specific parent initialization below runs last.
         super()._init_weights(module)
 
         if isinstance(module, NeoMMEEmbeddings):
-            # The factorized table is scaled by the RANK, not `initializer_range`, so the tied decode
+            # The factorized table is scaled by its rank, not `initializer_range`, so the tied decode
             # logits stay O(1) at init (otherwise the initial cross-entropy is ~250 instead of ln V).
             init.normal_(module.word_embeddings.weight, mean=0.0, std=self.config.embedding_rank**-0.5)
         elif isinstance(module, NeoMMEAttention):
@@ -625,7 +651,7 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
                 **kwargs,
             )
 
-        # The final norm is part of the backbone; heads must NOT re-norm.
+        # The final norm is part of the backbone, so task heads do not normalize again.
         hidden_states = self.final_norm(hidden_states)
         return BaseModelOutput(last_hidden_state=hidden_states)
 
@@ -643,14 +669,11 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
             (input_ids == self.config.image_token_id) & (previous_ids != self.config.document_token_id)
         ).unsqueeze(-1)
 
-        if not is_torchdynamo_compiling():
-            num_image_tokens = image_mask.sum()
-            torch_compilable_check(
-                num_image_tokens == pixel_values.shape[0],
-                lambda: (
-                    f"Got {pixel_values.shape[0]} image patches for {int(num_image_tokens)} image placeholder tokens"
-                ),
-            )
+        num_image_tokens = image_mask.sum()
+        torch_compilable_check(
+            num_image_tokens == pixel_values.shape[0],
+            lambda: f"Got {pixel_values.shape[0]} image patches for {int(num_image_tokens)} image placeholder tokens",
+        )
         patch_embeds = self.patch_embeddings(pixel_values.to(hidden_states.dtype))  # (patches, hidden_size)
         return hidden_states.masked_scatter(image_mask, patch_embeds)
 
@@ -740,9 +763,9 @@ class NeoMMEForRetrievalOutput(BaseModelOutput):
     embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, embedding_dim)`, *optional*):
         Normalized token embeddings for late-interaction retrieval. Padding rows are zeroed. Use
         [`NeoMMEProcessor.score_retrieval`] to score these embeddings with MaxSim.
-    dense_embeddings (`torch.FloatTensor` of shape `(batch_size, hidden_size)`, *optional*):
-        A normalized mean-pooled embedding for each input. You can request a Matryoshka prefix with `dense_dim`.
-        Use [`NeoMMEProcessor.score_retrieval`] to score dense embeddings with cosine similarity.
+    dense_embeddings (`torch.FloatTensor` of shape `(batch_size, hidden_size)` or `(batch_size, dense_dim)`, *optional*):
+        A normalized mean-pooled embedding for each input. When `dense_dim` is set, the last dimension is `dense_dim`.
+        Use [`NeoMMEProcessor.score_retrieval`] to score these embeddings with cosine similarity.
     """
 
     loss: torch.FloatTensor | None = None
@@ -828,8 +851,7 @@ class NeoMMEForRetrieval(NeoMMEPreTrainedModel):
         if dense_dim is None:
             return F.normalize(pooled, dim=-1)
 
-        # Slicing would quietly accept a negative or out-of-range width and return a differently-sized
-        # vector, which downstream cosine scoring cannot detect.
+        # Reject widths that slicing would accept but that would return an unexpected vector size.
         if not 0 < dense_dim <= pooled.shape[-1]:
             raise ValueError(f"dense_dim must be in 1..{pooled.shape[-1]} (the pooled width), got {dense_dim}")
         return F.normalize(pooled[..., :dense_dim], dim=-1)

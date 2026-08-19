@@ -16,6 +16,7 @@
 import unittest
 
 import numpy as np
+from huggingface_hub.errors import StrictDataclassFieldValidationError
 
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_vision_available
@@ -175,7 +176,7 @@ class NeoMMEImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return Image.fromarray(rng.integers(0, 255, (height, width, 3), dtype=np.uint8))
 
     def test_rescale_and_padding(self):
-        """Padding is added to the RAW image, so padded pixels land at exactly -1 after the rescale."""
+        """Padding is added before rescaling, so padded pixels become exactly -1."""
         patch_size = self.image_processor_tester.patch_size
         image = Image.fromarray(np.full((patch_size, patch_size + 1, 3), 255, dtype=np.uint8))
 
@@ -258,6 +259,25 @@ class NeoMMEImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         for kwargs in ({"size": 8}, {"do_center_crop": True}, {"do_pad": True}):
             with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
                 processor(images=[image], **kwargs)
+
+    def test_resolution_settings_must_be_positive_integers(self):
+        processor = self.image_processing_classes["torchvision"](patch_size=self.image_processor_tester.patch_size)
+        image = self.make_image(16, 16)
+        for name in ("patch_size", "max_side", "max_pixels", "min_pixels"):
+            for value in (0, -1, 1.5):
+                with (
+                    self.subTest(name=name, value=value),
+                    self.assertRaises((ValueError, StrictDataclassFieldValidationError)),
+                ):
+                    processor(images=[image], **{name: value})
+                with self.subTest(name=name, value=value, patch_count=True), self.assertRaises(ValueError):
+                    processor.get_number_of_image_patches(16, 16, {name: value})
+
+        for height, width in ((0, 16), (16, 0), (-1, 16), (16, 1.5)):
+            with self.subTest(height=height, width=width), self.assertRaises(ValueError):
+                processor.get_number_of_image_patches(height, width)
+        with self.assertRaises(ValueError):
+            processor.get_number_of_image_patches(0, 16, {"do_resize": False})
 
     def test_get_number_of_image_patches(self):
         patch_size = self.image_processor_tester.patch_size

@@ -18,7 +18,6 @@ import unittest
 from unittest import mock
 
 import numpy as np
-from jinja2.exceptions import TemplateError
 from parameterized import parameterized
 
 from transformers.testing_utils import require_tokenizers, require_torch, require_vision, torch_device
@@ -161,6 +160,28 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         direct = processor(text=["hello"], task="document", return_tensors="pt")
         torch.testing.assert_close(inputs["input_ids"], direct["input_ids"])
 
+    def test_apply_chat_template_preserves_processing_kwargs(self):
+        processor = self.get_processor()
+        self._set_retrieval_chat_template(processor)
+        messages = [{"role": "user", "content": [{"type": "text", "text": "hello world"}]}]
+
+        inputs = processor.apply_chat_template(
+            messages,
+            task="document",
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            max_length=2,
+            padding="max_length",
+        )
+        direct = processor(
+            text=["hello world"], task="document", return_tensors="pt", max_length=2, padding="max_length"
+        )
+
+        torch.testing.assert_close(inputs["input_ids"], direct["input_ids"])
+        self.assertEqual(inputs["input_ids"][0, 0], self.marker_ids["<doc>"])
+        self.assertNotIn(self.marker_ids["<mask>"], inputs["input_ids"][0].tolist())
+
     @parameterized.expand([(1, "pt"), (2, "pt")])
     def test_apply_chat_template_image(self, batch_size, return_tensors):
         processor = self.get_processor()
@@ -195,7 +216,7 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self._set_retrieval_chat_template(processor)
         messages = [{"role": "user", "content": [{"type": "text", "text": "hello"}]}]
 
-        with self.assertRaisesRegex(TemplateError, "task must be 'query' or 'document'"):
+        with self.assertRaisesRegex(ValueError, "expected 'query' or 'document'"):
             processor.apply_chat_template(messages, task="invalid", tokenize=True)
 
     def test_apply_chat_template_rejects_unsupported_inputs(self):
@@ -229,6 +250,12 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 [{"role": "user", "content": [{"type": "video", "video": "example.mp4"}]}],
                 "document",
                 "do not support content type 'video'",
+            ),
+            (
+                "missing image source",
+                [{"role": "user", "content": [{"type": "image"}]}],
+                "document",
+                "must provide an image",
             ),
         ]
 
@@ -268,6 +295,16 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         inputs = processor(text=["hello"], task="query", return_tensors="pt")
         hello_id = processor.tokenizer.convert_tokens_to_ids("hello")
         self.assertEqual(inputs["input_ids"][0].tolist(), [self.marker_ids["<query>"], hello_id])
+
+    def test_structural_settings_validated(self):
+        components = self.prepare_components()
+        for kwargs, error in (
+            ({"query_expand": -1}, "non-negative integer"),
+            ({"query_expand": 1.5}, "non-negative integer"),
+            ({"image_placeholder": ""}, "non-empty string"),
+        ):
+            with self.subTest(kwargs=kwargs), self.assertRaisesRegex(ValueError, error):
+                NeoMMEProcessor(**components, **kwargs)
 
     def test_tokenizer_defaults_preserved_by_kwargs(self):
         processor_components = self.prepare_components()
@@ -406,6 +443,10 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 batch = processor(text=["hello world"], task="query", return_tensors=return_tensors)
                 self.assertIsInstance(batch["input_ids"], expected)
 
+        ragged = processor(text=["hello world", "a"], task="document", padding=False, return_tensors=None)
+        self.assertIsInstance(ragged["input_ids"], list)
+        self.assertNotEqual(len(ragged["input_ids"][0]), len(ragged["input_ids"][1]))
+
     def test_unsupported_text_kwargs_raise(self):
         processor = self.get_processor()
 
@@ -473,6 +514,10 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.get_processor()
         with self.assertRaisesRegex(ValueError, "Pretokenized text"):
             processor(text=[["hello", "world"]])
+        with self.assertRaisesRegex(ValueError, "at least one"):
+            processor(text=[])
+        with self.assertRaisesRegex(ValueError, "Pretokenized text"):
+            processor(text=["hello", ["world"]])
 
     def test_document_truncation(self):
         processor = self.get_processor()
@@ -516,6 +561,13 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         with self.assertRaises(ValueError) as raised:
             processor(text=["hello world"], task="document")
         self.assertIn("row", str(raised.exception))
+
+    def test_marker_ids_must_be_distinct(self):
+        processor = self.get_processor()
+        processor.tokenizer.row_token = processor.tokenizer.image_token
+
+        with self.assertRaisesRegex(ValueError, "distinct token IDs"):
+            processor(text=["hello"], task="query")
 
     def test_image_layout(self):
         processor = self.get_processor()

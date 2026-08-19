@@ -17,6 +17,7 @@ import unittest
 from typing import ClassVar
 from unittest.mock import patch
 
+import pytest
 from datasets import load_dataset
 from huggingface_hub.errors import StrictDataclassClassValidationError
 
@@ -52,9 +53,9 @@ if is_torch_available():
 def _patch_residual_init(test_case: unittest.TestCase) -> None:
     """Refill NeoMME's zero-init residual exits so mixin output comparisons actually exercise the model.
 
-    NeoMME starts `o_proj`, `down_proj`, XSA `alpha`, and value embeddings at zero, so a fresh model just
-    returns its embeddings. Eager-vs-SDPA and similar checks would then always match. This patch fills those
-    tensors for the duration of `test_case` only.
+    NeoMME starts `o_proj`, `down_proj`, XSA `alpha`, and value embeddings at zero, so its residual branches
+    begin as no-ops. Eager-vs-SDPA and similar checks would otherwise match without exercising those branches.
+    This patch fills the tensors for the duration of `test_case` only.
     """
     initialize = NeoMMEPreTrainedModel._init_weights
 
@@ -64,12 +65,12 @@ def _patch_residual_init(test_case: unittest.TestCase) -> None:
         if isinstance(module, NeoMMEAttention):
             init.normal_(module.o_proj.weight, mean=0.0, std=self.config.initializer_range)
             if module.alpha is not None:
-                # XSA scales by `tanh(alpha)`, so a small std would leave it a no-op just like zero does.
+                # XSA scales by `tanh(alpha)`, so a small standard deviation would barely exercise the branch.
                 init.normal_(module.alpha, mean=0.0, std=1.0)
         elif isinstance(module, NeoMMEMLP):
             init.normal_(module.down_proj.weight, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, NeoMMEEncoderLayer):
-            # `lambdas` is born `[1.0, 0.0]`; only partly zero, so an all-zero refill would miss it.
+            # The default is `[1.0, 0.0]`, so replacing only all-zero parameters would miss it.
             init.copy_(module.lambdas, torch.tensor([1.0, 0.5]))
         elif isinstance(module, NeoMMEModel) and module.value_embeddings is not None:
             init.normal_(module.value_embeddings.weight, mean=0.0, std=self.config.initializer_range)
@@ -316,6 +317,25 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertEqual(explicit.rope_parameters["sliding_attention"]["rope_theta"], 7.0)
         self.assertEqual(explicit.rope_parameters["full_attention"]["rope_theta"], 123456.0)
 
+    def test_rope_theta_must_be_positive(self):
+        for theta in (0.0, -1.0, float("inf"), float("nan")):
+            with self.subTest(theta=theta), self.assertRaises(StrictDataclassClassValidationError):
+                NeoMMEConfig(rope_theta=theta)
+            with self.subTest(theta=theta, nested=True), self.assertRaises(StrictDataclassClassValidationError):
+                NeoMMEConfig(rope_parameters={"sliding_attention": {"rope_theta": theta}})
+
+    def test_architecture_dimensions_must_be_positive(self):
+        for name in (
+            "num_hidden_layers",
+            "num_attention_heads",
+            "head_dim",
+            "max_position_embeddings",
+            "patch_size",
+            "embedding_dim",
+        ):
+            with self.subTest(name=name), self.assertRaises((ValueError, StrictDataclassClassValidationError)):
+                NeoMMEConfig(**{name: 0})
+
     def test_legacy_rope_scaling_type_alias(self):
         config = NeoMMEConfig(rope_scaling={"type": "linear", "factor": 2.0})
         self.assertEqual(
@@ -431,6 +451,7 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
             untouched = [i for i in range(len(sequence)) if i not in patch_positions]
             torch.testing.assert_close(scattered[0, untouched], inputs_embeds[0, untouched])
 
+    @pytest.mark.torch_compile_test
     def test_image_path_torch_compile(self):
         """Image path must compile under `fullgraph=True` (patch-count used to be data-dependent)."""
         config = self.model_tester.get_config()
@@ -450,6 +471,10 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
         torch.testing.assert_close(compiled.last_hidden_state, eager.last_hidden_state)
         with self.assertRaises((ValueError, RuntimeError)):
             torch.compile(model, fullgraph=True)(input_ids=input_ids, pixel_values=pixel_values[:-1])
+        with self.assertRaises((ValueError, RuntimeError)):
+            torch.compile(model, fullgraph=True)(
+                input_ids=input_ids, pixel_values=torch.cat([pixel_values, pixel_values[:1]])
+            )
 
     def test_masked_lm_adds_no_parameters(self):
         config = self.model_tester.get_config()
@@ -474,6 +499,23 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
         for name, parameter in model.model.patch_embeddings.named_parameters():
             self.assertIsNotNone(parameter.grad, f"patch_embeddings.{name} received no gradient")
             self.assertGreater(parameter.grad.abs().sum().item(), 0.0)
+
+    def test_text_parameters_receive_gradients(self):
+        config, input_ids, attention_mask, labels = self.model_tester.prepare_config_and_inputs()
+        model = NeoMMEForMaskedLM(config).to(torch_device).train()
+        input_ids, attention_mask, labels = (
+            input_ids.to(torch_device),
+            attention_mask.to(torch_device),
+            labels.to(torch_device),
+        )
+
+        model(input_ids=input_ids, attention_mask=attention_mask, labels=labels).loss.backward()
+        missing = [
+            name
+            for name, parameter in model.named_parameters()
+            if parameter.requires_grad and "patch_embeddings" not in name and parameter.grad is None
+        ]
+        self.assertEqual(missing, [])
 
     def test_padded_row_stays_finite(self):
         """The sliding band intersected with padding can leave a padding query row with no key."""
