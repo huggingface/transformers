@@ -472,7 +472,9 @@ class Qwen4ExpQSAIndexer(nn.Module):
                         key_sin[batch_idx].index_select(0, group_starts),
                     ).squeeze(1)
 
-                    scores = torch.einsum("...hd,nd->...nh", q[batch_idx, query_idx].float(), block_key_states.float())
+                    scores = torch.matmul(
+                        q[batch_idx, query_idx].float(), block_key_states.float().transpose(-1, -2)
+                    ).transpose(-1, -2)
                     scores = torch.relu(scores).sum(dim=-1) / math.sqrt(self.index_head_dim)
 
                     selected_block_indices = scores.topk(min(self.block_topk, num_complete_blocks), dim=0).indices
