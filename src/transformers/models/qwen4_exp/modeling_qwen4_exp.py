@@ -626,48 +626,6 @@ class Qwen4ExpQSAIndexer(nn.Module):
         self.q_layernorm = Qwen4ExpRMSNorm(self.index_head_dim, eps=config.rms_norm_eps)
         self.k_layernorm = Qwen4ExpRMSNorm(self.index_head_dim, eps=config.rms_norm_eps)
 
-    def _select_visible_row(
-        self,
-        q: torch.Tensor,
-        raw_keys: torch.Tensor,
-        key_cos: torch.Tensor,
-        key_sin: torch.Tensor,
-        visible_token_indices: torch.Tensor,
-    ) -> torch.Tensor:
-        selected_token_indices = torch.full(
-            (self.token_budget + self.compress_ratio - 1,),
-            -1,
-            device=q.device,
-            dtype=torch.int32,
-        )
-        num_complete_blocks = visible_token_indices.numel() // self.compress_ratio
-        selected_tokens = visible_token_indices.new_empty((0,))
-        if num_complete_blocks:
-            block_token_indices = visible_token_indices[: num_complete_blocks * self.compress_ratio].view(
-                num_complete_blocks,
-                self.compress_ratio,
-            )
-
-            key_groups = raw_keys.index_select(0, block_token_indices.flatten())
-            key_groups = key_groups.view(*block_token_indices.shape, self.index_head_dim)
-            pooled_keys = key_groups.float().mean(dim=1).to(raw_keys.dtype)
-            pooled_keys = self.k_layernorm(pooled_keys)
-            group_starts = block_token_indices[:, 0]
-            block_key_states = apply_rotary_pos_emb(
-                pooled_keys.unsqueeze(1), key_cos.index_select(0, group_starts), key_sin.index_select(0, group_starts)
-            ).squeeze(1)
-
-            scores = torch.einsum("...hd,nd->...nh", q.float(), block_key_states.float())
-            scores = torch.relu(scores).sum(dim=-1) / math.sqrt(self.index_head_dim)
-
-            selected_block_indices = scores.topk(min(self.block_topk, num_complete_blocks), dim=0).indices
-            selected_tokens = block_token_indices.index_select(0, selected_block_indices).flatten()
-            selected_tokens = selected_tokens[: self.token_budget]
-        tail = visible_token_indices[num_complete_blocks * self.compress_ratio :]
-        selected_tokens = torch.cat([selected_tokens, tail])
-        selected_token_indices[: selected_tokens.numel()] = selected_tokens.to(torch.int32)
-        return selected_token_indices
-
     @staticmethod
     def build_sparse_attention_mask(
         selected_token_indices: torch.Tensor,
@@ -710,20 +668,14 @@ class Qwen4ExpQSAIndexer(nn.Module):
         q = self.q_layernorm(q)
         q = apply_rotary_pos_emb(q, cos, sin, unsqueeze_dim=2)
 
-        rotary_dim = cos.shape[-1]
         indexer_states = torch.cat([token_k, cos.to(token_k.dtype), sin.to(token_k.dtype)], dim=-1)
         if past_key_values is not None:
             indexer_states = past_key_values.update_indexer(indexer_states, self.layer_idx)
         indexer_states = indexer_states[:, :key_length]
 
+        rotary_dim = cos.shape[-1]
         raw_keys, key_cos, key_sin = torch.split(indexer_states, [self.index_head_dim, rotary_dim, rotary_dim], dim=-1)
 
-        selected_token_indices = torch.full(
-            (batch_size, sequence_length, self.token_budget + self.compress_ratio - 1),
-            -1,
-            dtype=torch.int32,
-            device=hidden_states.device,
-        )
         # If we don't have the mask, we will need those values to recreate valid indices
         if attention_mask is None:
             q_length = sequence_length
@@ -734,6 +686,12 @@ class Qwen4ExpQSAIndexer(nn.Module):
                 q_offset = 0
                 kv_length, kv_offset = q_length, 0
 
+        selected_token_indices = torch.full(
+            (batch_size, sequence_length, self.token_budget + self.compress_ratio - 1),
+            -1,
+            dtype=torch.int32,
+            device=hidden_states.device,
+        )
         for batch_idx in range(batch_size):
             for query_idx in range(sequence_length):
                 # Only eager and sdpa are accepted, so the mask is always either None or 4D here
@@ -747,13 +705,34 @@ class Qwen4ExpQSAIndexer(nn.Module):
                     mask_slice = attention_mask[batch_idx, 0, query_idx, :]
                     visible_token_indices = mask_slice if mask_slice.dtype == torch.bool else mask_slice == 0
 
-                selected_token_indices[batch_idx, query_idx] = self._select_visible_row(
-                    q[batch_idx, query_idx],
-                    raw_keys[batch_idx],
-                    key_cos[batch_idx],
-                    key_sin[batch_idx],
-                    visible_token_indices,
-                )
+                num_complete_blocks = visible_token_indices.numel() // self.compress_ratio
+                selected_tokens = visible_token_indices.new_empty((0,))
+                if num_complete_blocks > 0:
+                    block_token_indices = visible_token_indices[: num_complete_blocks * self.compress_ratio].view(
+                        num_complete_blocks, self.compress_ratio
+                    )
+
+                    key_groups = raw_keys[batch_idx].index_select(0, block_token_indices.flatten())
+                    key_groups = key_groups.view(*block_token_indices.shape, self.index_head_dim)
+                    pooled_keys = key_groups.float().mean(dim=1).to(raw_keys.dtype)
+                    pooled_keys = self.k_layernorm(pooled_keys)
+                    group_starts = block_token_indices[:, 0]
+                    block_key_states = apply_rotary_pos_emb(
+                        pooled_keys.unsqueeze(1),
+                        key_cos[batch_idx].index_select(0, group_starts),
+                        key_sin[batch_idx].index_select(0, group_starts),
+                    ).squeeze(1)
+
+                    scores = torch.einsum("...hd,nd->...nh", q[batch_idx, query_idx].float(), block_key_states.float())
+                    scores = torch.relu(scores).sum(dim=-1) / math.sqrt(self.index_head_dim)
+
+                    selected_block_indices = scores.topk(min(self.block_topk, num_complete_blocks), dim=0).indices
+                    selected_tokens = block_token_indices.index_select(0, selected_block_indices).flatten()
+                    selected_tokens = selected_tokens[: self.token_budget]
+                tail = visible_token_indices[num_complete_blocks * self.compress_ratio :]
+                selected_tokens = torch.cat([selected_tokens, tail]).to(torch.int32)
+                selected_token_indices[batch_idx, query_idx, : selected_tokens.numel()] = selected_tokens
+
         return selected_token_indices
 
 
