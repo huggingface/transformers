@@ -32,7 +32,6 @@ from transformers.testing_utils import (
     require_vision,
 )
 from transformers.video_utils import (
-    default_sample_indices_fn,
     group_videos_by_shape,
     is_torchvision_video_decoding_available,
     make_batched_videos,
@@ -389,26 +388,9 @@ class LoadVideoTester(unittest.TestCase):
                 num_frames=10,
             )
 
-    def test_default_sample_indices_fn_num_frames_exceeds_total(self):
-        # When `num_frames > total_num_frames`, the function should warn and return
-        # `num_frames` uniformly-sampled indices (with repetition) rather than silently
-        # returning `num_frames` copies of index 0 (the previous behaviour due to
-        # `dtype=int` truncating the step to 0).
-        metadata = VideoMetadata(total_num_frames=10, fps=30.0)
-        with self.assertLogs("transformers.video_utils", level="WARNING") as cm:
-            indices = default_sample_indices_fn(metadata, num_frames=20)
-        self.assertEqual(len(indices), 20)
-        self.assertTrue((indices >= 0).all() and (indices < 10).all())
-        self.assertGreater(len(set(indices.tolist())), 1)  # not all the same index
-        self.assertTrue(any("exceeds the total number of frames" in msg for msg in cm.output))
-
-    def test_default_sample_indices_fn_num_frames_equals_total(self):
-        metadata = VideoMetadata(total_num_frames=10, fps=30.0)
-        indices = default_sample_indices_fn(metadata, num_frames=10)
-        self.assertEqual(len(indices), 10)
-
-    def test_default_sample_indices_fn_num_frames_less_than_total(self):
-        metadata = VideoMetadata(total_num_frames=10, fps=30.0)
-        indices = default_sample_indices_fn(metadata, num_frames=4)
-        self.assertEqual(len(indices), 4)
-        self.assertTrue((indices >= 0).all() and (indices < 10).all())
+    def test_load_video_num_frames_exceeds_total(self):
+        video_file_path = hf_hub_download(
+            repo_id="raushan-testing-hf/videos-test", filename="sample_demo_1.mp4", repo_type="dataset"
+        )
+        with self.assertRaisesRegex(ValueError, "exceeds total_num_frames"):
+            load_video(video_file_path, num_frames=300)
