@@ -626,29 +626,6 @@ class Qwen4ExpQSAIndexer(nn.Module):
         self.q_layernorm = Qwen4ExpRMSNorm(self.index_head_dim, eps=config.rms_norm_eps)
         self.k_layernorm = Qwen4ExpRMSNorm(self.index_head_dim, eps=config.rms_norm_eps)
 
-    def _compress_keys(
-        self,
-        raw_keys: torch.Tensor,
-        key_cos: torch.Tensor,
-        key_sin: torch.Tensor,
-        block_token_indices: torch.Tensor,
-    ) -> torch.Tensor:
-        key_groups = raw_keys.index_select(0, block_token_indices.flatten())
-        key_groups = key_groups.view(*block_token_indices.shape, self.index_head_dim)
-        pooled_keys = key_groups.float().mean(dim=1).to(raw_keys.dtype)
-        pooled_keys = self.k_layernorm(pooled_keys)
-        group_starts = block_token_indices[:, 0]
-        return apply_rotary_pos_emb(
-            pooled_keys.unsqueeze(1),
-            key_cos.index_select(0, group_starts),
-            key_sin.index_select(0, group_starts),
-            unsqueeze_dim=1,
-        ).squeeze(1)
-
-    def _score_blocks(self, q: torch.Tensor, block_key_states: torch.Tensor) -> torch.Tensor:
-        scores = torch.einsum("...hd,nd->...nh", q.float(), block_key_states.float())
-        return torch.relu(scores).sum(dim=-1) / math.sqrt(self.index_head_dim)
-
     def _select_visible_row(
         self,
         q: torch.Tensor,
@@ -670,13 +647,19 @@ class Qwen4ExpQSAIndexer(nn.Module):
                 num_complete_blocks,
                 self.compress_ratio,
             )
-            block_key_states = self._compress_keys(
-                raw_keys,
-                key_cos,
-                key_sin,
-                block_token_indices,
-            )
-            scores = self._score_blocks(q, block_key_states)
+
+            key_groups = raw_keys.index_select(0, block_token_indices.flatten())
+            key_groups = key_groups.view(*block_token_indices.shape, self.index_head_dim)
+            pooled_keys = key_groups.float().mean(dim=1).to(raw_keys.dtype)
+            pooled_keys = self.k_layernorm(pooled_keys)
+            group_starts = block_token_indices[:, 0]
+            block_key_states = apply_rotary_pos_emb(
+                pooled_keys.unsqueeze(1), key_cos.index_select(0, group_starts), key_sin.index_select(0, group_starts)
+            ).squeeze(1)
+
+            scores = torch.einsum("...hd,nd->...nh", q.float(), block_key_states.float())
+            scores = torch.relu(scores).sum(dim=-1) / math.sqrt(self.index_head_dim)
+
             selected_block_indices = scores.topk(min(self.block_topk, num_complete_blocks), dim=0).indices
             selected_tokens = block_token_indices.index_select(0, selected_block_indices).flatten()
             selected_tokens = selected_tokens[: self.token_budget]
