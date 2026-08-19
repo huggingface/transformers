@@ -104,6 +104,11 @@ class Step3p7VisionRotaryEmbedding(nn.Module):
         sin = (emb.sin() * self.attention_scaling).to(dtype=x.dtype)
         return cos, sin
 
+    def recomposition_to_2d(self, freq):
+        # in contrast to pixtral, interleave grids as H-H-W-W
+        freq_h, freq_w = freq[:, 0], freq[:, 1]
+        return torch.cat([freq_h, freq_h, freq_w, freq_w], dim=-1)[None, ...]
+
 
 class Step3p7VisionMLP(nn.Module):
     def __init__(self, config):
