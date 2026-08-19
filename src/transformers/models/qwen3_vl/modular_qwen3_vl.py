@@ -30,7 +30,7 @@ from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import ProcessingKwargs, Unpack, VideosKwargs
 from ...utils import auto_docstring, can_return_tuple, logging
@@ -276,6 +276,23 @@ class Qwen3VLVisionBlock(Qwen2_5_VLVisionBlock):
 
 
 class Qwen3VLTextRotaryEmbedding(Ernie4_5_VLMoeTextRotaryEmbedding):
+    def __init__(self, config, device=None):
+        super().__init__()
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+        self.config = config
+
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type != "default":
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = inv_freq
+
+        self.mrope_section = config.rope_parameters.get("mrope_section", [24, 20, 20])
+
     def forward(self, x, position_ids):
         inv_freq_expanded = (
             self.inv_freq[None, None, :, None]

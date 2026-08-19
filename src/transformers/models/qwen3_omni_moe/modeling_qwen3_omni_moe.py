@@ -1270,7 +1270,9 @@ class Qwen3OmniMoeThinkerTextRotaryEmbedding(nn.Module):
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = inv_freq
 
-        self.mrope_section = config.rope_parameters.get("mrope_section", [22, 22, 20])
+        self.mrope_section = config.rope_parameters.get("mrope_section", [24, 20, 20])
+        if self.rope_type != "default":
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
     @staticmethod
     @deprecate_kwarg("device", version="5.18")

@@ -51,7 +51,6 @@ from .configuration_sam3_tracker_video import (
     Sam3TrackerVideoConfig,
     Sam3TrackerVideoMaskDecoderConfig,
     Sam3TrackerVideoPromptEncoderConfig,
-    Sam3TrackerVideoVisionConfig,
 )
 
 
@@ -746,7 +745,7 @@ class Sam3TrackerVideoPreTrainedModel(PreTrainedModel):
 # Simple axial 2D rope as in sam3/edgetam/etc with same freq of head-dim//2 for H and W
 class Sam3TrackerVideoVisionRotaryEmbedding(nn.Module):
     @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config: Sam3TrackerVideoVisionConfig, device=None):
+    def __init__(self, config: Sam3TrackerVideoConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
