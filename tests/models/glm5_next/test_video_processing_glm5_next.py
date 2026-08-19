@@ -39,7 +39,7 @@ class Glm5NextVideoProcessingTest(unittest.TestCase):
             "patch_expand_factor": 2,
             "min_image_tokens": 1,
             "max_image_tokens": 64,
-            "fps_interval": 1,
+            "fps": 1,
             "max_frame_count_dynamic": 16,
             "image_mean": [0.48145466, 0.4578275, 0.40821073],
             "image_std": [0.26862954, 0.26130258, 0.27577711],
@@ -81,7 +81,7 @@ class Glm5NextVideoProcessingTest(unittest.TestCase):
             min_image_tokens=16,
             max_image_tokens=240000,
             resize_mode="pad",
-            fps_interval=2,
+            fps=2,
             max_frame_count_dynamic=2048,
             image_mean=[0.48145466, 0.4578275, 0.40821073],
             image_std=[0.26862954, 0.26130258, 0.27577711],
@@ -119,27 +119,10 @@ class Glm5NextVideoProcessingTest(unittest.TestCase):
         self.assertIsInstance(loaded, Glm5NextVideoProcessor)
         self.assertEqual(loaded.to_dict(), processor.to_dict())
 
-    def test_sglang_processor_defaults(self):
-        processor = Glm5NextVideoProcessor(
-            **self.get_processor_kwargs(
-                fps_interval=2,
-                max_frame_count_dynamic=2048,
-            )
-        )
-        self.assertEqual(processor.fps_interval, 2)
-        self.assertEqual(processor.max_frame_count_dynamic, 2048)
-        self.assertEqual(processor.max_duration, 0)
 
-    def test_required_token_bounds(self):
-        with self.assertRaisesRegex(ValueError, "min_image_tokens and max_image_tokens"):
-            Glm5NextVideoProcessor(
-                patch_size=2,
-                temporal_patch_size=2,
-                merge_size=2,
-                patch_expand_factor=2,
-                fps_interval=1,
-                max_frame_count_dynamic=16,
-            )
+    def test_invalid_resize_mode(self):
+        with self.assertRaisesRegex(ValueError, "resize_mode"):
+            Glm5NextVideoProcessor(resize_mode="invalid")
 
 
 if __name__ == "__main__":

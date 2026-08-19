@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from .image_processing_glm5_next import *
     from .image_processing_pil_glm5_next import *
     from .modeling_glm5_next import *
+    from .processing_glm5_next import *
     from .video_processing_glm5_next import *
 else:
     import sys

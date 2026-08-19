@@ -1077,6 +1077,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("git", "GitProcessor"),
         ("glm46v", "Glm46VProcessor"),
         ("glm4v", "Glm4vProcessor"),
+        ("glm5_next", "Glm5NextProcessor"),
         ("glm_image", "GlmImageProcessor"),
         ("glmasr", "GlmAsrProcessor"),
         ("got_ocr2", "GotOcr2Processor"),

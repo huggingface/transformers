@@ -78,6 +78,10 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 [[autodoc]] Glm5NextForConditionalGeneration
     - forward
 
+## Glm5NextProcessor
+
+[[autodoc]] Glm5NextProcessor
+
 ## Glm5NextImageProcessor
 
 [[autodoc]] Glm5NextImageProcessor

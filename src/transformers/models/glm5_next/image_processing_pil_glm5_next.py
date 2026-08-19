@@ -25,7 +25,7 @@ import numpy as np
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
-from ...image_utils import PILImageResampling, SizeDict
+from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling, SizeDict
 from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, auto_docstring
 
@@ -58,40 +58,6 @@ class Glm5NextImageProcessorKwargs(ImagesKwargs, total=False):
     resize_mode: str
 
 
-def _ceil_to_factor(value: int, factor: int) -> int:
-    return math.ceil(value / factor) * factor
-
-
-def _fit_aligned_size_within_budget(
-    num_frames: int,
-    height: int,
-    width: int,
-    height_factor: int,
-    width_factor: int,
-    max_pixels: int,
-) -> tuple[int, int]:
-    minimum_pixels = num_frames * height_factor * width_factor
-    if max_pixels < minimum_pixels:
-        raise ValueError(
-            f"max_pixels={max_pixels} is too small. At least {minimum_pixels} pixels are required for one aligned patch."
-        )
-
-    low, high = 1, height
-    best_height, best_width = height_factor, width_factor
-    while low <= high:
-        content_height = (low + high) // 2
-        content_width = max(1, math.floor(width * content_height / height))
-        aligned_height = _ceil_to_factor(content_height, height_factor)
-        aligned_width = _ceil_to_factor(content_width, width_factor)
-        if num_frames * aligned_height * aligned_width <= max_pixels:
-            best_height, best_width = aligned_height, aligned_width
-            low = content_height + 1
-        else:
-            high = content_height - 1
-
-    return best_height, best_width
-
-
 def smart_resize(
     num_frames: int,
     height: int,
@@ -110,45 +76,69 @@ def smart_resize(
     if min_pixels > max_pixels:
         raise ValueError("min_pixels must be less than or equal to max_pixels.")
 
+    def align(value, factor):
+        return math.ceil(value / factor) * factor
+
+    def fit_within_budget(aligned_frames):
+        minimum_pixels = aligned_frames * height_factor * width_factor
+        if max_pixels < minimum_pixels:
+            raise ValueError(
+                f"max_pixels={max_pixels} is too small. "
+                f"At least {minimum_pixels} pixels are required for one aligned patch."
+            )
+
+        low, high = 1, height
+        best_height, best_width = height_factor, width_factor
+        while low <= high:
+            content_height = (low + high) // 2
+            content_width = max(1, math.floor(width * content_height / height))
+            candidate_height = align(content_height, height_factor)
+            candidate_width = align(content_width, width_factor)
+            if aligned_frames * candidate_height * candidate_width <= max_pixels:
+                best_height, best_width = candidate_height, candidate_width
+                low = content_height + 1
+            else:
+                high = content_height - 1
+        return best_height, best_width
+
     aligned_frames = max(temporal_factor, round(num_frames / temporal_factor) * temporal_factor)
-    aligned_height = _ceil_to_factor(height, height_factor)
-    aligned_width = _ceil_to_factor(width, width_factor)
+    aligned_height = align(height, height_factor)
+    aligned_width = align(width, width_factor)
     if aligned_frames * aligned_height * aligned_width > max_pixels:
-        aligned_height, aligned_width = _fit_aligned_size_within_budget(
-            aligned_frames, height, width, height_factor, width_factor, max_pixels
-        )
+        aligned_height, aligned_width = fit_within_budget(aligned_frames)
     elif aligned_frames * aligned_height * aligned_width < min_pixels:
         scale = math.sqrt(min_pixels / (num_frames * height * width))
-        aligned_height = _ceil_to_factor(max(1, math.ceil(height * scale)), height_factor)
-        aligned_width = _ceil_to_factor(max(1, math.ceil(width * scale)), width_factor)
+        aligned_height = align(max(1, math.ceil(height * scale)), height_factor)
+        aligned_width = align(max(1, math.ceil(width * scale)), width_factor)
         if aligned_frames * aligned_height * aligned_width > max_pixels:
-            aligned_height, aligned_width = _fit_aligned_size_within_budget(
-                aligned_frames, height, width, height_factor, width_factor, max_pixels
-            )
+            aligned_height, aligned_width = fit_within_budget(aligned_frames)
 
     return aligned_height, aligned_width
 
 
-def _get_pad_content_size(
-    image_height: int,
-    image_width: int,
-    canvas_height: int,
-    canvas_width: int,
-    allow_upscale: bool = False,
-) -> tuple[int, int]:
-    scale = min(canvas_height / image_height, canvas_width / image_width)
-    if not allow_upscale:
-        scale = min(1.0, scale)
-    return (
-        max(1, min(canvas_height, math.floor(image_height * scale))),
-        max(1, min(canvas_width, math.floor(image_width * scale))),
-    )
+def _prepare_processor(processor, kwargs=None):
+    kwargs = kwargs or {}
+    nested_kwargs = kwargs.get("kwargs") or kwargs.get("super_kwargs") or {}
+    overrides = {
+        name: value
+        for name in ("min_image_tokens", "max_image_tokens", "patch_expand_factor", "resize_mode")
+        if (value := kwargs.get(name, nested_kwargs.get(name))) is not None
+    }
+    if overrides:
+        processor = copy.copy(processor)
+        for name, value in overrides.items():
+            setattr(processor, name, value)
+
+    if processor.min_image_tokens is None or processor.max_image_tokens is None:
+        raise ValueError("min_image_tokens and max_image_tokens must be provided.")
+    if processor.resize_mode not in ("resize", "pad"):
+        raise ValueError("resize_mode must be either 'resize' or 'pad'.")
+    return processor
 
 
-def _get_resize_dimensions(processor, num_frames, height, width, temporal_factor, factor):
+def _get_resize_geometry(processor, num_frames, height, width, factor, temporal_factor):
     pixels_per_token = temporal_factor * (factor // processor.patch_expand_factor) ** 2
     min_pixels = processor.min_image_tokens * pixels_per_token
-    max_pixels = processor.max_image_tokens * pixels_per_token
     target_height, target_width = smart_resize(
         num_frames,
         height,
@@ -157,66 +147,32 @@ def _get_resize_dimensions(processor, num_frames, height, width, temporal_factor
         height_factor=factor,
         width_factor=factor,
         min_pixels=min_pixels,
-        max_pixels=max_pixels,
-    )
-    return target_height, target_width, min_pixels
-
-
-def _resize_pil(processor, image, resample, factor, temporal_factor):
-    factor *= processor.patch_expand_factor
-    height, width = image.shape[-2:]
-    target_height, target_width, min_pixels = _get_resize_dimensions(
-        processor, temporal_factor, height, width, temporal_factor, factor
+        max_pixels=processor.max_image_tokens * pixels_per_token,
     )
     if processor.resize_mode == "resize":
-        return PilBackend.resize(
-            processor, image, SizeDict(height=target_height, width=target_width), resample=resample
-        )
+        return target_height, target_width, target_height, target_width
 
-    content_height, content_width = _get_pad_content_size(
-        height,
-        width,
-        target_height,
-        target_width,
-        allow_upscale=temporal_factor * height * width < min_pixels,
-    )
-    if (content_height, content_width) != (height, width):
-        image = PilBackend.resize(
-            processor, image, SizeDict(height=content_height, width=content_width), resample=resample
-        )
-    return np.pad(
-        image,
-        ((0, 0), (0, target_height - content_height), (0, target_width - content_width)),
-        mode="constant",
-    )
-
-
-def _with_processor_overrides(processor, kwargs):
-    processor = copy.copy(processor)
-    nested_kwargs = kwargs.get("kwargs") or kwargs.get("super_kwargs") or {}
-    for name in ("min_image_tokens", "max_image_tokens", "patch_expand_factor", "resize_mode"):
-        if (value := kwargs.get(name, nested_kwargs.get(name))) is not None:
-            setattr(processor, name, value)
-    return processor
-
-
-def _validate_processor(processor):
-    if processor.min_image_tokens is None or processor.max_image_tokens is None:
-        raise ValueError("min_image_tokens and max_image_tokens must be provided.")
-    if processor.resize_mode not in ("resize", "pad"):
-        raise ValueError("resize_mode must be either 'resize' or 'pad'.")
+    scale = min(target_height / height, target_width / width)
+    if num_frames * height * width >= min_pixels:
+        scale = min(1.0, scale)
+    content_height = max(1, min(target_height, math.floor(height * scale)))
+    content_width = max(1, min(target_width, math.floor(width * scale)))
+    return target_height, target_width, content_height, content_width
 
 
 def _get_number_of_image_patches(processor, height: int, width: int, images_kwargs: dict | None = None) -> int:
-    processor = _with_processor_overrides(processor, images_kwargs or {})
+    processor = _prepare_processor(processor, images_kwargs)
     factor = processor.patch_size * processor.merge_size * processor.patch_expand_factor
-    resized_height, resized_width, _ = _get_resize_dimensions(
-        processor,
+    pixels_per_token = processor.temporal_patch_size * (processor.patch_size * processor.merge_size) ** 2
+    resized_height, resized_width = smart_resize(
         processor.temporal_patch_size,
         height,
         width,
-        processor.temporal_patch_size,
-        factor,
+        temporal_factor=processor.temporal_patch_size,
+        height_factor=factor,
+        width_factor=factor,
+        min_pixels=processor.min_image_tokens * pixels_per_token,
+        max_pixels=processor.max_image_tokens * pixels_per_token,
     )
     return resized_height // processor.patch_size * (resized_width // processor.patch_size)
 
@@ -230,28 +186,40 @@ class Glm5NextImageProcessorPil(PilBackend):
     do_rescale = True
     rescale_factor = 1 / 255
     do_normalize = True
-    image_mean = None
-    image_std = None
+    image_mean = OPENAI_CLIP_MEAN
+    image_std = OPENAI_CLIP_STD
     do_convert_rgb = True
-    patch_size = None
-    temporal_patch_size = None
-    merge_size = None
+    patch_size = 14
+    temporal_patch_size = 2
+    merge_size = 2
     valid_kwargs = Glm5NextImageProcessorKwargs
     model_input_names = ["pixel_values", "image_grid_thw"]
-    patch_expand_factor = None
-    min_image_tokens = None
-    max_image_tokens = None
+    patch_expand_factor = 1
+    min_image_tokens = 16
+    max_image_tokens = 8000
     resize_mode = "pad"
 
     @auto_docstring
     def preprocess(self, images, **kwargs) -> BatchFeature:
-        self = _with_processor_overrides(self, kwargs)
-        _validate_processor(self)
+        self = _prepare_processor(self, kwargs)
         return super().preprocess(images, **kwargs)
 
     def resize(self, image, size, resample, factor, temporal_factor, **kwargs) -> np.ndarray:
         """Resize dynamically based on input image aspect ratio."""
-        return _resize_pil(self, image, resample, factor, temporal_factor)
+        factor *= self.patch_expand_factor
+        height, width = image.shape[-2:]
+        target_height, target_width, content_height, content_width = _get_resize_geometry(
+            self, temporal_factor, height, width, factor, temporal_factor
+        )
+        if self.resize_mode == "resize":
+            return super().resize(image, SizeDict(height=target_height, width=target_width), resample=resample)
+        if (content_height, content_width) != (height, width):
+            image = super().resize(image, SizeDict(height=content_height, width=content_width), resample=resample)
+        return np.pad(
+            image,
+            ((0, 0), (0, target_height - content_height), (0, target_width - content_width)),
+            mode="constant",
+        )
 
     def patchify(
         self,

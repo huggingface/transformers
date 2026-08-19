@@ -28,7 +28,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...image_processing_backends import PilBackend, TorchvisionBackend
-from ...image_utils import SizeDict
+from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, SizeDict
 from ...integrations import (
     use_kernel_forward_from_hub,
     use_kernel_func_from_hub_with_fallback,
@@ -54,6 +54,7 @@ from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3MoE, DeepseekV3TopkRout
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4HyperConnection
 from ..exaone4_5.modeling_exaone4_5 import Exaone4_5_Model
 from ..glm46v.modeling_glm46v import Glm46VForConditionalGeneration
+from ..glm46v.processing_glm46v import Glm46VProcessor
 from ..glm_moe_dsa.configuration_glm_moe_dsa import GlmMoeDsaConfig
 from ..glm_moe_dsa.modeling_glm_moe_dsa import GlmMoeDsaAttention, GlmMoeDsaDecoderLayer, GlmMoeDsaIndexer
 from ..glm_ocr.configuration_glm_ocr import GlmOcrVisionConfig
@@ -1686,38 +1687,8 @@ class Glm5NextForConditionalGeneration(Glm46VForConditionalGeneration, Glm5NextP
         return {"deepseek_sparse_attention": attention_mask, "linear_attention": attention_mask}
 
 
-def _ceil_to_factor(value: int, factor: int) -> int:
-    return math.ceil(value / factor) * factor
-
-
-def _fit_aligned_size_within_budget(
-    num_frames: int,
-    height: int,
-    width: int,
-    height_factor: int,
-    width_factor: int,
-    max_pixels: int,
-) -> tuple[int, int]:
-    minimum_pixels = num_frames * height_factor * width_factor
-    if max_pixels < minimum_pixels:
-        raise ValueError(
-            f"max_pixels={max_pixels} is too small. At least {minimum_pixels} pixels are required for one aligned patch."
-        )
-
-    low, high = 1, height
-    best_height, best_width = height_factor, width_factor
-    while low <= high:
-        content_height = (low + high) // 2
-        content_width = max(1, math.floor(width * content_height / height))
-        aligned_height = _ceil_to_factor(content_height, height_factor)
-        aligned_width = _ceil_to_factor(content_width, width_factor)
-        if num_frames * aligned_height * aligned_width <= max_pixels:
-            best_height, best_width = aligned_height, aligned_width
-            low = content_height + 1
-        else:
-            high = content_height - 1
-
-    return best_height, best_width
+class Glm5NextProcessor(Glm46VProcessor):
+    pass
 
 
 def smart_resize(
@@ -1738,45 +1709,69 @@ def smart_resize(
     if min_pixels > max_pixels:
         raise ValueError("min_pixels must be less than or equal to max_pixels.")
 
+    def align(value, factor):
+        return math.ceil(value / factor) * factor
+
+    def fit_within_budget(aligned_frames):
+        minimum_pixels = aligned_frames * height_factor * width_factor
+        if max_pixels < minimum_pixels:
+            raise ValueError(
+                f"max_pixels={max_pixels} is too small. "
+                f"At least {minimum_pixels} pixels are required for one aligned patch."
+            )
+
+        low, high = 1, height
+        best_height, best_width = height_factor, width_factor
+        while low <= high:
+            content_height = (low + high) // 2
+            content_width = max(1, math.floor(width * content_height / height))
+            candidate_height = align(content_height, height_factor)
+            candidate_width = align(content_width, width_factor)
+            if aligned_frames * candidate_height * candidate_width <= max_pixels:
+                best_height, best_width = candidate_height, candidate_width
+                low = content_height + 1
+            else:
+                high = content_height - 1
+        return best_height, best_width
+
     aligned_frames = max(temporal_factor, round(num_frames / temporal_factor) * temporal_factor)
-    aligned_height = _ceil_to_factor(height, height_factor)
-    aligned_width = _ceil_to_factor(width, width_factor)
+    aligned_height = align(height, height_factor)
+    aligned_width = align(width, width_factor)
     if aligned_frames * aligned_height * aligned_width > max_pixels:
-        aligned_height, aligned_width = _fit_aligned_size_within_budget(
-            aligned_frames, height, width, height_factor, width_factor, max_pixels
-        )
+        aligned_height, aligned_width = fit_within_budget(aligned_frames)
     elif aligned_frames * aligned_height * aligned_width < min_pixels:
         scale = math.sqrt(min_pixels / (num_frames * height * width))
-        aligned_height = _ceil_to_factor(max(1, math.ceil(height * scale)), height_factor)
-        aligned_width = _ceil_to_factor(max(1, math.ceil(width * scale)), width_factor)
+        aligned_height = align(max(1, math.ceil(height * scale)), height_factor)
+        aligned_width = align(max(1, math.ceil(width * scale)), width_factor)
         if aligned_frames * aligned_height * aligned_width > max_pixels:
-            aligned_height, aligned_width = _fit_aligned_size_within_budget(
-                aligned_frames, height, width, height_factor, width_factor, max_pixels
-            )
+            aligned_height, aligned_width = fit_within_budget(aligned_frames)
 
     return aligned_height, aligned_width
 
 
-def _get_pad_content_size(
-    image_height: int,
-    image_width: int,
-    canvas_height: int,
-    canvas_width: int,
-    allow_upscale: bool = False,
-) -> tuple[int, int]:
-    scale = min(canvas_height / image_height, canvas_width / image_width)
-    if not allow_upscale:
-        scale = min(1.0, scale)
-    return (
-        max(1, min(canvas_height, math.floor(image_height * scale))),
-        max(1, min(canvas_width, math.floor(image_width * scale))),
-    )
+def _prepare_processor(processor, kwargs=None):
+    kwargs = kwargs or {}
+    nested_kwargs = kwargs.get("kwargs") or kwargs.get("super_kwargs") or {}
+    overrides = {
+        name: value
+        for name in ("min_image_tokens", "max_image_tokens", "patch_expand_factor", "resize_mode")
+        if (value := kwargs.get(name, nested_kwargs.get(name))) is not None
+    }
+    if overrides:
+        processor = copy.copy(processor)
+        for name, value in overrides.items():
+            setattr(processor, name, value)
+
+    if processor.min_image_tokens is None or processor.max_image_tokens is None:
+        raise ValueError("min_image_tokens and max_image_tokens must be provided.")
+    if processor.resize_mode not in ("resize", "pad"):
+        raise ValueError("resize_mode must be either 'resize' or 'pad'.")
+    return processor
 
 
-def _get_resize_dimensions(processor, num_frames, height, width, temporal_factor, factor):
+def _get_resize_geometry(processor, num_frames, height, width, factor, temporal_factor):
     pixels_per_token = temporal_factor * (factor // processor.patch_expand_factor) ** 2
     min_pixels = processor.min_image_tokens * pixels_per_token
-    max_pixels = processor.max_image_tokens * pixels_per_token
     target_height, target_width = smart_resize(
         num_frames,
         height,
@@ -1785,90 +1780,32 @@ def _get_resize_dimensions(processor, num_frames, height, width, temporal_factor
         height_factor=factor,
         width_factor=factor,
         min_pixels=min_pixels,
-        max_pixels=max_pixels,
-    )
-    return target_height, target_width, min_pixels
-
-
-def _resize_torchvision(processor, inputs, num_frames, resample, factor, temporal_factor):
-    height, width = inputs.shape[-2:]
-    target_height, target_width, min_pixels = _get_resize_dimensions(
-        processor, num_frames, height, width, temporal_factor, factor
+        max_pixels=processor.max_image_tokens * pixels_per_token,
     )
     if processor.resize_mode == "resize":
-        return TorchvisionBackend.resize(
-            processor, inputs, SizeDict(height=target_height, width=target_width), resample=resample
-        )
+        return target_height, target_width, target_height, target_width
 
-    content_height, content_width = _get_pad_content_size(
-        height,
-        width,
-        target_height,
-        target_width,
-        allow_upscale=num_frames * height * width < min_pixels,
-    )
-    if (content_height, content_width) != (height, width):
-        inputs = TorchvisionBackend.resize(
-            processor, inputs, SizeDict(height=content_height, width=content_width), resample=resample
-        )
-    return tvF.pad(inputs, [0, 0, target_width - content_width, target_height - content_height], fill=0)
-
-
-def _resize_pil(processor, image, resample, factor, temporal_factor):
-    factor *= processor.patch_expand_factor
-    height, width = image.shape[-2:]
-    target_height, target_width, min_pixels = _get_resize_dimensions(
-        processor, temporal_factor, height, width, temporal_factor, factor
-    )
-    if processor.resize_mode == "resize":
-        return PilBackend.resize(
-            processor, image, SizeDict(height=target_height, width=target_width), resample=resample
-        )
-
-    content_height, content_width = _get_pad_content_size(
-        height,
-        width,
-        target_height,
-        target_width,
-        allow_upscale=temporal_factor * height * width < min_pixels,
-    )
-    if (content_height, content_width) != (height, width):
-        image = PilBackend.resize(
-            processor, image, SizeDict(height=content_height, width=content_width), resample=resample
-        )
-    return np.pad(
-        image,
-        ((0, 0), (0, target_height - content_height), (0, target_width - content_width)),
-        mode="constant",
-    )
-
-
-def _with_processor_overrides(processor, kwargs):
-    processor = copy.copy(processor)
-    nested_kwargs = kwargs.get("kwargs") or kwargs.get("super_kwargs") or {}
-    for name in ("min_image_tokens", "max_image_tokens", "patch_expand_factor", "resize_mode"):
-        if (value := kwargs.get(name, nested_kwargs.get(name))) is not None:
-            setattr(processor, name, value)
-    return processor
-
-
-def _validate_processor(processor):
-    if processor.min_image_tokens is None or processor.max_image_tokens is None:
-        raise ValueError("min_image_tokens and max_image_tokens must be provided.")
-    if processor.resize_mode not in ("resize", "pad"):
-        raise ValueError("resize_mode must be either 'resize' or 'pad'.")
+    scale = min(target_height / height, target_width / width)
+    if num_frames * height * width >= min_pixels:
+        scale = min(1.0, scale)
+    content_height = max(1, min(target_height, math.floor(height * scale)))
+    content_width = max(1, min(target_width, math.floor(width * scale)))
+    return target_height, target_width, content_height, content_width
 
 
 def _get_number_of_image_patches(processor, height: int, width: int, images_kwargs: dict | None = None) -> int:
-    processor = _with_processor_overrides(processor, images_kwargs or {})
+    processor = _prepare_processor(processor, images_kwargs)
     factor = processor.patch_size * processor.merge_size * processor.patch_expand_factor
-    resized_height, resized_width, _ = _get_resize_dimensions(
-        processor,
+    pixels_per_token = processor.temporal_patch_size * (processor.patch_size * processor.merge_size) ** 2
+    resized_height, resized_width = smart_resize(
         processor.temporal_patch_size,
         height,
         width,
-        processor.temporal_patch_size,
-        factor,
+        temporal_factor=processor.temporal_patch_size,
+        height_factor=factor,
+        width_factor=factor,
+        min_pixels=processor.min_image_tokens * pixels_per_token,
+        max_pixels=processor.max_image_tokens * pixels_per_token,
     )
     return resized_height // processor.patch_size * (resized_width // processor.patch_size)
 
@@ -1898,24 +1835,35 @@ class Glm5NextImageProcessorKwargs(GlmgaImageProcessorKwargs, total=False):
 
 class Glm5NextImageProcessor(GlmgaImageProcessor):
     size = {"longest_edge": 1}
-    image_mean = None
-    image_std = None
-    patch_size = None
-    temporal_patch_size = None
-    merge_size = None
-    patch_expand_factor = None
-    min_image_tokens = None
-    max_image_tokens = None
+    image_mean = OPENAI_CLIP_MEAN
+    image_std = OPENAI_CLIP_STD
+    patch_size = 14
+    temporal_patch_size = 2
+    merge_size = 2
+    patch_expand_factor = 1
+    min_image_tokens = 16
+    max_image_tokens = 8000
     resize_mode = "pad"
     valid_kwargs = Glm5NextImageProcessorKwargs
 
     def preprocess(self, images, **kwargs):
-        self = _with_processor_overrides(self, kwargs)
-        _validate_processor(self)
+        self = _prepare_processor(self, kwargs)
         return super().preprocess(images, **kwargs)
 
     def resize(self, images, size, resample, factor, temporal_factor, **kwargs):
-        return _resize_torchvision(self, images, temporal_factor, resample, factor, temporal_factor)
+        height, width = images.shape[-2:]
+        target_height, target_width, content_height, content_width = _get_resize_geometry(
+            self, temporal_factor, height, width, factor, temporal_factor
+        )
+        if self.resize_mode == "resize":
+            return TorchvisionBackend.resize(
+                self, images, SizeDict(height=target_height, width=target_width), resample=resample
+            )
+        if (content_height, content_width) != (height, width):
+            images = TorchvisionBackend.resize(
+                self, images, SizeDict(height=content_height, width=content_width), resample=resample
+            )
+        return tvF.pad(images, [0, 0, target_width - content_width, target_height - content_height], fill=0)
 
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
         return _get_number_of_image_patches(self, height, width, images_kwargs)
@@ -1923,24 +1871,40 @@ class Glm5NextImageProcessor(GlmgaImageProcessor):
 
 class Glm5NextImageProcessorPil(GlmgaImageProcessorPil):
     size = {"longest_edge": 1}
-    image_mean = None
-    image_std = None
-    patch_size = None
-    temporal_patch_size = None
-    merge_size = None
-    patch_expand_factor = None
-    min_image_tokens = None
-    max_image_tokens = None
+    image_mean = OPENAI_CLIP_MEAN
+    image_std = OPENAI_CLIP_STD
+    patch_size = 14
+    temporal_patch_size = 2
+    merge_size = 2
+    patch_expand_factor = 1
+    min_image_tokens = 16
+    max_image_tokens = 8000
     resize_mode = "pad"
     valid_kwargs = Glm5NextImageProcessorKwargs
 
     def preprocess(self, images, **kwargs):
-        self = _with_processor_overrides(self, kwargs)
-        _validate_processor(self)
+        self = _prepare_processor(self, kwargs)
         return super().preprocess(images, **kwargs)
 
     def resize(self, image, size, resample, factor, temporal_factor, **kwargs):
-        return _resize_pil(self, image, resample, factor, temporal_factor)
+        factor *= self.patch_expand_factor
+        height, width = image.shape[-2:]
+        target_height, target_width, content_height, content_width = _get_resize_geometry(
+            self, temporal_factor, height, width, factor, temporal_factor
+        )
+        if self.resize_mode == "resize":
+            return PilBackend.resize(
+                self, image, SizeDict(height=target_height, width=target_width), resample=resample
+            )
+        if (content_height, content_width) != (height, width):
+            image = PilBackend.resize(
+                self, image, SizeDict(height=content_height, width=content_width), resample=resample
+            )
+        return np.pad(
+            image,
+            ((0, 0), (0, target_height - content_height), (0, target_width - content_width)),
+            mode="constant",
+        )
 
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
         return _get_number_of_image_patches(self, height, width, images_kwargs)
@@ -1966,8 +1930,6 @@ class Glm5NextVideoProcessorInitKwargs(GlmgaVideoProcessorInitKwargs, total=Fals
         Minimum spatial token budget for a video.
     max_image_tokens (`int`):
         Maximum spatial token budget for a video.
-    fps_interval (`float`, *optional*, defaults to 2.0):
-        Target raw frame sampling rate in frames per second.
     max_frame_count_dynamic (`int`, *optional*, defaults to 2048):
         Maximum number of dynamically sampled frames.
     resize_mode (`str`, *optional*, defaults to `"pad"`):
@@ -1977,7 +1939,6 @@ class Glm5NextVideoProcessorInitKwargs(GlmgaVideoProcessorInitKwargs, total=Fals
     max_duration: int
     min_image_tokens: int
     max_image_tokens: int
-    fps_interval: float
     max_frame_count_dynamic: int
     resize_mode: str
 
@@ -1985,17 +1946,16 @@ class Glm5NextVideoProcessorInitKwargs(GlmgaVideoProcessorInitKwargs, total=Fals
 class Glm5NextVideoProcessor(GlmgaVideoProcessor):
     size = {"longest_edge": 1}
     max_image_size = {"longest_edge": 28 * 28 * 2 * 30000}
-    image_mean = None
-    image_std = None
-    patch_size = None
-    temporal_patch_size = None
-    merge_size = None
-    patch_expand_factor = None
-    min_image_tokens = None
-    max_image_tokens = None
+    image_mean = OPENAI_CLIP_MEAN
+    image_std = OPENAI_CLIP_STD
+    patch_size = 14
+    temporal_patch_size = 2
+    merge_size = 2
+    patch_expand_factor = 1
+    min_image_tokens = 16
+    max_image_tokens = 240000
     max_duration = 0
-    fps = None
-    fps_interval = 2.0
+    fps = 2.0
     max_frame_count_dynamic = 2048
     max_frames = None
     resize_mode = "pad"
@@ -2003,7 +1963,7 @@ class Glm5NextVideoProcessor(GlmgaVideoProcessor):
 
     def __init__(self, **kwargs: Unpack[Glm5NextVideoProcessorInitKwargs]):
         super().__init__(**kwargs)
-        _validate_processor(self)
+        _prepare_processor(self)
 
     def sample_frames(self, metadata: VideoMetadata, fps: int | float | None = None, **kwargs):
         if metadata is None or getattr(metadata, "fps", None) is None:
@@ -2021,7 +1981,7 @@ class Glm5NextVideoProcessor(GlmgaVideoProcessor):
         if max_frames is None:
             max_frames = self.max_frame_count_dynamic
         effective_duration = duration if self.max_duration <= 0 else min(duration, self.max_duration)
-        target_fps = fps if fps is not None else self.fps_interval
+        target_fps = fps if fps is not None else self.fps
         extract_t = min(int(effective_duration * target_fps), max_frames)
 
         timestamps = [index / metadata.fps for index in range(total_frames)]
@@ -2054,11 +2014,23 @@ class Glm5NextVideoProcessor(GlmgaVideoProcessor):
         return np.array(frame_indices)
 
     def _preprocess(self, videos, **super_kwargs):
-        self = _with_processor_overrides(self, locals())
+        self = _prepare_processor(self, locals())
         return super()._preprocess(videos, **super_kwargs)
 
     def resize(self, videos, size, resample, factor, temporal_factor, **kwargs):
-        return _resize_torchvision(self, videos, videos.shape[1], resample, factor, temporal_factor)
+        height, width = videos.shape[-2:]
+        target_height, target_width, content_height, content_width = _get_resize_geometry(
+            self, videos.shape[1], height, width, factor, temporal_factor
+        )
+        if self.resize_mode == "resize":
+            return TorchvisionBackend.resize(
+                self, videos, SizeDict(height=target_height, width=target_width), resample=resample
+            )
+        if (content_height, content_width) != (height, width):
+            videos = TorchvisionBackend.resize(
+                self, videos, SizeDict(height=content_height, width=content_width), resample=resample
+            )
+        return tvF.pad(videos, [0, 0, target_width - content_width, target_height - content_height], fill=0)
 
 
 __all__ = [
@@ -2070,6 +2042,7 @@ __all__ = [
     "Glm5NextVisionModel",
     "Glm5NextModel",
     "Glm5NextForConditionalGeneration",
+    "Glm5NextProcessor",
     "Glm5NextImageProcessor",
     "Glm5NextImageProcessorPil",
     "Glm5NextVideoProcessor",

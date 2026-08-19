@@ -73,14 +73,9 @@ class Glm5NextImageProcessingTest(unittest.TestCase):
             self.assertEqual(output.image_grid_thw.tolist(), grid)
             self.assertEqual(digest, expected_hash)
 
-    def test_required_token_bounds(self):
-        processor = Glm5NextImageProcessor(
-            patch_size=2,
-            temporal_patch_size=2,
-            merge_size=2,
-            patch_expand_factor=2,
-        )
-        with self.assertRaisesRegex(ValueError, "min_image_tokens and max_image_tokens"):
+    def test_invalid_resize_mode(self):
+        processor = Glm5NextImageProcessor(resize_mode="invalid")
+        with self.assertRaisesRegex(ValueError, "resize_mode"):
             processor(torch.zeros(3, 5, 9, dtype=torch.uint8))
 
     def test_torchvision_and_pil_padding_are_bit_exact(self):
