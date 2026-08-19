@@ -3044,14 +3044,13 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             tokenize (`bool`, defaults to `True`):
                 Whether to tokenize the output. If `False`, the output will be a string.
             sanitize_special_tokens (`bool`, defaults to `False`):
-                Whether to sanitize the chat inputs before passing them to the template, ensuring that special
-                tokens in user-supplied content (e.g. a typed `<|assistant|>`) can't interfere with the chat
-                structure. Sanitization preserves the text, but encodes it with ordinary (non-special) tokens,
-                like `split_special_tokens=True`. Special tokens added by the chat template itself are
-                unaffected. Requires `tokenize=True`, since token-level sanitization cannot be expressed in
-                string output, and cannot currently be combined with `return_assistant_tokens_mask`.
-                Sanitization never deletes or rewrites input text: if the text cannot be represented with
-                ordinary tokens, a `ValueError` is raised instead.
+                Whether to sanitize the chat inputs so that special tokens inside them (e.g. a typed
+                `<|assistant|>`) cannot act as control tokens: the text is preserved, but encoded with
+                ordinary (non-special) tokens, as with `split_special_tokens=True`. Special tokens emitted
+                by the template itself are unaffected. Requires `tokenize=True`; incompatible with
+                `return_assistant_tokens_mask`. Raises `ValueError` rather than delete or rewrite text it
+                cannot make safe. Tokenization at sanitized boundaries may differ slightly; a chat with
+                nothing to sanitize is unaffected.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
                  Select a strategy to pad the returned sequences (according to the model's padding side and padding
                  index) among:
@@ -3147,8 +3146,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         if tokenize:
             if substitutions:
-                # Sanitization replaced special tokens in the chat inputs with placeholders. Restoring and
-                # encoding them so that they can never act as control tokens needs a dedicated path.
+                # Splicing the sanitized placeholders back in as ordinary tokens needs a dedicated path
                 out = encode_sanitized_chats(
                     self,
                     rendered_chat if is_batched else [rendered_chat],

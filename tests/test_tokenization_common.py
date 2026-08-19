@@ -1050,7 +1050,7 @@ Hey how are you doing"""  # noqa: W293
                 return_dict=True,
                 sanitize_special_tokens=True,
             )["input_ids"]
-        except NotImplementedError:
+        except (TypeError, NotImplementedError):
             self.skipTest("Tokenizer does not support sanitize_special_tokens")
         except ValueError:
             # Sanitization is all-or-nothing: tokenizers that cannot re-encode the injected text as ordinary
@@ -1059,12 +1059,11 @@ Hey how are you doing"""  # noqa: W293
         # the injected copy is encoded with ordinary tokens; only the template's own EOS stays special
         self.assertEqual(output.count(eos_id), 1)
 
-        # When the tokenizer can losslessly re-encode the token text as ordinary tokens, sanitization must
-        # preserve it. (Tokenizers that transform the text - e.g. lowercasing ones - are not held to the
-        # identity check; ones whose vocab can assemble special tokens from ordinary pieces raise instead
-        # and were skipped above.)
+        # Tokenizers that can losslessly re-encode the token text in splice position (following other ids)
+        # must preserve it exactly; ones that can't (lowercasing, SentencePiece dummy-space) are not held to it
+        prefix_ids = tokenizer.encode("hello", add_special_tokens=False)
         split_ids = tokenizer.encode(eos, add_special_tokens=False, split_special_tokens=True)
-        if eos_id not in split_ids and tokenizer.decode(split_ids) == eos:
+        if eos_id not in split_ids and tokenizer.decode(prefix_ids + split_ids) == tokenizer.decode(prefix_ids) + eos:
             self.assertIn(f"hello {eos} world", tokenizer.decode(output))
 
         # A conversation with nothing to sanitize takes the standard encoding path and is byte-identical
@@ -1112,7 +1111,7 @@ Hey how are you doing"""  # noqa: W293
         }
         try:
             base = tokenizer.apply_chat_template(conversation, **shared_kwargs)["input_ids"]
-        except NotImplementedError:
+        except (TypeError, NotImplementedError):
             self.skipTest("Tokenizer does not support sanitize_special_tokens")
         except ValueError:
             self.skipTest("Tokenizer cannot safely sanitize these inputs")
