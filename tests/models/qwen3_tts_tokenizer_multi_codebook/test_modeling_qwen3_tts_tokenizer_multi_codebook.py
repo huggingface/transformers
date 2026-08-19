@@ -285,9 +285,7 @@ class Qwen3TTSTokenizerMultiCodebookIntegrationTest(unittest.TestCase):
             if array.ndim > 1:
                 array = array.mean(axis=1)
             if sr != self.TARGET_SAMPLE_RATE:
-                array = torchaudio.functional.resample(
-                    torch.from_numpy(array), sr, self.TARGET_SAMPLE_RATE
-                ).numpy()
+                array = torchaudio.functional.resample(torch.from_numpy(array), sr, self.TARGET_SAMPLE_RATE).numpy()
             samples.append(np.array(array, dtype=np.float32))
         return samples
 
