@@ -52,13 +52,30 @@ def _findings_hash(findings):
 
 
 def _read_pr_state(pr_body):
-    """Extract the mlinter hash from the PR description state block. Returns hash string or None."""
+    """Extract the mlinter hash and review ID from the PR description state block.
+
+    Returns (hash_str, review_id_str) or (None, None).
+    """
     m = re.search(
-        r"<!-- mlinter-state-start -->.*?hash: `([0-9a-f]{8})`.*?<!-- mlinter-state-end -->",
+        r"<!-- mlinter-state-start -->.*?hash: `([0-9a-f]{8})`.*?"
+        r"review: [^\n]*#pullrequestreview-(\d+).*?<!-- mlinter-state-end -->",
         pr_body or "",
         re.DOTALL,
     )
-    return m.group(1) if m else None
+    if not m:
+        return None, None
+    return m.group(1), m.group(2)
+
+
+def _delete_old_review_comments(review_id, pulls_url, token):
+    """Delete all inline comments from a previous mlinter review to prevent accumulation."""
+    comments = get_github_json(f"{pulls_url}/reviews/{review_id}/comments", token=token) or []
+    repo_api_url = pulls_url.split("/pulls/")[0]
+    for comment in comments:
+        try:
+            github_request(f"{repo_api_url}/pulls/comments/{comment['id']}", token=token, method="DELETE")
+        except RuntimeError as exc:
+            print(f"Failed to delete comment {comment['id']}: {exc}", file=sys.stderr)
 
 
 def _update_pr_description(pr_body, findings_hash, commit_sha, review_url):
@@ -198,12 +215,13 @@ def main():
     pr_body = pr_data.get("body") or ""
     commit_sha = pr_data["head"]["sha"][:8]
 
-    existing_hash = _read_pr_state(pr_body)
+    existing_hash, existing_review_id = _read_pr_state(pr_body)
     if existing_hash == current_hash:
         print(f"Findings unchanged (hash {current_hash}); skipping.")
         return 0
-    if existing_hash:
-        print(f"Findings changed (was {existing_hash}, now {current_hash}); posting new review.")
+    if existing_hash and existing_review_id:
+        print(f"Findings changed (was {existing_hash}, now {current_hash}); deleting old inline comments.")
+        _delete_old_review_comments(existing_review_id, pulls_url, token)
 
     # Map each changed file to its commentable lines.
     anchors = {f["filename"]: _commentable_lines(f.get("patch")) for f in _paginate(f"{pulls_url}/files", token)}
