@@ -213,7 +213,7 @@ class Qwen3TTSForConditionalGenerationIntegrationTest(unittest.TestCase):
         from transformers.testing_utils import cleanup
 
         cleanup(torch_device, gc_collect=True)
-        cls.checkpoint = "qwen3_tts_converted"
+        cls.checkpoint = "shahvandit/qwen3-tts-base-hf"
 
     def tearDown(self):
         from transformers.testing_utils import cleanup
