@@ -143,13 +143,6 @@ _MODEL_TO_CONVERSION_PATTERN = {
 
 def _build_checkpoint_conversion_mapping():
     mapping = {
-        "neomme": [
-            WeightConverter(
-                source_patterns="self_attn.kv_proj.weight",
-                target_patterns=["self_attn.k_proj.weight", "self_attn.v_proj.weight"],
-                operations=[Chunk(dim=0)],
-            ),
-        ],
         # Cosmos3 Edge's composite checkpoint stores its dense reasoner text tower as conventional attention + MLP
         # blocks. The visual/projector tensors already use their native module names and intentionally need no mapping.
         "cosmos3_edge": [
