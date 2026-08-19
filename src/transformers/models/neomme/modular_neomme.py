@@ -338,14 +338,13 @@ class NeoMMERotaryEmbedding(nn.Module):
         self, hidden_states: torch.Tensor, position_ids: torch.LongTensor, layer_type: str | None = None
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Build cos/sin from two-axis `position_ids` of shape `(2, batch, seq_len)`."""
-        if position_ids.dim() == 2:
+        input_shape = hidden_states.shape[:2]
+        if position_ids.shape == input_shape:
             position_ids = position_ids.unsqueeze(0).expand(2, -1, -1)
-        elif position_ids.dim() != 3 or position_ids.shape[0] != 2:
-            # Otherwise a `(3, B, L)` or `(B, L, 2)` tensor indexes as if it were axis-major and silently
-            # encodes the wrong positions or raises an opaque `IndexError`.
+        elif position_ids.shape != (2, *input_shape):
             raise ValueError(
-                f"position_ids must be (2, batch_size, sequence_length) with the M-RoPE axis leading, or "
-                f"(batch_size, sequence_length) to use one axis for both; got {tuple(position_ids.shape)}."
+                f"position_ids must have shape {tuple(input_shape)} or {(2, *input_shape)}, "
+                f"got {tuple(position_ids.shape)}."
             )
         inv_freq = getattr(self, f"{layer_type}_inv_freq")  # (rotary_dim // 2,)
         attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
