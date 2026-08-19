@@ -48,7 +48,7 @@ messages = [
         "role": "user",
         "content": [
             {"type": "image", "url": image_url},
-            {"type": "text", "text": "Describe this image."},
+            {"type": "text", "text": "What do you see?"},
         ],
     }
 ]

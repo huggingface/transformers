@@ -90,10 +90,32 @@ class CohereCompassTextConfig(Cohere2Config):
 
         super().__post_init__(**kwargs)
 
+    def convert_rope_params_to_dict(self, **kwargs):
+        # allow per layer rope with optional NoPE layers
+        self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else {}
+        self.standardize_rope_params()
+        return kwargs
+
 
 @auto_docstring(checkpoint="CohereLabs/North-Micro-Vision-Instruct")
 @strict
 class CohereCompassConfig(Qwen3VLConfig):
+    r"""
+    Example:
+
+    ```python
+    >>> from transformers import CohereCompassForConditionalGeneration, CohereCompassConfig
+
+    >>> # Initializing a "CohereLabs/North-Micro-Vision-Instruct" style configuration
+    >>> configuration = CohereCompassConfig()
+
+    >>> # Initializing a model from the "CohereLabs/North-Micro-Vision-Instruct" style configuration
+    >>> model = CohereCompassForConditionalGeneration(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
     model_type = "cohere_compass"
     sub_configs = {
         "text_config": CohereCompassTextConfig,
@@ -201,7 +223,6 @@ class CohereCompassAttention(Cohere2Attention):
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None,
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
-        position_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
@@ -246,6 +267,7 @@ class CohereCompassDecoderLayer(Cohere2DecoderLayer):
 
 @auto_docstring
 class CohereCompassPreTrainedModel(Qwen3VLPreTrainedModel):
+    input_modalities = ("image", "text")
     _no_split_modules = [
         "CohereCompassDecoderLayer",
     ]
@@ -377,6 +399,7 @@ class CohereCompassForCausalLM(Cohere2ForCausalLM, CohereCompassPreTrainedModel)
 
 
 # Overwritten to show type as cohere_compass_vision for internal compatibility
+@auto_docstring
 class CohereCompassVisionModel(Qwen3VLVisionModel):
     config: CohereCompassVisionConfig
     input_modalities = ("image",)

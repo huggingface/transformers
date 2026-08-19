@@ -1562,7 +1562,7 @@ class Qwen3OmniMoeThinkerTextDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class Qwen3OmniMoeThinkerTextPreTrainedModel(PreTrainedModel):
-    config = Qwen3OmniMoeTextConfig
+    config: Qwen3OmniMoeTextConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Qwen3OmniMoeThinkerTextDecoderLayer"]
