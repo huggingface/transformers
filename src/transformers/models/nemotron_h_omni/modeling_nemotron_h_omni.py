@@ -20,15 +20,14 @@
 
 import torch
 from torch import nn
-from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
-from ...utils import can_return_tuple
-from ..auto import CONFIG_MAPPING, FEATURE_EXTRACTOR_MAPPING, AutoModel, AutoModelForCausalLM
+from ...utils import auto_docstring, can_return_tuple
+from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_nemotron_h_omni import NemotronH_Omni_Reasoning_V3_Config
 
 
@@ -54,17 +53,13 @@ class NemotronH_Omni_RMSNorm(nn.Module):
 
 
 class NemotronH_Omni_Reasoning_V3SoundProjector(nn.Module):
-    """Single-forward audio pipeline: feature-extract raw clip(s), encode with Parakeet and project,
-    returning flattened LLM-space embeddings ready to scatter onto `<audio>` positions.
+    """Encode pre-extracted mel features with Parakeet and project them into LLM space, returning
+    flattened embeddings ready to scatter onto `<audio>` positions. Mel extraction itself lives in
+    the processor.
     """
 
     def __init__(self, config, llm_hidden_size: int):
         super().__init__()
-        feature_extractor_class = FEATURE_EXTRACTOR_MAPPING[CONFIG_MAPPING["parakeet_encoder"]]
-        self.feature_extractor = feature_extractor_class(
-            sampling_rate=getattr(config, "sampling_rate", 16000),
-            feature_size=config.num_mel_bins,
-        )
         self.sound_encoder = AutoModel.from_config(config)
         self.sound_projection = NemotronH_Omni_Reasoning_V3MLP(
             config.hidden_size,
@@ -73,24 +68,10 @@ class NemotronH_Omni_Reasoning_V3SoundProjector(nn.Module):
             bias=config.projection_bias,
         )
 
-    def forward(self, sound_clips) -> torch.Tensor:
+    def forward(self, input_features, input_features_mask=None) -> torch.Tensor:
         weight = self.sound_encoder.subsampling.linear.weight
-        device, dtype = weight.device, weight.dtype
-
-        if isinstance(sound_clips, torch.Tensor) and sound_clips.dim() >= 3:
-            input_features = sound_clips.to(device=device, dtype=dtype)
-            attention_mask = None
-        else:
-            # `.tolist()` keeps a raw waveform tensor within the feature extractor's accepted input
-            # types (`list[float]` / `list[list[float]]`) without pulling in numpy here.
-            raw_speech = sound_clips.tolist() if isinstance(sound_clips, torch.Tensor) else sound_clips
-            audio_inputs = self.feature_extractor(
-                raw_speech, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
-            )
-            input_features = audio_inputs.input_features.to(device=device, dtype=dtype)
-            attention_mask = audio_inputs.get("attention_mask", None)
-            if attention_mask is not None:
-                attention_mask = attention_mask.to(device=device)
+        input_features = input_features.to(device=weight.device, dtype=weight.dtype)
+        attention_mask = input_features_mask.to(weight.device) if input_features_mask is not None else None
 
         encoder_states = self.sound_encoder(
             input_features=input_features, attention_mask=attention_mask
@@ -100,7 +81,8 @@ class NemotronH_Omni_Reasoning_V3SoundProjector(nn.Module):
         # Multiple clips are batch-padded; keep only each clip's real (subsampled) length before flattening.
         if sound_embeds.dim() == 3 and sound_embeds.shape[0] > 1 and attention_mask is not None:
             lengths = self.sound_encoder._get_subsampling_output_length(attention_mask.sum(-1) + 1)
-            return torch.cat([sound_embeds[i, : int(n)] for i, n in enumerate(lengths.tolist())], dim=0)
+            positions = torch.arange(sound_embeds.shape[1], device=sound_embeds.device)
+            return sound_embeds[positions[None, :] < lengths[:, None]]
         return sound_embeds.reshape(-1, sound_embeds.shape[-1])
 
 
@@ -216,7 +198,6 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel, GenerationMixin):
     main_input_name = "input_ids"
     _supports_flash_attn_2 = True
     _supports_flash_attn = True
-    _no_split_modules = ["NemotronHBlock"]
     # Ignore config-derived tensors
     _keys_to_ignore_on_load_unexpected = [
         r"feature_extractor\.featurizer\.(fb|window)$",
@@ -240,11 +221,9 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel, GenerationMixin):
         self.vision_projector = NemotronH_Omni_Reasoning_V3VisionProjector(config)
 
         self.sound_context_token_id = config.sound_context_token_id
+        # CODEPATH: `nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-BF16` ships a `sound_config` and
+        # takes the audio branch.
         if config.sound_config is not None:
-            # ParakeetEncoder has no flash-attention kernel, so it must not inherit a FA2 request
-            # propagated from the parent config through `sub_configs`.
-            if config.sound_config._attn_implementation == "flash_attention_2":
-                config.sound_config._attn_implementation = "sdpa"
             self.sound_projector = NemotronH_Omni_Reasoning_V3SoundProjector(config.sound_config, llm_hidden_size)
         else:
             self.sound_projector = None
@@ -254,7 +233,13 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel, GenerationMixin):
         self.post_init()
 
     @can_return_tuple
+    @auto_docstring
     def get_image_features(self, pixel_values, image_flags=None, **kwargs):
+        r"""
+        image_flags (`torch.LongTensor` of shape `(num_images, 1)`, *optional*):
+            Marks which projected image tiles are real; tiles flagged with `0` are dropped before
+            the features are scattered onto the placeholder tokens.
+        """
         # `pixel_values` is a list when tiles of differing sizes are batched; each runs the tower
         # separately and their projected tokens are concatenated.
         tiles = list(pixel_values) if isinstance(pixel_values, (list, tuple)) else [pixel_values]
@@ -280,6 +265,7 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel, GenerationMixin):
         )
 
     @can_return_tuple
+    @auto_docstring
     def get_video_features(self, pixel_values_videos, **kwargs):
         pixel_values_videos = pixel_values_videos.to(dtype=self.vision_model.config.torch_dtype)
         temporal_patch_dim = self.video_temporal_patch_dim
@@ -312,12 +298,14 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,
         pixel_values: torch.FloatTensor | None = None,
         pixel_values_videos: torch.FloatTensor | None = None,
-        sound_clips: torch.FloatTensor | None = None,
+        input_features: torch.FloatTensor | None = None,
+        input_features_mask: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         image_flags: torch.LongTensor | None = None,
@@ -325,11 +313,18 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel, GenerationMixin):
         labels: torch.LongTensor | None = None,
         inputs_embeds=None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
     ) -> CausalLMOutputWithPast:
+        r"""
+        input_features (`torch.FloatTensor` of shape `(batch_size, num_mel_bins, num_frames)`, *optional*):
+            Mel features produced by the processor, encoded and scattered onto the audio
+            placeholder tokens.
+        input_features_mask (`torch.Tensor` of shape `(batch_size, num_frames)`, *optional*):
+            Mask marking the real mel frames of each padded clip.
+        image_flags (`torch.LongTensor` of shape `(num_images, 1)`, *optional*):
+            Marks which projected image tiles are real; tiles flagged with `0` are dropped before
+            the features are scattered onto the placeholder tokens.
+        """
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
@@ -362,8 +357,8 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel, GenerationMixin):
                     attention_mask = attention_mask[retention_mask].unsqueeze(0)
                 input_ids = input_ids[retention_mask].unsqueeze(0)
 
-        if sound_clips is not None and self.sound_projector is not None and input_ids is not None:
-            sound_embeds = self.sound_projector(sound_clips)
+        if input_features is not None and self.sound_projector is not None and input_ids is not None:
+            sound_embeds = self.sound_projector(input_features, input_features_mask)
             sound_embeds = sound_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             sound_mask = (input_ids == self.sound_context_token_id).unsqueeze(-1).expand_as(inputs_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(sound_mask.to(inputs_embeds.device), sound_embeds)
@@ -374,21 +369,15 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel, GenerationMixin):
             position_ids=position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
+            **kwargs,
         )
         logits = outputs.logits
 
         loss = None
         if labels is not None:
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            loss_fct = CrossEntropyLoss()
-            shift_logits = shift_logits.view(-1, self.language_model.config.vocab_size)
-            shift_labels = shift_labels.view(-1)
-            shift_labels = shift_labels.to(shift_logits.device)
-            loss = loss_fct(shift_logits, shift_labels)
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.llm_config.vocab_size, **kwargs
+            )
 
         return CausalLMOutputWithPast(
             loss=loss,
@@ -406,7 +395,8 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel, GenerationMixin):
         inputs_embeds=None,
         pixel_values=None,
         pixel_values_videos=None,
-        sound_clips=None,
+        input_features=None,
+        input_features_mask=None,
         image_flags=None,
         use_cache=True,
         is_first_iteration=False,
@@ -419,7 +409,8 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             pixel_values=pixel_values,
             pixel_values_videos=pixel_values_videos,
-            sound_clips=sound_clips,
+            input_features=input_features,
+            input_features_mask=input_features_mask,
             image_flags=image_flags,
             use_cache=use_cache,
             is_first_iteration=is_first_iteration,
@@ -430,7 +421,8 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel, GenerationMixin):
         if not is_first_iteration and use_cache:
             model_inputs["pixel_values"] = None
             model_inputs["pixel_values_videos"] = None
-            model_inputs["sound_clips"] = None
+            model_inputs["input_features"] = None
+            model_inputs["input_features_mask"] = None
             model_inputs["image_flags"] = None
 
         return model_inputs

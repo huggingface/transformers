@@ -20,13 +20,14 @@ import numpy as np
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_base import BatchFeature
 from ...image_utils import ImageInput, ImageType, get_image_type, make_list_of_images
-from ...utils import is_torch_available
+from ...utils import auto_docstring, is_torch_available
 
 
 if is_torch_available():
     import torch
 
 
+@auto_docstring
 class NemotronH_Omni_Reasoning_V3ImageProcessor(TorchvisionBackend):
     """
     Dynamic-resolution image processor for the NemotronH Omni model.

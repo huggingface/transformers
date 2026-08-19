@@ -319,7 +319,14 @@ class NemotronH_Omni_Reasoning_V3IntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     def _generate(self, inputs):
-        accepted = {"input_ids", "attention_mask", "pixel_values", "pixel_values_videos", "sound_clips"}
+        accepted = {
+            "input_ids",
+            "attention_mask",
+            "pixel_values",
+            "pixel_values_videos",
+            "input_features",
+            "input_features_mask",
+        }
         inputs = {k: (v.to(self.model.device) if hasattr(v, "to") else v) for k, v in inputs.items() if k in accepted}
         with torch.inference_mode():
             output = self.model.generate(**inputs, max_new_tokens=self.max_new_tokens, do_sample=False)

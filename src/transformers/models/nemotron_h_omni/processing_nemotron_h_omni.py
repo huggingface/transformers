@@ -22,8 +22,9 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import is_torch_available
+from ...utils import auto_docstring, is_torch_available
 from ...video_utils import VideoInput
+from ..auto import CONFIG_MAPPING, FEATURE_EXTRACTOR_MAPPING
 
 
 if is_torch_available():
@@ -34,16 +35,8 @@ if is_torch_available():
 AudioInput = Union[str, "np.ndarray", "torch.Tensor", list]
 
 
-class NemotronH_Omni_Reasoning_V3ImagesKwargs(ImagesKwargs):
-    min_pixels: int | None
-    max_pixels: int | None
-    patch_size: int | None
-    temporal_patch_size: int | None
-    merge_size: int | None
-
-
 class NemotronH_Omni_Reasoning_V3ProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: NemotronH_Omni_Reasoning_V3ImagesKwargs
+    images_kwargs: ImagesKwargs
     videos_kwargs: VideosKwargs
     # `ProcessingKwargs` is a TypedDict, so `_defaults` is not inherited by subclasses and must be
     # (re)declared. Left empty on purpose — no defaults are overridden here (`padding` already
@@ -51,6 +44,7 @@ class NemotronH_Omni_Reasoning_V3ProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {}
 
 
+@auto_docstring
 class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
     r"""
     Constructs a NemotronH Omni processor which wraps an image processor and a tokenizer into a
@@ -68,14 +62,6 @@ class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
         chat_template (`str`, *optional*):
             A Jinja template which will be used to convert lists of messages in a chat into a
             tokenizable string.
-        audio_sampling_rate (`int`, *optional*, defaults to 16000):
-            Sampling rate for audio processing.
-        audio_subsampling_factor (`int`, *optional*, defaults to 8):
-            Subsampling factor for the audio encoder.
-        audio_hop_length (`int`, *optional*, defaults to 160):
-            Hop length in samples for feature extraction.
-        video_temporal_patch_dim (`int`, *optional*, defaults to 2):
-            Number of frames collapsed into a single temporal patch by the model's video embedder.
     """
 
     attributes = ["image_processor", "tokenizer"]
@@ -90,9 +76,22 @@ class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
         audio_subsampling_factor: int = 8,
         audio_hop_length: int = 160,
         video_temporal_patch_dim: int = 2,
+        num_mel_bins: int = 128,
         **kwargs,
     ):
-        # Number of frames collapsed into a single temporal patch by the model's video embedder.
+        r"""
+        audio_sampling_rate (`int`, *optional*, defaults to 16000):
+            Sampling rate, in Hz, the audio waveforms are expected to be at.
+        audio_subsampling_factor (`int`, *optional*, defaults to 8):
+            Factor by which the sound encoder subsamples the mel frames, used to size the audio
+            placeholder run.
+        audio_hop_length (`int`, *optional*, defaults to 160):
+            Hop length, in samples, between consecutive mel frames.
+        video_temporal_patch_dim (`int`, *optional*, defaults to 2):
+            Number of frames collapsed into a single temporal patch by the model's video embedder.
+        num_mel_bins (`int`, *optional*, defaults to 128):
+            Number of mel filterbank bins the sound encoder expects.
+        """
         self.video_temporal_patch_dim = video_temporal_patch_dim
         self.image_token = "<image>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
         self.video_token = "<video>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
@@ -122,9 +121,13 @@ class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
         self.audio_sampling_rate = audio_sampling_rate
         self.audio_subsampling_factor = audio_subsampling_factor
         self.audio_hop_length = audio_hop_length
+        self.num_mel_bins = num_mel_bins
+        feature_extractor_class = FEATURE_EXTRACTOR_MAPPING[CONFIG_MAPPING["parakeet_encoder"]]
+        self.feature_extractor = feature_extractor_class(sampling_rate=audio_sampling_rate, feature_size=num_mel_bins)
 
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
+    @auto_docstring
     def __call__(
         self,
         images: ImageInput = None,
@@ -133,15 +136,6 @@ class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
         audio: AudioInput = None,
         **kwargs: Unpack[NemotronH_Omni_Reasoning_V3ProcessorKwargs],
     ) -> BatchFeature:
-        """
-        Prepare multimodal inputs (text, images, videos, audio) for the model.
-
-        Text `<image>` / `<video>` / `<audio>` tokens are expanded into placeholder sequences sized
-        by the corresponding media, images/videos are run through the image processor, and audio is
-        turned into raw waveforms with an estimated token count. Returns a [`BatchFeature`] with (as
-        applicable) `input_ids`, `attention_mask`, `pixel_values`, `num_patches`,
-        `pixel_values_videos`, and `sound_clips`.
-        """
         output_kwargs = self._merge_kwargs(
             NemotronH_Omni_Reasoning_V3ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
@@ -168,8 +162,12 @@ class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
 
         audio_num_tokens = []
         if audio is not None:
-            audio_clips, audio_num_tokens = self._process_audio(audio, output_kwargs.get("audio_kwargs", {}))
-            audio_inputs["sound_clips"] = audio_clips
+            audio_features, audio_mask, audio_num_tokens = self._process_audio(
+                audio, output_kwargs.get("audio_kwargs", {})
+            )
+            audio_inputs["input_features"] = audio_features
+            if audio_mask is not None:
+                audio_inputs["input_features_mask"] = audio_mask
 
         if not isinstance(text, list):
             text = [text]
@@ -256,14 +254,13 @@ class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
         output_data = {**text_inputs, **image_inputs, **videos_inputs}
         result = BatchFeature(data=output_data, tensor_type=return_tensors)
 
-        # Audio clips stay as raw waveforms (list of numpy arrays), not tensors.
-        if audio_inputs:
-            result["sound_clips"] = audio_inputs["sound_clips"]
+        for key, value in audio_inputs.items():
+            result[key] = value
 
         return result
 
     def _process_audio(self, audio: AudioInput, audio_kwargs: dict) -> tuple:
-        """Load/normalize audio to waveforms and estimate the number of audio embedding tokens."""
+        """Extract mel features from the clip(s) and estimate the number of audio embedding tokens."""
         sampling_rate = audio_kwargs.get("sampling_rate", self.audio_sampling_rate)
 
         if not isinstance(audio, list):
@@ -285,7 +282,8 @@ class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
             n_tokens = self._estimate_audio_num_embeddings(len(waveform))
             num_tokens.append(max(1, n_tokens))
 
-        return audio_clips, num_tokens
+        features = self.feature_extractor(audio_clips, sampling_rate=sampling_rate, return_tensors="pt")
+        return features.input_features, features.get("attention_mask", None), num_tokens
 
     def _estimate_audio_num_embeddings(self, audio_length_samples: int) -> int:
         """Predict the number of `<so_embedding>` tokens the sound encoder emits for a raw clip.

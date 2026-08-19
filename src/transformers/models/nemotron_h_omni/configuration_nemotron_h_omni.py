@@ -15,6 +15,7 @@ from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, logging
+from ...utils.generic import is_flash_attention_requested
 from ..nemotron_h import NemotronHConfig
 from ..parakeet.configuration_parakeet import ParakeetEncoderConfig
 from ..radio.configuration_radio import RadioConfig
@@ -105,6 +106,15 @@ class NemotronH_Omni_Reasoning_V3_Config(PreTrainedConfig):
         # `attn_implementation` flows in through `**kwargs` (the base `PreTrainedConfig` stores it as
         # `self._attn_implementation`, as for every other model); propagate it to the language model.
         self.llm_config._attn_implementation = self._attn_implementation
+
+    @PreTrainedConfig._attn_implementation.setter
+    def _attn_implementation(self, value):
+        # ParakeetEncoder ships no flash-attention kernel, so a blanket flash request is rewritten
+        # into the per-subconfig mapping the base setter already understands: every tower follows
+        # the request except the sound one, which falls back to sdpa.
+        if isinstance(value, str) and is_flash_attention_requested(requested_attention_implementation=value):
+            value = {"": value, **dict.fromkeys(self.sub_configs, value), "sound_config": "sdpa"}
+        PreTrainedConfig._attn_implementation.fset(self, value)
 
     # vLLM's `NemotronH_Nano_VL_V2` implementation reads the language-model sub-config as
     # `config.text_config`. Our HF config stores it as `config.llm_config`; expose an alias so the
