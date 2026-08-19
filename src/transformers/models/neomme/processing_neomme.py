@@ -63,16 +63,18 @@ def _maxsim_scores(
     normalize: bool = True,
 ) -> torch.Tensor:
     """Compute MaxSim from padded token grids, optionally normalized by query length."""
-    query_grids = (  # (num_queries, query_length, dim)
-        torch.nn.functional.normalize(query_grids.float(), dim=-1) * query_mask[..., None]
-    )
-    passage_grids = torch.nn.functional.normalize(passage_grids.float(), dim=-1)  # (num_passages, passage_length, dim)
+    # query_grids: (num_queries, query_length, dim)
+    query_grids = torch.nn.functional.normalize(query_grids.float(), dim=-1) * query_mask[..., None]
 
-    similarity = torch.einsum(  # (num_queries, num_passages, query_length, passage_length)
-        "qid,pjd->qpij", query_grids, passage_grids
-    )
+    # passage_grids: (num_passages, passage_length, dim)
+    passage_grids = torch.nn.functional.normalize(passage_grids.float(), dim=-1)
+
+    # similarity: (num_queries, num_passages, query_length, passage_length)
+    similarity = torch.einsum("qid,pjd->qpij", query_grids, passage_grids)
     similarity = similarity.masked_fill(~passage_mask[None, :, None, :], torch.finfo(similarity.dtype).min)
-    scores = similarity.max(dim=-1).values.sum(dim=-1)  # (num_queries, num_passages)
+
+    # scores: (num_queries, num_passages)
+    scores = similarity.max(dim=-1).values.sum(dim=-1)
 
     if normalize:
         scores = scores / query_mask.sum(-1, keepdim=True).clamp_min(1).to(scores.dtype)

@@ -541,7 +541,8 @@ class NeoMMEPreTrainedModel(PreTrainedModel):
         if isinstance(module, NeoMMEEmbeddings):
             init.normal_(module.word_embeddings.weight, mean=0.0, std=self.config.embedding_rank**-0.5)
         elif isinstance(module, NeoMMEAttention):
-            init.zeros_(module.o_proj.weight)  # residual branch starts as an exact no-op
+            # Zero-init so the attention residual contributes nothing at initialization.
+            init.zeros_(module.o_proj.weight)
             init.zeros_(module.alpha)
         elif isinstance(module, NeoMMEMLP):
             init.zeros_(module.down_proj.weight)
