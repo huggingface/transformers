@@ -70,7 +70,7 @@ def pr_author_is_in_hf(pr_author, codeowners_lines):
         parts = line.split()
         owners = [owner.removeprefix("@") for owner in parts[1:]]
 
-        if pr_author in owners:
+        if pr_author.casefold() in {owner.casefold() for owner in owners}:
             return True
     return False
 
@@ -137,16 +137,22 @@ def main():
         print(f"Reviewers already requested: {users_requested}")
         return
 
+    # Tally per person, not per spelling: a login is case-insensitive on GitHub, and the same
+    # owner appearing as `@ArthurZucker` on one line and `@arthurzucker` on another would
+    # otherwise split their total across two entries (and be requested twice).
     locs_per_owner = Counter()
+    spelling = {}
     for file in pr.get_files():
         owners = get_file_owners(file.filename, codeowners_lines)
         for owner in owners:
-            locs_per_owner[owner] += file.changes
+            key = owner.casefold()
+            spelling.setdefault(key, owner)
+            locs_per_owner[key] += file.changes
 
     # Assign the top 2 based on locs changed as reviewers, but skip the owner if present
-    locs_per_owner.pop(pr_author, None)
-    ranked_owners = [owner for owner, _ in locs_per_owner.most_common()]
-    print("Top owners", locs_per_owner.most_common(MAX_REVIEWERS))
+    locs_per_owner.pop(pr_author.casefold(), None)
+    ranked_owners = [spelling[key] for key, _ in locs_per_owner.most_common()]
+    print("Top owners", [(spelling[key], locs) for key, locs in locs_per_owner.most_common(MAX_REVIEWERS)])
     requested = request_reviews(repo, pr, ranked_owners)
     if requested:
         print(f"Requested review from {requested}")

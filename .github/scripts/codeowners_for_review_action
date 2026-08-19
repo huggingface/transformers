@@ -312,13 +312,13 @@ tests/generation/test_continuous_batching.py @remi-or
 /src/transformers/models/idefics3/mod*_idefics3* @zucchini-nlp
 /src/transformers/models/instructblip/mod*_instructblip* @zucchini-nlp
 /src/transformers/models/instructblipvideo/mod*_instructblipvideo* @zucchini-nlp
-/src/transformers/models/kosmos_2/mod*_kosmos_2* @zucchini-nlp
+/src/transformers/models/kosmos2/mod*_kosmos2* @zucchini-nlp
 /src/transformers/models/layoutlm/mod*_layoutlm* @NielsRogge
 /src/transformers/models/layoutlmv2/mod*_layoutlmv2* @NielsRogge
 /src/transformers/models/layoutlmv3/mod*_layoutlmv3* @NielsRogge
 /src/transformers/models/layoutxlm/mod*_layoutxlm* @NielsRogge
 /src/transformers/models/lilt/mod*_lilt* @zucchini-nlp
-/src/transformers/models/llava/mod*_llava* @zucchini-nlp @arthurzucker
+/src/transformers/models/llava/mod*_llava* @zucchini-nlp @ArthurZucker
 /src/transformers/models/llava_next/mod*_llava_next* @zucchini-nlp
 /src/transformers/models/llava_next_video/mod*_llava_next_video* @zucchini-nlp
 /src/transformers/models/llava_onevision/mod*_llava_onevision* @zucchini-nlp
@@ -351,7 +351,7 @@ tests/generation/test_continuous_batching.py @remi-or
 /src/transformers/models/vision_encoder_decoder/mod*_vision_encoder_decoder* @Rocketknight1
 /src/transformers/models/vision_text_dual_encoder/mod*_vision_text_dual_encoder* @Rocketknight1
 /src/transformers/models/visual_bert/mod*_visual_bert* @zucchini-nlp
-/src/transformers/models/xclip/mod*_xclip* @zucchini-nlp
+/src/transformers/models/x_clip/mod*_x_clip* @zucchini-nlp
 
 # Reinforcement learning models
 /src/transformers/models/decision_transformer/mod*_decision_transformer* @Rocketknight1
@@ -365,7 +365,6 @@ tests/generation/test_continuous_batching.py @remi-or
 /src/transformers/models/time_series_transformer/mod*_time_series_transformer* @Rocketknight1
 
 # Graph models
-/src/transformers/models/graphormer/mod*_graphormer* @clefourrier
 
 # Finally, files with no owners that shouldn't generate pings, usually automatically generated and checked in the CI
 utils/dummy*
