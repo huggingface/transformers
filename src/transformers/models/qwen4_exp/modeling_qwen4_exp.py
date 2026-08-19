@@ -1303,16 +1303,14 @@ class Qwen4ExpPLELayer(nn.Module):
 class Qwen4ExpDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Qwen4ExpTextConfig, layer_idx: int):
         super().__init__()
-        self.block_type = config.layers_block_type[layer_idx]
-        if self.block_type == "linear_attention":
+        self.layer_type = config.layer_types[layer_idx]
+        if self.layer_type == "linear_attention":
             self.linear_attn = Qwen4ExpGatedDeltaNet(config, layer_idx)
-        elif self.block_type == "full_attention":
+        else:
             self.self_attn = Qwen4ExpAttention(config, layer_idx)
         self.mlp = Qwen4ExpSparseMoeBlock(config)
-        self.ple = None
-        if layer_idx + 1 in config.ple_layer_ids:
-            ple_layer_index = config.ple_layer_ids.index(layer_idx + 1)
-            self.ple = Qwen4ExpPLELayer(config, layer_idx, ple_layer_index)
+        ple_layer_index = config.ple_layer_ids.index(layer_idx + 1) if layer_idx + 1 in config.ple_layer_ids else None
+        self.ple = Qwen4ExpPLELayer(config, layer_idx, ple_layer_index) if ple_layer_index is not None else None
         self.attn_hyper_connection = Qwen4ExpGatedResidual(config)
         self.mlp_hyper_connection = Qwen4ExpGatedResidual(config)
 
@@ -1337,14 +1335,14 @@ class Qwen4ExpDecoderLayer(GradientCheckpointingLayer):
             )
 
         hidden_states, residual = self.attn_hyper_connection(hidden_states)
-        if self.block_type == "linear_attention":
+        if self.layer_type == "linear_attention":
             hidden_states = self.linear_attn(
                 hidden_states=hidden_states,
                 cache_params=past_key_values,
                 attention_mask=attention_mask,
                 **kwargs,
             )
-        elif self.block_type == "full_attention":
+        else:
             hidden_states, _ = self.self_attn(
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
@@ -1817,8 +1815,7 @@ class Qwen4ExpTextModel(Qwen4ExpPreTrainedModel):
 
         for layer_idx, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             layer_type = self.config.layer_types[layer_idx]
-            block_type = self.config.layers_block_type[layer_idx]
-            mask_key = layer_type if layer_type in causal_mask_mapping else block_type
+            mask_key = "linear_attention" if layer_type == "linear_attention" else "full_attention"
             hidden_states = decoder_layer(
                 hidden_states,
                 position_embeddings=position_embeddings,

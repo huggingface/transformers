@@ -19,7 +19,7 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, remap_legacy_layer_types
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -148,6 +148,7 @@ class Qwen4ExpTextConfig(PreTrainedConfig):
         "hyper_connection_mixer": "keep_full_weight",
     }
 
+    partial_rotary_factor: float = 0.25
     hc_count: int = 4
     hc_lowrank: int = 320
     ple_layer_ids: list[int] | None = None
@@ -174,35 +175,22 @@ class Qwen4ExpTextConfig(PreTrainedConfig):
         # Qwen4-Exp keeps the GatedDeltaNet convolution, PLE convolution and n-gram context in separate cache states.
         # Without PLE, only the GatedDeltaNet state is needed.
         self.number_of_conv_states = 3 if self.ple_layer_ids else 1
-        kwargs.setdefault("partial_rotary_factor", 0.25)  # assign default for BC
+
+        # Full-attention layers use an indexed cache when QSA is enabled. If PLE is also attached to that layer, the hybrid
+        # indexed cache additionally carries its convolution and n-gram context states
         if self.layer_types is None:
             interval_pattern = kwargs.pop("full_attention_interval", 4)
-            self.layer_types = [
-                "linear_attention" if bool((i + 1) % interval_pattern) else "full_attention"
-                for i in range(self.num_hidden_layers)
-            ]
-        else:
-            self.layer_types = remap_legacy_layer_types(self.layer_types)
+            layer_types = []
+            for i in range(self.num_hidden_layers):
+                if bool((i + 1) % interval_pattern):
+                    layer_types.append("linear_attention")
+                elif i + 1 in self.ple_layer_ids:
+                    layer_types.append("hybrid_indexed")
+                else:
+                    layer_types.append("deepseek_sparse_attention")
+            self.layer_types = layer_types
 
         super().__post_init__(**kwargs)
-
-        # Full-attention layers use an indexed cache when QSA is enabled. If PLE is also attached to that layer,
-        # the hybrid indexed cache additionally carries its convolution and n-gram context states.
-        block_types = self.layers_block_type
-        self.layer_types = [
-            (
-                "hybrid_indexed"
-                if self.indexer_n_heads is not None and layer_idx + 1 in self.ple_layer_ids
-                else "deepseek_sparse_attention"
-                if self.indexer_n_heads is not None
-                else "hybrid"
-                if layer_idx + 1 in self.ple_layer_ids
-                else "full_attention"
-            )
-            if block_type == "full_attention"
-            else block_type
-            for layer_idx, block_type in enumerate(block_types)
-        ]
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates Qwen4-Exp architecture invariants."""

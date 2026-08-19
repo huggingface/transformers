@@ -22,11 +22,10 @@ from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
+from ...configuration_utils import PreTrainedConfig
 from ...integrations import use_kernelized_func
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
-from ...modeling_layers import (
-    GradientCheckpointingLayer,
-)
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
@@ -153,6 +152,7 @@ class Qwen4ExpTextConfig(Qwen3_5MoeTextConfig):
     }
     base_model_pp_plan = None
 
+    partial_rotary_factor: float = 0.25
     hc_count: int = 4
     hc_lowrank: int = 320
     ple_layer_ids: list[int] | None = None
@@ -181,25 +181,22 @@ class Qwen4ExpTextConfig(Qwen3_5MoeTextConfig):
         # Qwen4-Exp keeps the GatedDeltaNet convolution, PLE convolution and n-gram context in separate cache states.
         # Without PLE, only the GatedDeltaNet state is needed.
         self.number_of_conv_states = 3 if self.ple_layer_ids else 1
-        super().__post_init__(**kwargs)
 
-        # Full-attention layers use an indexed cache when QSA is enabled. If PLE is also attached to that layer,
-        # the hybrid indexed cache additionally carries its convolution and n-gram context states.
-        block_types = self.layers_block_type
-        self.layer_types = [
-            (
-                "hybrid_indexed"
-                if self.indexer_n_heads is not None and layer_idx + 1 in self.ple_layer_ids
-                else "deepseek_sparse_attention"
-                if self.indexer_n_heads is not None
-                else "hybrid"
-                if layer_idx + 1 in self.ple_layer_ids
-                else "full_attention"
-            )
-            if block_type == "full_attention"
-            else block_type
-            for layer_idx, block_type in enumerate(block_types)
-        ]
+        # Full-attention layers use an indexed cache when QSA is enabled. If PLE is also attached to that layer, the hybrid
+        # indexed cache additionally carries its convolution and n-gram context states
+        if self.layer_types is None:
+            interval_pattern = kwargs.pop("full_attention_interval", 4)
+            layer_types = []
+            for i in range(self.num_hidden_layers):
+                if bool((i + 1) % interval_pattern):
+                    layer_types.append("linear_attention")
+                elif i + 1 in self.ple_layer_ids:
+                    layer_types.append("hybrid_indexed")
+                else:
+                    layer_types.append("deepseek_sparse_attention")
+            self.layer_types = layer_types
+
+        PreTrainedConfig.__post_init__(self, **kwargs)
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates Qwen4-Exp architecture invariants."""
@@ -882,16 +879,14 @@ class Qwen4ExpPLELayer(nn.Module):
 class Qwen4ExpDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Qwen4ExpTextConfig, layer_idx: int):
         super().__init__()
-        self.block_type = config.layers_block_type[layer_idx]
-        if self.block_type == "linear_attention":
+        self.layer_type = config.layer_types[layer_idx]
+        if self.layer_type == "linear_attention":
             self.linear_attn = Qwen4ExpGatedDeltaNet(config, layer_idx)
-        elif self.block_type == "full_attention":
+        else:
             self.self_attn = Qwen4ExpAttention(config, layer_idx)
         self.mlp = Qwen4ExpSparseMoeBlock(config)
-        self.ple = None
-        if layer_idx + 1 in config.ple_layer_ids:
-            ple_layer_index = config.ple_layer_ids.index(layer_idx + 1)
-            self.ple = Qwen4ExpPLELayer(config, layer_idx, ple_layer_index)
+        ple_layer_index = config.ple_layer_ids.index(layer_idx + 1) if layer_idx + 1 in config.ple_layer_ids else None
+        self.ple = Qwen4ExpPLELayer(config, layer_idx, ple_layer_index) if ple_layer_index is not None else None
         self.attn_hyper_connection = Qwen4ExpGatedResidual(config)
         self.mlp_hyper_connection = Qwen4ExpGatedResidual(config)
 
@@ -916,14 +911,14 @@ class Qwen4ExpDecoderLayer(GradientCheckpointingLayer):
             )
 
         hidden_states, residual = self.attn_hyper_connection(hidden_states)
-        if self.block_type == "linear_attention":
+        if self.layer_type == "linear_attention":
             hidden_states = self.linear_attn(
                 hidden_states=hidden_states,
                 cache_params=past_key_values,
                 attention_mask=attention_mask,
                 **kwargs,
             )
-        elif self.block_type == "full_attention":
+        else:
             hidden_states, _ = self.self_attn(
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
@@ -1076,8 +1071,7 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
 
         for layer_idx, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             layer_type = self.config.layer_types[layer_idx]
-            block_type = self.config.layers_block_type[layer_idx]
-            mask_key = layer_type if layer_type in causal_mask_mapping else block_type
+            mask_key = "linear_attention" if layer_type == "linear_attention" else "full_attention"
             hidden_states = decoder_layer(
                 hidden_states,
                 position_embeddings=position_embeddings,
