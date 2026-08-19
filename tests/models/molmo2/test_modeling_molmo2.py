@@ -533,17 +533,21 @@ class Molmo2IntegrationTest(unittest.TestCase):
         # 4B uses the Qwen tokenizer; `<|im_end|>` (151645) is the leading BOS.
         self.assertEqual(inputs["input_ids"][0, 0].item(), 151645)
 
-        expected_pixel_slice = torch.tensor(
-            [
-                [-0.07450979948043823, -0.05098038911819458, 0.019607901573181152],
-                [-0.7019608020782471, -0.6784313917160034, -0.6078431606292725],
-                [-0.8745098114013672, -0.8823529481887817, -0.843137264251709],
-            ],
-            dtype=torch.float32,
+        expected_pixel_slices = Expectations(
+            {
+                (None, None): torch.tensor(
+                    [
+                        [-0.07450979948043823, -0.05098038911819458, 0.019607901573181152],
+                        [-0.7019608020782471, -0.6784313917160034, -0.6078431606292725],
+                        [-0.8745098114013672, -0.8823529481887817, -0.843137264251709],
+                    ],
+                    dtype=torch.float32,
+                ),
+            }
         )
         torch.testing.assert_close(
             inputs["pixel_values"][0, :3, :3].float().cpu(),
-            expected_pixel_slice,
+            expected_pixel_slices.get_expectation(),
             atol=1e-2,
             rtol=1e-4,
         )
@@ -646,17 +650,21 @@ class Molmo2O7BIntegrationTest(unittest.TestCase):
         # O-7B uses the OLMo tokenizer; `<|endoftext|>` (100257) is the leading BOS.
         self.assertEqual(inputs["input_ids"][0, 0].item(), 100257)
 
-        expected_pixel_slice = torch.tensor(
-            [
-                [-0.07450979948043823, -0.05098038911819458, 0.019607901573181152],
-                [-0.7019608020782471, -0.6784313917160034, -0.6078431606292725],
-                [-0.8745098114013672, -0.8823529481887817, -0.843137264251709],
-            ],
-            dtype=torch.float32,
+        expected_pixel_slices = Expectations(
+            {
+                (None, None): torch.tensor(
+                    [
+                        [-0.07450979948043823, -0.05098038911819458, 0.019607901573181152],
+                        [-0.7019608020782471, -0.6784313917160034, -0.6078431606292725],
+                        [-0.8745098114013672, -0.8823529481887817, -0.843137264251709],
+                    ],
+                    dtype=torch.float32,
+                ),
+            }
         )
         torch.testing.assert_close(
             inputs["pixel_values"][0, :3, :3].float().cpu(),
-            expected_pixel_slice,
+            expected_pixel_slices.get_expectation(),
             atol=1e-2,
             rtol=1e-4,
         )
@@ -759,17 +767,21 @@ class Molmo2_8BIntegrationTest(unittest.TestCase):
         # 8B uses the Qwen tokenizer; `<|im_end|>` (151645) is the leading BOS.
         self.assertEqual(inputs["input_ids"][0, 0].item(), 151645)
 
-        expected_pixel_slice = torch.tensor(
-            [
-                [-0.07450979948043823, -0.05098038911819458, 0.019607901573181152],
-                [-0.7019608020782471, -0.6784313917160034, -0.6078431606292725],
-                [-0.8745098114013672, -0.8823529481887817, -0.843137264251709],
-            ],
-            dtype=torch.float32,
+        expected_pixel_slices = Expectations(
+            {
+                (None, None): torch.tensor(
+                    [
+                        [-0.07450979948043823, -0.05098038911819458, 0.019607901573181152],
+                        [-0.7019608020782471, -0.6784313917160034, -0.6078431606292725],
+                        [-0.8745098114013672, -0.8823529481887817, -0.843137264251709],
+                    ],
+                    dtype=torch.float32,
+                ),
+            }
         )
         torch.testing.assert_close(
             inputs["pixel_values"][0, :3, :3].float().cpu(),
-            expected_pixel_slice,
+            expected_pixel_slices.get_expectation(),
             atol=1e-2,
             rtol=1e-4,
         )
