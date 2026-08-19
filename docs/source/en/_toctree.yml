@@ -291,6 +291,8 @@
       title: FP-Quant
     - local: quantization/mxfp4
       title: MXFP4
+    - local: quantization/nvfp4
+      title: NVFP4
     title: FP4 and FP8 formats
   - sections:
     - local: quantization/auto_round
