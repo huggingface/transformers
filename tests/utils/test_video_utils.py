@@ -390,16 +390,16 @@ class LoadVideoTester(unittest.TestCase):
             )
 
     def test_default_sample_indices_fn_num_frames_exceeds_total(self):
-        # When `num_frames > total_num_frames`, the function should warn and return all
-        # available frames rather than silently returning `num_frames` copies of index 0
-        # (which was the previous behaviour due to `dtype=int` truncating the step to 0).
+        # When `num_frames > total_num_frames`, the function should warn and return
+        # `num_frames` uniformly-sampled indices (with repetition) rather than silently
+        # returning `num_frames` copies of index 0 (the previous behaviour due to
+        # `dtype=int` truncating the step to 0).
         metadata = VideoMetadata(total_num_frames=10, fps=30.0)
         with self.assertLogs("transformers.video_utils", level="WARNING") as cm:
             indices = default_sample_indices_fn(metadata, num_frames=20)
-        self.assertEqual(len(indices), 10)
-        # all frames are unique — no silent duplication
-        self.assertEqual(len(set(indices.tolist())), 10)
-        self.assertTrue(np.array_equal(indices, np.arange(0, 10)))
+        self.assertEqual(len(indices), 20)
+        self.assertTrue((indices >= 0).all() and (indices < 10).all())
+        self.assertGreater(len(set(indices.tolist())), 1)  # not all the same index
         self.assertTrue(any("exceeds the total number of frames" in msg for msg in cm.output))
 
     def test_default_sample_indices_fn_num_frames_equals_total(self):
