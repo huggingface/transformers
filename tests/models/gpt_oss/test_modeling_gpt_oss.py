@@ -32,6 +32,7 @@ from transformers import (
 )
 from transformers.testing_utils import (
     cleanup,
+    is_kernels_available,
     require_deterministic_for_xpu,
     require_kernels,
     require_torch,
@@ -253,6 +254,10 @@ class GptOssIntegrationTest(unittest.TestCase):
         """Generate a key for the restructured integration test results."""
         return f"device={torch_device}|quantized={str(quantized).lower()}|model={model}|kernels={str(kernels).lower()}|attn_impl={attn_impl}|mode={mode}"
 
+    def skip_if_kernels_are_required(self, kernels, attn_impl):
+        if (kernels or attn_impl == "kernels-community/vllm-flash-attn3") and not is_kernels_available():
+            self.skipTest("test requires the kernels library")
+
     def setUp(self):
         cleanup(torch_device, gc_collect=True)
 
@@ -454,6 +459,7 @@ if __name__ == "__main__":
         if torch_device == "xpu" and attn_impl == "kernels-community/vllm-flash-attn3":
             self.skipTest("flash attention 3 is not supported on XPU yet.")
 
+        self.skip_if_kernels_are_required(kernels, attn_impl)
         self.run_distributed_test(quantized, model, kernels, attn_impl, mode)
 
     # ------------------------
@@ -472,6 +478,8 @@ if __name__ == "__main__":
 
         if quantized:
             self.skipTest("Training test for quantized models is not supported.")
+
+        self.skip_if_kernels_are_required(kernels, attn_impl)
 
         model_id = f"openai/gpt-oss-{model}"
 
