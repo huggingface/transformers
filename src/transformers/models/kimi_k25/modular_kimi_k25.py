@@ -114,7 +114,7 @@ class Kimi_K25VisionConfig(PreTrainedConfig):
         Initial position embedding width.
     pos_emb_time (`int`, *optional*):
         Initial position embedding time dimension.
-    merge_size (`tuple[int] | list[int]`, *optional*):
+    merge_kernel_size (`tuple[int] | list[int]`, *optional*):
         Kernel size for patch merging.
     """
 
