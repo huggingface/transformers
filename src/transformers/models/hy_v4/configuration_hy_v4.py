@@ -64,6 +64,10 @@ class HYV4Config(PreTrainedConfig):
         Initial value of each learned attention-sink logit.
     swiglu_limit (`float`, *optional*, defaults to 10.0):
         Magnitude of the routed-expert SwiGLU clamp. Values at or below zero disable the clamp.
+    n_group (`int`, *optional*, defaults to 1):
+        Number of expert groups for routing. HYV4 selects experts globally, so this is 1 (one group holding every expert).
+    topk_group (`int`, *optional*, defaults to 1):
+        Number of expert groups kept during routing. With `n_group=1` this reuses `Glm4MoeLiteTopkRouter` as a plain global top-k.
     """
 
     model_type = "hy_v4"
@@ -77,6 +81,7 @@ class HYV4Config(PreTrainedConfig):
         "layers.*.self_attn.kv_b_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.self_attn.linear_gate": "colwise",
+        "layers.*.self_attn.learnable_sink_param": "colwise",
         "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
         "layers.*.mlp.experts": "moe_tp_experts",
@@ -117,6 +122,8 @@ class HYV4Config(PreTrainedConfig):
     num_experts_per_tok: int = 8
     routed_scaling_factor: float = 2.827
     norm_topk_prob: bool = True
+    n_group: int = 1
+    topk_group: int = 1
     q_lora_rank: int = 1536
     kv_lora_rank: int = 512
     qk_nope_head_dim: int = 192
@@ -151,9 +158,6 @@ class HYV4Config(PreTrainedConfig):
                 self.num_hidden_layers - 1, 0
             )
         if self.layer_types is None:
-            # All HYV4 attention layers are DeepSeek-style sparse attention; this canonical layer
-            # type makes the cache provision a `DynamicIndexedLayer` (with the DSA indexer-key cache)
-            # for every layer.
             self.layer_types = ["deepseek_sparse_attention"] * self.num_hidden_layers
         if self.indexer_types is None:
             self.indexer_types = [
