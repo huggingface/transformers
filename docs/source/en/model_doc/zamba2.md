@@ -34,7 +34,7 @@ This model was contributed by [pglo](https://huggingface.co/pglo).
 
 ## Quick start
 
-### Presequities
+### Prerequisites
 
 Zamba2 requires you use `transformers` version 4.48.0 or higher:
 

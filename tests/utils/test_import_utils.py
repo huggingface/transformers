@@ -293,3 +293,63 @@ def test_import_without_torch_distributed():
     ):
         # If transformers import errors out, it means that the distributed guarding is not working correctly.
         from transformers import AutoImageProcessor  # noqa: F401
+
+
+def _compile_constant_helpers():
+    """Every helper carrying `@_make_compile_constant`, as (name, args) for the test below.
+
+    Derived from the marker rather than hand-listed: marking a helper opts it into verification, so the
+    two can never drift. Helpers needing arguments get them here; the rest are called with none.
+    """
+    import inspect
+
+    import transformers.utils.import_utils as import_utils
+
+    with_args = {"is_torch_greater_or_equal": ("2.5",), "is_torch_less_or_equal": ("99.0",)}
+    cases = []
+    for name in sorted(dir(import_utils)):
+        fn = getattr(import_utils, name)
+        if not getattr(fn, "_dynamo_marked_constant", False):
+            continue
+        if name in with_args:
+            cases.append((name, with_args[name]))
+            continue
+        try:
+            inspect.signature(fn).bind()  # skip anything needing args we have not supplied
+        except (TypeError, ValueError):
+            continue
+        cases.append((name, ()))
+    return cases
+
+
+@require_torch
+@parameterized.expand(_compile_constant_helpers())
+def test_availability_helpers_are_compile_safe(helper_name: str, args: tuple):
+    """
+    These helpers get called from inside `torch.compile`d regions — e.g. `is_dtensor`, which every MoE
+    kernel integration reaches through `to_local`. Each carries `@_make_compile_constant`, so dynamo evaluates
+    it once at trace time and never enters the body; this checks the marker actually takes effect.
+
+    Folding rather than keeping the bodies traceable is deliberate. Most bottom out in
+    `_is_package_available`, whose `importlib.metadata` lookup dynamo cannot follow — and follows
+    differently per Python version, so a body that traces on one interpreter breaks on another. An
+    untraced body cannot break on any of them. `@lru_cache` is no protection either: dynamo steps past
+    cache wrappers and traces the wrapped function, which is why the marker sits underneath the cache —
+    above it, the marker is a silent no-op.
+
+    Add a helper here when compiled code starts calling it. Two are deliberately excluded and must never
+    be marked: `is_cuda_stream_capturing` and `is_torch_deterministic` genuinely change answer during a
+    process, so folding a transient into the graph would be worse than the graph break.
+    """
+    import torch
+
+    import transformers.utils.import_utils as import_utils
+
+    helper = getattr(import_utils, helper_name)
+    torch.compiler.reset()
+
+    @torch.compile(fullgraph=True)
+    def run(x):
+        return x + 1 if helper(*args) else x - 1
+
+    run(torch.zeros(3))  # a graph break inside the helper would raise here

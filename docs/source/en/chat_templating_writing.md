@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -243,7 +243,7 @@ An example of handling tool definitions in a chat template is shown below. The s
             {{- argument + ': ' + tool['function']['parameters']['properties'][argument]['description'] + '\n' }}
         {%- endfor %}
         {{- '\n</tool>' }}
-    {%- endif %}
+    {%- endfor %}
 {%- endif %}
 ```
 
@@ -277,7 +277,6 @@ A common pattern for handling tool calls is shown below. You can use this as a s
 {%- if message['role'] == 'assistant' and 'tool_calls' in message %}
     {%- for tool_call in message['tool_calls'] %}
             {{- '<tool_call>' + tool_call['function']['name'] + '\n' + tool_call['function']['arguments']|tojson + '\n</tool_call>' }}
-        {%- endif %}
     {%- endfor %}
 {%- endif %}
 ```
