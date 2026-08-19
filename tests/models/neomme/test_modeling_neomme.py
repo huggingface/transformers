@@ -527,23 +527,6 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
         torch.testing.assert_close(default, explicit)
         torch.testing.assert_close(default, stacked)
 
-    def test_position_ids_shape_validated(self):
-        config, input_ids, input_mask, _ = self.model_tester.prepare_config_and_inputs()
-        model = NeoMMEModel(config).to(torch_device).eval()
-        input_ids = input_ids[:2].to(torch_device)
-        input_mask = input_mask[:2].to(torch_device)
-        batch_size, seq_len = input_ids.shape
-
-        invalid_shapes = [(3, batch_size, seq_len), (batch_size, seq_len, 2), (batch_size, seq_len + 1)]
-        for shape in invalid_shapes:
-            with self.subTest(shape=shape), self.assertRaisesRegex(ValueError, "position_ids must have shape"):
-                model(
-                    input_ids=input_ids,
-                    attention_mask=input_mask,
-                    position_ids=torch.zeros(shape, dtype=torch.long, device=torch_device),
-                )
-
-
 @require_torch
 class NeoMMEForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     """`NeoMMEForRetrieval` produces embeddings rather than a loss, so it is tested on its own."""

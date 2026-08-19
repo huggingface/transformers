@@ -34,6 +34,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, torch_compilable_check
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import can_return_tuple, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_neomme import NeoMMEConfig
@@ -102,26 +103,27 @@ class NeoMMEPatchEmbeddings(nn.Module):
 class NeoMMERotaryEmbedding(nn.Module):
     """Two-axis interleaved M-RoPE with per-layer-type frequency spectra."""
 
+    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: NeoMMEConfig, device=None):
         super().__init__()
-        self.config = config
-        self.layer_types = sorted(set(config.layer_types))
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
-        self.rope_init_fns: dict[str, Callable[..., tuple[torch.Tensor, float]]] = {}
-        self.rope_type: dict[str, str] = {}
+        self.config = config
+        self.layer_types = list(set(config.layer_types))
+        self.rope_type = {}
         for layer_type in self.layer_types:
-            rope_type = config.rope_parameters[layer_type]["rope_type"]
-            self.rope_type[layer_type] = rope_type
-            self.rope_init_fns[layer_type] = (
-                self.compute_default_rope_parameters if rope_type == "default" else ROPE_INIT_FUNCTIONS[rope_type]
-            )
-            inv_freq, attention_scaling = self.rope_init_fns[layer_type](config, device=device, layer_type=layer_type)
-            self.register_buffer(f"{layer_type}_inv_freq", inv_freq, persistent=False)
-            # `dynamic_rope_update` restores the unscaled spectrum from this copy when a sequence shrinks
-            # back inside the original context, so it must survive the buffer being overwritten.
-            self.register_buffer(f"{layer_type}_original_inv_freq", inv_freq.clone(), persistent=False)
-            setattr(self, f"{layer_type}_attention_scaling", attention_scaling)
+            rope_params = self.config.rope_parameters[layer_type]
+            if rope_params is None:
+                continue
+
+            self.rope_type[layer_type] = rope_params["rope_type"]
+            rope_init_fn: Callable = self.compute_default_rope_parameters
+            if self.rope_type[layer_type] != "default":
+                rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, device, layer_type=layer_type)
+            setattr(self, f"{layer_type}_inv_freq", nn.Buffer(curr_inv_freq, persistent=False))
+            setattr(self, f"{layer_type}_original_inv_freq", nn.Buffer(curr_inv_freq.clone(), persistent=False))
+            setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -143,15 +145,6 @@ class NeoMMERotaryEmbedding(nn.Module):
         self, hidden_states: torch.Tensor, position_ids: torch.LongTensor, layer_type: str | None = None
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Build cos/sin from two-axis `position_ids` of shape `(2, batch, seq_len)`."""
-        input_shape = hidden_states.shape[:2]
-        if position_ids.shape == input_shape:
-            position_ids = position_ids.unsqueeze(0).expand(2, -1, -1)
-        elif position_ids.shape != (2, *input_shape):
-            raise ValueError(
-                f"position_ids must have shape {tuple(input_shape)} or {(2, *input_shape)}, "
-                f"got {tuple(position_ids.shape)}."
-            )
-
         inv_freq = getattr(self, f"{layer_type}_inv_freq")  # (rotary_dim // 2,)
         attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
 
@@ -438,7 +431,10 @@ class NeoMMEPreTrainedModel(PreTrainedModel):
             init.zeros_(module.value_embeddings.weight)
         elif isinstance(module, NeoMMERotaryEmbedding):
             for layer_type in module.layer_types:
-                inv_freq, _ = module.rope_init_fns[layer_type](module.config, layer_type=layer_type)
+                rope_init_fn = module.compute_default_rope_parameters
+                if module.rope_type[layer_type] != "default":
+                    rope_init_fn = ROPE_INIT_FUNCTIONS[module.rope_type[layer_type]]
+                inv_freq, _ = rope_init_fn(module.config, layer_type=layer_type)
                 init.copy_(getattr(module, f"{layer_type}_inv_freq"), inv_freq)
                 init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), inv_freq)
 
@@ -517,6 +513,8 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
         if position_ids is None:
             # Text uses the token index for both M-RoPE axes.
             position_ids = torch.arange(seq_len, device=hidden_states.device).expand(batch_size, -1)
+        if position_ids.ndim == 2:
+            position_ids = position_ids.unsqueeze(0).expand(2, -1, -1)
 
         # Reuse this normalized input as `initial_hidden_states` in every encoder layer.
         hidden_states = initial_hidden_states = self.embedding_norm(hidden_states)

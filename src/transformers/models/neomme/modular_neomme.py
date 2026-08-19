@@ -43,6 +43,7 @@ from ...utils.generic import can_return_tuple, maybe_autocast, merge_with_config
 from ...utils.output_capturing import capture_outputs
 from ..gemma4.modeling_gemma4 import Gemma4RMSNorm
 from ..gpt_neox.modeling_gpt_neox import apply_rotary_pos_emb
+from ..laguna.modeling_laguna import LagunaRotaryEmbedding
 from ..llama.modeling_llama import eager_attention_forward, repeat_kv
 from ..nemotron.modeling_nemotron import NemotronMLP
 from ..siglip2.image_processing_siglip2 import convert_image_to_patches
@@ -307,29 +308,8 @@ class NeoMMEPatchEmbeddings(nn.Module):
         return self.down_proj(self.act_fn(hidden_states))
 
 
-class NeoMMERotaryEmbedding(nn.Module):
+class NeoMMERotaryEmbedding(LagunaRotaryEmbedding):
     """Two-axis interleaved M-RoPE with per-layer-type frequency spectra."""
-
-    def __init__(self, config: NeoMMEConfig, device=None):
-        super().__init__()
-        self.config = config
-        self.layer_types = sorted(set(config.layer_types))
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
-        self.rope_init_fns: dict[str, Callable[..., tuple[torch.Tensor, float]]] = {}
-        self.rope_type: dict[str, str] = {}
-        for layer_type in self.layer_types:
-            rope_type = config.rope_parameters[layer_type]["rope_type"]
-            self.rope_type[layer_type] = rope_type
-            self.rope_init_fns[layer_type] = (
-                self.compute_default_rope_parameters if rope_type == "default" else ROPE_INIT_FUNCTIONS[rope_type]
-            )
-            inv_freq, attention_scaling = self.rope_init_fns[layer_type](config, device=device, layer_type=layer_type)
-            self.register_buffer(f"{layer_type}_inv_freq", inv_freq, persistent=False)
-            # `dynamic_rope_update` restores the unscaled spectrum from this copy when a sequence shrinks
-            # back inside the original context, so it must survive the buffer being overwritten.
-            self.register_buffer(f"{layer_type}_original_inv_freq", inv_freq.clone(), persistent=False)
-            setattr(self, f"{layer_type}_attention_scaling", attention_scaling)
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -351,15 +331,6 @@ class NeoMMERotaryEmbedding(nn.Module):
         self, hidden_states: torch.Tensor, position_ids: torch.LongTensor, layer_type: str | None = None
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Build cos/sin from two-axis `position_ids` of shape `(2, batch, seq_len)`."""
-        input_shape = hidden_states.shape[:2]
-        if position_ids.shape == input_shape:
-            position_ids = position_ids.unsqueeze(0).expand(2, -1, -1)
-        elif position_ids.shape != (2, *input_shape):
-            raise ValueError(
-                f"position_ids must have shape {tuple(input_shape)} or {(2, *input_shape)}, "
-                f"got {tuple(position_ids.shape)}."
-            )
-
         inv_freq = getattr(self, f"{layer_type}_inv_freq")  # (rotary_dim // 2,)
         attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
 
@@ -556,7 +527,10 @@ class NeoMMEPreTrainedModel(PreTrainedModel):
             init.zeros_(module.value_embeddings.weight)
         elif isinstance(module, NeoMMERotaryEmbedding):
             for layer_type in module.layer_types:
-                inv_freq, _ = module.rope_init_fns[layer_type](module.config, layer_type=layer_type)
+                rope_init_fn = module.compute_default_rope_parameters
+                if module.rope_type[layer_type] != "default":
+                    rope_init_fn = ROPE_INIT_FUNCTIONS[module.rope_type[layer_type]]
+                inv_freq, _ = rope_init_fn(module.config, layer_type=layer_type)
                 init.copy_(getattr(module, f"{layer_type}_inv_freq"), inv_freq)
                 init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), inv_freq)
 
@@ -635,6 +609,8 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
         if position_ids is None:
             # Text uses the token index for both M-RoPE axes.
             position_ids = torch.arange(seq_len, device=hidden_states.device).expand(batch_size, -1)
+        if position_ids.ndim == 2:
+            position_ids = position_ids.unsqueeze(0).expand(2, -1, -1)
 
         # Reuse this normalized input as `initial_hidden_states` in every encoder layer.
         hidden_states = initial_hidden_states = self.embedding_norm(hidden_states)
