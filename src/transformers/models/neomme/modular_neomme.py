@@ -630,7 +630,7 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
             Token embeddings before projection to `hidden_size`. Use `input_ids` for image inputs because the model
             needs the image placeholders to place `pixel_values`.
         """
-        if (input_ids is None) ^ (inputs_embeds is not None):
+        if (input_ids is None) == (inputs_embeds is None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
         if inputs_embeds is not None and self.value_embeddings is not None:
             logger.warning_once("inputs_embeds cannot apply value embeddings without token ids")

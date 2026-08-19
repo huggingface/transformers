@@ -244,6 +244,16 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
             from_embeds = model(inputs_embeds=inputs_embeds, attention_mask=input_mask).last_hidden_state
         torch.testing.assert_close(from_ids, from_embeds)
 
+    def test_requires_exactly_one_model_input(self):
+        config, input_ids, _, _ = self.model_tester.prepare_config_and_inputs()
+        model = NeoMMEModel(config).to(torch_device).eval()
+        inputs_embeds = model.get_input_embeddings()(input_ids)
+
+        with self.assertRaisesRegex(ValueError, "exactly one"):
+            model()
+        with self.assertRaisesRegex(ValueError, "exactly one"):
+            model(input_ids=input_ids, inputs_embeds=inputs_embeds)
+
     @unittest.skip(reason="the generic check compares an unused layer spectrum that differs by one floating-point ULP")
     def test_model_rope_scaling_frequencies(self):
         pass
