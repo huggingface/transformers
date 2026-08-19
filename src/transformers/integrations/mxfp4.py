@@ -148,7 +148,7 @@ def unswizzle_mxfp4_proj(module: "nn.Module", proj: str) -> tuple[torch.Tensor, 
     num_experts, in_dim, out_dim = weight.shape
 
     blocks = weight.storage.layout.unswizzle_data(weight.storage.data)
-    blocks = blocks[..., : in_dim // 2, :out_dim].transpose(-1, -2) 
+    blocks = blocks[..., : in_dim // 2, :out_dim].transpose(-1, -2)
     scales = precision_config.weight_scale.storage.layout.unswizzle_data(precision_config.weight_scale.storage.data)
     scales = scales[..., : in_dim // 32, :out_dim].transpose(-1, -2)
     return blocks.reshape(num_experts, out_dim, in_dim // 32, 16).contiguous(), scales.contiguous()
@@ -592,15 +592,19 @@ def mlp_forward(self, hidden_states):
     routed_out = routed_out.reshape(batch_size, -1, self.router.hidden_dim)
     return routed_out, router_logits
 
+
 def attach_packed_mxfp4_proj(
-    module: "nn.Module", proj: str, packed: torch.Tensor, scales: torch.Tensor,
+    module: "nn.Module",
+    proj: str,
+    packed: torch.Tensor,
+    scales: torch.Tensor,
 ) -> None:
     """Attach one mxfp4-packed expert projection to the module in the layout the triton kernels expect. Args:
-        - module (nn.Module): the module to attach the packed expert projections to
-        - proj (str): the name of the projection
-        - packed (torch.Tensor): the packed weights, shaped as [num_experts, out_dim, in_dim // 2] or
-            [num_experts, out_dim, in_dim // 32, 16] in uint8 (two e2m1 values per byte)
-        - scales (torch.Tensor): the scales, shaped as [num_experts, out_dim, in_dim // 32] in e8m0
+    - module (nn.Module): the module to attach the packed expert projections to
+    - proj (str): the name of the projection
+    - packed (torch.Tensor): the packed weights, shaped as [num_experts, out_dim, in_dim // 2] or
+        [num_experts, out_dim, in_dim // 32, 16] in uint8 (two e2m1 values per byte)
+    - scales (torch.Tensor): the scales, shaped as [num_experts, out_dim, in_dim // 32] in e8m0
     """
     hub = get_triton_kernels_hub()
     # If an accelerator is present, use it to swizzle the weights
