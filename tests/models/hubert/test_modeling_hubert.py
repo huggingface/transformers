@@ -338,6 +338,32 @@ class HubertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
 
+    def test_positional_conv_embedding_batch_norm_padding(self):
+        from transformers.models.hubert.modeling_hubert import HubertPositionalConvEmbedding
+
+        config = HubertConfig(
+            hidden_size=16,
+            num_conv_pos_embeddings=128,
+            num_conv_pos_embedding_groups=16,
+            feat_extract_activation="gelu",
+            conv_pos_batch_norm=True,
+        )
+        layer = HubertPositionalConvEmbedding(config).eval()
+
+        sz1, sz2 = 40, 80
+        s1 = torch.randn(1, sz1, 16)
+        s2 = torch.randn(1, sz2, 16)
+        s1_padded = torch.cat([s1, torch.zeros(1, sz2 - sz1, 16)], dim=1)
+        batch = torch.cat([s1_padded, s2], dim=0)
+
+        mask = torch.ones(2, sz2, dtype=torch.long)
+        mask[0, sz1:] = 0
+
+        out_alone = layer(s1, attention_mask=mask[0:1, :sz1])
+        out_batched = layer(batch, attention_mask=mask)[0:1, :sz1]
+
+        torch.testing.assert_close(out_alone, out_batched, rtol=1e-5, atol=1e-5)
+
     @unittest.skip(reason="Hubert has no inputs_embeds")
     def test_inputs_embeds(self):
         pass
