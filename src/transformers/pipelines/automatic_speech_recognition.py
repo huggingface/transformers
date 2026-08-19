@@ -69,12 +69,6 @@ def _to_mono(inputs):
             "so the weighting is yours to choose."
         )
 
-    if num_channels > 1:
-        logger.warning(
-            "We expect a single channel audio input for AutomaticSpeechRecognitionPipeline, got "
-            f"{num_channels} channels in an input of shape {tuple(inputs.shape)}. Taking the mean "
-            "over the channels for mono conversion."
-        )
     return inputs.mean(axis=0)
 
 
