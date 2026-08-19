@@ -676,7 +676,8 @@ class Qwen4ExpQSAIndexer(nn.Module):
         rotary_dim = cos.shape[-1]
         raw_keys, key_cos, key_sin = torch.split(indexer_states, [self.index_head_dim, rotary_dim, rotary_dim], dim=-1)
 
-        # If we don't have the mask, we will need those values to recreate valid indices
+        # Only eager and sdpa attentions are accepted, so the mask is always either None or 4D here
+        # If it's None, it means that we need to rely on the lengths and offsets to get the valid indices
         if attention_mask is None:
             q_length = sequence_length
             if past_key_values is not None:
@@ -686,6 +687,15 @@ class Qwen4ExpQSAIndexer(nn.Module):
                 q_offset = 0
                 kv_length, kv_offset = q_length, 0
 
+            # Create a basic causal mask
+            kv_positions = torch.arange(kv_length, device=hidden_states.device) + kv_offset
+            q_positions = torch.arange(q_length, device=hidden_states.device) + q_offset
+            visible_token_indices = q_positions[:, None] >= kv_positions[None, :]
+            visible_token_indices = visible_token_indices[None, None, :, :].expand(batch_size, -1, -1, -1)
+        # Always 4D with either bool (sdpa) or float (eager) that already gives us the valid indices
+        else:
+            visible_token_indices = attention_mask if attention_mask.dtype == torch.bool else attention_mask == 0
+
         selected_token_indices = torch.full(
             (batch_size, sequence_length, self.token_budget + self.compress_ratio - 1),
             -1,
@@ -694,21 +704,12 @@ class Qwen4ExpQSAIndexer(nn.Module):
         )
         for batch_idx in range(batch_size):
             for query_idx in range(sequence_length):
-                # Only eager and sdpa are accepted, so the mask is always either None or 4D here
-                # If it's None, it means that we rely on the lengths and offsets to get valid indices
-                if attention_mask is None:
-                    query_position = q_offset + query_idx
-                    key_positions = torch.arange(kv_length, device=hidden_states.device) + kv_offset
-                    visible_token_indices = key_positions <= query_position
-                # Always 4D with either bool (sdpa) or float (eager)
-                else:
-                    mask_slice = attention_mask[batch_idx, 0, query_idx, :]
-                    visible_token_indices = mask_slice if mask_slice.dtype == torch.bool else mask_slice == 0
-
-                num_complete_blocks = visible_token_indices.numel() // self.compress_ratio
-                selected_tokens = visible_token_indices.new_empty((0,))
+                local_visible_indices = visible_token_indices[batch_idx, 0, query_idx]
+                # Compute selected tokens
+                num_complete_blocks = local_visible_indices.numel() // self.compress_ratio
+                selected_tokens = local_visible_indices.new_empty((0,))
                 if num_complete_blocks > 0:
-                    block_token_indices = visible_token_indices[: num_complete_blocks * self.compress_ratio].view(
+                    block_token_indices = local_visible_indices[: num_complete_blocks * self.compress_ratio].view(
                         num_complete_blocks, self.compress_ratio
                     )
 
@@ -731,7 +732,7 @@ class Qwen4ExpQSAIndexer(nn.Module):
                     selected_block_indices = scores.topk(min(self.block_topk, num_complete_blocks), dim=0).indices
                     selected_tokens = block_token_indices.index_select(0, selected_block_indices).flatten()
                     selected_tokens = selected_tokens[: self.token_budget]
-                tail = visible_token_indices[num_complete_blocks * self.compress_ratio :]
+                tail = local_visible_indices[num_complete_blocks * self.compress_ratio :]
                 selected_tokens = torch.cat([selected_tokens, tail]).to(torch.int32)
                 selected_token_indices[batch_idx, query_idx, : selected_tokens.numel()] = selected_tokens
 
