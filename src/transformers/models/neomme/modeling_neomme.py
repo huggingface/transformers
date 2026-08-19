@@ -378,8 +378,7 @@ class NeoMMEEncoderLayer(GradientCheckpointingLayer):
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
-        # These three tensors must remain positional because reentrant checkpointing only reattaches positional inputs.
-        # Capturing the shared value embedding as a keyword would also replay its existing graph for both selected layers.
+        # Keep gradient-carrying inputs positional for reentrant checkpointing.
         mixed_states = self.lambdas[0] * hidden_states + self.lambdas[1] * initial_hidden_states
         normed_states = self.input_layernorm(mixed_states)
         attn_output, _ = self.self_attn(
@@ -456,7 +455,7 @@ class NeoMMEPreTrainedModel(PreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    The bare NeoMME model. It encodes text tokens and image patches with one bidirectional Transformer.
+    The bare NeoMME model. It encodes text tokens and image patches with one bidirectional Transformer encoder.
     """
 )
 class NeoMMEModel(NeoMMEPreTrainedModel):
@@ -508,7 +507,7 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
         if (input_ids is None) == (inputs_embeds is None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
         if inputs_embeds is not None and self.value_embeddings is not None:
-            logger.warning_once("inputs_embeds cannot apply value embeddings without token ids")
+            logger.warning_once("inputs_embeds cannot apply value embeddings without token IDs")
 
         hidden_states = self.embeddings(input_ids=input_ids, inputs_embeds=inputs_embeds)  # (batch, seq, hidden_size)
         if pixel_values is not None:
@@ -521,8 +520,7 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
             # One axis: `NeoMMERotaryEmbedding` expands it onto both, which is what text-only inputs want.
             position_ids = torch.arange(seq_len, device=hidden_states.device).expand(batch_size, -1)
 
-        # `initial_hidden_states` is captured HERE — after the patch scatter and the first norm — and every
-        # layer mixes it back in through its `lambdas`.
+        # Each encoder layer can mix in this normalized input through its learned `lambdas`.
         hidden_states = initial_hidden_states = self.embedding_norm(hidden_states)
 
         attention_masks = self._build_attention_masks(hidden_states, attention_mask)
@@ -530,8 +528,7 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
             layer_type: self.rotary_emb(hidden_states, position_ids, layer_type)
             for layer_type in set(self.config.layer_types)
         }
-        # Value embeddings are a per-token table lookup, so they need the ids themselves: an
-        # `inputs_embeds`-only call runs without them.
+        # Value embeddings require token IDs, so `inputs_embeds`-only calls omit them.
         value_embeds = None
         if self.value_embeddings is not None and input_ids is not None:
             value_embeds = self.value_embeddings(input_ids)  # (batch, seq, kv_heads * head_dim)
@@ -546,7 +543,7 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
                 **kwargs,
             )
 
-        # The final norm is part of the backbone, so task heads do not normalize again.
+        # The backbone applies the final normalization.
         hidden_states = self.final_norm(hidden_states)
         return BaseModelOutput(last_hidden_state=hidden_states)
 
@@ -559,7 +556,7 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
                 f"pixel_values has patch width {pixel_values.shape[-1]} but the model expects "
                 f"{self.config.patch_dim} (= 3 * patch_size ** 2 with patch_size={self.config.patch_size})"
             )
-        previous_ids = F.pad(input_ids[:, :-1], (1, 0), value=self.config.pad_token_id or 0)  # ids shifted right
+        previous_ids = F.pad(input_ids[:, :-1], (1, 0), value=self.config.pad_token_id or 0)  # token IDs shifted right
         image_mask = (
             (input_ids == self.config.image_token_id) & (previous_ids != self.config.document_token_id)
         ).unsqueeze(-1)

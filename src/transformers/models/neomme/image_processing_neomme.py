@@ -96,20 +96,23 @@ class NeoMMEImageProcessor(TorchvisionBackend):
     """
 
     valid_kwargs = NeoMMEImageProcessorKwargs
+
     resample = PILImageResampling.BILINEAR
     image_mean = [0.5, 0.5, 0.5]
     image_std = [0.5, 0.5, 0.5]
+
     do_convert_rgb = True
     do_resize = True
     do_rescale = True
     rescale_factor = 1 / 255
     do_normalize = True
+
     patch_size = 32
-    # Native resolution by default. When all limits are None, the computed scale is 1.0 and resize() is skipped.
-    # Converted checkpoints override these values from preprocessor_config.json when they define a resize budget.
+    # Checkpoints may set resize limits; unset limits preserve native resolution.
     max_side = None
     max_pixels = None
     min_pixels = None
+
     model_input_names = ["pixel_values", "image_grid_hw"]
 
     def __init__(self, **kwargs: Unpack[NeoMMEImageProcessorKwargs]):
@@ -126,8 +129,7 @@ class NeoMMEImageProcessor(TorchvisionBackend):
         return super().preprocess(images, **kwargs)
 
     def _validate_preprocess_kwargs(self, **kwargs) -> tuple:
-        # `size` is computed per image from the resolution budget, so the generic `do_resize` check
-        # (which insists on a `size`) does not apply.
+        # Generic resize validation requires a fixed `size`; NeoMME computes one per image.
         kwargs.pop("do_resize", None)
         self._validate_size_settings(
             kwargs.get("patch_size", self.patch_size),
@@ -175,8 +177,7 @@ class NeoMMEImageProcessor(TorchvisionBackend):
         pixel_values: list[torch.Tensor] = []
         image_grid_hw: list[tuple[int, int]] = []
 
-        # Per image, because each one gets its own patch grid: the usual group-by-shape batching would
-        # have to regroup after every step, and a page's grid is what decides its token count.
+        # Process images separately because each produces its own patch grid.
         for image in images:
             if do_resize:
                 image = self._resize_to_budget(image, max_side, max_pixels, min_pixels, resample)
@@ -232,8 +233,7 @@ class NeoMMEImageProcessor(TorchvisionBackend):
         if (resized_height, resized_width) == (height, width):
             return image
         size = SizeDict(height=resized_height, width=resized_width)
-        # `antialias=True` is the default, passed explicitly because it is what holds this backend to the
-        # PIL one: without it a downscaled page differs by up to 166 of 255 levels, not one.
+        # Explicit antialiasing keeps the Torchvision and PIL resize paths aligned.
         return self.resize(image=image, size=size, resample=resample, antialias=True)
 
     def _pad_to_patch_grid(self, image: "torch.Tensor", patch_size: int) -> tuple["torch.Tensor", int, int]:

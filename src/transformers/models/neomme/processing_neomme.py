@@ -63,13 +63,13 @@ def maxsim_scores(
     normalize: bool = True,
 ) -> torch.Tensor:
     """Compute MaxSim from padded token grids, optionally normalized by query length."""
-    query_grids = (
+    query_grids = (  # (num_queries, query_length, dim)
         torch.nn.functional.normalize(query_grids.float(), dim=-1) * query_mask[..., None]
-    )  # (num_queries, query_length, dim)
+    )
     passage_grids = torch.nn.functional.normalize(passage_grids.float(), dim=-1)  # (num_passages, passage_length, dim)
-    similarity = torch.einsum(
+    similarity = torch.einsum(  # (num_queries, num_passages, query_length, passage_length)
         "qid,pjd->qpij", query_grids, passage_grids
-    )  # (num_queries, num_passages, query_length, passage_length)
+    )
     similarity = similarity.masked_fill(~passage_mask[None, :, None, :], torch.finfo(similarity.dtype).min)
     scores = similarity.max(dim=-1).values.sum(dim=-1)  # (num_queries, num_passages)
 
@@ -79,7 +79,7 @@ def maxsim_scores(
 
 
 class NeoMMEProcessorKwargs(ProcessingKwargs, total=False):
-    # `_merge_kwargs` reads this attribute directly; TypedDict subclasses do not inherit it.
+    # `_merge_kwargs` reads this attribute directly, but TypedDict subclasses do not inherit it.
     _defaults = {}
 
 
@@ -284,14 +284,14 @@ class NeoMMEProcessor(ProcessorMixin):
                 content = message.get("content") or []
                 if isinstance(content, str):
                     self._validate_user_text(content)
-                    has_text |= bool(content)
+                    has_text = has_text or bool(content)
                     continue
                 for item in content:
                     content_type = item.get("type")
                     if content_type == "text":
                         item_text = item.get("text") or ""
                         self._validate_user_text(item_text)
-                        has_text |= bool(item_text)
+                        has_text = has_text or bool(item_text)
                     elif content_type in {"image", "image_url"}:
                         if require_image_source and not self._has_image_source(item):
                             raise ValueError(
@@ -564,7 +564,7 @@ class NeoMMEProcessor(ProcessorMixin):
         return scores.to(output_dtype or scores.dtype).to(output_device)
 
     def _marker_ids(self) -> dict[str, int]:
-        """Resolve marker token ids and validate that the tokenizer defines them."""
+        """Resolve marker token IDs and validate that the tokenizer defines them."""
         ids = {
             "query": getattr(self.tokenizer, "query_token_id", None),
             "document": getattr(self.tokenizer, "document_token_id", None),
