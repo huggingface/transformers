@@ -647,19 +647,17 @@ def sanitize_chat_inputs(
     """Replace special-token text anywhere in the chat inputs with unique placeholders, for
     `encode_sanitized_chats` to encode as ordinary (non-special) tokens after the template has rendered.
     Returns the sanitized inputs plus the `{placeholder: original_text}` substitutions made."""
-    if not tokenize:
+    if not tokenize or return_assistant_tokens_mask:
         raise ValueError(
-            "`sanitize_special_tokens=True` requires `tokenize=True`: sanitization is a property of the "
-            "encoding, not of the rendered string."
+            "`sanitize_special_tokens=True` requires `tokenize=True` and does not support "
+            "`return_assistant_tokens_mask`."
         )
-    if return_assistant_tokens_mask:
-        raise NotImplementedError("`sanitize_special_tokens` does not support `return_assistant_tokens_mask` yet.")
-    substitutions = {}
+    substitutions: dict[str, str] = {}
     pattern = _compile_special_token_pattern(tuple(sanitization_special_tokens(tokenizer)))
-    conversations = _sanitize_chat_input(conversations, pattern, substitutions)
-    tools = _sanitize_chat_input(tools, pattern, substitutions)
-    documents = _sanitize_chat_input(documents, pattern, substitutions)
-    kwargs = _sanitize_chat_input(kwargs, pattern, substitutions)
+    conversations, tools, documents, kwargs = (
+        _sanitize_chat_input(chat_input, pattern, substitutions)
+        for chat_input in (conversations, tools, documents, kwargs)
+    )
     return conversations, tools, documents, kwargs, substitutions
 
 
@@ -702,7 +700,7 @@ def sanitization_special_tokens(tokenizer) -> list[str]:
 
 def encode_sanitized_chats(
     tokenizer,
-    rendered_batch: list[str],
+    rendered_chat: str | list[str],
     substitutions: dict[str, str],
     padding=False,
     truncation: bool = False,
@@ -710,12 +708,15 @@ def encode_sanitized_chats(
     return_tensors=None,
     **tokenizer_kwargs,
 ):
-    """Encode rendered chats whose inputs were sanitized by `sanitize_chat_inputs`, given the
+    """Encode rendered chats whose inputs had special-token text replaced with placeholders, given the
     `{placeholder: original_text}` substitutions it made. Text between placeholders is encoded normally, so
     only the special tokens the template itself emitted act as control tokens; each placeholder becomes the
     ids of its original text encoded without special-token matching (as with `split_special_tokens=True`).
     Tokenization at placeholder boundaries can therefore differ from encoding the same text inline (e.g. a
-    SentencePiece dummy space). Returns the padded `BatchEncoding` for the batch."""
+    SentencePiece dummy space). Returns the padded `BatchEncoding`, unbatched when `rendered_chat` is a
+    single string."""
+    single = isinstance(rendered_chat, str)
+    rendered_batch = [rendered_chat] if single else rendered_chat
     verbose = tokenizer_kwargs.pop("verbose", True)
     padding_side = tokenizer_kwargs.pop("padding_side", None)
     pad_to_multiple_of = tokenizer_kwargs.pop("pad_to_multiple_of", None)
@@ -778,7 +779,7 @@ def encode_sanitized_chats(
     encoded_inputs = {"input_ids": batch_ids}
     if "token_type_ids" in tokenizer.model_input_names:
         encoded_inputs["token_type_ids"] = [[0] * len(ids) for ids in batch_ids]
-    return tokenizer.pad(
+    out = tokenizer.pad(
         encoded_inputs,
         padding=padding_strategy.value,
         max_length=max_length,
@@ -788,3 +789,7 @@ def encode_sanitized_chats(
         return_tensors=return_tensors,
         verbose=verbose,
     )
+    if single and return_tensors is None:
+        # type(out) is BatchEncoding, which cannot be imported here (circular import)
+        out = type(out)({key: value[0] for key, value in out.items()})
+    return out

@@ -64,11 +64,7 @@ from .utils import (
 )
 from .utils.chat_parsing import ResponseParser
 from .utils.chat_parsing import parse_response as _template_parse_response
-from .utils.chat_template_utils import (
-    encode_sanitized_chats,
-    render_jinja_template,
-    sanitize_chat_inputs,
-)
+from .utils.chat_template_utils import encode_sanitized_chats, render_jinja_template, sanitize_chat_inputs
 
 
 if TYPE_CHECKING:
@@ -3120,13 +3116,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         substitutions = None
         if sanitize_special_tokens:
             conversations, tools, documents, kwargs, substitutions = sanitize_chat_inputs(
-                self,
-                conversations,
-                tools,
-                documents,
-                kwargs,
-                tokenize=tokenize,
-                return_assistant_tokens_mask=return_assistant_tokens_mask,
+                self, conversations, tools, documents, kwargs, tokenize, return_assistant_tokens_mask
             )
 
         template_kwargs = {**self.special_tokens_map, **kwargs}  # kwargs overwrite special tokens if both are present
@@ -3146,10 +3136,10 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         if tokenize:
             if substitutions:
-                # Splicing the sanitized placeholders back in as ordinary tokens needs a dedicated path
+                # The placeholders are spliced back in as ordinary tokens, never as control tokens
                 out = encode_sanitized_chats(
                     self,
-                    rendered_chat if is_batched else [rendered_chat],
+                    rendered_chat,
                     substitutions,
                     padding=padding,
                     truncation=truncation,
@@ -3157,8 +3147,6 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                     return_tensors=return_tensors,
                     **tokenizer_kwargs,
                 )
-                if not is_batched and return_tensors is None:
-                    out = BatchEncoding({key: value[0] for key, value in out.items()})
             else:
                 out = self(
                     rendered_chat,
