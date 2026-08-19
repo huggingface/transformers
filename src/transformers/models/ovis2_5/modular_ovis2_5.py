@@ -557,11 +557,9 @@ class Ovis2_5Model(Ovis2Model):
         PreTrainedModel.__init__(self, config)
         self.vision_tower = Ovis2_5VisionModel(config.vision_config)
         self.visual_tokenizer = Ovis2_5VisualTokenProjector(config.vision_config)
-        text_hidden_size = getattr(config.text_config, "hidden_size")
-        visual_vocab_size = getattr(config.vision_config, "vocab_size")
         self.visual_embeddings_table = nn.Embedding(
-            visual_vocab_size,
-            text_hidden_size,
+            config.vision_config.vocab_size,
+            config.text_config.hidden_size,
         )
         self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()

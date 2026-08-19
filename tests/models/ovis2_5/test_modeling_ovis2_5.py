@@ -903,9 +903,14 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         torch.testing.assert_close(actual, patches + torch.cat(expected_positions), atol=1e-5, rtol=1e-5)
 
     def test_visual_modules_use_native_state_dict_layout(self):
-        model = Ovis2_5ForConditionalGeneration(self.model_tester.get_config())
+        config = self.model_tester.get_config()
+        model = Ovis2_5ForConditionalGeneration(config)
         state_dict = model.state_dict()
 
+        self.assertEqual(
+            model.model.visual_embeddings_table.weight.shape,
+            (config.vision_config.vocab_size, config.text_config.hidden_size),
+        )
         self.assertIn("model.vision_tower.embeddings.patch_embedding.weight", state_dict)
         self.assertIn("model.visual_tokenizer.head_linear.weight", state_dict)
         self.assertIn("model.visual_tokenizer.head_norm.weight", state_dict)
