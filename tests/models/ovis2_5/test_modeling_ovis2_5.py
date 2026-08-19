@@ -554,20 +554,23 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
                 torch.testing.assert_close(expanded_kwargs[pixel_key], pixel_values[expected_patch_indices])
                 torch.testing.assert_close(expanded_kwargs[grid_key], grid_thw[expected_grid_indices])
 
-    def test_generation_uses_text_position_ids(self):
-        """Generation keeps the Qwen3 text backbone's one-dimensional position IDs."""
+    def test_generation_uses_standard_text_positions(self):
+        """Generation leaves position IDs to the Qwen3 text backbone and does not create multimodal RoPE state."""
         model = Ovis2_5ForConditionalGeneration(self.model_tester.get_config()).to(torch_device).eval()
         input_ids = torch.tensor([[1, 2, 3, 4]], dtype=torch.long, device=torch_device)
         attention_mask = torch.tensor([[0, 1, 1, 1]], dtype=torch.long, device=torch_device)
 
-        position_ids = model._prepare_position_ids_for_generation(
+        model_inputs = model.prepare_inputs_for_generation(
             input_ids,
-            {"attention_mask": attention_mask},
+            attention_mask=attention_mask,
+            use_cache=False,
         )
 
-        torch.testing.assert_close(position_ids, torch.tensor([[0, 0, 1, 2]], device=torch_device))
-        self.assertEqual(position_ids.ndim, 2)
+        self.assertIsNone(model_inputs["position_ids"])
+        self.assertNotIn("rope_deltas", model_inputs)
+        self.assertNotIn("mm_token_type_ids", model_inputs)
         self.assertFalse(hasattr(model.model, "rope_deltas"))
+        self.assertNotIn("_prepare_position_ids_for_generation", Ovis2_5ForConditionalGeneration.__dict__)
 
     def test_native_subconfig_names(self):
         text_config = self.model_tester.get_text_config().to_dict()

@@ -23,7 +23,6 @@ from torch import nn
 
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
-from ...generation import GenerationMixin
 from ...image_processing_backends import PilBackend, TorchvisionBackend
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling, SizeDict
 from ...modeling_layers import GradientCheckpointingLayer
@@ -848,9 +847,6 @@ class Ovis2_5ForConditionalGeneration(Ovis2_5PreTrainedModel, Exaone4_5_ForCondi
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
 
         self.post_init()
-
-    def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
-        return GenerationMixin._prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs)
 
     @can_return_tuple
     @auto_docstring

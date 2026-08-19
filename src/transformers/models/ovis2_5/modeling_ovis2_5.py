@@ -1000,8 +1000,5 @@ class Ovis2_5ForConditionalGeneration(Ovis2_5PreTrainedModel, GenerationMixin):
         model_inputs["position_ids"] = None
         return model_inputs
 
-    def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
-        return super()._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
-
 
 __all__ = ["Ovis2_5VisionModel", "Ovis2_5PreTrainedModel", "Ovis2_5Model", "Ovis2_5ForConditionalGeneration"]
