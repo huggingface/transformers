@@ -417,8 +417,6 @@ class NeoMMEPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
 
         if isinstance(module, NeoMMEEmbeddings):
-            # The factorized table is scaled by its rank, not `initializer_range`, so the tied decode
-            # logits stay O(1) at init (otherwise the initial cross-entropy is ~250 instead of ln V).
             init.normal_(module.word_embeddings.weight, mean=0.0, std=self.config.embedding_rank**-0.5)
         elif isinstance(module, NeoMMEAttention):
             init.zeros_(module.o_proj.weight)  # residual branch starts as an exact no-op
@@ -427,7 +425,7 @@ class NeoMMEPreTrainedModel(PreTrainedModel):
             init.zeros_(module.down_proj.weight)
         elif isinstance(module, NeoMMEEncoderLayer):
             init.copy_(module.lambdas, torch.tensor([1.0, 0.0]))
-        elif isinstance(module, NeoMMEModel) and module.value_embeddings is not None:
+        elif isinstance(module, NeoMMEModel):
             init.zeros_(module.value_embeddings.weight)
         elif isinstance(module, NeoMMERotaryEmbedding):
             for layer_type in module.layer_types:
@@ -441,9 +439,6 @@ class NeoMMEPreTrainedModel(PreTrainedModel):
         """Resize word and value embedding tables together."""
         word_embeddings = super()._resize_token_embeddings(new_num_tokens, pad_to_multiple_of, mean_resizing)
         backbone = getattr(self, self.base_model_prefix, self)
-        if getattr(backbone, "value_embeddings", None) is None:
-            return word_embeddings
-
         resized = self._get_resized_embeddings(
             backbone.value_embeddings, word_embeddings.weight.shape[0], mean_resizing=mean_resizing
         )
@@ -469,15 +464,8 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
             [NeoMMEEncoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         global_layers = [i for i, layer_type in enumerate(config.layer_types) if layer_type == "full_attention"]
-        # CODEPATH: Hcompany/NeoMME-260M and Hcompany/NeoMME-260M-Retriever use value embeddings;
-        # custom disabled or all-sliding configurations omit them.
-        if config.use_value_embeds and global_layers:
-            self.value_embeddings = nn.Embedding(config.vocab_size, config.num_key_value_heads * config.head_dim)
-        else:
-            self.value_embeddings = None
-        self.value_embedding_layers = (
-            {global_layers[0], global_layers[-1]} if self.value_embeddings is not None else set()
-        )
+        self.value_embeddings = nn.Embedding(config.vocab_size, config.num_key_value_heads * config.head_dim)
+        self.value_embedding_layers = {global_layers[0], global_layers[-1]}
         self.gradient_checkpointing = False
         self.post_init()
 
@@ -506,7 +494,7 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
         """
         if (input_ids is None) == (inputs_embeds is None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-        if inputs_embeds is not None and self.value_embeddings is not None:
+        if inputs_embeds is not None:
             logger.warning_once("inputs_embeds cannot apply value embeddings without token IDs")
 
         hidden_states = self.embeddings(input_ids=input_ids, inputs_embeds=inputs_embeds)  # (batch, seq, hidden_size)
@@ -517,10 +505,10 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
 
         batch_size, seq_len = hidden_states.shape[:2]
         if position_ids is None:
-            # One axis: `NeoMMERotaryEmbedding` expands it onto both, which is what text-only inputs want.
+            # Text uses the token index for both M-RoPE axes.
             position_ids = torch.arange(seq_len, device=hidden_states.device).expand(batch_size, -1)
 
-        # Each encoder layer can mix in this normalized input through its learned `lambdas`.
+        # Reuse this normalized input as `initial_hidden_states` in every encoder layer.
         hidden_states = initial_hidden_states = self.embedding_norm(hidden_states)
 
         attention_masks = self._build_attention_masks(hidden_states, attention_mask)
@@ -528,10 +516,8 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
             layer_type: self.rotary_emb(hidden_states, position_ids, layer_type)
             for layer_type in set(self.config.layer_types)
         }
-        # Value embeddings require token IDs, so `inputs_embeds`-only calls omit them.
-        value_embeds = None
-        if self.value_embeddings is not None and input_ids is not None:
-            value_embeds = self.value_embeddings(input_ids)  # (batch, seq, kv_heads * head_dim)
+        # Value embeddings are token-ID lookups and cannot be recovered from `inputs_embeds`.
+        value_embeds = self.value_embeddings(input_ids) if input_ids is not None else None
 
         for layer_idx, encoder_layer in enumerate(self.layers):
             hidden_states = encoder_layer(
@@ -543,7 +529,6 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
                 **kwargs,
             )
 
-        # The backbone applies the final normalization.
         hidden_states = self.final_norm(hidden_states)
         return BaseModelOutput(last_hidden_state=hidden_states)
 

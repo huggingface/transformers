@@ -72,7 +72,7 @@ def _patch_residual_init(test_case: unittest.TestCase) -> None:
         elif isinstance(module, NeoMMEEncoderLayer):
             # The default is `[1.0, 0.0]`, so replacing only all-zero parameters would miss it.
             init.copy_(module.lambdas, torch.tensor([1.0, 0.5]))
-        elif isinstance(module, NeoMMEModel) and module.value_embeddings is not None:
+        elif isinstance(module, NeoMMEModel):
             init.normal_(module.value_embeddings.weight, mean=0.0, std=self.config.initializer_range)
 
     patcher = patch.object(NeoMMEPreTrainedModel, "_init_weights", initialize_with_live_residual_branches)
@@ -235,16 +235,6 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds_matches_input_ids(self):
         pass
 
-    def test_inputs_embeds_match_when_value_embeds_off(self):
-        config, input_ids, input_mask, _ = self.model_tester.prepare_config_and_inputs()
-        config.use_value_embeds = False
-        model = NeoMMEModel(config).to(torch_device).eval()
-        inputs_embeds = model.get_input_embeddings()(input_ids)
-        with torch.no_grad():
-            from_ids = model(input_ids=input_ids, attention_mask=input_mask).last_hidden_state
-            from_embeds = model(inputs_embeds=inputs_embeds, attention_mask=input_mask).last_hidden_state
-        torch.testing.assert_close(from_ids, from_embeds)
-
     def test_requires_exactly_one_model_input(self):
         config, input_ids, _, _ = self.model_tester.prepare_config_and_inputs()
         model = NeoMMEModel(config).to(torch_device).eval()
@@ -267,12 +257,6 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
-    def test_sliding_only_pattern(self):
-        config = NeoMMEConfig(num_hidden_layers=2, layer_types=["sliding_attention"] * 2)
-        model = NeoMMEModel(config)
-        self.assertIsNone(model.value_embeddings)
-        self.assertEqual(model.value_embedding_layers, set())
-
     def test_grouped_query_heads_validated(self):
         for num_key_value_heads in (0, 3):
             with self.assertRaisesRegex(StrictDataclassClassValidationError, "must divide"):
@@ -284,6 +268,8 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
             NeoMMEConfig(**base, layer_types=["sliding_attention"] + ["full_attention"])
         with self.assertRaises(ValueError):  # not a known layer type
             NeoMMEConfig(**base, layer_types=["sliding_attention", "gdn", "full_attention"])
+        with self.assertRaises(ValueError):  # value embeddings require a full-attention layer
+            NeoMMEConfig(**base, layer_types=["sliding_attention"] * 3)
 
         pattern = ["sliding_attention", "sliding_attention", "full_attention"]
         config = NeoMMEConfig(num_hidden_layers=3, layer_types=pattern)
@@ -301,8 +287,6 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
     def test_rope_parameters_follow_layer_types(self):
         """Only layer types present in the pattern get rope parameters."""
         self.assertEqual(list(NeoMMEConfig(num_hidden_layers=1).rope_parameters), ["full_attention"])
-        sliding_only = NeoMMEConfig(num_hidden_layers=2, layer_types=["sliding_attention"] * 2)
-        self.assertEqual(list(sliding_only.rope_parameters), ["sliding_attention"])
 
     def test_flat_rope_theta(self):
         """Flat `rope_theta` reaches every layer type and is not written back to `config.json`."""

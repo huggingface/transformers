@@ -42,8 +42,6 @@ class NeoMMEConfig(PreTrainedConfig):
     sliding_window_long (`int`, *optional*, defaults to 1024):
         Number of tokens on either side that a long sliding-attention layer can attend to. Short and long windows
         alternate between full-attention layers.
-    use_value_embeds (`bool`, *optional*, defaults to `True`):
-        Whether to add learned token value embeddings in the first and last full-attention layers.
     residual_scale (`float`, *optional*):
         Scale applied to attention and MLP residual branches. Defaults to `1 / sqrt(2 * num_hidden_layers)`.
     embedding_dim (`int`, *optional*, defaults to 128):
@@ -86,7 +84,6 @@ class NeoMMEConfig(PreTrainedConfig):
     sliding_window_short: int = 256
     sliding_window_long: int = 1024
 
-    use_value_embeds: bool = True
     residual_scale: float | None = None
 
     patch_size: int = 32
@@ -172,6 +169,8 @@ class NeoMMEConfig(PreTrainedConfig):
         unknown = sorted(set(self.layer_types) - {"full_attention", "sliding_attention"})
         if unknown:
             raise ValueError(f"layer_types contains unknown values {unknown}; expected full/sliding_attention.")
+        if "full_attention" not in self.layer_types:
+            raise ValueError("layer_types must contain at least one full_attention layer.")
 
     def _validate_rotary_dims(self) -> None:
         """Ensure each layer type rotates a multiple of 4 head dimensions."""
