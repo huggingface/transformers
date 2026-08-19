@@ -160,6 +160,7 @@ class NeoMMEImageProcessor(TorchvisionBackend):
             raise ValueError(f"patch_size must be a positive integer, got {patch_size!r}.")
         if size is not None and set(dict(size)) != {"min_pixels", "max_pixels"}:
             raise ValueError("size must contain exactly min_pixels and max_pixels.")
+
         for name, value in (
             ("max_side", max_side),
             ("size.max_pixels", size.max_pixels if size is not None else None),
@@ -199,6 +200,7 @@ class NeoMMEImageProcessor(TorchvisionBackend):
         for image in images:
             if do_resize:
                 image = self._resize_to_budget(image, max_side, size, resample)
+
             # Pad to a whole patch grid before rescaling, so padded pixels become -1 exactly like the
             # black canvas the reference implementation pastes onto.
             image, grid_height, grid_width = self._pad_to_patch_grid(image, patch_size)
@@ -225,10 +227,13 @@ class NeoMMEImageProcessor(TorchvisionBackend):
         patch_size = images_kwargs.get("patch_size", self.patch_size)
         max_side = images_kwargs.get("max_side", self.max_side)
         size = self._standardize_kwargs(size=images_kwargs.get("size", self.size))["size"]
+
         _validate_image_dimensions(height, width)
         self._validate_size_settings(patch_size, max_side, size)
+
         if images_kwargs.get("do_resize", self.do_resize):
             height, width = get_resize_output_size(height, width, max_side, size)
+
         return -(-height // patch_size) * (-(-width // patch_size))
 
     def _resize_to_budget(

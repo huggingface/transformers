@@ -141,6 +141,7 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(ids.count(self.marker_ids["<query>"]), 1)
         self.assertIn(processor.tokenizer.convert_tokens_to_ids("hello"), ids)
         self.assertEqual(ids[-processor.query_expand :], [self.marker_ids["<mask>"]] * processor.query_expand)
+
         direct = processor(text=["hello"], task="query", return_tensors="pt")
         torch.testing.assert_close(inputs["input_ids"], direct["input_ids"])
 
@@ -157,6 +158,7 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(ids.count(self.marker_ids["<doc>"]), 1)
         self.assertIn(processor.tokenizer.convert_tokens_to_ids("hello"), ids)
         self.assertNotIn(self.marker_ids["<mask>"], ids)
+
         direct = processor(text=["hello"], task="document", return_tensors="pt")
         torch.testing.assert_close(inputs["input_ids"], direct["input_ids"])
 
@@ -198,6 +200,7 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(inputs["position_ids"].shape[1], batch_size)
         self.assertNotIn("image_grid_hw", inputs)
         self.assertIn("pixel_values", inputs)
+
         direct = processor(images=[image] * batch_size, return_tensors=return_tensors)
         torch.testing.assert_close(inputs["input_ids"], direct["input_ids"])
         torch.testing.assert_close(inputs["position_ids"], direct["position_ids"])
@@ -425,6 +428,7 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.get_processor()
         image_inputs = processor(images=self.prepare_image_inputs())
         self.assertSetEqual(set(image_inputs.keys()), set(processor.model_input_names))
+
         # Text queries are the other retrieval side: no vision keys.
         query_inputs = processor(text=["hello"], task="query")
         self.assertSetEqual(set(query_inputs.keys()), {"input_ids", "attention_mask"})
@@ -544,6 +548,7 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_one_modality_per_call(self):
         processor = self.get_processor()
         image = np.random.randint(0, 255, (8, 8, 3), dtype=np.uint8)
+
         with self.assertRaises(ValueError):
             processor()
         with self.assertRaises(ValueError):

@@ -206,6 +206,7 @@ class NeoMMEImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                     "pixel_values"
                 ]
                 self.assertEqual(patches.shape, (4, 3 * patch_size**2))
+
                 for patch_index, (row, column) in enumerate([(0, 0), (0, 1), (1, 0), (1, 1)]):
                     block = array[
                         row * patch_size : (row + 1) * patch_size, column * patch_size : (column + 1) * patch_size
@@ -223,6 +224,7 @@ class NeoMMEImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 self.assertEqual(processor(images=[image], return_tensors="np")["image_grid_hw"].tolist(), [[16, 8]])
                 capped = processor(images=[image], max_side=16, return_tensors="np")
                 self.assertEqual(capped["image_grid_hw"].tolist(), [[4, 2]])
+
                 # max_side only ever shrinks; min_pixels is the one setting that grows an image.
                 self.assertEqual(
                     processor(images=[small], max_side=1024, return_tensors="np")["image_grid_hw"].tolist(), [[1, 1]]
@@ -235,6 +237,7 @@ class NeoMMEImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                     )["image_grid_hw"].tolist(),
                     [[4, 4]],
                 )
+
                 strict_processor = image_processing_class(patch_size=1)
                 side_capped = strict_processor(images=[self.make_image(101, 200)], max_side=65, return_tensors="np")[
                     "image_grid_hw"
@@ -247,6 +250,7 @@ class NeoMMEImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 )["image_grid_hw"][0]
                 self.assertEqual(capped_size.tolist(), [9, 11])
                 self.assertLessEqual(int(capped_size.prod()), 106)
+
                 floored_size = strict_processor(
                     images=[self.make_image(16, 16)],
                     size={"min_pixels": 341, "max_pixels": 10**9},
@@ -302,6 +306,7 @@ class NeoMMEImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                     processor(images=[image], **{name: value})
                 with self.subTest(name=name, value=value, patch_count=True), self.assertRaises(ValueError):
                     processor.get_number_of_image_patches(16, 16, {name: value})
+
         for name in ("min_pixels", "max_pixels"):
             for value in (0, -1, 1.5):
                 size = {"min_pixels": 1, "max_pixels": 1024}

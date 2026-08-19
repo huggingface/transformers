@@ -280,6 +280,7 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
         base = {"num_hidden_layers": 3, "layer_types": _layer_types(3, 3)}
         uniform = NeoMMEConfig(**base, sliding_window_short=256, sliding_window_long=256)
         self.assertEqual([w for w in uniform.layer_window_sizes if w is not None], [256, 256])
+
         for short, long in ((256, 0), (256, 128), (0, 256)):
             with self.subTest(short=short, long=long), self.assertRaises(StrictDataclassClassValidationError):
                 NeoMMEConfig(**base, sliding_window_short=short, sliding_window_long=long)
@@ -296,6 +297,7 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
             {"full_attention": 123456.0, "sliding_attention": 123456.0},
         )
         self.assertNotIn("rope_theta", config.to_dict())
+
         # An explicit per-layer-type value still wins over the flat one.
         explicit = NeoMMEConfig(rope_theta=123456.0, rope_parameters={"sliding_attention": {"rope_theta": 7.0}})
         self.assertEqual(explicit.rope_parameters["sliding_attention"]["rope_theta"], 7.0)
@@ -335,6 +337,7 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
             NeoMMEConfig(head_dim=64, rope_parameters={"full_attention": {"partial_rotary_factor": 0.3}})
         with self.assertRaisesRegex(StrictDataclassClassValidationError, "needs at least 4"):
             NeoMMEConfig(head_dim=2, layer_types=["full_attention"] * 17)
+
         # A factor that lands on a multiple of 4 is fine, on either layer type.
         config = NeoMMEConfig(head_dim=64, rope_parameters={"full_attention": {"partial_rotary_factor": 0.75}})
         self.assertEqual(config.rope_parameters["full_attention"]["partial_rotary_factor"], 0.75)
@@ -390,6 +393,7 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
                 self.assertTrue((attention[0, :, inside] > 0).all(), "a reachable pair got zero weight")
                 if window is not None and (~inside).any():
                     self.assertTrue((attention[0, :, ~inside] == 0).all(), "attention leaked outside the band")
+
                 # The upper triangle carries the bidirectionality: a causal mask would zero it.
                 upper = torch.triu(inside, diagonal=1)
                 if upper.any():
@@ -406,10 +410,12 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
             output = model(input_ids=input_ids, pixel_values=pixel_values)
             self.assertEqual(output.last_hidden_state.shape[1], input_ids.shape[1])
             self.assertTrue(torch.isfinite(output.last_hidden_state).all())
+
             with self.assertRaises(ValueError):
                 model(input_ids=input_ids, pixel_values=pixel_values[:-1])
             with self.assertRaises(ValueError):
                 model(input_ids=input_ids, pixel_values=pixel_values[:, :-1])
+
             inputs_embeds = model.get_input_embeddings()(input_ids)
             with self.assertRaisesRegex(ValueError, "requires `input_ids`"):
                 model(inputs_embeds=inputs_embeds, pixel_values=pixel_values)
@@ -453,6 +459,7 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
             eager = model(input_ids=input_ids, pixel_values=pixel_values)
 
         torch.testing.assert_close(compiled.last_hidden_state, eager.last_hidden_state)
+
         with self.assertRaises((ValueError, RuntimeError)):
             torch.compile(model, fullgraph=True)(input_ids=input_ids, pixel_values=pixel_values[:-1])
         with self.assertRaises((ValueError, RuntimeError)):
@@ -480,6 +487,7 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
         input_ids, pixel_values = input_ids.to(torch_device), pixel_values.to(torch_device)
 
         model(input_ids=input_ids, pixel_values=pixel_values, labels=input_ids).loss.backward()
+
         for name, parameter in model.model.patch_embeddings.named_parameters():
             self.assertIsNotNone(parameter.grad, f"patch_embeddings.{name} received no gradient")
             self.assertGreater(parameter.grad.abs().sum().item(), 0.0)
@@ -605,6 +613,7 @@ class NeoMMEForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertIsInstance(output, BaseModelOutput)
         self.assertIsNone(output.dense_embeddings)
         self.assertIsNone(model(input_ids=input_ids, output_multivector=False).embeddings)
+
         with self.assertRaises(ValueError):
             model(input_ids=input_ids, output_dense=False, output_multivector=False)
 

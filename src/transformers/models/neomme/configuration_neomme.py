@@ -104,6 +104,7 @@ class NeoMMEConfig(PreTrainedConfig):
             ]
         if self.residual_scale is None:
             self.residual_scale = (2 * self.num_hidden_layers) ** -0.5
+
         self.validate_layer_types()
 
         super().__post_init__(**kwargs)
@@ -112,6 +113,7 @@ class NeoMMEConfig(PreTrainedConfig):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
         if self.num_key_value_heads <= 0 or self.num_attention_heads % self.num_key_value_heads:
             raise ValueError("num_key_value_heads must divide num_attention_heads")
+
         for name in (
             "vocab_size",
             "embedding_rank",
@@ -126,6 +128,7 @@ class NeoMMEConfig(PreTrainedConfig):
                 raise ValueError(f"{name} must be positive")
         if self.embedding_dim <= 0:
             raise ValueError("embedding_dim must be positive")
+
         if not 0 < self.sliding_window_short <= self.sliding_window_long:
             raise ValueError(
                 f"expected 0 < sliding_window_short <= sliding_window_long, got {self.sliding_window_short} "
@@ -134,6 +137,7 @@ class NeoMMEConfig(PreTrainedConfig):
             )
         if not math.isfinite(self.residual_scale) or self.residual_scale <= 0:
             raise ValueError("residual_scale must be finite and positive")
+
         self._validate_rotary_dims()
 
     def convert_rope_params_to_dict(self, **kwargs):
@@ -183,6 +187,7 @@ class NeoMMEConfig(PreTrainedConfig):
                 or rope_theta <= 0
             ):
                 raise ValueError(f"rope_parameters[{layer_type!r}]['rope_theta'] must be finite and positive")
+
             partial_rotary_factor = self.rope_parameters[layer_type].get("partial_rotary_factor", 1.0)
             rotary_dim = int(self.head_dim * partial_rotary_factor)
             if not 0.0 < partial_rotary_factor <= 1.0:

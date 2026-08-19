@@ -167,6 +167,7 @@ class NeoMMEImageProcessor(TorchvisionBackend):
             raise ValueError(f"patch_size must be a positive integer, got {patch_size!r}.")
         if size is not None and set(dict(size)) != {"min_pixels", "max_pixels"}:
             raise ValueError("size must contain exactly min_pixels and max_pixels.")
+
         for name, value in (
             ("max_side", max_side),
             ("size.max_pixels", size.max_pixels if size is not None else None),
@@ -206,6 +207,7 @@ class NeoMMEImageProcessor(TorchvisionBackend):
         for image in images:
             if do_resize:
                 image = self._resize_to_budget(image, max_side, size, resample)
+
             # Pad to a whole patch grid before rescaling, so padded pixels become -1 exactly like the
             # black canvas the reference implementation pastes onto.
             image, grid_height, grid_width = self._pad_to_patch_grid(image, patch_size)
@@ -232,10 +234,13 @@ class NeoMMEImageProcessor(TorchvisionBackend):
         patch_size = images_kwargs.get("patch_size", self.patch_size)
         max_side = images_kwargs.get("max_side", self.max_side)
         size = self._standardize_kwargs(size=images_kwargs.get("size", self.size))["size"]
+
         _validate_image_dimensions(height, width)
         self._validate_size_settings(patch_size, max_side, size)
+
         if images_kwargs.get("do_resize", self.do_resize):
             height, width = get_resize_output_size(height, width, max_side, size)
+
         return -(-height // patch_size) * (-(-width // patch_size))
 
     def _resize_to_budget(
@@ -356,6 +361,7 @@ class NeoMMERotaryEmbedding(nn.Module):
                 f"position_ids must have shape {tuple(input_shape)} or {(2, *input_shape)}, "
                 f"got {tuple(position_ids.shape)}."
             )
+
         inv_freq = getattr(self, f"{layer_type}_inv_freq")  # (rotary_dim // 2,)
         attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
 
@@ -503,6 +509,7 @@ class NeoMMEEncoderLayer(GradientCheckpointingLayer):
             **kwargs,
         )
         hidden_states = hidden_states + self.residual_scale * attn_output
+
         normed_states = self.post_attention_layernorm(hidden_states)
         mlp_output = self.mlp(normed_states)
         return hidden_states + self.residual_scale * mlp_output
@@ -578,6 +585,7 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
         self.layers = nn.ModuleList(
             [NeoMMEEncoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
+
         global_layers = [i for i, layer_type in enumerate(config.layer_types) if layer_type == "full_attention"]
         self.value_embeddings = nn.Embedding(config.vocab_size, config.num_key_value_heads * config.head_dim)
         self.value_embedding_layers = {global_layers[0], global_layers[-1]}
@@ -631,6 +639,7 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
             layer_type: self.rotary_emb(hidden_states, position_ids, layer_type)
             for layer_type in set(self.config.layer_types)
         }
+
         # Value embeddings are token-ID lookups and cannot be recovered from `inputs_embeds`.
         value_embeds = self.value_embeddings(input_ids) if input_ids is not None else None
 
@@ -656,6 +665,7 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
                 f"pixel_values has patch width {pixel_values.shape[-1]} but the model expects "
                 f"{self.config.patch_dim} (= 3 * patch_size ** 2 with patch_size={self.config.patch_size})"
             )
+
         previous_ids = F.pad(input_ids[:, :-1], (1, 0), value=self.config.pad_token_id or 0)  # token IDs shifted right
         image_mask = (
             (input_ids == self.config.image_token_id) & (previous_ids != self.config.document_token_id)

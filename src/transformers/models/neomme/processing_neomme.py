@@ -67,6 +67,7 @@ def _maxsim_scores(
         torch.nn.functional.normalize(query_grids.float(), dim=-1) * query_mask[..., None]
     )
     passage_grids = torch.nn.functional.normalize(passage_grids.float(), dim=-1)  # (num_passages, passage_length, dim)
+
     similarity = torch.einsum(  # (num_queries, num_passages, query_length, passage_length)
         "qid,pjd->qpij", query_grids, passage_grids
     )
@@ -178,6 +179,7 @@ class NeoMMEProcessor(ProcessorMixin):
             raise ValueError(f"query_expand must be a non-negative integer, got {query_expand!r}.")
         if not isinstance(image_placeholder, str) or not image_placeholder.strip():
             raise ValueError("image_placeholder must be a non-empty string.")
+
         super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
         self.query_expand = query_expand
         self.image_placeholder = image_placeholder
@@ -318,6 +320,7 @@ class NeoMMEProcessor(ProcessorMixin):
                 chat_template = self.chat_template
         elif isinstance(self.chat_template, dict) and chat_template in self.chat_template:
             chat_template = self.chat_template[chat_template]
+
         if not isinstance(chat_template, str):
             raise ValueError("NeoMMEProcessor requires one default chat template or an explicit template.")
         return chat_template
@@ -401,6 +404,7 @@ class NeoMMEProcessor(ProcessorMixin):
         template = self._resolve_chat_template(None)
         if "task" not in _get_template_variables(template):
             raise ValueError("NeoMME chat templates must use the `task` variable to distinguish retrieval sides.")
+
         return self.tokenizer.apply_chat_template(
             conversations,
             chat_template=template,
@@ -416,6 +420,7 @@ class NeoMMEProcessor(ProcessorMixin):
             raise ValueError("Pretokenized text is not supported.")
         for value in text:
             self._validate_user_text(value)
+
         conversations = [[{"role": "user", "content": value}] for value in text]
         return self._render_template(conversations, task)
 
@@ -454,6 +459,7 @@ class NeoMMEProcessor(ProcessorMixin):
                 raise ValueError(
                     f"query_expand={expansion_length} leaves no room for content inside max_length={max_length}"
                 )
+
             sequences.append([prefix_id, *content[:content_limit], *expansion])
 
         return self._pad_sequences(sequences, padding=padding, max_length=max_length, return_tensors=return_tensors)
@@ -506,6 +512,7 @@ class NeoMMEProcessor(ProcessorMixin):
         """
         if is_valid_image(images):
             images = [images]
+
         return_tensors = kwargs.setdefault("return_tensors", "pt")
         image_inputs = self.image_processor(images=images, **kwargs)
         image_grid_hw = image_inputs.pop("image_grid_hw")
@@ -521,6 +528,7 @@ class NeoMMEProcessor(ProcessorMixin):
             self.replace_image_token({"image_grid_hw": image_grid_hw}, index) for index in range(len(image_grid_hw))
         ]
         rendered_text, _ = self.get_text_with_replacements(list(rendered_text), images_replacements=replacements)
+
         sequences = self.tokenizer(rendered_text, add_special_tokens=False)["input_ids"]
         if len(sequences) != len(image_grid_hw):
             raise ValueError(f"Got {len(sequences)} image prompts for {len(image_grid_hw)} images.")
@@ -560,6 +568,7 @@ class NeoMMEProcessor(ProcessorMixin):
             while self.image_placeholder in sample:
                 sample = sample.replace(self.image_placeholder, next(replacements), 1)
             text[index] = sample
+
         if any(self.image_placeholder in sample for sample in text):
             raise ValueError("An image placeholder remained after replacement.")
         return text, []
@@ -642,8 +651,10 @@ class NeoMMEProcessor(ProcessorMixin):
         missing = [name for name, token_id in ids.items() if token_id is None or token_id == unknown_id]
         if missing:
             raise ValueError(f"The tokenizer is missing NeoMME marker tokens: {missing}")
+
         if len(set(ids.values())) != len(ids):
             raise ValueError("NeoMME query, document, image, row, and mask markers must use distinct token IDs.")
+
         pad_token_id = self.tokenizer.pad_token_id
         if ids["image"] == (pad_token_id if pad_token_id is not None else 0):
             raise ValueError("The NeoMME image marker must not use the padding token ID.")
@@ -684,6 +695,7 @@ class NeoMMEProcessor(ProcessorMixin):
                     "attention_mask": [[1] * len(ids) for ids in sequences],
                 }
             )
+
         length = self._padded_length([len(ids) for ids in sequences], padding, max_length)
         pad_token_id = self.tokenizer.pad_token_id or 0
 
@@ -711,6 +723,7 @@ class NeoMMEProcessor(ProcessorMixin):
                     "would drop tokens."
                 )
             return max_length
+
         if padding in (False, "do_not_pad") and longest != min(lengths):
             raise ValueError(
                 "padding=False cannot return a single tensor for rows of different lengths. Pass "
@@ -725,11 +738,13 @@ class NeoMMEProcessor(ProcessorMixin):
         }
         if text_kwargs.get("truncation") not in (None, False, "do_not_truncate") and "max_length" not in supported:
             supported["max_length"] = self.tokenizer.model_max_length
+
         if text_kwargs.get("truncation") is False and text_kwargs.get("max_length") is not None:
             raise ValueError(
                 "truncation=False with a max_length is not supported: the marker and query-expansion layout "
                 "is fixed, so content past max_length is always dropped."
             )
+
         unsupported = sorted((set(text_kwargs) & requested) - set(supported) - {"truncation"})
         if unsupported:
             raise ValueError(f"NeoMMEProcessor does not implement these text kwargs: {unsupported}.")
