@@ -374,36 +374,3 @@ class CohereCompassModelTest(VLMModelTest, unittest.TestCase):
                 mm_token_type_ids=mm_token_type_ids,
             )
         self.assertEqual(output.logits.shape[:2], input_ids.shape)
-
-    @unittest.skip("TODO: compass configures RoPE per layer type")
-    def test_model_rope_scaling_frequencies(self):
-        pass
-
-    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
-    @unittest.skip("TODO: compass configures RoPE per layer type")
-    def test_model_rope_scaling_from_config(self):
-        pass
-
-    @unittest.skip("CohereCompass uses data-dependent control flow incompatible with torch.export")
-    def test_torch_export_dynamic(self):
-        pass
-
-    @unittest.skip("CohereCompass uses data-dependent control flow incompatible with torch.export")
-    def test_torch_export_generate_dynamic(self):
-        pass
-
-    @unittest.skip("CohereCompass uses data-dependent control flow incompatible with torch.export")
-    def test_torch_export_generate_dynamic_static_cache(self):
-        pass
-
-    @unittest.skip("CohereCompass uses data-dependent control flow incompatible with torch.export")
-    def test_torch_export_generate_static(self):
-        pass
-
-    @unittest.skip("CohereCompass uses data-dependent control flow incompatible with torch.export")
-    def test_torch_export_generate_static_static_cache(self):
-        pass
-
-    @unittest.skip("CohereCompass uses data-dependent control flow incompatible with torch.export")
-    def test_torch_export_static(self):
-        pass
