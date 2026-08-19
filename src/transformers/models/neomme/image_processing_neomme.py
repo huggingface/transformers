@@ -48,15 +48,19 @@ class NeoMMEImageProcessorKwargs(ImagesKwargs, total=False):
 
 
 def convert_image_to_patches(images: "torch.Tensor", patch_size: int) -> "torch.Tensor":
-    """Convert a batch of NCHW images into flattened, row-major patches."""
+    """
+    Convert 3D array image of shape (image_height, image_width, num_channels) into 2D array of patches of shape
+    (num_patches_height * num_patches_width, patch_size * patch_size * num_channels).
+    """
     batch_size, num_channels, image_height, image_width = images.shape
     num_patches_height = image_height // patch_size
     num_patches_width = image_width // patch_size
-    patched_images = images.reshape(
+    patched_image = images.reshape(
         batch_size, num_channels, num_patches_height, patch_size, num_patches_width, patch_size
     )
-    patched_images = patched_images.permute(0, 2, 4, 3, 5, 1)
-    return patched_images.reshape(batch_size, num_patches_height * num_patches_width, -1)
+    patched_image = patched_image.permute(0, 2, 4, 3, 5, 1)
+    patched_image = patched_image.reshape(batch_size, num_patches_height * num_patches_width, -1)
+    return patched_image
 
 
 def _validate_image_dimensions(height: int, width: int) -> None:

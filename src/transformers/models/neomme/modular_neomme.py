@@ -45,24 +45,13 @@ from ...utils.output_capturing import capture_outputs
 from ..gemma4.modeling_gemma4 import Gemma4RMSNorm
 from ..gpt_neox.modeling_gpt_neox import apply_rotary_pos_emb
 from ..laguna.modeling_laguna import LagunaRotaryEmbedding
+from ..lfm2_vl.image_processing_lfm2_vl import convert_image_to_patches
 from ..llama.modeling_llama import eager_attention_forward, repeat_kv
 from ..nemotron.modeling_nemotron import NemotronMLP
 from .configuration_neomme import NeoMMEConfig
 
 
 logger = logging.get_logger(__name__)
-
-
-def convert_image_to_patches(images: "torch.Tensor", patch_size: int) -> "torch.Tensor":
-    """Convert a batch of NCHW images into flattened, row-major patches."""
-    batch_size, num_channels, image_height, image_width = images.shape
-    num_patches_height = image_height // patch_size
-    num_patches_width = image_width // patch_size
-    patched_images = images.reshape(
-        batch_size, num_channels, num_patches_height, patch_size, num_patches_width, patch_size
-    )
-    patched_images = patched_images.permute(0, 2, 4, 3, 5, 1)
-    return patched_images.reshape(batch_size, num_patches_height * num_patches_width, -1)
 
 
 def _validate_image_dimensions(height: int, width: int) -> None:
