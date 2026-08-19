@@ -368,7 +368,7 @@ class MtpModel(PreTrainedModel):
     _supports_flex_attn = True
     _supports_flash_attn = True
     # Since the embedding/head are shared with main model, silence any warning if they are provided again
-    _keys_to_ignore_on_load_unexpected = ["shared_head.head.weight", "embed_tokens.weight"]
+    _keys_to_ignore_on_load_unexpected = ["shared_head.head.weight", "embed_tokens.weight", r"\.shared_head\.output\."]
     # Silence as well when not provided, since one again we take them from main model
     _keys_to_ignore_on_load_missing = ["shared_head.weight", "embed_tokens.weight"]
 
@@ -429,8 +429,8 @@ class MtpModel(PreTrainedModel):
         self, layer_idx: int, inputs_embeds: torch.Tensor, mtp_cache: MtpCache, position_ids: torch.Tensor
     ):
         """
-        Create the (potentially several) masks required for layer `layer_idx`. This relies on the `layer_type`
-        attribute of the mtp layer if any, otherwise simply create a causal mask for full attention.
+        Create the (potentially several) masks required for layer `layer_idx`. This relies on the layer type
+        of the mtp layer if any, otherwise simply create a causal mask for full attention.
         """
         # Note that `_assisted_decoding` raises on batch_size > 1, so there is no padding mask to add
         mask_kwargs = {
@@ -443,7 +443,8 @@ class MtpModel(PreTrainedModel):
             "layer_idx": layer_idx,
         }
 
-        mtp_layer_type = getattr(self.layers[layer_idx], "layer_type", None)
+        _layer_types = getattr(self.config, "layer_types", None)
+        mtp_layer_type = _layer_types[layer_idx] if _layer_types is not None else None
         masks = {}
         if mtp_layer_type is not None and mtp_layer_type in LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING:
             mask_function = LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING[mtp_layer_type]
@@ -499,15 +500,14 @@ class MtpModel(PreTrainedModel):
         drafted_logits = []
         drafted_tokens = []
         loss = None
+        mtp_layer_types = getattr(self.config, "layer_types", None)
         for i, mtp_layer in enumerate(self.layers):
-            # We need to recompute those every layer since they change
             inputs_embeds = self.embed_tokens(input_ids).to(last_hidden_states.device)
-            # For models with per-layer-type RoPE, read the layer type from the decoder so rotary_emb
-            # can dispatch to correct inv_freq.
-            layer_type = getattr(mtp_layer.mtp_block, "attention_type", None) or getattr(
-                mtp_layer.mtp_block, "layer_type", None
+            position_embeddings = (
+                self.rotary_emb(inputs_embeds, position_ids=position_ids, layer_type=mtp_layer_types[i] if mtp_layer_types is not None else None)
+                if self.rotary_emb is not None
+                else None
             )
-            position_embeddings = self.rotary_emb(inputs_embeds, position_ids=position_ids, layer_type=layer_type)
 
             # In full generality, we may need to recompute masks for every layer due to the position offset of each layer
             masks = self.create_masks_for_mtp_layer(i, inputs_embeds, mtp_cache, position_ids)

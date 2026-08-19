@@ -781,21 +781,7 @@ class Step3p7VisionModel(Step3p7PreTrainedModel):
 class Step3p7RotaryEmbedding(LagunaRotaryEmbedding):
     # `LagunaRotaryEmbedding` is `Gemma3RotaryEmbedding` plus `partial_rotary_factor` support
     # (Gemma3 itself never needs partial rotation; Step3p7's full-attention layers do).
-
-    def forward(self, x, position_ids, layer_type=None):
-        if layer_type is None:
-            # `MtpModel` calls rotary_emb without `layer_type`; Step3p7's MTP layers are always
-            # `full_attention. Otherwise the single-type model 
-            if "full_attention" in self.layer_types:
-                layer_type = "full_attention"
-            elif len(self.layer_types) == 1:
-                layer_type = self.layer_types[0]
-            else:
-                raise ValueError(
-                    f"`layer_type` must be provided when multiple layer types are registered and none is "
-                    f"`full_attention`: {self.layer_types}"
-                )
-        return super().forward(x, position_ids, layer_type)
+    pass
 
 
 class Step3p7RMSNorm(MiniMaxM3VLRMSNorm):
@@ -1004,16 +990,7 @@ class Step3p7Model(DeepseekOcr2Model):
 
 class Step3p7ForConditionalGeneration(DeepseekOcr2ForConditionalGeneration):
     config: Step3p7Config
-    # Class-level patterns for the real checkpoint's trailing MTP layers (layers 45–47 on the
-    # 45-layer Flash checkpoint). `test_generate_with_mtp` reads the class attribute to decide
-    # whether to run; `Step3p7TextModel.__init__` extends the set with the config-specific indices.
-    # Note: dots are intentionally unescaped so the skip-check regex `re.search(r"layers\.\d+", x)`
-    # matches the literal substring; as regexes they still filter the correct weight keys.
-    _keys_to_ignore_on_load_unexpected = [
-        "model.language_model.layers.45.",
-        "model.language_model.layers.46.",
-        "model.language_model.layers.47.",
-    ]
+    _keys_to_ignore_on_load_unexpected = [r"model\.language_model\.layers\.(45|46|47)\..*"]
 
 
 @auto_docstring
