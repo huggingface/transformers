@@ -141,6 +141,38 @@ _MODEL_TO_CONVERSION_PATTERN = {
 }
 
 
+# MTP weights always load into the same `MtpModel` class, but each main model type names them differently in
+# its checkpoints, so they get their own conversion level keyed by the text `model_type`.
+# Deepseek-style checkpoints nest the shared head inside the decoder block, `MtpLayer` holds it next to it
+_MTP_DEEPSEEK_STYLE_RENAMINGS = [
+    WeightRenaming(source_patterns=".mtp_block.shared_head.norm.", target_patterns=".post_norm."),
+]
+
+# Inkling checkpoints store `layers.{k}.hidden_norm/embed_norm/input_proj` and the decoder block under
+# `layers.{k}.transformer_block.`, the main-model conversions (applied after) rename the block internals
+_MTP_INKLING_RENAMINGS = [
+    WeightRenaming(source_patterns=r"\.hidden_norm\.", target_patterns=r".hnorm."),
+    WeightRenaming(source_patterns=r"\.embed_norm\.", target_patterns=r".enorm."),
+    WeightRenaming(source_patterns=r"\.input_proj\.", target_patterns=r".eh_proj."),
+    WeightRenaming(source_patterns=r"^chain_norm\.", target_patterns=r"shared_post_norm."),
+    WeightRenaming(source_patterns=r"layers\.(\d+)\.transformer_block\.", target_patterns=r"layers.\1.mtp_block."),
+]
+
+_MTP_CONVERSION_MAPPING = {
+    "deepseek_v3": _MTP_DEEPSEEK_STYLE_RENAMINGS,
+    "glm4_moe": _MTP_DEEPSEEK_STYLE_RENAMINGS,
+    "glm_ocr_text": _MTP_DEEPSEEK_STYLE_RENAMINGS,
+    "inkling_text": _MTP_INKLING_RENAMINGS,
+}
+
+# Every model type carries these, before its own renamings
+_MTP_PREFIX_CHANGES = [
+    PrefixChange(prefix_to_remove="model"),
+    PrefixChange(prefix_to_remove="language_model"),
+    PrefixChange(prefix_to_remove="mtp"),
+]
+
+
 def _build_checkpoint_conversion_mapping():
     mapping = {
         # Cosmos3 Edge's composite checkpoint stores its dense reasoner text tower as conventional attention + MLP
@@ -1778,47 +1810,15 @@ def get_checkpoint_conversion_mapping(model_type):
 
 def get_mtp_conversion_mapping(model_type: str) -> list[WeightTransform]:
     """
-    Return the MTP weight conversions for a text `model_type`. Each model family names its mtp weights
-    differently, so the renamings are registered per model_type to avoid conflicts between families.
+    Return the MTP weight conversions registered for a text `model_type`, raising if it has none.
     """
-    deepseek_style_renamings = [
-        WeightRenaming(source_patterns=".shared_head.norm.", target_patterns=".post_norm."),
-    ]
-    # Inkling checkpoints store `layers.{k}.hidden_norm/embed_norm/input_proj` and the decoder block under
-    # `layers.{k}.transformer_block.`, the main-model conversions (applied after) rename the block internals
-    inkling_renamings = [
-        WeightRenaming(source_patterns=r"\.hidden_norm\.", target_patterns=r".hnorm."),
-        WeightRenaming(source_patterns=r"\.embed_norm\.", target_patterns=r".enorm."),
-        WeightRenaming(source_patterns=r"\.input_proj\.", target_patterns=r".eh_proj."),
-        WeightRenaming(source_patterns=r"^chain_norm\.", target_patterns=r"shared_post_norm."),
-        WeightRenaming(source_patterns=r"layers\.(\d+)\.transformer_block\.", target_patterns=r"layers.\1.mtp_block."),
-    ]
-    mtp_renamings = {
-        "deepseek_v3": deepseek_style_renamings,
-        "glm4_moe": deepseek_style_renamings,
-        "glm_ocr_text": deepseek_style_renamings,
-        "inkling_text": inkling_renamings,
-    }
-    if model_type not in mtp_renamings:
+    if model_type not in _MTP_CONVERSION_MAPPING:
         raise ValueError(
             f"No MTP weight conversions are registered for model_type `{model_type}`. Add an entry for it in "
-            "`get_mtp_conversion_mapping`."
+            "`_MTP_CONVERSION_MAPPING`."
         )
-    prefix_changes = [
-        PrefixChange(prefix_to_remove="model"),
-        PrefixChange(prefix_to_remove="language_model"),
-        PrefixChange(prefix_to_remove="mtp"),
-    ]
-    # `MtpModel.from_pretrained` renames every `layers.{N}.` weight to `layers.{k}.mtp_block.`, but
-    # enorm/hnorm/eh_proj/post_norm are attributes of `MtpLayer`, not of `mtp_block` so werename them back.
-    # Applied after the per-family renamings so the renamed weights are moved back too
-    mtp_block_pullbacks = [
-        WeightRenaming(source_patterns=".mtp_block.enorm.", target_patterns=".enorm."),
-        WeightRenaming(source_patterns=".mtp_block.hnorm.", target_patterns=".hnorm."),
-        WeightRenaming(source_patterns=".mtp_block.eh_proj.", target_patterns=".eh_proj."),
-        WeightRenaming(source_patterns=".mtp_block.post_norm.", target_patterns=".post_norm."),
-    ]
-    return prefix_changes + mtp_renamings[model_type] + mtp_block_pullbacks
+    # Deepcopy as the transforms are stateful, and these lists are shared between model types
+    return deepcopy(_MTP_PREFIX_CHANGES + _MTP_CONVERSION_MAPPING[model_type])
 
 
 USER_REGISTERED_MAPPINGS = set()

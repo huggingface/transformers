@@ -630,16 +630,23 @@ class MtpModel(PreTrainedModel):
                 ):
                     mtp_state_dict[k] = file_pointer.get_slice(k)  # don't materialize yet
 
-        # For the correct conversions, we need first the mtp-specific renamings, then the main_model conversions
-        # Note that since the layer numbers are dynamic, we cannot register those conversions - we also add the `mtp_block`
-        # part for all weights since we cannot distinguish easily those that are under the main model's block or not. It will
-        # be removed after for the few that should not have it
-        weight_conversions = [
-            WeightRenaming(
-                source_patterns=f"layers.{N}.", target_patterns=f"layers.{N - num_hidden_layers}.mtp_block."
+        # For the correct conversions, we need first the mtp-specific renamings, then the main_model conversions.
+        # The layer numbers are dynamic, so those conversions cannot be registered. `MtpLayer` holds the decoder
+        # block under `mtp_block` next to its own modules, so renumber those modules first, every remaining weight
+        # of the layer belongs to the block. Renamings are applied in order and a renumbered key no longer matches
+        # the block renaming below.
+        weight_conversions = []
+        for N in range(num_hidden_layers, num_hidden_layers + num_mtp_layers):
+            mtp_layer_idx = N - num_hidden_layers
+            weight_conversions += [
+                WeightRenaming(
+                    source_patterns=f"layers.{N}.{module}.", target_patterns=f"layers.{mtp_layer_idx}.{module}."
+                )
+                for module in ("enorm", "hnorm", "eh_proj", "post_norm")
+            ]
+            weight_conversions.append(
+                WeightRenaming(source_patterns=f"layers.{N}.", target_patterns=f"layers.{mtp_layer_idx}.mtp_block.")
             )
-            for N in range(num_hidden_layers, num_hidden_layers + num_mtp_layers)
-        ]
         weight_conversions.extend(get_mtp_conversion_mapping(mtp_model.config.model_type))
         weight_conversions.extend(main_model._weight_conversions)
 
