@@ -248,7 +248,7 @@ class Qwen3TTSTokenizerMultiCodebookIntegrationTest(unittest.TestCase):
         from transformers.testing_utils import cleanup
 
         cleanup(torch_device, gc_collect=True)
-        cls.checkpoint = "qwen3_tts_tokenizer_mc_converted"
+        cls.checkpoint = "shahvandit/qwen3-tts-tokenizer-multi-codebook-hf"
 
     def tearDown(self):
         from transformers.testing_utils import cleanup
