@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was published in HF papers on 2025-08-16 and contributed to Hugging Face Transformers on 2026-08-18.*
+*This model was published in HF papers on 2025-08-16 and contributed to Hugging Face Transformers on 2026-07-31.*
 
 # Ovis2.5
 
@@ -32,30 +32,21 @@ Two checkpoints are available:
 
 > [!IMPORTANT]
 > The released repositories still contain legacy SigLIP processor metadata, so [`AutoProcessor`] cannot select the
-> native Ovis2.5 components yet. Instantiate the native image and video processors explicitly and pass them to
-> [`Ovis2_5Processor`], as shown below. The model weights are converted on the fly by the registered loading mapping.
+> native Ovis2.5 components yet. Load [`Ovis2_5Processor`] explicitly as shown below; it replaces the legacy metadata
+> with the native image and video processors. The model weights are converted on the fly by the registered loading
+> mapping.
 
 ## Image inference
 
 Use [`Ovis2_5Processor.apply_chat_template`] to load the image, format the conversation, and tokenize it in one call.
-For the 9B checkpoint, replace the model ID and set `longest_edge` to `1792 * 1792`.
+For the 9B checkpoint, replace the model ID.
 
 ```python
-from transformers import (
-    Ovis2_5ForConditionalGeneration,
-    Ovis2_5ImageProcessor,
-    Ovis2_5Processor,
-    Ovis2_5VideoProcessor,
-)
+from transformers import Ovis2_5ForConditionalGeneration, Ovis2_5Processor
 
 
 model_id = "AIDC-AI/Ovis2.5-2B"
-size = {"shortest_edge": 448 * 448, "longest_edge": 1344 * 1792}
-processor = Ovis2_5Processor.from_pretrained(
-    model_id,
-    image_processor=Ovis2_5ImageProcessor(size=size),
-    video_processor=Ovis2_5VideoProcessor(size=size),
-)
+processor = Ovis2_5Processor.from_pretrained(model_id)
 model = Ovis2_5ForConditionalGeneration.from_pretrained(
     model_id,
     device_map="auto",
