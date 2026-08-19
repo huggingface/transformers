@@ -55,7 +55,7 @@ def _as_padded_grids(embeddings: torch.Tensor | list[torch.Tensor]) -> tuple[tor
     return _pad_grids(list(embeddings))
 
 
-def maxsim_scores(
+def _maxsim_scores(
     query_grids: torch.Tensor,
     passage_grids: torch.Tensor,
     query_mask: torch.Tensor,
@@ -76,6 +76,68 @@ def maxsim_scores(
     if normalize:
         scores = scores / query_mask.sum(-1, keepdim=True).clamp_min(1).to(scores.dtype)
     return scores.masked_fill(~passage_mask.any(dim=-1)[None, :], -1.0)
+
+
+def _maxsim_in_blocks(
+    query_embeddings: torch.Tensor | list[torch.Tensor],
+    passage_embeddings: torch.Tensor | list[torch.Tensor],
+    batch_size: int,
+    normalize: bool,
+    output_device: str | torch.device,
+) -> torch.Tensor:
+    """Compute MaxSim scores in query-passage blocks."""
+    rows: list[torch.Tensor] = []
+    for query_start in range(0, len(query_embeddings), batch_size):
+        query_block = query_embeddings[query_start : query_start + batch_size]
+        query_grids, query_mask = _as_padded_grids(query_block)
+        columns: list[torch.Tensor] = []
+        for passage_start in range(0, len(passage_embeddings), batch_size):
+            passage_block = passage_embeddings[passage_start : passage_start + batch_size]
+            passage_grids, passage_mask = _as_padded_grids(passage_block)
+            scores = _maxsim_scores(
+                query_grids,
+                passage_grids,
+                query_mask,
+                passage_mask,
+                normalize=normalize,
+            )
+            columns.append(scores.to(output_device))
+        rows.append(torch.cat(columns, dim=1))
+    return torch.cat(rows, dim=0)  # (num_queries, num_passages)
+
+
+def _embedding_kind(embeddings: torch.Tensor | list[torch.Tensor], name: str) -> tuple[str, int]:
+    """Validate one embedding collection and return its representation kind and dimension."""
+    if isinstance(embeddings, torch.Tensor):
+        if embeddings.dim() == 2:
+            return "dense", embeddings.shape[-1]
+        if embeddings.dim() == 3:
+            return "multi-vector", embeddings.shape[-1]
+        raise ValueError(
+            f"`{name}` must be a 2-D dense tensor or a 3-D multi-vector tensor, got {embeddings.dim()}-D."
+        )
+
+    if any(not isinstance(embedding, torch.Tensor) for embedding in embeddings):
+        raise ValueError(f"`{name}` must contain tensors.")
+    ranks = {embedding.dim() for embedding in embeddings}
+    if len(ranks) != 1:
+        raise ValueError(f"`{name}` must contain tensors of one consistent rank, got {sorted(ranks)}.")
+    rank = ranks.pop()
+    if rank == 1:
+        kind = "dense"
+    elif rank == 2:
+        kind = "multi-vector"
+    else:
+        raise ValueError(f"`{name}` must contain 1-D dense vectors or 2-D multi-vector grids, got {rank}-D entries.")
+
+    dimensions = {embedding.shape[-1] for embedding in embeddings}
+    if len(dimensions) != 1:
+        raise ValueError(f"`{name}` must use one consistent embedding dimension, got {sorted(dimensions)}.")
+    return kind, dimensions.pop()
+
+
+def _as_dense(embeddings: torch.Tensor | list[torch.Tensor]) -> torch.Tensor:
+    return embeddings if isinstance(embeddings, torch.Tensor) else torch.stack(list(embeddings))  # (batch_size, dim)
 
 
 class NeoMMEProcessorKwargs(ProcessingKwargs, total=False):
@@ -273,45 +335,49 @@ class NeoMMEProcessor(ProcessorMixin):
             isinstance(conversation, (list, tuple)) and conversation and isinstance(conversation[0], (list, tuple))
         )
         conversations = conversation if is_batched else [conversation]
-        modalities = set()
-
-        for messages in conversations:
-            if not messages:
-                raise ValueError("Each NeoMME chat conversation must contain at least one message.")
-            has_text = False
-            image_count = 0
-            for message in messages:
-                content = message.get("content") or []
-                if isinstance(content, str):
-                    self._validate_user_text(content)
-                    has_text = has_text or bool(content)
-                    continue
-                for item in content:
-                    content_type = item.get("type")
-                    if content_type == "text":
-                        item_text = item.get("text") or ""
-                        self._validate_user_text(item_text)
-                        has_text = has_text or bool(item_text)
-                    elif content_type in {"image", "image_url"}:
-                        if require_image_source and not self._has_image_source(item):
-                            raise ValueError(
-                                "Tokenized NeoMME image content must provide an image, URL, path, or base64 value."
-                            )
-                        image_count += 1
-                    else:
-                        raise ValueError(f"NeoMME chat templates do not support content type {content_type!r}.")
-
-            if image_count and has_text:
-                raise ValueError("NeoMME cannot encode text and images in the same chat item.")
-            if image_count > 1:
-                raise ValueError("NeoMME accepts one image document per chat item.")
-            if image_count and task != "document":
-                raise ValueError("Images in chat messages must use task='document'.")
-            modalities.add("image" if image_count else "text")
+        modalities = {self._conversation_modality(messages, task, require_image_source) for messages in conversations}
 
         if len(modalities) != 1:
             raise ValueError("A NeoMME chat template batch cannot mix text and image documents.")
         return modalities.pop()
+
+    def _conversation_modality(
+        self,
+        messages: list[dict[str, Any]],
+        task: Literal["query", "document"],
+        require_image_source: bool,
+    ) -> Literal["text", "image"]:
+        """Validate one conversation and return its modality."""
+        if not messages:
+            raise ValueError("Each NeoMME chat conversation must contain at least one message.")
+
+        has_text = False
+        image_count = 0
+        for message in messages:
+            content = message.get("content") or []
+            items = [{"type": "text", "text": content}] if isinstance(content, str) else content
+            for item in items:
+                content_type = item.get("type")
+                if content_type == "text":
+                    text = item.get("text") or ""
+                    self._validate_user_text(text)
+                    has_text = has_text or bool(text)
+                elif content_type in {"image", "image_url"}:
+                    if require_image_source and not self._has_image_source(item):
+                        raise ValueError(
+                            "Tokenized NeoMME image content must provide an image, URL, path, or base64 value."
+                        )
+                    image_count += 1
+                else:
+                    raise ValueError(f"NeoMME chat templates do not support content type {content_type!r}.")
+
+        if image_count and has_text:
+            raise ValueError("NeoMME cannot encode text and images in the same chat item.")
+        if image_count > 1:
+            raise ValueError("NeoMME accepts one image document per chat item.")
+        if image_count and task != "document":
+            raise ValueError("Images in chat messages must use task='document'.")
+        return "image" if image_count else "text"
 
     @staticmethod
     def _has_image_source(item: dict[str, Any]) -> bool:
@@ -538,8 +604,8 @@ class NeoMMEProcessor(ProcessorMixin):
         if batch_size < 1:
             raise ValueError(f"batch_size must be at least 1, got {batch_size}")
 
-        query_kind, query_dim = self._embedding_kind(query_embeddings, "query_embeddings")
-        passage_kind, passage_dim = self._embedding_kind(passage_embeddings, "passage_embeddings")
+        query_kind, query_dim = _embedding_kind(query_embeddings, "query_embeddings")
+        passage_kind, passage_dim = _embedding_kind(passage_embeddings, "passage_embeddings")
         if query_kind != passage_kind:
             raise ValueError(
                 "`query_embeddings` and `passage_embeddings` must both be dense or both be multi-vector, "
@@ -552,10 +618,10 @@ class NeoMMEProcessor(ProcessorMixin):
             )
 
         if query_kind == "multi-vector":
-            scores = self._maxsim_in_blocks(query_embeddings, passage_embeddings, batch_size, normalize, output_device)
+            scores = _maxsim_in_blocks(query_embeddings, passage_embeddings, batch_size, normalize, output_device)
         else:
-            queries = self._as_dense(query_embeddings)  # (num_queries, dim)
-            passages = self._as_dense(passage_embeddings)  # (num_passages, dim)
+            queries = _as_dense(query_embeddings)  # (num_queries, dim)
+            passages = _as_dense(passage_embeddings)  # (num_passages, dim)
             scores = (
                 torch.nn.functional.normalize(queries.float(), dim=-1)
                 @ torch.nn.functional.normalize(passages.float(), dim=-1).t()
@@ -668,70 +734,6 @@ class NeoMMEProcessor(ProcessorMixin):
         if unsupported:
             raise ValueError(f"NeoMMEProcessor does not implement these text kwargs: {unsupported}.")
         return supported
-
-    def _maxsim_in_blocks(
-        self,
-        query_embeddings: torch.Tensor | list[torch.Tensor],
-        passage_embeddings: torch.Tensor | list[torch.Tensor],
-        batch_size: int,
-        normalize: bool,
-        output_device: str | torch.device,
-    ) -> torch.Tensor:
-        """Compute MaxSim scores in query-passage blocks."""
-        rows: list[torch.Tensor] = []
-        for query_start in range(0, len(query_embeddings), batch_size):
-            query_block = query_embeddings[query_start : query_start + batch_size]
-            query_grids, query_mask = _as_padded_grids(query_block)
-            columns: list[torch.Tensor] = []
-            for passage_start in range(0, len(passage_embeddings), batch_size):
-                passage_block = passage_embeddings[passage_start : passage_start + batch_size]
-                passage_grids, passage_mask = _as_padded_grids(passage_block)
-                scores = maxsim_scores(
-                    query_grids,
-                    passage_grids,
-                    query_mask,
-                    passage_mask,
-                    normalize=normalize,
-                )
-                columns.append(scores.to(output_device))
-            rows.append(torch.cat(columns, dim=1))
-        return torch.cat(rows, dim=0)  # (num_queries, num_passages)
-
-    def _embedding_kind(self, embeddings: torch.Tensor | list[torch.Tensor], name: str) -> tuple[str, int]:
-        """Validate one embedding collection and return its representation kind and dimension."""
-        if isinstance(embeddings, torch.Tensor):
-            if embeddings.dim() == 2:
-                return "dense", embeddings.shape[-1]
-            if embeddings.dim() == 3:
-                return "multi-vector", embeddings.shape[-1]
-            raise ValueError(
-                f"`{name}` must be a 2-D dense tensor or a 3-D multi-vector tensor, got {embeddings.dim()}-D."
-            )
-
-        if any(not isinstance(embedding, torch.Tensor) for embedding in embeddings):
-            raise ValueError(f"`{name}` must contain tensors.")
-        ranks = {embedding.dim() for embedding in embeddings}
-        if len(ranks) != 1:
-            raise ValueError(f"`{name}` must contain tensors of one consistent rank, got {sorted(ranks)}.")
-        rank = ranks.pop()
-        if rank == 1:
-            kind = "dense"
-        elif rank == 2:
-            kind = "multi-vector"
-        else:
-            raise ValueError(
-                f"`{name}` must contain 1-D dense vectors or 2-D multi-vector grids, got {rank}-D entries."
-            )
-
-        dimensions = {embedding.shape[-1] for embedding in embeddings}
-        if len(dimensions) != 1:
-            raise ValueError(f"`{name}` must use one consistent embedding dimension, got {sorted(dimensions)}.")
-        return kind, dimensions.pop()
-
-    def _as_dense(self, embeddings: torch.Tensor | list[torch.Tensor]) -> torch.Tensor:
-        return (
-            embeddings if isinstance(embeddings, torch.Tensor) else torch.stack(list(embeddings))
-        )  # (batch_size, dim)
 
 
 __all__ = ["NeoMMEProcessor"]
