@@ -833,6 +833,28 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         self.assertGreater(captured_seqlens[0].numel(), captured_seqlens[1].numel())
         torch.testing.assert_close(captured_seqlens[1], torch.tensor([0, 32], dtype=torch.int32, device=torch_device))
 
+    def test_vision_window_order_is_restored_without_layers(self):
+        """Window packing is reversed before returning packed image and video patches."""
+        config = self.model_tester.get_vision_config()
+        config.num_hidden_layers = 0
+        config.layer_types = []
+        config.image_size = 8
+        config.window_size = 8
+        model = Ovis2_5VisionModel(config).to(torch_device).eval()
+        grid_thw = torch.tensor([[1, 4, 8], [2, 4, 4]], dtype=torch.long, device=torch_device)
+        pixel_values = torch.randn(
+            int(grid_thw.prod(dim=1).sum()),
+            config.num_channels * config.patch_size**2,
+            device=torch_device,
+        )
+
+        with torch.no_grad():
+            embeddings = model.embeddings(pixel_values, grid_thw)
+            outputs = model(pixel_values=pixel_values, grid_thw=grid_thw)
+
+        torch.testing.assert_close(outputs.pooler_output, embeddings)
+        torch.testing.assert_close(outputs.last_hidden_state, model.post_layernorm(embeddings))
+
     def test_vision_rotary_embedding_initialization(self):
         config = self.model_tester.get_vision_config()
         model = Ovis2_5VisionModel(config)
@@ -918,6 +940,8 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
             (config.vision_config.vocab_size, config.text_config.hidden_size),
         )
         self.assertIn("model.vision_tower.embeddings.patch_embedding.weight", state_dict)
+        self.assertIn("model.vision_tower.encoder.layers.0.self_attn.q_proj.weight", state_dict)
+        self.assertIn("model.vision_tower.post_layernorm.weight", state_dict)
         self.assertIn("model.visual_tokenizer.head_linear.weight", state_dict)
         self.assertIn("model.visual_tokenizer.head_norm.weight", state_dict)
         self.assertIn("model.visual_tokenizer.head_norm.bias", state_dict)
