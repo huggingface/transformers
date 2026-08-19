@@ -33,16 +33,10 @@ class NeoMMEConfig(PreTrainedConfig):
     embedding_rank (`int`, *optional*, defaults to 256):
         Width of the factorized token embedding table before projection to `hidden_size`.
     layer_types (`list[str]`, *optional*):
-        Attention type for each layer. Use `"full_attention"` or `"sliding_attention"`. When set, this list must
-        contain one value per layer. By default, every sixth layer and the final layer use full attention.
+        By default, every sixth layer and the final layer use full attention.
     rope_parameters (`dict`, *optional*):
         Rotary-position settings for `"full_attention"` and `"sliding_attention"` layers. The rotated dimensions,
         `head_dim * partial_rotary_factor`, must be a positive multiple of four.
-    sliding_window_short (`int`, *optional*, defaults to 256):
-        Number of tokens on either side that a short sliding-attention layer can attend to.
-    sliding_window_long (`int`, *optional*, defaults to 1024):
-        Number of tokens on either side that a long sliding-attention layer can attend to. Short and long windows
-        alternate between full-attention layers.
     residual_multiplier (`float`, *optional*):
         Scale applied to attention and MLP residual branches. Defaults to `1 / sqrt(2 * num_hidden_layers)`.
     embedding_dim (`int`, *optional*, defaults to 128):
