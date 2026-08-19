@@ -165,7 +165,52 @@ class NeoMMERotaryEmbedding(nn.Module):
         column_angles = position_ids[1].float().unsqueeze(-1) * inv_freq[1::2]  # (batch, seq, rotary_dim // 4)
 
         angles = torch.stack([row_angles, column_angles], dim=-1).flatten(-2)  # (batch, seq, rotary_dim // 2)
-        return angles.cos() * attention_scaling, angles.sin() * attention_scaling
+        cos = (angles.cos() * attention_scaling).to(hidden_states.dtype)
+        sin = (angles.sin() * attention_scaling).to(hidden_states.dtype)
+        return torch.cat([cos, cos], dim=-1), torch.cat([sin, sin], dim=-1)
+
+
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors.
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+
+    # Keep half or full tensor for later concatenation
+    rotary_dim = cos.shape[-1]
+    q_rot, q_pass = q[..., :rotary_dim], q[..., rotary_dim:]
+    k_rot, k_pass = k[..., :rotary_dim], k[..., rotary_dim:]
+
+    # Apply rotary embeddings on the first half or full tensor
+    q_embed = (q_rot * cos) + (rotate_half(q_rot) * sin)
+    k_embed = (k_rot * cos) + (rotate_half(k_rot) * sin)
+
+    # Concatenate back to full shape
+    q_embed = torch.cat([q_embed, q_pass], dim=-1)
+    k_embed = torch.cat([k_embed, k_pass], dim=-1)
+    return q_embed, k_embed
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -205,35 +250,6 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-def apply_interleaved_rotary_pos_emb(
-    hidden_states: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, rotary_dim: int, unsqueeze_dim: int = 2
-) -> torch.Tensor:
-    """Apply interleaved rotary position embeddings to query or key states.
-
-    NeoMME rotates even/odd dimension pairs rather than the first/second half split
-    used by most models in `transformers`.
-
-    Args:
-        hidden_states (`torch.Tensor` of shape `(batch_size, seq_len, num_heads, head_dim)`):
-            Query or key states, heads-last.
-        cos (`torch.Tensor` of shape `(batch_size, seq_len, rotary_dim // 2)`):
-            Cosine of the interleaved two-axis angles.
-        sin (`torch.Tensor` of shape `(batch_size, seq_len, rotary_dim // 2)`):
-            Sine of the interleaved two-axis angles.
-        rotary_dim (`int`):
-            Number of leading head dims to rotate; the rest pass through unchanged.
-        unsqueeze_dim (`int`, *optional*, defaults to 2):
-            Dimension `cos`/`sin` are unsqueezed at to broadcast over the head axis.
-    """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    rotary_states = hidden_states[..., :rotary_dim].float()
-    pass_through = hidden_states[..., rotary_dim:].float()
-    first, second = rotary_states[..., 0::2], rotary_states[..., 1::2]
-    rotated = torch.stack([first * cos - second * sin, first * sin + second * cos], dim=-1).flatten(-2)
-    return torch.cat([rotated, pass_through], dim=-1).to(hidden_states.dtype)
-
-
 class NeoMMEAttention(nn.Module):
     """Bidirectional grouped-query attention with QK-norm, M-RoPE, and a sigmoid output gate.
 
@@ -252,8 +268,6 @@ class NeoMMEAttention(nn.Module):
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
-        partial_rotary_factor = config.rope_parameters[self.attention_type].get("partial_rotary_factor", 1.0)
-        self.rotary_dim = int(config.head_dim * partial_rotary_factor)
         self.is_causal = False
         self.q_norm = NeoMMERMSNorm(config.head_dim, config.norm_eps, with_scale=False)
         self.k_norm = NeoMMERMSNorm(config.head_dim, config.norm_eps, with_scale=False)
@@ -292,8 +306,7 @@ class NeoMMEAttention(nn.Module):
         key_states = self.k_norm(key_states)
 
         cos, sin = position_embeddings
-        query_states = apply_interleaved_rotary_pos_emb(query_states, cos, sin, self.rotary_dim)
-        key_states = apply_interleaved_rotary_pos_emb(key_states, cos, sin, self.rotary_dim)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, unsqueeze_dim=2)
         if value_embeds is not None:
             value_states = value_states + value_embeds.view(*input_shape, self.num_key_value_heads, self.head_dim)
 

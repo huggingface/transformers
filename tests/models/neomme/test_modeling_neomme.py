@@ -45,7 +45,7 @@ if is_torch_available():
         NeoMMEEncoderLayer,
         NeoMMEMLP,
         NeoMMEPreTrainedModel,
-        apply_interleaved_rotary_pos_emb,
+        apply_rotary_pos_emb,
     )
 
 
@@ -456,15 +456,14 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertEqual(NeoMMEForMaskedLM(config).num_parameters(), NeoMMEModel(config).num_parameters())
         self.assertIsNone(NeoMMEForMaskedLM(config).get_output_embeddings())
 
-    def test_interleaved_partial_rotary(self):
-        """Rotation acts on interleaved pairs and leaves the NoPE tail untouched."""
+    def test_partial_rotary_standard_layout(self):
+        """Rotation acts on the standard half layout and leaves the NoPE tail untouched."""
         head_dim, rotary_dim = 8, 4
         states = torch.arange(head_dim, dtype=torch.float32).view(1, 1, 1, head_dim)
-        # A quarter turn on both axes: cos = 0, sin = 1 -> (x0, x1) becomes (-x1, x0).
-        cos = torch.zeros(1, 1, rotary_dim // 2)
-        sin = torch.ones(1, 1, rotary_dim // 2)
-        rotated = apply_interleaved_rotary_pos_emb(states, cos, sin, rotary_dim)
-        torch.testing.assert_close(rotated.flatten(), torch.tensor([-1.0, 0.0, -3.0, 2.0, 4.0, 5.0, 6.0, 7.0]))
+        cos = torch.zeros(1, 1, rotary_dim)
+        sin = torch.ones(1, 1, rotary_dim)
+        rotated, _ = apply_rotary_pos_emb(states, states, cos, sin, unsqueeze_dim=2)
+        torch.testing.assert_close(rotated.flatten(), torch.tensor([-2.0, -3.0, 0.0, 1.0, 4.0, 5.0, 6.0, 7.0]))
 
     def test_patch_stem_gradients(self):
         config, input_ids, pixel_values = self.model_tester.prepare_image_config_and_inputs()
