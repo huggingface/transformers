@@ -775,7 +775,7 @@ def convert_to_rgb(
 
     # np.array usually comes with ChannelDimension.LAST so let's convert it
     if input_data_format is None:
-        input_data_format = infer_channel_dimension_format(video)
+        input_data_format = infer_channel_dimension_format(video, num_channels=(1, 3, 4))
     video = to_channel_dimension_format(video, ChannelDimension.FIRST, input_channel_dim=input_data_format)
 
     # 3 channels for RGB already
@@ -787,12 +787,12 @@ def convert_to_rgb(
         return video.repeat(3, -3)
 
     if not (video[..., 3, :, :] < 255).any():
-        return video
+        return video[..., :3, :, :]
 
     # There is a transparency layer, blend it with a white background.
     # Calculate the alpha proportion for blending.
     alpha = video[..., 3, :, :] / 255.0
-    video = (1 - alpha[..., None, :, :]) * 255 + alpha[..., None, :, :] * video[..., 3, :, :]
+    video = (1 - alpha[..., None, :, :]) * 255 + alpha[..., None, :, :] * video[..., :3, :, :]
     return video
 
 
@@ -905,8 +905,12 @@ def group_videos_by_shape(
         grouped_videos[shape].append(video)
         grouped_videos_index[i] = (shape, len(grouped_videos[shape]) - 1)
 
-    # stack videos with the same size and number of frames
-    grouped_videos = {shape: torch.stack(videos, dim=0) for shape, videos in grouped_videos.items()}
+    # stack videos with the same size and number of frames. Groups holding a single video are unsqueezed instead, as
+    # stacking would copy the video for no reason.
+    grouped_videos = {
+        shape: videos[0].unsqueeze(0) if len(videos) == 1 else torch.stack(videos, dim=0)
+        for shape, videos in grouped_videos.items()
+    }
     return grouped_videos, grouped_videos_index
 
 
