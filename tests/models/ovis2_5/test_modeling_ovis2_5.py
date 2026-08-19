@@ -610,6 +610,28 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         with self.assertRaises(StrictDataclassClassValidationError):
             Ovis2_5VisionConfig(num_hidden_layers=1, layer_types=["invalid"])
 
+    def test_vision_config_converts_legacy_full_attention_indexes(self):
+        """Legacy full-attention indexes are converted without overriding native layer types."""
+        for indexes in ([1, 3], "1|3"):
+            with self.subTest(indexes=indexes):
+                config = Ovis2_5VisionConfig(num_hidden_layers=4, fullatt_block_indexes=indexes)
+                self.assertEqual(
+                    config.layer_types,
+                    ["sliding_attention", "full_attention", "sliding_attention", "full_attention"],
+                )
+                self.assertFalse(hasattr(config, "fullatt_block_indexes"))
+                self.assertNotIn("fullatt_block_indexes", config.to_dict())
+
+        config = Ovis2_5VisionConfig(num_hidden_layers=2, fullatt_block_indexes=None)
+        self.assertEqual(config.layer_types, ["full_attention", "full_attention"])
+
+        config = Ovis2_5VisionConfig(
+            num_hidden_layers=2,
+            layer_types=["sliding_attention", "full_attention"],
+            fullatt_block_indexes=[0],
+        )
+        self.assertEqual(config.layer_types, ["sliding_attention", "full_attention"])
+
     def test_legacy_subconfig_names(self):
         text_config = self.model_tester.get_text_config().to_dict()
         text_config["hidden_size"] = 2048
