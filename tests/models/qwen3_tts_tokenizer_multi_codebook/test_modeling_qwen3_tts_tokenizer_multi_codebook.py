@@ -1,4 +1,4 @@
-﻿# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -263,9 +263,8 @@ class Qwen3TTSTokenizerMultiCodebookIntegrationTest(unittest.TestCase):
     def _load_datasamples(self, num_samples):
         """Decode with soundfile and resample with torchaudio.
 
-        `reproduce_qwen3_tts_tokenizer_mc_from_original.py` loads the same samples the same
-        way, so both sides see bit-identical audio: resampling differences between backends
-        would change the codes.
+        The reproducer loads the same samples the same way, so both sides see bit-identical
+        audio: resampling differences between backends would change the codes.
         """
         import io
 
@@ -295,8 +294,9 @@ class Qwen3TTSTokenizerMultiCodebookIntegrationTest(unittest.TestCase):
     @slow
     def test_single(self):
         """
-        Ground truth generated from the original Qwen3-TTS tokenizer by
-        `reproduce_qwen3_tts_tokenizer_mc_from_original.py`.
+        Ground truth generated from the original Qwen3-TTS tokenizer.
+
+        reproducer: https://gist.github.com/ShahVandit/cab13f3b7232c52b4ff93cce592950c4#file-reproducer_qwen3_tts_multicodebook_tokenizer-py
         """
         set_seed(42)
         expected = self._load_fixture("expected_results_single.json")
@@ -332,8 +332,9 @@ class Qwen3TTSTokenizerMultiCodebookIntegrationTest(unittest.TestCase):
     @slow
     def test_batch(self):
         """
-        Ground truth generated from the original Qwen3-TTS tokenizer by
-        `reproduce_qwen3_tts_tokenizer_mc_from_original.py`.
+        Ground truth generated from the original Qwen3-TTS tokenizer.
+
+        reproducer: https://gist.github.com/ShahVandit/cab13f3b7232c52b4ff93cce592950c4#file-reproducer_qwen3_tts_multicodebook_tokenizer-py
         """
         import numpy as np
 
