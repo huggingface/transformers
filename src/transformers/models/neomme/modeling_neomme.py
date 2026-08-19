@@ -729,57 +729,6 @@ class NeoMMEForRetrieval(NeoMMEPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    def get_multivector_embeddings(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        pixel_values: torch.Tensor | None = None,
-        inputs_embeds: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        """
-        Return normalized token embeddings for late-interaction retrieval.
-
-        The method returns the `embeddings` output and does not compute dense embeddings. Padding rows are zeroed.
-        """
-        return self.forward(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            pixel_values=pixel_values,
-            inputs_embeds=inputs_embeds,
-            output_dense=False,
-            **kwargs,
-        ).embeddings
-
-    def get_dense_embeddings(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        pixel_values: torch.Tensor | None = None,
-        inputs_embeds: torch.Tensor | None = None,
-        dense_dim: int | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        """
-        Return normalized mean-pooled embeddings for dense retrieval.
-
-        The method returns the `dense_embeddings` output and does not compute token embeddings. Set `dense_dim` to
-        truncate the pooled vector before normalization.
-        """
-        return self.forward(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            pixel_values=pixel_values,
-            inputs_embeds=inputs_embeds,
-            output_multivector=False,
-            dense_dim=dense_dim,
-            **kwargs,
-        ).dense_embeddings
-
     def _multivector(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
         proj_dtype = self.embedding_proj_layer.weight.dtype
         # (batch_size, sequence_length, embedding_dim)

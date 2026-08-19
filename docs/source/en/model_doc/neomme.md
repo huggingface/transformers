@@ -114,5 +114,3 @@ print(scores)  # Expected: scores[0, 0] > scores[0, 1] and scores[1, 1] > scores
 
 [[autodoc]] NeoMMEForRetrieval
     - forward
-    - get_multivector_embeddings
-    - get_dense_embeddings
