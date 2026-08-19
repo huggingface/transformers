@@ -82,6 +82,8 @@ class Qwen4ExpTextConfig(Qwen3_5MoeTextConfig):
         Number of key heads used in linear attention layers.
     linear_num_value_heads (`int`, *optional*, defaults to 32):
         Number of value heads used in linear attention layers.
+    partial_rotary_factor (`float`, *optional*, defaults to 0.25):
+        Fraction of head_dim that gets RoPE.
     hc_count (`int`, *optional*, defaults to 4):
         Number of residual streams used by the hyper-connections.
     hc_lowrank (`int`, *optional*, defaults to 320):
@@ -200,7 +202,9 @@ class Qwen4ExpTextConfig(Qwen3_5MoeTextConfig):
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates Qwen4-Exp architecture invariants."""
-        unsupported_layer_types = sorted(set(self.layers_block_type) - {"full_attention", "linear_attention"})
+        unsupported_layer_types = sorted(
+            set(self.layer_types) - {"linear_attention", "hybrid_indexed", "deepseek_sparse_attention"}
+        )
         if unsupported_layer_types:
             raise ValueError(f"Unsupported Qwen4-Exp layer types: {unsupported_layer_types}.")
         output_gate_type = self.output_gate_type or self.hidden_act
@@ -254,22 +258,13 @@ class Qwen4ExpTextConfig(Qwen3_5MoeTextConfig):
             if self.eos_token_id is None or isinstance(self.eos_token_id, list) and not self.eos_token_id:
                 raise ValueError("eos_token_id must be set when Qwen4-Exp PLE layers are enabled.")
 
-        if self.indexer_n_heads is not None:
-            partial_rotary_factor = (self.rope_parameters or {}).get("partial_rotary_factor", 1.0)
-            rotary_dim = int(self.head_dim * partial_rotary_factor)
-            if rotary_dim > self.indexer_head_dim:
-                raise ValueError(
-                    "Qwen4-Exp attention RoPE dimensions must fit the QSA index head: "
-                    f"rotary_dim={rotary_dim}, indexer_head_dim={self.indexer_head_dim}."
-                )
-
-    @property
-    def layers_block_type(self) -> list[str]:
-        full_attention_cache_types = {"deepseek_sparse_attention", "full_attention", "hybrid", "hybrid_indexed"}
-        return [
-            "full_attention" if layer_type in full_attention_cache_types else layer_type
-            for layer_type in self.layer_types
-        ]
+        partial_rotary_factor = (self.rope_parameters or {}).get("partial_rotary_factor", 1.0)
+        rotary_dim = int(self.head_dim * partial_rotary_factor)
+        if rotary_dim > self.indexer_head_dim:
+            raise ValueError(
+                f"Qwen4-Exp attention RoPE dimensions must fit the QSA index head: rotary_dim={rotary_dim}, "
+                f"indexer_head_dim={self.indexer_head_dim}."
+            )
 
 
 @auto_docstring(checkpoint="Qwen/Qwen4-Exp")
@@ -546,7 +541,7 @@ class Qwen4ExpQSAIndexer(nn.Module):
 class Qwen4ExpAttention(Qwen3_5Attention):
     def __init__(self, config: Qwen4ExpTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.indexer = Qwen4ExpQSAIndexer(config, layer_idx) if config.indexer_n_heads is not None else None
+        self.indexer = Qwen4ExpQSAIndexer(config, layer_idx)
 
     def forward(
         self,
@@ -556,26 +551,26 @@ class Qwen4ExpAttention(Qwen3_5Attention):
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        if self.indexer is not None:
-            query_length = hidden_states.shape[1]
-            past_length = 0
-            target_length = query_length
-            if past_key_values is not None:
-                past_length = past_key_values.get_seq_length(self.layer_idx)
-                past_length = int(past_length.item()) if isinstance(past_length, torch.Tensor) else past_length
-                target_length, _ = past_key_values.get_mask_sizes(query_length, self.layer_idx)
-            selected_token_indices = self.indexer(
-                hidden_states,
-                position_embeddings,
-                attention_mask,
-                past_key_values,
-                key_length=past_length + query_length,
-            )
-            attention_mask = self.indexer.build_sparse_attention_mask(
-                selected_token_indices,
-                target_length=target_length,
-                dtype=hidden_states.dtype,
-            )
+        query_length = hidden_states.shape[1]
+        past_length = 0
+        target_length = query_length
+        if past_key_values is not None:
+            past_length = past_key_values.get_seq_length(self.layer_idx)
+            past_length = int(past_length.item()) if isinstance(past_length, torch.Tensor) else past_length
+            target_length, _ = past_key_values.get_mask_sizes(query_length, self.layer_idx)
+        selected_token_indices = self.indexer(
+            hidden_states,
+            position_embeddings,
+            attention_mask,
+            past_key_values,
+            key_length=past_length + query_length,
+        )
+        attention_mask = self.indexer.build_sparse_attention_mask(
+            selected_token_indices,
+            target_length=target_length,
+            dtype=hidden_states.dtype,
+        )
+
         return super().forward(
             hidden_states=hidden_states,
             position_embeddings=position_embeddings,
@@ -1024,12 +1019,6 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
-        if (
-            past_key_values is not None
-            and getattr(past_key_values, "offloading", False)
-            and (self.config.ple_layer_ids or self.config.indexer_n_heads is not None)
-        ):
-            raise ValueError("Qwen4-Exp does not support offloaded caches when PLE or QSA is enabled.")
 
         if position_ids is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0

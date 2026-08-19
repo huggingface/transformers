@@ -38,6 +38,8 @@ class Qwen4ExpTextConfig(PreTrainedConfig):
         Number of key heads used in linear attention layers.
     linear_num_value_heads (`int`, *optional*, defaults to 32):
         Number of value heads used in linear attention layers.
+    partial_rotary_factor (`float`, *optional*, defaults to 0.25):
+        Fraction of head_dim that gets RoPE.
     hc_count (`int`, *optional*, defaults to 4):
         Number of residual streams used by the hyper-connections.
     hc_lowrank (`int`, *optional*, defaults to 320):
@@ -194,7 +196,9 @@ class Qwen4ExpTextConfig(PreTrainedConfig):
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates Qwen4-Exp architecture invariants."""
-        unsupported_layer_types = sorted(set(self.layers_block_type) - {"full_attention", "linear_attention"})
+        unsupported_layer_types = sorted(
+            set(self.layer_types) - {"linear_attention", "hybrid_indexed", "deepseek_sparse_attention"}
+        )
         if unsupported_layer_types:
             raise ValueError(f"Unsupported Qwen4-Exp layer types: {unsupported_layer_types}.")
         output_gate_type = self.output_gate_type or self.hidden_act
@@ -248,22 +252,13 @@ class Qwen4ExpTextConfig(PreTrainedConfig):
             if self.eos_token_id is None or isinstance(self.eos_token_id, list) and not self.eos_token_id:
                 raise ValueError("eos_token_id must be set when Qwen4-Exp PLE layers are enabled.")
 
-        if self.indexer_n_heads is not None:
-            partial_rotary_factor = (self.rope_parameters or {}).get("partial_rotary_factor", 1.0)
-            rotary_dim = int(self.head_dim * partial_rotary_factor)
-            if rotary_dim > self.indexer_head_dim:
-                raise ValueError(
-                    "Qwen4-Exp attention RoPE dimensions must fit the QSA index head: "
-                    f"rotary_dim={rotary_dim}, indexer_head_dim={self.indexer_head_dim}."
-                )
-
-    @property
-    def layers_block_type(self) -> list[str]:
-        full_attention_cache_types = {"deepseek_sparse_attention", "full_attention", "hybrid", "hybrid_indexed"}
-        return [
-            "full_attention" if layer_type in full_attention_cache_types else layer_type
-            for layer_type in self.layer_types
-        ]
+        partial_rotary_factor = (self.rope_parameters or {}).get("partial_rotary_factor", 1.0)
+        rotary_dim = int(self.head_dim * partial_rotary_factor)
+        if rotary_dim > self.indexer_head_dim:
+            raise ValueError(
+                f"Qwen4-Exp attention RoPE dimensions must fit the QSA index head: rotary_dim={rotary_dim}, "
+                f"indexer_head_dim={self.indexer_head_dim}."
+            )
 
 
 @auto_docstring(checkpoint="Qwen/Qwen4-Exp")

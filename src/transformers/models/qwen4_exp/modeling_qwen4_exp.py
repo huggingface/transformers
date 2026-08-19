@@ -852,7 +852,7 @@ class Qwen4ExpAttention(nn.Module):
         )
         self.q_norm = Qwen4ExpRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
         self.k_norm = Qwen4ExpRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # thus post q_norm does not need reshape
-        self.indexer = Qwen4ExpQSAIndexer(config, layer_idx) if config.indexer_n_heads is not None else None
+        self.indexer = Qwen4ExpQSAIndexer(config, layer_idx)
 
     def forward(
         self,
@@ -862,26 +862,25 @@ class Qwen4ExpAttention(nn.Module):
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        if self.indexer is not None:
-            query_length = hidden_states.shape[1]
-            past_length = 0
-            target_length = query_length
-            if past_key_values is not None:
-                past_length = past_key_values.get_seq_length(self.layer_idx)
-                past_length = int(past_length.item()) if isinstance(past_length, torch.Tensor) else past_length
-                target_length, _ = past_key_values.get_mask_sizes(query_length, self.layer_idx)
-            selected_token_indices = self.indexer(
-                hidden_states,
-                position_embeddings,
-                attention_mask,
-                past_key_values,
-                key_length=past_length + query_length,
-            )
-            attention_mask = self.indexer.build_sparse_attention_mask(
-                selected_token_indices,
-                target_length=target_length,
-                dtype=hidden_states.dtype,
-            )
+        query_length = hidden_states.shape[1]
+        past_length = 0
+        target_length = query_length
+        if past_key_values is not None:
+            past_length = past_key_values.get_seq_length(self.layer_idx)
+            past_length = int(past_length.item()) if isinstance(past_length, torch.Tensor) else past_length
+            target_length, _ = past_key_values.get_mask_sizes(query_length, self.layer_idx)
+        selected_token_indices = self.indexer(
+            hidden_states,
+            position_embeddings,
+            attention_mask,
+            past_key_values,
+            key_length=past_length + query_length,
+        )
+        attention_mask = self.indexer.build_sparse_attention_mask(
+            selected_token_indices,
+            target_length=target_length,
+            dtype=hidden_states.dtype,
+        )
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -1768,12 +1767,6 @@ class Qwen4ExpTextModel(Qwen4ExpPreTrainedModel):
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
-        if (
-            past_key_values is not None
-            and getattr(past_key_values, "offloading", False)
-            and (self.config.ple_layer_ids or self.config.indexer_n_heads is not None)
-        ):
-            raise ValueError("Qwen4-Exp does not support offloaded caches when PLE or QSA is enabled.")
 
         if position_ids is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
