@@ -28,6 +28,8 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
+    from transformers.image_utils import PILImageResampling
+
 
 if is_torchvision_available():
     from transformers import Glm4vVideoProcessor, Ovis2_5VideoProcessor
@@ -159,6 +161,19 @@ class Ovis2_5VideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
             size=overridden_size,
         )
         self.assertEqual(video_processor.size, overridden_size)
+
+    def test_default_attributes_do_not_leak_from_glm4v(self):
+        """Ovis keeps its released sampling and resolution defaults while reusing GLM4V preprocessing."""
+        video_processor = self.fast_video_processing_class()
+
+        self.assertFalse(video_processor.do_sample_frames)
+        self.assertIsNone(video_processor.num_frames)
+        self.assertIsNone(video_processor.fps)
+        self.assertIsNone(video_processor.max_duration)
+        self.assertIsNone(video_processor.max_image_size)
+        self.assertEqual(video_processor.resample, PILImageResampling.BILINEAR)
+        self.assertEqual(list(video_processor.image_mean), [0.5, 0.5, 0.5])
+        self.assertEqual(list(video_processor.image_std), [0.5, 0.5, 0.5])
 
     def _check_input_type(self, video_inputs, **kwargs):
         for video_processing_class in self.video_processor_list:

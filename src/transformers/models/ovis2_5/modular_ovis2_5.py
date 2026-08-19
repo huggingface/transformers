@@ -29,10 +29,12 @@ from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILIma
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import Unpack
+from ...processing_utils import Unpack, VideosKwargs
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import accepts_precomputed_kwargs, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ...video_processing_utils import BaseVideoProcessor
+from ...video_utils import VideoMetadata
 from ...vision_utils import (
     get_vision_attention_seqlens,
     get_vision_interpolation_indices_and_weights,
@@ -42,6 +44,7 @@ from ...vision_utils import (
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..glm4v.image_processing_glm4v import Glm4vImageProcessor, Glm4vImageProcessorKwargs
 from ..glm4v.image_processing_pil_glm4v import Glm4vImageProcessorPil
+from ..glm4v.video_processing_glm4v import Glm4vVideoProcessor
 from ..ovis2.modeling_ovis2 import Ovis2Model
 from ..qwen2_vl.modeling_qwen2_vl import Qwen2VLForConditionalGeneration
 from ..video_llama_3.modeling_video_llama_3 import (
@@ -201,6 +204,117 @@ class Ovis2_5ImageProcessorPil(Glm4vImageProcessorPil):
             max_pixels=max_pixels,
         )
         return (resized_height // patch_size) * (resized_width // patch_size)
+
+
+class Ovis2_5VideoProcessorInitKwargs(VideosKwargs, total=False):
+    r"""
+    patch_size (`int`, *optional*, defaults to 16):
+        The spatial patch size used by the vision encoder.
+    temporal_patch_size (`int`, *optional*, defaults to 1):
+        The temporal patch size used by the vision encoder.
+    merge_size (`int`, *optional*, defaults to 2):
+        The spatial merge size between the vision encoder and language model.
+    """
+
+    patch_size: int
+    temporal_patch_size: int
+    merge_size: int
+
+
+class Ovis2_5VideoProcessor(Glm4vVideoProcessor):
+    resample = PILImageResampling.BILINEAR
+    size = {"shortest_edge": 448 * 448, "longest_edge": 1344 * 1792}
+    image_mean = [0.5, 0.5, 0.5]
+    image_std = [0.5, 0.5, 0.5]
+    do_sample_frames = False
+    patch_size = 16
+    temporal_patch_size = 1
+    merge_size = 2
+    max_image_size = None
+    max_duration = None
+    num_frames = None
+    fps = None
+    valid_kwargs = Ovis2_5VideoProcessorInitKwargs
+
+    def sample_frames(
+        self,
+        metadata: VideoMetadata,
+        num_frames: int | None = None,
+        fps: int | float | None = None,
+        **kwargs,
+    ):
+        return BaseVideoProcessor.sample_frames(
+            self,
+            metadata=metadata,
+            num_frames=num_frames,
+            fps=fps,
+            **kwargs,
+        )
+
+    def resize(
+        self,
+        videos: torch.Tensor,
+        size: SizeDict,
+        resample: PILImageResampling | int | None,
+        factor: int,
+        temporal_factor: int,
+        **kwargs,
+    ) -> torch.Tensor:
+        """Resize each frame with the released Ovis2.5 spatial policy."""
+        if not size.shortest_edge or not size.longest_edge:
+            raise ValueError(f"`size` dict must contain 'shortest_edge' and 'longest_edge' keys but got {size}.")
+
+        height, width = videos.shape[-2:]
+        resized_height, resized_width = smart_resize(
+            height=height,
+            width=width,
+            factor=factor,
+            min_pixels=size.shortest_edge,
+            max_pixels=size.longest_edge,
+        )
+        return TorchvisionBackend.resize(
+            self,
+            image=videos,
+            size=SizeDict(height=resized_height, width=resized_width),
+            resample=resample,
+        )
+
+    def get_number_of_video_patches(
+        self,
+        num_frames: int,
+        height: int,
+        width: int,
+        videos_kwargs: dict | None = None,
+    ) -> int:
+        """Return the number of pre-merge vision patches for one video."""
+        if num_frames <= 0:
+            raise ValueError(f"`num_frames` must be positive, got {num_frames}.")
+        videos_kwargs = videos_kwargs or {}
+        patch_size = videos_kwargs.get("patch_size", self.patch_size)
+        temporal_patch_size = videos_kwargs.get("temporal_patch_size", self.temporal_patch_size)
+        merge_size = videos_kwargs.get("merge_size", self.merge_size)
+        do_resize = videos_kwargs.get("do_resize", self.do_resize)
+        if do_resize:
+            size = videos_kwargs.get("size", self.size)
+            min_pixels = size["shortest_edge"] if isinstance(size, dict) else size.shortest_edge
+            max_pixels = size["longest_edge"] if isinstance(size, dict) else size.longest_edge
+            height, width = smart_resize(
+                height,
+                width,
+                factor=patch_size * merge_size,
+                min_pixels=min_pixels,
+                max_pixels=max_pixels,
+            )
+
+        factor = patch_size * merge_size
+        if height % factor != 0 or width % factor != 0:
+            raise ValueError(
+                "Ovis2.5 images must have height and width divisible by "
+                f"`patch_size * merge_size` ({factor}), got ({height}, {width})."
+            )
+
+        grid_t = math.ceil(num_frames / temporal_patch_size)
+        return grid_t * (height // patch_size) * (width // patch_size)
 
 
 @auto_docstring(checkpoint="AIDC-AI/Ovis2.5-2B")
@@ -832,6 +946,7 @@ __all__ = [
     "Ovis2_5Config",
     "Ovis2_5ImageProcessor",
     "Ovis2_5ImageProcessorPil",
+    "Ovis2_5VideoProcessor",
     "Ovis2_5VisionConfig",
     "Ovis2_5VisionModel",
     "Ovis2_5PreTrainedModel",
