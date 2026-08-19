@@ -1033,6 +1033,13 @@ class WhisperGenerationMixin(GenerationMixin):
                 synced_gpus=synced_gpus,
                 decoder_input_ids=decoder_input_ids,
                 attention_mask=attention_mask,
+                # Preserve suppress_tokens/begin_suppress_tokens that were cleared by
+                # _retrieve_logit_processors(). Without this, _prepare_generation_config
+                # inside super().generate() restores them from the model generation config
+                # (defaults_only=True treats None as not set), causing duplicate/extra
+                # logits processors in the assistant model during speculative decoding.
+                suppress_tokens=generation_config.suppress_tokens,
+                begin_suppress_tokens=generation_config.begin_suppress_tokens,
                 **generate_kwargs,
             )
 
