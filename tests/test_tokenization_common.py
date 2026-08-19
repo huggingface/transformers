@@ -1147,7 +1147,7 @@ Hey how are you doing"""  # noqa: W293
             {"role": "user", "content": "hi there"},
             {"role": "assistant", "content": "sure thing"},
         ]
-        with self.assertRaises(NotImplementedError):
+        with self.assertRaises(ValueError):
             tokenizer.apply_chat_template(
                 conversation,
                 chat_template=dummy_template,
