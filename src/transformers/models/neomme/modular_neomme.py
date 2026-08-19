@@ -147,6 +147,14 @@ class NeoMMEImageProcessor(TorchvisionBackend):
         return super().preprocess(images, **kwargs)
 
     def _validate_preprocess_kwargs(self, **kwargs) -> tuple:
+        unsupported = sorted(
+            name
+            for name in ("crop_size", "do_center_crop", "do_pad", "pad_size", "image_seq_length")
+            if kwargs.get(name) not in (None, False)
+        )
+        if unsupported:
+            raise ValueError(f"NeoMMEImageProcessor does not implement these image kwargs: {unsupported}")
+
         self._validate_size_settings(
             kwargs.get("patch_size", self.patch_size),
             kwargs.get("max_side", self.max_side),
@@ -188,14 +196,6 @@ class NeoMMEImageProcessor(TorchvisionBackend):
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
-        unsupported = sorted(
-            name
-            for name in ("crop_size", "do_center_crop", "do_pad", "pad_size", "image_seq_length")
-            if kwargs.get(name) not in (None, False)
-        )
-        if unsupported:
-            raise ValueError(f"NeoMMEImageProcessor does not implement these image kwargs: {unsupported}")
-
         pixel_values: list[torch.Tensor] = []
         image_grid_hw: list[tuple[int, int]] = []
 
