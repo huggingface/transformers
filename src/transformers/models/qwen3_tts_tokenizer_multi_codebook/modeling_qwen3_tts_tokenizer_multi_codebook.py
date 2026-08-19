@@ -386,47 +386,6 @@ class Qwen3TTSTokenizerMultiCodebookMlp(nn.Module):
         return down_proj
 
 
-class Qwen3TTSTokenizerMultiCodebookSnakeBeta(nn.Module):
-    """
-    A modified Snake function which uses separate parameters for the magnitude of the periodic components
-    Shape:
-        - Input: (B, C, T)
-        - Output: (B, C, T), same shape as the input
-    Parameters:
-        - alpha - trainable parameter that controls frequency
-        - beta - trainable parameter that controls magnitude
-    References:
-        - This activation function is a modified version based on this paper by Liu Ziyin, Tilman Hartwig, Masahito Ueda:
-        https://huggingface.co/papers/2006.08195
-    """
-
-    def __init__(self, in_features, alpha=1.0):
-        super().__init__()
-        self.in_features = in_features
-
-        # initialize alpha
-        self.alpha = Parameter(torch.zeros(in_features) * alpha)
-        self.beta = Parameter(torch.zeros(in_features) * alpha)
-
-        self.no_div_by_zero = 0.000000001
-
-    def forward(self, hidden_states):
-        """
-        Forward pass of the function.
-        Applies the function to the input elementwise.
-        SnakeBeta ∶= x + 1/b * sin^2 (xa)
-        """
-        alpha = self.alpha.unsqueeze(0).unsqueeze(-1)  # line up with x to [B, C, T]
-        beta = self.beta.unsqueeze(0).unsqueeze(-1)
-        alpha = torch.exp(alpha)
-        beta = torch.exp(beta)
-        hidden_states = hidden_states + (1.0 / (beta + self.no_div_by_zero)) * torch.pow(
-            torch.sin(hidden_states * alpha), 2
-        )
-
-        return hidden_states
-
-
 class Qwen3TTSTokenizerMultiCodebookResidualUnit(nn.Module):
     def __init__(self, dim: int = 16, dilation: int = 1):
         super().__init__()
@@ -1107,6 +1066,47 @@ class Qwen3TTSTokenizerMultiCodebookDecoderBlock(Qwen3TTSTokenizerMultiCodebookP
         for block in self.block:
             hidden = block(hidden)
         return hidden
+
+
+class Qwen3TTSTokenizerMultiCodebookSnakeBeta(nn.Module):
+    """
+    A modified Snake function which uses separate parameters for the magnitude of the periodic components
+    Shape:
+        - Input: (B, C, T)
+        - Output: (B, C, T), same shape as the input
+    Parameters:
+        - alpha - trainable parameter that controls frequency
+        - beta - trainable parameter that controls magnitude
+    References:
+        - This activation function is a modified version based on this paper by Liu Ziyin, Tilman Hartwig, Masahito Ueda:
+        https://huggingface.co/papers/2006.08195
+    """
+
+    def __init__(self, in_features, alpha=1.0):
+        super().__init__()
+        self.in_features = in_features
+
+        # initialize alpha
+        self.alpha = Parameter(torch.zeros(in_features) * alpha)
+        self.beta = Parameter(torch.zeros(in_features) * alpha)
+
+        self.no_div_by_zero = 0.000000001
+
+    def forward(self, hidden_states):
+        """
+        Forward pass of the function.
+        Applies the function to the input elementwise.
+        SnakeBeta ∶= x + 1/b * sin^2 (xa)
+        """
+        alpha = self.alpha.unsqueeze(0).unsqueeze(-1)  # line up with x to [B, C, T]
+        beta = self.beta.unsqueeze(0).unsqueeze(-1)
+        alpha = torch.exp(alpha)
+        beta = torch.exp(beta)
+        hidden_states = hidden_states + (1.0 / (beta + self.no_div_by_zero)) * torch.pow(
+            torch.sin(hidden_states * alpha), 2
+        )
+
+        return hidden_states
 
 
 class Qwen3TTSTokenizerMultiCodebookEuclideanCodebook(nn.Module):
