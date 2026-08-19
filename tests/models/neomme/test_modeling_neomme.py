@@ -13,7 +13,9 @@
 # limitations under the License.
 """Testing suite for the PyTorch NeoMME model."""
 
+import tempfile
 import unittest
+from pathlib import Path
 from typing import ClassVar
 from unittest.mock import patch
 
@@ -31,6 +33,7 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor,
 
 if is_torch_available():
     import torch
+    from safetensors.torch import load_file
 
     from transformers import (
         AutoModelForMaskedLM,
@@ -354,6 +357,25 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
         config = NeoMMEConfig(num_hidden_layers=8)
         self.assertEqual(config.residual_multiplier, (2 * 8) ** -0.5)
         self.assertNotIn("residual_scale", config.to_dict())
+
+    def test_fused_kv_checkpoint_roundtrip(self):
+        config = self.model_tester.get_config()
+        model = NeoMMEModel(config).eval()
+        expected_k = model.layers[0].self_attn.k_proj.weight.detach().clone()
+        expected_v = model.layers[0].self_attn.v_proj.weight.detach().clone()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir, save_original_format=True)
+            saved_state = load_file(Path(tmp_dir) / "model.safetensors")
+            fused_key = "layers.0.self_attn.kv_proj.weight"
+            self.assertIn(fused_key, saved_state)
+            self.assertNotIn("layers.0.self_attn.k_proj.weight", saved_state)
+            self.assertNotIn("layers.0.self_attn.v_proj.weight", saved_state)
+            torch.testing.assert_close(saved_state[fused_key], torch.cat([expected_k, expected_v], dim=0))
+
+            reloaded = NeoMMEModel.from_pretrained(tmp_dir)
+            torch.testing.assert_close(reloaded.layers[0].self_attn.k_proj.weight, expected_k)
+            torch.testing.assert_close(reloaded.layers[0].self_attn.v_proj.weight, expected_v)
 
     def test_partial_rotary_factor_multiple_of_four(self):
         """Rotating dims must be a multiple of 4 (two M-RoPE axes × pairs); used to silently round down."""

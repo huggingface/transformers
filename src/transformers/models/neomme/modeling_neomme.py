@@ -271,8 +271,8 @@ class NeoMMEAttention(nn.Module):
         self.sliding_window = None if window is None else window + 1
 
         self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * config.head_dim, bias=False)
-        # Fused K/V projection: rows `[:num_key_value_heads * head_dim]` are K, the rest are V.
-        self.kv_proj = nn.Linear(config.hidden_size, 2 * config.num_key_value_heads * config.head_dim, bias=False)
+        self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * config.head_dim, bias=False)
+        self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * config.head_dim, bias=False)
         self.output_gate = nn.Linear(config.hidden_size, config.num_attention_heads * config.head_dim, bias=False)
         self.o_proj = nn.Linear(config.num_attention_heads * config.head_dim, config.hidden_size, bias=False)
         # Exclusive Self-Attention: zero-init, so `tanh(alpha) == 0` makes it an exact no-op at step 0.
@@ -292,10 +292,8 @@ class NeoMMEAttention(nn.Module):
         query_states = self.q_proj(hidden_states).view(*input_shape, self.num_attention_heads, self.head_dim)
         query_states = self.q_norm(query_states)
 
-        # key_states and value_states: (batch, seq, 2, kv_heads, head_dim)
-        key_states, value_states = (
-            self.kv_proj(hidden_states).view(*input_shape, 2, self.num_key_value_heads, self.head_dim).unbind(-3)
-        )
+        key_states = self.k_proj(hidden_states).view(*input_shape, self.num_key_value_heads, self.head_dim)
+        value_states = self.v_proj(hidden_states).view(*input_shape, self.num_key_value_heads, self.head_dim)
         key_states = self.k_norm(key_states)
 
         cos, sin = position_embeddings

@@ -54,6 +54,15 @@ class NeoMMEConfig(PreTrainedConfig):
     """
 
     model_type = "neomme"
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.output_gate": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+    }
     # Per-layer-type RoPE: sliding layers rotate every head dim at short range; global layers rotate 25%
     # at long range and leave the rest of each head unrotated for content matching.
     default_theta = {"full_attention": 1_000_000.0, "sliding_attention": 10_000.0}
@@ -110,6 +119,8 @@ class NeoMMEConfig(PreTrainedConfig):
         kwargs["per_layer_config"] = per_layer_config
 
         super().__post_init__(**kwargs)
+        self.base_model_tp_plan.pop("embed_tokens", None)
+        self.base_model_tp_plan["embeddings.word_embeddings"] = "embedding_rowwise"
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
