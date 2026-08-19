@@ -87,6 +87,19 @@ def _layer_types(num_hidden_layers: int, full_attention_every_n_layers: int) -> 
     ]
 
 
+def _per_layer_window_config(layer_types: list[str], alternate_sliding_window: int) -> dict[int, dict]:
+    per_layer_config = {}
+    sliding_idx = 0
+    for layer_idx, layer_type in enumerate(layer_types):
+        if layer_type == "full_attention":
+            per_layer_config[layer_idx] = {"sliding_window": None}
+            continue
+        if sliding_idx % 2:
+            per_layer_config[layer_idx] = {"sliding_window": alternate_sliding_window}
+        sliding_idx += 1
+    return per_layer_config
+
+
 class NeoMMEModelTester:
     def __init__(
         self,
@@ -106,8 +119,8 @@ class NeoMMEModelTester:
         # 16 ensures the default 0.25 rotary factor yields four dimensions, enough for both M-RoPE axes.
         head_dim=16,
         layer_types=None,
-        sliding_window_short=3,
-        sliding_window_long=6,
+        sliding_window=3,
+        alternate_sliding_window=6,
         patch_size=4,
         embedding_dim=8,
         max_position_embeddings=128,
@@ -132,8 +145,8 @@ class NeoMMEModelTester:
         self.num_key_value_heads = num_key_value_heads
         self.head_dim = head_dim
         self.layer_types = layer_types or _layer_types(num_hidden_layers, 2)
-        self.sliding_window_short = sliding_window_short
-        self.sliding_window_long = sliding_window_long
+        self.sliding_window = sliding_window
+        self.alternate_sliding_window = alternate_sliding_window
         self.patch_size = patch_size
         self.embedding_dim = embedding_dim
         self.max_position_embeddings = max_position_embeddings
@@ -154,8 +167,7 @@ class NeoMMEModelTester:
             "num_key_value_heads": self.num_key_value_heads,
             "head_dim": self.head_dim,
             "layer_types": self.layer_types,
-            "sliding_window_short": self.sliding_window_short,
-            "sliding_window_long": self.sliding_window_long,
+            "sliding_window": self.sliding_window,
             "patch_size": self.patch_size,
             "embedding_dim": self.embedding_dim,
             "max_position_embeddings": self.max_position_embeddings,
@@ -165,7 +177,14 @@ class NeoMMEModelTester:
             "image_token_id": self.image_token_id,
         }
         config_kwargs.update(kwargs)
-        return NeoMMEConfig(**config_kwargs)
+        config_kwargs.setdefault(
+            "per_layer_config",
+            _per_layer_window_config(config_kwargs["layer_types"], self.alternate_sliding_window),
+        )
+        config = NeoMMEConfig(**config_kwargs)
+        # Generic model tests inspect the global window even though NeoMME resolves windows per layer.
+        config.allow_global_per_layer_attribute_access = True
+        return config
 
     def prepare_config_and_inputs(self):
         # Keep random text IDs above the reserved special-token range.
@@ -254,6 +273,10 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
+    @unittest.skip(reason="the generic test cannot read a heterogeneous global window; custom coverage is below")
+    def test_sliding_window_mask(self):
+        pass
+
     def test_grouped_query_heads_validated(self):
         with self.assertRaises(StrictDataclassFieldValidationError):
             NeoMMEConfig(num_attention_heads=4, num_key_value_heads=0)
@@ -274,14 +297,24 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertEqual(config.layer_types, pattern)
 
     def test_window_widths_validated(self):
-        """Equal widths select one band; runtime configs reject the research zero encoding."""
+        """Global and per-layer windows must be positive; `None` selects full attention."""
         base = {"num_hidden_layers": 3, "layer_types": _layer_types(3, 3)}
-        uniform = NeoMMEConfig(**base, sliding_window_short=256, sliding_window_long=256)
-        self.assertEqual([w for w in uniform.layer_window_sizes if w is not None], [256, 256])
+        default = NeoMMEConfig(**base)
+        self.assertEqual([layer.sliding_window for layer in default.per_layer_config], [256, 1024, None])
 
-        for short, long in ((256, 0), (256, 128), (0, 256)):
-            with self.subTest(short=short, long=long), self.assertRaises(StrictDataclassClassValidationError):
-                NeoMMEConfig(**base, sliding_window_short=short, sliding_window_long=long)
+        uniform = NeoMMEConfig(**base, per_layer_config={1: {"sliding_window": 256}})
+        self.assertEqual([layer.sliding_window for layer in uniform.per_layer_config], [256, 256, None])
+
+        overridden = NeoMMEConfig(**base, per_layer_config={0: {"sliding_window": 128}})
+        self.assertEqual([layer.sliding_window for layer in overridden.per_layer_config], [128, 1024, None])
+
+        for value in (0, -1, 1.5, True):
+            with self.subTest(value=value, global_value=True), self.assertRaises(
+                (ValueError, StrictDataclassClassValidationError, StrictDataclassFieldValidationError)
+            ):
+                NeoMMEConfig(**base, sliding_window=value)
+            with self.subTest(value=value, global_value=False), self.assertRaises(ValueError):
+                NeoMMEConfig(**base, per_layer_config={0: {"sliding_window": value}})
 
     def test_rope_parameters_follow_layer_types(self):
         self.assertEqual(list(NeoMMEConfig(num_hidden_layers=1).rope_parameters), ["full_attention"])
@@ -345,20 +378,29 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
         reloaded = NeoMMEConfig.from_dict(config.to_dict())
 
         self.assertEqual(reloaded.layer_types, config.layer_types)
-        self.assertEqual(reloaded.layer_window_sizes, config.layer_window_sizes)
+        self.assertEqual(
+            [layer.sliding_window for layer in reloaded.per_layer_config],
+            [layer.sliding_window for layer in config.per_layer_config],
+        )
         self.assertEqual(reloaded.rope_parameters, config.rope_parameters)
 
     def test_sliding_windows_alternate(self):
         # Three layers [sliding, sliding, global]: both short/long widths plus the always-global last layer.
         config = self.model_tester.get_config(num_hidden_layers=3, layer_types=_layer_types(3, 3))
-        windows = [window for window in config.layer_window_sizes if window is not None]
-        expected = [
-            config.sliding_window_long if index % 2 else config.sliding_window_short for index in range(len(windows))
-        ]
-        self.assertEqual(windows, expected)
+        windows = [layer.sliding_window for layer in config.per_layer_config]
+        self.assertEqual(windows, [self.model_tester.sliding_window, self.model_tester.alternate_sliding_window, None])
         self.assertEqual(
-            [window is None for window in config.layer_window_sizes],
+            [window is None for window in windows],
             [layer_type == "full_attention" for layer_type in config.layer_types],
+        )
+
+        moved_full = self.model_tester.get_config(
+            num_hidden_layers=3,
+            layer_types=["full_attention", "sliding_attention", "sliding_attention"],
+        )
+        self.assertEqual(
+            [layer.sliding_window for layer in moved_full.per_layer_config],
+            [None, self.model_tester.sliding_window, self.model_tester.alternate_sliding_window],
         )
 
     def test_bidirectional_attention_windows(self):
@@ -378,7 +420,8 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
         positions = torch.arange(seq_length, device=torch_device)
         distance = (positions[:, None] - positions[None, :]).abs()
 
-        for layer_idx, (attention, window) in enumerate(zip(attentions, config.layer_window_sizes)):
+        windows = [layer.sliding_window for layer in config.per_layer_config]
+        for layer_idx, (attention, window) in enumerate(zip(attentions, windows)):
             inside = distance <= window if window is not None else torch.ones_like(distance, dtype=torch.bool)
             with self.subTest(layer=layer_idx, window=window):
                 self.assertTrue((attention[0, :, inside] > 0).all(), "a reachable pair got zero weight")
@@ -504,7 +547,9 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
         """A padded query can have no keys after intersecting padding with a sliding window."""
         config = self.model_tester.get_config()
         model = NeoMMEModel(config).to(torch_device).eval()
-        seq_length = 4 * config.sliding_window_long
+        seq_length = 4 * max(
+            layer.sliding_window for layer in config.per_layer_config if layer.sliding_window is not None
+        )
         input_ids = ids_tensor([2, seq_length], config.vocab_size - 64) + 64
         attention_mask = torch.ones_like(input_ids)
         attention_mask[1, 2:] = 0
@@ -536,6 +581,10 @@ class NeoMMEForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = NeoMMEModelTester(self, is_training=False)
         _patch_residual_init(self)
+
+    @unittest.skip(reason="the generic test cannot read a heterogeneous global window; covered on NeoMMEModel")
+    def test_sliding_window_mask(self):
+        pass
 
     @unittest.skip(
         reason="every NeoMME layer passes a 4-D mask; SDPA's flash kernel rejects masks. The real flash path "

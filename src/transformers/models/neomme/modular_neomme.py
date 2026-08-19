@@ -371,9 +371,9 @@ class NeoMMEAttention(nn.Module):
         self.q_norm = NeoMMERMSNorm(config.head_dim, config.norm_eps, with_scale=False)
         self.k_norm = NeoMMERMSNorm(config.head_dim, config.norm_eps, with_scale=False)
 
-        # `config.layer_window_sizes` is a HALF-width (`abs(i - j) <= window`). The flash-attention path
+        # `sliding_window` is a HALF-width (`abs(i - j) <= window`). The flash-attention path
         # builds an inclusive symmetric band of `sliding_window - 1` per side, hence the `+ 1`.
-        window = config.layer_window_sizes[layer_idx]
+        window = config.per_layer_config[layer_idx].sliding_window
         self.sliding_window = None if window is None else window + 1
 
         self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * config.head_dim, bias=False)
@@ -667,16 +667,21 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
         if isinstance(attention_mask, dict):
             return [attention_mask[layer_type] for layer_type in self.config.layer_types]
 
-        mask_kwargs = {"config": self.config, "inputs_embeds": hidden_states, "attention_mask": attention_mask}
+        mask_kwargs = {"inputs_embeds": hidden_states, "attention_mask": attention_mask}
         masks: dict[int | None, torch.Tensor | None] = {}
-        for window in set(self.config.layer_window_sizes):
+        windows = [layer_config.sliding_window for layer_config in self.config.per_layer_config]
+        for layer_config, window in zip(self.config.per_layer_config, windows):
+            if window in masks:
+                continue
             if window is None:
-                masks[window] = create_bidirectional_mask(**mask_kwargs)
+                masks[window] = create_bidirectional_mask(config=layer_config, **mask_kwargs)
             else:
                 masks[window] = create_bidirectional_mask(
-                    **mask_kwargs, and_mask_function=sliding_window_bidirectional_overlay(window)
+                    config=layer_config,
+                    **mask_kwargs,
+                    and_mask_function=sliding_window_bidirectional_overlay(window),
                 )
-        return [masks[window] for window in self.config.layer_window_sizes]
+        return [masks[window] for window in windows]
 
 
 @auto_docstring(

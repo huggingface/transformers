@@ -82,8 +82,7 @@ class NeoMMEConfig(PreTrainedConfig):
 
     layer_types: list[str] | None = None
     rope_parameters: dict[Literal["full_attention", "sliding_attention"], dict] | None = None
-    sliding_window_short: int = 256
-    sliding_window_long: int = 1024
+    sliding_window: int | None = 256
 
     residual_multiplier: float | None = None
 
@@ -106,6 +105,16 @@ class NeoMMEConfig(PreTrainedConfig):
 
         self.validate_layer_types()
 
+        per_layer_config = self._default_per_layer_config()
+        for layer_idx, layer_overrides in (kwargs.pop("per_layer_config", None) or {}).items():
+            layer_idx = int(layer_idx)
+            if "sliding_window" in layer_overrides:
+                self._check_sliding_window(
+                    layer_overrides["sliding_window"], f"per_layer_config[{layer_idx}].sliding_window"
+                )
+            per_layer_config.setdefault(layer_idx, {}).update(layer_overrides)
+        kwargs["per_layer_config"] = per_layer_config
+
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):
@@ -113,12 +122,9 @@ class NeoMMEConfig(PreTrainedConfig):
         if self.num_attention_heads % self.num_key_value_heads:
             raise ValueError("num_key_value_heads must divide num_attention_heads")
 
-        if not 0 < self.sliding_window_short <= self.sliding_window_long:
-            raise ValueError(
-                f"expected 0 < sliding_window_short <= sliding_window_long, got {self.sliding_window_short} "
-                f"and {self.sliding_window_long}. Pass two equal widths for a single band; the research "
-                "encoding of `sliding_window_long = 0` for 'uniform' is resolved by the conversion script."
-            )
+        self._check_sliding_window(
+            self._getattr_without_heterogeneous_validation("sliding_window"), "sliding_window"
+        )
         if not math.isfinite(self.residual_multiplier) or self.residual_multiplier <= 0:
             raise ValueError("residual_multiplier must be finite and positive")
 
@@ -191,22 +197,25 @@ class NeoMMEConfig(PreTrainedConfig):
         """Width of one flattened image patch, `3 * patch_size ** 2`."""
         return 3 * self.patch_size**2
 
-    @property
-    def layer_window_sizes(self) -> list[int | None]:
-        """Per-layer sliding-window half-width; `None` on global layers.
-
-        Sliding layers alternate short/long by their ordinal among sliding layers, so the pattern does
-        not shift when the global layers move.
-        """
-        windows: list[int | None] = []
+    def _default_per_layer_config(self) -> dict[int, dict[str, int | None]]:
+        """Build NeoMME's alternating short/long window pattern."""
+        per_layer_config: dict[int, dict[str, int | None]] = {}
         sliding_idx = 0
-        for layer_type in self.layer_types:
+        for layer_idx, layer_type in enumerate(self.layer_types):
             if layer_type == "full_attention":
-                windows.append(None)
+                per_layer_config[layer_idx] = {"sliding_window": None}
                 continue
-            windows.append(self.sliding_window_long if sliding_idx % 2 else self.sliding_window_short)
+            if sliding_idx % 2:
+                per_layer_config[layer_idx] = {"sliding_window": 1024}
             sliding_idx += 1
-        return windows
+        return per_layer_config
+
+    @staticmethod
+    def _check_sliding_window(sliding_window: int | None, name: str) -> None:
+        if sliding_window is not None and (
+            not isinstance(sliding_window, int) or isinstance(sliding_window, bool) or sliding_window <= 0
+        ):
+            raise ValueError(f"{name} must be a positive integer or None, got {sliding_window!r}.")
 
 
 __all__ = ["NeoMMEConfig"]
