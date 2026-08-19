@@ -509,10 +509,30 @@ class MtpModel(PreTrainedModel):
         drafted_logits = []
         drafted_tokens = []
         loss = None
-        for i in range(len(self.layers)):
-            last_hidden_states = self.forward_layer(
-                i, last_hidden_states, position_ids, mtp_cache, input_ids=input_ids, **kwargs
+        for i, mtp_layer in enumerate(self.layers):
+            # We need to recompute those every layer since they change
+            inputs_embeds = self.embed_tokens(input_ids).to(last_hidden_states.device)
+            # For models with per-layer-type RoPE, read the layer type from the decoder so rotary_emb
+            # can dispatch to correct inv_freq.
+            layer_type = getattr(mtp_layer.mtp_block, "attention_type", None) or getattr(
+                mtp_layer.mtp_block, "layer_type", None
             )
+            position_embeddings = self.rotary_emb(inputs_embeds, position_ids=position_ids, layer_type=layer_type)
+
+            # In full generality, we may need to recompute masks for every layer due to the position offset of each layer
+            masks = self.create_masks_for_mtp_layer(i, inputs_embeds, mtp_cache, position_ids)
+
+            last_hidden_states = mtp_layer(
+                inputs_embeds,
+                last_hidden_states,
+                position_embeddings=position_embeddings,
+                position_ids=position_ids,
+                past_key_values=mtp_cache,
+                **masks,
+                **kwargs,
+            )
+            if self.use_shared_post_norm:
+                last_hidden_states = self.shared_post_norm(last_hidden_states)
 
             # If we are not computing the loss, only compute logits for the next drafted token to save memory
             slice_indices = slice(-1, None) if labels is None else slice(None, None)
