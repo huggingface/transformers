@@ -335,10 +335,10 @@ def default_sample_indices_fn(metadata: VideoMetadata, num_frames=None, fps=None
         if num_frames > total_num_frames:
             logger.warning_once(
                 f"`num_frames={num_frames}` exceeds the total number of frames in the video "
-                f"({total_num_frames}). Sampling all {total_num_frames} frames instead. "
-                f"Set `num_frames` to a value <= {total_num_frames} to avoid this warning."
+                f"({total_num_frames}). Sampling {num_frames} frames uniformly (with repetition) "
+                f"from the available {total_num_frames} frames."
             )
-            indices = np.arange(0, total_num_frames, dtype=int)
+            indices = np.linspace(0, max(total_num_frames - 1, 0), num_frames, dtype=int)
         else:
             indices = np.arange(0, total_num_frames, total_num_frames / num_frames, dtype=int)
     else:
