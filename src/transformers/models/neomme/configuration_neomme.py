@@ -127,9 +127,7 @@ class NeoMMEConfig(PreTrainedConfig):
         if self.num_attention_heads % self.num_key_value_heads:
             raise ValueError("num_key_value_heads must divide num_attention_heads")
 
-        self._check_sliding_window(
-            self._getattr_without_heterogeneous_validation("sliding_window"), "sliding_window"
-        )
+        self._check_sliding_window(self._getattr_without_heterogeneous_validation("sliding_window"), "sliding_window")
         if not math.isfinite(self.residual_multiplier) or self.residual_multiplier <= 0:
             raise ValueError("residual_multiplier must be finite and positive")
 

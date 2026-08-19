@@ -325,8 +325,11 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertEqual([layer.sliding_window for layer in overridden.per_layer_config], [128, 1024, None])
 
         for value in (0, -1, 1.5, True):
-            with self.subTest(value=value, global_value=True), self.assertRaises(
-                (ValueError, StrictDataclassClassValidationError, StrictDataclassFieldValidationError)
+            with (
+                self.subTest(value=value, global_value=True),
+                self.assertRaises(
+                    (ValueError, StrictDataclassClassValidationError, StrictDataclassFieldValidationError)
+                ),
             ):
                 NeoMMEConfig(**base, sliding_window=value)
             with self.subTest(value=value, global_value=False), self.assertRaises(ValueError):
@@ -608,6 +611,7 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
 
         torch.testing.assert_close(default, explicit)
         torch.testing.assert_close(default, stacked)
+
 
 @require_torch
 class NeoMMEForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
