@@ -349,9 +349,8 @@ class NeoMMERotaryEmbedding(nn.Module):
         inv_freq = getattr(self, f"{layer_type}_inv_freq")  # (rotary_dim // 2,)
         attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
 
-        # row_angles and column_angles: (batch, seq, rotary_dim // 4)
-        row_angles = position_ids[0].float().unsqueeze(-1) * inv_freq[0::2]
-        column_angles = position_ids[1].float().unsqueeze(-1) * inv_freq[1::2]
+        row_angles = position_ids[0].float().unsqueeze(-1) * inv_freq[0::2]  # (batch, seq, rotary_dim // 4)
+        column_angles = position_ids[1].float().unsqueeze(-1) * inv_freq[1::2]  # (batch, seq, rotary_dim // 4)
 
         angles = torch.stack([row_angles, column_angles], dim=-1).flatten(-2)  # (batch, seq, rotary_dim // 2)
         return angles.cos() * attention_scaling, angles.sin() * attention_scaling
@@ -442,22 +441,18 @@ class NeoMMEAttention(nn.Module):
         )
 
         attn_output = self._exclusive_self_attention(attn_output, value_states)
-
-        # (batch, seq, heads * head_dim)
-        attn_output = attn_output.reshape(*input_shape, -1)
+        attn_output = attn_output.reshape(*input_shape, -1)  # (batch, seq, heads * head_dim)
         gated_output = attn_output * torch.sigmoid(self.output_gate(hidden_states))
         return self.o_proj(gated_output), attn_weights  # (batch, seq, hidden_size)
 
     def _exclusive_self_attention(self, attn_output: torch.Tensor, value_states: torch.Tensor) -> torch.Tensor:
         """Exclusive self-attention correction along the value direction."""
 
-        # (batch, heads, seq, head_dim)
-        value_states = repeat_kv(value_states, self.num_key_value_groups)
+        value_states = repeat_kv(value_states, self.num_key_value_groups)  # (batch, heads, seq, head_dim)
         value_states = value_states.transpose(1, 2)  # (batch, seq, heads, head_dim)
         value_unit = F.normalize(value_states.float(), dim=-1).to(attn_output.dtype)
 
-        # (batch, seq, heads, 1)
-        projection = (attn_output * value_unit).sum(-1, keepdim=True)
+        projection = (attn_output * value_unit).sum(-1, keepdim=True)  # (batch, seq, heads, 1)
         scale = torch.tanh(self.alpha).to(attn_output.dtype).view(1, 1, self.num_attention_heads, 1)
         return attn_output - (scale * projection) * value_unit
 
@@ -623,8 +618,7 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
         if inputs_embeds is not None and self.value_embeddings is not None:
             logger.warning_once("inputs_embeds cannot apply value embeddings without token ids")
 
-        # (batch, seq, hidden_size)
-        hidden_states = self.embeddings(input_ids=input_ids, inputs_embeds=inputs_embeds)
+        hidden_states = self.embeddings(input_ids=input_ids, inputs_embeds=inputs_embeds)  # (batch, seq, hidden_size)
         if pixel_values is not None:
             if input_ids is None:
                 raise ValueError("`pixel_values` requires `input_ids` to locate image placeholder tokens.")
@@ -648,8 +642,7 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
         # `inputs_embeds`-only call runs without them.
         value_embeds = None
         if self.value_embeddings is not None and input_ids is not None:
-            # (batch, seq, kv_heads * head_dim)
-            value_embeds = self.value_embeddings(input_ids)
+            value_embeds = self.value_embeddings(input_ids)  # (batch, seq, kv_heads * head_dim)
 
         for layer_idx, encoder_layer in enumerate(self.layers):
             hidden_states = encoder_layer(
