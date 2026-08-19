@@ -666,25 +666,6 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         self.assertNotIn("vit_config", serialized_config)
         self.assertNotIn("visual_vocab_size", serialized_config)
 
-    def test_legacy_config_rejects_unreleased_patch_embedding(self):
-        with self.assertRaisesRegex(ValueError, "convolutional vision patch embedding"):
-            Ovis2_5Config(
-                llm_config=self.model_tester.get_text_config().to_dict(),
-                vit_config={**self.model_tester.get_vision_config().to_dict(), "num_patches": 16},
-            )
-
-    def test_legacy_config_rejects_unreleased_vision_options(self):
-        for option, message in (
-            ("preserve_original_pe", "learned vision position embeddings"),
-            ("use_rope", "vision rotary position embeddings"),
-        ):
-            with self.subTest(option=option):
-                with self.assertRaisesRegex(ValueError, message):
-                    Ovis2_5Config(
-                        llm_config=self.model_tester.get_text_config().to_dict(),
-                        vit_config={**self.model_tester.get_vision_config().to_dict(), option: False},
-                    )
-
     def test_visual_tokenizer_distribution(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         model = Ovis2_5ForConditionalGeneration(config).to(torch_device).eval()

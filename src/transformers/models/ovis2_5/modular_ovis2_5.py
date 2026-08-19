@@ -304,22 +304,9 @@ class Ovis2_5Config(PreTrainedConfig):
         if isinstance(self.vision_config, dict):
             # Released configs label this remote-code tower as `siglip2_navit`; the native tower type is fixed here.
             self.vision_config.pop("model_type", None)
-            if not self.vision_config.pop("preserve_original_pe", True):
-                raise ValueError("The released Ovis2.5 checkpoints require learned vision position embeddings.")
-            if not self.vision_config.pop("use_rope", True):
-                raise ValueError("The released Ovis2.5 checkpoints require vision rotary position embeddings.")
-            if self.vision_config.pop("num_patches", -1) != -1:
-                raise ValueError("The released Ovis2.5 checkpoints use a convolutional vision patch embedding.")
-            full_attention_indexes = self.vision_config.pop("fullatt_block_indexes", None)
-            if "layer_types" not in self.vision_config and full_attention_indexes is not None:
-                if isinstance(full_attention_indexes, str):
-                    full_attention_indexes = [int(index) for index in full_attention_indexes.split("|") if index]
-                full_attention_indexes = set(full_attention_indexes)
-                num_hidden_layers = self.vision_config.get("num_hidden_layers", Ovis2_5VisionConfig.num_hidden_layers)
-                self.vision_config["layer_types"] = [
-                    "full_attention" if layer_index in full_attention_indexes else "sliding_attention"
-                    for layer_index in range(num_hidden_layers)
-                ]
+            self.vision_config.pop("preserve_original_pe", None)
+            self.vision_config.pop("use_rope", None)
+            self.vision_config.pop("num_patches", None)
             if legacy_visual_vocab_size is not None:
                 self.vision_config.setdefault("vocab_size", legacy_visual_vocab_size)
             self.vision_config = Ovis2_5VisionConfig(**self.vision_config)
