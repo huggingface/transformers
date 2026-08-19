@@ -47,11 +47,22 @@ from ..gpt_neox.modeling_gpt_neox import apply_rotary_pos_emb
 from ..laguna.modeling_laguna import LagunaRotaryEmbedding
 from ..llama.modeling_llama import eager_attention_forward, repeat_kv
 from ..nemotron.modeling_nemotron import NemotronMLP
-from ..siglip2.image_processing_siglip2 import convert_image_to_patches
 from .configuration_neomme import NeoMMEConfig
 
 
 logger = logging.get_logger(__name__)
+
+
+def convert_image_to_patches(images: "torch.Tensor", patch_size: int) -> "torch.Tensor":
+    """Convert a batch of NCHW images into flattened, row-major patches."""
+    batch_size, num_channels, image_height, image_width = images.shape
+    num_patches_height = image_height // patch_size
+    num_patches_width = image_width // patch_size
+    patched_images = images.reshape(
+        batch_size, num_channels, num_patches_height, patch_size, num_patches_width, patch_size
+    )
+    patched_images = patched_images.permute(0, 2, 4, 3, 5, 1)
+    return patched_images.reshape(batch_size, num_patches_height * num_patches_width, -1)
 
 
 def _validate_image_dimensions(height: int, width: int) -> None:
@@ -219,9 +230,7 @@ class NeoMMEImageProcessor(TorchvisionBackend):
             stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
-            processed_images_grouped[shape] = torch.stack(
-                [convert_image_to_patches(image, patch_size) for image in stacked_images]
-            )
+            processed_images_grouped[shape] = convert_image_to_patches(stacked_images, patch_size)
             image_grids_grouped[shape] = torch.tensor(
                 [[grid_height, grid_width]] * len(stacked_images), dtype=torch.int64
             )
