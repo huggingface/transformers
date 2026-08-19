@@ -43,7 +43,7 @@ class NeoMMEConfig(PreTrainedConfig):
     sliding_window_long (`int`, *optional*, defaults to 1024):
         Number of tokens on either side that a long sliding-attention layer can attend to. Short and long windows
         alternate between full-attention layers.
-    residual_scale (`float`, *optional*):
+    residual_multiplier (`float`, *optional*):
         Scale applied to attention and MLP residual branches. Defaults to `1 / sqrt(2 * num_hidden_layers)`.
     embedding_dim (`int`, *optional*, defaults to 128):
         Width of the token-level embeddings returned by [`NeoMMEForRetrieval`]. This setting is unrelated to
@@ -85,7 +85,7 @@ class NeoMMEConfig(PreTrainedConfig):
     sliding_window_short: int = 256
     sliding_window_long: int = 1024
 
-    residual_scale: float | None = None
+    residual_multiplier: float | None = None
 
     patch_size: int = interval(min=1)(default=32)
     embedding_dim: int = interval(min=1)(default=128)
@@ -101,8 +101,8 @@ class NeoMMEConfig(PreTrainedConfig):
                 "full_attention" if (i + 1) % 6 == 0 or i == self.num_hidden_layers - 1 else "sliding_attention"
                 for i in range(self.num_hidden_layers)
             ]
-        if self.residual_scale is None:
-            self.residual_scale = (2 * self.num_hidden_layers) ** -0.5
+        if self.residual_multiplier is None:
+            self.residual_multiplier = (2 * self.num_hidden_layers) ** -0.5
 
         self.validate_layer_types()
 
@@ -119,8 +119,8 @@ class NeoMMEConfig(PreTrainedConfig):
                 f"and {self.sliding_window_long}. Pass two equal widths for a single band; the research "
                 "encoding of `sliding_window_long = 0` for 'uniform' is resolved by the conversion script."
             )
-        if not math.isfinite(self.residual_scale) or self.residual_scale <= 0:
-            raise ValueError("residual_scale must be finite and positive")
+        if not math.isfinite(self.residual_multiplier) or self.residual_multiplier <= 0:
+            raise ValueError("residual_multiplier must be finite and positive")
 
     def convert_rope_params_to_dict(self, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)

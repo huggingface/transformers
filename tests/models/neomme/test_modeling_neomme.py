@@ -317,6 +317,11 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
             with self.subTest(name=name), self.assertRaises(StrictDataclassFieldValidationError):
                 NeoMMEConfig(**{name: 0})
 
+    def test_residual_multiplier_defaults_from_depth(self):
+        config = NeoMMEConfig(num_hidden_layers=8)
+        self.assertEqual(config.residual_multiplier, (2 * 8) ** -0.5)
+        self.assertNotIn("residual_scale", config.to_dict())
+
     def test_legacy_rope_scaling_type_alias(self):
         config = NeoMMEConfig(rope_scaling={"type": "linear", "factor": 2.0})
         self.assertEqual(

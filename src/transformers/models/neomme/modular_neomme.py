@@ -491,7 +491,7 @@ class NeoMMEEncoderLayer(GradientCheckpointingLayer):
         self.lambdas = nn.Parameter(torch.tensor([1.0, 0.0]))
         self.input_layernorm = NeoMMERMSNorm(config.hidden_size, config.norm_eps, with_scale=False)
         self.post_attention_layernorm = NeoMMERMSNorm(config.hidden_size, config.norm_eps, with_scale=False)
-        self.residual_scale = config.residual_scale
+        self.residual_multiplier = config.residual_multiplier
         self.attention_type = config.layer_types[layer_idx]
 
     def forward(
@@ -513,11 +513,11 @@ class NeoMMEEncoderLayer(GradientCheckpointingLayer):
             value_embeds=value_embeds,
             **kwargs,
         )
-        hidden_states = hidden_states + self.residual_scale * attn_output
+        hidden_states = hidden_states + self.residual_multiplier * attn_output
 
         normed_states = self.post_attention_layernorm(hidden_states)
         mlp_output = self.mlp(normed_states)
-        return hidden_states + self.residual_scale * mlp_output
+        return hidden_states + self.residual_multiplier * mlp_output
 
 
 @auto_docstring
