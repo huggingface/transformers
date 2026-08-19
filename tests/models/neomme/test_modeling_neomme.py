@@ -241,6 +241,11 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
         self.config_tester = ConfigTester(self, config_class=NeoMMEConfig)
         _patch_residual_init(self)
 
+    def _image_features_prepare_config_and_inputs(self):
+        config = self.model_tester.get_config()
+        pixel_values = floats_tensor([self.model_tester.batch_size, config.patch_dim])
+        return config, {"pixel_values": pixel_values}
+
     def test_config(self):
         self.config_tester.run_common_tests()
 
@@ -278,6 +283,14 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="the generic test cannot read a heterogeneous global window; custom coverage is below")
     def test_sliding_window_mask(self):
+        pass
+
+    @unittest.skip(reason="NeoMME's image feature extractor is a single patch MLP without intermediate states")
+    def test_get_image_features_hidden_states(self):
+        pass
+
+    @unittest.skip(reason="NeoMME's image feature extractor is a patch MLP without attention layers")
+    def test_get_image_features_attentions(self):
         pass
 
     def test_grouped_query_heads_validated(self):
@@ -489,11 +502,13 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
             pixel_values = floats_tensor([len(patch_positions), config.patch_dim]).to(torch_device)
 
             inputs_embeds = model.embeddings(input_ids=input_ids)
-            scattered = model._scatter_patch_embeddings(input_ids, inputs_embeds, pixel_values)
-            expected = model.patch_embeddings(pixel_values)
+            image_features = model.get_image_features(pixel_values).pooler_output
+            image_mask = model.get_placeholder_mask(input_ids, image_features)
+            scattered = inputs_embeds.masked_scatter(image_mask, image_features)
 
             self.assertEqual(len(patch_positions), sum(h * w for h, w in grids))
-            torch.testing.assert_close(scattered[0, patch_positions], expected)
+            self.assertFalse(image_mask[0, 1].any(), "the <img> marker immediately after <doc> is not a patch")
+            torch.testing.assert_close(scattered[0, patch_positions], image_features)
             untouched = [i for i in range(len(sequence)) if i not in patch_positions]
             torch.testing.assert_close(scattered[0, untouched], inputs_embeds[0, untouched])
 

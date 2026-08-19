@@ -29,7 +29,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...masking_utils import create_bidirectional_mask, sliding_window_bidirectional_overlay
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, MaskedLMOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MaskedLMOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -505,7 +505,10 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
         if pixel_values is not None:
             if input_ids is None:
                 raise ValueError("`pixel_values` requires `input_ids` to locate image placeholder tokens.")
-            hidden_states = self._scatter_patch_embeddings(input_ids, hidden_states, pixel_values)
+            image_outputs = self.get_image_features(pixel_values, return_dict=True)
+            image_features = image_outputs.pooler_output
+            image_mask = self.get_placeholder_mask(input_ids, image_features)
+            hidden_states = hidden_states.masked_scatter(image_mask, image_features)
 
         batch_size, seq_len = hidden_states.shape[:2]
         if position_ids is None:
@@ -539,28 +542,31 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
         hidden_states = self.final_norm(hidden_states)
         return BaseModelOutput(last_hidden_state=hidden_states)
 
-    def _scatter_patch_embeddings(
-        self, input_ids: torch.LongTensor, hidden_states: torch.Tensor, pixel_values: torch.Tensor
-    ) -> torch.Tensor:
-        """Scatter patch embeddings into image placeholder tokens."""
+    @merge_with_config_defaults
+    @can_return_tuple
+    @auto_docstring(custom_intro="Projects flattened image patches into the model hidden space.")
+    def get_image_features(
+        self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> BaseModelOutputWithPooling:
         if pixel_values.shape[-1] != self.config.patch_dim:  # trf-ignore: TRF041
             raise ValueError(
                 f"pixel_values has patch width {pixel_values.shape[-1]} but the model expects "
                 f"{self.config.patch_dim} (= 3 * patch_size ** 2 with patch_size={self.config.patch_size})"
             )
+        image_features = self.patch_embeddings(pixel_values.to(self.patch_embeddings.norm.weight.dtype))
+        return BaseModelOutputWithPooling(last_hidden_state=image_features, pooler_output=image_features)
 
+    def get_placeholder_mask(self, input_ids: torch.LongTensor, image_features: torch.Tensor) -> torch.BoolTensor:
+        """Find patch placeholders and validate that every image feature has a destination."""
         previous_ids = F.pad(input_ids[:, :-1], (1, 0), value=self.config.pad_token_id or 0)  # token IDs shifted right
-        image_mask = (
-            (input_ids == self.config.image_token_id) & (previous_ids != self.config.document_token_id)
-        ).unsqueeze(-1)
+        image_mask = (input_ids == self.config.image_token_id) & (previous_ids != self.config.document_token_id)
 
         num_image_tokens = image_mask.sum()
         torch_compilable_check(
-            num_image_tokens == pixel_values.shape[0],
-            lambda: f"Got {pixel_values.shape[0]} image patches for {int(num_image_tokens)} image placeholder tokens",
+            num_image_tokens == image_features.shape[0],
+            lambda: f"Got {image_features.shape[0]} image patches for {int(num_image_tokens)} image placeholder tokens",
         )
-        patch_embeds = self.patch_embeddings(pixel_values.to(hidden_states.dtype))  # (patches, hidden_size)
-        return hidden_states.masked_scatter(image_mask, patch_embeds)
+        return image_mask.unsqueeze(-1).expand(-1, -1, image_features.shape[-1])
 
     def _build_attention_masks(
         self, hidden_states: torch.Tensor, attention_mask: torch.Tensor | None
