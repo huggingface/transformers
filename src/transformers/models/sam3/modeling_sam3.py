@@ -47,7 +47,7 @@ from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_position_ids
 from ..auto import AutoModel
-from ..clip import CLIPTextModelWithProjection
+from ..clip import CLIPTextModelWithProjection  # trf-ignore: TRF009
 from .configuration_sam3 import (
     Sam3Config,
     Sam3DETRDecoderConfig,

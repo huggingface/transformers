@@ -309,7 +309,7 @@ class CohereCompassPreTrainedModel(Qwen3VLPreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        PreTrainedModel._init_weights(module)
+        PreTrainedModel._init_weights(self, module)
         if isinstance(module, CohereCompassRotaryEmbedding):
             for layer_type in module.rope_type:
                 rope_init_fn = module.compute_default_rope_parameters

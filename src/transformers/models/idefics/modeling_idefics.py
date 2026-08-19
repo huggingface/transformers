@@ -569,7 +569,7 @@ class IdeficsAttention(nn.Module):
             hidden_size,
             bias=False,
         )
-        self.rotary_emb = IdeficsRotaryEmbedding(config)
+        self.rotary_emb = IdeficsRotaryEmbedding(config)  # trf-ignore: TRF050
 
         self.qk_layer_norms = qk_layer_norms
         if self.qk_layer_norms:
