@@ -49,7 +49,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: mlinter-findings
-          path: ${{ runner.temp }}/mlinter-findings
+          path: .
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -57,4 +57,4 @@ jobs:
         if: steps.download.outcome == 'success'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python3 utils/post_mlinter_review.py ${{ runner.temp }}/mlinter-findings
+        run: python3 utils/post_mlinter_review.py
