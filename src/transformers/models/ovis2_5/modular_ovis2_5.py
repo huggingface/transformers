@@ -449,6 +449,9 @@ class Ovis2_5VisionEmbeddings(PaddleOCRVisionEmbeddings):
         self.interpolation_mode = "bicubic"
         self.interpolation_align_corners = False
 
+    def interpolate_pos_encoding(self):
+        raise AttributeError("Not needed for Ovis2.5")
+
     def forward(
         self,
         pixel_values: torch.FloatTensor,
