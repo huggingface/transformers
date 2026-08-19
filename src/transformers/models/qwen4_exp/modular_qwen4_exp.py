@@ -454,31 +454,6 @@ class Qwen4ExpQSAIndexer(nn.Module):
         additive_attention_mask.scatter_(-1, scatter_indices, 0)
         return additive_attention_mask[..., :target_length].unsqueeze(1)
 
-    def _visible_indices(
-        self,
-        attention_mask: torch.Tensor | None,
-        batch_idx: int,
-        query_idx: int,
-        query_position: int,
-        key_length: int,
-        device: torch.device,
-    ) -> torch.Tensor:
-        key_positions = torch.arange(key_length, device=device)
-        visible = key_positions <= query_position
-        if isinstance(attention_mask, torch.Tensor):
-            mask_batch_idx = min(batch_idx, attention_mask.shape[0] - 1)
-            if attention_mask.ndim == 2:
-                visible &= attention_mask[mask_batch_idx, :key_length].bool()
-            elif attention_mask.ndim == 3:
-                mask_query_idx = min(query_idx, attention_mask.shape[-2] - 1)
-                mask_row = attention_mask[mask_batch_idx, mask_query_idx, :key_length]
-                visible &= mask_row if mask_row.dtype == torch.bool else mask_row == 0
-            elif attention_mask.ndim == 4:
-                mask_query_idx = min(query_idx, attention_mask.shape[-2] - 1)
-                mask_row = attention_mask[mask_batch_idx, 0, mask_query_idx, :key_length]
-                visible &= mask_row if mask_row.dtype == torch.bool else mask_row == 0
-        return torch.nonzero(visible, as_tuple=False).flatten()
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -515,18 +490,29 @@ class Qwen4ExpQSAIndexer(nn.Module):
             dtype=torch.int32,
             device=hidden_states.device,
         )
-        query_start = key_length - sequence_length
+        # If we don't have the mask, we will need those values to recreate valid indices
+        if attention_mask is None:
+            q_length = sequence_length
+            if past_key_values is not None:
+                q_offset = past_key_values.get_query_offset(self.layer_idx)
+                kv_length, kv_offset = past_key_values.get_mask_sizes(q_length, self.layer_idx)
+            else:
+                q_offset = 0
+                kv_length, kv_offset = q_length, 0
+
         for batch_idx in range(batch_size):
             for query_idx in range(sequence_length):
-                query_position = query_start + query_idx
-                visible_token_indices = self._visible_indices(
-                    attention_mask,
-                    batch_idx,
-                    query_idx,
-                    query_position,
-                    key_length,
-                    hidden_states.device,
-                )
+                # Only eager and sdpa are accepted, so the mask is always either None or 4D here
+                # If it's None, it means that we rely on the lengths and offsets to get valid indices
+                if attention_mask is None:
+                    query_position = q_offset + query_idx
+                    key_positions = torch.arange(kv_length, device=hidden_states.device) + kv_offset
+                    visible_token_indices = key_positions <= query_position
+                # Always 4D with either bool (sdpa) or float (eager)
+                else:
+                    mask_slice = attention_mask[batch_idx, 0, query_idx, :]
+                    visible_token_indices = mask_slice if mask_slice.dtype == torch.bool else mask_slice == 0
+
                 selected_token_indices[batch_idx, query_idx] = self._select_visible_row(
                     q[batch_idx, query_idx],
                     raw_keys[batch_idx],
