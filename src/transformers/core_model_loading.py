@@ -1660,7 +1660,7 @@ def convert_and_load_state_dict_in_model(
                 # A param about to be quantized on the fly must keep its checkpoint precision: the meta model may
                 # already declare the quantized container for it (e.g. uint8 mxfp4 blocks), and casting the dense
                 # weight to that dtype would destroy it before the quantize op runs.
-                materialize_dtype = empty_param.dtype  # usually correct when initializing
+                materialize_dtype = empty_param.dtype
 
             # Per-expert sharding (EP) needs `tensor_idx` = the expert index so the
             # distributed op selects whole experts. The signal is a `MergeModulelist`
