@@ -166,13 +166,13 @@ class NeoMMEImageProcessor(TorchvisionBackend):
             # black canvas the reference implementation pastes onto.
             image, grid_height, grid_width = self._pad_to_patch_grid(image, patch_size)
             image = self.rescale_and_normalize(image, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
-            pixel_values.append(convert_image_to_patches(image, patch_size))  # (num_patches_i, 3 * patch_size ** 2)
+            pixel_values.append(convert_image_to_patches(image, patch_size))  # (patches, patch_dim)
             image_grid_hw.append((grid_height, grid_width))
 
         return BatchFeature(
             data={
-                "pixel_values": torch.cat(pixel_values, dim=0),  # (num_patches, 3 * patch_size ** 2)
-                "image_grid_hw": torch.tensor(image_grid_hw, dtype=torch.int64),  # (batch_size, 2)
+                "pixel_values": torch.cat(pixel_values, dim=0),  # (total_patches, patch_dim)
+                "image_grid_hw": torch.tensor(image_grid_hw, dtype=torch.int64),  # (images, 2)
             },
             tensor_type=return_tensors,
         )
@@ -274,8 +274,8 @@ class NeoMMEEmbeddings(nn.Module):
 
     def decode(self, hidden_states: torch.Tensor) -> torch.Tensor:
         """Project hidden states through the tied factorized embedding for MLM logits."""
-        projected = hidden_states @ self.embedding_projection.weight  # (batch_size, sequence_length, embedding_rank)
-        return projected @ self.word_embeddings.weight.t()  # (batch_size, sequence_length, vocab_size)
+        projected = hidden_states @ self.embedding_projection.weight  # (batch, seq, embedding_rank)
+        return projected @ self.word_embeddings.weight.t()  # (batch, seq, vocab_size)
 
 
 class NeoMMEPatchEmbeddings(nn.Module):
@@ -348,13 +348,12 @@ class NeoMMERotaryEmbedding(nn.Module):
             )
         inv_freq = getattr(self, f"{layer_type}_inv_freq")  # (rotary_dim // 2,)
         attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
-        # (batch_size, sequence_length, rotary_dim // 4)
+
+        # row_angles and column_angles: (batch, seq, rotary_dim // 4)
         row_angles = position_ids[0].float().unsqueeze(-1) * inv_freq[0::2]
         column_angles = position_ids[1].float().unsqueeze(-1) * inv_freq[1::2]
-        # (batch_size, sequence_length, rotary_dim // 2)
-        angles = torch.stack([row_angles, column_angles], dim=-1).flatten(
-            -2
-        )
+
+        angles = torch.stack([row_angles, column_angles], dim=-1).flatten(-2)  # (batch, seq, rotary_dim // 2)
         return angles.cos() * attention_scaling, angles.sin() * attention_scaling
 
 
@@ -403,12 +402,13 @@ class NeoMMEAttention(nn.Module):
         value_embeds: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        input_shape = hidden_states.shape[:-1]  # (batch_size, sequence_length)
+        input_shape = hidden_states.shape[:-1]  # (batch, seq)
 
-        # (batch_size, sequence_length, num_attention_heads, head_dim)
+        # query_states: (batch, seq, heads, head_dim)
         query_states = self.q_proj(hidden_states).view(*input_shape, self.num_attention_heads, self.head_dim)
         query_states = self.q_norm(query_states)
-        # K is index 0, V is index 1: (batch_size, sequence_length, 2, num_key_value_heads, head_dim)
+
+        # key_states and value_states: (batch, seq, 2, kv_heads, head_dim)
         key_states, value_states = (
             self.kv_proj(hidden_states).view(*input_shape, 2, self.num_key_value_heads, self.head_dim).unbind(-3)
         )
@@ -420,14 +420,15 @@ class NeoMMEAttention(nn.Module):
         if value_embeds is not None:
             value_states = value_states + value_embeds.view(*input_shape, self.num_key_value_heads, self.head_dim)
 
-        query_states = query_states.transpose(1, 2)  # -> (batch_size, num_attention_heads, sequence_length, head_dim)
+        query_states = query_states.transpose(1, 2)  # (batch, heads, seq, head_dim)
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
-        # attn_output is heads-last: (batch_size, sequence_length, num_attention_heads, head_dim)
+
+        # attn_output is heads-last: (batch, seq, heads, head_dim)
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
@@ -441,18 +442,21 @@ class NeoMMEAttention(nn.Module):
         )
 
         attn_output = self._exclusive_self_attention(attn_output, value_states)
-        # (batch_size, sequence_length, num_attention_heads * head_dim)
+
+        # (batch, seq, heads * head_dim)
         attn_output = attn_output.reshape(*input_shape, -1)
         gated_output = attn_output * torch.sigmoid(self.output_gate(hidden_states))
-        return self.o_proj(gated_output), attn_weights  # (batch_size, sequence_length, hidden_size)
+        return self.o_proj(gated_output), attn_weights  # (batch, seq, hidden_size)
 
     def _exclusive_self_attention(self, attn_output: torch.Tensor, value_states: torch.Tensor) -> torch.Tensor:
         """Exclusive self-attention correction along the value direction."""
-        # (batch_size, num_attention_heads, sequence_length, head_dim)
+
+        # (batch, heads, seq, head_dim)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
-        value_states = value_states.transpose(1, 2)  # (batch_size, sequence_length, num_attention_heads, head_dim)
+        value_states = value_states.transpose(1, 2)  # (batch, seq, heads, head_dim)
         value_unit = F.normalize(value_states.float(), dim=-1).to(attn_output.dtype)
-        # (batch_size, sequence_length, num_attention_heads, 1)
+
+        # (batch, seq, heads, 1)
         projection = (attn_output * value_unit).sum(-1, keepdim=True)
         scale = torch.tanh(self.alpha).to(attn_output.dtype).view(1, 1, self.num_attention_heads, 1)
         return attn_output - (scale * projection) * value_unit
@@ -619,7 +623,7 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
         if inputs_embeds is not None and self.value_embeddings is not None:
             logger.warning_once("inputs_embeds cannot apply value embeddings without token ids")
 
-        # (batch_size, sequence_length, hidden_size)
+        # (batch, seq, hidden_size)
         hidden_states = self.embeddings(input_ids=input_ids, inputs_embeds=inputs_embeds)
         if pixel_values is not None:
             if input_ids is None:
@@ -644,7 +648,7 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
         # `inputs_embeds`-only call runs without them.
         value_embeds = None
         if self.value_embeddings is not None and input_ids is not None:
-            # (batch_size, sequence_length, num_key_value_heads * head_dim)
+            # (batch, seq, kv_heads * head_dim)
             value_embeds = self.value_embeddings(input_ids)
 
         for layer_idx, encoder_layer in enumerate(self.layers):
@@ -683,7 +687,7 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
                     f"Got {pixel_values.shape[0]} image patches for {int(num_image_tokens)} image placeholder tokens"
                 ),
             )
-        patch_embeds = self.patch_embeddings(pixel_values.to(hidden_states.dtype))  # (num_patches, hidden_size)
+        patch_embeds = self.patch_embeddings(pixel_values.to(hidden_states.dtype))  # (patches, hidden_size)
         return hidden_states.masked_scatter(image_mask, patch_embeds)
 
     def _build_attention_masks(
@@ -745,7 +749,7 @@ class NeoMMEForMaskedLM(NeoMMEPreTrainedModel):
             inputs_embeds=inputs_embeds,
             **kwargs,
         )
-        logits = self.model.embeddings.decode(outputs.last_hidden_state)  # (batch_size, sequence_length, vocab_size)
+        logits = self.model.embeddings.decode(outputs.last_hidden_state)  # (batch, seq, vocab_size)
 
         loss = None
         if labels is not None:
@@ -846,8 +850,7 @@ class NeoMMEForRetrieval(NeoMMEPreTrainedModel):
     def _forward_late_head(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
         """Project and normalize token embeddings, then zero padding positions."""
         proj_dtype = self.embedding_proj_layer.weight.dtype
-        # (batch_size, sequence_length, embedding_dim)
-        embeddings = self.embedding_proj_layer(hidden_states.to(proj_dtype))
+        embeddings = self.embedding_proj_layer(hidden_states.to(proj_dtype))  # (batch, seq, embedding_dim)
         embeddings = F.normalize(embeddings, dim=-1)
         # Overwrite padding rows rather than multiply them out, so a non-finite value cannot survive.
         return embeddings.masked_fill(~attention_mask.bool().unsqueeze(-1), 0.0)

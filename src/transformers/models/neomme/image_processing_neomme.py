@@ -159,13 +159,13 @@ class NeoMMEImageProcessor(TorchvisionBackend):
             # black canvas the reference implementation pastes onto.
             image, grid_height, grid_width = self._pad_to_patch_grid(image, patch_size)
             image = self.rescale_and_normalize(image, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
-            pixel_values.append(convert_image_to_patches(image, patch_size))  # (num_patches_i, 3 * patch_size ** 2)
+            pixel_values.append(convert_image_to_patches(image, patch_size))  # (patches, patch_dim)
             image_grid_hw.append((grid_height, grid_width))
 
         return BatchFeature(
             data={
-                "pixel_values": torch.cat(pixel_values, dim=0),  # (num_patches, 3 * patch_size ** 2)
-                "image_grid_hw": torch.tensor(image_grid_hw, dtype=torch.int64),  # (batch_size, 2)
+                "pixel_values": torch.cat(pixel_values, dim=0),  # (total_patches, patch_dim)
+                "image_grid_hw": torch.tensor(image_grid_hw, dtype=torch.int64),  # (images, 2)
             },
             tensor_type=return_tensors,
         )
