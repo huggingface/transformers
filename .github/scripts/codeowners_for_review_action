@@ -29,8 +29,8 @@ docs/ @stevhliu
 # Owners of subsections of the library
 /src/transformers/generation/ @Cyrilvallez
 /src/transformers/pipeline/ @Rocketknight1
-/src/transformers/integrations/ @SunMarc @MekkCyber @zach-huggingface
-/src/transformers/quantizers/ @SunMarc @MekkCyber
+/src/transformers/integrations/ @SunMarc
+/src/transformers/quantizers/ @SunMarc
 tests/ @ydshieh
 tests/generation/ @Cyrilvallez
 
@@ -41,8 +41,8 @@ tests/generation/ @Cyrilvallez
 # Specific files come after the sections/globs, so they take priority
 /.circleci/config.yml @ArthurZucker @ydshieh
 /utils/tests_fetcher.py @ydshieh
-trainer.py @zach-huggingface @SunMarc
-trainer_utils.py @zach-huggingface @SunMarc
+trainer.py @SunMarc
+trainer_utils.py @SunMarc
 /utils/modular_model_converter.py @Cyrilvallez @ArthurZucker
 /src/transformers/generation/continuous_batching/ @remi-or
 tests/generation/test_continuous_batching.py @remi-or
