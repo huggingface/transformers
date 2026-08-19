@@ -412,41 +412,25 @@ class NeoMMEPreTrainedModel(PreTrainedModel):
         # Generic init for whatever the branches below do not name. Safe for the tensors NeoMME needs born
         # at exactly zero: `apply` visits children before parents, so the parent-level zeroing runs last.
         super()._init_weights(module)
-        std = self.config.initializer_range
 
         if isinstance(module, NeoMMEEmbeddings):
             # The factorized table is scaled by the RANK, not `initializer_range`, so the tied decode
             # logits stay O(1) at init (otherwise the initial cross-entropy is ~250 instead of ln V).
             init.normal_(module.word_embeddings.weight, mean=0.0, std=self.config.embedding_rank**-0.5)
-            init.normal_(module.embedding_projection.weight, mean=0.0, std=std)
-        elif isinstance(module, NeoMMEPatchEmbeddings):
-            init.normal_(module.up_proj.weight, mean=0.0, std=std)
-            init.normal_(module.down_proj.weight, mean=0.0, std=std)
-            init.zeros_(module.down_proj.bias)
         elif isinstance(module, NeoMMEAttention):
-            init.normal_(module.q_proj.weight, mean=0.0, std=std)
-            init.normal_(module.kv_proj.weight, mean=0.0, std=std)
-            init.normal_(module.output_gate.weight, mean=0.0, std=std)
             init.zeros_(module.o_proj.weight)  # residual branch starts as an exact no-op
             init.zeros_(module.alpha)
         elif isinstance(module, NeoMMEMLP):
-            init.normal_(module.up_proj.weight, mean=0.0, std=std)
             init.zeros_(module.down_proj.weight)
         elif isinstance(module, NeoMMEEncoderLayer):
             init.copy_(module.lambdas, torch.tensor([1.0, 0.0]))
         elif isinstance(module, NeoMMEModel) and module.value_embeddings is not None:
             init.zeros_(module.value_embeddings.weight)
-        elif isinstance(module, NeoMMEForRetrieval):
-            init.normal_(module.embedding_proj_layer.weight, mean=0.0, std=std)
         elif isinstance(module, NeoMMERotaryEmbedding):
             for layer_type in module.layer_types:
                 inv_freq, _ = module.rope_init_fns[layer_type](module.config, layer_type=layer_type)
                 init.copy_(getattr(module, f"{layer_type}_inv_freq"), inv_freq)
                 init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), inv_freq)
-        elif isinstance(module, (nn.LayerNorm, nn.RMSNorm)):
-            init.ones_(module.weight)
-            if getattr(module, "bias", None) is not None:
-                init.zeros_(module.bias)
 
     def _resize_token_embeddings(
         self, new_num_tokens: int, pad_to_multiple_of: int | None = None, mean_resizing: bool = True
