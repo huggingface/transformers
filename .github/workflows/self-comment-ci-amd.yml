@@ -27,6 +27,20 @@ env:
 
 
 jobs:
+  setup:
+    name: Setup
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Upload setup_values artifact
+        run: |
+          mkdir setup_values
+          echo "" > setup_values/prev_workflow_run_id.txt
+          echo "" > setup_values/other_workflow_run_id.txt
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: setup_values
+          path: setup_values
+
   get-pr-number:
     name: Get PR number
     # TODO: restore `if:` condition before merge (removed to allow pull_request-triggered test runs)
@@ -171,7 +185,7 @@ jobs:
     if: ${{ needs.get-tests.outputs.models != '[]' }}
     # TODO: revert to @main before merge
     uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled_arc_scale_set.yaml@pr-ci-amd
-    needs: [get-pr-number, check-timestamps, get-tests, create_run]
+    needs: [setup, get-pr-number, check-timestamps, get-tests, create_run]
     with:
       job: run_models_gpu
       slack_report_channel: "#amd-hf-ci"
