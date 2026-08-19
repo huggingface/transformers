@@ -25,6 +25,7 @@ from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
+from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
@@ -188,28 +189,41 @@ class NeoMMEImageProcessor(TorchvisionBackend):
         do_normalize: bool,
         image_mean: float | list[float] | None,
         image_std: float | list[float] | None,
+        disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
-        pixel_values: list[torch.Tensor] = []
-        image_grid_hw: list[tuple[int, int]] = []
-
-        # Process images separately because each produces its own patch grid.
-        for image in images:
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        resized_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
             if do_resize:
-                image = self._resize_to_budget(image, max_side, size, resample)
+                stacked_images = self._resize_to_budget(stacked_images, max_side, size, resample)
+            resized_images_grouped[shape] = stacked_images
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
+        processed_images_grouped = {}
+        image_grids_grouped = {}
+        for shape, stacked_images in grouped_images.items():
             # Pad to a whole patch grid before rescaling, so padded pixels become -1 exactly like the
             # black canvas the reference implementation pastes onto.
-            image, grid_height, grid_width = self._pad_to_patch_grid(image, patch_size)
-            image = self.rescale_and_normalize(image, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
-            pixel_values.append(convert_image_to_patches(image, patch_size))  # (patches, patch_dim)
-            image_grid_hw.append((grid_height, grid_width))
+            stacked_images, grid_height, grid_width = self._pad_to_patch_grid(stacked_images, patch_size)
+            stacked_images = self.rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            processed_images_grouped[shape] = torch.stack(
+                [convert_image_to_patches(image, patch_size) for image in stacked_images]
+            )
+            image_grids_grouped[shape] = torch.tensor(
+                [[grid_height, grid_width]] * len(stacked_images), dtype=torch.int64
+            )
 
+        pixel_values = reorder_images(processed_images_grouped, grouped_images_index)
+        image_grid_hw = reorder_images(image_grids_grouped, grouped_images_index)
         return BatchFeature(
             data={
                 "pixel_values": torch.cat(pixel_values, dim=0),  # (total_patches, patch_dim)
-                "image_grid_hw": torch.tensor(image_grid_hw, dtype=torch.int64),  # (images, 2)
+                "image_grid_hw": torch.stack(image_grid_hw),  # (images, 2)
             },
             tensor_type=return_tensors,
         )

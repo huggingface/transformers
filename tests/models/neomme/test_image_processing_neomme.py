@@ -210,6 +210,22 @@ class NeoMMEImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                     ]
                     np.testing.assert_allclose(patches[patch_index], block.reshape(-1) / 127.5 - 1.0, atol=1e-6)
 
+    def test_grouped_preprocessing_matches_ungrouped(self):
+        cases = {
+            "repeated_shapes": ([self.make_image(8, 12), self.make_image(8, 12)], {}),
+            "mixed_shapes": ([self.make_image(8, 12), self.make_image(12, 8), self.make_image(8, 12)], {}),
+            "resized_to_same_shape": ([self.make_image(32, 16), self.make_image(64, 32)], {"max_side": 16}),
+        }
+
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            processor = image_processing_class(patch_size=self.image_processor_tester.patch_size)
+            for case, (images, kwargs) in cases.items():
+                with self.subTest(backend=backend_name, case=case):
+                    grouped = processor(images=images, disable_grouping=False, return_tensors="pt", **kwargs)
+                    ungrouped = processor(images=images, disable_grouping=True, return_tensors="pt", **kwargs)
+                    self.assertTrue(grouped.pixel_values.equal(ungrouped.pixel_values))
+                    self.assertTrue(grouped.image_grid_hw.equal(ungrouped.image_grid_hw))
+
     def test_resolution_budgets(self):
         patch_size = self.image_processor_tester.patch_size
         image = self.make_image(64, 32)
