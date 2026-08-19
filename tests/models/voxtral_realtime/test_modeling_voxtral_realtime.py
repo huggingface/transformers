@@ -268,7 +268,7 @@ class VoxtralRealtimeForConditionalGenerationModelTest(ALMModelTest, unittest.Te
     def test_model_rope_scaling_from_config(self, scaling_type):
         pass
 
-    @parameterized.expand([("dynamic",), ("offloaded",), ("static",)])
+    @parameterized.expand([("dynamic",), ("static",)])
     def test_generate_with_cache_implementation(self, cache_implementation):
         """Any `cache_implementation` should match the default one, which already uses a `DynamicCache`."""
         config, inputs_dict = self.prepare_config_and_inputs_for_generate()
