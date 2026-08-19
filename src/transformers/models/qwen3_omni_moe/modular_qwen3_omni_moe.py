@@ -1099,7 +1099,13 @@ class Qwen3OmniMoeVisionPatchMerger(nn.Module):
 
 
 class Qwen3OmniMoeVisionRotaryEmbedding(Qwen3VLMoeVisionRotaryEmbedding):
-    pass
+    def __init__(self, config: Qwen3OmniMoeVisionEncoderConfig, device=None):
+        super().__init__(config, device=device)
+
+    def compute_default_rope_parameters(
+        config: Qwen3OmniMoeVisionEncoderConfig, device=None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
+        return super().compute_default_rope_parameters(config, device=device, **kwargs)
 
 
 class Qwen3OmniMoeVisionEncoder(Qwen3VLMoeVisionModel):

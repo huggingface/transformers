@@ -1452,6 +1452,16 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
         )
 
 
+class Qwen2_5OmniVisionRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
+    def __init__(self, config: Qwen2_5OmniVisionEncoderConfig, device=None):
+        super().__init__(config, device=device)
+
+    def compute_default_rope_parameters(
+        config: Qwen2_5OmniVisionEncoderConfig, device=None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
+        return super().compute_default_rope_parameters(config, device=device, *kwargs)
+
+
 class Qwen2_5OmniVisionAttention(nn.Module):
     def __init__(self, config: Qwen2_5OmniVisionEncoderConfig = None) -> None:
         super().__init__()
@@ -1560,10 +1570,6 @@ class Qwen2_5OmniVisionBlock(Qwen2_5_VLVisionBlock):
         )
         hidden_states = hidden_states + self.mlp(self.norm2(hidden_states))
         return hidden_states
-
-
-class Qwen2_5_VLVisionRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
-    pass
 
 
 class Qwen2_5OmniVisionEncoder(Qwen2_5_VisionTransformerPretrainedModel):
