@@ -195,8 +195,8 @@ class Glm46VProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_dict=True,
             fps=video_fps,
         )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 8)
+        self.assertTrue(self.video_input_name in out_dict_with_video)
+        self.assertEqual(len(out_dict_with_video[self.video_input_name]), 8)
 
         # Load the whole video
         out_dict_with_video = processor.apply_chat_template(
@@ -206,8 +206,8 @@ class Glm46VProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_dict=True,
             do_sample_frames=False,
         )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 24)
+        self.assertTrue(self.video_input_name in out_dict_with_video)
+        self.assertEqual(len(out_dict_with_video[self.video_input_name]), 24)
 
         # Load video as a list of frames (i.e. images). NOTE: each frame should have same size
         # because we assume they come from one video
@@ -229,8 +229,8 @@ class Glm46VProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_dict=True,
             do_sample_frames=False,
         )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 4)
+        self.assertTrue(self.video_input_name in out_dict_with_video)
+        self.assertEqual(len(out_dict_with_video[self.video_input_name]), 4)
 
         # When the inputs are frame URLs/paths we expect that those are already
         # sampled and will raise an error is asked to sample again.

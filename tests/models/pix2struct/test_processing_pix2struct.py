@@ -30,7 +30,7 @@ if is_vision_available():
 class Pix2StructProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Pix2StructProcessor
     text_input_name = "decoder_input_ids"
-    images_input_name = "flattened_patches"
+    image_input_name = "flattened_patches"
 
     @classmethod
     def _setup_tokenizer(cls):

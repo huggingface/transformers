@@ -214,9 +214,9 @@ class Kimi_K25ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             num_frames=num_frames,
             fps=None,
         )
-        self.assertTrue(self.videos_input_name in out_dict_num_frames)
+        self.assertTrue(self.video_input_name in out_dict_num_frames)
         expected_num_frames_len = sum(thw[0] * thw[1] * thw[2] for thw in out_dict_num_frames["video_grid_thw"])
-        self.assertEqual(len(out_dict_num_frames[self.videos_input_name]), expected_num_frames_len)
+        self.assertEqual(len(out_dict_num_frames[self.video_input_name]), expected_num_frames_len)
 
         # Load with `fps` arg
         fps = 3
@@ -227,9 +227,9 @@ class Kimi_K25ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_dict=True,
             fps=fps,
         )
-        self.assertTrue(self.videos_input_name in out_dict_fps)
+        self.assertTrue(self.video_input_name in out_dict_fps)
         expected_fps_len = sum(thw[0] * thw[1] * thw[2] for thw in out_dict_fps["video_grid_thw"])
-        self.assertEqual(len(out_dict_fps[self.videos_input_name]), expected_fps_len)
+        self.assertEqual(len(out_dict_fps[self.video_input_name]), expected_fps_len)
         # num_frames and fps sampling should produce different token counts
         self.assertNotEqual(expected_num_frames_len, expected_fps_len)
 
@@ -251,14 +251,14 @@ class Kimi_K25ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
         inputs = processor(text=input_str, images=image_input, return_tensors="pt")
-        self.assertEqual(inputs[self.images_input_name].shape[0], 56)
+        self.assertEqual(inputs[self.image_input_name].shape[0], 56)
         inputs = processor(
             text=input_str,
             images=image_input,
             size={"max_height": 56 * 56 * 4, "max_width": 56 * 56 * 4},
             return_tensors="pt",
         )
-        self.assertEqual(inputs[self.images_input_name].shape[0], 800)
+        self.assertEqual(inputs[self.image_input_name].shape[0], 800)
 
     @unittest.skip("Kimi pops some keys before returning in a processor")
     def test_video_processor_defaults(self):

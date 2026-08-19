@@ -295,8 +295,8 @@ class Ernie4_5_VLMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             num_frames=num_frames,
             min_frames=3,  # default is 16
         )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 768)
+        self.assertTrue(self.video_input_name in out_dict_with_video)
+        self.assertEqual(len(out_dict_with_video[self.video_input_name]), 768)
 
         # Load with `fps` arg
         fps = 1
@@ -307,8 +307,8 @@ class Ernie4_5_VLMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_dict=True,
             fps=fps,
         )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 2304)
+        self.assertTrue(self.video_input_name in out_dict_with_video)
+        self.assertEqual(len(out_dict_with_video[self.video_input_name]), 2304)
 
         # Load with `fps` and `num_frames` args, should raise an error
         with self.assertRaises(ValueError):
@@ -328,8 +328,8 @@ class Ernie4_5_VLMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             tokenize=True,
             return_dict=True,
         )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 2304)
+        self.assertTrue(self.video_input_name in out_dict_with_video)
+        self.assertEqual(len(out_dict_with_video[self.video_input_name]), 2304)
 
         # Load video as a list of frames (i.e. images). NOTE: each frame should have same size
         # because we assume they come from one video
@@ -347,8 +347,8 @@ class Ernie4_5_VLMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_dict=True,
             do_sample_frames=False,
         )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 320)
+        self.assertTrue(self.video_input_name in out_dict_with_video)
+        self.assertEqual(len(out_dict_with_video[self.video_input_name]), 320)
 
     def test_kwargs_overrides_custom_image_processor_kwargs(self):
         processor = self.get_processor()
@@ -359,6 +359,6 @@ class Ernie4_5_VLMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         size = {"shortest_edge": processor.image_processor.size["shortest_edge"], "longest_edge": 56 * 56 * 4}
         inputs = processor(text=input_str, images=image_input, size=size, return_tensors="pt")
-        self.assertEqual(inputs[self.images_input_name].shape[0], 612)
+        self.assertEqual(inputs[self.image_input_name].shape[0], 612)
         inputs = processor(text=input_str, images=image_input, return_tensors="pt")
-        self.assertEqual(inputs[self.images_input_name].shape[0], 100)
+        self.assertEqual(inputs[self.image_input_name].shape[0], 100)

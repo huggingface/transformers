@@ -155,9 +155,9 @@ class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             num_frames=num_frames,
             return_tensors="pt",
         )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), num_frames)
+        self.assertTrue(self.video_input_name in out_dict_with_video)
+        self.assertEqual(len(out_dict_with_video[self.video_input_name]), 1)
+        self.assertEqual(len(out_dict_with_video[self.video_input_name][0]), num_frames)
 
         # Choose an fps high enough to avoid rounding down to zero sampled frames on short dummy videos
         fps = 4
@@ -169,4 +169,4 @@ class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             fps=fps,
             return_tensors="pt",
         )
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
+        self.assertEqual(len(out_dict_with_video[self.video_input_name]), 1)

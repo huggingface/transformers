@@ -213,8 +213,8 @@ class VideoLlama3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_dict=True,
             num_frames=num_frames,
         )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 144)
+        self.assertTrue(self.video_input_name in out_dict_with_video)
+        self.assertEqual(len(out_dict_with_video[self.video_input_name]), 144)
 
         # Load with `fps` arg
         fps = 1
@@ -225,8 +225,8 @@ class VideoLlama3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_dict=True,
             fps=fps,
         )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 192)
+        self.assertTrue(self.video_input_name in out_dict_with_video)
+        self.assertEqual(len(out_dict_with_video[self.video_input_name]), 192)
 
         # Load with `fps` and `num_frames` args, should raise an error
         with self.assertRaises(ValueError):
@@ -246,8 +246,8 @@ class VideoLlama3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             tokenize=True,
             return_dict=True,
         )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 120)
+        self.assertTrue(self.video_input_name in out_dict_with_video)
+        self.assertEqual(len(out_dict_with_video[self.video_input_name]), 120)
 
         # Load video as a list of frames (i.e. images). NOTE: each frame should have same size
         # because we assume they come from one video
@@ -264,8 +264,8 @@ class VideoLlama3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             tokenize=True,
             return_dict=True,
         )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 192)
+        self.assertTrue(self.video_input_name in out_dict_with_video)
+        self.assertEqual(len(out_dict_with_video[self.video_input_name]), 192)
 
         # When the inputs are frame URLs/paths we expect that those are already
         # sampled and will raise an error is asked to sample again.
@@ -287,9 +287,9 @@ class VideoLlama3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
         inputs = processor(text=input_str, images=image_input, return_tensors="pt")
-        self.assertEqual(inputs[self.images_input_name].shape[0], 52)
+        self.assertEqual(inputs[self.image_input_name].shape[0], 52)
         inputs = processor(text=input_str, images=image_input, max_pixels=56 * 56 * 4, return_tensors="pt")
-        self.assertEqual(inputs[self.images_input_name].shape[0], 52)
+        self.assertEqual(inputs[self.image_input_name].shape[0], 52)
 
     def test_special_mm_token_truncation(self):
         """Tests that special vision tokens do not get truncated when `truncation=True` is set."""

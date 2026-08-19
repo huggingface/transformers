@@ -257,8 +257,8 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_dict=True,
             num_frames=num_frames,
         )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1440)
+        self.assertTrue(self.video_input_name in out_dict_with_video)
+        self.assertEqual(len(out_dict_with_video[self.video_input_name]), 1440)
 
         # Load with `fps` arg
         fps = 1
@@ -269,8 +269,8 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_dict=True,
             fps=fps,
         )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1440)
+        self.assertTrue(self.video_input_name in out_dict_with_video)
+        self.assertEqual(len(out_dict_with_video[self.video_input_name]), 1440)
 
         # Load with `fps` and `num_frames` args, should raise an error
         with self.assertRaises(ValueError):
@@ -290,8 +290,8 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             tokenize=True,
             return_dict=True,
         )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 4320)
+        self.assertTrue(self.video_input_name in out_dict_with_video)
+        self.assertEqual(len(out_dict_with_video[self.video_input_name]), 4320)
 
         # Load video as a list of frames (i.e. images). NOTE: each frame should have same size
         # because we assume they come from one video
@@ -308,8 +308,8 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             tokenize=True,
             return_dict=True,
         )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 7600)
+        self.assertTrue(self.video_input_name in out_dict_with_video)
+        self.assertEqual(len(out_dict_with_video[self.video_input_name]), 7600)
 
         # When the inputs are frame URLs/paths we expect that those are already
         # sampled and will raise an error is asked to sample again.
@@ -375,10 +375,10 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             load_audio_from_video=True,
         )
         self.assertTrue(self.audio_input_name in out_dict)
-        self.assertTrue(self.videos_input_name in out_dict)
+        self.assertTrue(self.video_input_name in out_dict)
 
         # should always have input_ids and attention_mask
         self.assertEqual(len(out_dict["input_ids"]), 1)  # batch-size=1
         self.assertEqual(len(out_dict["attention_mask"]), 1)  # batch-size=1
         self.assertEqual(len(out_dict[self.audio_input_name]), 1)  # 1 audio in the conversation
-        self.assertEqual(len(out_dict[self.videos_input_name]), 10800)  # 1 video in the conversation
+        self.assertEqual(len(out_dict[self.video_input_name]), 10800)  # 1 video in the conversation

@@ -293,9 +293,9 @@ class MiniCPMV4_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_tensors="pt",
             processor_kwargs={"num_frames": num_frames, "fps": None},
         )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), num_frames)
+        self.assertTrue(self.video_input_name in out_dict_with_video)
+        self.assertEqual(len(out_dict_with_video[self.video_input_name]), 1)
+        self.assertEqual(len(out_dict_with_video[self.video_input_name][0]), num_frames)
 
         # Load with `fps` arg
         fps = 10
@@ -307,11 +307,11 @@ class MiniCPMV4_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_tensors="pt",
             processor_kwargs={"fps": fps, "num_frames": None},
         )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
+        self.assertTrue(self.video_input_name in out_dict_with_video)
+        self.assertEqual(len(out_dict_with_video[self.video_input_name]), 1)
         # 1 frame is inferred from input video's length and FPS, so can be hardcoded
         # (224 = 56*56/14 with scale_resolution=64; was 14112 = 392*504/14 at default scale_resolution=448)
-        self.assertEqual(out_dict_with_video[self.videos_input_name].shape[-1], 224)
+        self.assertEqual(out_dict_with_video[self.video_input_name].shape[-1], 224)
 
         # When `do_sample_frames=False` no sampling is done and whole video is loaded, even if number of frames is passed
         fps = 10
@@ -326,10 +326,10 @@ class MiniCPMV4_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 "return_tensors": "pt",
             },
         )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
+        self.assertTrue(self.video_input_name in out_dict_with_video)
+        self.assertEqual(len(out_dict_with_video[self.video_input_name]), 1)
         # 2464 = 11 frames * 224 per frame (56*56/14); was 155232 = 11 * 14112 at default scale_resolution=448
-        self.assertEqual(out_dict_with_video[self.videos_input_name].shape[-1], 2464)
+        self.assertEqual(out_dict_with_video[self.video_input_name].shape[-1], 2464)
 
         # Load without any arg should load the whole video
         out_dict_with_video = processor.apply_chat_template(
@@ -338,10 +338,10 @@ class MiniCPMV4_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             tokenize=True,
             return_dict=True,
         )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
+        self.assertTrue(self.video_input_name in out_dict_with_video)
+        self.assertEqual(len(out_dict_with_video[self.video_input_name]), 1)
         # 224 per frame (56*56/14 at scale_resolution=64); was 14112 = 392*504/14 at scale_resolution=448
-        self.assertEqual(out_dict_with_video[self.videos_input_name].shape[-1], 224)
+        self.assertEqual(out_dict_with_video[self.video_input_name].shape[-1], 224)
 
         # Load video as a list of frames (i.e. images).
         # NOTE: each frame should have same size because we assume they come from one video
@@ -361,11 +361,11 @@ class MiniCPMV4_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_dict=True,
             do_sample_frames=False,
         )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
+        self.assertTrue(self.video_input_name in out_dict_with_video)
+        self.assertEqual(len(out_dict_with_video[self.video_input_name]), 1)
         # 448 = 2 frames * 224 per frame (56*56/14 at scale_resolution=64, no slicing);
         # was 203392 = 2 frames * (source 15680 + 6 slices * 14336) at scale_resolution=448
-        self.assertEqual(out_dict_with_video[self.videos_input_name].shape[-1], 448)
+        self.assertEqual(out_dict_with_video[self.video_input_name].shape[-1], 448)
 
     @require_torch
     def test_apply_chat_template_tool_calls_no_content(self):

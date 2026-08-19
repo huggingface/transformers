@@ -108,7 +108,7 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             text=[text_single_image, text_single_image], images=[[image], [image]], return_tensors="pt"
         )
         self.assertListEqual(
-            out_batch_oneimage[self.images_input_name].tolist(), out_multiimages[self.images_input_name].tolist()
+            out_batch_oneimage[self.image_input_name].tolist(), out_multiimages[self.image_input_name].tolist()
         )
 
     def test_pan_and_scan(self):
@@ -128,7 +128,7 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
 
         # base image + 4 crops
-        self.assertEqual(len(inputs[self.images_input_name]), 5)
+        self.assertEqual(len(inputs[self.image_input_name]), 5)
         baseline = processor(
             text=input_str,
             images=image_input,

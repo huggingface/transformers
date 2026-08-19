@@ -36,7 +36,7 @@ class QianfanOCRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     # Tiny processor created with make_tiny_processor.py from "bairongz/QianfanOCR"
     tiny_model_id = "hf-internal-testing/tiny-processor-qianfan_ocr"
     # QianfanOCR has no video support; images and pixel values share the same tensor key
-    videos_input_name = "pixel_values"
+    video_input_name = "pixel_values"
 
     @classmethod
     def _setup_image_processor(cls):
@@ -182,7 +182,7 @@ class QianfanOCRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @parameterized.expand([(1, "pt"), (2, "pt")])
     def test_apply_chat_template_image(self, batch_size: int, return_tensors: str):
         self._test_apply_chat_template(
-            "image", batch_size, return_tensors, "images_input_name", "image_processor", MODALITY_INPUT_DATA["images"]
+            "image", batch_size, return_tensors, "image_input_name", "image_processor", MODALITY_INPUT_DATA["images"]
         )
 
     @require_torch

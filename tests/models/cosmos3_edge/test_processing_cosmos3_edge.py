@@ -204,13 +204,13 @@ class Cosmos3EdgeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         ]
 
         def assert_packed_video(output, expected_num_frames):
-            self.assertIn(self.videos_input_name, output)
+            self.assertIn(self.video_input_name, output)
             self.assertEqual(tuple(output["video_grid_thw"].shape), (1, 3))
             self.assertEqual(output["video_grid_thw"][0, 0].item(), expected_num_frames)
             expected_num_patches = int(output["video_grid_thw"].prod(dim=-1).sum())
-            self.assertEqual(len(output[self.videos_input_name]), expected_num_patches)
+            self.assertEqual(len(output[self.video_input_name]), expected_num_patches)
             self.assertEqual(
-                output[self.videos_input_name].shape[-1],
+                output[self.video_input_name].shape[-1],
                 len(processor.video_processor.image_mean) * processor.video_processor.patch_size**2,
             )
 

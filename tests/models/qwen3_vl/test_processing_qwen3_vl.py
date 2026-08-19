@@ -207,8 +207,8 @@ class Qwen3VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             num_frames=num_frames,
             fps=None,  # if pass num_frames, fps should be None
         )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 280)
+        self.assertTrue(self.video_input_name in out_dict_with_video)
+        self.assertEqual(len(out_dict_with_video[self.video_input_name]), 280)
 
         # Load with `fps` arg
         fps = 1
@@ -219,8 +219,8 @@ class Qwen3VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_dict=True,
             fps=fps,
         )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 192)
+        self.assertTrue(self.video_input_name in out_dict_with_video)
+        self.assertEqual(len(out_dict_with_video[self.video_input_name]), 192)
 
         # Load with `fps` and `num_frames` args, should raise an error
         with self.assertRaises(ValueError):
@@ -240,8 +240,8 @@ class Qwen3VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             tokenize=True,
             return_dict=True,
         )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 192)
+        self.assertTrue(self.video_input_name in out_dict_with_video)
+        self.assertEqual(len(out_dict_with_video[self.video_input_name]), 192)
 
         # Load video as a list of frames (i.e. images). NOTE: each frame should have same size
         # because we assume they come from one video
@@ -259,8 +259,8 @@ class Qwen3VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_dict=True,
             do_sample_frames=False,
         )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 216)
+        self.assertTrue(self.video_input_name in out_dict_with_video)
+        self.assertEqual(len(out_dict_with_video[self.video_input_name]), 216)
 
     def test_kwargs_overrides_custom_image_processor_kwargs(self):
         processor = self.get_processor()
@@ -269,9 +269,9 @@ class Qwen3VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
         inputs = processor(text=input_str, images=image_input, max_pixels=56 * 56 * 4, return_tensors="pt")
-        self.assertEqual(inputs[self.images_input_name].shape[0], 612)
+        self.assertEqual(inputs[self.image_input_name].shape[0], 612)
         inputs = processor(text=input_str, images=image_input, return_tensors="pt")
-        self.assertEqual(inputs[self.images_input_name].shape[0], 100)
+        self.assertEqual(inputs[self.image_input_name].shape[0], 100)
 
     @unittest.skip("qwen3_vl can't sample frames from image frames directly, user can use `qwen-vl-utils`")
     def test_apply_chat_template_video_1(self):

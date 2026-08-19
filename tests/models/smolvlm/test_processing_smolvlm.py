@@ -27,7 +27,7 @@ from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 @require_vision
 class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = SmolVLMProcessor
-    videos_input_name = "pixel_values"
+    video_input_name = "pixel_values"
     # Tiny processor created with make_tiny_processor.py from "HuggingFaceTB/SmolVLM2-256M-Video-Instruct"
     tiny_model_id = "hf-internal-testing/tiny-processor-smolvlm"
 
@@ -405,10 +405,10 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             num_frames=num_frames,
             return_tensors="pt",
         )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
+        self.assertTrue(self.video_input_name in out_dict_with_video)
+        self.assertEqual(len(out_dict_with_video[self.video_input_name]), 1)
         # SmolVLM doesn't sample `num_frames` exactly, by uses other sampling method
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 1)
+        self.assertEqual(len(out_dict_with_video[self.video_input_name][0]), 1)
 
         # Load with `fps` arg
         fps = 10
@@ -420,10 +420,10 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             fps=fps,
             return_tensors="pt",
         )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
+        self.assertTrue(self.video_input_name in out_dict_with_video)
+        self.assertEqual(len(out_dict_with_video[self.video_input_name]), 1)
         # SmolVLM doesn't sample 1 frame per second exactly, by uses other sampling method
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 4)
+        self.assertEqual(len(out_dict_with_video[self.video_input_name][0]), 4)
 
         # NOTE: the last assert checks are removed
         # Loading video as a list of frames (i.e. images) is not supported in SmolVLM
@@ -481,7 +481,7 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             max_length=172,
         )
 
-        self.assertLessEqual(inputs[self.videos_input_name][0].mean(), 0)
+        self.assertLessEqual(inputs[self.video_input_name][0].mean(), 0)
         self.assertEqual(len(inputs["input_ids"][0]), 172)
 
     @require_torch
