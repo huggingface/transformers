@@ -53,6 +53,25 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         decoded = tokenizer.decode(tokens, skip_special_tokens=True)
         self.assertEqual(decoded, text)
 
+    def test_decode_keeps_real_leading_whitespace(self):
+        # Metaspace only prepends `▁` when the text does not already start with one, so with two or
+        # more leading spaces there is no synthetic prefix to remove and the old
+        # `Strip(content=" ", left=1)` decoder ate one of the user's own spaces. Regression test for #47487.
+        tokenizer = LlamaTokenizer.from_pretrained("hf-internal-testing/llama-tokenizer")
+        for text in ["  hello", "   leading spaces", "    indented_line", "def f():\n    return 1"]:
+            ids = tokenizer.encode(text, add_special_tokens=False)
+            self.assertEqual(tokenizer.decode(ids), text)
+
+        # The synthetic prefix is still stripped, so text without leading whitespace does not gain a
+        # space. A single leading space is fused into the prefix at encode time and stays unrecoverable.
+        for text in ["hello", "\tindented", "élan"]:
+            ids = tokenizer.encode(text, add_special_tokens=False)
+            self.assertEqual(tokenizer.decode(ids), text)
+        self.assertEqual(tokenizer.decode(tokenizer.encode(" hello", add_special_tokens=False)), "hello")
+
+        # Only the very start of the string is affected, never the indentation of later lines.
+        self.assertEqual(tokenizer.decode(tokenizer.encode(" a\n  b", add_special_tokens=False)), "a\n  b")
+
     @slow
     def test_llama3_bpe_skips_clean_up_tokenization_spaces(self):
         # Llama 3 ships with `clean_up_tokenization_spaces=True` in its config, but as a
