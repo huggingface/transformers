@@ -55,13 +55,10 @@ processor = Ovis2_5Processor.from_pretrained(
     model_id,
     image_processor=Ovis2_5ImageProcessor(size=size),
     video_processor=Ovis2_5VideoProcessor(size=size),
-    trust_remote_code=False,
 )
 model = Ovis2_5ForConditionalGeneration.from_pretrained(
     model_id,
-    dtype="auto",
     device_map="auto",
-    trust_remote_code=False,
 )
 
 messages = [
