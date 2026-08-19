@@ -65,9 +65,9 @@ from .utils import (
 from .utils.chat_parsing import ResponseParser
 from .utils.chat_parsing import parse_response as _template_parse_response
 from .utils.chat_template_utils import (
-    encode_untrusted_chat,
+    encode_sanitized_chat,
     render_jinja_template,
-    wrap_untrusted_content,
+    sanitize_content,
 )
 
 
@@ -3132,7 +3132,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                     "`sanitize_special_tokens=True` is not compatible with `return_assistant_tokens_mask`, "
                     "which needs character offsets into the rendered chat."
                 )
-            conversations, untrusted_contents = wrap_untrusted_content(conversations, self)
+            conversations, safe_ids = sanitize_content(conversations, self)
 
         template_kwargs = {**self.special_tokens_map, **kwargs}  # kwargs overwrite special tokens if both are present
         rendered_chat, generation_indices = render_jinja_template(
@@ -3151,10 +3151,10 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         if tokenize:
             if sanitize_special_tokens:
-                # Message content was already encoded, as ordinary tokens, by `wrap_untrusted_content`. Only
-                # the template text around it still needs encoding, with its own control tokens kept special.
+                # Content is already encoded as ordinary tokens; only the template text around it is left,
+                # and it keeps its own control tokens special.
                 input_ids = [
-                    encode_untrusted_chat(self, chat, untrusted_contents)
+                    encode_sanitized_chat(self, chat, safe_ids)
                     for chat in (rendered_chat if is_batched else [rendered_chat])
                 ]
                 if truncation and max_length is not None:

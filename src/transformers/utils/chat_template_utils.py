@@ -631,70 +631,57 @@ class Chat:
         self.messages = messages
 
 
-# NUL-delimited digits: content holding a NUL is always isolated below, so an unmarked span can never carry
-# one and a marker is never confused with template output. Digits survive filters like `trim` or `upper`
-_UNTRUSTED_SPAN = re.compile("\x00([0-9]+)\x00")
+# Content holding a NUL is never inlined, so an unmarked span can never carry one
+_SAFE_SPAN = re.compile("\x00([0-9]+)\x00")
 
 
-def wrap_untrusted_content(conversations: list[ChatType], tokenizer) -> tuple[list[ChatType], list[list[int]]]:
-    """Replace the untrusted part of each message - its content - with an opaque marker, and encode it.
+def sanitize_content(conversations: list[ChatType], tokenizer) -> tuple[list[ChatType], list[list[int]]]:
+    """Swap each message content for a marker, and encode the content as ordinary text.
 
-    Template structure and untrusted content are decoupled entirely: Jinja dictates the formatting topology,
-    and the tokenizer enforces the safety boundary. Content is encoded with `split_special_tokens=True`, so
-    the tokenizer treats it strictly as literal string primitives and a `<|im_end|>` typed by a user is
-    encoded as ordinary text by the Rust/C++ backend, rather than being stripped or escaped by a fragile
-    text-level pass in Python. Each content string is then replaced by a marker that
-    [`~PreTrainedTokenizerBase.apply_chat_template`] splices back out into the ids already produced for it,
-    so a plain `{{ message.content }}` is protected with no template change at all.
+    `split_special_tokens=True` makes the tokenizer read a user's `<|im_end|>` as literal text, so nothing is
+    stripped or escaped. Jinja then formats markers, and [`~PreTrainedTokenizerBase.apply_chat_template`]
+    splices the ids back in.
 
-    Only content is replaced. Structural fields such as `role` stay untouched, since templates branch on
-    their values, and `tools` and `documents` are supplied by the application itself, not by the user whose
-    input the template is being defended against. Content that the tokenizer encodes identically with and
-    without special-token matching holds no control tokens and is left exactly as it is, so chats with
-    nothing to isolate still encode as they always did, instead of paying the boundary effects of a separate
-    encoding call (a SentencePiece tokenizer, for one, prepends its dummy space to every call). The flip
-    side is that such content is still encoded jointly with the template text around it, so a *fragment* of
-    a control token can in principle fuse with an adjacent fragment emitted by the template - real templates
-    emit whole control tokens, and the template itself is not attacker-controlled.
-
-    The marker is opaque, so a template that inspects marked content *as text* (slicing it, `in` tests,
-    `| length`, `| tojson`) sees the marker rather than the user's text. Returns the rewritten conversations
-    alongside the ids that each marker stands for.
+    Only content is swapped: `role`, `tools` and `documents` come from the application, not from the user.
+    Markers are opaque, so a template that slices content or takes its `| length` sees the marker instead.
     """
-    contents: list[list[int]] = []
+    safe_ids: list[list[int]] = []
 
-    def wrap(node: Any) -> Any:
+    def sanitize(node: Any, may_inline: bool = True) -> Any:
         if isinstance(node, str):
             ids = tokenizer.encode(node, add_special_tokens=False, split_special_tokens=True)
-            # NUL is checked for too, so that content left unmarked can never be mistaken for a marker
-            if "\x00" not in node and ids == tokenizer.encode(node, add_special_tokens=False):
+            # Content with nothing to hide is left for the template's own encoding call, so ordinary chats
+            # stay byte-identical instead of paying its boundary effects (SentencePiece prepends a dummy
+            # space to every call). Only safe where the neighbours are template text: blocks inside a list
+            # render back to back, so two halves of a control token would fuse into the real thing.
+            if may_inline and "\x00" not in node and ids == tokenizer.encode(node, add_special_tokens=False):
                 return node
-            contents.append(ids)
-            return f"\x00{len(contents) - 1}\x00"
+            safe_ids.append(ids)
+            return f"\x00{len(safe_ids) - 1}\x00"
         elif isinstance(node, dict):
-            # Multimodal content blocks: only their text is untrusted input, the rest of the block is structure
-            return {key: wrap(value) if key == "text" else value for key, value in node.items()}
+            # Multimodal blocks: the text is untrusted, the rest of the block is structure
+            return {key: sanitize(value, may_inline) if key == "text" else value for key, value in node.items()}
         elif isinstance(node, list):
-            return [wrap(item) for item in node]
+            return [sanitize(item, may_inline=False) for item in node]
         return node
 
-    wrapped = [
-        [{key: wrap(value) if key == "content" else value for key, value in message.items()} for message in messages]
-        for messages in (chat.messages if hasattr(chat, "messages") else chat for chat in conversations)
+    safe_conversations = [
+        [{key: sanitize(value) if key == "content" else value for key, value in message.items()} for message in chat]
+        for chat in (chat.messages if hasattr(chat, "messages") else chat for chat in conversations)
     ]
-    return wrapped, contents
+    return safe_conversations, safe_ids
 
 
-def encode_untrusted_chat(tokenizer, rendered_chat: str, contents: list[list[int]]) -> list[int]:
-    """Encode a chat rendered by `wrap_untrusted_content`.
+def encode_sanitized_chat(tokenizer, rendered_chat: str, safe_ids: list[list[int]]) -> list[int]:
+    """Encode a chat rendered by `sanitize_content`.
 
-    Template text is encoded normally, so the control tokens the template itself emitted stay special, while
-    each marker is spliced in as the ids the tokenizer already produced for the content it stands for.
+    Template text is encoded normally, so its own control tokens stay special, while each marker becomes the
+    ids already produced for the content it stands for.
     """
     input_ids = []
-    for index, span in enumerate(_UNTRUSTED_SPAN.split(rendered_chat)):
-        if index % 2:  # capture group: a marker, whose content was already encoded as ordinary text
-            input_ids.extend(contents[int(span)])
+    for index, span in enumerate(_SAFE_SPAN.split(rendered_chat)):
+        if index % 2:  # a marker: content, already encoded as ordinary text
+            input_ids.extend(safe_ids[int(span)])
         elif span:
             input_ids.extend(tokenizer.encode(span, add_special_tokens=False))
     return input_ids

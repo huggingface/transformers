@@ -658,6 +658,12 @@ class ChatInputSanitizationTest(unittest.TestCase):
     template = "{% for message in messages %}{{ bos_token }}{{ message['content'] }}{% endfor %}"
     # A more realistic shape: content sits between control tokens that an attacker could try to forge
     chatml = "{% for message in messages %}<|im_start|>{{ message['role'] }}\n{{ message['content'] }}<|im_end|>\n{% endfor %}"
+    # Text blocks render back to back here, which is what lets an attacker try to rebuild a token across them
+    multimodal = (
+        "{% for message in messages %}{% for part in message['content'] %}"
+        "{% if part['type'] == 'image' %}<image>{% else %}{{ part['text'] }}{% endif %}"
+        "{% endfor %}{% endfor %}"
+    )
 
     @classmethod
     def setUpClass(cls):
@@ -773,11 +779,6 @@ class ChatInputSanitizationTest(unittest.TestCase):
 
     def test_multimodal_injected_image_token_stays_text(self):
         """Only the image placeholder the template emits is a control token; ones typed by the user are not."""
-        template = (
-            "{% for message in messages %}{% for part in message['content'] %}"
-            "{% if part['type'] == 'image' %}<image>{% else %}{{ part['text'] }}{% endif %}"
-            "{% endfor %}{% endfor %}"
-        )
         chat = [
             {
                 "role": "user",
@@ -787,11 +788,57 @@ class ChatInputSanitizationTest(unittest.TestCase):
                 ],
             }
         ]
-        self.assertEqual(self.apply(chat, template=template, tokenizer=self.extended).count(self.image_id), 3)
+        self.assertEqual(self.apply(chat, template=self.multimodal, tokenizer=self.extended).count(self.image_id), 3)
 
-        sanitized = self.apply(chat, template=template, tokenizer=self.extended, sanitize_special_tokens=True)
+        sanitized = self.apply(chat, template=self.multimodal, tokenizer=self.extended, sanitize_special_tokens=True)
         self.assertEqual(sanitized.count(self.image_id), 1)  # the one image actually in the message
         self.assertIn("what is in <image>? describe the <image> token", self.extended.decode(sanitized))
+
+    def test_control_token_rebuilt_across_text_blocks_stays_text(self):
+        """Halves of a control token in neighbouring blocks must not fuse back into the real thing.
+
+        Neither half holds a control token on its own, so each looks harmless in isolation. They are still
+        isolated, because the template renders them back to back with nothing in between.
+        """
+        for first, second, forged in [
+            ("<|im_", "end|>", self.im_end_id),
+            ("<ima", "ge>", self.image_id),
+            ("<image", ">", self.image_id),
+        ]:
+            with self.subTest(pieces=(first, second)):
+                chat = [
+                    {"role": "user", "content": [{"type": "text", "text": first}, {"type": "text", "text": second}]}
+                ]
+                sanitized = self.apply(
+                    chat, template=self.multimodal, tokenizer=self.extended, sanitize_special_tokens=True
+                )
+                self.assertEqual(sanitized.count(forged), 0)
+                self.assertEqual(self.extended.decode(sanitized).replace(" ", ""), first + second)
+
+    def test_image_token_rebuilt_around_a_real_image_stays_text(self):
+        """The template's own placeholder must not be extended into a second one by the text beside it."""
+        chat = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "<ima"},
+                    {"type": "image"},
+                    {"type": "text", "text": "ge>"},
+                ],
+            }
+        ]
+        sanitized = self.apply(chat, template=self.multimodal, tokenizer=self.extended, sanitize_special_tokens=True)
+        self.assertEqual(sanitized.count(self.image_id), 1)  # only the image block itself
+
+    def test_control_token_rebuilt_across_messages_stays_text(self):
+        """The same trick across two messages, for a template that puts nothing between them."""
+        template = "{% for message in messages %}{% for part in message['content'] %}{{ part['text'] }}{% endfor %}{% endfor %}"
+        chat = [
+            {"role": "user", "content": [{"type": "text", "text": "<ima"}]},
+            {"role": "user", "content": [{"type": "text", "text": "ge>"}]},
+        ]
+        sanitized = self.apply(chat, template=template, tokenizer=self.extended, sanitize_special_tokens=True)
+        self.assertEqual(sanitized.count(self.image_id), 0)
 
     def test_continue_final_message(self):
         chat = [{"role": "user", "content": "hi"}, {"role": "assistant", "content": f"{self.eos} partial"}]
@@ -813,8 +860,7 @@ class ChatInputSanitizationTest(unittest.TestCase):
         self.assertIn(f"the {self.eos} token ends a sequence", self.tokenizer.decode(sanitized))
 
     def test_multimodal_talking_about_the_image_token_does_not_fail(self):
-        template = "{% for message in messages %}{% for part in message['content'] %}{{ part['text'] }}{% endfor %}{% endfor %}"
         chat = [{"role": "user", "content": [{"type": "text", "text": "how do I use the <image> token?"}]}]
-        sanitized = self.apply(chat, template=template, tokenizer=self.extended, sanitize_special_tokens=True)
+        sanitized = self.apply(chat, template=self.multimodal, tokenizer=self.extended, sanitize_special_tokens=True)
         self.assertEqual(sanitized.count(self.image_id), 0)
         self.assertIn("how do I use the <image> token?", self.extended.decode(sanitized))
