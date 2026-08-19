@@ -113,7 +113,7 @@ class NeoMMEImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             image_processing = image_processing_class(**self.image_processor_dict)
             for attribute in ("do_resize", "do_rescale", "rescale_factor", "do_normalize", "patch_size"):
                 self.assertTrue(hasattr(image_processing, attribute))
-            for attribute in ("max_side", "max_pixels", "min_pixels"):
+            for attribute in ("max_side", "size"):
                 self.assertTrue(hasattr(image_processing, attribute))
 
     def test_image_processor_from_dict_with_kwargs(self):
@@ -121,10 +121,17 @@ class NeoMMEImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.patch_size, self.image_processor_tester.patch_size)
             self.assertIsNone(image_processor.max_side)  # no budget unless asked for: native resolution
+            self.assertIsNone(image_processor.size)
 
-            image_processor = image_processing_class.from_dict(self.image_processor_dict, patch_size=8, max_side=64)
+            image_processor = image_processing_class.from_dict(
+                self.image_processor_dict,
+                patch_size=8,
+                max_side=64,
+                size={"min_pixels": 256, "max_pixels": 1024},
+            )
             self.assertEqual(image_processor.patch_size, 8)
             self.assertEqual(image_processor.max_side, 64)
+            self.assertEqual(dict(image_processor.size), {"min_pixels": 256, "max_pixels": 1024})
 
     def _check_call(self, image_inputs) -> None:
         """Assert single and batched image-processor outputs for NeoMME's flat patch table."""
@@ -221,18 +228,32 @@ class NeoMMEImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                     processor(images=[small], max_side=1024, return_tensors="np")["image_grid_hw"].tolist(), [[1, 1]]
                 )
                 self.assertEqual(
-                    processor(images=[small], min_pixels=16 * 16, return_tensors="np")["image_grid_hw"].tolist(),
+                    processor(
+                        images=[small],
+                        size={"min_pixels": 16 * 16, "max_pixels": 10**9},
+                        return_tensors="np",
+                    )["image_grid_hw"].tolist(),
                     [[4, 4]],
                 )
                 strict_processor = image_processing_class(patch_size=1)
-                capped_size = strict_processor(images=[self.make_image(16, 20)], max_pixels=106, return_tensors="np")[
+                side_capped = strict_processor(images=[self.make_image(101, 200)], max_side=65, return_tensors="np")[
                     "image_grid_hw"
                 ][0]
-                self.assertEqual(capped_size.tolist(), [9, 12])
-                floored_size = strict_processor(images=[self.make_image(16, 16)], min_pixels=341, return_tensors="np")[
-                    "image_grid_hw"
-                ][0]
-                self.assertEqual(floored_size.tolist(), [18, 18])
+                self.assertEqual(side_capped.tolist(), [33, 65])
+                capped_size = strict_processor(
+                    images=[self.make_image(16, 20)],
+                    size={"min_pixels": 1, "max_pixels": 106},
+                    return_tensors="np",
+                )["image_grid_hw"][0]
+                self.assertEqual(capped_size.tolist(), [9, 11])
+                self.assertLessEqual(int(capped_size.prod()), 106)
+                floored_size = strict_processor(
+                    images=[self.make_image(16, 16)],
+                    size={"min_pixels": 341, "max_pixels": 10**9},
+                    return_tensors="np",
+                )["image_grid_hw"][0]
+                self.assertEqual(floored_size.tolist(), [19, 19])
+                self.assertGreaterEqual(int(floored_size.prod()), 341)
 
     def test_caps_clamp_min_pixels(self):
         """A cap takes precedence over the minimum pixel floor."""
@@ -242,15 +263,24 @@ class NeoMMEImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         for backend_name, image_processing_class in self.image_processing_classes.items():
             with self.subTest(backend=backend_name):
                 processor = image_processing_class(patch_size=patch_size)
-                for cap in ({"max_side": 16}, {"max_pixels": 64 * 32 // 4}):
+                for cap, floor in (
+                    ({"max_side": 16}, {"max_side": 16, "size": {"min_pixels": 10**6, "max_pixels": 10**9}}),
+                    (
+                        {"size": {"min_pixels": 1, "max_pixels": 64 * 32 // 4}},
+                        {"size": {"min_pixels": 10**6, "max_pixels": 64 * 32 // 4}},
+                    ),
+                ):
                     with self.subTest(cap=cap):
                         capped = processor(images=[image], return_tensors="np", **cap)["image_grid_hw"].tolist()
-                        floored = processor(images=[image], min_pixels=10**6, return_tensors="np", **cap)[
-                            "image_grid_hw"
-                        ]
-                        self.assertEqual(floored.tolist(), capped)
+                        floored = processor(images=[image], return_tensors="np", **floor)["image_grid_hw"].tolist()
+                        self.assertEqual(floored, capped)
 
-                grid = processor(images=[self.make_image(4, 4)], max_side=8, min_pixels=1024, return_tensors="np")
+                grid = processor(
+                    images=[self.make_image(4, 4)],
+                    max_side=8,
+                    size={"min_pixels": 1024, "max_pixels": 10**9},
+                    return_tensors="np",
+                )
                 self.assertEqual(grid["image_grid_hw"].tolist(), [[2, 2]])
 
     def test_unsupported_image_kwargs_raise(self):
@@ -263,7 +293,7 @@ class NeoMMEImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def test_resolution_settings_must_be_positive_integers(self):
         processor = self.image_processing_classes["torchvision"](patch_size=self.image_processor_tester.patch_size)
         image = self.make_image(16, 16)
-        for name in ("patch_size", "max_side", "max_pixels", "min_pixels"):
+        for name in ("patch_size", "max_side"):
             for value in (0, -1, 1.5):
                 with (
                     self.subTest(name=name, value=value),
@@ -272,6 +302,17 @@ class NeoMMEImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                     processor(images=[image], **{name: value})
                 with self.subTest(name=name, value=value, patch_count=True), self.assertRaises(ValueError):
                     processor.get_number_of_image_patches(16, 16, {name: value})
+        for name in ("min_pixels", "max_pixels"):
+            for value in (0, -1, 1.5):
+                size = {"min_pixels": 1, "max_pixels": 1024}
+                size[name] = value
+                with (
+                    self.subTest(name=name, value=value),
+                    self.assertRaises((ValueError, StrictDataclassFieldValidationError)),
+                ):
+                    processor(images=[image], size=size)
+                with self.subTest(name=name, value=value, patch_count=True), self.assertRaises(ValueError):
+                    processor.get_number_of_image_patches(16, 16, {"size": size})
 
         for height, width in ((0, 16), (16, 0), (-1, 16), (16, 1.5)):
             with self.subTest(height=height, width=width), self.assertRaises(ValueError):
@@ -285,10 +326,10 @@ class NeoMMEImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             (9, 13, {}),
             (64, 32, {"max_side": 16}),
             (64, 32, {"do_resize": False, "max_side": 16}),
-            (4, 4, {"min_pixels": 256}),
-            (64, 32, {"max_pixels": 24 * 24}),
-            (16, 20, {"max_pixels": 106}),
-            (16, 16, {"min_pixels": 341}),
+            (4, 4, {"size": {"min_pixels": 256, "max_pixels": 10**9}}),
+            (64, 32, {"size": {"min_pixels": 1, "max_pixels": 24 * 24}}),
+            (16, 20, {"size": {"min_pixels": 1, "max_pixels": 106}}),
+            (16, 16, {"size": {"min_pixels": 341, "max_pixels": 10**9}}),
         ]
 
         for backend_name, image_processing_class in self.image_processing_classes.items():

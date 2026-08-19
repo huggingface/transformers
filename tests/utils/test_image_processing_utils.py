@@ -22,6 +22,7 @@ import httpx
 
 from transformers import AutoImageProcessor, ViTImageProcessor, ViTImageProcessorFast
 from transformers.image_processing_utils import get_size_dict
+from transformers.image_utils import SizeDict
 from transformers.testing_utils import TOKEN, TemporaryHubRepo, get_tests_dir, is_staging_test
 
 
@@ -198,6 +199,12 @@ class ImageProcessingUtilsTester(unittest.TestCase):
         inputs = {"longest_edge": 224, "shortest_edge": 224}
         outputs = get_size_dict(inputs)
         self.assertEqual(outputs, {"longest_edge": 224, "shortest_edge": 224})
+
+        inputs = {"min_pixels": 256, "max_pixels": 1024}
+        outputs = get_size_dict(inputs)
+        self.assertEqual(outputs, inputs)
+        self.assertEqual(dict(SizeDict(**outputs)), inputs)
+        self.assertEqual(hash(SizeDict(**outputs)), hash(SizeDict(**inputs)))
 
         # Test a single int value which  represents (size, size)
         outputs = get_size_dict(224)
