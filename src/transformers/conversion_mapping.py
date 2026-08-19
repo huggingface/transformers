@@ -1223,7 +1223,6 @@ def _build_checkpoint_conversion_mapping():
         ],
         "nemotron_h": [
             WeightRenaming("backbone.", "model."),
-            WeightRenaming("embedding.weight", "embeddings.weight"),
             WeightConverter(
                 source_patterns=[
                     "mixer.experts.*.up_proj.weight",
