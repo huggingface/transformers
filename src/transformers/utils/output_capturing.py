@@ -109,8 +109,17 @@ def install_output_capuring_hook(
         if collected_outputs is None or key not in collected_outputs.keys():
             return
 
+        hidden_states_layers = collected_outputs.get("_hidden_states_layers")
+
         if capture_initial_hidden_state and key == "hidden_states" and len(collected_outputs[key]) == 0:
-            collected_outputs[key].append(args[0])
+            collected_outputs[key].append(args[0] if hidden_states_layers is None else None)
+
+        if key == "hidden_states" and hidden_states_layers is not None:
+            layer_idx = len(collected_outputs[key]) - int(capture_initial_hidden_state)
+            if layer_idx not in hidden_states_layers:
+                collected_outputs[key].append(None)
+                return
+
         if not isinstance(output, tuple):
             collected_outputs[key].append(output)
         elif output[index] is not None:
@@ -232,6 +241,7 @@ def capture_outputs(func=None, *, tie_last_hidden_states=True):
         def wrapper(self, *args, **kwargs):
             # Pop it so that internal modules always return a dict even if False is requested
             return_dict = kwargs.pop("return_dict", getattr(self.config, "return_dict", True))
+            output_hidden_states_layers = kwargs.pop("output_hidden_states_layers", None)
 
             # _can_record_outputs is None by default
             capturable_flags = _CAN_RECORD_REGISTRY.get(str(self.__class__)) or {}
@@ -250,7 +260,12 @@ def capture_outputs(func=None, *, tie_last_hidden_states=True):
                     "output_attentions", getattr(self.config, "output_attentions", False)
                 )
 
+            if output_hidden_states_layers is not None and "hidden_states" in capturable_flags:
+                recordable_keys["output_hidden_states"] = True
+
             collected_outputs = {k.replace("output_", ""): [] for k, v in recordable_keys.items() if v}
+            if output_hidden_states_layers is not None and "hidden_states" in collected_outputs:
+                collected_outputs["_hidden_states_layers"] = set(output_hidden_states_layers)
             # Make sure hooks are installed if we need to collect outputs
             if len(collected_outputs) > 0:
                 maybe_install_capturing_hooks(self)
@@ -265,9 +280,16 @@ def capture_outputs(func=None, *, tie_last_hidden_states=True):
                 _active_collector.reset(output_token)
 
             # Inject collected outputs into model output (return everything as tuples for BC)
+            hidden_states_layers = collected_outputs.pop("_hidden_states_layers", None)
             for key in collected_outputs:
                 if key == "hidden_states":
                     if not tie_last_hidden_states:
+                        pass
+                    elif (
+                        hidden_states_layers is not None
+                        and len(collected_outputs[key]) > 0
+                        and collected_outputs[key][-1] is None
+                    ):
                         pass
                     elif hasattr(outputs, "vision_hidden_states"):
                         collected_outputs[key] = collected_outputs[key][:-1]

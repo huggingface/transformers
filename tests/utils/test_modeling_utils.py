@@ -490,6 +490,29 @@ class ModelUtilsTest(TestCasePlus):
 
         self.assertTrue(check_models_equal(model, model_loaded))
 
+    @require_torch
+    def test_output_hidden_states_layers(self):
+        config = BertConfig(
+            vocab_size=99,
+            hidden_size=32,
+            num_hidden_layers=4,
+            num_attention_heads=4,
+            intermediate_size=37,
+        )
+        model = BertModel(config).to(torch_device).eval()
+        input_ids = torch.randint(0, config.vocab_size, (2, 7), device=torch_device)
+
+        with torch.no_grad():
+            full_outputs = model(input_ids=input_ids, output_hidden_states=True)
+            sparse_outputs = model(input_ids=input_ids, output_hidden_states_layers=[1, 3])
+
+        self.assertEqual(len(sparse_outputs.hidden_states), len(full_outputs.hidden_states))
+        self.assertIsNone(sparse_outputs.hidden_states[0])
+        self.assertIsNone(sparse_outputs.hidden_states[1])
+        self.assertIsNone(sparse_outputs.hidden_states[3])
+        torch.testing.assert_close(sparse_outputs.hidden_states[2], full_outputs.hidden_states[2])
+        torch.testing.assert_close(sparse_outputs.hidden_states[4], full_outputs.hidden_states[4])
+
     def test_model_manually_shared_disjointed_tensors_optimum(self):
         config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
         model = BertModel(config)
