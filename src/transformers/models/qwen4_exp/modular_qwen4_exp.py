@@ -659,7 +659,7 @@ class Qwen4ExpTextNGramEmbedding(nn.Module):
         # This is a trick to store the previous N=self.context_len `input_ids` - indeed the manipulations are identical to storing
         # a past conv_state, so we can use an additional conv_states inside the Cache for it
         if past_key_values is not None and past_key_values.has_previous_state(self.layer_idx, state_idx=2):
-            previous_context = past_key_values.layers[self.layer_idx].conv_states[2]
+            previous_context = past_key_values.layers[self.layer_idx].conv_states[2].clone()
         else:
             previous_context = input_ids.new_full((input_ids.shape[0], self.context_len), self.eos_token_id)
         # Store the current input_ids for the next forward
