@@ -29,7 +29,7 @@ def get_experts_scheme(quantization_config, module_name=None):
     different layers with different schemes (e.g. Kimi: FP8 attention + INT4 experts), so
     the experts' scheme cannot be assumed global. When ``module_name`` is provided, match
     the concrete checkpoint expert projection against each group's targets. This is needed
-    for configs such as Laguna INT4, where different decoder layers use different bit widths.
+    for configs where different decoder layers use different bit widths (e.g. Laguna INT4).
     """
     from compressed_tensors.utils.match import match_name
 
