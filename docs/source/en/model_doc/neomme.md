@@ -21,11 +21,11 @@ rendered properly in your Markdown viewer.
 [![arXiv](https://img.shields.io/badge/arXiv-coming_soon-b31b1b.svg?style=for-the-badge)](https://arxiv.org)
 [![Hugging Face](https://img.shields.io/badge/NeoMME_Collection-FFD21E?style=for-the-badge&logo=huggingface&logoColor=000)](https://huggingface.co/collections/Hcompany/neomme)
 
-NeoMME is a family of bidirectional multilingual encoders for text and images (natural images and document pages). Text tokens and raw image patches use one shared Transformer encoder, without a separately pretrained vision encoder. The pretrained backbone returns contextual token representations for task-specific fine-tuning.
+NeoMME is a family of efficient 260M and 800M parameter multimodal-native multilingual foundation encoders from H Company. It processes multilingual text tokens and raw image patches in a single bidirectional Transformer encoder, without a separately pretrained vision tower or causal language model.
 
-NeoMME-Retriever is a downstream model fine-tuned for text and document retrieval. It returns token embeddings for MeanMaxSim scoring and mean-pooled embeddings for cosine similarity.
+NeoMME-Retriever is a model fine-tuned from the NeoMME backbone for visual document retrieval with joint late-interaction and dense objectives. It produces multivector embeddings for MeanMaxSim scoring (late-interaction) and mean-pooled embeddings for cosine similarity (dense).
 
-Training details, evaluations, benchmark results, and ablations will be included in the technical report. Apache-2.0 weights are available in the [NeoMME collection](https://huggingface.co/collections/Hcompany/neomme).
+The pretrained backbones and retrieval checkpoints are available under Apache 2.0 in the [NeoMME collection](https://huggingface.co/collections/Hcompany/neomme) and can be used with [Sentence Transformers](https://huggingface.co/sentence-transformers).
 
 ```python
 import torch
