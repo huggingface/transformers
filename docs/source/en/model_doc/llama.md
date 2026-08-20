@@ -122,14 +122,12 @@ visualizer("Plants create energy through a process known as")
 
 [[autodoc]] LlamaTokenizer
     - get_special_tokens_mask
+    - update_post_processor
     - save_vocabulary
 
 ## LlamaTokenizerFast
 
 [[autodoc]] LlamaTokenizerFast
-    - get_special_tokens_mask
-    - update_post_processor
-    - save_vocabulary
 
 ## LlamaModel
 

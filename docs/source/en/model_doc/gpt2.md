@@ -113,10 +113,6 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 [[autodoc]] GPT2Tokenizer
     - save_vocabulary
 
-## GPT2TokenizerFast
-
-[[autodoc]] GPT2TokenizerFast
-
 ## GPT2 specific outputs
 
 [[autodoc]] models.gpt2.modeling_gpt2.GPT2DoubleHeadsModelOutput

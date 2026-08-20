@@ -105,17 +105,6 @@ transcription[0]
     - basic_normalize
     - normalize
 
-## WhisperTokenizerFast
-
-[[autodoc]] WhisperTokenizerFast
-    - set_prefix_tokens
-    - get_special_tokens_mask
-    - save_vocabulary
-    - batch_decode
-    - decode
-    - basic_normalize
-    - normalize
-
 ## WhisperFeatureExtractor
 
 [[autodoc]] WhisperFeatureExtractor
