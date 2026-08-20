@@ -134,6 +134,9 @@ _LEGACY_DROP_PATHS = {
 _WEIGHT_KEY_RENAMES = (
     ("inputs_embedder.atom_attention_encoder.", "input_embedder.atom_encoder."),
     ("structure_head.diffusion_module.", "structure_head."),
+    # The denoiser's noisy-coord embedding lives on the diffusion module in the port, not inside its
+    # atom encoder (the trunk-side encoder has no coordinate stream). Must follow the rule above.
+    ("structure_head.atom_encoder.coords_linear.", "structure_head.coords_linear."),
     (".atom_transformer.", "."),
     ("._engine.", "."),
     (".blocks.", ".layers."),

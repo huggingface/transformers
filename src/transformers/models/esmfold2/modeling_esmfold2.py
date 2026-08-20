@@ -457,27 +457,18 @@ def scatter_atom_to_token(
 
 
 class EsmFold2AtomEncoder(nn.Module):
-    """SWA atom encoder. ``structure_prediction=True`` (the diffusion module) adds ``coords_linear``.
+    """SWA atom encoder: embeds per-atom features, runs the atom layers and pools atoms into tokens.
 
-    Resolves which of the two atom sub-configs a call site uses and hands it down, so nothing below
-    repeats the choice.
+    We need to pass atom_config separately because different configs are used in different
+    instantiations of this class.
     """
 
-    def __init__(self, config: EsmFold2Config, structure_prediction: bool = True) -> None:
+    def __init__(self, config: EsmFold2Config, atom_config: EsmFold2AtomEncoderConfig) -> None:
         super().__init__()
-        diffusion_config = config.structure_head.diffusion_module
-        atom_config = diffusion_config.atom_encoder if structure_prediction else config.atom_encoder
-        self.structure_prediction = structure_prediction
-
         # The atom-name-char slice of `config.atom_feature_dim`.
         self.char_feature_dim = config.char_vocab_size * config.max_chars
         self.atom_linear = nn.Linear(config.atom_feature_dim, atom_config.hidden_size, bias=False)
         self.atom_norm = EsmFold2LayerNorm(atom_config.hidden_size)
-
-        # CODEPATH: the diffusion module's encoder (structure_prediction=True) embeds the noisy atom
-        # coords; the trunk's input featurizer (structure_prediction=False) runs before any coords exist.
-        if structure_prediction:
-            self.coords_linear = nn.Linear(6, atom_config.hidden_size, bias=False)
 
         self.config = config
         self.rotary_emb = EsmFold2RotaryEmbedding(atom_config)
@@ -527,26 +518,20 @@ class EsmFold2AtomEncoder(nn.Module):
 
     def forward(
         self,
-        atom_embeds: Tensor,
+        hidden_states: Tensor,
+        atom_conditioning: Tensor,
         attention_mask: Tensor,
         position_embeddings: tuple[Tensor, Tensor],
         atom_mask: Tensor,
         atom_to_token: Tensor,
         num_tokens: int,
-        atom_coords: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor, Tensor]:
-        """Returns ``(token_hidden_states, hidden_states, atom_conditioning)``. Every argument is already at the
-        caller's batch size (for the diffusion stack, ``batch_size * num_diffusion_samples``).
+    ) -> tuple[Tensor, Tensor]:
+        """Returns ``(token_hidden_states, hidden_states)``. Every argument is already at the caller's
+        batch size (for the diffusion stack, ``batch_size * num_diffusion_samples``).
+
+        ``atom_conditioning`` is the ``embed_atoms`` output; the trunk passes it as ``hidden_states``
+        too, while the diffusion module passes coord-augmented embeds as ``hidden_states``.
         """
-        atom_conditioning = atom_embeds
-        hidden_states = atom_conditioning
-
-        if self.structure_prediction:
-            # The second coord slot is unused in this release, so coords_linear sees [atom_coords, 0].
-            coord_input = torch.cat([atom_coords, torch.zeros_like(atom_coords)], dim=-1)
-            coord_embeds = self.coords_linear(coord_input.to(self.coords_linear.weight.dtype))
-            hidden_states = hidden_states + coord_embeds
-
         for layer in self.layers:
             hidden_states = layer(hidden_states, atom_conditioning, attention_mask, position_embeddings)
 
@@ -558,7 +543,7 @@ class EsmFold2AtomEncoder(nn.Module):
             atom_mask=atom_mask,
         )
 
-        return token_hidden_states, hidden_states, atom_conditioning
+        return token_hidden_states, hidden_states
 
 
 def _gather_along_dim1(source: Tensor, index: Tensor) -> Tensor:
@@ -805,7 +790,8 @@ class EsmFold2DiffusionModule(nn.Module):
         self.sigma_data = diffusion_config.sigma_data
 
         self.conditioning = EsmFold2DiffusionConditioning(config)
-        self.atom_encoder = EsmFold2AtomEncoder(config, structure_prediction=True)
+        self.coords_linear = nn.Linear(6, diffusion_config.atom_encoder.hidden_size, bias=False)
+        self.atom_encoder = EsmFold2AtomEncoder(config, diffusion_config.atom_encoder)
         self.atom_decoder = EsmFold2AtomDecoder(config)
         self.single_to_token = nn.Linear(diffusion_config.hidden_size, diffusion_config.hidden_size, bias=False)
         self.token_transformer = EsmFold2DiffusionTransformer(config)
@@ -884,15 +870,18 @@ class EsmFold2DiffusionModule(nn.Module):
         denominator = torch.sqrt(noise_level * noise_level + sigma_data * sigma_data)
         normalized_coords = noisy_coords / denominator[:, None, None]
 
-        # Step 3: atom encoder
-        token_hidden_states, atom_hidden_states, atom_conditioning = self.atom_encoder(
-            atom_embeds=conditioning.atom_embeds,
+        # Step 3: embed the normalized coords, then run the atom encoder on the coord-augmented stream.
+        # The second coord slot is unused in this release, so coords_linear sees [normalized_coords, 0].
+        coord_input = torch.cat([normalized_coords, torch.zeros_like(normalized_coords)], dim=-1)
+        coord_embeds = self.coords_linear(coord_input.to(self.coords_linear.weight.dtype))
+        token_hidden_states, atom_hidden_states = self.atom_encoder(
+            hidden_states=conditioning.atom_embeds + coord_embeds,
+            atom_conditioning=conditioning.atom_embeds,
             attention_mask=conditioning.attention_mask,
             position_embeddings=conditioning.position_embeddings,
             atom_mask=conditioning.atom_mask,
             atom_to_token=conditioning.atom_to_token,
             num_tokens=single_states.shape[1],
-            atom_coords=normalized_coords,
         )
 
         # Step 4: add conditioned single repr
@@ -910,7 +899,7 @@ class EsmFold2DiffusionModule(nn.Module):
         coord_update = self.atom_decoder(
             token_hidden_states=token_hidden_states,
             hidden_states=atom_hidden_states,
-            atom_conditioning=atom_conditioning,
+            atom_conditioning=conditioning.atom_embeds,
             attention_mask=conditioning.attention_mask,
             position_embeddings=conditioning.position_embeddings,
             atom_to_token=conditioning.atom_to_token,
@@ -1783,7 +1772,7 @@ class EsmFold2InputEmbedder(nn.Module):
 
     def __init__(self, config: EsmFold2Config) -> None:
         super().__init__()
-        self.atom_encoder = EsmFold2AtomEncoder(config, structure_prediction=False)
+        self.atom_encoder = EsmFold2AtomEncoder(config, config.atom_encoder)
         self.pair_init_1 = nn.Linear(config.single_inputs_size, config.pairwise_hidden_size, bias=False)
         self.pair_init_2 = nn.Linear(config.single_inputs_size, config.pairwise_hidden_size, bias=False)
         self.rel_pos = EsmFold2RelativePositionEncoding(config)
@@ -1810,7 +1799,9 @@ class EsmFold2InputEmbedder(nn.Module):
         # The atom stack runs once here, at the unexpanded batch size.
         atom_embeds, position_embeddings = self.atom_encoder.embed_atoms(atom_inputs)
         atom_encoding = self.atom_encoder(
-            atom_embeds=atom_embeds,
+            # No coordinates exist yet, so the layer stream and its conditioning are the same embeds.
+            hidden_states=atom_embeds,
+            atom_conditioning=atom_embeds,
             attention_mask=self.atom_encoder.build_attention_mask(atom_inputs.atom_attention_mask, atom_embeds),
             position_embeddings=position_embeddings,
             atom_mask=atom_inputs.atom_attention_mask,
