@@ -527,11 +527,7 @@ class Qwen4ExpTextGatedResidual(nn.Module):
         self.hc_count = config.hc_count
         self.hidden_size = config.hidden_size
         hc_hidden_size = self.hc_count * self.hidden_size
-        self.hc_norm = Qwen4ExpTextGroupedRMSNorm(
-            hc_hidden_size,
-            eps=config.rms_norm_eps,
-            group_size=self.hidden_size,
-        )
+        self.hc_norm = Qwen4ExpTextGroupedRMSNorm(hc_hidden_size, self.hidden_size, eps=config.rms_norm_eps)
         self.input_mix_weight_down = nn.Linear(hc_hidden_size, config.hc_lowrank, bias=False)
         self.input_mix_weight_up = nn.Linear(config.hc_lowrank, hc_hidden_size, bias=False)
         self.block_inject_weight = nn.Linear(hc_hidden_size, self.hc_count, bias=False) if use_combine else None
@@ -727,15 +723,9 @@ class Qwen4ExpTextPLELayer(nn.Module):
         self.short_conv_state_len = (conv_kernel_size - 1) * conv_dilation
         self.key_proj = nn.Linear(ple_embed_dim, hc_hidden_size, bias=False)
         self.value_proj = nn.Linear(ple_embed_dim, self.hidden_size, bias=False)
-        self.norm_key = Qwen4ExpTextGroupedRMSNorm(
-            hc_hidden_size, eps=config.rms_norm_eps, group_size=self.hidden_size
-        )
-        self.norm_query = Qwen4ExpTextGroupedRMSNorm(
-            hc_hidden_size, eps=config.rms_norm_eps, group_size=self.hidden_size
-        )
-        self.norm_conv = Qwen4ExpTextGroupedRMSNorm(
-            hc_hidden_size, eps=config.rms_norm_eps, group_size=self.hidden_size
-        )
+        self.norm_key = Qwen4ExpTextGroupedRMSNorm(hc_hidden_size, self.hidden_size, eps=config.rms_norm_eps)
+        self.norm_query = Qwen4ExpTextGroupedRMSNorm(hc_hidden_size, self.hidden_size, eps=config.rms_norm_eps)
+        self.norm_conv = Qwen4ExpTextGroupedRMSNorm(hc_hidden_size, self.hidden_size, eps=config.rms_norm_eps)
         self.conv1d = nn.Conv1d(
             hc_hidden_size,
             hc_hidden_size,
