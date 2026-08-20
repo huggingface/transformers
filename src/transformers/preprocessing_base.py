@@ -22,7 +22,7 @@ import json
 import os
 from collections import UserDict
 from copy import deepcopy
-from typing import Any, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar, overload
 
 import numpy as np
 from huggingface_hub import create_repo, is_offline_mode
@@ -43,6 +43,14 @@ from .utils import (
     safe_load_json_file,
 )
 from .utils.hub import cached_file
+
+
+if TYPE_CHECKING:
+    from typing_extensions import Unpack
+
+    from .audio_utils import AudioInput
+    from .image_utils import ImageInput
+    from .processing_utils import AudioKwargs, ImagesKwargs
 
 
 logger = logging.get_logger(__name__)
@@ -342,7 +350,11 @@ class PreprocessingMixin(PushToHubMixin):
         default is a no-op.
         """
 
-    def preprocess(self, inputs, *args, **kwargs):
+    @overload
+    def preprocess(self, inputs: "ImageInput", *args, **kwargs: "Unpack[ImagesKwargs]") -> BatchFeature: ...
+    @overload
+    def preprocess(self, inputs: "AudioInput", *args, **kwargs: "Unpack[AudioKwargs]") -> BatchFeature: ...
+    def preprocess(self, inputs: "ImageInput | AudioInput", *args, **kwargs) -> BatchFeature:
         """
         Common preprocess entrypoint: validate received kwargs against `valid_kwargs`, fill in
         defaults from `self`, standardize and validate them, then dispatch to the modality-specific
@@ -363,7 +375,7 @@ class PreprocessingMixin(PushToHubMixin):
 
         return self._preprocess_like_inputs(inputs, *args, **kwargs)
 
-    def _preprocess_like_inputs(self, inputs, *args, **kwargs):
+    def _preprocess_like_inputs(self, inputs: "ImageInput | AudioInput", *args, **kwargs) -> BatchFeature:
         """
         Dispatch to the modality-specific `_preprocess_*_like_inputs` method
         (e.g. `_preprocess_image_like_inputs`). Implemented by modality base classes.
