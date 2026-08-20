@@ -145,8 +145,6 @@ if is_accelerate_available():
 if TYPE_CHECKING:
     from kernels.layer.mode import Mode
 
-    from ._typing import DeviceMeshLike
-
 
 if is_sagemaker_mp_enabled():
     import smdistributed.modelparallel.torch as smp
@@ -184,7 +182,6 @@ class LoadStateDictConfig:
     dtype: torch.dtype | None = None
     dtype_plan: dict = field(default_factory=dict)
     hf_quantizer: HfQuantizer | None = None
-    device_mesh: "DeviceMeshLike | None" = None
     weights_only: bool = True
     weight_mapping: list[WeightConverter | WeightRenaming] | None = None
     disable_mmap: bool | None = None
@@ -4317,7 +4314,8 @@ class PreTrainedModel(
         # Obtain the weight conversion mapping for this model if any are registered and apply to all submodels recursively
         weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)
 
-        model = cls.maybe_distribute_model(model, distributed_config, device_mesh)
+        if distributed_config is not None:
+            model = cls.maybe_distribute_model(model, distributed_config, device_mesh)
 
         # Prepare the full device map
         if device_map is not None:
@@ -4334,7 +4332,6 @@ class PreTrainedModel(
             dtype=dtype,
             dtype_plan=dtype_plan,
             hf_quantizer=hf_quantizer,
-            device_mesh=device_mesh,
             weights_only=weights_only,
             weight_mapping=weight_conversions,
             use_safetensors=use_safetensors,
@@ -4505,7 +4502,6 @@ class PreTrainedModel(
             model._move_missing_keys_from_meta_to_device(
                 loading_info.missing_and_mismatched(),
                 load_config.device_map,
-                load_config.device_mesh,
                 load_config.hf_quantizer,
             )
 
@@ -4722,7 +4718,6 @@ class PreTrainedModel(
         self,
         missing_keys: list[str],
         device_map: dict | None,
-        device_mesh: "DeviceMeshLike | None",
         hf_quantizer: HfQuantizer | None,
     ) -> None:
         """Move missing params/buffers off meta to their target device.
