@@ -183,12 +183,9 @@ class NeoMMEProcessor(ProcessorMixin):
             raise ValueError("image_placeholder must be a non-empty string.")
 
         super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
+        self.image_token = tokenizer.image_token
         self.query_expand = query_expand
         self.image_placeholder = image_placeholder
-
-    @property
-    def image_token(self) -> str | None:
-        return getattr(self.tokenizer, "image_token", None)
 
     @property
     def model_input_names(self) -> list[str]:
