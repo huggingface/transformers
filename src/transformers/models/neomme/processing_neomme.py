@@ -247,6 +247,8 @@ class NeoMMEProcessor(ProcessorMixin):
 
         _chat_template_applied (`bool`, *optional*, defaults to `False`):
             Internal flag set by [`~NeoMMEProcessor.apply_chat_template`] after the retrieval markers are rendered.
+        task (`str`, *optional*, defaults to `"query"`):
+            Retrieval side already rendered into `text` by [`~NeoMMEProcessor.apply_chat_template`].
 
         Returns:
             A [`BatchFeature`] with `input_ids` and `attention_mask`. Image inputs also return `position_ids`,
