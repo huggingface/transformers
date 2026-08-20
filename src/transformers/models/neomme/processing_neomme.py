@@ -78,7 +78,7 @@ class NeoMMEProcessor(ProcessorMixin):
         """
         retrieval_task = kwargs.pop("_retrieval_task", None)
         text_batch = [text] if isinstance(text, str) else text
-        expected_prefix = getattr(self.tokenizer, f"{retrieval_task}_token_id", None)
+        expected_prefix_id = getattr(self.tokenizer, f"{retrieval_task}_token_id", None)
         query_mask_counts = (
             [value.count(self.tokenizer.mask_token) for value in text_batch]
             if retrieval_task == "query" and text_batch is not None
@@ -90,15 +90,19 @@ class NeoMMEProcessor(ProcessorMixin):
         input_ids_list = input_ids.tolist() if hasattr(input_ids, "tolist") else input_ids
         attention_mask = batch.get("attention_mask")
         attention_mask_list = attention_mask.tolist() if hasattr(attention_mask, "tolist") else attention_mask
-        for index, ids in enumerate(input_ids_list):
-            active_ids = (
-                [token_id for token_id, keep in zip(ids, attention_mask_list[index]) if keep]
+        for index, input_ids_row in enumerate(input_ids_list):
+            non_padded_ids = (
+                [
+                    token_id
+                    for token_id, is_non_padding in zip(input_ids_row, attention_mask_list[index])
+                    if is_non_padding
+                ]
                 if attention_mask_list is not None
-                else ids
+                else input_ids_row
             )
-            if expected_prefix is not None and (not active_ids or active_ids[0] != expected_prefix):
+            if expected_prefix_id is not None and (not non_padded_ids or non_padded_ids[0] != expected_prefix_id):
                 raise ValueError("The NeoMME retrieval template must preserve its leading task marker.")
-            if query_mask_counts and ids.count(self.tokenizer.mask_token_id) != query_mask_counts[index]:
+            if query_mask_counts and input_ids_row.count(self.tokenizer.mask_token_id) != query_mask_counts[index]:
                 raise ValueError("Truncation removed NeoMME query expansion tokens; increase `max_length`.")
 
         image_grid_hw = batch.pop("image_grid_hw", None)
@@ -178,47 +182,47 @@ class NeoMMEProcessor(ProcessorMixin):
         attention_mask = attention_mask.tolist() if hasattr(attention_mask, "tolist") else attention_mask
         image_grid_hw = image_grid_hw.tolist() if hasattr(image_grid_hw, "tolist") else image_grid_hw
 
-        if len({len(ids) for ids in input_ids_list}) != 1:
+        if len({len(input_ids_row) for input_ids_row in input_ids_list}) != 1:
             raise ValueError("NeoMME image batches require padding to a common sequence length.")
-        positions = np.zeros((2, len(input_ids_list), len(input_ids_list[0])), dtype=np.int64)
+        position_ids = np.zeros((2, len(input_ids_list), len(input_ids_list[0])), dtype=np.int64)
         image_index = 0
-        for batch_index, (ids, mask) in enumerate(zip(input_ids_list, attention_mask)):
-            active = np.flatnonzero(mask)
-            active_ids = [ids[index] for index in active]
-            if self.image_token_id in active_ids and image_index < len(image_grid_hw):
+        for batch_index, (input_ids_row, attention_mask_row) in enumerate(zip(input_ids_list, attention_mask)):
+            non_padded_indices = np.flatnonzero(attention_mask_row)
+            non_padded_ids = [input_ids_row[index] for index in non_padded_indices]
+            if self.image_token_id in non_padded_ids and image_index < len(image_grid_hw):
                 grid_height, grid_width = image_grid_hw[image_index]
                 image_index += 1
-                expected_ids = [
+                expected_input_ids = [
                     self.tokenizer.document_token_id,
                     self.image_token_id,
                     *([self.image_token_id] * grid_width + [self.tokenizer.row_token_id]) * grid_height,
                 ]
-                if active_ids != expected_ids:
+                if non_padded_ids != expected_input_ids:
                     raise ValueError("NeoMME image inputs contain an invalid or truncated token layout.")
-                sample_positions = self._image_positions(grid_height, grid_width)
+                sample_position_ids = self._image_positions(grid_height, grid_width)
             else:
-                indices = np.arange(len(active), dtype=np.int64)
-                sample_positions = np.stack((indices, indices), axis=-1)
-            positions[:, batch_index, active] = sample_positions.T
+                text_position_ids = np.arange(len(non_padded_indices), dtype=np.int64)
+                sample_position_ids = np.stack((text_position_ids, text_position_ids), axis=-1)
+            position_ids[:, batch_index, non_padded_indices] = sample_position_ids.T
 
         if image_index != len(image_grid_hw):
             raise ValueError(f"Got {image_index} image prompts for {len(image_grid_hw)} images.")
 
         if hasattr(input_ids, "new_tensor"):
-            return input_ids.new_tensor(positions)
-        return positions if isinstance(input_ids, np.ndarray) else positions.tolist()
+            return input_ids.new_tensor(position_ids)
+        return position_ids if isinstance(input_ids, np.ndarray) else position_ids.tolist()
 
     @staticmethod
     def _image_positions(grid_height: int, grid_width: int) -> np.ndarray:
         """Return positions for `<doc> <img>` followed by the patch grid and row markers."""
-        positions = np.empty((2 + grid_height * (grid_width + 1), 2), dtype=np.int64)
-        positions[0] = (0, 0)
-        positions[1] = (1, 1)
+        position_ids = np.empty((2 + grid_height * (grid_width + 1), 2), dtype=np.int64)
+        position_ids[0] = (0, 0)
+        position_ids[1] = (1, 1)
         rows = np.broadcast_to(np.arange(grid_height)[:, None], (grid_height, grid_width + 1))
         columns = np.broadcast_to(np.arange(grid_width + 1)[None, :], (grid_height, grid_width + 1))
-        positions[2:, 0] = 2 + rows.ravel()
-        positions[2:, 1] = 2 + columns.ravel()
-        return positions
+        position_ids[2:, 0] = 2 + rows.ravel()
+        position_ids[2:, 1] = 2 + columns.ravel()
+        return position_ids
 
 
 __all__ = ["NeoMMEProcessor"]
