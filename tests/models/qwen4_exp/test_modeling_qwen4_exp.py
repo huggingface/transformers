@@ -53,7 +53,7 @@ class Qwen4ExpTextModelTester(CausalLMModelTester):
     def __init__(self, parent):
         super().__init__(parent=parent)
         self.hidden_act = "silu"
-        self.head_dim = 8
+        self.rope_parameters = {"rope_type": "default", "partial_rotary_factor": 0.25}
         self.layer_types = ["linear_attention", "deepseek_sparse_attention"]
         self.linear_conv_kernel_dim = 2
         self.linear_key_head_dim = 16
@@ -390,7 +390,16 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
 @require_torch
 class Qwen4ExpCompositeModelTest(unittest.TestCase):
     def get_config(self):
-        text_config = Qwen4ExpTextModelTester(self).get_config(ple_layer_ids=[1])
+        text_config = Qwen4ExpTextModelTester(self).get_config(
+            ple_layer_ids=[1],
+            head_dim=24,
+            rope_parameters={
+                "rope_type": "default",
+                "partial_rotary_factor": 0.25,
+                "mrope_section": [1, 1, 1],
+                "mrope_interleaved": True,
+            },
+        )
         vision_config = {
             "depth": 1,
             "in_channels": 3,
