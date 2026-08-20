@@ -28,7 +28,8 @@ def _prefer_cudnn_sdpa(device: int) -> bool:
 
     Hopper only, because that is where cuDNN wins: measured forward+backward at 8K-128K sequence
     lengths, cuDNN is 1.7-2.3x faster on H100 and H200, but 0.82x on A100 and 0.88x on Blackwell
-    (RTX PRO 6000, sm120). sm100 was not measured.
+    (RTX PRO 6000, sm120). sm100 was not measured. Benchmark and numbers:
+    https://github.com/huggingface/transformers/pull/48163
     """
     if not _is_torch_greater_or_equal_than_2_8:
         return False
