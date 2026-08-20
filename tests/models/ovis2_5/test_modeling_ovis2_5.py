@@ -865,12 +865,20 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
     def test_vision_rotary_embedding_initialization(self):
         config = self.model_tester.get_vision_config()
         model = Ovis2_5VisionModel(config)
-        rotary_embedding = model.rotary_pos_emb
+        rotary_embedding = model.rotary_emb
+        spatial_dim = config.hidden_size // config.num_attention_heads // 2
         expected = 1.0 / (
-            rotary_embedding.theta
-            ** (torch.arange(0, rotary_embedding.dim, 2, dtype=torch.float) / rotary_embedding.dim)
+            config.rope_parameters["rope_theta"]
+            ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim)
         )
         torch.testing.assert_close(rotary_embedding.inv_freq, expected)
+
+        position_ids = torch.tensor([[0, 1], [2, 3]], dtype=torch.long)
+        old_frequencies = (position_ids.unsqueeze(-1) * expected).flatten(1)
+        old_frequencies = torch.cat((old_frequencies, old_frequencies), dim=-1)
+        cos, sin = rotary_embedding(torch.zeros(2, config.hidden_size), position_ids)
+        torch.testing.assert_close(cos, old_frequencies.cos())
+        torch.testing.assert_close(sin, old_frequencies.sin())
 
     def test_patch_embedding_uses_released_convolutional_layout(self):
         config = self.model_tester.get_vision_config()

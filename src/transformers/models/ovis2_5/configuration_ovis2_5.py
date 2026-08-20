@@ -61,6 +61,8 @@ class Ovis2_5VisionConfig(PreTrainedConfig):
     vocab_size: int = 65536
     num_visual_indicator_tokens: int = 4
     initializer_range: float = 0.02
+    max_position_embeddings: int = 1024
+    rope_parameters: dict | None = None
 
     # Ignore copy
     def __post_init__(self, **kwargs):

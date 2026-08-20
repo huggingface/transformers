@@ -46,7 +46,7 @@ from ..exaone4_5.modeling_exaone4_5 import Exaone4_5_ForConditionalGeneration
 from ..glm4v.image_processing_glm4v import Glm4vImageProcessor, Glm4vImageProcessorKwargs
 from ..glm4v.image_processing_pil_glm4v import Glm4vImageProcessorPil
 from ..glm4v.video_processing_glm4v import Glm4vVideoProcessor
-from ..muse_glimmer.modeling_muse_glimmer import MuseGlimmerVisionModel
+from ..muse_glimmer.modeling_muse_glimmer import MuseGlimmerVisionModel, MuseGlimmerVisionRotaryEmbedding
 from ..ovis2.modeling_ovis2 import Ovis2Model
 from ..paddleocr_vl.modeling_paddleocr_vl import PaddleOCRVisionEmbeddings
 from ..video_llama_3.modeling_video_llama_3 import (
@@ -56,7 +56,6 @@ from ..video_llama_3.modeling_video_llama_3 import (
     VideoLlama3VisionAttention,
     VideoLlama3VisionEncoderLayer,
     VideoLlama3VisionMLP,
-    VideoLlama3VisionRotaryEmbedding,
 )
 
 
@@ -355,6 +354,8 @@ class Ovis2_5VisionConfig(Cosmos3EdgeVisionConfig):
     vocab_size: int = 65536
     num_visual_indicator_tokens: int = 4
     initializer_range: float = 0.02
+    max_position_embeddings: int = 1024
+    rope_parameters: dict | None = None
     num_patches = AttributeError()
 
     # Ignore copy
@@ -441,7 +442,7 @@ class Ovis2_5Config(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-class Ovis2_5VisionRotaryEmbedding(VideoLlama3VisionRotaryEmbedding):
+class Ovis2_5VisionRotaryEmbedding(MuseGlimmerVisionRotaryEmbedding):
     pass
 
 
@@ -549,6 +550,9 @@ class Ovis2_5PreTrainedModel(VideoLlama3PreTrainedModel):
     _supports_flex_attn = True
     _can_compile_fullgraph = False
 
+    def _init_weights(self, module):
+        PreTrainedModel._init_weights(self, module)
+
 
 @auto_docstring(custom_intro="The Ovis2.5 vision tower, without the visual tokenizer or language model.")
 class Ovis2_5VisionModel(Ovis2_5PreTrainedModel, MuseGlimmerVisionModel):
@@ -569,8 +573,7 @@ class Ovis2_5VisionModel(Ovis2_5PreTrainedModel, MuseGlimmerVisionModel):
         self.embeddings = Ovis2_5VisionEmbeddings(config)
         self.encoder = Ovis2_5VisionEncoder(config)
         self.post_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        head_dim = config.hidden_size // config.num_attention_heads
-        self.rotary_pos_emb = Ovis2_5VisionRotaryEmbedding(head_dim // 2)
+        self.rotary_emb = Ovis2_5VisionRotaryEmbedding(config)
         self.post_init()
 
     def pixel_shuffle(self):
@@ -600,20 +603,14 @@ class Ovis2_5VisionModel(Ovis2_5PreTrainedModel, MuseGlimmerVisionModel):
         )
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
 
-        position_ids = get_vision_position_ids(grid_thw, self.config.spatial_merge_size, kwargs=kwargs)
-        rotary_pos_emb = self.rotary_pos_emb(position_ids)
-        rotary_pos_emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
-        rotary_cos, rotary_sin = rotary_pos_emb.cos(), rotary_pos_emb.sin()
-
         sequence_length = hidden_states.shape[0]
         hidden_states = hidden_states.reshape(sequence_length // spatial_merge_unit, spatial_merge_unit, -1)
         hidden_states = hidden_states[window_index].reshape(sequence_length, -1)
-        rotary_cos = rotary_cos.reshape(sequence_length // spatial_merge_unit, spatial_merge_unit, -1)
-        rotary_sin = rotary_sin.reshape(sequence_length // spatial_merge_unit, spatial_merge_unit, -1)
-        position_embeddings = (
-            rotary_cos[window_index].reshape(sequence_length, -1),
-            rotary_sin[window_index].reshape(sequence_length, -1),
-        )
+
+        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
+        position_ids = position_ids.reshape(sequence_length // spatial_merge_unit, spatial_merge_unit, -1)
+        position_ids = position_ids[window_index].reshape(sequence_length, -1)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         cu_seqlens_mapping = {
             "full_attention": (cu_seqlens, max_seqlen),
