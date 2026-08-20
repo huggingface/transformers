@@ -226,23 +226,24 @@ def apply_pipeline_parallelism(model: nn.Module, pp_mesh: torch.distributed.devi
 
     return model
 
+def _hidden_states_shape(fwd_kwargs: dict, hidden_size: int) -> tuple[int, ...]:
+    if (inputs_embeds := fwd_kwargs.get("inputs_embeds")) is not None:
+        return tuple(inputs_embeds.shape)
+    if (input_ids := fwd_kwargs.get("input_ids")) is not None:
+        return (*input_ids.shape[:2], hidden_size)
+    raise ValueError("Cannot determine hidden states shape for pipeline recv_forward")
+
+
+def _feed_hidden_states_as_input_embeds(fwd_kwargs: dict, hidden_states: torch.Tensor) -> dict:
+    """Stage 0 uses input_ids; later stages use received hidden states as inputs_embeds."""
+    fwd_kwargs.pop("input_ids", None)
+    fwd_kwargs["inputs_embeds"] = hidden_states
+    return fwd_kwargs
+
 
 def pipeline_parallel_naive_forward(
     model: nn.Module, original_forward, forward_signature: inspect.Signature, *args, **kwargs
 ):
-    def _hidden_states_shape(fwd_kwargs: dict, hidden_size: int) -> tuple[int, ...]:
-        if (inputs_embeds := fwd_kwargs.get("inputs_embeds")) is not None:
-            return tuple(inputs_embeds.shape)
-        if (input_ids := fwd_kwargs.get("input_ids")) is not None:
-            return (*input_ids.shape[:2], hidden_size)
-        raise ValueError("Cannot determine hidden states shape for pipeline recv_forward")
-
-    def _feed_hidden_states_as_input_embeds(fwd_kwargs: dict, hidden_states: torch.Tensor) -> dict:
-        """Stage 0 uses input_ids; later stages use received hidden states as inputs_embeds."""
-        fwd_kwargs.pop("input_ids", None)
-        fwd_kwargs["inputs_embeds"] = hidden_states
-        return fwd_kwargs
-
     stage = model._pp_stage
 
     device = next(model.parameters()).device
