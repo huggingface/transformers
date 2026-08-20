@@ -95,7 +95,7 @@ class AutoFeatureExtractorTest(unittest.TestCase):
     def test_feature_extractor_not_found(self):
         with self.assertRaisesRegex(
             EnvironmentError,
-            "Can't load feature extractor for 'hf-internal-testing/config-no-model'.",
+            "Can't load audio processor for 'hf-internal-testing/config-no-model'.",
         ):
             _ = AutoFeatureExtractor.from_pretrained("hf-internal-testing/config-no-model")
 
