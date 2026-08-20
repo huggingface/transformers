@@ -155,7 +155,7 @@ class Gemma4ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             text=[text_single_image, text_single_image], images=[[image], [image]], return_tensors="np"
         )
         self.assertListEqual(
-            out_batch_oneimage[self.images_input_name].tolist(), out_multiimages[self.images_input_name].tolist()
+            out_batch_oneimage[self.image_input_name].tolist(), out_multiimages[self.image_input_name].tolist()
         )
 
     def test_special_mm_token_truncation(self):

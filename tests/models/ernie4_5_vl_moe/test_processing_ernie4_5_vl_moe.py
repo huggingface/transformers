@@ -138,6 +138,6 @@ class Ernie4_5_VLMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         size = {"shortest_edge": processor.image_processor.size["shortest_edge"], "longest_edge": 56 * 56 * 4}
         inputs = processor(text=input_str, images=image_input, size=size, return_tensors="pt")
-        self.assertEqual(inputs[self.images_input_name].shape[0], 612)
+        self.assertEqual(inputs[self.image_input_name].shape[0], 612)
         inputs = processor(text=input_str, images=image_input, return_tensors="pt")
-        self.assertEqual(inputs[self.images_input_name].shape[0], 100)
+        self.assertEqual(inputs[self.image_input_name].shape[0], 100)

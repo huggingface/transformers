@@ -390,7 +390,7 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             max_length=76,
         )
 
-        self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
+        self.assertLessEqual(inputs[self.image_input_name][0][0].mean(), 0)
         self.assertTrue(
             len(inputs[self.text_input_name][0]) == len(inputs[self.text_input_name][1])
             and len(inputs[self.text_input_name][1]) < 76

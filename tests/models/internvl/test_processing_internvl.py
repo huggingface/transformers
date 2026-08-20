@@ -30,7 +30,7 @@ if is_torch_available():
 @require_vision
 class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = InternVLProcessor
-    videos_input_name = "pixel_values"
+    video_input_name = "pixel_values"
     # Tiny processor created with make_tiny_processor.py from "OpenGVLab/InternVL3-1B-hf"
     tiny_model_id = "hf-internal-testing/tiny-processor-internvl"
 
@@ -258,7 +258,7 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_tensors="pt",
             num_frames=num_frames,
         )
-        self.assertTrue(self.videos_input_name in out_dict)
+        self.assertTrue(self.video_input_name in out_dict)
         self.assertEqual(len(out_dict["input_ids"]), batch_size)
         self.assertEqual(len(out_dict["attention_mask"]), batch_size)
 
@@ -272,7 +272,7 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                         num_pixel_planes += 1
                     elif content_type == "video":
                         num_pixel_planes += num_frames
-        self.assertEqual(len(out_dict[self.videos_input_name]), num_pixel_planes)
+        self.assertEqual(len(out_dict[self.video_input_name]), num_pixel_planes)
         for k in out_dict:
             self.assertIsInstance(out_dict[k], torch.Tensor)
 

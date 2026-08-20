@@ -28,7 +28,7 @@ class QianfanOCRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     # Tiny processor created with make_tiny_processor.py from "bairongz/QianfanOCR"
     tiny_model_id = "hf-internal-testing/tiny-processor-qianfan_ocr"
     # QianfanOCR has no video support; images and pixel values share the same tensor key
-    videos_input_name = "pixel_values"
+    video_input_name = "pixel_values"
 
     @classmethod
     def _setup_image_processor(cls):

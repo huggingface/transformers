@@ -117,7 +117,7 @@ class ShieldGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         images = self.prepare_image_inputs()
         processed_inputs = processor(images=images, policies=policies)
         self.assertEqual(len(processed_inputs[self.text_input_name]), expected_batch_size)
-        self.assertEqual(len(processed_inputs[self.images_input_name]), expected_batch_size)
+        self.assertEqual(len(processed_inputs[self.image_input_name]), expected_batch_size)
 
     @parameterized.expand(
         [
@@ -145,7 +145,7 @@ class ShieldGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         images = self.prepare_image_inputs()
         processed_inputs = processor(images=images, custom_policies=custom_policies, policies=policies)
         self.assertEqual(len(processed_inputs[self.text_input_name]), expected_batch_size)
-        self.assertEqual(len(processed_inputs[self.images_input_name]), expected_batch_size)
+        self.assertEqual(len(processed_inputs[self.image_input_name]), expected_batch_size)
 
     def test_with_multiple_images(self):
         processor = self.get_processor()
@@ -156,7 +156,7 @@ class ShieldGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         images = self.prepare_image_inputs(batch_size=2)
         processed_inputs = processor(images=images)
         self.assertEqual(len(processed_inputs[self.text_input_name]), 6)
-        self.assertEqual(len(processed_inputs[self.images_input_name]), 6)
+        self.assertEqual(len(processed_inputs[self.image_input_name]), 6)
 
     # TODO(ryanmullins): Adapt this test for ShieldGemma 2
     @parameterized.expand([(1, "np"), (1, "pt"), (2, "np"), (2, "pt")])

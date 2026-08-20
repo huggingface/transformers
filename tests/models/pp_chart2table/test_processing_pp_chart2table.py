@@ -65,7 +65,7 @@ class PPChart2TableProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             max_length=self.image_unstructured_max_length,
         )
 
-        self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
+        self.assertLessEqual(inputs[self.image_input_name][0][0].mean(), 0)
 
     @unittest.skip(
         reason="PPChart2Table relies on a heavily predetermined input format; chat template usage is not intended as expected"

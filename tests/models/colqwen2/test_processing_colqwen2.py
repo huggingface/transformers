@@ -157,7 +157,7 @@ class ColQwen2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_input = self.prepare_image_inputs()
 
         inputs = processor(images=image_input, return_tensors="pt")
-        self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
+        self.assertLessEqual(inputs[self.image_input_name][0][0].mean(), 0)
 
     def test_kwargs_overrides_default_tokenizer_kwargs(self):
         if "image_processor" not in self.processor_class.get_attributes():
@@ -186,7 +186,7 @@ class ColQwen2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_input = self.prepare_image_inputs()
 
         inputs = processor(images=image_input, do_rescale=True, rescale_factor=-1.0, return_tensors="pt")
-        self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
+        self.assertLessEqual(inputs[self.image_input_name][0][0].mean(), 0)
 
     def test_unstructured_kwargs(self):
         if "image_processor" not in self.processor_class.get_attributes():
@@ -224,7 +224,7 @@ class ColQwen2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             max_length=76,
         )
 
-        self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
+        self.assertLessEqual(inputs[self.image_input_name][0][0].mean(), 0)
 
     def test_doubly_passed_kwargs(self):
         if "image_processor" not in self.processor_class.get_attributes():

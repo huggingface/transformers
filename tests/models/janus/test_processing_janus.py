@@ -118,11 +118,11 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         """
 
         out_dict = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True)
-        self.assertTrue(self.images_input_name in out_dict)
+        self.assertTrue(self.image_input_name in out_dict)
         # should always have input_ids and attention_mask
         self.assertEqual(len(out_dict["input_ids"]), 1)
         self.assertEqual(len(out_dict["attention_mask"]), 1)
-        self.assertEqual(len(out_dict[self.images_input_name]), 1)
+        self.assertEqual(len(out_dict[self.image_input_name]), 1)
 
         # Passing generation prompt explicitly
         messages = [
@@ -254,10 +254,10 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         out_dict = processor.apply_chat_template(
             batched_messages, add_generation_prompt=True, tokenize=True, return_dict=True, padding=True
         )
-        self.assertTrue(self.images_input_name in out_dict)
+        self.assertTrue(self.image_input_name in out_dict)
         self.assertEqual(len(out_dict["input_ids"]), 2)  # Batch size for text
         self.assertEqual(len(out_dict["attention_mask"]), 2)  # Batch size for attention mask
-        self.assertEqual(len(out_dict[self.images_input_name]), 2)  # Batch size for images
+        self.assertEqual(len(out_dict[self.image_input_name]), 2)  # Batch size for images
 
         # Test 2: Two images per message batch with different prompts
         batched_messages = [
@@ -413,7 +413,7 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             rescale_factor=-1.0,
             return_tensors="pt",
         )
-        self.assertLessEqual(out_dict[self.images_input_name][0][0].mean(), 0)
+        self.assertLessEqual(out_dict[self.image_input_name][0][0].mean(), 0)
 
     def test_processor_postprocess(self):
         processor_components = self.prepare_components()

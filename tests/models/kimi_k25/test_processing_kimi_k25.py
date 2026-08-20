@@ -80,14 +80,14 @@ class Kimi_K25ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
         inputs = processor(text=input_str, images=image_input, return_tensors="pt")
-        self.assertEqual(inputs[self.images_input_name].shape[0], 56)
+        self.assertEqual(inputs[self.image_input_name].shape[0], 56)
         inputs = processor(
             text=input_str,
             images=image_input,
             size={"max_height": 56 * 56 * 4, "max_width": 56 * 56 * 4},
             return_tensors="pt",
         )
-        self.assertEqual(inputs[self.images_input_name].shape[0], 800)
+        self.assertEqual(inputs[self.image_input_name].shape[0], 800)
 
     @parameterized.expand([(1, "pt")])
     @unittest.skip("Kimi sampels with FPS by default which is not compatible with this test")

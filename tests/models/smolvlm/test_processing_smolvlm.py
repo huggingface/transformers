@@ -27,7 +27,7 @@ from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 @require_vision
 class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = SmolVLMProcessor
-    videos_input_name = "pixel_values"
+    video_input_name = "pixel_values"
     # Tiny processor created with make_tiny_processor.py from "HuggingFaceTB/SmolVLM2-256M-Video-Instruct"
     tiny_model_id = "hf-internal-testing/tiny-processor-smolvlm"
 
@@ -434,7 +434,7 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             max_length=172,
         )
 
-        self.assertLessEqual(inputs[self.videos_input_name][0].mean(), 0)
+        self.assertLessEqual(inputs[self.video_input_name][0].mean(), 0)
         self.assertEqual(len(inputs["input_ids"][0]), 172)
 
     @require_torch

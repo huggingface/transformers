@@ -164,7 +164,7 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             load_audio_from_video=True,
         )
         self.assertTrue(self.audio_input_name in out_dict)
-        self.assertTrue(self.videos_input_name in out_dict)
+        self.assertTrue(self.video_input_name in out_dict)
 
         # should always have input_ids and attention_mask
         self.assertEqual(len(out_dict["input_ids"]), 1)  # batch-size=1
@@ -172,4 +172,4 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(len(out_dict[self.audio_input_name]), 1)  # 1 audio in the conversation
         # Qwen pixel values are flattened, verify length matches video_grid_thw
         expected_video_tokens = sum(thw[0] * thw[1] * thw[2] for thw in out_dict["video_grid_thw"])
-        self.assertEqual(len(out_dict[self.videos_input_name]), expected_video_tokens)  # 1 video in the conversation
+        self.assertEqual(len(out_dict[self.video_input_name]), expected_video_tokens)  # 1 video in the conversation
