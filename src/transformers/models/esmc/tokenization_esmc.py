@@ -13,7 +13,7 @@
 # limitations under the License.
 """Tokenization classes for ESMC."""
 
-from tokenizers import AddedToken, Tokenizer
+from tokenizers import Tokenizer
 from tokenizers.models import BPE
 from tokenizers.processors import TemplateProcessing
 
@@ -121,7 +121,7 @@ class EsmcTokenizer(TokenizersBackend):
         token_to_id = {tok: ind for ind, tok in enumerate(SEQUENCE_VOCAB)}
         # Has to precede the super call: `TokenizersBackend` raises unless it finds either an existing
         # `_tokenizer` or a serialized tokenizer/vocab to build one from, and we have neither.
-        self._tokenizer = Tokenizer(BPE(token_to_id, merges=[], unk_token=self._ensure_str(unk_token)))
+        self._tokenizer = Tokenizer(BPE(token_to_id, merges=[], unk_token=str(unk_token)))
 
         super().__init__(
             unk_token=unk_token,
@@ -137,17 +137,13 @@ class EsmcTokenizer(TokenizersBackend):
         )
 
         # Wrap every encoded sequence with <cls> … <eos>, using the tokens the super call registered.
-        cls_str, eos_str = self._ensure_str(self.cls_token), self._ensure_str(self.eos_token)
         self._tokenizer.post_processor = TemplateProcessing(
-            single=f"{cls_str} $A {eos_str}",
-            special_tokens=[(cls_str, token_to_id[cls_str]), (eos_str, token_to_id[eos_str])],
+            single=f"{self.cls_token} $A {self.eos_token}",
+            special_tokens=[
+                (self.cls_token, token_to_id[self.cls_token]),
+                (self.eos_token, token_to_id[self.eos_token]),
+            ],
         )
-
-    @staticmethod
-    def _ensure_str(token) -> str:
-        if isinstance(token, AddedToken):
-            return token.content
-        return str(token)
 
 
 __all__ = ["EsmcTokenizer"]

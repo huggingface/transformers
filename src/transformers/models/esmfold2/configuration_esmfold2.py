@@ -248,10 +248,6 @@ class EsmFold2ConfidenceHeadConfig(PreTrainedConfig):
 @strict
 class EsmFold2MsaEncoderConfig(PreTrainedConfig):
     r"""
-    divide_outer_before_proj (`bool`, *optional*, defaults to `False`):
-        Order of the outer-product-mean normalization: `False` computes `Wout(outer) / n_valid` (the
-        projection bias is scaled too), `True` computes `Wout(outer / n_valid)`. Different released
-        checkpoints were trained with different orderings.
     hidden_size (`int`, *optional*, defaults to 128):
         Width of the MSA stream.
     outer_hidden_size (`int`, *optional*, defaults to 32):
@@ -270,7 +266,6 @@ class EsmFold2MsaEncoderConfig(PreTrainedConfig):
         bit-exact in bf16, so it trades exactness for peak memory on long sequences.
     """
 
-    divide_outer_before_proj: bool | None = False
     hidden_size: int | None = 128
     outer_hidden_size: int | None = 32
     num_hidden_layers: int | None = 4

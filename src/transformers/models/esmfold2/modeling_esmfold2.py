@@ -255,10 +255,8 @@ def eager_attention_forward(
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
-    Identical to Llama's, but deliberately *not* inherited from it: Llama's carries
-    ``@use_kernel_forward_from_hub("rotary_pos_emb")``, and the fused kernel is CUDA-only while the atom
-    stack's rope runs on CPU in the tests. Swapping in a kernel here would also break the bit-exact
-    bf16 reference comparison.
+    No kernel decorator: the fused rotary kernel is CUDA-only, and the atom stack's rope must stay
+    bit-exact with the bf16 reference on CPU.
 
     Args:
         q (`torch.Tensor`): The query tensor.
@@ -476,6 +474,8 @@ class EsmFold2AtomEncoder(nn.Module):
         self.atom_linear = nn.Linear(config.atom_feature_dim, atom_config.hidden_size, bias=False)
         self.atom_norm = EsmFold2LayerNorm(atom_config.hidden_size)
 
+        # CODEPATH: the diffusion module's encoder (structure_prediction=True) embeds the noisy atom
+        # coords; the trunk's input featurizer (structure_prediction=False) runs before any coords exist.
         if structure_prediction:
             self.coords_linear = nn.Linear(6, atom_config.hidden_size, bias=False)
 
@@ -1149,27 +1149,19 @@ class EsmFold2PairUpdateStack(nn.Module):
 
 
 class EsmFold2OuterProductMean(nn.Module):
-    """Outer-product mean: maps an MSA representation into a pair update.
-
-    ``divide_outer_before_proj`` selects ``Wout(outer / num_valid_pairs)`` over ``Wout(outer) / num_valid_pairs``,
-    as different released checkpoints were trained with different orderings.
-    """
+    """Outer-product mean: maps an MSA representation into a pair update."""
 
     def __init__(self, config: EsmFold2Config) -> None:
         super().__init__()
-        self.outer_hidden_size = config.msa_encoder.outer_hidden_size
-        self.divide_outer_before_proj = config.msa_encoder.divide_outer_before_proj
-        self.norm = EsmFold2LayerNorm(config.msa_encoder.hidden_size)
-        self.input_proj = nn.Linear(
-            config.msa_encoder.hidden_size, 2 * config.msa_encoder.outer_hidden_size, bias=False
-        )
-        self.output_proj = nn.Linear(
-            config.msa_encoder.outer_hidden_size * config.msa_encoder.outer_hidden_size,
-            config.pairwise_hidden_size,
-            bias=True,
-        )
+        msa_config = config.msa_encoder
+        self.hidden_size = msa_config.hidden_size
+        self.outer_hidden_size = msa_config.outer_hidden_size
         # Its own chunk size, off by default: chunking this einsum is not always bit-exact in bf16.
-        self.chunk_size: int | None = config.msa_encoder.outer_product_chunk_size
+        self.chunk_size: int | None = msa_config.outer_product_chunk_size
+
+        self.norm = EsmFold2LayerNorm(self.hidden_size)
+        self.input_proj = nn.Linear(self.hidden_size, 2 * self.outer_hidden_size, bias=False)
+        self.output_proj = nn.Linear(self.outer_hidden_size**2, config.pairwise_hidden_size, bias=True)
 
     def forward(self, msa_states: Tensor, msa_attention_mask: Tensor) -> Tensor:
         msa_normed = self.norm(msa_states)
@@ -1187,10 +1179,7 @@ class EsmFold2OuterProductMean(nn.Module):
             window = slice(start, start + chunk_size)
             outer = left[:, window].transpose(2, 3).flatten(1, 2) @ right_flat
             outer = outer.unflatten(1, (-1, outer_dim)).unflatten(-1, (-1, outer_dim)).transpose(2, 3).flatten(-2)
-            if self.divide_outer_before_proj:
-                out_chunks.append(self.output_proj(outer / num_valid_pairs[:, window]))
-            else:
-                out_chunks.append(self.output_proj(outer) / num_valid_pairs[:, window])
+            out_chunks.append(self.output_proj(outer) / num_valid_pairs[:, window])
         return torch.cat(out_chunks, dim=1)
 
 
@@ -1684,6 +1673,8 @@ class EsmFold2MSAEncoderLayer(EsmFold2PairUpdateLayer):
         super().__init__(config)
         self.updates_msa = updates_msa
         self.outer_product_mean = EsmFold2OuterProductMean(config)
+        # CODEPATH: True for every layer except the final one, in all released checkpoints — the
+        # final layer's MSA output would be discarded, and no weights exist for these submodules.
         if updates_msa:
             self.msa_pair_weighted_averaging = EsmFold2MSAPairWeightedAveraging(config)
             self.msa_transition = EsmFold2Transition(
