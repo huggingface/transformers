@@ -679,8 +679,8 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             processor(text=[])
 
     def test_generic_processing_does_not_require_retrieval_template(self):
-        processor = self.get_processor()
-        processor.chat_template = None
+        processor = self.processor_class(**self.prepare_components())
+        self.assertIsNone(processor.chat_template)
 
         text_batch = processor(text=["hello world"])
         text_ids = text_batch["input_ids"][0].tolist()
@@ -701,6 +701,9 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_batch = processor(images=[image])
         self.assertEqual(image_batch["input_ids"][0, 0], self.marker_ids["<doc>"])
         self.assertIn("pixel_values", image_batch)
+
+        with self.assertRaisesRegex(ValueError, "does not have a chat template"):
+            processor.apply_chat_template([{"role": "user", "content": "hello"}], task="document")
 
     def test_missing_markers_raise(self):
         """A missing marker must raise instead of resolving to `unk_token_id`."""
