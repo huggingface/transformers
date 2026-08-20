@@ -53,12 +53,14 @@ print(processor.tokenizer.decode(predicted_token_id))
 > Sentence Transformers API, see the [Multi-Vector Encoder quickstart](https://sbert.net/docs/quickstart.html#multi-vector-encoder).
 
 ```python
+from typing import Any, Literal
+
 import requests
 import torch
 from PIL import Image
 from sentence_transformers.util import mean_maxsim
 
-from transformers import NeoMMEForRetrieval, NeoMMEProcessor
+from transformers import BatchFeature, NeoMMEForRetrieval, NeoMMEProcessor
 
 
 model_name = "Hcompany/NeoMME-260M-Retriever"
@@ -83,20 +85,22 @@ document_messages = [
 ]
 query_messages = [[{"role": "user", "content": query}] for query in queries]
 
-inputs_documents = processor.apply_chat_template(
-    document_messages,
-    task="document",
-    tokenize=True,
-    return_dict=True,
-    return_tensors="pt",
-).to(model.device)
-inputs_text = processor.apply_chat_template(
-    query_messages,
-    task="query",
-    tokenize=True,
-    return_dict=True,
-    return_tensors="pt",
-).to(model.device)
+
+def encode(
+    messages: list[list[dict[str, Any]]],
+    task: Literal["query", "document"],
+) -> BatchFeature:
+    return processor.apply_chat_template(
+        messages,
+        task=task,
+        tokenize=True,
+        return_dict=True,
+        return_tensors="pt",
+    ).to(model.device)
+
+
+inputs_documents = encode(document_messages, "document")
+inputs_text = encode(query_messages, "query")
 
 with torch.inference_mode():
     document_embeddings = model(**inputs_documents).embeddings
