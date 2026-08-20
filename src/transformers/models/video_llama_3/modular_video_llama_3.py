@@ -36,15 +36,14 @@ from ...image_utils import (
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ProcessorMixin, Unpack
-from ...utils import TensorType, add_start_docstrings, auto_docstring, can_return_tuple, logging
+from ...utils import TensorType, auto_docstring, can_return_tuple, logging
 from ...utils.generic import (
-    accepts_precomputed_kwargs,
     get_max_seqlen,
     is_flash_attention_requested,
     merge_with_config_defaults,
 )
 from ...utils.output_capturing import capture_outputs
-from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING, BaseVideoProcessor
+from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import (
     group_videos_by_shape,
     reorder_videos,
@@ -477,9 +476,6 @@ class VideoLlama3Model(Qwen2VLModel):
     def compute_3d_position_ids(self):
         raise AttributeError("Not needed for VideoLLaMA3")
 
-    @accepts_precomputed_kwargs(modality="video")
-    @can_return_tuple
-    @auto_docstring
     def get_video_features(
         self,
         pixel_values_videos: torch.FloatTensor,
@@ -488,10 +484,6 @@ class VideoLlama3Model(Qwen2VLModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input videos.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
         video_merge_sizes (`torch.Tensor` of shape `(num_videos,)`):
             The spatial downsampling ratio of each video feature.
         """
@@ -502,9 +494,6 @@ class VideoLlama3Model(Qwen2VLModel):
             **kwargs,
         )
 
-    @accepts_precomputed_kwargs(modality="image")
-    @can_return_tuple
-    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -513,10 +502,6 @@ class VideoLlama3Model(Qwen2VLModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input images.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
         image_merge_sizes (`torch.Tensor` of shape `(num_images,)`):
             The spatial downsampling ratio of each image feature.
         """
@@ -536,7 +521,6 @@ class VideoLlama3Model(Qwen2VLModel):
 
         return vision_outputs
 
-    @can_return_tuple
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -555,12 +539,8 @@ class VideoLlama3Model(Qwen2VLModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | VideoLlama3ModelOutputWithPast:
         r"""
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
         image_merge_sizes (`torch.Tensor` of shape `(num_images,)`):
             The spatial downsampling ratio of each image feature.
-        video_grid_thw (`torch.Tensor` of shape `(num_videos, 3)`):
-            The temporal, height and width of feature shape of each video before vision encoder.
         video_merge_sizes (`torch.Tensor` of shape `(num_videos,)`):
             The spatial downsampling ratio of each video feature.
         video_compression_mask (`torch.BoolTensor` of shape `(num_video_features,)`, *optional*):
@@ -655,8 +635,6 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
     def __init__(self, config: VideoLlama3Config):
         super().__init__(config)  # just to add type hint on config
 
-    @can_return_tuple
-    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -676,16 +654,8 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | VideoLlama3CausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
         image_merge_sizes (`torch.Tensor` of shape `(num_images,)`):
             The spatial downsampling ratio of each image feature.
-        video_grid_thw (`torch.Tensor` of shape `(num_videos, 3)`):
-            The temporal, height and width of feature shape of each video before vision encoder.
         video_merge_sizes (`torch.Tensor` of shape `(num_videos,)`):
             The spatial downsampling ratio of each video feature.
         video_compression_mask (`torch.BoolTensor` of shape `(num_video_features,)`, *optional*):
@@ -1160,29 +1130,28 @@ class VideoLlama3ImageProcessor(Qwen2VLImageProcessor):
 
 
 class VideoLlama3VideoProcessorInitKwargs(Qwen2VLVideoProcessorInitKwargs):
+    r"""
+    min_pixels (`int`, *optional*, defaults to `56 * 56`):
+        The min pixels of the image to resize the image.
+    max_pixels (`int`, *optional*, defaults to `28 * 28 * 1280`):
+        The max pixels of the image to resize the image.
+    patch_size (`int`, *optional*, defaults to 14):
+        The spatial patch size of the vision encoder.
+    temporal_patch_size (`int`, *optional*, defaults to 1):
+        The temporal patch size of the vision encoder.
+    merge_size (`int`, *optional*, defaults to 2):
+        The merge size of the vision encoder to llm encoder.
+    min_frames (`int`, *optional*, defaults to 4):
+        The minimum number of frames that can be sampled.
+    max_frames (`int`, *optional*, defaults to 768):
+        The maximum number of frames that can be sampled.
+    use_token_compression (`bool`, *optional*, defaults to `True`):
+        Whether to compress videos when processing or not.
+    """
+
     use_token_compression: bool | None
 
 
-@add_start_docstrings(
-    "Constructs a fast Qwen2-VL image processor that dynamically resizes videos based on the original videos.",
-    BASE_VIDEO_PROCESSOR_DOCSTRING,
-    """
-        min_pixels (`int`, *optional*, defaults to `56 * 56`):
-            The min pixels of the image to resize the image.
-        max_pixels (`int`, *optional*, defaults to `28 * 28 * 1280`):
-            The max pixels of the image to resize the image.
-        patch_size (`int`, *optional*, defaults to 14):
-            The spacial patch size of the vision encoder.
-        temporal_patch_size (`int`, *optional*, defaults to 1):
-            The temporal patch size of the vision encoder.
-        merge_size (`int`, *optional*, defaults to 2):
-            The merge size of the vision encoder to llm encoder.
-        min_frames (`int`, *optional*, defaults to 4):
-            The minimum number of frames that can be sampled.
-        max_frames (`int`, *optional*, defaults to 768):
-            The maximum number of frames that can be sampled.
-    """,
-)
 class VideoLlama3VideoProcessor(Qwen2VLVideoProcessor):
     use_token_compression = True
     image_mean = IMAGENET_STANDARD_MEAN

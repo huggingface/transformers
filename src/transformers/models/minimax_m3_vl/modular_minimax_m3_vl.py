@@ -67,7 +67,7 @@ from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor, Qwen2VLProcessorKwa
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="MiniMaxAI/MiniMax-M3-preview")
+@auto_docstring(checkpoint="MiniMaxAI/MiniMax-M3")
 @strict
 class MiniMaxM3VLTextConfig(MiniMaxM2Config):
     r"""
@@ -163,7 +163,7 @@ class MiniMaxM3VLTextConfig(MiniMaxM2Config):
             self.mlp_layer_types = ["sparse"] * self.num_hidden_layers
 
 
-@auto_docstring(checkpoint="MiniMaxAI/MiniMax-M3-preview")
+@auto_docstring(checkpoint="MiniMaxAI/MiniMax-M3")
 @strict
 class MiniMaxM3VLVisionConfig(PreTrainedConfig):
     r"""
@@ -191,7 +191,7 @@ class MiniMaxM3VLVisionConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
 
-@auto_docstring(checkpoint="MiniMaxAI/MiniMax-M3-preview")
+@auto_docstring(checkpoint="MiniMaxAI/MiniMax-M3")
 @strict
 class MiniMaxM3VLConfig(PreTrainedConfig):
     model_type = "minimax_m3_vl"
@@ -258,13 +258,17 @@ class MiniMaxM3VLSparseCacheLayer(DynamicLayer):
         if self.idx_keys is not None:
             self.idx_keys = self.idx_keys[indices, ...]
 
-    def crop(self, max_length: int) -> None:
-        # Important to get the seq_len before the call to `super`, as it will be changed inside otherwise
-        if max_length < 0:
-            max_length = self.get_seq_length() - abs(max_length)
-        if self.idx_keys is not None and self.idx_keys.shape[-2] > max_length:
-            self.idx_keys = self.idx_keys[..., :max_length, :]
-        super().crop(max_length)
+    @deprecate_kwarg("max_length", new_name="tokens_to_remove", version="5.18")
+    def crop(self, tokens_to_remove: int) -> None:
+        super().crop(tokens_to_remove)
+        if tokens_to_remove > 0:
+            current_length = self.idx_keys.shape[-2]
+            if tokens_to_remove >= current_length:
+                return
+            tokens_to_remove = current_length - tokens_to_remove
+        if tokens_to_remove == 0:
+            return
+        self.idx_keys = self.idx_keys[..., : -abs(tokens_to_remove), :]
 
 
 class MiniMaxM3VLSparseStaticCacheLayer(StaticLayer):
@@ -983,11 +987,6 @@ class MiniMaxM3VLModel(LlavaModel):
         image_grid_thw: torch.Tensor,
         **kwargs,
     ) -> BaseModelOutputWithPooling:
-        r"""
-        image_grid_thw (`torch.Tensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of each image's feature grid, used to build the vision 3D RoPE
-            and to merge patch features.
-        """
         # Return the raw vision-tower output (so callers can inspect hidden states /
         # attentions) while stashing the projected + spatially-merged features —
         # ready to scatter into the text embeddings — in `pooler_output`.
@@ -1006,13 +1005,6 @@ class MiniMaxM3VLModel(LlavaModel):
         video_grid_thw: torch.Tensor,
         **kwargs,
     ) -> BaseModelOutputWithPooling:
-        r"""
-        pixel_values_videos (`torch.FloatTensor`):
-            The tensors corresponding to the input video frames.
-        video_grid_thw (`torch.Tensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of each video's feature grid, used to build the vision 3D RoPE
-            and to merge patch features.
-        """
         # Video frames flow through the same vision pipeline as images (the tower is
         # grid-agnostic); only the placeholder token they scatter into differs.
         vision_outputs = self.vision_tower(pixel_values=pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
@@ -1075,14 +1067,6 @@ class MiniMaxM3VLModel(LlavaModel):
         inputs_embeds: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MiniMaxM3VLModelOutputWithPast:
-        r"""
-        image_grid_thw (`torch.Tensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of each image's feature grid, used to build the vision 3D RoPE
-            and to merge patch features.
-        video_grid_thw (`torch.Tensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of each video's feature grid, used to build the vision 3D RoPE
-            and to merge patch features.
-        """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -1132,21 +1116,10 @@ class MiniMaxM3SparseForConditionalGeneration(LlavaForConditionalGeneration):
     config: MiniMaxM3VLConfig
 
     def get_image_features(self, pixel_values, image_grid_thw, **kwargs):
-        r"""
-        image_grid_thw (`torch.Tensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of each image's feature grid, used to build the vision 3D RoPE
-            and to merge patch features.
-        """
         return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
+    @auto_docstring
     def get_video_features(self, pixel_values_videos, video_grid_thw, **kwargs):
-        r"""
-        pixel_values_videos (`torch.FloatTensor`):
-            The tensors corresponding to the input video frames.
-        video_grid_thw (`torch.Tensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of each video's feature grid, used to build the vision 3D RoPE
-            and to merge patch features.
-        """
         return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
 
     @can_return_tuple
@@ -1166,14 +1139,6 @@ class MiniMaxM3SparseForConditionalGeneration(LlavaForConditionalGeneration):
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MiniMaxM3VLCausalLMOutputWithPast:
-        r"""
-        image_grid_thw (`torch.Tensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of each image's feature grid, used to build the vision 3D RoPE
-            and to merge patch features.
-        video_grid_thw (`torch.Tensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of each video's feature grid, used to build the vision 3D RoPE
-            and to merge patch features.
-        """
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,

@@ -193,7 +193,7 @@ class MiniMaxCache(DynamicCache):
             else:
                 self.layers[layer_idx].batch_select_indices(indices)
 
-    def crop(self, max_length: int):
+    def crop(self, tokens_to_remove: int) -> None:
         raise RuntimeError("MiniMaxCache does not support `crop` method")
 
 

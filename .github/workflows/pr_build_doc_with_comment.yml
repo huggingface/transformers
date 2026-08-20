@@ -8,7 +8,8 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.issue.number }}-${{ startsWith(github.event.comment.body, 'build-doc') }}
   cancel-in-progress: true
-permissions: {}
+permissions:
+  contents: read
 
 
 jobs:
@@ -25,11 +26,11 @@ jobs:
     with:
       pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
 
-  verity_pr_commit:
-    name: Verity PR commit corresponds to a specific event by comparing timestamps
+  verify_pr_commit:
+    name: Verify PR commit corresponds to a specific event by comparing timestamps
     if: ${{ needs.get-pr-number.outputs.PR_NUMBER != ''}}
     runs-on: ubuntu-22.04
-    needs: get-pr-info
+    needs: [get-pr-number, get-pr-info]
     env:
       COMMENT_DATE: ${{ github.event.comment.created_at }}
       PR_MERGE_COMMIT_DATE: ${{ needs.get-pr-info.outputs.PR_MERGE_COMMIT_DATE }}
