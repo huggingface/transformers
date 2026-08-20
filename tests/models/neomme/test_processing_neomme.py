@@ -140,7 +140,6 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             image_processor=NeoMMEImageProcessor(patch_size=cls.patch_size),
             tokenizer=cls._setup_tokenizer(),
             chat_template=cls.chat_template,
-            query_expand=10,
         )
         cls._setup_test_attributes(processor)
         processor.save_pretrained(cls.tmpdirname)
@@ -149,7 +148,7 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def marker_ids(self) -> dict[str, int]:
         return {token: index for index, token in enumerate(self.special_tokens)}
 
-    @unittest.skip(reason="NeoMMEProcessor takes exactly one of text or images: they are opposite retrieval sides")
+    @unittest.skip(reason="NeoMME image batches require matching image placeholders")
     def test_processor_with_multiple_inputs(self):
         pass
 
@@ -166,7 +165,7 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @staticmethod
     def prepare_processor_dict():
-        return {"query_expand": 10}
+        return {}
 
     def _apply_text(self, processor, text, task="query", **processor_kwargs):
         text = [text] if isinstance(text, str) else text
@@ -202,10 +201,7 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertEqual(ids.count(self.marker_ids["<query>"]), 1)
         self.assertIn(processor.tokenizer.convert_tokens_to_ids("hello"), ids)
-        self.assertEqual(ids[-processor.query_expand :], [self.marker_ids["<mask>"]] * processor.query_expand)
-
-        direct = processor(text=["hello"], task="query", return_tensors="pt")
-        torch.testing.assert_close(inputs["input_ids"], direct["input_ids"])
+        self.assertEqual(ids[-10:], [self.marker_ids["<mask>"]] * 10)
 
     def test_apply_chat_template_text_document(self):
         processor = self.get_processor()
@@ -221,9 +217,6 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIn(processor.tokenizer.convert_tokens_to_ids("hello"), ids)
         self.assertNotIn(self.marker_ids["<mask>"], ids)
 
-        direct = processor(text=["hello"], task="document", return_tensors="pt")
-        torch.testing.assert_close(inputs["input_ids"], direct["input_ids"])
-
     def test_apply_chat_template_preserves_processing_kwargs(self):
         processor = self.get_processor()
         self._set_retrieval_chat_template(processor)
@@ -235,17 +228,9 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             tokenize=True,
             return_dict=True,
             return_tensors="pt",
-            processor_kwargs={"max_length": 2, "padding": "max_length"},
-        )
-        direct = processor(
-            text=["hello world"],
-            task="document",
-            return_tensors="pt",
-            max_length=2,
-            padding="max_length",
+            processor_kwargs={"max_length": 2, "padding": "max_length", "truncation": True},
         )
 
-        torch.testing.assert_close(inputs["input_ids"], direct["input_ids"])
         self.assertEqual(inputs["input_ids"][0, 0], self.marker_ids["<doc>"])
         self.assertNotIn(self.marker_ids["<mask>"], inputs["input_ids"][0].tolist())
 
@@ -278,6 +263,10 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         with self.assertRaisesRegex(TemplateError, "expected 'query' or 'document'"):
             processor.apply_chat_template(messages, task="invalid", tokenize=True)
+
+        processor.chat_template = "{{ task and 'hello' }}"
+        with self.assertRaisesRegex(ValueError, "leading task marker"):
+            processor.apply_chat_template(messages, task="query", tokenize=True)
 
     def test_apply_chat_template_rejects_unsupported_inputs(self):
         processor = self.get_processor()
@@ -375,26 +364,17 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "image prompts"):
             processor.apply_chat_template(messages, task="document", tokenize=True)
 
+        processor.chat_template = "{% if task %}{{ document_token + image_token + row_token }}{% endif %}"
+        with self.assertRaisesRegex(ValueError, "invalid or truncated token layout"):
+            processor.apply_chat_template(messages, task="document", tokenize=True)
+
     def test_zero_query_expansion_template(self):
         processor = self.get_processor()
-        processor.query_expand = 0
         processor.chat_template = self.chat_template.replace("mask_token * 10", "mask_token * 0")
 
         inputs = self._apply_text(processor, ["hello"], task="query", return_tensors="pt")
         hello_id = processor.tokenizer.convert_tokens_to_ids("hello")
         self.assertEqual(inputs["input_ids"][0].tolist(), [self.marker_ids["<query>"], hello_id])
-
-    def test_structural_settings_validated(self):
-        components = self.prepare_components()
-        for kwargs, error in (
-            ({"query_expand": -1}, "non-negative integer"),
-            ({"query_expand": 1.5}, "non-negative integer"),
-        ):
-            with self.subTest(kwargs=kwargs), self.assertRaisesRegex(ValueError, error):
-                NeoMMEProcessor(**components, **kwargs)
-
-    def test_query_expand_defaults_to_zero(self):
-        self.assertEqual(self.processor_class(**self.prepare_components()).query_expand, 0)
 
     def test_tokenizer_defaults_preserved_by_kwargs(self):
         processor_components = self.prepare_components()
@@ -570,64 +550,37 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIsInstance(ragged["input_ids"], list)
         self.assertNotEqual(len(ragged["input_ids"][0]), len(ragged["input_ids"][1]))
 
-    def test_unsupported_text_kwargs_raise(self):
-        processor = self.get_processor()
-
-        with self.assertRaises(ValueError):  # extra special tokens would change the marker layout
-            self._apply_text(processor, ["hello"], add_special_tokens=True)
-        with self.assertRaises(ValueError):  # max_length cannot override truncation=False
-            self._apply_text(processor, ["hello world text"], max_length=4, truncation=False)
-        with self.assertRaises(ValueError):  # ragged rows cannot become one tensor
-            self._apply_text(processor, ["hello world", "a"], padding=False)
-        with self.assertRaises(ValueError):  # padding="max_length" requires max_length
-            self._apply_text(processor, ["hello"], padding="max_length")
-        with self.assertRaisesRegex(ValueError, "top-level processor argument"):
-            self._apply_text(processor, ["hello"], text_kwargs={"task": "document"})
-
-    def test_tokenizer_init_padding_side(self):
-        """Ignore `tokenizer.init_kwargs["padding_side"]` because it is not a caller argument."""
-        processor = self.get_processor()
-
-        for side in ("right", "left"):
-            processor.tokenizer.init_kwargs["padding_side"] = side
-            self.assertEqual(self._apply_text(processor, ["hello"], task="query")["input_ids"].shape[0], 1)
-
-        processor.tokenizer.init_kwargs.pop("padding_side", None)
-        # Explicit `padding_side` still raises because this processor always right-pads.
-        with self.assertRaises(ValueError):
-            self._apply_text(processor, ["hello"], padding_side="left")
-        with self.assertRaises(ValueError):
-            self._apply_text(processor, ["hello"], text_kwargs={"padding_side": "left"})
-
     def test_query_marker_and_expansion(self):
         processor = self.get_processor()
         batch = self._apply_text(processor, ["hello world", "a"], task="query")
         first = batch["input_ids"][0].tolist()
 
         self.assertEqual(first[0], self.marker_ids["<query>"])
-        self.assertEqual(first[-processor.query_expand :], [self.marker_ids["<mask>"]] * processor.query_expand)
-        self.assertEqual(len(first), 1 + 2 + processor.query_expand)
+        self.assertEqual(first[-10:], [self.marker_ids["<mask>"]] * 10)
+        self.assertEqual(len(first), 1 + 2 + 10)
         # The shorter query is right-padded and its padding is masked out.
-        self.assertEqual(int(batch["attention_mask"][1].sum()), 1 + 1 + processor.query_expand)
+        self.assertEqual(int(batch["attention_mask"][1].sum()), 1 + 1 + 10)
 
-    def test_query_truncation_preserves_markers(self):
+    def test_query_truncation_rejects_removed_expansion(self):
         processor = self.get_processor()
-        max_length = 1 + 1 + processor.query_expand
-        ids = self._apply_text(
-            processor,
-            ["hello world text"],
-            task="query",
-            max_length=max_length,
-        )["input_ids"][0].tolist()
+        with self.assertRaisesRegex(ValueError, "removed NeoMME query expansion tokens"):
+            self._apply_text(
+                processor,
+                ["hello world text"],
+                task="query",
+                max_length=12,
+                truncation=True,
+            )
 
-        self.assertEqual(len(ids), max_length)
-        self.assertEqual(ids[0], self.marker_ids["<query>"])
-        self.assertEqual(ids[-processor.query_expand :], [self.marker_ids["<mask>"]] * processor.query_expand)
-
-    def test_query_expansion_fits_max_length(self):
-        processor = self.get_processor()
-        with self.assertRaises(ValueError):
-            self._apply_text(processor, ["hello"], task="query", max_length=processor.query_expand)
+        processor.tokenizer.truncation_side = "left"
+        with self.assertRaisesRegex(ValueError, "leading task marker"):
+            self._apply_text(
+                processor,
+                ["hello world text"],
+                task="query",
+                max_length=12,
+                truncation=True,
+            )
 
     def test_document_marker(self):
         processor = self.get_processor()
@@ -645,6 +598,7 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             ["hello world text"],
             task="document",
             max_length=2,
+            truncation=True,
         )["input_ids"][0].tolist()
         self.assertEqual(len(ids), 2)
         self.assertEqual(ids[0], self.marker_ids["<doc>"])
@@ -662,21 +616,6 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertEqual(len(ids), processor.tokenizer.model_max_length)
         self.assertEqual(ids[0], self.marker_ids["<doc>"])
-
-    def test_direct_processing_routes_through_chat_template(self):
-        processor = self.get_processor()
-        image = np.random.randint(0, 255, (8, 8, 3), dtype=np.uint8)
-
-        for kwargs in ({}, {"text": ["hello"], "images": [image]}):
-            with self.subTest(kwargs=kwargs), self.assertRaisesRegex(ValueError, "exactly one"):
-                processor(**kwargs)
-
-        with self.assertRaisesRegex(TemplateError, "expected 'query' or 'document'"):
-            processor(text=["hello"], task="invalid")
-        with self.assertRaisesRegex(ValueError, "Pretokenized text"):
-            processor(text=[["hello", "world"]])
-        with self.assertRaisesRegex(ValueError, "at least one"):
-            processor(text=[])
 
     def test_generic_processing_does_not_require_retrieval_template(self):
         processor = self.processor_class(**self.prepare_components())
@@ -704,26 +643,6 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "does not have a chat template"):
             processor.apply_chat_template([{"role": "user", "content": "hello"}], task="document")
-
-    def test_missing_markers_raise(self):
-        """A missing marker must raise instead of resolving to `unk_token_id`."""
-        stripped = self._setup_tokenizer(specials=[token for token in self.special_tokens if token != "<row>"])
-        processor = NeoMMEProcessor(
-            image_processor=NeoMMEImageProcessor(patch_size=self.patch_size),
-            tokenizer=stripped,
-            chat_template=self.chat_template,
-        )
-
-        with self.assertRaises(ValueError) as raised:
-            self._apply_text(processor, ["hello world"], task="document")
-        self.assertIn("row", str(raised.exception))
-
-    def test_marker_ids_must_be_distinct(self):
-        processor = self.get_processor()
-        processor.tokenizer.row_token = processor.tokenizer.image_token
-
-        with self.assertRaisesRegex(ValueError, "distinct token IDs"):
-            self._apply_text(processor, ["hello"], task="query")
 
     def test_process_images_uses_standard_hook(self):
         processor = self.get_processor()
@@ -761,6 +680,18 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(positions[:, 2].tolist(), [2, 2])
         self.assertEqual(positions[:, 2 + grid_width].tolist(), [2, 2 + grid_width])
         self.assertEqual(positions[:, 2 + grid_width + 1].tolist(), [3, 2])
+
+        with self.assertRaisesRegex(ValueError, "require `return_attention_mask=True`"):
+            self._apply_images(processor, [image], return_attention_mask=False)
+
+        second_image = Image.fromarray(np.random.randint(0, 255, (patch_size, patch_size, 3), dtype=np.uint8))
+        with self.assertRaisesRegex(ValueError, "require padding"):
+            self._apply_images(
+                processor,
+                [image, second_image],
+                padding=False,
+                return_tensors=None,
+            )
 
     def test_per_image_position_ids(self):
         processor = self.get_processor()

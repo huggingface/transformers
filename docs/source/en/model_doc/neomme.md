@@ -78,8 +78,25 @@ queries = [
     "Which hour of the day had the highest overall electricity generation in 2019?",
 ]
 
-inputs_documents = processor(images=documents, task="document", return_tensors="pt").to(model.device)
-inputs_text = processor(text=queries, task="query", return_tensors="pt").to(model.device)
+document_messages = [
+    [{"role": "user", "content": [{"type": "image", "image": document}]}] for document in documents
+]
+query_messages = [[{"role": "user", "content": query}] for query in queries]
+
+inputs_documents = processor.apply_chat_template(
+    document_messages,
+    task="document",
+    tokenize=True,
+    return_dict=True,
+    return_tensors="pt",
+).to(model.device)
+inputs_text = processor.apply_chat_template(
+    query_messages,
+    task="query",
+    tokenize=True,
+    return_dict=True,
+    return_tensors="pt",
+).to(model.device)
 
 with torch.inference_mode():
     document_embeddings = model(**inputs_documents).embeddings
