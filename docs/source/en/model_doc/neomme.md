@@ -73,6 +73,7 @@ def encode(
         tokenize=True,
         return_dict=True,
         return_tensors="pt",
+        processor_kwargs={"padding": "longest"},
     )
 
 
