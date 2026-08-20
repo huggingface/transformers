@@ -236,6 +236,12 @@ class HfExporter(ABC):
         post-processors trace as-is, but a backend that requires static shapes will reject the
         result — prefer a fixed-size top-k there and let the caller threshold.
 
+        A Transformers post-processor can be passed as-is: the arguments that decide between its
+        traceable and its eager branch are filled in by
+        [`~exporters.utils.bind_static_post_process_kwargs`], so `return_traceable_outputs=True` and a
+        constant-folded `target_sizes` need no `functools.partial` from the caller. Reshape the
+        tensor tuple the artifact returns with the processor's matching `build_*_outputs` method.
+
         Args:
             model ([`PreTrainedModel`]):
                 The model to export.
@@ -252,14 +258,17 @@ class HfExporter(ABC):
                 is routed to the stage that declares it as a parameter; a stage declaring `**kwargs`
                 takes everything the other stage doesn't declare explicitly (see
                 [`~exporters.utils.route_end_to_end_inputs`]). A key claimed by neither stage raises.
+                A `target_sizes` is traced as a constant rather than routed (see
+                [`~exporters.utils.bind_static_post_process_kwargs`]).
             config ([`~transformers.exporters.configs.ExportConfigMixin`]):
                 Backend-specific configuration, forwarded to [`~HfExporter.export`].
 
         Returns:
             Backend-specific export artifact, as returned by [`~HfExporter.export`].
         """
-        from .utils import EndToEndModel
+        from .utils import EndToEndModel, bind_static_post_process_kwargs
 
+        post_process, sample_inputs = bind_static_post_process_kwargs(post_process, sample_inputs)
         end_to_end_model = EndToEndModel(
             model, input_names=list(sample_inputs), preprocess=preprocess, post_process=post_process
         )

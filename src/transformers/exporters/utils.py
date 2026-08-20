@@ -34,7 +34,8 @@ Organised into six sections (search for the `# ── Name ──` banners):
   multimodal forward into one entry per submodule), backed by `_capture_forward`.
 - **End-to-end composition** — the inverse of decomposition: `EndToEndModel` chains
   preprocessing, the model forward and post-processing into one `nn.Module` (with
-  `route_end_to_end_inputs` deciding which input feeds which stage) so the whole
+  `route_end_to_end_inputs` deciding which input feeds which stage and
+  `bind_static_post_process_kwargs` folding the rest into constants) so the whole
   pipeline exports as a single graph.
 """
 
@@ -939,7 +940,22 @@ def decompose_for_generation(
 # a backend's `export` traces all three stages into one graph. `EndToEndModel` owns the
 # plumbing — routing `sample_inputs` to the stage that declares them, and aligning the
 # preprocess output with the model's dtype/device — and `HfExporter.export_end_to_end`
-# is a one-liner over it.
+# is a one-liner over it plus `bind_static_post_process_kwargs`.
+
+
+@register_patch(
+    "dynamo", "transformers.image_processing_backends.TorchvisionBackend._fuse_mean_std_and_rescale_factor"
+)
+@register_patch("onnx", "transformers.image_processing_backends.TorchvisionBackend._fuse_mean_std_and_rescale_factor")
+def _patch_fuse_mean_std_and_rescale_factor(original):
+    """Drop the `lru_cache` around the fused mean/std tensors while a preprocessing stage is traced.
+
+    The cache is keyed on the processor and its normalization kwargs, so the fake tensors the first
+    trace puts in it are handed back to every later call — poisoning the next export ("we found a
+    fake tensor in the exported program constant's list") and eager preprocessing alike. Tracing
+    without the cache recreates them per call and leaves the pre-export entries untouched.
+    """
+    return original.__wrapped__
 
 
 def _stage_input_names(stage: TorchvisionBackend | Callable, *, skip_first: bool = False) -> tuple[list[str], bool]:
@@ -1009,6 +1025,56 @@ def route_end_to_end_inputs(
     return preprocess_names, post_process_names
 
 
+def bind_static_post_process_kwargs(
+    post_process: Callable | None, sample_inputs: MutableMapping[str, Any]
+) -> tuple[Callable | None, dict[str, Any]]:
+    """Freeze the `post_process` arguments a tracer can't take as graph inputs, and drop them from `sample_inputs`.
+
+    Two arguments of the Transformers post-processors are resolved here instead of being exposed on
+    the exported graph:
+
+    - `return_traceable_outputs` is set to `True` whenever the post-processor declares it, selecting the branch
+      that returns a tuple of fixed-shape tensors over the list of dicts / `ModelOutput` it builds
+      eagerly. Reshape the tuple after running the artifact with the matching `build_*_outputs`
+      method of the same processor.
+    - `target_sizes` is read on the Python side by every post-processor that takes it — `.tolist()`,
+      `len(set(...))` to check the sizes agree, a comparison against the batch size — to pick the
+      size it interpolates to, none of which a tracer can do on a graph input. So it is normalised
+      to a list of `(height, width)` tuples once, here, and passed in as a Python constant: those
+      reads then run at trace time over `int`s and fold away, leaving the sizes baked into the
+      graph. The artifact is pinned to them — export again to target others.
+
+    Anything else in `sample_inputs` is left alone, and so is a `post_process` declaring neither
+    name (a plain callable of the model outputs, say).
+
+    Returns:
+        `tuple[Callable | None, dict[str, Any]]`: the `post_process` to trace — a `functools.partial`
+        over the original when anything was bound — and `sample_inputs` without the bound names.
+    """
+    sample_inputs = dict(sample_inputs)
+    if post_process is None:
+        return post_process, sample_inputs
+
+    declared, _ = _stage_input_names(post_process, skip_first=True)
+    bound: dict[str, Any] = {}
+
+    if "return_traceable_outputs" in declared:
+        bound["return_traceable_outputs"] = True
+
+    if "target_sizes" in declared and "target_sizes" in sample_inputs:
+        target_sizes = sample_inputs.pop("target_sizes")
+        if target_sizes is not None:
+            # Covers a tensor and an ndarray — one transfer here, none inside the traced code
+            if hasattr(target_sizes, "tolist"):
+                target_sizes = target_sizes.tolist()
+            target_sizes = [tuple(size) for size in target_sizes]
+        bound["target_sizes"] = target_sizes
+
+    if bound:
+        post_process = functools.partial(post_process, **bound)
+    return post_process, sample_inputs
+
+
 if is_torch_available():
 
     class EndToEndModel(torch.nn.Module):
@@ -1034,7 +1100,10 @@ if is_torch_available():
                 filters, anchor grids) so they're lifted into the graph as buffers.
             post_process (`Callable`, *optional*):
                 Called as `post_process(model_outputs, **claimed_inputs)`; its return value is the
-                module's output. `None` returns the model outputs unchanged.
+                module's output. `None` returns the model outputs unchanged. Pass a Transformers
+                post-processor through [`~exporters.utils.bind_static_post_process_kwargs`] first
+                to pick up its traceable branch and a constant `target_sizes` —
+                [`~HfExporter.export_end_to_end`] does that for you.
         """
 
         def __init__(
