@@ -505,7 +505,11 @@ class MtpModel(PreTrainedModel):
             # We need to recompute those every layer since they change
             inputs_embeds = self.embed_tokens(input_ids).to(last_hidden_states.device)
             position_embeddings = (
-                self.rotary_emb(inputs_embeds, position_ids=position_ids, layer_type=mtp_layer_types[i] if mtp_layer_types is not None else None)
+                self.rotary_emb(
+                    inputs_embeds,
+                    position_ids=position_ids,
+                    layer_type=mtp_layer_types[i] if mtp_layer_types is not None else None,
+                )
                 if self.rotary_emb is not None
                 else None
             )

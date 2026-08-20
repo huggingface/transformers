@@ -2539,7 +2539,8 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 with patch.object(
                     model_class,
                     "_keys_to_ignore_on_load_unexpected",
-                    keys_to_ignore_unexpected + [f"{model.base_model_prefix}.layers.{config.get_text_config().num_hidden_layers}"],
+                    keys_to_ignore_unexpected
+                    + [f"{model.base_model_prefix}.layers.{config.get_text_config().num_hidden_layers}"],
                 ):
                     # Reload model WITHOUT mtp
                     reloaded_model = model_class.from_pretrained(tmpdirname).to(torch_device)
