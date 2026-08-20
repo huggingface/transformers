@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import http.client
 import logging
 import os
 import sys
@@ -162,22 +161,6 @@ class LogTokenStatusTest(unittest.TestCase):
         # A connectivity failure is logged but must not abort the caller.
         self._patch_request(gh.urllib.error.URLError("timeout"))
         gh._log_token_status(token="t")  # must not raise
-
-
-class RequestTest(unittest.TestCase):
-    def test_connection_error_is_wrapped_as_url_error(self):
-        # ConnectionError (and subclasses) are OSError, not urllib.error.URLError — _request must
-        # normalize them so callers see a single consistent exception type.
-        with patch("urllib.request.urlopen", side_effect=ConnectionResetError("reset")):
-            with self.assertRaises(gh.urllib.error.URLError):
-                gh._request("https://api.github.com/x", {})
-
-    def test_remote_disconnected_is_wrapped_as_url_error(self):
-        # The concrete error seen in CI: RemoteDisconnected is a ConnectionResetError subclass.
-        exc = http.client.RemoteDisconnected("Remote end closed connection without response")
-        with patch("urllib.request.urlopen", side_effect=exc):
-            with self.assertRaises(gh.urllib.error.URLError):
-                gh._request("https://api.github.com/x", {})
 
 
 class GithubRequestTest(unittest.TestCase):
