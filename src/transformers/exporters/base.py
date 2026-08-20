@@ -17,13 +17,13 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import MutableMapping
-from typing import TYPE_CHECKING
+from collections.abc import Callable, MutableMapping
+from typing import TYPE_CHECKING, Any
 
 from packaging import version
 
 from ..utils import logging
-from ..utils.import_utils import _is_package_available, is_torch_available
+from ..utils.import_utils import _is_package_available, is_torch_available, requires
 from .configs import ExportConfigMixin
 from .utils import decompose_for_generation
 
@@ -129,6 +129,67 @@ class HfExporter(ABC):
             "in your subclass with a backend-specific tracing pipeline that consumes `config` "
             "and returns the runtime artifact."
         )
+
+    @requires(backends=("torch",))
+    def export_end_to_end(
+        self,
+        model: PreTrainedModel,
+        preprocess: Callable | torch.nn.Module | None,
+        post_process: Callable | torch.nn.Module | None,
+        sample_inputs: MutableMapping[str, torch.Tensor],
+        config: ExportConfigMixin | dict[str, Any],
+    ):
+        """
+        Export preprocessing, the model forward, and post-processing as a **single** graph.
+
+        Chains the three stages into one [`~exporters.utils.EndToEndModel`] and calls
+        [`~HfExporter.export`] on it, so the artifact takes raw inputs (uint8 images, an audio
+        waveform, …) and returns final outputs (top-k labels, rescaled boxes, …). The runtime then
+        needs no Python-side processor. If you need the intermediate module (to run it eagerly for
+        verification, or to reuse it with a different config), build `EndToEndModel` directly.
+
+        Both stages are traced, so both must be written in tensor ops. Python control flow over
+        tensor *values* (`.item()`, `.tolist()`, `nonzero()`, thresholding that changes output
+        shape) and PIL/NumPy calls are not traceable — that rules out tokenizers and the slow
+        (PIL-based) image processors, and any post-processor whose output shape depends on the
+        data. Rewrite those steps in tensor ops, or keep them outside the graph and use
+        [`~HfExporter.export`].
+
+        Args:
+            model ([`PreTrainedModel`]):
+                The model to export.
+            preprocess (`Callable` or `torch.nn.Module`, *optional*):
+                Maps the raw inputs it claims to a mapping of `model.forward` kwargs. `None`
+                passes them straight to the forward.
+            post_process (`Callable` or `torch.nn.Module`, *optional*):
+                Called as `post_process(model_outputs, **claimed_inputs)`; its return value becomes
+                the graph output. `None` returns the model outputs unchanged.
+            sample_inputs (`dict[str, torch.Tensor]`):
+                **Raw** inputs — what you'd pass to the pipeline, not to `model.forward`. Each key
+                is routed to the stage that declares it as a parameter; a stage declaring `**kwargs`
+                takes everything the other stage doesn't declare explicitly (see
+                [`~exporters.utils.route_end_to_end_inputs`]). A key claimed by neither stage raises.
+            config ([`~transformers.exporters.configs.ExportConfigMixin`]):
+                Backend-specific configuration, forwarded to [`~HfExporter.export`].
+
+        Returns:
+            Backend-specific export artifact, as returned by [`~HfExporter.export`].
+        """
+        from .utils import EndToEndModel
+
+        end_to_end_model = EndToEndModel(
+            model, input_names=list(sample_inputs), preprocess=preprocess, post_process=post_process
+        )
+        try:
+            return self.export(end_to_end_model, sample_inputs, config=config)
+        except Exception as e:
+            raise RuntimeError(
+                f"{type(self).__name__}.export failed on the end-to-end graph for {type(model).__name__} "
+                f"(preprocess inputs={end_to_end_model.preprocess_names}, post-process inputs="
+                f"{end_to_end_model.post_process_names}). Export the model alone with `export` to tell a "
+                f"model-side failure from a pre/post-processing one — the stages are traced too, so a "
+                f"data-dependent op in either of them fails here."
+            ) from e
 
     def export_for_generation(
         self,

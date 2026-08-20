@@ -15,7 +15,7 @@
 
 """Shared export utilities used by all exporter backends.
 
-Organised into five sections (search for the `# ── Name ──` banners):
+Organised into six sections (search for the `# ── Name ──` banners):
 
 - **Patch and fix registries** — backend-keyed `_PATCHES` / `_FX_NODE_FIXES` /
   `_FX_PROGRAM_FIXES` populated via `@register_patch(backend, *paths)` /
@@ -32,6 +32,10 @@ Organised into five sections (search for the `# ── Name ──` banners):
 - **Decomposition** — `decompose_prefill_decode` (split a generative forward
   into prefill + decode) and `decompose_multimodal` + `is_multimodal` (split a
   multimodal forward into one entry per submodule), backed by `_capture_forward`.
+- **End-to-end composition** — the inverse of decomposition: `EndToEndModel` chains
+  preprocessing, the model forward and post-processing into one `nn.Module` (with
+  `route_end_to_end_inputs` deciding which input feeds which stage) so the whole
+  pipeline exports as a single graph.
 """
 
 from __future__ import annotations
@@ -927,3 +931,153 @@ def decompose_for_generation(
     components = decompose_multimodal(prefill_model, prefill_inputs)
     components["decode"] = stages["decode"]
     return components
+
+
+# ── End-to-end composition ────────────────────────────────────────────────────
+# Chain preprocessing, the model forward and post-processing into a single `nn.Module` so
+# a backend's `export` traces all three stages into one graph. `EndToEndModel` owns the
+# plumbing — routing `sample_inputs` to the stage that declares them, and aligning the
+# preprocess output with the model's dtype/device — and `HfExporter.export_end_to_end`
+# is a one-liner over it.
+
+
+def _stage_input_names(stage: Any, *, skip_first: bool = False) -> tuple[list[str], bool]:
+    """Return `(declared_parameter_names, accepts_var_keyword)` for a preprocess/post-process stage.
+
+    `skip_first` drops the leading positional parameter — for `post_process` that slot holds the
+    model outputs, not one of `sample_inputs`. Callables that expose no signature (builtins, C
+    extensions) are treated as `**kwargs`-only.
+    """
+    target = stage.forward if isinstance(stage, torch.nn.Module) else stage
+    try:
+        parameters = list(inspect.signature(target).parameters.values())
+    except (TypeError, ValueError):
+        return [], True
+
+    positional = (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+    if skip_first and parameters and parameters[0].kind in positional:
+        parameters = parameters[1:]
+
+    declared = [
+        param.name
+        for param in parameters
+        if param.kind in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+    ]
+    var_keyword = any(param.kind is inspect.Parameter.VAR_KEYWORD for param in parameters)
+    return declared, var_keyword
+
+
+def route_end_to_end_inputs(input_names: list[str], preprocess: Any, post_process: Any) -> tuple[list[str], list[str]]:
+    """Split `input_names` into the names `preprocess` consumes and the names `post_process` consumes.
+
+    A stage claims the names it declares explicitly. A stage that declares `**kwargs` claims
+    everything the *other* stage doesn't declare explicitly — so a `target_sizes` declared by
+    `post_process` isn't also handed to a processor's `__call__(images, **kwargs)`. A `None`
+    `preprocess` acts as the identity and claims names the same way (they go straight to the model
+    forward); a `None` `post_process` claims nothing.
+
+    Returns:
+        `tuple[list[str], list[str]]`: `(preprocess_names, post_process_names)`.
+
+    Raises:
+        `ValueError`: if a name is claimed by neither stage — it would become a graph input that
+            nothing reads.
+    """
+    pre_declared, pre_var_keyword = ([], True) if preprocess is None else _stage_input_names(preprocess)
+    post_declared, post_var_keyword = (
+        ([], False) if post_process is None else _stage_input_names(post_process, skip_first=True)
+    )
+
+    pre_explicit = [name for name in input_names if name in pre_declared]
+    post_explicit = [name for name in input_names if name in post_declared]
+    preprocess_names = [name for name in input_names if name not in post_explicit] if pre_var_keyword else pre_explicit
+    post_process_names = (
+        [name for name in input_names if name not in pre_explicit] if post_var_keyword else post_explicit
+    )
+
+    unclaimed = [name for name in input_names if name not in preprocess_names and name not in post_process_names]
+    if unclaimed:
+        raise ValueError(
+            f"Inputs {unclaimed} are consumed by neither `preprocess` nor `post_process`, so they would "
+            f"become graph inputs that nothing reads. Declare them as parameters of the stage that needs "
+            f"them (`preprocess` declares {pre_declared or 'nothing'}, `post_process` declares "
+            f"{post_declared or 'nothing'}), or drop them from `sample_inputs`."
+        )
+    return preprocess_names, post_process_names
+
+
+if is_torch_available():
+
+    class EndToEndModel(torch.nn.Module):
+        """Single `nn.Module` chaining `preprocess` → `model.forward` → `post_process`.
+
+        Exporting this module yields one graph that goes from raw inputs (uint8 images, an audio
+        waveform, …) to final outputs (top-k labels, rescaled boxes, …), so the runtime doesn't
+        have to reimplement the Python pre/post-processing. Both stages are traced, so both must be
+        written in tensor ops — Python control flow over tensor *values*, `.item()`, `.tolist()`,
+        `nonzero()`, or PIL/NumPy calls are not traceable.
+
+        Args:
+            model ([`PreTrainedModel`]):
+                The model whose `forward` is the middle stage.
+            input_names (`list[str]`):
+                Keys of the `sample_inputs` the module will be called with, used to route each
+                input to the stage that declares it (see [`~exporters.utils.route_end_to_end_inputs`]).
+            preprocess (`Callable` or `torch.nn.Module`, *optional*):
+                Maps the raw inputs it claims to a mapping of `model.forward` kwargs (a `dict` or
+                `BatchFeature`). `None` passes the claimed inputs straight to `model.forward`.
+                Pass an `nn.Module` when the preprocessing owns tensors (mel filters, anchor
+                grids) so they're lifted into the graph as buffers.
+            post_process (`Callable` or `torch.nn.Module`, *optional*):
+                Called as `post_process(model_outputs, **claimed_inputs)`; its return value is the
+                module's output. `None` returns the model outputs unchanged.
+        """
+
+        def __init__(
+            self,
+            model: PreTrainedModel,
+            input_names: list[str],
+            preprocess: Any = None,
+            post_process: Any = None,
+        ):
+            super().__init__()
+            if preprocess is None and post_process is None:
+                raise ValueError(
+                    "`EndToEndModel` needs at least one of `preprocess` / `post_process`. With neither "
+                    "there is nothing to chain — export the model directly with `export`."
+                )
+
+            self.preprocess_names, self.post_process_names = route_end_to_end_inputs(
+                input_names, preprocess=preprocess, post_process=post_process
+            )
+            # `model` is registered first so `module_dtype` / `module_device` resolve to the model's
+            # parameters rather than a stage's buffers.
+            self.model = model
+            self.preprocess = preprocess
+            self.post_process = post_process
+            if hasattr(model, "config"):
+                self.config = model.config
+
+        def forward(self, **kwargs):
+            model_inputs = {name: kwargs[name] for name in self.preprocess_names if name in kwargs}
+            if self.preprocess is not None:
+                model_inputs = self.preprocess(**model_inputs)
+                if not isinstance(model_inputs, MutableMapping):
+                    raise TypeError(
+                        f"`preprocess` must return a mapping of `model.forward` kwargs (dict, BatchFeature), "
+                        f"got {type(model_inputs).__name__}."
+                    )
+                model_inputs = dict(model_inputs)
+
+            # Preprocessing produces float32 while the model may hold bfloat16/float16 weights, so
+            # align the stage boundary instead of failing the trace on a dtype mismatch.
+            dtype, device = module_dtype(self.model), module_device(self.model)
+            if dtype is not None or device is not None:
+                model_inputs = cast_leaf_tensors(model_inputs, dtype=dtype, device=device)
+
+            outputs = self.model(**model_inputs)
+
+            if self.post_process is not None:
+                post_process_inputs = {name: kwargs[name] for name in self.post_process_names if name in kwargs}
+                outputs = self.post_process(outputs, **post_process_inputs)
+            return outputs
