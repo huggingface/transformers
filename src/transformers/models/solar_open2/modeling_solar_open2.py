@@ -479,7 +479,6 @@ class SolarOpen2Attention(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
@@ -500,12 +499,11 @@ class SolarOpen2Attention(nn.Module):
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
-            cache_kwargs = {"cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
-        attention_interface = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -719,6 +717,8 @@ class SolarOpen2DecoderLayer(GradientCheckpointingLayer):
 
         self.input_layernorm = SolarOpen2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = SolarOpen2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        # CODEPATH: upstage/Solar-Open2-250B uses SolarOpen2LinearAttention for linear-attention layers;
+        # full-attention layers retain SolarOpen2Attention from the parent initialization.
         if config.layer_types[layer_idx] == "linear_attention":
             self.self_attn = SolarOpen2LinearAttention(config, layer_idx)
 
