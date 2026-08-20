@@ -156,13 +156,19 @@ class Qwen4ExpTextRotaryEmbedding(nn.Module):
 
 
 class Qwen4ExpTextRMSNorm(nn.Module):
-    def __init__(self, dim: int, eps: float = 1e-6):
+    def __init__(self, dim: int, group_size: int | None = None, eps: float = 1e-6):
         super().__init__()
         self.eps = eps
         self.weight = nn.Parameter(torch.zeros(dim))
+        self.group_size = group_size
+        if group_size is not None and dim % group_size != 0:
+            raise ValueError(f"hidden_size ({dim}) must be divisible by group_size ({group_size}).")
 
-    def _norm(self, x):
-        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+    def _norm(self, x: torch.Tensor) -> torch.Tensor:
+        if self.group_size is not None:
+            x = x.reshape(*x.shape[:-1], -1, self.group_size)
+        out = x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+        return out.flatten(-2) if self.group_size is not None else out
 
     def forward(self, x):
         output = self._norm(x.float())
@@ -919,37 +925,13 @@ class Qwen4ExpTextSparseMoeBlock(nn.Module):
         return expert_output
 
 
-class Qwen4ExpTextGroupedRMSNorm(nn.Module):
-    def __init__(self, dim: int, group_size: int, eps: float = 1e-6):
-        super().__init__()
-        self.eps = eps
-        self.weight = nn.Parameter(torch.zeros(dim))
-        if dim % group_size != 0:
-            raise ValueError(f"hidden_size ({dim}) must be divisible by group_size ({group_size}).")
-        self.group_size = group_size
-
-    def _norm(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        grouped_shape = (*hidden_states.shape[:-1], -1, self.group_size)
-        return super()._norm(hidden_states.reshape(grouped_shape)).flatten(-2)
-
-    def forward(self, x):
-        output = self._norm(x.float())
-        # Llama does x.to(float16) * w whilst Qwen4ExpTextGrouped is (x * w).to(float16)
-        # See https://github.com/huggingface/transformers/pull/29402
-        output = output * (1.0 + self.weight.float())
-        return output.type_as(x)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.eps}"
-
-
 class Qwen4ExpTextGatedResidual(nn.Module):
     def __init__(self, config: Qwen4ExpTextConfig, use_combine: bool = True):
         super().__init__()
         self.hc_count = config.hc_count
         self.hidden_size = config.hidden_size
         hc_hidden_size = self.hc_count * self.hidden_size
-        self.hc_norm = Qwen4ExpTextGroupedRMSNorm(hc_hidden_size, self.hidden_size, eps=config.rms_norm_eps)
+        self.hc_norm = Qwen4ExpTextRMSNorm(hc_hidden_size, group_size=self.hidden_size, eps=config.rms_norm_eps)
         self.input_mix_weight_down = nn.Linear(hc_hidden_size, config.hc_lowrank, bias=False)
         self.input_mix_weight_up = nn.Linear(config.hc_lowrank, hc_hidden_size, bias=False)
         self.block_inject_weight = nn.Linear(hc_hidden_size, self.hc_count, bias=False) if use_combine else None
@@ -1138,9 +1120,9 @@ class Qwen4ExpTextPLELayer(nn.Module):
         self.short_conv_state_len = (conv_kernel_size - 1) * conv_dilation
         self.key_proj = nn.Linear(ple_embed_dim, hc_hidden_size, bias=False)
         self.value_proj = nn.Linear(ple_embed_dim, self.hidden_size, bias=False)
-        self.norm_key = Qwen4ExpTextGroupedRMSNorm(hc_hidden_size, self.hidden_size, eps=config.rms_norm_eps)
-        self.norm_query = Qwen4ExpTextGroupedRMSNorm(hc_hidden_size, self.hidden_size, eps=config.rms_norm_eps)
-        self.norm_conv = Qwen4ExpTextGroupedRMSNorm(hc_hidden_size, self.hidden_size, eps=config.rms_norm_eps)
+        self.norm_key = Qwen4ExpTextRMSNorm(hc_hidden_size, group_size=self.hidden_size, eps=config.rms_norm_eps)
+        self.norm_query = Qwen4ExpTextRMSNorm(hc_hidden_size, group_size=self.hidden_size, eps=config.rms_norm_eps)
+        self.norm_conv = Qwen4ExpTextRMSNorm(hc_hidden_size, group_size=self.hidden_size, eps=config.rms_norm_eps)
         self.conv1d = nn.Conv1d(
             hc_hidden_size,
             hc_hidden_size,
@@ -1300,8 +1282,6 @@ class Qwen4ExpPreTrainedModel(PreTrainedModel):
             )
             init.copy_(module.ngram_heads_vocab_sizes, torch.tensor(module.head_vocab_sizes, dtype=torch.long))
             init.copy_(module.ngram_heads_offsets, torch.tensor(module.head_offsets, dtype=torch.long))
-        elif isinstance(module, Qwen4ExpTextGroupedRMSNorm):
-            init.zeros_(module.weight)
         elif isinstance(module, Qwen4ExpTextPLELayer):
             init.zeros_(module.conv1d.weight)
 

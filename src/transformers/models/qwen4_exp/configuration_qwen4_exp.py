@@ -38,8 +38,6 @@ class Qwen4ExpTextConfig(PreTrainedConfig):
         Number of key heads used in linear attention layers.
     linear_num_value_heads (`int`, *optional*, defaults to 32):
         Number of value heads used in linear attention layers.
-    partial_rotary_factor (`float`, *optional*, defaults to 0.25):
-        Fraction of head_dim that gets RoPE.
     hc_count (`int`, *optional*, defaults to 4):
         Number of residual streams used by the hyper-connections.
     hc_lowrank (`int`, *optional*, defaults to 320):
@@ -150,7 +148,6 @@ class Qwen4ExpTextConfig(PreTrainedConfig):
         "hyper_connection_mixer": "keep_full_weight",
     }
 
-    partial_rotary_factor: float = 0.25
     hc_count: int = 4
     hc_lowrank: int = 320
     ple_layer_ids: list[int] | None = None

@@ -83,8 +83,6 @@ class Qwen4ExpTextConfig(Qwen3_5MoeTextConfig):
         Number of key heads used in linear attention layers.
     linear_num_value_heads (`int`, *optional*, defaults to 32):
         Number of value heads used in linear attention layers.
-    partial_rotary_factor (`float`, *optional*, defaults to 0.25):
-        Fraction of head_dim that gets RoPE.
     hc_count (`int`, *optional*, defaults to 4):
         Number of residual streams used by the hyper-connections.
     hc_lowrank (`int`, *optional*, defaults to 320):
@@ -155,7 +153,6 @@ class Qwen4ExpTextConfig(Qwen3_5MoeTextConfig):
     }
     base_model_pp_plan = None
 
-    partial_rotary_factor: float = 0.25
     hc_count: int = 4
     hc_lowrank: int = 320
     ple_layer_ids: list[int] | None = None
@@ -299,7 +296,17 @@ class Qwen4ExpTextRotaryEmbedding(Qwen3_5TextRotaryEmbedding):
 
 
 class Qwen4ExpTextRMSNorm(Qwen3_5RMSNorm):
-    pass
+    def __init__(self, dim: int, group_size: int | None = None, eps: float = 1e-6):
+        super().__init__(dim, eps=eps)
+        self.group_size = group_size
+        if group_size is not None and dim % group_size != 0:
+            raise ValueError(f"hidden_size ({dim}) must be divisible by group_size ({group_size}).")
+
+    def _norm(self, x: torch.Tensor) -> torch.Tensor:
+        if self.group_size is not None:
+            x = x.reshape(*x.shape[:-1], -1, self.group_size)
+        out = x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+        return out.flatten(-2) if self.group_size is not None else out
 
 
 class Qwen4ExpTextRMSNormGated(Qwen3NextRMSNormGated):
@@ -509,25 +516,13 @@ class Qwen4ExpTextSparseMoeBlock(Qwen3NextSparseMoeBlock):
         self.shared_expert = Qwen4ExpTextMLP(config, intermediate_size=config.shared_expert_intermediate_size)
 
 
-class Qwen4ExpTextGroupedRMSNorm(Qwen3_5RMSNorm):
-    def __init__(self, dim: int, group_size: int, eps: float = 1e-6):
-        super().__init__(dim, eps=eps)
-        if dim % group_size != 0:
-            raise ValueError(f"hidden_size ({dim}) must be divisible by group_size ({group_size}).")
-        self.group_size = group_size
-
-    def _norm(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        grouped_shape = (*hidden_states.shape[:-1], -1, self.group_size)
-        return super()._norm(hidden_states.reshape(grouped_shape)).flatten(-2)
-
-
 class Qwen4ExpTextGatedResidual(nn.Module):
     def __init__(self, config: Qwen4ExpTextConfig, use_combine: bool = True):
         super().__init__()
         self.hc_count = config.hc_count
         self.hidden_size = config.hidden_size
         hc_hidden_size = self.hc_count * self.hidden_size
-        self.hc_norm = Qwen4ExpTextGroupedRMSNorm(hc_hidden_size, self.hidden_size, eps=config.rms_norm_eps)
+        self.hc_norm = Qwen4ExpTextRMSNorm(hc_hidden_size, group_size=self.hidden_size, eps=config.rms_norm_eps)
         self.input_mix_weight_down = nn.Linear(hc_hidden_size, config.hc_lowrank, bias=False)
         self.input_mix_weight_up = nn.Linear(config.hc_lowrank, hc_hidden_size, bias=False)
         self.block_inject_weight = nn.Linear(hc_hidden_size, self.hc_count, bias=False) if use_combine else None
@@ -716,9 +711,9 @@ class Qwen4ExpTextPLELayer(nn.Module):
         self.short_conv_state_len = (conv_kernel_size - 1) * conv_dilation
         self.key_proj = nn.Linear(ple_embed_dim, hc_hidden_size, bias=False)
         self.value_proj = nn.Linear(ple_embed_dim, self.hidden_size, bias=False)
-        self.norm_key = Qwen4ExpTextGroupedRMSNorm(hc_hidden_size, self.hidden_size, eps=config.rms_norm_eps)
-        self.norm_query = Qwen4ExpTextGroupedRMSNorm(hc_hidden_size, self.hidden_size, eps=config.rms_norm_eps)
-        self.norm_conv = Qwen4ExpTextGroupedRMSNorm(hc_hidden_size, self.hidden_size, eps=config.rms_norm_eps)
+        self.norm_key = Qwen4ExpTextRMSNorm(hc_hidden_size, group_size=self.hidden_size, eps=config.rms_norm_eps)
+        self.norm_query = Qwen4ExpTextRMSNorm(hc_hidden_size, group_size=self.hidden_size, eps=config.rms_norm_eps)
+        self.norm_conv = Qwen4ExpTextRMSNorm(hc_hidden_size, group_size=self.hidden_size, eps=config.rms_norm_eps)
         self.conv1d = nn.Conv1d(
             hc_hidden_size,
             hc_hidden_size,
@@ -860,8 +855,6 @@ class Qwen4ExpPreTrainedModel(Qwen3_5MoePreTrainedModel):
             )
             init.copy_(module.ngram_heads_vocab_sizes, torch.tensor(module.head_vocab_sizes, dtype=torch.long))
             init.copy_(module.ngram_heads_offsets, torch.tensor(module.head_offsets, dtype=torch.long))
-        elif isinstance(module, Qwen4ExpTextGroupedRMSNorm):
-            init.zeros_(module.weight)
         elif isinstance(module, Qwen4ExpTextPLELayer):
             init.zeros_(module.conv1d.weight)
 
