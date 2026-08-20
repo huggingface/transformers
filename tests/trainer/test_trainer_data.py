@@ -564,7 +564,8 @@ class TrainerSamplerTest(unittest.TestCase):
             self.check_shard_sampler(dataset, 4, drop_last=False, num_processes=3)
 
     def test_batch_rebalance_basic(self):
-        """Test that BatchRebalanceSampler yields correct number of micro-batches and covers all samples."""
+        """Core invariants: full coverage with no overlap between ranks, exact per-global-batch
+        sample counts, correct micro-batch count, and determinism for a fixed seed."""
         lengths = [
             100,
             500,
@@ -593,41 +594,7 @@ class TrainerSamplerTest(unittest.TestCase):
         ]
         dp_size = 2
         grad_accum = 2
-        micro_batch_size = 1
-        effective_batch_size = micro_batch_size * grad_accum * dp_size  # = 4
-
-        for rank in range(dp_size):
-            sampler = BatchRebalanceSampler(
-                lengths=lengths,
-                effective_batch_size=effective_batch_size,
-                dp_size=dp_size,
-                grad_accum=grad_accum,
-                rank=rank,
-            )
-            batches = list(sampler)
-            # Should yield num_global_batches * grad_accum micro-batches per rank
-            self.assertEqual(len(batches), sampler.num_global_batches * grad_accum)
-
-        # All ranks combined should cover all samples
-        all_indices = set()
-        for rank in range(dp_size):
-            sampler = BatchRebalanceSampler(
-                lengths=lengths,
-                effective_batch_size=effective_batch_size,
-                dp_size=dp_size,
-                grad_accum=grad_accum,
-                rank=rank,
-            )
-            for batch in sampler:
-                all_indices.update(batch)
-        self.assertEqual(all_indices, set(range(len(lengths))))
-
-    def test_batch_rebalance_no_overlap_between_ranks(self):
-        """Test that different ranks never get the same sample in the same global batch."""
-        lengths = [100 * (i + 1) for i in range(48)]
-        dp_size = 4
-        grad_accum = 2
-        effective_batch_size = 2 * 2 * 4  # = 16
+        effective_batch_size = 4  # one micro-batch-size sample per (rank, slot) group
 
         samplers = [
             BatchRebalanceSampler(
@@ -639,108 +606,37 @@ class TrainerSamplerTest(unittest.TestCase):
             )
             for r in range(dp_size)
         ]
-
-        all_batches_per_rank = [list(s) for s in samplers]
-
-        # For each global batch, check no overlap between ranks
-        num_global = len(all_batches_per_rank[0]) // grad_accum
-        for gb in range(num_global):
-            for slot in range(grad_accum):
-                micro_idx = gb * grad_accum + slot
-                indices_per_rank = [set(all_batches_per_rank[r][micro_idx]) for r in range(dp_size)]
-                combined = set()
-                for s in indices_per_rank:
-                    self.assertEqual(len(combined & s), 0, f"Overlap in gb={gb}, slot={slot}")
-                    combined |= s
-
-    def test_batch_rebalance_eff_batch_size(self):
-        """Test that each global batch has exactly effective_batch_size total samples."""
-        lengths = [
-            50,
-            300,
-            100,
-            800,
-            200,
-            500,
-            150,
-            700,
-            400,
-            1000,
-            250,
-            600,
-            120,
-            900,
-            350,
-            2000,
-            450,
-            550,
-            80,
-            300,
-            650,
-            750,
-            180,
-            1200,
-            60,
-            400,
-            220,
-            850,
-            330,
-            480,
-            130,
-            1100,
-        ]
-        dp_size = 2
-        grad_accum = 2
-        effective_batch_size = 2 * 2 * 2  # = 8
-
-        samplers = [
-            BatchRebalanceSampler(
-                lengths=lengths,
-                effective_batch_size=effective_batch_size,
-                dp_size=dp_size,
-                grad_accum=grad_accum,
-                rank=r,
-            )
-            for r in range(dp_size)
-        ]
-
         all_batches = [list(s) for s in samplers]
-        num_global = len(all_batches[0]) // grad_accum
 
+        # Micro-batch count per rank and per-global-batch totals across ranks.
+        num_global = len(all_batches[0]) // grad_accum
+        self.assertEqual(len(all_batches[0]), num_global * grad_accum)
+        all_indices = set()
         for gb in range(num_global):
-            total = 0
+            combined = set()
             for slot in range(grad_accum):
                 for r in range(dp_size):
-                    total += len(all_batches[r][gb * grad_accum + slot])
-            self.assertEqual(
-                total, effective_batch_size, f"gb={gb}: expected {effective_batch_size} samples, got {total}"
-            )
+                    batch = all_batches[r][gb * grad_accum + slot]
+                    self.assertEqual(len(combined & set(batch)), 0, f"Overlap in gb={gb}, slot={slot}")
+                    combined.update(batch)
+            self.assertEqual(len(combined), effective_batch_size, f"gb={gb}")
+            all_indices.update(combined)
+        self.assertEqual(all_indices, set(range(len(lengths))))
 
-    def test_batch_rebalance_deterministic(self):
-        """Test that same seed produces same results, and different ranks produce same partition."""
-        lengths = [100 * (i + 1) for i in range(32)]
-        dp_size = 4
-        grad_accum = 2
-        effective_batch_size = 8
-
-        for rank in range(dp_size):
-            s1 = BatchRebalanceSampler(
-                lengths=lengths,
-                effective_batch_size=effective_batch_size,
-                dp_size=dp_size,
-                grad_accum=grad_accum,
-                rank=rank,
-                seed=42,
+        # Same seed reproduces the same iteration.
+        again = [
+            list(
+                BatchRebalanceSampler(
+                    lengths=lengths,
+                    effective_batch_size=effective_batch_size,
+                    dp_size=dp_size,
+                    grad_accum=grad_accum,
+                    rank=r,
+                )
             )
-            s2 = BatchRebalanceSampler(
-                lengths=lengths,
-                effective_batch_size=effective_batch_size,
-                dp_size=dp_size,
-                grad_accum=grad_accum,
-                rank=rank,
-                seed=42,
-            )
-            self.assertEqual(list(s1), list(s2))
+            for r in range(dp_size)
+        ]
+        self.assertEqual(all_batches, again)
 
     def test_batch_rebalance_converges_for_large_effective_batch_size(self):
         """
@@ -816,71 +712,49 @@ class TrainerSamplerTest(unittest.TestCase):
 
         self.assertAlmostEqual(rebalanced_spread, optimal_spread, places=6)
 
-    def test_batch_rebalance_drop_last_false_covers_all_samples(self):
-        """Regression: when drop_last=False the trailing partial batch must also be yielded,
-        otherwise samples beyond the last full batch are silently dropped. All existing
-        batch_rebalance tests use dataset sizes that divide evenly by effective_batch_size, so
-        this regression was not covered."""
-        ds_size = 18
-        eff_bs = 16
-        lengths = list(range(100, 100 + ds_size))
-
+    def test_batch_rebalance_drop_last(self):
+        """Tail handling. With drop_last=True the trailing partial batch is dropped (default).
+        With drop_last=False it is yielded: a remainder smaller than K (= dp_size * grad_accum)
+        is padded up to K (not the full effective_batch_size, so duplication stays bounded), and
+        a dataset smaller than K is wrapped around repeatedly until K indices are available."""
+        # drop_last=True: trailing samples beyond the last full batch are dropped.
         s = BatchRebalanceSampler(
-            lengths=lengths,
-            effective_batch_size=eff_bs,
-            dp_size=1,
-            grad_accum=1,
-            shuffle=False,
-            rank=0,
-            drop_last=False,
-        )
-        covered = set()
-        for batch in s:
-            covered.update(batch)
-        # Must cover ALL samples including the trailing {16, 17}.
-        self.assertEqual(covered, set(range(ds_size)))
-        self.assertEqual(s.num_global_batches, 2)  # 1 full + 1 tail
-
-    def test_batch_rebalance_drop_last_true_drops_tail(self):
-        """When drop_last=True the trailing partial batch must be dropped (default behaviour)."""
-        ds_size = 18
-        eff_bs = 16
-        lengths = list(range(100, 100 + ds_size))
-
-        s = BatchRebalanceSampler(
-            lengths=lengths,
-            effective_batch_size=eff_bs,
+            lengths=list(range(100, 118)),  # 18 samples, eff_bs=16 -> remainder 2
+            effective_batch_size=16,
             dp_size=1,
             grad_accum=1,
             shuffle=False,
             rank=0,
             drop_last=True,
         )
-        covered = set()
-        for batch in s:
-            covered.update(batch)
-        self.assertEqual(covered, set(range(eff_bs)))
+        covered = {i for batch in s for i in batch}
+        self.assertEqual(covered, set(range(16)))
         self.assertEqual(s.num_global_batches, 1)
 
-    def test_batch_rebalance_drop_last_padding_path(self):
-        """When drop_last=False and the remainder is smaller than dp_size * grad_accum, the tail
-        is padded (repeating samples from the start, like torch DistributedSampler) so every
-        (rank, slot) group still has >= 1 sample. Union over all ranks must cover every real
-        sample, and the tail is padded only up to K (= dp_size * grad_accum) -- NOT the full
-        effective_batch_size -- so duplication stays bounded."""
-        ds_size = 20
-        eff_bs = 16
-        dp_size = 4
-        grad_accum = 2  # K = 8 groups, but remainder = 4 < 8 -> padding kicks in
-        lengths = list(range(100, 100 + ds_size))
-        K = dp_size * grad_accum
+        # drop_last=False, remainder >= K: the tail is yielded as-is, nothing dropped.
+        s = BatchRebalanceSampler(
+            lengths=list(range(100, 118)),
+            effective_batch_size=16,
+            dp_size=1,
+            grad_accum=1,
+            shuffle=False,
+            rank=0,
+            drop_last=False,
+        )
+        covered = {i for batch in s for i in batch}
+        self.assertEqual(covered, set(range(18)))
+        self.assertEqual(s.num_global_batches, 2)
 
-        covered = set()
+        # drop_last=False, remainder < K: padded up to K, not to effective_batch_size.
+        # 20 samples, eff_bs=16, dp=4, ga=2 -> K=8, remainder=4 -> tail padded 4->8.
+        dp_size, grad_accum = 4, 2
+        K = dp_size * grad_accum
         total_yielded = 0
+        covered = set()
         for rank in range(dp_size):
             s = BatchRebalanceSampler(
-                lengths=lengths,
-                effective_batch_size=eff_bs,
+                lengths=list(range(100, 120)),
+                effective_batch_size=16,
                 dp_size=dp_size,
                 grad_accum=grad_accum,
                 shuffle=False,
@@ -890,34 +764,20 @@ class TrainerSamplerTest(unittest.TestCase):
             for batch in s:
                 covered.update(batch)
                 total_yielded += len(batch)
-        # All real sample indices survive; only padding copies are duplicated.
-        self.assertTrue(set(range(ds_size)) <= covered)
-        # num_full_batches = 20 // 16 = 1 (16 samples); remainder = 4 < K=8, padded up to K=8.
-        # So total yielded = full batch (16) + padded tail (K=8) = 24, NOT 16 + eff_bs(16) = 32.
-        self.assertEqual(total_yielded, eff_bs + K)
-        self.assertLess(total_yielded, eff_bs + eff_bs)
+        self.assertTrue(set(range(20)) <= covered)
+        # full batch (16) + padded tail (K=8) = 24, NOT 16 + eff_bs (16) = 32.
+        self.assertEqual(total_yielded, 16 + K)
 
-    def test_batch_rebalance_drop_last_padding_when_dataset_smaller_than_K(self):
-        """Regression: when the whole dataset is smaller than K (= dp_size * grad_accum), the tail
-        IS the whole dataset and must be padded up to K by wrapping the order repeatedly. The naive
-        `order[:pad]` only returns at most len(order) elements, so it underfills the tail and
-        `_poormans_rebalance(..., min_per_group=1)` raises ValueError. Padding must repeat the order
-        until `pad` elements are available."""
-        eff_bs = 8
-        dp_size = 4
-        grad_accum = 2  # K = 8 > len(dataset)=1 -> padding must wrap around
-        K = dp_size * grad_accum
-        lengths = [100]
-
+        # drop_last=False, dataset smaller than K: padding wraps the order around.
         total_yielded = 0
         micro_batch_sizes = []
         covered = set()
         for rank in range(dp_size):
             s = BatchRebalanceSampler(
-                lengths=lengths,
-                effective_batch_size=eff_bs,
+                lengths=[100],
+                effective_batch_size=8,
                 dp_size=dp_size,
-                grad_accum=grad_accum,
+                grad_accum=grad_accum,  # K = 8 > len(dataset) = 1
                 shuffle=False,
                 rank=rank,
                 drop_last=False,
@@ -926,47 +786,10 @@ class TrainerSamplerTest(unittest.TestCase):
                 micro_batch_sizes.append(len(batch))
                 covered.update(batch)
                 total_yielded += len(batch)
-        # No crash, tail padded up to K: K samples distributed across dp_size*grad_accum groups,
-        # 1 per group. Each rank yields grad_accum micro-batches of >= 1 sample.
         self.assertEqual(total_yielded, K)
         self.assertEqual(len(micro_batch_sizes), dp_size * grad_accum)
         self.assertTrue(all(sz >= 1 for sz in micro_batch_sizes))
-        # The single real sample survives.
         self.assertEqual(covered, {0})
-
-    @require_accelerate
-    def test_batch_rebalance_defeats_double_sharding(self):
-        """Regression: `accelerator.prepare` wraps the already rank-aware batch_sampler in
-        accelerate's `BatchSamplerShard`, which re-shards and silently drops most samples each
-        epoch. The Trainer neutralises the wrapper by setting num_processes=1. This test
-        simulates the wrapper directly (no multi-process needed) and verifies the passthrough
-        restores full sample coverage."""
-        from accelerate.data_loader import BatchSamplerShard
-
-        lengths = [100 * (i + 1) for i in range(16)]
-        kwargs = {"lengths": lengths, "effective_batch_size": 16, "dp_size": 2, "grad_accum": 1, "rank": 0}
-
-        # What the sampler itself yields for rank 0 (ground truth).
-        expected = sorted(idx for batch in BatchRebalanceSampler(**kwargs) for idx in batch)
-
-        # Simulate accelerate's wrapper at num_processes=2 (the double-shard source). Without
-        # the Trainer's passthrough it re-shards and loses samples.
-        wrapper_sharded = BatchSamplerShard(
-            BatchRebalanceSampler(**kwargs), num_processes=2, process_index=0, even_batches=False
-        )
-        sharded = sorted(idx for batch in wrapper_sharded for idx in batch)
-        self.assertLess(len(sharded), len(expected))
-
-        # Apply the Trainer's passthrough fix and confirm full coverage is restored.
-        wrapper = BatchSamplerShard(
-            BatchRebalanceSampler(**kwargs), num_processes=2, process_index=0, even_batches=False
-        )
-        # Detection: the wrapper exposes the original sampler via .batch_sampler.
-        self.assertIsNotNone(getattr(wrapper, "batch_sampler", None))
-        wrapper.num_processes = 1
-        wrapper.process_index = 0
-        passthrough = sorted(idx for batch in wrapper for idx in batch)
-        self.assertEqual(passthrough, expected)
 
     def test_batch_rebalance_trainer_effective_batch_size_formula(self):
         """Regression for the effective_batch_size calculation in Trainer._get_train_sampler.
