@@ -616,7 +616,7 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
             device=visual_features.device,
         )
         visual_indicator_features = self.visual_embeddings_table(indicator_token_ids)
-        split_sizes = (image_grid_thw.prod(dim=1) // self.vision_tower.config.hidden_stride**2).tolist()
+        split_sizes = (image_grid_thw.prod(dim=1) // self.vision_tower.config.spatial_merge_size**2).tolist()
         return Ovis2_5VisualFeaturesOutput(
             last_hidden_state=vision_outputs.last_hidden_state,
             pooler_output=torch.split(visual_features, split_sizes),
