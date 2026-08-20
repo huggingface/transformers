@@ -638,6 +638,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         EXPECTED_GENERATIONS = Expectations(
             {
+                (None, None): "Describe the images.\nThe first image shows a black dog sitting on a wooden surface. The dog has a glossy coat and is looking directly at the camera with a calm expression. The wooden background appears to be made of planks, providing a rustic and warm setting for the photograph.\n\nThe second image depicts a scenic mountain landscape. The view is from a high vantage point, looking down at a rugged terrain with rocky outcrops and patches of green vegetation. The mountains in the distance are covered with snow",
                 ("cuda", 8): "Describe the images.\nThe first image shows a black dog sitting on a wooden surface. The dog has a glossy coat and is looking directly at the camera with a calm expression. The wooden background appears to be made of planks, giving a rustic and cozy feel to the image.\n\nThe second image depicts a scenic mountain landscape. The view is from a high vantage point, looking down at a rugged terrain with rocky outcrops and patches of green vegetation. The mountains in the distance are covered with",
             }
         )  # fmt: skip
@@ -706,6 +707,10 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         EXPECTED_GENERATIONS = Expectations(
             {
+                (None, None): [
+                    "What breed is the dog?The dog in the image is a black Labrador Retriever.",
+                    "What is shown in this image?The image depicts a narrow, winding dirt path surrounded by lush greenery. The path is bordered by grass and shrubs on both sides. On the left side, there are tall trees and dense foliage, while on the right side, there"
+                ],
                 ("cuda", 8): [
                     "What breed is the dog?The dog in the image is a black Labrador Retriever.",
                     "What is shown in this image?A narrow dirt path is surrounded by grass and trees. The path leads to a distant point, and the sky is clear and blue."
