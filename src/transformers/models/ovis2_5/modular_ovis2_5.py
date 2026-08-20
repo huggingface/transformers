@@ -225,8 +225,8 @@ class Ovis2_5VideoProcessorInitKwargs(VideosKwargs, total=False):
 class Ovis2_5VideoProcessor(Glm4vVideoProcessor):
     resample = PILImageResampling.BILINEAR
     size = {"shortest_edge": 448 * 448, "longest_edge": 1344 * 1792}
-    image_mean = [0.5, 0.5, 0.5]
-    image_std = [0.5, 0.5, 0.5]
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
     do_sample_frames = False
     patch_size = 16
     temporal_patch_size = 1
