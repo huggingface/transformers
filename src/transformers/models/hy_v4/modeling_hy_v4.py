@@ -186,7 +186,23 @@ class HYV4Indexer(nn.Module):
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None,
     ) -> torch.LongTensor:
-        """Select DSA keys using HYV4's split-half tail-RoPE layout and FP32 key normalization."""
+        """
+        Selects the top-k tokens per query for DeepSeek Sparse Attention (DSA).
+
+        Same as [`DeepseekV32Indexer.forward`], but the indexer applies **interleaved** RoPE
+        rather than the non-interleaved half-split RoPE used by DeepSeek-V3.2.
+
+        Args:
+            hidden_states: Input hidden states `[B, S, hidden_size]`.
+            q_resid: Query residual from `q_a_layernorm(q_a_proj(x))`, shape `[B, S, q_lora_rank]`.
+            position_embeddings: `(cos, sin)` from RotaryEmbedding.
+            attention_mask: Causal mask, broadcastable to `[B, S, T]`.
+            past_key_values: Cache object containing the indexer key cache for this layer.
+
+        Returns:
+            `torch.Tensor`: the `int32` top-k token indices of shape `[B, S, topk]`. The eager / SDPA paths
+                turn these into an additive sparse mask; the `flash-mla` kernel consumes them directly.
+        """
         batch_size, sequence_length, _ = hidden_states.shape
         query_states = self.wq_b(query_residual).view(batch_size, sequence_length, self.n_heads, self.head_dim)
         key_states = F.layer_norm(
@@ -229,6 +245,49 @@ class HYV4Indexer(nn.Module):
         return torch.where(topk_scores.isneginf(), torch.full_like(topk_indices, -1), topk_indices)
 
 
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float,
+    dropout: float | int = 0.0,
+    **kwargs,
+):
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    sinks = module.sinks.reshape(1, -1, 1, 1).expand(query.shape[0], -1, query.shape[-2], -1)
+    combined_logits = torch.cat([attn_weights, sinks], dim=-1)
+
+    # This was not in the original implementation and slightly affect results; it prevents overflow in BF16/FP16
+    # when training with bsz>1 we clamp max values.
+
+    combined_logits = combined_logits - combined_logits.max(dim=-1, keepdim=True).values
+    probs = F.softmax(combined_logits, dim=-1, dtype=combined_logits.dtype)
+    scores = probs[..., :-1]  # we drop the sink here
+    attn_weights = nn.functional.dropout(scores, p=dropout, training=module.training).to(value_states.dtype)
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+    return attn_output, attn_weights
+
+
 def yarn_get_mscale(scale=1, mscale=1):
     if scale <= 1:
         return 1.0
@@ -243,31 +302,6 @@ def yarn_apply_mscale(rope_parameters, scaling):
             mscale = yarn_get_mscale(scaling_factor, mscale_all_dim)
             scaling = scaling * mscale * mscale
     return scaling
-
-
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    scaling: float,
-    dropout: float | int = 0.0,
-    **kwargs,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    attn_weights = torch.matmul(query.float(), key.float().transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask.float()
-
-    sinks = module.learnable_sink_param.reshape(1, -1, 1, 1).expand(query.shape[0], -1, query.shape[-2], -1)
-    combined_logits = torch.cat([attn_weights, sinks.float()], dim=-1)
-    combined_logits = combined_logits - combined_logits.max(dim=-1, keepdim=True).values
-    probs = F.softmax(combined_logits, dim=-1, dtype=torch.float32)
-    scores = probs[..., :-1]  # drop the sink column
-    attn_weights = F.dropout(scores, p=dropout, training=module.training).to(value.dtype)
-    attn_output = torch.matmul(attn_weights, value)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-    return attn_output, attn_weights
 
 
 class HYV4Attention(nn.Module):
@@ -327,7 +361,6 @@ class HYV4Attention(nn.Module):
         self.scaling = yarn_apply_mscale(config.rope_parameters, self.qk_head_dim ** (-0.5))
         self.indexer_type = config.indexer_types[layer_idx]
         self.indexer = HYV4Indexer(config, layer_idx) if self.indexer_type == "full" else None
-        # The released checkpoint always uses elementwise gated MLA and a learned sink.
         self.gate_projection_size = self.v_head_dim
         self.linear_gate = nn.Linear(config.hidden_size, self.num_heads * self.gate_projection_size, bias=False)
         self.learnable_sink_param = nn.Parameter(
@@ -411,6 +444,11 @@ class HYV4Attention(nn.Module):
         attention_output = attention_output.reshape(batch_size, sequence_length, -1).contiguous()
         return self.o_proj(attention_output), attention_weights, topk_indices
 
+    @property
+    def sinks(self) -> torch.Tensor:
+        # Alias for the shared GPT-OSS `eager_attention_forward`, which reads `module.sinks`.
+        return self.learnable_sink_param
+
     def _build_sparse_mask(
         self,
         topk_indices: torch.LongTensor | None,
@@ -421,18 +459,14 @@ class HYV4Attention(nn.Module):
         if topk_indices is None:
             return attention_mask
         batch_size, query_length, _ = topk_indices.shape
-        safe_indices = topk_indices.clamp_min(0)
-        valid_indices = topk_indices.ge(0)
-        selected_counts = torch.zeros(
-            (batch_size, query_length, key_length),
-            dtype=torch.int32,
-            device=topk_indices.device,
-        )
-        selected_counts.scatter_add_(-1, safe_indices, valid_indices.to(torch.int32))
-        selected_mask = selected_counts.gt(0).unsqueeze(1)
+        # Scatter the selected keys to False on an all-masked mask; `-1` sentinels go to a padded
+        # column that is then dropped.
+        index_mask = topk_indices.new_ones((batch_size, query_length, key_length + 1), dtype=torch.bool)
+        index_mask.scatter_(-1, topk_indices.masked_fill(topk_indices < 0, key_length), False)
+        index_mask = index_mask[..., :key_length].unsqueeze(1)
         sparse_mask = torch.zeros(
             (batch_size, 1, query_length, key_length), dtype=dtype, device=topk_indices.device
-        ).masked_fill(~selected_mask, torch.finfo(dtype).min)
+        ).masked_fill(index_mask, torch.finfo(dtype).min)
         if attention_mask is None:
             return sparse_mask
         attention_mask = attention_mask[..., :key_length]
@@ -499,7 +533,7 @@ class HYV4TopKRouter(nn.Module):
 
 
 class HYV4Experts(nn.Module):
-    """Trainable stacked routed experts using the release checkpoint parameter layout."""
+    """Stacked routed experts. The sentinel index `num_experts` (set by `RouterParallel`) is skipped."""
 
     def __init__(self, config: HYV4Config):
         super().__init__()
@@ -517,12 +551,14 @@ class HYV4Experts(nn.Module):
         top_k_weights: torch.Tensor,
     ) -> torch.Tensor:
         final_hidden_states = torch.zeros_like(hidden_states)
-        valid_routes = (top_k_indices >= 0) & (top_k_indices < self.num_experts) & (top_k_weights != 0)
-        if not torch.any(valid_routes):
-            return final_hidden_states
-
-        for expert_idx in torch.unique(top_k_indices[valid_routes]).tolist():
-            token_idx, top_k_position = torch.where(valid_routes & (top_k_indices == expert_idx))
+        with torch.no_grad():
+            expert_mask = F.one_hot(top_k_indices, num_classes=self.num_experts + 1).permute(2, 1, 0)
+            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+        for expert_idx in expert_hit:
+            expert_idx = expert_idx[0]
+            if expert_idx == self.num_experts:
+                continue
+            top_k_position, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx].to(self.gate_up_proj.dtype)
             gate, up = F.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
             if self.swiglu_limit > 0:
@@ -557,20 +593,9 @@ class HYV4MoE(nn.Module):
         return hidden_states
 
 
-def _hc_rms_gated_logits(hidden_states: torch.Tensor, mix_weight: torch.Tensor, rms_eps: float) -> torch.Tensor:
-    """Shared iHC projection: flatten the multi-channel hidden state, RMS-scale it in float32, and
-    project it through ``mix_weight`` to produce per-channel gate logits.
+class HYV4HyperConnection(nn.Module):
+    """Independent Hyper-Connection following the DeepSeek-V4 form (parameters on the module)."""
 
-    Returns logits of shape ``[batch, sequence, mix_weight.shape[0]]`` in float32. Both the pre/post
-    gating layer and the head layer build their sigmoid gates on top of these logits; only the
-    number of output gate groups and the presence of a post branch differ between them.
-    """
-    flat_states = hidden_states.flatten(2).float()
-    inverse_rms = torch.rsqrt(flat_states.square().mean(-1, keepdim=True) + rms_eps)
-    return F.linear(flat_states, mix_weight.float()) * inverse_rms
-
-
-class HYV4HCPreLayer(nn.Module):
     def __init__(self, config: HYV4Config):
         super().__init__()
         self.hidden_dim = config.hidden_size
@@ -582,12 +607,16 @@ class HYV4HCPreLayer(nn.Module):
         self.hc_scale = nn.Parameter(torch.empty(2, dtype=torch.float32))
         self.hc_base = nn.Parameter(torch.empty(2 * self.hc_mult, dtype=torch.float32))
 
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        if hidden_states.ndim != 4:
+            hidden_states = hidden_states.unsqueeze(2).expand(-1, -1, self.hc_mult, -1).contiguous()
         original_shape = hidden_states.shape
         input_dtype = hidden_states.dtype
         device_type = hidden_states.device.type if hidden_states.device.type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):
-            mixes = _hc_rms_gated_logits(hidden_states, self.hc_fn, self.layernorm_epsilon)
+            flat = hidden_states.flatten(2).float()
+            inverse_rms = torch.rsqrt(flat.square().mean(-1, keepdim=True) + self.layernorm_epsilon)
+            mixes = F.linear(flat, self.hc_fn.float()) * inverse_rms
             pre_logits, post_logits = mixes.split(self.hc_mult, dim=-1)
             pre_gates = (
                 torch.sigmoid(pre_logits * self.hc_scale[0].float() + self.hc_base[: self.hc_mult].float())
@@ -598,17 +627,20 @@ class HYV4HCPreLayer(nn.Module):
                 * torch.sigmoid(post_logits * self.hc_scale[1].float() + self.hc_base[self.hc_mult :].float())
                 + self.hc_eps
             )
-            reduced_states = torch.sum(pre_gates.unsqueeze(-1) * hidden_states.reshape(original_shape), dim=2)
-        return reduced_states.to(input_dtype), post_gates
+            collapsed = torch.sum(pre_gates.unsqueeze(-1) * hidden_states.reshape(original_shape), dim=2)
+        return post_gates, collapsed.to(input_dtype), hidden_states
+
+    @staticmethod
+    def add_residual(
+        sublayer_output: torch.Tensor, hidden_streams: torch.Tensor, post_gates: torch.Tensor
+    ) -> torch.Tensor:
+        output = post_gates.float().unsqueeze(-1) * sublayer_output.float().unsqueeze(-2)
+        return (output + hidden_streams.float()).to(sublayer_output.dtype)
 
 
-class HYV4HCPostLayer(nn.Module):
-    def forward(self, hidden_states: torch.Tensor, residual: torch.Tensor, post_gates: torch.Tensor) -> torch.Tensor:
-        output = post_gates.float().unsqueeze(-1) * hidden_states.float().unsqueeze(-2)
-        return (output + residual.float()).to(hidden_states.dtype)
+class HYV4HyperHead(nn.Module):
+    """Final iHC head: collapse the multi-stream hidden state back to a single stream."""
 
-
-class HYV4HCHeadLayer(nn.Module):
     def __init__(self, config: HYV4Config):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -624,37 +656,12 @@ class HYV4HCHeadLayer(nn.Module):
         input_dtype = hidden_states.dtype
         device_type = hidden_states.device.type if hidden_states.device.type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):
-            mixes = _hc_rms_gated_logits(hidden_states, self.hc_head_fn, self.rms_norm_eps)
+            flat = hidden_states.flatten(2).float()
+            inverse_rms = torch.rsqrt(flat.square().mean(-1, keepdim=True) + self.rms_norm_eps)
+            mixes = F.linear(flat, self.hc_head_fn.float()) * inverse_rms
             pre_gates = torch.sigmoid(mixes * self.hc_head_scale.float() + self.hc_head_base.float()) + self.hc_eps
             output = torch.sum(pre_gates.unsqueeze(-1) * hidden_states.reshape(original_shape), dim=2)
         return output.to(input_dtype)
-
-
-class HYV4HCLayer(nn.Module):
-    """Released HYV4 independent Hyper-Connection around one sublayer."""
-
-    def __init__(self, config: HYV4Config):
-        super().__init__()
-        self.hc_mult = config.hc_mult
-        self.hc_pre = HYV4HCPreLayer(config)
-        self.hc_post = HYV4HCPostLayer()
-
-    def prepare_input(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        if hidden_states.ndim == 4:
-            return hidden_states
-        return hidden_states.unsqueeze(2).expand(-1, -1, self.hc_mult, -1).contiguous()
-
-    def pre(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        reduced_states, post_gates = self.hc_pre(hidden_states)
-        return reduced_states, post_gates, hidden_states
-
-    def post(
-        self,
-        hidden_states: torch.Tensor,
-        residual: torch.Tensor,
-        post_gates: torch.Tensor,
-    ) -> torch.Tensor:
-        return self.hc_post(hidden_states, residual, post_gates)
 
 
 class HYV4DecoderLayer(GradientCheckpointingLayer):
@@ -665,8 +672,8 @@ class HYV4DecoderLayer(GradientCheckpointingLayer):
         self.mlp = HYV4MoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else HYV4MLP(config)
         self.input_layernorm = HYV4RMSNorm(config.hidden_size, config.rms_norm_eps)
         self.post_attention_layernorm = HYV4RMSNorm(config.hidden_size, config.rms_norm_eps)
-        self.hc_attn_layer = HYV4HCLayer(config)
-        self.hc_mlp_layer = HYV4HCLayer(config)
+        self.hc_attn_layer = HYV4HyperConnection(config)
+        self.hc_mlp_layer = HYV4HyperConnection(config)
 
     def forward(
         self,
@@ -679,11 +686,9 @@ class HYV4DecoderLayer(GradientCheckpointingLayer):
         prev_topk_indices: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.LongTensor | None]:
-        hidden_states = self.hc_attn_layer.prepare_input(hidden_states)
-        hidden_states, post_gates, residual = self.hc_attn_layer.pre(hidden_states)
-        hidden_states = self.input_layernorm(hidden_states)
-        hidden_states, _, topk_indices = self.self_attn(
-            hidden_states=hidden_states,
+        post_gates, collapsed, hidden_states = self.hc_attn_layer(hidden_states)
+        attn_output, _, topk_indices = self.self_attn(
+            hidden_states=self.input_layernorm(collapsed),
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -692,13 +697,11 @@ class HYV4DecoderLayer(GradientCheckpointingLayer):
             prev_topk_indices=prev_topk_indices,
             **kwargs,
         )
-        hidden_states = self.hc_attn_layer.post(hidden_states, residual, post_gates)
+        hidden_states = self.hc_attn_layer.add_residual(attn_output, hidden_states, post_gates)
 
-        hidden_states = self.hc_mlp_layer.prepare_input(hidden_states)
-        hidden_states, post_gates, residual = self.hc_mlp_layer.pre(hidden_states)
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = self.hc_mlp_layer.post(hidden_states, residual, post_gates)
+        post_gates, collapsed, hidden_states = self.hc_mlp_layer(hidden_states)
+        mlp_output = self.mlp(self.post_attention_layernorm(collapsed))
+        hidden_states = self.hc_mlp_layer.add_residual(mlp_output, hidden_states, post_gates)
         return hidden_states, topk_indices
 
 
@@ -739,14 +742,14 @@ class HYV4PreTrainedModel(PreTrainedModel):
         elif isinstance(module, HYV4Experts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, HYV4HCPreLayer):
+        elif isinstance(module, HYV4HyperConnection):
             init.normal_(module.hc_fn, mean=0.0, std=6e-3)
             init.constant_(module.hc_scale, 0.01)
             if not getattr(module.hc_base, "_is_hf_initialized", False):
                 base_value = -float(torch.log(torch.tensor(max(module.hc_mult - 1, 1), dtype=torch.float32)))
                 module.hc_base[: module.hc_mult].fill_(base_value)
                 module.hc_base[module.hc_mult :].zero_()
-        elif isinstance(module, HYV4HCHeadLayer):
+        elif isinstance(module, HYV4HyperHead):
             init.normal_(module.hc_head_fn, mean=0.0, std=6e-3)
             init.constant_(module.hc_head_scale, 0.01)
             if not getattr(module.hc_head_base, "_is_hf_initialized", False):
@@ -771,7 +774,7 @@ class HYV4Model(HYV4PreTrainedModel):
         self.norm = HYV4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = HYV4RotaryEmbedding(config=config)
         self.gradient_checkpointing = False
-        self.hc_head = HYV4HCHeadLayer(config)
+        self.hc_head = HYV4HyperHead(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -844,7 +847,6 @@ class HYV4ForCausalLM(HYV4PreTrainedModel, GenerationMixin):
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     _fsdp_plan = {"lm_head": "keep_full_weight"}
-    # The FP32 LM head lives only on the causal-LM class; the base model has no `lm_head`.
     _keep_in_fp32_modules_strict = HYV4PreTrainedModel._keep_in_fp32_modules_strict + ["lm_head"]
 
     def __init__(self, config: HYV4Config):
@@ -899,6 +901,7 @@ class HYV4ForCausalLM(HYV4PreTrainedModel, GenerationMixin):
         hidden_states = outputs.last_hidden_state
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         head_input = hidden_states[:, slice_indices, :]
+        # LM head is evaluated in float32.
         logits = self.lm_head(head_input.float())
 
         loss = None

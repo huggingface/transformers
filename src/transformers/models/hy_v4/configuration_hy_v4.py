@@ -149,8 +149,7 @@ class HYV4Config(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
-        # RoPE applies only to the rope slice, so point `head_dim` at it: the inherited rotary
-        # embedding reads `config.head_dim` and then computes the right frequencies with no override.
+        # RoPE applies only to the rope slice, so `head_dim` points at it.
         self.head_dim = self.qk_rope_head_dim
 
         if self.mlp_layer_types is None:

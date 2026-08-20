@@ -53,7 +53,6 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "glm4_moe": "qwen2_moe",
     "glm4_moe_lite": "qwen2_moe",
     "glm_moe_dsa": "qwen2_moe",
-    "hy_v4": "qwen2_moe",
     "glm4v_moe": "qwen2_moe",
     "longcat_flash": "qwen2_moe",
     "solar_open": "qwen2_moe",
@@ -144,6 +143,10 @@ _MODEL_TO_CONVERSION_PATTERN = {
 
 def _build_checkpoint_conversion_mapping():
     mapping = {
+        # HYV4 checkpoints store Hyper-Connection weights under a `hc_pre.` sub-prefix; drop it.
+        "hy_v4": [
+            WeightRenaming(source_patterns=r"\.hc_pre\.hc_", target_patterns=r".hc_"),
+        ],
         # Cosmos3 Edge's composite checkpoint stores its dense reasoner text tower as conventional attention + MLP
         # blocks. The visual/projector tensors already use their native module names and intentionally need no mapping.
         "cosmos3_edge": [

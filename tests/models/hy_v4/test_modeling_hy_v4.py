@@ -101,9 +101,9 @@ class HYV4ModelTest(CausalLMModelTest, unittest.TestCase):
 
         self.assertEqual(output.last_hidden_state.shape, (2, 5, config.hidden_size))
         state_dict = model.state_dict()
-        self.assertIn("layers.0.hc_attn_layer.hc_pre.hc_fn", state_dict)
+        self.assertIn("layers.0.hc_attn_layer.hc_fn", state_dict)
         self.assertIn("hc_head.hc_head_fn", state_dict)
-        self.assertEqual(state_dict["layers.0.hc_attn_layer.hc_pre.hc_fn"].dtype, torch.float32)
+        self.assertEqual(state_dict["layers.0.hc_attn_layer.hc_fn"].dtype, torch.float32)
         self.assertEqual(state_dict["hc_head.hc_head_fn"].dtype, torch.float32)
 
     def test_sink_parameter_layout(self):
