@@ -72,31 +72,30 @@ MODALITY_INPUT_DATA = {
 for modality, urls in MODALITY_INPUT_DATA.items():
     MODALITY_INPUT_DATA[modality] = [url_to_local_path(url) for url in urls]
 
-MODALITY_PARAMETERIZED_DATA = {
-    "text": {"processing_class": "tokenizer", "kwargs": {"padding": False, "truncation": False}},
-    "images": {"processing_class": "image_processor", "kwargs": {"do_normalize": False}},
-    "videos": {"processing_class": "videoe_processor", "kwargs": {"do_sample_frames": False}},
-    "audio": {"processing_class": "audio_processor", "kwargs": {}},
-}
 
 MODALITY_CONFIG = {
+    "text": {
+        "component_key": "tokenizer",
+        "input_kwarg": "text",
+        "prepare_fn": "prepare_text_inputs",
+        "call_time_kwargs": {},
+        "init_time_kwargs": {},
+    },
     "image": {
         "component_key": "image_processor",
         "input_kwarg": "images",
         "prepare_fn": "prepare_image_inputs",
-        "input_name_attr": "image_input_name",
-        "extra_call_kwargs": {},
-        "component_init_kwargs": {"do_rescale": True, "rescale_factor": -1.0},
+        "call_time_kwargs": {},
+        "init_time_kwargs": {"do_rescale": True, "rescale_factor": -1.0},
     },
     "video": {
         "component_key": "video_processor",
         "input_kwarg": "videos",
         "prepare_fn": "prepare_video_inputs",
-        "input_name_attr": "video_input_name",
         # `do_sample_frames=False` is required by video processors so that
         # frame sampling doesn't change the number of resulting tokens.
-        "extra_call_kwargs": {"do_sample_frames": False},
-        "component_init_kwargs": {"do_rescale": True, "rescale_factor": -1.0},
+        "call_time_kwargs": {"do_sample_frames": False},
+        "init_time_kwargs": {"do_rescale": True, "rescale_factor": -1.0},
     },
     "audio": {
         # Either a raw feature_extractor or an audio_processor attribute
@@ -104,9 +103,8 @@ MODALITY_CONFIG = {
         "component_key": None,
         "input_kwarg": "audio",
         "prepare_fn": "prepare_audio_inputs",
-        "input_name_attr": "audio_input_name",
-        "extra_call_kwargs": {},
-        "component_init_kwargs": {},
+        "call_time_kwargs": {},
+        "init_time_kwargs": {},
     },
 }
 
@@ -511,12 +509,6 @@ class ProcessorTesterMixin:
             return raw_speech
         return raw_speech * batch_size
 
-    def prepare_modality_inputs(self, modality, batch_size: int | None = None):
-        if modality in ["images", "videos"]:
-            modality = modality[:-1]  # FIXME
-        func = getattr(self, f"prepare_{modality}_inputs")
-        return func(batch_size=batch_size)
-
     # Video sampling inputs and expected sampled frame length. Override for models with custom sampling
     @property
     def video_sampling_expectations(self):
@@ -672,8 +664,8 @@ class ProcessorTesterMixin:
     @parameterized.expand(
         [
             ("text",),
-            ("images",),
-            ("videos",),
+            ("image",),
+            ("video",),
             ("audio",),
         ]
     )
@@ -683,11 +675,12 @@ class ProcessorTesterMixin:
         This test verifies that processor(single_modality_data) produces the same output as subprocessor(single_modality_data).
         """
         # Skip if processor doesn't have image_processor
-        parameterized_data = MODALITY_PARAMETERIZED_DATA[modality]
-        if parameterized_data["processing_class"] not in self.processor_class.get_attributes():
-            self.skipTest(f"{parameterized_data['processing_class']} attribute not present in {self.processor_class}")
+        parameterized_config = MODALITY_CONFIG[modality]
+        if parameterized_config["component_key"] not in self.processor_class.get_attributes():
+            self.skipTest(f"{parameterized_config['component_key']} attribute not present in {self.processor_class}")
 
-        subprocessor = self.get_component(parameterized_data["processing_class"])
+        subprocessor = self.get_component(parameterized_config["component_key"])
+        input_key = parameterized_config["input_kwarg"]  # images/videos/audio
 
         # Get all other required components for processor
         components = {}
@@ -695,21 +688,21 @@ class ProcessorTesterMixin:
             components[attribute] = self.get_component(attribute)
 
         processor = self.processor_class(**components, **self.prepare_processor_dict())
-        modality_input = self.prepare_modality_inputs(modality)
+        modality_input = self._prepare_modality_input(modality)
 
         # merge processor defaults when calling a subprocessor
-        kwargs = parameterized_data["kwargs"]
+        kwargs = parameterized_config["call_time_kwargs"]
         kwargs["return_tensors"] = "pt"
         merged_kwargs = processor._merge_kwargs(
             processor.valid_processor_kwargs,
             tokenizer_init_kwargs=processor.tokenizer.init_kwargs if hasattr(processor, "tokenizer") else {},
             **kwargs,
         )
-        kwargs = merged_kwargs[f"{modality}_kwargs"]
+        kwargs = merged_kwargs[f"{input_key}_kwargs"]
 
         input_subproc = subprocessor(modality_input, **kwargs)
         try:
-            input_processor = processor(**{modality: modality_input, **kwargs})
+            input_processor = processor(**{input_key: modality_input, **kwargs})
         except Exception:
             input_processor = {}
 
@@ -918,55 +911,51 @@ class ProcessorTesterMixin:
             return "feature_extractor"
         return None
 
-    def _skip_unless_modality_and_tokenizer(self, modality, require_tokenizer=True):
-        attrs = self.processor_class.get_attributes()
+    def _skip_unless_modality_and_tokenizer_present_present(
+        self, modality: str, attributes: list, require_tokenizer: bool = True
+    ):
+        attributes = self.processor_class.get_attributes()
+        component_key = self.get_subprocessor_name(modality, attributes)
+        if component_key not in attributes:
+            self.skipTest(f"{component_key} attribute not present in {self.processor_class}")
+        if require_tokenizer and "tokenizer" not in attributes:
+            self.skipTest(f"tokenizer attribute not present in {self.processor_class}")
+
+    def _get_subprocessor_name(self, modality: str, attributes: list):
         if modality == "audio":
-            if "audio_processor" in attrs:
+            if "audio_processor" in attributes:
                 component_key = "audio_processor"
             else:
                 component_key = "feature_extractor"
         else:
             component_key = MODALITY_CONFIG[modality]["component_key"]
-
-        if component_key not in attrs:
-            self.skipTest(f"{component_key} attribute not present in {self.processor_class}")
-        if require_tokenizer and "tokenizer" not in attrs:
-            self.skipTest(f"tokenizer attribute not present in {self.processor_class}")
         return component_key
 
-    def _prepare_modal_input(self, modality, batch_size=None):
+    def _prepare_modality_input(self, modality: str, batch_size: int | None = None):
         config = MODALITY_CONFIG[modality]
         prepare_fn = getattr(self, config["prepare_fn"])
         return prepare_fn(batch_size=batch_size) if batch_size is not None else prepare_fn()
 
-    def _prepare_text_for_modality(self, modality, batch_size: int | None = None):
-        if batch_size is not None:
-            return self.prepare_text_inputs(batch_size=batch_size, modalities=modality)
-        return self.prepare_text_inputs(modalities=modality)
-
     def _call_processor(self, processor, modality, text, modal_input, **kwargs):
         config = MODALITY_CONFIG[modality]
-        call_kwargs = dict(config["extra_call_kwargs"])
+        call_kwargs = dict(config["call_time_kwargs"])
         call_kwargs.update(kwargs)
         return processor(text=text, **{config["input_kwarg"]: modal_input}, **call_kwargs)
 
-    def _modal_output_name(self, modality):
-        config = MODALITY_CONFIG[modality]
-        attr = config["input_name_attr"]
-        return getattr(self, attr, None) if attr else None
-
-    def _check_modality_inputs(self, inputs, modality):
+    def _check_modality_outputs(self, inputs: dict, modality: str):
         # skio audio as there is no single kwarg that works same way in all audio processors
         input_key = getattr(self, f"{modality}_input_name")
         if modality in ["image", "video"]:
             self.assertLessEqual(inputs[input_key][0][0].mean(), 0)
 
     def _test_modality_processor_defaults_preserved_by_modality_kwargs(self, modality):
-        component_key = self._skip_unless_modality_and_tokenizer(modality)
+        attributes = self.processor_class.get_attributes()
+        self._skip_unless_modality_and_tokenizer_present(modality, attributes)
+        component_key = self._get_subprocessor_name(modality, attributes)
         processor_components = self.prepare_components()
 
-        component_init_kwargs = MODALITY_CONFIG[modality]["component_init_kwargs"]
-        processor_components[component_key] = self.get_component(component_key, **component_init_kwargs)
+        init_time_kwargs = MODALITY_CONFIG[modality]["init_time_kwargs"]
+        processor_components[component_key] = self.get_component(component_key, **init_time_kwargs)
 
         max_length = getattr(self, f"{modality}_text_kwargs_max_length")
         processor_components["tokenizer"] = self.get_component(
@@ -977,14 +966,17 @@ class ProcessorTesterMixin:
         processor = self.processor_class(**processor_components, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = self._prepare_text_for_modality(modality)
-        modal_input = self._prepare_modal_input(modality)
+        input_str = self.prepare_text_inputs(modalities=modality)
+        modal_input = self._prepare_modality_input(modality)
         inputs = self._call_processor(processor, modality, input_str, modal_input, return_tensors="pt")
-        self._check_modality_inputs(inputs, modality)
+        self._check_modality_outputs(inputs, modality)
         self.assertEqual(len(inputs[self.text_input_name][0]), max_length)
 
     def _test_kwargs_overrides_default_modality_processor_kwargs(self, modality):
-        component_key = self._skip_unless_modality_and_tokenizer(modality)
+        attributes = self.processor_class.get_attributes()
+        self._skip_unless_modality_and_tokenizer_present(modality, attributes)
+        component_key = self._get_subprocessor_name(modality, attributes)
+
         processor_components = self.prepare_components()
         processor_components[component_key] = self.get_component(component_key)
         processor_components["tokenizer"] = self.get_component("tokenizer", padding=False)
@@ -992,10 +984,10 @@ class ProcessorTesterMixin:
         processor = self.processor_class(**processor_components, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
-        component_init_kwargs = MODALITY_CONFIG[modality]["component_init_kwargs"]
+        init_time_kwargs = MODALITY_CONFIG[modality]["init_time_kwargs"]
         max_length = getattr(self, f"{modality}_text_kwargs_max_length")
-        input_str = self._prepare_text_for_modality(modality)
-        modal_input = self._prepare_modal_input(modality)
+        input_str = self.prepare_text_inputs(modalities=modality)
+        modal_input = self._prepare_modality_input(modality)
         inputs = self._call_processor(
             processor,
             modality,
@@ -1004,21 +996,23 @@ class ProcessorTesterMixin:
             return_tensors="pt",
             max_length=max_length,
             padding="max_length",
-            **component_init_kwargs,
+            **init_time_kwargs,
         )
-        self._check_modality_inputs(inputs, modality)
+        self._check_modality_outputs(inputs, modality)
         self.assertEqual(len(inputs[self.text_input_name][0]), max_length)
 
     def _test_unstructured_kwargs(self, modality):
-        self._skip_unless_modality_and_tokenizer(modality)
+        attributes = self.processor_class.get_attributes()
+        self._skip_unless_modality_and_tokenizer_present(modality, attributes)
+
         processor = self.get_processor()
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = self._prepare_text_for_modality(modality)
-        modal_input = self._prepare_modal_input(modality)
+        input_str = self.prepare_text_inputs(modalities=modality)
+        modal_input = self._prepare_modality_input(modality)
         max_length = getattr(self, f"{modality}_unstructured_max_length")
 
-        component_init_kwargs = MODALITY_CONFIG[modality]["component_init_kwargs"]
+        init_time_kwargs = MODALITY_CONFIG[modality]["init_time_kwargs"]
         inputs = self._call_processor(
             processor,
             modality,
@@ -1027,20 +1021,22 @@ class ProcessorTesterMixin:
             return_tensors="pt",
             padding="max_length",
             max_length=max_length,
-            **component_init_kwargs,
+            **init_time_kwargs,
         )
-        self._check_modality_inputs(inputs, modality)
+        self._check_modality_outputs(inputs, modality)
         self.assertEqual(inputs[self.text_input_name].shape[-1], max_length)
 
     def _test_unstructured_kwargs_batched(self, modality):
-        self._skip_unless_modality_and_tokenizer(modality)
+        attributes = self.processor_class.get_attributes()
+        self._skip_unless_modality_and_tokenizer_present(modality, attributes)
+
         processor = self.get_processor()
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = self.prepare_text_inputs(batch_size=2, modalities=modality)
-        modal_input = self._prepare_modal_input(modality, batch_size=2)
+        modal_input = self._prepare_modality_input(modality, batch_size=2)
         max_length = getattr(self, f"{modality}_unstructured_max_length")
-        component_init_kwargs = MODALITY_CONFIG[modality]["component_init_kwargs"]
+        init_time_kwargs = MODALITY_CONFIG[modality]["init_time_kwargs"]
         inputs = self._call_processor(
             processor,
             modality,
@@ -1049,44 +1045,48 @@ class ProcessorTesterMixin:
             return_tensors="pt",
             padding="longest",
             max_length=max_length,
-            **component_init_kwargs,
+            **init_time_kwargs,
         )
-        self._check_modality_inputs(inputs, modality)
+        self._check_modality_outputs(inputs, modality)
         self.assertTrue(
             len(inputs[self.text_input_name][0]) == len(inputs[self.text_input_name][1])
             and len(inputs[self.text_input_name][1]) < max_length
         )
 
     def _test_doubly_passed_kwargs(self, modality):
-        self._skip_unless_modality_and_tokenizer(modality)
+        attributes = self.processor_class.get_attributes()
+        self._skip_unless_modality_and_tokenizer_present(modality, attributes)
+
         processor = self.get_processor()
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = [self._prepare_text_for_modality(modality)]
-        modal_input = self._prepare_modal_input(modality)
+        input_str = [self.prepare_text_inputs(modalities=modality)]
+        modal_input = self._prepare_modality_input(modality)
         modality_kwargs_key = f"{MODALITY_CONFIG[modality]['input_kwarg']}_kwargs"
-        component_init_kwargs = MODALITY_CONFIG[modality]["component_init_kwargs"]
+        init_time_kwargs = MODALITY_CONFIG[modality]["init_time_kwargs"]
         with self.assertRaises(ValueError):
             self._call_processor(
                 processor,
                 modality,
                 input_str,
                 modal_input,
-                **{modality_kwargs_key: component_init_kwargs},
-                **component_init_kwargs,
+                **{modality_kwargs_key: init_time_kwargs},
+                **init_time_kwargs,
                 return_tensors="pt",
             )
 
     def _test_structured_kwargs_nested(self, modality, from_dict=False):
-        self._skip_unless_modality_and_tokenizer(modality)
+        attributes = self.processor_class.get_attributes()
+        self._skip_unless_modality_and_tokenizer_present(modality, attributes)
+
         processor = self.get_processor()
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = self._prepare_text_for_modality(modality)
-        modal_input = self._prepare_modal_input(modality)
+        input_str = self.prepare_text_inputs(modalities=modality)
+        modal_input = self._prepare_modality_input(modality)
         max_length = getattr(self, f"{modality}_unstructured_max_length")
         modality_kwargs_key = f"{MODALITY_CONFIG[modality]['input_kwarg']}_kwargs"
-        modality_kwargs = MODALITY_CONFIG[modality]["component_init_kwargs"]
+        modality_kwargs = MODALITY_CONFIG[modality]["init_time_kwargs"]
         if modality == "video":
             modality_kwargs["do_sample_frames"] = False
         all_kwargs = {
@@ -1101,7 +1101,7 @@ class ProcessorTesterMixin:
             # support a second time after the call; kept for parity.
             self.skip_processor_without_typed_kwargs(processor)
 
-        self._check_modality_inputs(inputs, modality)
+        self._check_modality_outputs(inputs, modality)
         self.assertEqual(inputs[self.text_input_name].shape[-1], max_length)
 
     def _test_overlapping_text_modality_kwargs_handling(self, modality):
@@ -1109,12 +1109,14 @@ class ProcessorTesterMixin:
         when passed both flat and nested" checks. Image/video raise via a
         top-level `padding="max_length"` clashing with a nested
         `text_kwargs={"padding": "do_not_pad"}`."""
-        self._skip_unless_modality_and_tokenizer(modality)
+        attributes = self.processor_class.get_attributes()
+        self._skip_unless_modality_and_tokenizer_present(modality, attributes)
+
         processor = self.get_processor()
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = self._prepare_text_for_modality(modality)
-        modal_input = self._prepare_modal_input(modality)
+        input_str = self.prepare_text_inputs(modalities=modality)
+        modal_input = self._prepare_modality_input(modality)
 
         with self.assertRaises(ValueError):
             self._call_processor(

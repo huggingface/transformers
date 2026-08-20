@@ -390,7 +390,7 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         input_str = self.prepare_text_inputs(batch_size=2, modalities=modality)
         modal_input = self._prepare_modal_input(modality, batch_size=2)
         max_length = getattr(self, f"{modality}_unstructured_max_length")
-        component_init_kwargs = MODALITY_CONFIG[modality]["component_init_kwargs"]
+        init_time_kwargs = MODALITY_CONFIG[modality]["init_time_kwargs"]
         inputs = self._call_processor(
             processor,
             modality,
@@ -399,9 +399,9 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_tensors="pt",
             padding="longest",
             max_length=max_length,
-            **component_init_kwargs,
+            **init_time_kwargs,
         )
-        self._check_modality_inputs(inputs, modality)
+        self._check_modality_outputs(inputs, modality)
         self.assertTrue(
             len(inputs[self.text_input_name][0]) == len(inputs[self.text_input_name][1])
             and len(inputs[self.text_input_name][1]) < max_length
