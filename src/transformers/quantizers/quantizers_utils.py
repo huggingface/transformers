@@ -28,17 +28,16 @@ def get_module_from_name(module, tensor_name: str) -> tuple[Any, str]:
 
 
 def is_packed_experts_module(module: "torch.nn.Module") -> bool:
-    """Returns whether `module` is a fused-experts module whose weights can be swapped for packed (quantized) ones. This
-    requires the module to have the right projects (gate_up_proj, down_proj), to be decorated with the
-    `use_experts_implementation` (which sets the `has_gate` and `num_experts` attributes), and to not be transposed.
+    """Returns whether `module` is a fused-experts module. This requires the module to be decorated with
+    `use_experts_implementation` (which sets the `has_gate` and `num_experts` attributes), to have the right projections
+    (`gate_up_proj` for gated MoEs, `up_proj` for non-gated ones, and `down_proj` either way).
     """
-    return (
-        hasattr(module, "gate_up_proj")
-        and hasattr(module, "down_proj")
-        and hasattr(module, "has_gate")
-        and hasattr(module, "num_experts")
-        and not getattr(module, "is_transposed", False)
-    )
+    # Check for everything but the gate_up or up projection
+    if not (hasattr(module, "has_gate") and hasattr(module, "down_proj") and hasattr(module, "num_experts")):
+        return False
+    # Now that we know there is a "has_gate" attribute, we can check for the right projection
+    first_proj_name = "gate_up_proj" if module.has_gate else "up_proj"
+    return hasattr(module, first_proj_name)
 
 
 def try_set_experts_implementation(model, module_names: list[str], implementation: str) -> list[str]:

@@ -259,27 +259,36 @@ class Mxfp4HfQuantizer(HfQuantizer):
         from ..integrations import Mxfp4GptOssExperts
 
         has_gpt_oss_modules = False
+        excluded_expert = None
         experts_modules = []
         for name, module in model.named_modules():
             # keep track of gpt-oss modules to avoid warning if this is a gpt-oss model
             if isinstance(module, Mxfp4GptOssExperts):
                 has_gpt_oss_modules = True
             # find all the experts modules that support packed mxfp4 at runtime
-            elif (
-                name.endswith(".experts")
-                and is_packed_experts_module(module)
-                and should_convert_module(name, self.modules_to_not_convert)
-            ):
-                experts_modules.append(name)
+            elif name.endswith(".experts") and is_packed_experts_module(module):
+                if should_convert_module(name, self.modules_to_not_convert):
+                    experts_modules.append(name)
+                elif excluded_expert is None:
+                    excluded_expert = name
 
-        # Stop if no experts modules were found. This is expected for non-gpt-oss models, throw a warning otherwise
-        if not experts_modules:
+        # Stop if no experts modules were found at all. This is expected for gpt-oss models, throw a warning otherwise
+        if not experts_modules and excluded_expert is None:
             if not has_gpt_oss_modules:
                 logger.warning_once(
                     "You are loading your model in mxfp4 but no fused MoE experts modules were found: nothing "
                     "will be quantized. Please double check your model architecture, or submit an issue on "
                     "github if you think this is a bug."
                 )
+            return None
+
+        # Also stop if there is an expert affected by `set_experts_implementation` that is not quantized
+        if excluded_expert is not None:
+            logger.warning_once(
+                f"The expert {excluded_expert} in this checkpoint is not mxfp4 quantized, but the packed mxfp4 runtime"
+                " must dispatch the mxfp4 experts implementation to every MoE layer. Dequantizing the model."
+            )
+            self.quantization_config.dequantize = self.pre_quantized
             return None
 
         # Try setting the experts implementation to mxfp4 and dequantize the model if that fails

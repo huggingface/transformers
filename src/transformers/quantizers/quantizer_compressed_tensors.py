@@ -151,16 +151,32 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
     def _setup_packed_experts(self, model: "PreTrainedModel") -> None:
         """Route the model's fused-experts modules to the packed runtime, or give up on it.
 
-        The runtime replaces the experts' dense weights with kernel-ready packed ones, so it is only usable
-        when every fused-experts module can take them and the model dispatches its experts forward through
-        `ExpertsInterface`. `self.packed_experts_format` is cleared otherwise, which sends the loader back
-        to decompressing the experts.
+        The runtime replaces the experts' dense weights with kernel-ready packed ones, so it is only usable when every
+        fused-experts module can take them and the model dispatches its experts forward through `ExpertsInterface`.
+        `self.packed_experts_format` is cleared otherwise, which sends the loader back to decompressing the experts.
         """
-        experts_modules = [
-            name
-            for name, module in model.named_modules()
-            if name.endswith(".experts") and is_packed_experts_module(module)
-        ]
+        from compressed_tensors.utils.match import is_match
+
+        # Check all experts have the same CT scheme: if not, we cannot set `mxfp4` experts implementation for all
+        ct_config = self.compressor.quantization_config
+        scheme = get_experts_scheme(ct_config)
+
+        experts_modules = []
+        for name, module in model.named_modules():
+            # Skip modules not affected by `set_experts_implementation`
+            if not (name.endswith(".experts") and is_packed_experts_module(module)):
+                continue
+            experts_modules.append(name)
+
+            # Exit if an affected expert does not match the CT scheme
+            if not is_match(name, module, scheme.targets, ct_config.ignore or ()):
+                logger.warning_once(
+                    f"The expert {name} in this checkpoint does not match the CT mxfp4 quantization scheme, but the "
+                    "packed mxfp4 runtime must dispatch one implementation to every MoE layer. Decompressing the model."
+                )
+                self.packed_experts_format = None
+                return
+
         failed_to_switch = try_set_experts_implementation(model, experts_modules, "mxfp4")
 
         if not experts_modules or failed_to_switch:
