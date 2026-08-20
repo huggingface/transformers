@@ -568,13 +568,12 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-def apply_rotary_pos_emb(hidden_states, cos, sin, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the `hidden_states` tensors.
-
-    Removes the interleaving of cos and sin from GLM
+def apply_rotary_pos_emb(q, k=None, cos=None, sin=None, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors, or only the queries if the keys are not provided.
 
     Args:
-        hidden_states (`torch.Tensor`): The input tensor.
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor if provided.
         cos (`torch.Tensor`): The cosine part of the rotary embedding.
         sin (`torch.Tensor`): The sine part of the rotary embedding.
         unsqueeze_dim (`int`, *optional*, defaults to 1):
@@ -589,16 +588,25 @@ def apply_rotary_pos_emb(hidden_states, cos, sin, unsqueeze_dim=1):
     """
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
+    rotary_dim = cos.shape[-1]
 
     # Keep half or full tensor for later concatenation
-    rotary_dim = cos.shape[-1]
-    rope, nope = hidden_states[..., :rotary_dim], hidden_states[..., rotary_dim:]
-
+    q_rope, q_nope = q[..., :rotary_dim], q[..., rotary_dim:]
     # Apply rotary embeddings on the first half or full tensor
-    rope = (rope * cos) + (rotate_half(rope) * sin)
-
+    q_rope = (q_rope * cos) + (rotate_half(q_rope) * sin)
     # Concatenate back to full shape
-    return torch.cat([rope, nope], dim=-1)
+    q_rotated = torch.cat([q_rope, q_nope], dim=-1)
+
+    if k is not None:
+        k_rope, k_nope = k[..., :rotary_dim], k[..., rotary_dim:]
+        # Apply rotary embeddings on the first half or full tensor
+        k_rope = (k_rope * cos) + (rotate_half(k_rope) * sin)
+        # Concatenate back to full shape
+        k_rotated = torch.cat([k_rope, k_nope], dim=-1)
+
+        return q_rotated, k_rotated
+    else:
+        return q_rotated
 
 
 class Qwen4ExpTextQSAIndexer(nn.Module):
@@ -640,7 +648,7 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
         )
         q, token_k = q.reshape(*hidden_shape), token_k.reshape(*hidden_shape).squeeze(2)
         q = self.q_layernorm(q)
-        q = apply_rotary_pos_emb(q, cos, sin, unsqueeze_dim=2)
+        q = apply_rotary_pos_emb(q, cos=cos, sin=sin, unsqueeze_dim=2)
 
         indexer_states = torch.cat([token_k, cos.to(token_k.dtype), sin.to(token_k.dtype)], dim=-1)
         if past_key_values is not None:
@@ -678,8 +686,8 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
                     group_starts = block_token_indices[:, 0]
                     block_key_states = apply_rotary_pos_emb(
                         pooled_keys.unsqueeze(1),
-                        key_cos[batch_idx].index_select(0, group_starts),
-                        key_sin[batch_idx].index_select(0, group_starts),
+                        cos=key_cos[batch_idx].index_select(0, group_starts),
+                        sin=key_sin[batch_idx].index_select(0, group_starts),
                     ).squeeze(1)
 
                     scores = torch.matmul(
@@ -697,8 +705,13 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
                 selected_token_indices[batch_idx, query_idx, : selected_tokens.numel()] = selected_tokens
 
         # Create the additive mask to be added to the main causal mask
-        selected_token_mask = torch.zeros_like(attention_mask, dtype=torch.bool).squeeze(1)
-        selected_token_mask = selected_token_mask.scatter(-1, selected_token_indices, True).unsqueeze(1)
+        kv_length = attention_mask.shape[-1]
+        selected_token_mask = torch.zeros(
+            (*selected_token_indices.shape[:-1], kv_length + 1), device=attention_mask.device, dtype=torch.bool
+        )
+        # We absorb all the -1 by scaterring them to the last index that we will drop
+        scatter_indices = torch.where(selected_token_indices >= 0, selected_token_indices, kv_length)
+        selected_token_mask = selected_token_mask.scatter(-1, scatter_indices, True)[..., :kv_length].unsqueeze(1)
         # if using eager, convert to float mask
         if attention_mask.is_floating_point():
             min_dtype = torch.finfo(attention_mask.dtype).min
