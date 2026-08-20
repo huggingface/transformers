@@ -661,19 +661,20 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
 
         mask_kwargs = {"inputs_embeds": hidden_states, "attention_mask": attention_mask}
         masks: dict[int | None, torch.Tensor | None] = {}
-        windows = [layer_config.sliding_window for layer_config in self.config.per_layer_config]
-        for layer_config, window in zip(self.config.per_layer_config, windows):
-            if window in masks:
-                continue
-            if window is None:
-                masks[window] = create_bidirectional_mask(config=layer_config, **mask_kwargs)
-            else:
-                masks[window] = create_bidirectional_mask(
-                    config=layer_config,
-                    **mask_kwargs,
-                    and_mask_function=sliding_window_bidirectional_overlay(window),
-                )
-        return [masks[window] for window in windows]
+        attention_masks = []
+        for layer_config in self.config.per_layer_config:
+            window = layer_config.sliding_window
+            if window not in masks:
+                if window is None:
+                    masks[window] = create_bidirectional_mask(config=layer_config, **mask_kwargs)
+                else:
+                    masks[window] = create_bidirectional_mask(
+                        config=layer_config,
+                        **mask_kwargs,
+                        and_mask_function=sliding_window_bidirectional_overlay(window),
+                    )
+            attention_masks.append(masks[window])
+        return attention_masks
 
 
 @auto_docstring(
