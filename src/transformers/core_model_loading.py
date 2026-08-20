@@ -1688,6 +1688,8 @@ def convert_and_load_state_dict_in_model(
                         mapping.distributed_operation = tp_layer(
                             device_mesh=device_mesh, rank=device_mesh.get_local_rank(), empty_param=empty_param.clone()
                         )
+                        module_name = renamed_key.rsplit(".", 1)[0]
+                        mapping.distributed_operation.configure_for_module(model.get_submodule(module_name))
                     sharding_op = mapping.distributed_operation
                     materialize_device = device_map[""]
 

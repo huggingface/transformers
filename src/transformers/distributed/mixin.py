@@ -267,7 +267,13 @@ class DistributedMixin:
             return state_dict
 
         if distributed_config.tp_size > 1:
-            state_dict = gather_state_dict_for_save(state_dict, self._tp_plan, self._device_mesh, self._tp_size)
+            state_dict = gather_state_dict_for_save(
+                state_dict,
+                self._tp_plan,
+                self._device_mesh,
+                self._tp_size,
+                getattr(self.config.get_text_config(), "num_key_value_heads", None),
+            )
             if not save_on_this_rank:
                 state_dict = {}
             return state_dict

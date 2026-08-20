@@ -203,11 +203,13 @@ class PagedAttentionCache:
         # per GPU is simply divided by the TP size
         tp_size = distributed_helper.tp_size
         if tp_size > 1 and kv_is_tp:
-            if self.num_key_value_heads % tp_size != 0:
+            if self.num_key_value_heads % tp_size != 0 and tp_size % self.num_key_value_heads != 0:
                 raise ValueError(
-                    f"Number of key value heads {self.num_key_value_heads} must be divisible by tensor parallel size {tp_size}."
+                    f"Number of key value heads {self.num_key_value_heads} must be divisible by tensor parallel size {tp_size}, "
+                    f"or divide it so that KV heads can be replicated across ranks."
                 )
-            self.num_key_value_heads //= tp_size
+            # With fewer KV heads than ranks, heads are replicated and each rank holds exactly one
+            self.num_key_value_heads = max(self.num_key_value_heads // tp_size, 1)
 
         # If somehow the max memory percent is not yet resolved, resolve it conservatively
         if continuous_batching_config.max_memory_percent is None:
