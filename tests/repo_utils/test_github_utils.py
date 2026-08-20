@@ -245,16 +245,19 @@ class GithubRequestTest(unittest.TestCase):
             github_request("https://api.github.com/x", token="t")
         self.assertEqual(mock.call_count, 1)
 
-    def test_network_error_retries_then_fails(self):
-        # All attempts raise URLError → exhausts max_retries then raises RuntimeError.
+    def test_connection_error_retries_then_fails(self):
+        # _request normalizes ConnectionError subclasses (e.g. RemoteDisconnected) into URLError
+        # before they reach github_request, so the mock raises URLError here — that is the type
+        # github_request sees. All attempts fail → exhausts max_retries → raises RuntimeError.
         mock = self._patch_request(gh.urllib.error.URLError("connection reset"))
         with self.assertRaises(RuntimeError) as ctx:
             github_request("https://api.github.com/x", token="t", max_retries=3)
         self.assertIn("connection reset", str(ctx.exception))
         self.assertEqual(mock.call_count, 3)
 
-    def test_network_error_retries_then_succeeds(self):
-        # Transient error on first attempt, then succeeds — should not raise.
+    def test_connection_error_retries_then_succeeds(self):
+        # Same normalization: mock raises URLError (what _request surfaces after catching
+        # ConnectionError). Transient error on attempt 1, success on attempt 2.
         mock = self._patch_request(
             [
                 gh.urllib.error.URLError("connection reset"),
