@@ -449,7 +449,7 @@ class Ovis2_5VisionEmbeddings(PaddleOCRVisionEmbeddings):
     def __init__(self, config: Ovis2_5VisionConfig):
         super().__init__(config)
         del self.position_ids
-        self.spatial_merge_size = config.hidden_stride
+        self.spatial_merge_size = config.spatial_merge_size
         self.interpolation_mode = "bicubic"
         self.interpolation_align_corners = False
 

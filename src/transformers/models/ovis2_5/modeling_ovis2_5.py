@@ -91,7 +91,7 @@ class Ovis2_5VisionEmbeddings(nn.Module):
         self.num_grid_per_side = int(self.num_positions**0.5)
         self.interpolation_align_corners = False
         self.interpolation_mode = "bicubic"
-        self.spatial_merge_size = config.hidden_stride
+        self.spatial_merge_size = config.spatial_merge_size
 
     def forward(
         self,
