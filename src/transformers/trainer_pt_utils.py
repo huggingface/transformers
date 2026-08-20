@@ -765,32 +765,28 @@ class BatchRebalanceSampler(Sampler):
         else:
             order = list(range(n))
 
-        for gb in range(self.num_full_batches):
-            start = gb * self.effective_batch_size
-            batch_indices = order[start : start + self.effective_batch_size]
-            batch_lengths = [self.lengths[i] for i in batch_indices]
-
-            rank_mbs = self._assign(batch_indices, batch_lengths)
-
-            for ga in range(self.grad_accum):
-                yield rank_mbs[self.rank][ga]
-
-        # Trailing partial batch when drop_last=False. If the remainder is smaller than the number
-        # of (rank, slot) groups (K = dp_size * grad_accum), pad by repeating samples from the
-        # start of the epoch order (same strategy as torch.utils.data.DistributedSampler) so every
-        # group still has >= 1 sample and the all-reduce stays consistent across ranks.
-        if self.has_tail:
-            batch_indices = order[self.num_full_batches * self.effective_batch_size :]
-            K = self.dp_size * self.grad_accum
-            if len(batch_indices) < K:
-                pad = K - len(batch_indices)
+        for gb in range(self.num_global_batches):
+            batch_indices = order[gb * self.effective_batch_size : (gb + 1) * self.effective_batch_size]
+            # The trailing partial batch (drop_last=False) may be smaller than the number of
+            # (rank, slot) groups (K = dp_size * grad_accum); pad it by repeating samples from
+            # the start of the epoch order (same strategy as torch.utils.data.DistributedSampler)
+            # so every group still has >= 1 sample and the all-reduce stays consistent.
+            if (
+                self.has_tail
+                and gb == self.num_global_batches - 1
+                and len(batch_indices) < self.dp_size * self.grad_accum
+            ):
+                pad = self.dp_size * self.grad_accum - len(batch_indices)
                 # Wrap `order` enough times to fill `pad` indices (handles len(order) < pad).
                 padding = (order * math.ceil(pad / len(order)))[:pad]
                 batch_indices = batch_indices + padding
-            batch_lengths = [self.lengths[i] for i in batch_indices]
-            rank_mbs = self._assign(batch_indices, batch_lengths)
-            for ga in range(self.grad_accum):
-                yield rank_mbs[self.rank][ga]
+            yield from self._yield_global_batch(batch_indices)
+
+    def _yield_global_batch(self, batch_indices):
+        batch_lengths = [self.lengths[i] for i in batch_indices]
+        rank_mbs = self._assign(batch_indices, batch_lengths)
+        for ga in range(self.grad_accum):
+            yield rank_mbs[self.rank][ga]
 
     def __len__(self):
         return self.num_global_batches * self.grad_accum
@@ -799,10 +795,14 @@ class BatchRebalanceSampler(Sampler):
         return bs * max_len + self.QUADRATIC_COST_COEF * bs * max_len * max_len
 
     def _assign(self, indices, lengths):
+        # Snake assignment: after balancing, sort the K groups by cost descending and deal them
+        # round-wise — slot k receives groups ranked [k*dp_size, (k+1)*dp_size). The highest-cost
+        # groups land in slot 0, the next-highest in slot 1, etc., so every slot has the same
+        # cost profile across ranks (each rank's slot-k micro-batches cost roughly the same) and
+        # the totals even out across grad-accumulation steps.
         sorted_pairs = sorted(zip(indices, lengths), key=lambda x: x[1], reverse=True)
 
-        K = self.dp_size * self.grad_accum
-        all_groups = self._poormans_rebalance(sorted_pairs, K, min_per_group=1, dp_size=self.dp_size)
+        all_groups = self._balance_groups(sorted_pairs)
 
         group_costs = [(i, self._group_cost(g)) for i, g in enumerate(all_groups)]
         group_costs.sort(key=lambda x: x[1], reverse=True)
@@ -817,11 +817,23 @@ class BatchRebalanceSampler(Sampler):
 
         return rank_mbs
 
-    def _poormans_rebalance(self, sorted_pairs, num_groups, min_per_group=1, dp_size=None):
+    def _balance_groups(self, sorted_pairs):
+        """
+        Split `sorted_pairs` (sorted by length descending) into `K = dp_size * grad_accum`
+        contiguous groups with near-equal cost, by iterative hill climbing: each step moves one
+        sample from the most expensive group to the cheapest one that can receive it.
+
+        The search stops at a local optimum: `seen` detects cycles (no improving move left),
+        and `best_counts` snapshots the lowest-spread state seen along the way so exhausting
+        the iteration budget only degrades the result gracefully (no samples are dropped).
+
+        When the most expensive group is already at `min_per_group` samples it can no longer
+        give samples away, so spread cannot shrink further through it: its whole slot is
+        frozen (see `_relieve_and_freeze`) and the search continues on the remaining groups.
+        """
         n = len(sorted_pairs)
-        K = num_groups
-        if dp_size is None:
-            dp_size = K
+        K = self.dp_size * self.grad_accum
+        min_per_group = 1
 
         base = n // K
         remainder = n % K
@@ -833,6 +845,7 @@ class BatchRebalanceSampler(Sampler):
         counts = [base + (1 if i < remainder else 0) for i in range(K)]
 
         def compute_groups_costs(cts):
+            # Materialize contiguous groups from per-group counts and price each one.
             groups = []
             idx = 0
             for c in cts:
@@ -889,41 +902,60 @@ class BatchRebalanceSampler(Sampler):
             if not transferred:
                 if counts[hi_idx] <= min_per_group:
                     cap_cost = costs[hi_idx]
-
-                    cost_ranking = sorted(range(K), key=lambda i: costs[i], reverse=True)
-                    hi_rank = cost_ranking.index(hi_idx)
-                    slot_num = hi_rank // dp_size
-                    slot_start = slot_num * dp_size
-                    slot_end = min(slot_start + dp_size, K)
-                    slot_members = set(cost_ranking[slot_start:slot_end])
-
-                    for gi in slot_members:
-                        if gi in frozen or gi == hi_idx:
-                            continue
-                        while True:
-                            _, costs_now = compute_groups_costs(counts)
-                            idx_start = sum(counts[:gi])
-                            gi_max_len = sorted_pairs[idx_start][1] if counts[gi] > 0 else 0
-                            projected = self._cost(counts[gi] + 1, gi_max_len)
-                            if projected > cap_cost:
-                                break
-                            donors = [
-                                i
-                                for i in range(K)
-                                if i not in frozen and i not in slot_members and counts[i] > min_per_group
-                            ]
-                            if not donors:
-                                break
-                            donor = min(donors, key=lambda i: costs_now[i])
-                            counts[gi] += 1
-                            counts[donor] -= 1
-
-                    frozen.update(slot_members)
+                    slot_members = self._slot_groups(costs, hi_idx)
+                    self._relieve_and_freeze(counts, slot_members, hi_idx, frozen, sorted_pairs, cap_cost)
                 else:
                     break
 
         groups, _ = compute_groups_costs(best_counts)
         return groups
+
+    def _slot_groups(self, costs, pivot_idx):
+        """Return the groups that share `pivot_idx`'s slot."""
+        K = len(costs)
+        dp_size = self.dp_size
+        cost_ranking = sorted(range(K), key=lambda i: costs[i], reverse=True)
+        pivot_rank = cost_ranking.index(pivot_idx)
+        slot_num = pivot_rank // dp_size
+        slot_start = slot_num * dp_size
+        slot_end = min(slot_start + dp_size, K)
+        return set(cost_ranking[slot_start:slot_end])
+
+    def _relieve_and_freeze(self, counts, slot_members, pivot_idx, frozen, sorted_pairs, cap_cost):
+        """Freeze `slot_members` and exclude them from further balancing.
+
+        Called when the slot's most expensive group (`pivot_idx`) is down to `min_per_group`
+        samples and can no longer give samples away, so its cost cannot shrink anymore.
+        Before freezing, top up the slot's other groups from cheaper outside groups, never
+        letting a receiver's cost exceed `cap_cost` (the slot's peak). This moves samples
+        out of the outside groups, which helps balance the ones still active."""
+        K = len(counts)
+        for gi in slot_members:
+            if gi in frozen or gi == pivot_idx:
+                continue
+            while True:
+                _, costs_now = self._groups_costs_from(counts, sorted_pairs)
+                idx_start = sum(counts[:gi])
+                gi_max_len = sorted_pairs[idx_start][1] if counts[gi] > 0 else 0
+                projected = self._cost(counts[gi] + 1, gi_max_len)
+                if projected > cap_cost:
+                    break
+                donors = [i for i in range(K) if i not in frozen and i not in slot_members and counts[i] > 1]
+                if not donors:
+                    break
+                donor = min(donors, key=lambda i: costs_now[i])
+                counts[gi] += 1
+                counts[donor] -= 1
+        frozen.update(slot_members)
+
+    def _groups_costs_from(self, counts, sorted_pairs):
+        groups = []
+        idx = 0
+        for c in counts:
+            groups.append(sorted_pairs[idx : idx + c])
+            idx += c
+        costs = [self._group_cost(g) for g in groups]
+        return groups, costs
 
     def _group_cost(self, group):
         if not group:
