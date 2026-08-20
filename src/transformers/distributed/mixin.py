@@ -203,7 +203,7 @@ class DistributedMixin:
             elif distributed_config.fsdp_size > 1:
                 fsdp_mesh = device_mesh["fsdp"] if device_mesh.ndim > 1 else device_mesh
                 model = apply_fully_sharded_data_parallelism(model, fsdp_mesh)
-            
+
             elif distributed_config.pp_size > 1:
                 pp_mesh = device_mesh["pp"] if device_mesh.ndim > 1 else device_mesh
                 model = apply_pipeline_parallelism(model, pp_mesh)
