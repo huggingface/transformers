@@ -26,7 +26,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...integrations import use_kernelized_func
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
@@ -891,11 +891,6 @@ class Qwen4ExpPreTrainedModel(Qwen3_5MoePreTrainedModel):
             init.zeros_(module.conv1d.weight)
 
 
-class Qwen4ExpVisionModel(Qwen3_5MoeVisionModel):
-    _no_split_modules = ["Qwen4ExpVisionBlock"]
-    config: Qwen4ExpVisionConfig
-
-
 class Qwen4ExpModelOutputWithPast(Qwen3_5MoeModelOutputWithPast):
     pass
 
@@ -919,6 +914,27 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
         self.gradient_checkpointing = False
         self.post_init()
 
+    def reverse_embedding(self, inputs_embeds: torch.Tensor) -> torch.Tensor:
+        """
+        Recreate `input_ids` from `inputs_embeds` by reverting the embedding matrix. This is needed when the user only provides
+        `inputs_embeds` and ple is active.
+        """
+        # If only inputs_embeds are provided, reverse main embedding to find the input_ids - this allows to `generate`
+        # from `inputs_embeds` only as other models (otherwise it would need the value from both embeddings)
+        with torch.no_grad():
+            input_ids = (
+                (inputs_embeds[:, :, None, :] == self.embed_tokens.weight[None, None, :, :]).all(dim=3).nonzero()[:, 2]
+            )
+            try:
+                input_ids = input_ids.view(inputs_embeds.shape[:2])
+            except RuntimeError:
+                raise RuntimeError(
+                    "It seems like you tried to call `forward` from `inputs_embeds` without providing `input_ids`, and that "
+                    "the `inputs_embeds` you provided do not exactly match the embedding weights. Since Gemma4 needs to reverse "
+                    "the embedding to compute another embedding, make sure you provide exact `inputs_embeds`"
+                )
+        return input_ids
+
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
@@ -930,7 +946,7 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        ple_input_ids: torch.LongTensor | None = None,
+        ple_input_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         r"""
@@ -938,24 +954,15 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
             Original token ids used by Per-Layer Embedding (PLE). This is only needed when PLE is enabled and
             `inputs_embeds` are passed instead of `input_ids`.
         """
-        if input_ids is None and inputs_embeds is None:
-            raise ValueError("You must specify input_ids or inputs_embeds.")
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("input_ids and inputs_embeds cannot both be used as model inputs.")
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
-        if input_ids is not None:
-            ple_input_ids = input_ids
+
         if self.config.ple_layer_ids and ple_input_ids is None:
-            raise ValueError(
-                "ple_input_ids must be provided when Qwen4-Exp PLE layers are enabled and inputs_embeds are used."
-            )
-        if ple_input_ids is not None and ple_input_ids.shape != inputs_embeds.shape[:2]:
-            raise ValueError(
-                "ple_input_ids must have the same batch size and sequence length as inputs_embeds, but got "
-                f"{tuple(ple_input_ids.shape)} and {tuple(inputs_embeds.shape[:2])}."
-            )
+            # If we do not have input_ids but have ple, we need to revert the embeddings to find back the ids
+            ple_input_ids = input_ids if input_ids is not None else self.reverse_embedding(inputs_embeds)
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
@@ -990,14 +997,12 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
             }
 
         ple_padding_mask = causal_mask_mapping.get("linear_attention")
-        if self.config.ple_layer_ids and ple_input_ids is not None and ple_padding_mask is not None:
+        if self.config.ple_layer_ids and ple_padding_mask is not None:
             eos_token_id = self.config.eos_token_id
             eos_token_id = eos_token_id[0] if isinstance(eos_token_id, list) else eos_token_id
             ple_input_ids = torch.where(ple_padding_mask.bool(), ple_input_ids, eos_token_id)
 
-        output_hidden_states = kwargs.pop("output_hidden_states", self.config.output_hidden_states)
         hidden_states = inputs_embeds
-        all_hidden_states = (hidden_states,) if output_hidden_states else None
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
         hidden_states = hidden_states.repeat(1, 1, self.config.hc_count)
 
@@ -1014,91 +1019,17 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
                 use_cache=use_cache,
                 **kwargs,
             )
-            if output_hidden_states:
-                layer_hidden_states = self.hyper_connection_mixer(hidden_states)
-                all_hidden_states += (layer_hidden_states,)
 
         hidden_states = self.hyper_connection_mixer(hidden_states)
+
         return Qwen4ExpModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
-            hidden_states=all_hidden_states,
-        )
-
-
-class Qwen4ExpModel(Qwen3_5MoeModel):
-    def forward(
-        self,
-        input_ids: torch.LongTensor = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        ple_input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.Tensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
-        image_grid_thw: torch.LongTensor | None = None,
-        video_grid_thw: torch.LongTensor | None = None,
-        mm_token_type_ids: torch.IntTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Qwen4ExpModelOutputWithPast:
-        r"""
-        ple_input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Original token ids used by Per-Layer Embedding (PLE) when inputs_embeds are passed instead of input_ids.
-            When input_ids are provided, they are always used for PLE.
-        """
-        if input_ids is not None:
-            ple_input_ids = input_ids
-        kwargs["ple_input_ids"] = ple_input_ids
-        return super().forward(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            pixel_values=pixel_values,
-            pixel_values_videos=pixel_values_videos,
-            image_grid_thw=image_grid_thw,
-            video_grid_thw=video_grid_thw,
-            mm_token_type_ids=mm_token_type_ids,
-            **kwargs,
         )
 
 
 class Qwen4ExpForCausalLM(Qwen3_5MoeForCausalLM):
     config: Qwen4ExpTextConfig
-
-    def forward(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        labels: torch.LongTensor | None = None,
-        use_cache: bool | None = None,
-        output_router_logits: bool | None = None,
-        logits_to_keep: int | torch.Tensor = 0,
-        ple_input_ids: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ):
-        r"""
-        ple_input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Original token ids used by Per-Layer Embedding (PLE) when inputs_embeds are passed instead of input_ids.
-        """
-        kwargs["ple_input_ids"] = ple_input_ids
-        return super().forward(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            labels=labels,
-            use_cache=use_cache,
-            output_router_logits=output_router_logits,
-            logits_to_keep=logits_to_keep,
-            **kwargs,
-        )
 
     @staticmethod
     def create_masks_for_generate(
@@ -1127,7 +1058,12 @@ class Qwen4ExpForCausalLM(Qwen3_5MoeForCausalLM):
         return causal_mask_mapping
 
 
-class Qwen4ExpForConditionalGeneration(Qwen3_5MoeForConditionalGeneration):
+class Qwen4ExpVisionModel(Qwen3_5MoeVisionModel):
+    _no_split_modules = ["Qwen4ExpVisionBlock"]
+    config: Qwen4ExpVisionConfig
+
+
+class Qwen4ExpModel(Qwen3_5MoeModel):
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1135,37 +1071,76 @@ class Qwen4ExpForConditionalGeneration(Qwen3_5MoeForConditionalGeneration):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        labels: torch.LongTensor | None = None,
         pixel_values: torch.Tensor | None = None,
         pixel_values_videos: torch.FloatTensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
-        logits_to_keep: int | torch.Tensor = 0,
-        ple_input_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
-        r"""
-        ple_input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Original token ids used by Per-Layer Embedding (PLE) when inputs_embeds are passed instead of input_ids.
-        """
-        kwargs["ple_input_ids"] = ple_input_ids
-        return super().forward(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
+    ) -> tuple | Qwen4ExpModelOutputWithPast:
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
+
+        ple_input_ids = None
+        if self.config.text_config.ple_layer_ids:
+            # If we do not have input_ids but have ple, we need to revert the embeddings to find back the ids
+            ple_input_ids = (
+                input_ids if input_ids is not None else self.language_model.reverse_embedding(inputs_embeds)
+            )
+
+        if pixel_values is not None:
+            image_outputs: BaseModelOutputWithPooling = self.get_image_features(
+                pixel_values, image_grid_thw, return_dict=True, **kwargs
+            )
+            image_embeds = image_outputs.pooler_output
+            image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            image_mask, _ = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
+
+        if pixel_values_videos is not None:
+            video_outputs: BaseModelOutputWithPooling = self.get_video_features(
+                pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
+            )
+            video_embeds = video_outputs.pooler_output
+            video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            _, video_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
+
+        if position_ids is None:
+            position_ids = self.compute_3d_position_ids(
+                input_ids=input_ids,
+                image_grid_thw=image_grid_thw,
+                video_grid_thw=video_grid_thw,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
+                mm_token_type_ids=mm_token_type_ids,
+            )
+
+        outputs = self.language_model(
+            input_ids=None,
             position_ids=position_ids,
+            attention_mask=attention_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            labels=labels,
-            pixel_values=pixel_values,
-            pixel_values_videos=pixel_values_videos,
-            image_grid_thw=image_grid_thw,
-            video_grid_thw=video_grid_thw,
-            mm_token_type_ids=mm_token_type_ids,
-            logits_to_keep=logits_to_keep,
+            ple_input_ids=ple_input_ids,
             **kwargs,
         )
 
+        return Qwen4ExpModelOutputWithPast(
+            **outputs,
+            rope_deltas=self.rope_deltas,
+        )
+
+
+class Qwen4ExpForConditionalGeneration(Qwen3_5MoeForConditionalGeneration):
     @staticmethod
     def create_masks_for_generate(
         config: PreTrainedConfig,

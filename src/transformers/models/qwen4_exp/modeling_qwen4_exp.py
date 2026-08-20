@@ -1331,6 +1331,366 @@ class Qwen4ExpPreTrainedModel(PreTrainedModel):
             init.zeros_(module.conv1d.weight)
 
 
+@auto_docstring
+@dataclass
+class Qwen4ExpModelOutputWithPast(BaseModelOutputWithPast):
+    r"""
+    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
+        The rope index difference between sequence length and multimodal rope.
+        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
+    """
+
+    rope_deltas: torch.LongTensor | None = None
+    router_logits: tuple[torch.FloatTensor] | None = None
+
+
+class Qwen4ExpTextModel(Qwen4ExpPreTrainedModel):
+    config: Qwen4ExpTextConfig
+    _no_split_modules = ["Qwen4ExpTextDecoderLayer"]
+    _can_record_outputs = {
+        "router_logits": OutputRecorder(Qwen4ExpTextTopKRouter, index=0),
+        "attentions": Qwen4ExpTextAttention,
+    }
+
+    def __init__(self, config: Qwen4ExpTextConfig):
+        super().__init__(config)
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, config.pad_token_id)
+        self.layers = nn.ModuleList(
+            [Qwen4ExpTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.rotary_emb = Qwen4ExpTextRotaryEmbedding(config=config)
+        self.hyper_connection_mixer = Qwen4ExpTextGatedResidual(config, use_combine=False)
+        self.gradient_checkpointing = False
+        self.post_init()
+
+    @merge_with_config_defaults
+    @capture_outputs
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        ple_input_ids: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPast:
+        r"""
+        ple_input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Original token ids used by Per-Layer Embedding (PLE). This is only needed when PLE is enabled and
+            `inputs_embeds` are passed instead of `input_ids`.
+        """
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids)
+
+        if self.config.ple_layer_ids and ple_input_ids is None:
+            # If we do not have input_ids but have ple, we need to revert the embeddings to find back the ids
+            ple_input_ids = input_ids if input_ids is not None else self.reverse_embedding(inputs_embeds)
+
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache(config=self.config)
+
+        if position_ids is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.view(1, 1, -1).expand(4, inputs_embeds.shape[0], -1)
+        elif position_ids.ndim == 2:
+            position_ids = position_ids[None, ...].expand(4, position_ids.shape[0], -1)
+
+        if position_ids.ndim == 3 and position_ids.shape[0] == 4:
+            text_position_ids = position_ids[0]
+            position_ids = position_ids[1:]
+        else:
+            text_position_ids = None
+
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            mask_kwargs = {
+                "config": self.config,
+                "inputs_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "past_key_values": past_key_values,
+                "position_ids": text_position_ids,
+                # Due to the indexer, we always want to create a mask to then simply overlay the indexer mask in each layer - otherwise
+                # we may have to recreate it in each layer if it gets skipped
+                "allow_is_causal_skip": False,
+            }
+            causal_mask_mapping = {
+                "full_attention": create_causal_mask(**mask_kwargs),
+                "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
+            }
+
+        ple_padding_mask = causal_mask_mapping.get("linear_attention")
+        if self.config.ple_layer_ids and ple_padding_mask is not None:
+            eos_token_id = self.config.eos_token_id
+            eos_token_id = eos_token_id[0] if isinstance(eos_token_id, list) else eos_token_id
+            ple_input_ids = torch.where(ple_padding_mask.bool(), ple_input_ids, eos_token_id)
+
+        hidden_states = inputs_embeds
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+        hidden_states = hidden_states.repeat(1, 1, self.config.hc_count)
+
+        for layer_idx, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+            layer_type = self.config.layer_types[layer_idx]
+            mask_key = "linear_attention" if layer_type == "linear_attention" else "full_attention"
+            hidden_states = decoder_layer(
+                hidden_states,
+                position_embeddings=position_embeddings,
+                attention_mask=causal_mask_mapping[mask_key],
+                past_key_values=past_key_values,
+                ple_input_ids=ple_input_ids,
+                ple_padding_mask=ple_padding_mask,
+                use_cache=use_cache,
+                **kwargs,
+            )
+
+        hidden_states = self.hyper_connection_mixer(hidden_states)
+
+        return Qwen4ExpModelOutputWithPast(
+            last_hidden_state=hidden_states,
+            past_key_values=past_key_values,
+        )
+
+    def reverse_embedding(self, inputs_embeds: torch.Tensor) -> torch.Tensor:
+        """
+        Recreate `input_ids` from `inputs_embeds` by reverting the embedding matrix. This is needed when the user only provides
+        `inputs_embeds` and ple is active.
+        """
+        # If only inputs_embeds are provided, reverse main embedding to find the input_ids - this allows to `generate`
+        # from `inputs_embeds` only as other models (otherwise it would need the value from both embeddings)
+        with torch.no_grad():
+            input_ids = (
+                (inputs_embeds[:, :, None, :] == self.embed_tokens.weight[None, None, :, :]).all(dim=3).nonzero()[:, 2]
+            )
+            try:
+                input_ids = input_ids.view(inputs_embeds.shape[:2])
+            except RuntimeError:
+                raise RuntimeError(
+                    "It seems like you tried to call `forward` from `inputs_embeds` without providing `input_ids`, and that "
+                    "the `inputs_embeds` you provided do not exactly match the embedding weights. Since Gemma4 needs to reverse "
+                    "the embedding to compute another embedding, make sure you provide exact `inputs_embeds`"
+                )
+        return input_ids
+
+
+def load_balancing_loss_func(
+    gate_logits: torch.Tensor | tuple[torch.Tensor] | None,
+    num_experts: int | None = None,
+    top_k=2,
+    attention_mask: torch.Tensor | None = None,
+) -> torch.Tensor | int:
+    r"""
+    Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
+
+    See Switch Transformer (https://huggingface.co/papers/2101.03961) for more details. This function implements the loss
+    function presented in equations (4) - (6) of the paper. It aims at penalizing cases where the routing between
+    experts is too unbalanced.
+
+    Args:
+        gate_logits:
+            Logits from the `gate`, should be a tuple of model.config.num_hidden_layers tensors of
+            shape [batch_size X sequence_length, num_experts].
+        num_experts:
+            Number of experts
+        top_k:
+            The number of experts to route per-token, can be also interpreted as the `top-k` routing
+            parameter.
+        attention_mask (`torch.Tensor`, *optional*):
+            The attention_mask used in forward function
+            shape [batch_size X sequence_length] if not None.
+
+    Returns:
+        The auxiliary loss.
+    """
+    if gate_logits is None or not isinstance(gate_logits, tuple):
+        return 0
+
+    if isinstance(gate_logits, tuple):
+        compute_device = gate_logits[0].device
+        concatenated_gate_logits = torch.cat([layer_gate.to(compute_device) for layer_gate in gate_logits], dim=0)
+
+    routing_weights = torch.nn.functional.softmax(concatenated_gate_logits, dim=-1)
+
+    _, selected_experts = torch.topk(routing_weights, top_k, dim=-1)
+
+    expert_mask = torch.nn.functional.one_hot(selected_experts, num_experts)
+
+    if attention_mask is None:
+        # Compute the percentage of tokens routed to each experts
+        tokens_per_expert = torch.mean(expert_mask.float(), dim=0)
+
+        # Compute the average probability of routing to these experts
+        router_prob_per_expert = torch.mean(routing_weights, dim=0)
+    else:
+        batch_size, sequence_length = attention_mask.shape
+        num_hidden_layers = concatenated_gate_logits.shape[0] // (batch_size * sequence_length)
+
+        # Compute the mask that masks all padding tokens as 0 with the same shape of expert_mask
+        expert_attention_mask = (
+            attention_mask[None, :, :, None, None]
+            .expand((num_hidden_layers, batch_size, sequence_length, top_k, num_experts))
+            .reshape(-1, top_k, num_experts)
+            .to(compute_device)
+        )
+
+        # Compute the percentage of tokens routed to each experts
+        tokens_per_expert = torch.sum(expert_mask.float() * expert_attention_mask, dim=0) / torch.sum(
+            expert_attention_mask, dim=0
+        )
+
+        # Compute the mask that masks all padding tokens as 0 with the same shape of tokens_per_expert
+        router_per_expert_attention_mask = (
+            attention_mask[None, :, :, None]
+            .expand((num_hidden_layers, batch_size, sequence_length, num_experts))
+            .reshape(-1, num_experts)
+            .to(compute_device)
+        )
+
+        # Compute the average probability of routing to these experts
+        router_prob_per_expert = torch.sum(routing_weights * router_per_expert_attention_mask, dim=0) / torch.sum(
+            router_per_expert_attention_mask, dim=0
+        )
+
+    overall_loss = torch.sum(tokens_per_expert * router_prob_per_expert.unsqueeze(0))
+    return overall_loss * num_experts
+
+
+@auto_docstring
+class Qwen4ExpForCausalLM(Qwen4ExpPreTrainedModel, GenerationMixin):
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
+    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
+    config: Qwen4ExpTextConfig
+    _keys_to_ignore_on_load_unexpected = [r"^mtp.*", r"^model.visual.*"]
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.model = Qwen4ExpTextModel(config)
+        self.vocab_size = config.vocab_size
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.router_aux_loss_coef = config.router_aux_loss_coef
+        self.num_experts = config.num_experts
+        self.num_experts_per_tok = config.num_experts_per_tok
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_router_logits: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> MoeCausalLMOutputWithPast:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoTokenizer, Qwen4ExpForCausalLM
+
+        >>> model = Qwen4ExpForCausalLM.from_pretrained("Qwen/Qwen3-Next-80B-A3B-Instruct")
+        >>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-Next-80B-A3B-Instruct")
+
+        >>> prompt = "Hey, are you conscious? Can you talk to me?"
+        >>> inputs = tokenizer(prompt, return_tensors="pt")
+
+        >>> # Generate
+        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
+        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
+        ```"""
+
+        output_router_logits = (
+            output_router_logits if output_router_logits is not None else self.config.output_router_logits
+        )
+
+        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
+        outputs: MoeModelOutputWithPast = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_router_logits=output_router_logits,
+            **kwargs,
+        )
+
+        hidden_states = outputs.last_hidden_state
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
+
+        aux_loss = None
+        if output_router_logits:
+            aux_loss = load_balancing_loss_func(
+                outputs.router_logits,
+                self.num_experts,
+                self.num_experts_per_tok,
+                attention_mask,
+            )
+            if labels is not None:
+                loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
+
+        return MoeCausalLMOutputWithPast(
+            loss=loss,
+            aux_loss=aux_loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            router_logits=outputs.router_logits,
+        )
+
+    @staticmethod
+    def create_masks_for_generate(
+        config: PreTrainedConfig,
+        inputs_embeds: torch.Tensor,
+        attention_mask: torch.Tensor | None,
+        past_key_values: Cache | None,
+        position_ids: torch.Tensor | None,
+        **kwargs,
+    ) -> dict:
+        # We need to overwrite to add the `allow_is_causal_skip=False` condition
+        mask_kwargs = {
+            "config": config,
+            "inputs_embeds": inputs_embeds,
+            "attention_mask": attention_mask,
+            "past_key_values": past_key_values,
+            "position_ids": position_ids,
+            # Due to the indexer, we always want to create a mask to then simply overlay the indexer mask in each layer - otherwise
+            # we may have to recreate it in each layer if it gets skipped
+            "allow_is_causal_skip": False,
+        }
+        causal_mask_mapping = {
+            "full_attention": create_causal_mask(**mask_kwargs),
+            "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
+        }
+        return causal_mask_mapping
+
+
 class Qwen4ExpVisionMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -1619,145 +1979,6 @@ class Qwen4ExpVisionModel(Qwen4ExpPreTrainedModel):
         return BaseModelOutputWithPooling(
             last_hidden_state=hidden_states,
             pooler_output=merged_hidden_states,
-        )
-
-
-@auto_docstring
-@dataclass
-class Qwen4ExpModelOutputWithPast(BaseModelOutputWithPast):
-    r"""
-    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-        The rope index difference between sequence length and multimodal rope.
-        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
-    """
-
-    rope_deltas: torch.LongTensor | None = None
-    router_logits: tuple[torch.FloatTensor] | None = None
-
-
-class Qwen4ExpTextModel(Qwen4ExpPreTrainedModel):
-    config: Qwen4ExpTextConfig
-    _no_split_modules = ["Qwen4ExpTextDecoderLayer"]
-    _can_record_outputs = {
-        "router_logits": OutputRecorder(Qwen4ExpTextTopKRouter, index=0),
-        "attentions": Qwen4ExpTextAttention,
-    }
-
-    def __init__(self, config: Qwen4ExpTextConfig):
-        super().__init__(config)
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, config.pad_token_id)
-        self.layers = nn.ModuleList(
-            [Qwen4ExpTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-        )
-        self.rotary_emb = Qwen4ExpTextRotaryEmbedding(config=config)
-        self.hyper_connection_mixer = Qwen4ExpTextGatedResidual(config, use_combine=False)
-        self.gradient_checkpointing = False
-        self.post_init()
-
-    @merge_with_config_defaults
-    @capture_outputs
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        use_cache: bool | None = None,
-        ple_input_ids: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPast:
-        r"""
-        ple_input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Original token ids used by Per-Layer Embedding (PLE). This is only needed when PLE is enabled and
-            `inputs_embeds` are passed instead of `input_ids`.
-        """
-        if input_ids is None and inputs_embeds is None:
-            raise ValueError("You must specify input_ids or inputs_embeds.")
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("input_ids and inputs_embeds cannot both be used as model inputs.")
-
-        if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids)
-        if input_ids is not None:
-            ple_input_ids = input_ids
-        if self.config.ple_layer_ids and ple_input_ids is None:
-            raise ValueError(
-                "ple_input_ids must be provided when Qwen4-Exp PLE layers are enabled and inputs_embeds are used."
-            )
-        if ple_input_ids is not None and ple_input_ids.shape != inputs_embeds.shape[:2]:
-            raise ValueError(
-                "ple_input_ids must have the same batch size and sequence length as inputs_embeds, but got "
-                f"{tuple(ple_input_ids.shape)} and {tuple(inputs_embeds.shape[:2])}."
-            )
-
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
-
-        if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
-            position_ids = position_ids.view(1, 1, -1).expand(4, inputs_embeds.shape[0], -1)
-        elif position_ids.ndim == 2:
-            position_ids = position_ids[None, ...].expand(4, position_ids.shape[0], -1)
-
-        if position_ids.ndim == 3 and position_ids.shape[0] == 4:
-            text_position_ids = position_ids[0]
-            position_ids = position_ids[1:]
-        else:
-            text_position_ids = None
-
-        if not isinstance(causal_mask_mapping := attention_mask, dict):
-            mask_kwargs = {
-                "config": self.config,
-                "inputs_embeds": inputs_embeds,
-                "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
-                "position_ids": text_position_ids,
-                # Due to the indexer, we always want to create a mask to then simply overlay the indexer mask in each layer - otherwise
-                # we may have to recreate it in each layer if it gets skipped
-                "allow_is_causal_skip": False,
-            }
-            causal_mask_mapping = {
-                "full_attention": create_causal_mask(**mask_kwargs),
-                "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
-            }
-
-        ple_padding_mask = causal_mask_mapping.get("linear_attention")
-        if self.config.ple_layer_ids and ple_input_ids is not None and ple_padding_mask is not None:
-            eos_token_id = self.config.eos_token_id
-            eos_token_id = eos_token_id[0] if isinstance(eos_token_id, list) else eos_token_id
-            ple_input_ids = torch.where(ple_padding_mask.bool(), ple_input_ids, eos_token_id)
-
-        output_hidden_states = kwargs.pop("output_hidden_states", self.config.output_hidden_states)
-        hidden_states = inputs_embeds
-        all_hidden_states = (hidden_states,) if output_hidden_states else None
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
-        hidden_states = hidden_states.repeat(1, 1, self.config.hc_count)
-
-        for layer_idx, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
-            layer_type = self.config.layer_types[layer_idx]
-            mask_key = "linear_attention" if layer_type == "linear_attention" else "full_attention"
-            hidden_states = decoder_layer(
-                hidden_states,
-                position_embeddings=position_embeddings,
-                attention_mask=causal_mask_mapping[mask_key],
-                past_key_values=past_key_values,
-                ple_input_ids=ple_input_ids,
-                ple_padding_mask=ple_padding_mask,
-                use_cache=use_cache,
-                **kwargs,
-            )
-            if output_hidden_states:
-                layer_hidden_states = self.hyper_connection_mixer(hidden_states)
-                all_hidden_states += (layer_hidden_states,)
-
-        hidden_states = self.hyper_connection_mixer(hidden_states)
-        return Qwen4ExpModelOutputWithPast(
-            last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
-            hidden_states=all_hidden_states,
         )
 
 
@@ -2053,7 +2274,6 @@ class Qwen4ExpModel(Qwen4ExpPreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        ple_input_ids: torch.LongTensor | None = None,
         pixel_values: torch.Tensor | None = None,
         pixel_values_videos: torch.FloatTensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
@@ -2061,19 +2281,18 @@ class Qwen4ExpModel(Qwen4ExpPreTrainedModel):
         mm_token_type_ids: torch.IntTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Qwen4ExpModelOutputWithPast:
-        r"""
-        ple_input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Original token ids used by Per-Layer Embedding (PLE) when inputs_embeds are passed instead of input_ids.
-            When input_ids are provided, they are always used for PLE.
-        """
-        if input_ids is not None:
-            ple_input_ids = input_ids
-        kwargs["ple_input_ids"] = ple_input_ids
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
+
+        ple_input_ids = None
+        if self.config.text_config.ple_layer_ids:
+            # If we do not have input_ids but have ple, we need to revert the embeddings to find back the ids
+            ple_input_ids = (
+                input_ids if input_ids is not None else self.language_model.reverse_embedding(inputs_embeds)
+            )
 
         if pixel_values is not None:
             image_outputs: BaseModelOutputWithPooling = self.get_image_features(
@@ -2114,6 +2333,7 @@ class Qwen4ExpModel(Qwen4ExpPreTrainedModel):
             attention_mask=attention_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
+            ple_input_ids=ple_input_ids,
             **kwargs,
         )
 
@@ -2121,204 +2341,6 @@ class Qwen4ExpModel(Qwen4ExpPreTrainedModel):
             **outputs,
             rope_deltas=self.rope_deltas,
         )
-
-
-def load_balancing_loss_func(
-    gate_logits: torch.Tensor | tuple[torch.Tensor] | None,
-    num_experts: int | None = None,
-    top_k=2,
-    attention_mask: torch.Tensor | None = None,
-) -> torch.Tensor | int:
-    r"""
-    Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
-
-    See Switch Transformer (https://huggingface.co/papers/2101.03961) for more details. This function implements the loss
-    function presented in equations (4) - (6) of the paper. It aims at penalizing cases where the routing between
-    experts is too unbalanced.
-
-    Args:
-        gate_logits:
-            Logits from the `gate`, should be a tuple of model.config.num_hidden_layers tensors of
-            shape [batch_size X sequence_length, num_experts].
-        num_experts:
-            Number of experts
-        top_k:
-            The number of experts to route per-token, can be also interpreted as the `top-k` routing
-            parameter.
-        attention_mask (`torch.Tensor`, *optional*):
-            The attention_mask used in forward function
-            shape [batch_size X sequence_length] if not None.
-
-    Returns:
-        The auxiliary loss.
-    """
-    if gate_logits is None or not isinstance(gate_logits, tuple):
-        return 0
-
-    if isinstance(gate_logits, tuple):
-        compute_device = gate_logits[0].device
-        concatenated_gate_logits = torch.cat([layer_gate.to(compute_device) for layer_gate in gate_logits], dim=0)
-
-    routing_weights = torch.nn.functional.softmax(concatenated_gate_logits, dim=-1)
-
-    _, selected_experts = torch.topk(routing_weights, top_k, dim=-1)
-
-    expert_mask = torch.nn.functional.one_hot(selected_experts, num_experts)
-
-    if attention_mask is None:
-        # Compute the percentage of tokens routed to each experts
-        tokens_per_expert = torch.mean(expert_mask.float(), dim=0)
-
-        # Compute the average probability of routing to these experts
-        router_prob_per_expert = torch.mean(routing_weights, dim=0)
-    else:
-        batch_size, sequence_length = attention_mask.shape
-        num_hidden_layers = concatenated_gate_logits.shape[0] // (batch_size * sequence_length)
-
-        # Compute the mask that masks all padding tokens as 0 with the same shape of expert_mask
-        expert_attention_mask = (
-            attention_mask[None, :, :, None, None]
-            .expand((num_hidden_layers, batch_size, sequence_length, top_k, num_experts))
-            .reshape(-1, top_k, num_experts)
-            .to(compute_device)
-        )
-
-        # Compute the percentage of tokens routed to each experts
-        tokens_per_expert = torch.sum(expert_mask.float() * expert_attention_mask, dim=0) / torch.sum(
-            expert_attention_mask, dim=0
-        )
-
-        # Compute the mask that masks all padding tokens as 0 with the same shape of tokens_per_expert
-        router_per_expert_attention_mask = (
-            attention_mask[None, :, :, None]
-            .expand((num_hidden_layers, batch_size, sequence_length, num_experts))
-            .reshape(-1, num_experts)
-            .to(compute_device)
-        )
-
-        # Compute the average probability of routing to these experts
-        router_prob_per_expert = torch.sum(routing_weights * router_per_expert_attention_mask, dim=0) / torch.sum(
-            router_per_expert_attention_mask, dim=0
-        )
-
-    overall_loss = torch.sum(tokens_per_expert * router_prob_per_expert.unsqueeze(0))
-    return overall_loss * num_experts
-
-
-@auto_docstring
-class Qwen4ExpForCausalLM(Qwen4ExpPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    _tp_plan = {"lm_head": "colwise_gather_output"}
-    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
-    _fsdp_plan = {"lm_head": "keep_full_weight"}
-    config: Qwen4ExpTextConfig
-    _keys_to_ignore_on_load_unexpected = [r"^mtp.*", r"^model.visual.*"]
-
-    def __init__(self, config):
-        super().__init__(config)
-        self.model = Qwen4ExpTextModel(config)
-        self.vocab_size = config.vocab_size
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        self.router_aux_loss_coef = config.router_aux_loss_coef
-        self.num_experts = config.num_experts
-        self.num_experts_per_tok = config.num_experts_per_tok
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @can_return_tuple
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        labels: torch.LongTensor | None = None,
-        use_cache: bool | None = None,
-        output_router_logits: bool | None = None,
-        logits_to_keep: int | torch.Tensor = 0,
-        ple_input_ids: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> MoeCausalLMOutputWithPast:
-        r"""
-        ple_input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Original token ids used by Per-Layer Embedding (PLE) when inputs_embeds are passed instead of input_ids.
-        """
-        kwargs["ple_input_ids"] = ple_input_ids
-
-        output_router_logits = (
-            output_router_logits if output_router_logits is not None else self.config.output_router_logits
-        )
-
-        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
-        outputs: MoeModelOutputWithPast = self.model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            output_router_logits=output_router_logits,
-            **kwargs,
-        )
-
-        hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
-
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
-
-        aux_loss = None
-        if output_router_logits:
-            aux_loss = load_balancing_loss_func(
-                outputs.router_logits,
-                self.num_experts,
-                self.num_experts_per_tok,
-                attention_mask,
-            )
-            if labels is not None:
-                loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
-
-        return MoeCausalLMOutputWithPast(
-            loss=loss,
-            aux_loss=aux_loss,
-            logits=logits,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            router_logits=outputs.router_logits,
-        )
-
-    @staticmethod
-    def create_masks_for_generate(
-        config: PreTrainedConfig,
-        inputs_embeds: torch.Tensor,
-        attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None,
-        position_ids: torch.Tensor | None,
-        **kwargs,
-    ) -> dict:
-        # We need to overwrite to add the `allow_is_causal_skip=False` condition
-        mask_kwargs = {
-            "config": config,
-            "inputs_embeds": inputs_embeds,
-            "attention_mask": attention_mask,
-            "past_key_values": past_key_values,
-            "position_ids": position_ids,
-            # Due to the indexer, we always want to create a mask to then simply overlay the indexer mask in each layer - otherwise
-            # we may have to recreate it in each layer if it gets skipped
-            "allow_is_causal_skip": False,
-        }
-        causal_mask_mapping = {
-            "full_attention": create_causal_mask(**mask_kwargs),
-            "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
-        }
-        return causal_mask_mapping
 
 
 @auto_docstring
@@ -2392,14 +2414,47 @@ class Qwen4ExpForConditionalGeneration(Qwen4ExpPreTrainedModel, GenerationMixin)
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
-        ple_input_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Qwen4ExpCausalLMOutputWithPast:
         r"""
-        ple_input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Original token ids used by Per-Layer Embedding (PLE) when inputs_embeds are passed instead of input_ids.
-        """
-        kwargs["ple_input_ids"] = ple_input_ids
+        Example:
+        ```python
+        >>> from transformers import AutoProcessor, Qwen4ExpForConditionalGeneration
+
+        >>> model = Qwen4ExpForConditionalGeneration.from_pretrained("Qwen/Qwen3.5-35B-A3B-Instruct", dtype="auto", device_map="auto")
+        >>> processor = AutoProcessor.from_pretrained("Qwen/Qwen3.5-35B-A3B-Instruct")
+
+        >>> messages = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "image": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/assets/demo.jpeg",
+                    },
+                    {"type": "text", "text": "Describe this image in short."},
+                ],
+            }
+        ]
+
+        >>> # Preparation for inference
+        >>> inputs = processor.apply_chat_template(
+            messages,
+            tokenize=True,
+            add_generation_prompt=True,
+            return_dict=True,
+            return_tensors="pt"
+        )
+        >>> inputs = inputs.to(model.device)
+
+        >>> # Generate
+        >>> generated_ids = model.generate(**inputs, max_new_tokens=128)
+        >>> generated_ids_trimmed = [
+            out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
+        ]
+        >>> processor.batch_decode(generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        "A woman in a plaid shirt sits on a sandy beach at sunset, smiling as she gives a high-five to a yellow Labrador Retriever wearing a harness. The ocean waves roll in the background."
+        ```"""
 
         outputs = self.model(
             input_ids=input_ids,
