@@ -443,11 +443,8 @@ class MuseGlimmerTextNormedEmbedding(nn.Embedding):
         # to embed without the norm
         self.embed_norm = MuseGlimmerRMSNorm(eps=norm_eps, with_scale=False)
 
-    def forward(self, input_ids: torch.Tensor, apply_norm: bool = True):
-        inputs_embeds = super().forward(input_ids)
-        if not apply_norm:
-            return inputs_embeds
-        return self.embed_norm(inputs_embeds)
+    def forward(self, input_ids: torch.Tensor):
+        return self.embed_norm(super().forward(input_ids))
 
 
 @auto_docstring

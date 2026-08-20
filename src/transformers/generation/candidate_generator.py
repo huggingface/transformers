@@ -15,6 +15,7 @@
 import copy
 import weakref
 from collections.abc import Iterable
+from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any, Optional, cast
 
 import numpy as np
@@ -1620,6 +1621,23 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
 
         self.is_main_model_prefill = True
 
+    @contextmanager
+    def _skip_embedding_norm(self):
+        embed_norm = getattr(self.main_model_input_embeddings, "embed_norm", None)
+        if embed_norm is None:
+            yield
+            return
+
+        self.main_model_input_embeddings.embed_norm = nn.Identity()
+        try:
+            yield
+        finally:
+            self.main_model_input_embeddings.embed_norm = embed_norm
+
+    def _get_noise_embeds(self, noise_ids: torch.LongTensor) -> torch.Tensor:
+        with self._skip_embedding_norm():
+            return self.main_model_input_embeddings(noise_ids)
+
     def get_candidates(
         self,
         input_ids: torch.LongTensor,
@@ -1673,7 +1691,7 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
         # Create the new inputs corresponding to only the "noise", or "diffusion window". It's the last bonus token (or "anchor") from
         # the main model, and the noise tokens
         noise_ids = torch.cat([input_ids[:, -1:], self.noise_ids_mask.to(input_ids.device)], dim=-1)
-        noise_embeds = self.main_model_input_embeddings(noise_ids, apply_norm=False)
+        noise_embeds = self._get_noise_embeds(noise_ids)
 
         # Append positions and mask for the noise tokens, because they correspond to positions beyond the last `num_last_main_model_tokens`
         # that will first be used to populate the assistant kv cache at those positions through the `context_hidden_states`
