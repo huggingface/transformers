@@ -40,7 +40,7 @@ from ...utils import (
     torch_compilable_check,
 )
 from ...utils.constants import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
-from ...utils.generic import can_return_tuple, maybe_autocast, merge_with_config_defaults
+from ...utils.generic import can_return_tuple, maybe_autocast
 from ...utils.output_capturing import capture_outputs
 from ..gemma4.modeling_gemma4 import Gemma4RMSNorm
 from ..gpt_neox.modeling_gpt_neox import apply_rotary_pos_emb
@@ -581,7 +581,6 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
         self.gradient_checkpointing = False
         self.post_init()
 
-    @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
     def forward(
@@ -650,7 +649,6 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
         hidden_states = self.final_norm(hidden_states)
         return BaseModelOutput(last_hidden_state=hidden_states)
 
-    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring(custom_intro="Projects flattened image patches into the model hidden space.")
     def get_image_features(
