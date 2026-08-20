@@ -55,6 +55,8 @@ predicted_token_id = outputs.logits[0, masked_index].argmax(dim=-1)
 print(processor.tokenizer.decode(predicted_token_id))
 ```
 
+Install `sentence-transformers>=6.0.0` to use MeanMaxSim scoring in the retrieval example below.
+
 ```python
 import requests
 import torch

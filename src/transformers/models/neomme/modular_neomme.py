@@ -742,8 +742,7 @@ class NeoMMEForRetrievalOutput(BaseModelOutput):
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
         Retrieval loss. This value is always `None`.
     embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, embedding_dim)`, *optional*):
-        Normalized token embeddings for late-interaction retrieval. Padding rows are zeroed. Score them with
-        MeanMaxSim, for example with `sentence_transformers.util.mean_maxsim`.
+        Normalized token embeddings for late-interaction retrieval. Padding rows are zeroed. Score them with MeanMaxSim.
     dense_embeddings (`torch.FloatTensor` of shape `(batch_size, hidden_size)` or `(batch_size, dense_dim)`, *optional*):
         A normalized mean-pooled embedding for each input. When `dense_dim` is set, the last dimension is `dense_dim`.
         Score them with cosine similarity.
