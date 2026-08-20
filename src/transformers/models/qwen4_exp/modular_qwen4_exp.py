@@ -27,6 +27,7 @@ from ...integrations import use_kernelized_func
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults
@@ -36,7 +37,6 @@ from ..qwen3_5.modeling_qwen3_5 import (
     Qwen3_5GatedDeltaNet,
     Qwen3_5RMSNorm,
     Qwen3_5TextRotaryEmbedding,
-    Qwen3_5VisionRotaryEmbedding,
     causal_conv1d_fn,
     causal_conv1d_update,
     rotate_half,
@@ -59,6 +59,7 @@ from ..qwen3_5_moe.modeling_qwen3_5_moe import (
 )
 from ..qwen3_next.modeling_qwen3_next import (
     Qwen3NextExperts,
+    Qwen3NextMLP,
     Qwen3NextRMSNormGated,
     Qwen3NextSparseMoeBlock,
     Qwen3NextTopKRouter,
@@ -293,19 +294,15 @@ class Qwen4ExpConfig(Qwen3_5MoeConfig):
     base_model_fsdp_plan = None
 
 
-class Qwen4ExpVisionRotaryEmbedding(Qwen3_5VisionRotaryEmbedding):
-    pass
-
-
 class Qwen4ExpTextRotaryEmbedding(Qwen3_5TextRotaryEmbedding):
     pass
 
 
-class Qwen4ExpRMSNorm(Qwen3_5RMSNorm):
+class Qwen4ExpTextRMSNorm(Qwen3_5RMSNorm):
     pass
 
 
-class Qwen4ExpRMSNormGated(Qwen3NextRMSNormGated):
+class Qwen4ExpTextRMSNormGated(Qwen3NextRMSNormGated):
     def __init__(self, hidden_size: int, eps: float = 1e-6, activation: str = "silu"):
         super().__init__(hidden_size, eps)
         self.activation = activation
@@ -314,10 +311,10 @@ class Qwen4ExpRMSNormGated(Qwen3NextRMSNormGated):
 @use_kernelized_func(
     [torch_recurrent_gated_delta_rule, torch_chunk_gated_delta_rule, causal_conv1d_fn, causal_conv1d_update]
 )
-class Qwen4ExpGatedDeltaNet(Qwen3_5GatedDeltaNet):
+class Qwen4ExpTextGatedDeltaNet(Qwen3_5GatedDeltaNet):
     def __init__(self, config: Qwen4ExpTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.norm = Qwen4ExpRMSNormGated(
+        self.norm = Qwen4ExpTextRMSNormGated(
             self.head_v_dim, eps=self.layer_norm_epsilon, activation=config.output_gate_type or config.hidden_act
         )
 
@@ -355,7 +352,7 @@ def apply_rotary_pos_emb(hidden_states, cos, sin, unsqueeze_dim=1):
     return torch.cat([rope, nope], dim=-1)
 
 
-class Qwen4ExpQSAIndexer(nn.Module):
+class Qwen4ExpTextQSAIndexer(nn.Module):
     """Select QSA token indices from compressed key blocks."""
 
     def __init__(self, config: Qwen4ExpTextConfig, layer_idx: int):
@@ -372,8 +369,8 @@ class Qwen4ExpQSAIndexer(nn.Module):
             (self.index_n_heads + self.index_kv_heads) * self.index_head_dim,
             bias=False,
         )
-        self.q_layernorm = Qwen4ExpRMSNorm(self.index_head_dim, eps=config.rms_norm_eps)
-        self.k_layernorm = Qwen4ExpRMSNorm(self.index_head_dim, eps=config.rms_norm_eps)
+        self.q_layernorm = Qwen4ExpTextRMSNorm(self.index_head_dim, eps=config.rms_norm_eps)
+        self.k_layernorm = Qwen4ExpTextRMSNorm(self.index_head_dim, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -459,10 +456,12 @@ class Qwen4ExpQSAIndexer(nn.Module):
         return selected_token_indices, selected_token_mask
 
 
-class Qwen4ExpAttention(Qwen3_5Attention):
+class Qwen4ExpTextAttention(Qwen3_5Attention):
     def __init__(self, config: Qwen4ExpTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.indexer = Qwen4ExpQSAIndexer(config, layer_idx)
+        self.q_norm = Qwen4ExpTextRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = Qwen4ExpTextRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.indexer = Qwen4ExpTextQSAIndexer(config, layer_idx)
 
     def forward(
         self,
@@ -490,23 +489,31 @@ class Qwen4ExpAttention(Qwen3_5Attention):
         )
 
 
-class Qwen4ExpExperts(Qwen3NextExperts):
+class Qwen4ExpTextMLP(Qwen3NextMLP):
     pass
 
 
-class Qwen4ExpTopKRouter(Qwen3NextTopKRouter):
+class Qwen4ExpTextExperts(Qwen3NextExperts):
     pass
 
 
-class Qwen4ExpSparseMoeBlock(Qwen3NextSparseMoeBlock):
+class Qwen4ExpTextTopKRouter(Qwen3NextTopKRouter):
     pass
 
 
-class Qwen4ExpGroupedRMSNorm(Qwen4ExpRMSNorm):
-    def __init__(self, hidden_size: int, group_size: int, eps: float = 1e-6):
-        super().__init__(hidden_size, eps=eps)
-        if hidden_size % group_size != 0:
-            raise ValueError(f"hidden_size ({hidden_size}) must be divisible by group_size ({group_size}).")
+class Qwen4ExpTextSparseMoeBlock(Qwen3NextSparseMoeBlock):
+    def __init__(self, config):
+        super().__init__(config)
+        self.gate = Qwen4ExpTextTopKRouter(config)
+        self.experts = Qwen4ExpTextExperts(config)
+        self.shared_expert = Qwen4ExpTextMLP(config, intermediate_size=config.shared_expert_intermediate_size)
+
+
+class Qwen4ExpTextGroupedRMSNorm(Qwen3_5RMSNorm):
+    def __init__(self, dim: int, group_size: int, eps: float = 1e-6):
+        super().__init__(dim, eps=eps)
+        if dim % group_size != 0:
+            raise ValueError(f"hidden_size ({dim}) must be divisible by group_size ({group_size}).")
         self.group_size = group_size
 
     def _norm(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -514,13 +521,13 @@ class Qwen4ExpGroupedRMSNorm(Qwen4ExpRMSNorm):
         return super()._norm(hidden_states.reshape(grouped_shape)).flatten(-2)
 
 
-class Qwen4ExpGatedResidual(nn.Module):
+class Qwen4ExpTextGatedResidual(nn.Module):
     def __init__(self, config: Qwen4ExpTextConfig, use_combine: bool = True):
         super().__init__()
         self.hc_count = config.hc_count
         self.hidden_size = config.hidden_size
         hc_hidden_size = self.hc_count * self.hidden_size
-        self.hc_norm = Qwen4ExpGroupedRMSNorm(
+        self.hc_norm = Qwen4ExpTextGroupedRMSNorm(
             hc_hidden_size,
             eps=config.rms_norm_eps,
             group_size=self.hidden_size,
@@ -595,7 +602,7 @@ def _find_nth_prime_after(start: int, count: int) -> int:
     return prime
 
 
-class Qwen4ExpNGramEmbedding(nn.Module):
+class Qwen4ExpTextNGramEmbedding(nn.Module):
     def __init__(self, config: Qwen4ExpTextConfig, embedding_dim: int, ple_layer_index: int = 0):
         super().__init__()
         self.ngram_size = config.ngram_size
@@ -699,7 +706,7 @@ class Qwen4ExpNGramEmbedding(nn.Module):
         return self.ngram_embedding(ngram_ids).flatten(-2)
 
 
-class Qwen4ExpPLELayer(nn.Module):
+class Qwen4ExpTextPLELayer(nn.Module):
     """Inject hashed n-gram features into every hyper-connection stream.
 
     PLE projects each token's concatenated n-gram embedding to a shared value and one key per residual stream. The
@@ -714,15 +721,21 @@ class Qwen4ExpPLELayer(nn.Module):
         self.hc_count = config.hc_count
         ple_embed_dim = config.ple_embed_dim
         hc_hidden_size = self.hidden_size * self.hc_count
-        self.ple_embedding = Qwen4ExpNGramEmbedding(config, ple_embed_dim, ple_layer_index)
+        self.ple_embedding = Qwen4ExpTextNGramEmbedding(config, ple_embed_dim, ple_layer_index)
         conv_kernel_size = config.ple_conv_kernel_size
         conv_dilation = config.ngram_size
         self.short_conv_state_len = (conv_kernel_size - 1) * conv_dilation
         self.key_proj = nn.Linear(ple_embed_dim, hc_hidden_size, bias=False)
         self.value_proj = nn.Linear(ple_embed_dim, self.hidden_size, bias=False)
-        self.norm_key = Qwen4ExpGroupedRMSNorm(hc_hidden_size, eps=config.rms_norm_eps, group_size=self.hidden_size)
-        self.norm_query = Qwen4ExpGroupedRMSNorm(hc_hidden_size, eps=config.rms_norm_eps, group_size=self.hidden_size)
-        self.norm_conv = Qwen4ExpGroupedRMSNorm(hc_hidden_size, eps=config.rms_norm_eps, group_size=self.hidden_size)
+        self.norm_key = Qwen4ExpTextGroupedRMSNorm(
+            hc_hidden_size, eps=config.rms_norm_eps, group_size=self.hidden_size
+        )
+        self.norm_query = Qwen4ExpTextGroupedRMSNorm(
+            hc_hidden_size, eps=config.rms_norm_eps, group_size=self.hidden_size
+        )
+        self.norm_conv = Qwen4ExpTextGroupedRMSNorm(
+            hc_hidden_size, eps=config.rms_norm_eps, group_size=self.hidden_size
+        )
         self.conv1d = nn.Conv1d(
             hc_hidden_size,
             hc_hidden_size,
@@ -772,19 +785,19 @@ class Qwen4ExpPLELayer(nn.Module):
         return output if ple_padding_mask is None else output * current_ple_padding_mask
 
 
-class Qwen4ExpDecoderLayer(GradientCheckpointingLayer):
+class Qwen4ExpTextDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Qwen4ExpTextConfig, layer_idx: int):
         super().__init__()
         self.layer_type = config.layer_types[layer_idx]
         if self.layer_type == "linear_attention":
-            self.linear_attn = Qwen4ExpGatedDeltaNet(config, layer_idx)
+            self.linear_attn = Qwen4ExpTextGatedDeltaNet(config, layer_idx)
         else:
-            self.self_attn = Qwen4ExpAttention(config, layer_idx)
-        self.mlp = Qwen4ExpSparseMoeBlock(config)
+            self.self_attn = Qwen4ExpTextAttention(config, layer_idx)
+        self.mlp = Qwen4ExpTextSparseMoeBlock(config)
         ple_layer_index = config.ple_layer_ids.index(layer_idx + 1) if layer_idx + 1 in config.ple_layer_ids else None
-        self.ple = Qwen4ExpPLELayer(config, layer_idx, ple_layer_index) if ple_layer_index is not None else None
-        self.attn_hyper_connection = Qwen4ExpGatedResidual(config)
-        self.mlp_hyper_connection = Qwen4ExpGatedResidual(config)
+        self.ple = Qwen4ExpTextPLELayer(config, layer_idx, ple_layer_index) if ple_layer_index is not None else None
+        self.attn_hyper_connection = Qwen4ExpTextGatedResidual(config)
+        self.mlp_hyper_connection = Qwen4ExpTextGatedResidual(config)
 
     def forward(
         self,
@@ -836,19 +849,34 @@ class Qwen4ExpDecoderLayer(GradientCheckpointingLayer):
 
 class Qwen4ExpPreTrainedModel(Qwen3_5MoePreTrainedModel):
     config: Qwen4ExpConfig
-    _no_split_modules = ["Qwen4ExpDecoderLayer", "Qwen4ExpVisionBlock"]
-    _can_record_outputs = {
-        "router_logits": OutputRecorder(Qwen4ExpTopKRouter, index=0),
-        "attentions": Qwen4ExpAttention,
-    }
+    _no_split_modules = None  # will be set on text and vision separately
+    _can_record_outputs = None  # will be set on text and vision separately
     _supports_flash_attn = False  # flash-mla kernels need a bit more work in the way we enable them!
     _supports_flex_attn = False
     _supports_sdpa = True
 
     @torch.no_grad()
     def _init_weights(self, module):
-        super()._init_weights(module)
-        if isinstance(module, Qwen4ExpNGramEmbedding):
+        PreTrainedModel._init_weights(self, module)
+        if isinstance(module, Qwen4ExpTextGatedDeltaNet):
+            init.ones_(module.dt_bias)
+            # Lower bound kept away from 0 so log(A) never becomes -inf
+            init.copy_(
+                module.A_log,
+                torch.empty(module.num_v_heads, device=module.A_log.device).uniform_(0.01, 16).log_(),
+            )
+        # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
+        elif isinstance(module, Qwen4ExpTextRMSNorm):
+            init.zeros_(module.weight)
+        elif isinstance(module, Qwen4ExpTextExperts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, Qwen4ExpTextSparseMoeBlock):
+            init.normal_(module.gate.weight, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, Qwen4ExpVisionRotaryEmbedding):  # noqa
+            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
+            init.copy_(module.inv_freq, inv_freq)
+        if isinstance(module, Qwen4ExpTextNGramEmbedding):
             init.copy_(
                 module.layer_multipliers,
                 _build_layer_multipliers(
@@ -857,13 +885,14 @@ class Qwen4ExpPreTrainedModel(Qwen3_5MoePreTrainedModel):
             )
             init.copy_(module.ngram_heads_vocab_sizes, torch.tensor(module.head_vocab_sizes, dtype=torch.long))
             init.copy_(module.ngram_heads_offsets, torch.tensor(module.head_offsets, dtype=torch.long))
-        elif isinstance(module, Qwen4ExpGroupedRMSNorm):
+        elif isinstance(module, Qwen4ExpTextGroupedRMSNorm):
             init.zeros_(module.weight)
-        elif isinstance(module, Qwen4ExpPLELayer):
+        elif isinstance(module, Qwen4ExpTextPLELayer):
             init.zeros_(module.conv1d.weight)
 
 
 class Qwen4ExpVisionModel(Qwen3_5MoeVisionModel):
+    _no_split_modules = ["Qwen4ExpVisionBlock"]
     config: Qwen4ExpVisionConfig
 
 
@@ -873,15 +902,20 @@ class Qwen4ExpModelOutputWithPast(Qwen3_5MoeModelOutputWithPast):
 
 class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
     config: Qwen4ExpTextConfig
+    _no_split_modules = ["Qwen4ExpTextDecoderLayer"]
+    _can_record_outputs = {
+        "router_logits": OutputRecorder(Qwen4ExpTextTopKRouter, index=0),
+        "attentions": Qwen4ExpTextAttention,
+    }
 
     def __init__(self, config: Qwen4ExpTextConfig):
         Qwen4ExpPreTrainedModel.__init__(self, config)
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, config.pad_token_id)
         self.layers = nn.ModuleList(
-            [Qwen4ExpDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [Qwen4ExpTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.rotary_emb = Qwen4ExpTextRotaryEmbedding(config=config)
-        self.hyper_connection_mixer = Qwen4ExpGatedResidual(config, use_combine=False)
+        self.hyper_connection_mixer = Qwen4ExpTextGatedResidual(config, use_combine=False)
         self.gradient_checkpointing = False
         self.post_init()
 
