@@ -96,8 +96,8 @@ class NeoMMEProcessor(ProcessorMixin):
         When `tokenize=True`, image content must include an image, URL, path, or base64 value. Pass processing
         options such as `max_length` or `max_side` through `processor_kwargs`.
         """
-        if kwargs.get("return_assistant_tokens_mask") and self._batch_contains_image(conversation):
-            raise ValueError("Image document templates do not support `return_assistant_tokens_mask`.")
+        if kwargs.get("return_assistant_tokens_mask"):
+            raise ValueError("NeoMME retrieval templates do not support `return_assistant_tokens_mask`.")
 
         processor_kwargs = {**(processor_kwargs or {}), "task": task, "_chat_template_applied": True}
         return super().apply_chat_template(
@@ -106,20 +106,6 @@ class NeoMMEProcessor(ProcessorMixin):
             processor_kwargs=processor_kwargs,
             task=task,
             **kwargs,
-        )
-
-    @staticmethod
-    def _batch_contains_image(
-        conversation: list[dict[str, str]] | list[list[dict[str, str]]],
-    ) -> bool:
-        """Return whether an image is present for the assistant-mask restriction."""
-        is_batched = bool(conversation) and isinstance(conversation[0], (list, tuple))
-        conversations = conversation if is_batched else [conversation]
-        return any(
-            item.get("type") in {"image", "image_url"}
-            for messages in conversations
-            for message in messages
-            for item in (message.get("content") if isinstance(message.get("content"), list) else [])
         )
 
     @auto_docstring

@@ -339,14 +339,22 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(inputs["position_ids"].shape[1], 2)
         self.assertIn("pixel_values", inputs)
 
-    def test_apply_chat_template_image_rejects_assistant_mask(self):
+    def test_apply_chat_template_rejects_assistant_mask(self):
         processor = self.get_processor()
         self._set_retrieval_chat_template(processor)
         image = Image.fromarray(np.random.randint(0, 255, (8, 8, 3), dtype=np.uint8))
-        messages = [{"role": "user", "content": [{"type": "image", "image": image}]}]
 
-        with self.assertRaisesRegex(ValueError, "do not support `return_assistant_tokens_mask`"):
-            processor.apply_chat_template(messages, task="document", tokenize=True, return_assistant_tokens_mask=True)
+        for messages in (
+            [{"role": "user", "content": "hello"}],
+            [{"role": "user", "content": [{"type": "image", "image": image}]}],
+        ):
+            with (
+                self.subTest(messages=messages),
+                self.assertRaisesRegex(ValueError, "do not support `return_assistant_tokens_mask`"),
+            ):
+                processor.apply_chat_template(
+                    messages, task="document", tokenize=True, return_assistant_tokens_mask=True
+                )
 
     def test_image_token_is_reserved_and_required(self):
         processor = self.get_processor()
