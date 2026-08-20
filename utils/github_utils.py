@@ -222,6 +222,11 @@ def _request(url, headers, method="GET", data=None):
             return response.status, response.headers, response.read().decode("utf-8", errors="replace")
     except urllib.error.HTTPError as error:
         return error.code, error.headers, error.read().decode("utf-8", errors="replace")
+    except ConnectionError as error:
+        # http.client.RemoteDisconnected (and siblings like ConnectionResetError) are OSError
+        # subclasses that urllib does not always wrap in URLError — re-raise so callers see a
+        # consistent urllib.error.URLError and can decide whether to retry.
+        raise urllib.error.URLError(reason=error) from error
 
 
 def github_request(url, token=None, method="GET", payload=None, max_retries=8):
@@ -261,8 +266,17 @@ def github_request(url, token=None, method="GET", payload=None, max_retries=8):
         try:
             status, response_headers, body = _request(url, headers, method=method, data=data)
         except urllib.error.URLError as error:
-            # Network-level failure (DNS, connection reset, timeout): not a rate limit, so fail hard.
-            raise RuntimeError(f"GitHub API request to {method} {url} failed: {error}") from error
+            # Transient network-level failure (DNS, connection reset, RemoteDisconnected, timeout).
+            # Retry with exponential backoff rather than failing immediately, because these are
+            # almost always transient (the runner saw RemoteDisconnected mid-TLS handshake).
+            if attempt < max_retries - 1:
+                wait = min(2**attempt, 60)
+                logger.warning("[%s] Network error on %s %s (%s) — retrying in %ss", label, method, url, error, wait)
+                time.sleep(wait)
+                continue
+            raise RuntimeError(
+                f"GitHub API request to {method} {url} failed after {max_retries} attempts: {error}"
+            ) from error
 
         logger.info("[%s] %s %s → HTTP %s", label, method, url, status)
         # Rate-limit headers are absent on 401 (auth rejected before rate-limit machinery runs).
