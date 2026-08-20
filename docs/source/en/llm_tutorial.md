@@ -97,7 +97,7 @@ model.generate(**inputs, num_beams=4, do_sample=True)
 
 1. the `logits_processor` parameter accepts custom [`LogitsProcessor`] instances for manipulating the next token probability distribution;
 2. the `stopping_criteria` parameters supports custom [`StoppingCriteria`] to stop text generation;
-3. other custom generation methods can be loaded through the `custom_generate` flag ([docs](generation_strategies#custom-decoding-methods)).
+3. other custom generation methods can be loaded through the `custom_generate` flag ([docs](generation_strategies#custom-generation-methods)).
 
 Refer to the [Generation strategies](./generation_strategies) guide to learn more about search, sampling, and decoding strategies.
 
@@ -194,7 +194,7 @@ tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
 The default decoding strategy in [`~GenerationMixin.generate`] is *greedy search*, which selects the next most likely token, unless otherwise specified in a models [`GenerationConfig`]. While this decoding strategy works well for input-grounded tasks (transcription, translation), it is not optimal for more creative use cases (story writing, chat applications).
 
-For example, enable a [multinomial sampling](./generation_strategies#multinomial-sampling) strategy to generate more diverse outputs. Refer to the [Generation strategy](./generation_strategies) guide for more decoding strategies.
+For example, enable a [multinomial sampling](./generation_strategies#sampling) strategy to generate more diverse outputs. Refer to the [Generation strategy](./generation_strategies) guide for more decoding strategies.
 
 ```py
 model_inputs = tokenizer(["I am a cat."], return_tensors="pt").to(model.device)
