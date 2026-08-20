@@ -139,6 +139,7 @@ class CwmIntegrationTest(unittest.TestCase):
         self.assertEqual(out.logits.shape[2], model.config.vocab_size)
         self.assertFalse(torch.isnan(out.logits).any())
         self.assertFalse(torch.isinf(out.logits).any())
+        del model
 
     @slow
     @require_deterministic_for_xpu
@@ -191,6 +192,7 @@ class CwmIntegrationTest(unittest.TestCase):
         for i, layer in enumerate(model.model.layers):
             if model.config.layer_types[i] == "sliding_attention":
                 self.assertEqual(layer.self_attn.sliding_window, sliding_window)
+        del model
 
     @slow
     def test_cwm_generation_20_tokens(self):
@@ -255,3 +257,4 @@ class CwmIntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_ids, expected_token_ids, "Generated tokens should match ground truth")
         self.assertEqual(generated_text, expected_text, "Generated text should match ground truth")
+        del model
