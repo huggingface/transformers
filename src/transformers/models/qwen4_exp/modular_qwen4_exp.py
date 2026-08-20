@@ -546,16 +546,7 @@ class Qwen4ExpGatedResidual(nn.Module):
         if self.block_inject_weight is None:
             return mixed_input
         injection_weights = 2 * torch.sigmoid(self.block_inject_weight(hyper_input_normed) / self.hc_count)
-        return mixed_input, (hyper_input, injection_weights)
-
-    @staticmethod
-    def combine(
-        block_output: torch.Tensor,
-        residual_context: tuple[torch.Tensor, torch.Tensor],
-    ) -> torch.Tensor:
-        hyper_input, injection_weights = residual_context
-        injection = block_output.unsqueeze(-2) * injection_weights.unsqueeze(-1)
-        return hyper_input + injection.flatten(-2)
+        return mixed_input, hyper_input, injection_weights
 
 
 _MASK64 = (1 << 64) - 1
@@ -815,7 +806,7 @@ class Qwen4ExpDecoderLayer(GradientCheckpointingLayer):
                 ple_padding_mask=ple_padding_mask,
             )
 
-        hidden_states, residual = self.attn_hyper_connection(hidden_states)
+        hidden_states, hyper_input, injection_weights = self.attn_hyper_connection(hidden_states)
         if self.layer_type == "linear_attention":
             hidden_states = self.linear_attn(
                 hidden_states=hidden_states,
@@ -831,11 +822,16 @@ class Qwen4ExpDecoderLayer(GradientCheckpointingLayer):
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
-        hidden_states = self.attn_hyper_connection.combine(hidden_states, residual)
 
-        hidden_states, residual = self.mlp_hyper_connection(hidden_states)
+        injection = hidden_states.unsqueeze(-2) * injection_weights.unsqueeze(-1)
+        hidden_states = hyper_input + injection.flatten(-2)
+
+        hidden_states, hyper_input, injection_weights = self.mlp_hyper_connection(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        return self.mlp_hyper_connection.combine(hidden_states, residual)
+
+        injection = hidden_states.unsqueeze(-2) * injection_weights.unsqueeze(-1)
+        hidden_states = hyper_input + injection.flatten(-2)
+        return hidden_states
 
 
 class Qwen4ExpPreTrainedModel(Qwen3_5MoePreTrainedModel):
