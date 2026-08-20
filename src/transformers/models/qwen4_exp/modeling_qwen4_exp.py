@@ -712,7 +712,7 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
         # if using eager, convert to float mask
         if attention_mask.is_floating_point():
             min_dtype = torch.finfo(attention_mask.dtype).min
-            selected_token_mask = torch.where(selected_token_mask, attention_mask.new_zeros((0,)), min_dtype)
+            selected_token_mask = torch.where(selected_token_mask, attention_mask.new_zeros(()), min_dtype)
 
         return selected_token_indices, selected_token_mask
 
