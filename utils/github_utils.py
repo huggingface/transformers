@@ -277,12 +277,12 @@ def github_request(url, token=None, method="GET", payload=None, max_retries=8):
             # almost always transient (the runner saw RemoteDisconnected mid-TLS handshake).
             if attempt < max_retries - 1:
                 wait = min(2**attempt, 60)
-                logger.warning(
-                    "[%s] Network error on %s %s (%s) — retrying in %ss", label, method, url, error, wait
-                )
+                logger.warning("[%s] Network error on %s %s (%s) — retrying in %ss", label, method, url, error, wait)
                 time.sleep(wait)
                 continue
-            raise RuntimeError(f"GitHub API request to {method} {url} failed after {max_retries} attempts: {error}") from error
+            raise RuntimeError(
+                f"GitHub API request to {method} {url} failed after {max_retries} attempts: {error}"
+            ) from error
 
         logger.info("[%s] %s %s → HTTP %s", label, method, url, status)
         # Rate-limit headers are absent on 401 (auth rejected before rate-limit machinery runs).
