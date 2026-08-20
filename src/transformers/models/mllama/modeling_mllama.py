@@ -1404,9 +1404,7 @@ class MllamaModel(MllamaPreTrainedModel):
 )
 class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
     # _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
-    # Cross-attention layers cache a different length than self-attention ones, but all of them are fixed-size
-    # `StaticLayer`s (see `_prepare_static_cache`), so the graph is fully static.
-    _can_compile_fullgraph = True
+    _can_compile_fullgraph = True  # every cache layer is a fixed-size `StaticLayer`, see `_prepare_static_cache`
 
     def __init__(self, config: MllamaConfig):
         super().__init__(config)
