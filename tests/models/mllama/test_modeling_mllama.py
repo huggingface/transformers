@@ -460,11 +460,7 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
                 self.assertEqual(layer.keys.shape[-2], expected_length)
 
     def test_generate_compile_matches_eager(self):
-        """
-        Tests that the compiled graph is fully static: `cross_attention_mask` grows by one row per decoded token, so
-        it must be sliced down to the tokens being processed before entering `forward`, otherwise dynamo recompiles at
-        every step. Checks that a single graph is traced, without breaks, and that the output matches eager.
-        """
+        """Generating with a static cache traces a single graph, without breaks, and matches eager."""
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_generative_model_classes:
