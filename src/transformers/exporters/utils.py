@@ -46,9 +46,10 @@ import enum
 import functools
 import inspect
 import sys
-from collections.abc import MutableMapping
+from collections.abc import Callable, MutableMapping
 from typing import Any
 
+from ..image_processing_backends import TorchvisionBackend
 from ..utils import logging
 from ..utils.generic import get_max_seqlen
 from ..utils.import_utils import is_torch_available
@@ -941,7 +942,7 @@ def decompose_for_generation(
 # is a one-liner over it.
 
 
-def _stage_input_names(stage: Any, *, skip_first: bool = False) -> tuple[list[str], bool]:
+def _stage_input_names(stage: TorchvisionBackend | Callable, *, skip_first: bool = False) -> tuple[list[str], bool]:
     """Return `(declared_parameter_names, accepts_var_keyword)` for a preprocess/post-process stage.
 
     `skip_first` drops the leading positional parameter — for `post_process` that slot holds the
@@ -967,7 +968,9 @@ def _stage_input_names(stage: Any, *, skip_first: bool = False) -> tuple[list[st
     return declared, var_keyword
 
 
-def route_end_to_end_inputs(input_names: list[str], preprocess: Any, post_process: Any) -> tuple[list[str], list[str]]:
+def route_end_to_end_inputs(
+    input_names: list[str], preprocess: TorchvisionBackend | Callable | None, post_process: Callable | None
+) -> tuple[list[str], list[str]]:
     """Split `input_names` into the names `preprocess` consumes and the names `post_process` consumes.
 
     A stage claims the names it declares explicitly. A stage that declares `**kwargs` claims
@@ -1023,12 +1026,13 @@ if is_torch_available():
             input_names (`list[str]`):
                 Keys of the `sample_inputs` the module will be called with, used to route each
                 input to the stage that declares it (see [`~exporters.utils.route_end_to_end_inputs`]).
-            preprocess (`Callable` or `torch.nn.Module`, *optional*):
-                Maps the raw inputs it claims to a mapping of `model.forward` kwargs (a `dict` or
-                `BatchFeature`). `None` passes the claimed inputs straight to `model.forward`.
-                Pass an `nn.Module` when the preprocessing owns tensors (mel filters, anchor
-                grids) so they're lifted into the graph as buffers.
-            post_process (`Callable` or `torch.nn.Module`, *optional*):
+            preprocess (`TorchvisionBackend` or `Callable`, *optional*):
+                A torchvision-backed image or video processor, called with `return_tensors="pt"`,
+                or any callable mapping the raw inputs it claims to a mapping of `model.forward`
+                kwargs (a `dict` or `BatchFeature`). `None` passes the claimed inputs straight to
+                `model.forward`. Pass an `nn.Module` when the preprocessing owns tensors (mel
+                filters, anchor grids) so they're lifted into the graph as buffers.
+            post_process (`Callable`, *optional*):
                 Called as `post_process(model_outputs, **claimed_inputs)`; its return value is the
                 module's output. `None` returns the model outputs unchanged.
         """
@@ -1037,8 +1041,8 @@ if is_torch_available():
             self,
             model: PreTrainedModel,
             input_names: list[str],
-            preprocess: Any = None,
-            post_process: Any = None,
+            preprocess: TorchvisionBackend | Callable | None = None,
+            post_process: Callable | None = None,
         ):
             super().__init__()
             if preprocess is None and post_process is None:
@@ -1061,7 +1065,10 @@ if is_torch_available():
         def forward(self, **kwargs):
             model_inputs = {name: kwargs[name] for name in self.preprocess_names if name in kwargs}
             if self.preprocess is not None:
-                model_inputs = self.preprocess(**model_inputs)
+                if isinstance(self.preprocess, TorchvisionBackend):
+                    model_inputs = self.preprocess(**model_inputs, return_tensors="pt")
+                else:
+                    model_inputs = self.preprocess(**model_inputs)
                 if not isinstance(model_inputs, MutableMapping):
                     raise TypeError(
                         f"`preprocess` must return a mapping of `model.forward` kwargs (dict, BatchFeature), "

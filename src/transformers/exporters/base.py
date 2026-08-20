@@ -32,6 +32,8 @@ logger = logging.get_logger(__name__)
 
 
 if TYPE_CHECKING:
+    from ..image_processing_backends import TorchvisionBackend
+
     if is_torch_available():
         import torch
 
@@ -130,67 +132,6 @@ class HfExporter(ABC):
             "and returns the runtime artifact."
         )
 
-    @requires(backends=("torch",))
-    def export_end_to_end(
-        self,
-        model: PreTrainedModel,
-        preprocess: Callable | torch.nn.Module | None,
-        post_process: Callable | torch.nn.Module | None,
-        sample_inputs: MutableMapping[str, torch.Tensor],
-        config: ExportConfigMixin | dict[str, Any],
-    ):
-        """
-        Export preprocessing, the model forward, and post-processing as a **single** graph.
-
-        Chains the three stages into one [`~exporters.utils.EndToEndModel`] and calls
-        [`~HfExporter.export`] on it, so the artifact takes raw inputs (uint8 images, an audio
-        waveform, …) and returns final outputs (top-k labels, rescaled boxes, …). The runtime then
-        needs no Python-side processor. If you need the intermediate module (to run it eagerly for
-        verification, or to reuse it with a different config), build `EndToEndModel` directly.
-
-        Both stages are traced, so both must be written in tensor ops. Python control flow over
-        tensor *values* (`.item()`, `.tolist()`, `nonzero()`, thresholding that changes output
-        shape) and PIL/NumPy calls are not traceable — that rules out tokenizers and the slow
-        (PIL-based) image processors, and any post-processor whose output shape depends on the
-        data. Rewrite those steps in tensor ops, or keep them outside the graph and use
-        [`~HfExporter.export`].
-
-        Args:
-            model ([`PreTrainedModel`]):
-                The model to export.
-            preprocess (`Callable` or `torch.nn.Module`, *optional*):
-                Maps the raw inputs it claims to a mapping of `model.forward` kwargs. `None`
-                passes them straight to the forward.
-            post_process (`Callable` or `torch.nn.Module`, *optional*):
-                Called as `post_process(model_outputs, **claimed_inputs)`; its return value becomes
-                the graph output. `None` returns the model outputs unchanged.
-            sample_inputs (`dict[str, torch.Tensor]`):
-                **Raw** inputs — what you'd pass to the pipeline, not to `model.forward`. Each key
-                is routed to the stage that declares it as a parameter; a stage declaring `**kwargs`
-                takes everything the other stage doesn't declare explicitly (see
-                [`~exporters.utils.route_end_to_end_inputs`]). A key claimed by neither stage raises.
-            config ([`~transformers.exporters.configs.ExportConfigMixin`]):
-                Backend-specific configuration, forwarded to [`~HfExporter.export`].
-
-        Returns:
-            Backend-specific export artifact, as returned by [`~HfExporter.export`].
-        """
-        from .utils import EndToEndModel
-
-        end_to_end_model = EndToEndModel(
-            model, input_names=list(sample_inputs), preprocess=preprocess, post_process=post_process
-        )
-        try:
-            return self.export(end_to_end_model, sample_inputs, config=config)
-        except Exception as e:
-            raise RuntimeError(
-                f"{type(self).__name__}.export failed on the end-to-end graph for {type(model).__name__} "
-                f"(preprocess inputs={end_to_end_model.preprocess_names}, post-process inputs="
-                f"{end_to_end_model.post_process_names}). Export the model alone with `export` to tell a "
-                f"model-side failure from a pre/post-processing one — the stages are traced too, so a "
-                f"data-dependent op in either of them fails here."
-            ) from e
-
     def export_for_generation(
         self,
         model: PreTrainedModel,
@@ -264,3 +205,71 @@ class HfExporter(ABC):
                 ) from e
 
         return exported
+
+    @requires(backends=("torch",))
+    def export_end_to_end(
+        self,
+        model: PreTrainedModel,
+        preprocess: TorchvisionBackend | Callable | None,
+        post_process: Callable | None,
+        sample_inputs: MutableMapping[str, torch.Tensor],
+        config: ExportConfigMixin | dict[str, Any],
+    ):
+        """
+        Export preprocessing, the model forward, and post-processing as a **single** graph.
+
+        Chains the three stages into one [`~exporters.utils.EndToEndModel`] and calls
+        [`~HfExporter.export`] on it, so the artifact takes raw inputs (uint8 images, an audio
+        waveform, …) and returns final outputs (top-k labels, rescaled boxes, …). The runtime then
+        needs no Python-side processor. If you need the intermediate module (to run it eagerly for
+        verification, or to reuse it with a different config), build `EndToEndModel` directly.
+
+        Both stages are traced, so anything either of them computes in Python runs once at trace
+        time and is frozen into the graph. Tokenizers are out entirely. The Transformers image and
+        video processors are torchvision-backed and do trace, but one that derives its output size
+        in Python from the input size (an aspect-ratio-preserving resize) freezes that arithmetic
+        into a shape guard, pinning the graph to the traced resolution; a processor with a fixed
+        target size stays resolution-agnostic.
+
+        Data-dependent output *shapes* (`scores[scores > threshold]`) are a softer constraint:
+        `torch.export` resolves the surviving count to an unbacked symbol, so the stock detection
+        post-processors trace as-is, but a backend that requires static shapes will reject the
+        result — prefer a fixed-size top-k there and let the caller threshold.
+
+        Args:
+            model ([`PreTrainedModel`]):
+                The model to export.
+            preprocess (`TorchvisionBackend` or `Callable`, *optional*):
+                A torchvision-backed image or video processor, called with `return_tensors="pt"`,
+                or any callable mapping the raw inputs it claims to a mapping of `model.forward`
+                kwargs. `None` passes them straight to the forward. Pass an `nn.Module` when the
+                preprocessing owns tensors so they're lifted into the graph as buffers.
+            post_process (`Callable`, *optional*):
+                Called as `post_process(model_outputs, **claimed_inputs)`; its return value becomes
+                the graph output. `None` returns the model outputs unchanged.
+            sample_inputs (`dict[str, torch.Tensor]`):
+                **Raw** inputs — what you'd pass to the pipeline, not to `model.forward`. Each key
+                is routed to the stage that declares it as a parameter; a stage declaring `**kwargs`
+                takes everything the other stage doesn't declare explicitly (see
+                [`~exporters.utils.route_end_to_end_inputs`]). A key claimed by neither stage raises.
+            config ([`~transformers.exporters.configs.ExportConfigMixin`]):
+                Backend-specific configuration, forwarded to [`~HfExporter.export`].
+
+        Returns:
+            Backend-specific export artifact, as returned by [`~HfExporter.export`].
+        """
+        from .utils import EndToEndModel
+
+        end_to_end_model = EndToEndModel(
+            model, input_names=list(sample_inputs), preprocess=preprocess, post_process=post_process
+        )
+        try:
+            return self.export(end_to_end_model, sample_inputs, config=config)
+        except Exception as e:
+            raise RuntimeError(
+                f"{type(self).__name__}.export failed on the end-to-end graph for {type(model).__name__} "
+                f"(preprocess inputs={end_to_end_model.preprocess_names}, post-process inputs="
+                f"{end_to_end_model.post_process_names}). Export the model alone with `export` to tell a "
+                f"model-side failure from a pre/post-processing one — the stages are traced too, so a "
+                f"data-dependent op in either of them fails here."
+            ) from e
