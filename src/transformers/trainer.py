@@ -2997,8 +2997,18 @@ class Trainer:
                     logits = smp_nested_concat(logits_mb)
             else:
                 if has_labels or loss_without_labels:
-                    with self.compute_loss_context_manager():
-                        num_items_in_batch = self._get_num_items_in_batch([inputs], self.args.device)
+                    # Shard the sequence exactly as `training_step` does. Context parallel ranks all
+                    # receive the same batch, and the loss is scaled by the number of processes to
+                    # undo the gradient reduction's averaging; evaluating without the sharding would
+                    # apply that scaling to a full, unsharded loss and report `cp_size` times the
+                    # real value.
+                    # Count the batch's items *before* sharding: entering the context parallel
+                    # region splits the buffers in place, and the count is expected to be the
+                    # unsharded one (this mirrors the training loop, which counts in
+                    # `get_batch_samples` before `training_step` shards).
+                    num_items_in_batch = self._get_num_items_in_batch([inputs], self.args.device)
+                    cp_context, inputs = self._prepare_context_parallel_inputs(model, inputs)
+                    with self.compute_loss_context_manager(), cp_context():
                         if self.args.use_liger_kernel and prediction_loss_only:
                             inputs = {**inputs, "skip_logits": True}
                         loss, outputs = self.compute_loss(
