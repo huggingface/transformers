@@ -1467,6 +1467,12 @@ def _add_unmatched_checkpoint_key(
     model: PreTrainedModel,
     loading_info: LoadStateDictInfo,
 ) -> None:
+    """Classify a checkpoint key that does not match the current model state dict.
+
+    During pipeline-parallel loading, each stage receives keys for the entire model even though its local state dict
+    contains only that stage's parameters. A key owned by another stage is therefore recorded as intentionally skipped
+    instead of unexpected. Without the key, it would be considered unexpected.
+    """
     stage = getattr(model, "_pp_stage", None)
     if stage is None:
         loading_info.unexpected_keys.add(key)
