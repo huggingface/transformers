@@ -26,9 +26,10 @@ if TYPE_CHECKING:
 
 if is_torch_available():
     import torch
-    import torch.distributed as dist
     import torch.nn as nn
 
+if is_torch_distributed_available():
+    import torch.distributed as dist
 
 def _bind_forward_kwargs(forward_fn, args: tuple, kwargs: dict) -> dict:
     bound = inspect.signature(forward_fn).bind_partial(*args, **kwargs)
