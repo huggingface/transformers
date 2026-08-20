@@ -37,13 +37,13 @@ def _bind_forward_kwargs(forward_fn, args: tuple, kwargs: dict) -> dict:
 
 
 class PipelineIdentityLayer(nn.Identity):
-    """A placeholder layer for missing layers in a pipeline parallel model."""
+    """An identity layer replacing modules not owned by the current pipeline stage."""
 
     def __init__(self, *args, **kwargs):
         super().__init__()
 
     def forward(self, *args, **kwargs):
-        """Return the first arg from args or the first value from kwargs."""
+        """Return the first arg from args or the first value from kwargs as nothing is used."""
         return args[0] if args else next(iter(kwargs.values()))
 
 
