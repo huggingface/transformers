@@ -1078,6 +1078,9 @@ class Trainer:
                 dataset=eval_dataset,
                 lengths=lengths,
                 model_input_name=model_input_name,
+                generator=torch.Generator().manual_seed(
+                    self.args.data_seed if self.args.data_seed is not None else self.args.seed
+                ),
             )
 
         if self.args.world_size <= 1:
