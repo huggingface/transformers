@@ -599,11 +599,8 @@ def apply_rotary_pos_emb(q, k=None, cos=None, sin=None, unsqueeze_dim=1):
 
     if k is not None:
         k_rope, k_nope = k[..., :rotary_dim], k[..., rotary_dim:]
-        # Apply rotary embeddings on the first half or full tensor
         k_rope = (k_rope * cos) + (rotate_half(k_rope) * sin)
-        # Concatenate back to full shape
         k_rotated = torch.cat([k_rope, k_nope], dim=-1)
-
         return q_rotated, k_rotated
     else:
         return q_rotated
