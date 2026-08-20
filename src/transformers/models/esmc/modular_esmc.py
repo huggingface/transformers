@@ -239,7 +239,7 @@ class EsmcModel(EsmcPreTrainedModel):
         super().__init__(config)
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
         self.rotary_emb = EsmcRotaryEmbedding(config)
-        self.layers = nn.ModuleList([EsmcLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([EsmcLayer(config) for _ in range(config.num_hidden_layers)])  # trf-ignore: TRF034
         self.norm = EsmcLayerNorm(config.hidden_size, bias=False)
         self.gradient_checkpointing = False
         self.post_init()

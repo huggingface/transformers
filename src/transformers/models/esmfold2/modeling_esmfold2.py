@@ -42,7 +42,7 @@ from .generation_esmfold2 import EsmFold2FoldingMixin
 
 
 @dataclass
-class EsmFold2AtomInputs:
+class EsmFold2AtomInputs:  # trf-ignore: TRF031
     """Featurized reference-conformer atom inputs, bundled so the atom stack takes one argument.
 
     Taken as one argument by [`EsmFold2Model.forward`], holding the raw featurizer tensors.
@@ -76,7 +76,7 @@ class EsmFold2AtomInputs:
 
 
 @dataclass
-class EsmFold2DenoiserConditioning:
+class EsmFold2DenoiserConditioning:  # trf-ignore: TRF031
     """Denoiser conditioning that depends on neither the noise level nor the noisy coordinates.
 
     Built once per fold by ``EsmFold2DiffusionModule.prepare_conditioning``, with both attention masks
