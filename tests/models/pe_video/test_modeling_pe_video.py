@@ -149,6 +149,13 @@ class PeVideoEncoderTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @unittest.skip(
+        "TimmWrapper sets _supports_sdpa=True (timm uses F.scaled_dot_product_attention internally) but does not "
+        "support flash-only dispatch via sdpa_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False)."
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
     @unittest.skip(reason="The model has TimmWrapper backbone but doesn't apply any conversion")
     def test_reverse_loading_mapping(self, check_keys_were_modified=True):
         pass
