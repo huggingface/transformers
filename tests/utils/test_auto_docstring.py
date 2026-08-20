@@ -782,9 +782,10 @@ class TestAutoDocstringPerformance:
     # Upper bound (seconds) of CPU time that auto_docstring may add per imported
     # module. Measured with `time.process_time()` so co-tenant scheduling noise
     # (the test runs under `pytest-xdist -n 8`) and filesystem I/O do not affect
-    # the result, making the bound portable across machines. Catches serious
-    # regressions without being sensitive to run-to-run wall-clock noise.
-    AUTO_DOCSTRING_COST_PER_MODULE_UPPER_BOUND = 0.5
+    # the result, making the bound portable across machines. The measured cost is
+    # a few ms per module, so this budget leaves generous headroom (~16x) to stay
+    # robust to hardware differences while still catching serious regressions.
+    AUTO_DOCSTRING_COST_PER_MODULE_UPPER_BOUND = 0.1
 
     def test_auto_docstring_import_time_upper_bound(self):
         """
