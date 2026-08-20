@@ -117,7 +117,7 @@ A type of layer in a neural network where the input matrix is multiplied element
 Parallelism technique for training on multiple GPUs where the same setup is replicated multiple times, with each instance
 receiving a distinct data slice. The processing is done in parallel and all setups are synchronized at the end of each training step.
 
-Learn more about how DataParallel works [here](perf_train_gpu_many#dataparallel-vs-distributeddataparallel).
+Learn more about [DataParallel](perf_train_gpu_many#dataparallel).
 
 ### decoder input IDs
 
@@ -348,7 +348,7 @@ For more details, see [Pipelines for inference](https://huggingface.co/docs/tran
 
 Parallelism technique in which the model is split up vertically (layer-level) across multiple GPUs, so that only one or
 several layers of the model are placed on a single GPU. Each GPU processes in parallel different stages of the pipeline
-and working on a small chunk of the batch. Learn more about how PipelineParallel works [here](perf_train_gpu_many#from-naive-model-parallelism-to-pipeline-parallelism).
+and working on a small chunk of the batch. Learn more about [PipelineParallel](perf_train_gpu_many#pipeline-parallelism).
 
 ### pixel values
 

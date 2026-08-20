@@ -25,7 +25,7 @@ This guide will show you how to chat with multimodal models with the high-level 
 
 ## ImageTextToTextPipeline
 
-[`ImageTextToTextPipeline`] is a high-level image and text generation class with a “chat mode”. Chat mode is enabled when a conversational model is detected and the chat prompt is [properly formatted](./llm_tutorial#wrong-prompt-format).
+[`ImageTextToTextPipeline`] is a high-level image and text generation class with a “chat mode”. Chat mode is enabled when a conversational model is detected and the chat prompt is [properly formatted](./llm_tutorial#prompt-format).
 
 Add image and text blocks to the `content` key in the chat history.
 
@@ -111,7 +111,7 @@ The decoded output contains the full conversation so far, including the user mes
 
 ## Video inputs
 
-Some vision models also support video inputs. The message format is very similar to the format for [image inputs](#image-inputs).
+Some vision models also support video inputs. The message format is very similar to the format for image inputs described in the earlier section.
 
 - The content `"type"` should be `"video"` to indicate the content is a video.
 - For videos, it can be a link to the video (`"url"`) or it could be a file path (`"path"`). Videos are decoded with [torchcodec](https://meta-pytorch.org/torchcodec/stable/index.html). If torchcodec isn't available and you're on an older torchvision version, decoding falls back to torchvision.

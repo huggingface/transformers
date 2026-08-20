@@ -202,7 +202,7 @@ Use the end-of-sequence token as the padding token and set `mlm=False`. This wil
 
 <Tip>
 
-If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the [basic tutorial](../training#train-with-pytorch-trainer)!
+If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the [basic tutorial](../training)!
 
 </Tip>
 
