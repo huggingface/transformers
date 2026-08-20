@@ -12,15 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import pathlib
 import unittest
-from unittest.mock import patch
 
 import numpy as np
 from parameterized import parameterized
 
 from transformers import WeatherNext2Config, WeatherNext2FeatureExtractor, is_torch_available
-from transformers.testing_utils import require_torch, require_trimesh, slow, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -28,14 +26,12 @@ from ...test_modeling_common import (
     ModelTesterMixin,
     floats_tensor,
 )
-from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
     import torch
 
     from transformers import WeatherNext2ForWeatherForecasting, WeatherNext2Model
-    from transformers.models.weathernext2.geometry_weathernext2 import build_geometry
     from transformers.models.weathernext2.modeling_weathernext2 import WeatherNext2Attention
 
 
@@ -54,6 +50,8 @@ class WeatherNext2ModelTester:
         noise_channels=4,
         mesh_splits=2,
         attention_k_hop=2,
+        attention_bandwidth=64,
+        num_grid_to_mesh_edges=2048,
         grid_latitudes=19,
         grid_longitudes=36,
         pressure_levels=(500, 850),
@@ -69,6 +67,8 @@ class WeatherNext2ModelTester:
         self.noise_channels = noise_channels
         self.mesh_splits = mesh_splits
         self.attention_k_hop = attention_k_hop
+        self.attention_bandwidth = attention_bandwidth
+        self.num_grid_to_mesh_edges = num_grid_to_mesh_edges
         self.grid_latitudes = grid_latitudes
         self.grid_longitudes = grid_longitudes
         self.pressure_levels = pressure_levels
@@ -84,6 +84,8 @@ class WeatherNext2ModelTester:
             noise_channels=self.noise_channels,
             mesh_splits=self.mesh_splits,
             attention_k_hop=self.attention_k_hop,
+            attention_bandwidth=self.attention_bandwidth,
+            num_grid_to_mesh_edges=self.num_grid_to_mesh_edges,
             grid_latitudes=self.grid_latitudes,
             grid_longitudes=self.grid_longitudes,
             pressure_levels=self.pressure_levels,
@@ -161,56 +163,11 @@ class WeatherNext2ModelTester:
         }
 
 
-GEOMETRY_FIXTURE = pathlib.Path(__file__).parents[2] / "fixtures" / "weathernext2_geometry.safetensors"
-
-
-def install_fixture_geometry(self, device=None):
-    """Stands in for `register_geometry_buffers` while the model tests run.
-
-    Building the geometry needs trimesh, which is not a Transformers dependency: released checkpoints
-    carry their geometry, so only building one from scratch needs it. The tests do build from scratch,
-    so they read the tiny mesh from a fixture instead and stay runnable anywhere.
-    """
-    from safetensors.torch import load_file
-
-    geometry = load_file(GEOMETRY_FIXTURE)
-    expected = (self.config.mesh_splits, self.config.grid_latitudes, self.config.grid_longitudes)
-    if expected != (2, 19, 36):
-        raise ValueError(
-            f"The geometry fixture was built for mesh_splits=2 on a 19x36 grid, but the config asks for {expected}. "
-            "Regenerate it, or decorate the test with `@require_trimesh` and build the geometry."
-        )
-    for name, value in geometry.items():
-        self.register_buffer(name, value.clone().to(device) if device is not None else value.clone(), persistent=True)
-    self.config.num_grid_to_mesh_edges = int(geometry["grid_to_mesh_senders"].shape[0])
-    self.config.attention_bandwidth = int(geometry["attention_mask"].shape[2])
-
-
 @require_torch
-class WeatherNext2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (WeatherNext2Model, WeatherNext2ForWeatherForecasting) if is_torch_available() else ()
-    # There is no `weather-forecasting` pipeline yet; the inputs are global gridded states rather than
-    # anything the generic pipeline machinery handles.
-    pipeline_model_mapping = {}
 
-    fx_compatible = False
-    test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
-    test_inputs_embeds = False
-    test_torchscript = False
-    is_encoder_decoder = False
-
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        cls._geometry_patch = patch.object(WeatherNext2Model, "register_geometry_buffers", install_fixture_geometry)
-        cls._geometry_patch.start()
-
-    @classmethod
-    def tearDownClass(cls):
-        cls._geometry_patch.stop()
-        super().tearDownClass()
 
     def setUp(self):
         self.model_tester = WeatherNext2ModelTester(self)
@@ -401,10 +358,6 @@ class WeatherNext2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     # WeatherNext 2 consumes gridded physical fields, not tokens or images, and masks by mesh
     # adjacency rather than by sequence position, so several of the shared tests do not apply.
     @unittest.skip(reason="WeatherNext 2 has no token embeddings.")
-    def test_resize_tokens_embeddings(self):
-        pass
-
-    @unittest.skip(reason="WeatherNext 2 has no token embeddings.")
     def test_model_get_set_embeddings(self):
         pass
 
@@ -421,43 +374,12 @@ class WeatherNext2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     def test_eager_matches_sdpa_inference(self, *args, **kwargs):
         pass
 
-
-@require_torch
-@require_trimesh
-class WeatherNext2GeometryTest(unittest.TestCase):
-    def test_mesh_sizes_and_banded_mask(self):
-        geometry = build_geometry(
-            mesh_splits=2,
-            grid_lat=np.linspace(-90, 90, 19),
-            grid_lon=np.arange(36) * 10.0,
-            attention_k_hop=2,
-            ball_query_radius_fraction=0.6,
-        )
-        self.assertEqual(geometry.num_mesh_nodes, 10 * 4**2 + 2)
-        # Mesh-to-grid connects every grid point to the three vertices of one face.
-        self.assertEqual(len(geometry.mesh_to_grid_senders), 19 * 36 * 3)
-        # Edges are sorted by receiver so the aggregation can use a segmented sum.
-        self.assertTrue(np.all(np.diff(geometry.mesh_to_grid_receivers) >= 0))
-        self.assertTrue(np.all(np.diff(geometry.grid_to_mesh_receivers) >= 0))
-        # Every non-zero of the mask lies inside the band.
-        coo = geometry.attention_mask.tocoo()
-        self.assertLessEqual(np.abs(coo.row - coo.col).max() + 1, geometry.attention_bandwidth)
-        # Edge features are normalized to the unit interval.
-        self.assertLessEqual(geometry.mesh_to_grid_edge_features[:, 0].max(), 1.0 + 1e-6)
-        self.assertLessEqual(np.abs(geometry.mesh_to_grid_edge_features[:, 1:]).max(), 1.0 + 1e-6)
-
-    def test_geometry_is_deterministic(self):
-        kwargs = {
-            "mesh_splits": 1,
-            "grid_lat": np.linspace(-90, 90, 13),
-            "grid_lon": np.arange(24) * 15.0,
-            "attention_k_hop": 2,
-            "ball_query_radius_fraction": 0.6,
-        }
-        first, second = build_geometry(**kwargs), build_geometry(**kwargs)
-        np.testing.assert_array_equal(first.mesh_lat, second.mesh_lat)
-        np.testing.assert_array_equal(first.grid_to_mesh_senders, second.grid_to_mesh_senders)
-        np.testing.assert_array_equal(first.mesh_to_grid_senders, second.mesh_to_grid_senders)
+    @unittest.skip(
+        reason="The shared test calls `state_dict()` on the state dict it already has whenever a buffer is a "
+        "`BoolTensor`, which the banded attention mask is."
+    )
+    def test_torch_save_load(self):
+        pass
 
 
 @require_torch
@@ -465,7 +387,7 @@ class WeatherNext2GeometryTest(unittest.TestCase):
 class WeatherNext2ModelIntegrationTest(unittest.TestCase):
     """End-to-end check against the released 1 degree Mini checkpoint.
 
-    Marked slow: it downloads ~230 MB of weights and builds the icosahedral mesh on first run.
+    Marked slow: it downloads ~230 MB of weights, the mesh and both graphs among them.
     """
 
     checkpoint = "kashif/weathernext2-mini"

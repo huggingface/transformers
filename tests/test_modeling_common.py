@@ -1454,7 +1454,7 @@ class ModelTesterMixin(ExportTesterMixin):
             def check_equal(loaded):
                 for key in state_dict:
                     max_diff = torch.max(
-                        state_dict[key] ^ loaded[key]
+                        state_dict()[key] ^ loaded[key]
                         if isinstance(state_dict[key], torch.BoolTensor)
                         else torch.abs(state_dict[key] - loaded[key])
                     ).item()
