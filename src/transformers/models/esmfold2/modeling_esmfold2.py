@@ -1853,9 +1853,6 @@ class EsmFold2PreTrainedModel(PreTrainedModel):
         "EsmFold2DiffusionTransformer",
     ]
     supports_gradient_checkpointing = True
-    # The patterns regex-search the full parameter key, so a bare "norm" would also pin the adaLN-Zero
-    # Linears (`input_layernorm.gate_proj`, ...) and crash bf16 runs on an fp32-weight matmul: pin the
-    # norm parameters and the prefix-named norms (tri-mul, MSA averaging) explicitly instead.
     _keep_in_fp32_modules_strict = [
         "fourier",
         "norm.weight",
