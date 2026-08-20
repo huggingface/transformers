@@ -30,14 +30,10 @@ from .tensor_parallel import (
 )
 from .utils import (
     _distributed_barrier,
-    _ensure_torch_distributed,
     _get_torch_distributed_rank,
-    _get_torch_distributed_world_size,
     _is_torch_distributed_initialized,
     gather_full_state_dict,
-    initialize_fully_sharded_data_parallelism,
-    initialize_pipeline_parallelism,
-    initialize_tensor_parallelism,
+    initialize_distributed_mesh,
     save_model_checkpoint_distributed,
 )
 
@@ -149,38 +145,23 @@ class DistributedMixin:
     def prepare_distribute_model(
         cls,
         distributed_config: DistributedConfig | dict | None,
-        *,
-        device_mesh=None,
         device_map=None,
     ) -> tuple[DistributedConfig | None, object, object]:
         if distributed_config is None:
-            return None, device_map, device_mesh
+            return None, device_map, None
 
         if isinstance(distributed_config, dict):
             distributed_config = DistributedConfig.from_dict(distributed_config)
 
-        if distributed_config.tp_size > 1 or distributed_config.fsdp_size > 1:
-            _ensure_torch_distributed()
-            world_size = _get_torch_distributed_world_size()
-            if distributed_config.tp_size * distributed_config.fsdp_size != world_size:
-                raise RuntimeError(
-                    f"tp_size ({distributed_config.tp_size}) * fsdp_size ({distributed_config.fsdp_size}) "
-                    f"is not equal to world_size ({world_size})"
-                )
+        if distributed_config.tp_size == 1 and distributed_config.fsdp_size == 1 and distributed_config.pp_size == 1:
+            return distributed_config, device_map, None
 
-        if distributed_config.tp_size > 1:
-            if distributed_config.tp_plan is None:
-                distributed_config.tp_plan = "auto"
-            device_map, device_mesh = initialize_tensor_parallelism(
-                distributed_config.tp_plan,
-                tp_size=distributed_config.tp_size,
-                device_mesh=device_mesh,
-                device_map=device_map,
-            )
-        elif distributed_config.fsdp_size > 1:
-            device_map, device_mesh = initialize_fully_sharded_data_parallelism(distributed_config)
-        elif distributed_config.pp_size > 1:
-            device_map, device_mesh = initialize_pipeline_parallelism(distributed_config)
+        if distributed_config.tp_size > 1 and device_map is not None:
+            raise ValueError("Tensor parallelism and `device_map` are mutually exclusive.")
+        if distributed_config.fsdp_size > 1 and not is_torch_greater_or_equal("2.7"):
+            raise OSError("FSDP2 requires `torch>=2.7` (distributed checkpoint save/load).")
+
+        device_map, device_mesh = initialize_distributed_mesh(distributed_config)
 
         return distributed_config, device_map, device_mesh
 
@@ -196,17 +177,17 @@ class DistributedMixin:
             model.config.distributed_config = distributed_config
             model._device_mesh = device_mesh
 
+            if distributed_config.pp_size > 1:
+                pp_mesh = device_mesh["pp"] if device_mesh.ndim > 1 else device_mesh
+                model = apply_pipeline_parallelism(model, pp_mesh)
+
             if distributed_config.tp_size > 1:
                 tp_mesh = device_mesh["tp"] if device_mesh.ndim > 1 else device_mesh
                 model = apply_tensor_parallelism(model, tp_mesh)
-
             elif distributed_config.fsdp_size > 1:
+                # TODO(3outeille): turn into a if statement when TP + FSDP is supported
                 fsdp_mesh = device_mesh["fsdp"] if device_mesh.ndim > 1 else device_mesh
                 model = apply_fully_sharded_data_parallelism(model, fsdp_mesh)
-            
-            elif distributed_config.pp_size > 1:
-                pp_mesh = device_mesh["pp"] if device_mesh.ndim > 1 else device_mesh
-                model = apply_pipeline_parallelism(model, pp_mesh)
         return model
 
     def should_save_on_this_rank(self, is_main_process: bool) -> bool:

@@ -31,6 +31,7 @@ if is_torch_available():
 if is_torch_distributed_available():
     import torch.distributed as dist
 
+
 def _bind_forward_kwargs(forward_signature: inspect.Signature, args: tuple, kwargs: dict) -> dict:
     bound = forward_signature.bind_partial(*args, **kwargs)
     bound.apply_defaults()
@@ -94,7 +95,8 @@ class PipelineStage:
 
         # Shared P2P: one isend/irecv with the adjacent rank.
         is_send = operation.startswith("send")
-        peer_rank = dest if is_send else src
+        peer_group_rank = dest if is_send else src
+        peer_rank = dist.get_global_rank(self.pp_group, peer_group_rank)
         op = dist.P2POp(dist.isend if is_send else dist.irecv, tensor, peer_rank, group=self.pp_group)
         # Wait for the communication to complete.
         for req in dist.batch_isend_irecv([op]):
@@ -154,7 +156,7 @@ class PipelineStage:
         if self.pp_size <= 1:
             return tensor
 
-        last_rank = self.pp_size - 1
+        last_rank = dist.get_global_rank(self.pp_group, self.pp_size - 1)
         comm_device = torch.device("cpu") if self.comm_on_cpu else device
         # Logits are always (batch, seq_len, vocab_size).
         logits_ndim = 3
@@ -225,6 +227,7 @@ def apply_pipeline_parallelism(model: nn.Module, pp_mesh: torch.distributed.devi
         model._pp_forward_wrapped = True
 
     return model
+
 
 def _hidden_states_shape(fwd_kwargs: dict, hidden_size: int) -> tuple[int, ...]:
     if (inputs_embeds := fwd_kwargs.get("inputs_embeds")) is not None:
