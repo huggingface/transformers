@@ -27,16 +27,6 @@ from ...utils import auto_docstring
 from ...utils.import_utils import requires
 
 
-class NeoMMEProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "add_special_tokens": False,
-            "padding": "longest",
-        },
-        "common_kwargs": {"return_tensors": "pt"},
-    }
-
-
 @requires(backends=("torch",))
 @auto_docstring
 class NeoMMEProcessor(ProcessorMixin):
@@ -47,7 +37,7 @@ class NeoMMEProcessor(ProcessorMixin):
     inputs. Images receive a patch grid and two-axis positions.
     """
 
-    valid_processor_kwargs = NeoMMEProcessorKwargs
+    valid_processor_kwargs = ProcessingKwargs
 
     def __init__(
         self,
@@ -65,7 +55,7 @@ class NeoMMEProcessor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: TextInput | list[TextInput] | None = None,
-        **kwargs: Unpack[NeoMMEProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         r"""
         Tokenize text or process images. Retrieval inputs must first be formatted with

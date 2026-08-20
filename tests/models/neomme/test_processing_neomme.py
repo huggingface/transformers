@@ -170,6 +170,8 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def _apply_text(self, processor, text, task="query", **processor_kwargs):
         text = [text] if isinstance(text, str) else text
         messages = [[{"role": "user", "content": value}] for value in text]
+        processor_kwargs.setdefault("padding", "longest")
+        processor_kwargs.setdefault("return_tensors", "pt")
         return processor.apply_chat_template(
             messages,
             task=task,
@@ -181,6 +183,8 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def _apply_images(self, processor, images, **processor_kwargs):
         images = images if isinstance(images, (list, tuple)) else [images]
         messages = [[{"role": "user", "content": [{"type": "image", "image": image}]}] for image in images]
+        processor_kwargs.setdefault("padding", "longest")
+        processor_kwargs.setdefault("return_tensors", "pt")
         return processor.apply_chat_template(
             messages,
             task="document",
@@ -327,7 +331,12 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         ]
 
         inputs = processor.apply_chat_template(
-            messages, task="document", tokenize=True, return_dict=True, return_tensors="pt"
+            messages,
+            task="document",
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            processor_kwargs={"padding": "longest"},
         )
 
         self.assertEqual(inputs["input_ids"].shape[0], 2)
@@ -628,7 +637,7 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.processor_class(**self.prepare_components())
         self.assertIsNone(processor.chat_template)
 
-        text_batch = processor(text=["hello world"])
+        text_batch = processor(text=["hello world"], return_tensors="pt")
         text_ids = text_batch["input_ids"][0].tolist()
         self.assertEqual(
             text_ids,
@@ -644,7 +653,7 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
 
         image = np.random.randint(0, 255, (8, 8, 3), dtype=np.uint8)
-        image_batch = processor(images=[image])
+        image_batch = processor(images=[image], padding="longest", return_tensors="pt")
         self.assertEqual(image_batch["input_ids"][0, 0], self.marker_ids["<doc>"])
         self.assertIn("pixel_values", image_batch)
 
