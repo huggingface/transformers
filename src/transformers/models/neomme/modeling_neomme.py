@@ -617,10 +617,6 @@ class NeoMMEForMaskedLM(NeoMMEPreTrainedModel):
         self.model = NeoMMEModel(config)
         self.post_init()
 
-    def get_output_embeddings(self):
-        """The decode is tied through the factorized embedding; there is no separate output layer."""
-        return None
-
     @can_return_tuple
     @auto_docstring
     def forward(

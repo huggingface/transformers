@@ -95,7 +95,6 @@ class NeoMMEConfig(PreTrainedConfig):
     pad_token_id: int | None = 0
     document_token_id: int | None = 5
     image_token_id: int | None = 6
-    tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
         if self.layer_types is None:
