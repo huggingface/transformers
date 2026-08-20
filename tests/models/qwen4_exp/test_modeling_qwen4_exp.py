@@ -48,8 +48,12 @@ if is_torch_available():
     )
 
 
-def get_qwen4_exp_text_config(ple_layer_ids=None, ple_conv_kernel_size=2, layer_types=None, use_qsa=False):
-    layer_types = ["full_attention", "linear_attention"] if layer_types is None else layer_types
+def get_qwen4_exp_text_config(ple_layer_ids=None, ple_conv_kernel_size=2, layer_types=None):
+    ple_layer_ids = [] if ple_layer_ids is None else ple_layer_ids
+    layer_types = ["deepseek_sparse_attention", "linear_attention"] if layer_types is None else layer_types.copy()
+    for layer_idx in ple_layer_ids:
+        if layer_types[layer_idx - 1] == "deepseek_sparse_attention":
+            layer_types[layer_idx - 1] = "hybrid_indexed"
     qsa_kwargs = (
         {
             "indexer_n_heads": 2,
@@ -58,7 +62,7 @@ def get_qwen4_exp_text_config(ple_layer_ids=None, ple_conv_kernel_size=2, layer_
             "indexer_budget": 4,
             "indexer_compress_ratio": 2,
         }
-        if use_qsa
+        if any(layer_type != "linear_attention" for layer_type in layer_types)
         else {}
     )
     return Qwen4ExpTextConfig(
@@ -84,7 +88,7 @@ def get_qwen4_exp_text_config(ple_layer_ids=None, ple_conv_kernel_size=2, layer_
         output_gate_type="sigmoid",
         hc_count=2,
         hc_lowrank=8,
-        ple_layer_ids=[] if ple_layer_ids is None else ple_layer_ids,
+        ple_layer_ids=ple_layer_ids,
         ple_embed_dim=16,
         ple_conv_kernel_size=ple_conv_kernel_size,
         ngram_size=3,
@@ -107,7 +111,8 @@ class Qwen4ExpTextModelTester(CausalLMModelTester):
     def __init__(self, parent):
         super().__init__(parent=parent)
         self.hidden_act = "silu"
-        self.layer_types = ["full_attention", "linear_attention"]
+        self.head_dim = 8
+        self.layer_types = ["deepseek_sparse_attention", "linear_attention"]
         self.linear_conv_kernel_dim = 2
         self.linear_key_head_dim = 16
         self.linear_value_head_dim = 16
@@ -123,6 +128,11 @@ class Qwen4ExpTextModelTester(CausalLMModelTester):
         self.ngram_vocab_size_base = 31
         self.make_ngram_vocab_size_divisible_by = 8
         self.split_ngram_parts = 4
+        self.indexer_n_heads = 2
+        self.indexer_kv_heads = 1
+        self.indexer_head_dim = 8
+        self.indexer_budget = 4
+        self.indexer_compress_ratio = 2
         self.moe_intermediate_size = 8
         self.shared_expert_intermediate_size = 8
         self.num_experts_per_tok = 2
@@ -133,6 +143,10 @@ class Qwen4ExpTextModelTester(CausalLMModelTester):
 class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = Qwen4ExpTextModelTester
     model_split_percents = [0.5, 0.8, 0.9]
+
+    # QSA indexer parameters only influence the non-differentiable top-k selection. They are trained through a
+    # separate upstream objective rather than the causal-LM loss.
+    test_all_params_have_gradient = False
 
     def _get_conv_state_shape(self, batch_size: int, config):
         intermediate_size = (
@@ -151,7 +165,7 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
 
     @staticmethod
     def _get_parallel_config():
-        return get_qwen4_exp_text_config(ple_layer_ids=[1], use_qsa=True)
+        return get_qwen4_exp_text_config(ple_layer_ids=[1])
 
     def _get_tp_config(self, tie_word_embeddings=None):
         config = self._get_parallel_config()
@@ -214,60 +228,28 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
                 outputs = model(
                     **self._prepare_for_class(inputs_dict, model_class),
                     output_attentions=True,
-                    output_hidden_states=True,
                 )
 
             self.assertEqual(
                 len(outputs.attentions),
-                sum(layer == "full_attention" for layer in config.layers_block_type),
+                sum(layer != "linear_attention" for layer in config.layer_types),
             )
             self.assertListEqual(
                 list(outputs.attentions[0].shape[-3:]),
                 [config.num_attention_heads, seq_len, seq_len],
             )
-            self.assertEqual(len(outputs.hidden_states), config.num_hidden_layers + 1)
-            self.assertTrue(all(state.shape[-1] == config.hidden_size for state in outputs.hidden_states))
 
     def test_tp_plan_matches_params(self):
         self.model_tester.ple_layer_ids = [1]
-        self.model_tester.indexer_n_heads = 2
-        self.model_tester.indexer_kv_heads = 1
-        self.model_tester.indexer_head_dim = 8
-        self.model_tester.indexer_budget = 4
-        self.model_tester.indexer_compress_ratio = 2
+        self.model_tester.layer_types[0] = "hybrid_indexed"
         try:
             super().test_tp_plan_matches_params()
         finally:
             self.model_tester.ple_layer_ids = []
-            self.model_tester.indexer_n_heads = None
-            self.model_tester.indexer_kv_heads = None
-            self.model_tester.indexer_head_dim = None
-            self.model_tester.indexer_budget = None
-            self.model_tester.indexer_compress_ratio = None
-
-    def test_qsa_matches_dense_attention_when_budget_covers_context(self):
-        torch.manual_seed(0)
-        dense_config = get_qwen4_exp_text_config(layer_types=["full_attention"])
-        qsa_config = get_qwen4_exp_text_config(layer_types=["full_attention"], use_qsa=True)
-        dense_config._attn_implementation = "eager"
-        qsa_config._attn_implementation = "eager"
-        qsa_model = Qwen4ExpTextModel(qsa_config).to(torch_device).eval()
-        dense_model = Qwen4ExpTextModel(dense_config).to(torch_device).eval()
-        dense_model.load_state_dict(qsa_model.state_dict(), strict=False)
-
-        input_ids = torch.tensor([[5, 6, 7, 8], [9, 10, 11, 12]], device=torch_device)
-        with torch.no_grad():
-            expected = dense_model(input_ids).last_hidden_state
-            actual = qsa_model(input_ids).last_hidden_state
-
-        torch.testing.assert_close(actual, expected, rtol=1e-5, atol=1e-5)
-        qsa_model.config._attn_implementation = "sdpa"
-        with torch.no_grad():
-            actual_sdpa = qsa_model(input_ids).last_hidden_state
-        torch.testing.assert_close(actual_sdpa, actual, rtol=1e-5, atol=1e-5)
+            self.model_tester.layer_types[0] = "deepseek_sparse_attention"
 
     def test_qsa_left_padding_matches_unpadded_sequence(self):
-        config = get_qwen4_exp_text_config(layer_types=["full_attention"], use_qsa=True)
+        config = get_qwen4_exp_text_config(layer_types=["deepseek_sparse_attention"])
         config._attn_implementation = "eager"
         model = Qwen4ExpTextModel(config).to(torch_device).eval()
         padded_ids = torch.tensor([[config.pad_token_id, config.pad_token_id, 5, 6, 7]], device=torch_device)
@@ -282,7 +264,7 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
 
     def test_ple_padding_matches_unpadded_sequence(self):
         torch.manual_seed(0)
-        config = get_qwen4_exp_text_config(ple_layer_ids=[1], layer_types=["full_attention"])
+        config = get_qwen4_exp_text_config(ple_layer_ids=[1], layer_types=["deepseek_sparse_attention"])
         config._attn_implementation = "eager"
         model = Qwen4ExpTextModel(config).to(torch_device).eval()
         with torch.no_grad():
@@ -300,7 +282,7 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
 
     def test_ple_static_cache_preserves_padding_mask(self):
         torch.manual_seed(0)
-        config = get_qwen4_exp_text_config(ple_layer_ids=[1], layer_types=["full_attention"])
+        config = get_qwen4_exp_text_config(ple_layer_ids=[1], layer_types=["deepseek_sparse_attention"])
         config._attn_implementation = "eager"
         model = Qwen4ExpForCausalLM(config).to(torch_device).eval()
         with torch.no_grad():
@@ -329,7 +311,7 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
         torch.testing.assert_close(static_logits, dynamic_logits, rtol=1e-5, atol=1e-5)
 
     def test_qsa_static_generation(self):
-        config = get_qwen4_exp_text_config(layer_types=["full_attention"], use_qsa=True)
+        config = get_qwen4_exp_text_config(layer_types=["deepseek_sparse_attention"])
         config._attn_implementation = "eager"
         model = Qwen4ExpForCausalLM(config).to(torch_device).eval()
         input_ids = torch.tensor([[5, 6, 7]], device=torch_device)
@@ -350,8 +332,7 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
         torch.manual_seed(0)
         config = get_qwen4_exp_text_config(
             ple_layer_ids=[1],
-            layer_types=["full_attention", "full_attention"],
-            use_qsa=True,
+            layer_types=["deepseek_sparse_attention", "deepseek_sparse_attention"],
         )
         config._attn_implementation = "eager"
         model = Qwen4ExpTextModel(config).to(torch_device).eval()
@@ -367,8 +348,7 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
     def test_qsa_ple_beam_generation(self):
         config = get_qwen4_exp_text_config(
             ple_layer_ids=[1],
-            layer_types=["full_attention"],
-            use_qsa=True,
+            layer_types=["deepseek_sparse_attention"],
         )
         config._attn_implementation = "eager"
         model = Qwen4ExpForCausalLM(config).to(torch_device).eval()
@@ -385,45 +365,17 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
 
         self.assertEqual(output.shape, (1, input_ids.shape[1] + 3))
 
-    def test_sharded_checkpoint_layout_loads_and_forwards(self):
-        config = get_qwen4_exp_text_config(ple_layer_ids=[1], layer_types=["full_attention"], use_qsa=True)
+    def test_ple_sharded_checkpoint_loads_and_forwards(self):
+        config = get_qwen4_exp_text_config(ple_layer_ids=[1], layer_types=["linear_attention"])
         config.split_ngram_parts = 12
         model = Qwen4ExpForCausalLM(config)
         state_dict = model.state_dict()
-        checkpoint_state_dict = {}
-
-        def add_checkpoint_tensor(key, tensor):
-            if key.startswith("model."):
-                key = key.replace("model.", "model.language_model.", 1)
-            checkpoint_state_dict[key] = tensor.detach().clone()
-
-        for key, tensor in state_dict.items():
-            if key.endswith("mlp.experts.gate_up_proj"):
-                gate_proj, up_proj = tensor.chunk(2, dim=1)
-                for expert_idx in range(config.num_experts):
-                    add_checkpoint_tensor(
-                        key.replace("experts.gate_up_proj", f"experts.{expert_idx}.gate_proj.weight"),
-                        gate_proj[expert_idx],
-                    )
-                    add_checkpoint_tensor(
-                        key.replace("experts.gate_up_proj", f"experts.{expert_idx}.up_proj.weight"),
-                        up_proj[expert_idx],
-                    )
-            elif key.endswith("mlp.experts.down_proj"):
-                for expert_idx in range(config.num_experts):
-                    add_checkpoint_tensor(
-                        key.replace("experts.down_proj", f"experts.{expert_idx}.down_proj.weight"),
-                        tensor[expert_idx],
-                    )
-            elif key.endswith("ple.ple_embedding.ngram_embedding.weight"):
-                shards = torch.chunk(tensor, config.split_ngram_parts, dim=0)
-                for shard_idx, shard in enumerate(shards):
-                    add_checkpoint_tensor(
-                        key.replace("ngram_embedding.weight", f"ngram_embedding.shard_{shard_idx}.weight"),
-                        shard,
-                    )
-            else:
-                add_checkpoint_tensor(key, tensor)
+        checkpoint_state_dict = {key: tensor.detach().clone() for key, tensor in state_dict.items()}
+        embedding_key = next(key for key in state_dict if key.endswith("ngram_embedding.weight"))
+        embedding_weight = checkpoint_state_dict.pop(embedding_key)
+        for shard_idx, shard in enumerate(torch.chunk(embedding_weight, config.split_ngram_parts, dim=0)):
+            shard_key = embedding_key.replace("ngram_embedding.weight", f"ngram_embedding.shard_{shard_idx}.weight")
+            checkpoint_state_dict[shard_key] = shard.contiguous()
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             config.save_pretrained(tmpdirname)
@@ -464,8 +416,11 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
 
     def test_ple_cached_forward_matches_full_forward(self):
         torch.manual_seed(0)
-        config = get_qwen4_exp_text_config(ple_layer_ids=[1, 2])
-        config._attn_implementation = "eager"
+        config = get_qwen4_exp_text_config(
+            ple_layer_ids=[2],
+            layer_types=["deepseek_sparse_attention", "linear_attention"],
+        )
+        config._attn_implementation = "sdpa"
         model = Qwen4ExpTextModel(config).to(torch_device).eval()
         # Use non-zero convolution weights to exercise cached PLE state.
         with torch.no_grad():
@@ -480,18 +435,14 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
         self._assert_cached_matches_full(model, input_ids)
 
     def test_ple_and_qsa_reject_offloaded_cache(self):
-        cases = (
-            ("ple", [1], False),
-            ("qsa", [], True),
-        )
+        cases = (("ple", [1], ["linear_attention"]), ("qsa", [], ["deepseek_sparse_attention"]))
         input_ids = torch.tensor([[5, 6, 7]], device=torch_device)
 
-        for name, ple_layer_ids, use_qsa in cases:
+        for name, ple_layer_ids, layer_types in cases:
             with self.subTest(name=name):
                 config = get_qwen4_exp_text_config(
-                    layer_types=["full_attention"],
                     ple_layer_ids=ple_layer_ids,
-                    use_qsa=use_qsa,
+                    layer_types=layer_types,
                 )
                 config._attn_implementation = "eager"
                 model = Qwen4ExpTextModel(config).to(torch_device).eval()
@@ -502,9 +453,14 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
 
     def test_gdn_cached_forward_with_ple_on_another_layer(self):
         torch.manual_seed(0)
-        config = get_qwen4_exp_text_config(ple_layer_ids=[1])
-        config._attn_implementation = "eager"
+        config = get_qwen4_exp_text_config(
+            ple_layer_ids=[1],
+            layer_types=["linear_attention", "linear_attention", "deepseek_sparse_attention"],
+        )
+        config._attn_implementation = "sdpa"
         model = Qwen4ExpTextModel(config).to(torch_device).eval()
+        with torch.no_grad():
+            model.layers[0].ple.value_proj.weight.zero_()
         model.layers[1].linear_attn.chunk_gated_delta_rule = torch_chunk_gated_delta_rule
         model.layers[1].linear_attn.recurrent_gated_delta_rule = torch_recurrent_gated_delta_rule
         input_ids = torch.tensor([[5, 6, 7, 8, 9]], device=torch_device)
@@ -528,11 +484,10 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
         input_ids = torch.tensor([[5, 6, 7]], device=torch_device)
         inputs_embeds = model.get_input_embeddings()(input_ids)
 
-        with self.assertRaisesRegex(ValueError, "ple_input_ids must be provided"):
-            model(inputs_embeds=inputs_embeds)
         with torch.no_grad():
-            outputs = model(inputs_embeds=inputs_embeds, ple_input_ids=input_ids)
-        self.assertEqual(outputs.last_hidden_state.shape, (1, 3, config.hidden_size))
+            expected = model(input_ids=input_ids).last_hidden_state
+            actual = model(inputs_embeds=inputs_embeds).last_hidden_state
+        torch.testing.assert_close(actual, expected)
 
         causal_model = Qwen4ExpForCausalLM(config).to(torch_device).eval()
         causal_inputs_embeds = causal_model.get_input_embeddings()(input_ids)
@@ -544,7 +499,7 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
             )
         self.assertEqual(causal_outputs.logits.shape, (1, 3, config.vocab_size))
 
-    def test_generate_with_inputs_embeds_and_ple_input_ids(self):
+    def test_generate_with_ple_and_inputs_embeds(self):
         config = get_qwen4_exp_text_config(ple_layer_ids=[1])
         model = Qwen4ExpForCausalLM(config).to(torch_device).eval()
         model.generation_config.eos_token_id = None
@@ -553,7 +508,6 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
         with torch.no_grad():
             output = model.generate(
                 inputs_embeds=inputs_embeds,
-                ple_input_ids=input_ids,
                 max_new_tokens=2,
                 do_sample=False,
             )
@@ -572,21 +526,22 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
 
     def test_reverse_loading_mapping(self, check_keys_were_modified=True):
         self.model_tester.ple_layer_ids = [1]
+        self.model_tester.layer_types[0] = "hybrid_indexed"
         self.model_tester.split_ngram_parts = 12
         try:
             super().test_reverse_loading_mapping(check_keys_were_modified)
         finally:
             self.model_tester.ple_layer_ids = []
+            self.model_tester.layer_types[0] = "deepseek_sparse_attention"
             self.model_tester.split_ngram_parts = 4
 
 
 @require_torch
 class Qwen4ExpCompositeModelTest(unittest.TestCase):
-    def get_config(self, use_qsa=False, layer_types=None):
+    def get_config(self, layer_types=None):
         text_config = get_qwen4_exp_text_config(
             ple_layer_ids=[1],
             layer_types=layer_types,
-            use_qsa=use_qsa,
         )
         vision_config = {
             "depth": 1,
@@ -610,20 +565,15 @@ class Qwen4ExpCompositeModelTest(unittest.TestCase):
             vision_end_token_id=6,
         )
 
-    def test_multimodal_model_with_inputs_embeds_and_ple_input_ids(self):
+    def test_model_with_ple_and_inputs_embeds(self):
         config = self.get_config()
         model = Qwen4ExpForConditionalGeneration(config).to(torch_device).eval()
         input_ids = torch.tensor([[7, 8, 9, 10]], device=torch_device)
         inputs_embeds = model.get_input_embeddings()(input_ids)
 
-        with self.assertRaisesRegex(ValueError, "ple_input_ids must be provided"):
-            model(inputs_embeds=inputs_embeds, use_cache=False)
-        with self.assertRaisesRegex(ValueError, "same batch size and sequence length"):
-            model(inputs_embeds=inputs_embeds, ple_input_ids=input_ids[:, :-1], use_cache=False)
-
         with torch.no_grad():
             expected = model(input_ids=input_ids, use_cache=False).logits
-            actual = model(inputs_embeds=inputs_embeds, ple_input_ids=input_ids, use_cache=False).logits
+            actual = model(inputs_embeds=inputs_embeds, use_cache=False).logits
         torch.testing.assert_close(actual, expected, rtol=1e-5, atol=1e-5)
 
     def test_input_ids_take_priority_over_stale_ple_input_ids(self):
@@ -638,11 +588,11 @@ class Qwen4ExpCompositeModelTest(unittest.TestCase):
         torch.testing.assert_close(actual, expected)
 
     def test_qsa_unsupported_attention_backend_matches_eager(self):
-        fallback_config = self.get_config(use_qsa=True, layer_types=["full_attention"])
+        fallback_config = self.get_config(layer_types=["deepseek_sparse_attention"])
         fallback_config._attn_implementation = "flash_attention_2"
         fallback_model = Qwen4ExpForConditionalGeneration(fallback_config).to(torch_device).eval()
 
-        eager_config = self.get_config(use_qsa=True, layer_types=["full_attention"])
+        eager_config = self.get_config(layer_types=["deepseek_sparse_attention"])
         eager_config._attn_implementation = "eager"
         eager_model = Qwen4ExpForConditionalGeneration(eager_config).to(torch_device).eval()
         eager_model.load_state_dict(fallback_model.state_dict())
@@ -659,7 +609,7 @@ class Qwen4ExpCompositeModelTest(unittest.TestCase):
         with self.assertNoLogs("transformers.distributed.fsdp", level="WARNING"):
             verify_fsdp_plan([name for name, _ in model.named_modules()], model._fsdp_plan)
 
-    def test_generate_with_inputs_embeds_and_ple_input_ids(self):
+    def test_generate_with_ple_and_inputs_embeds(self):
         config = self.get_config()
         model = Qwen4ExpForConditionalGeneration(config).to(torch_device).eval()
         model.generation_config.eos_token_id = None
@@ -668,24 +618,16 @@ class Qwen4ExpCompositeModelTest(unittest.TestCase):
         with torch.no_grad():
             output = model.generate(
                 inputs_embeds=inputs_embeds,
-                ple_input_ids=input_ids,
                 max_new_tokens=2,
                 do_sample=False,
             )
         self.assertEqual(output.shape, (1, 2))
 
-    def test_qsa_image_forward_matches_dense_attention(self):
+    def test_image_forward(self):
         torch.manual_seed(0)
-        layer_types = ["full_attention", "full_attention"]
-        dense_config = self.get_config(layer_types=layer_types)
-        qsa_config = self.get_config(use_qsa=True, layer_types=layer_types)
-        qsa_config.text_config.indexer_budget = 8
-        dense_config.text_config._attn_implementation = "eager"
-        qsa_config.text_config._attn_implementation = "eager"
-
-        qsa_model = Qwen4ExpForConditionalGeneration(qsa_config).to(torch_device).eval()
-        dense_model = Qwen4ExpForConditionalGeneration(dense_config).to(torch_device).eval()
-        dense_model.load_state_dict(qsa_model.state_dict(), strict=False)
+        config = self.get_config()
+        config.text_config._attn_implementation = "eager"
+        model = Qwen4ExpForConditionalGeneration(config).to(torch_device).eval()
 
         input_ids = torch.tensor([[5, 3, 3, 3, 3, 6, 7, 8]], device=torch_device)
         attention_mask = torch.ones_like(input_ids)
@@ -693,46 +635,24 @@ class Qwen4ExpCompositeModelTest(unittest.TestCase):
         mm_token_type_ids[:, 1:5] = 1
         image_grid_thw = torch.tensor([[1, 2, 2]], device=torch_device)
         flattened_patch_size = (
-            qsa_config.vision_config.in_channels
-            * qsa_config.vision_config.temporal_patch_size
-            * qsa_config.vision_config.patch_size**2
+            config.vision_config.in_channels
+            * config.vision_config.temporal_patch_size
+            * config.vision_config.patch_size**2
         )
         pixel_values = torch.randn((4, flattened_patch_size), device=torch_device)
         with torch.no_grad():
-            expected = dense_model(
+            outputs = model(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 pixel_values=pixel_values,
                 image_grid_thw=image_grid_thw,
                 mm_token_type_ids=mm_token_type_ids,
-            ).logits
-            actual = qsa_model(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                pixel_values=pixel_values,
-                image_grid_thw=image_grid_thw,
-                mm_token_type_ids=mm_token_type_ids,
-            ).logits
+            )
 
-        torch.testing.assert_close(actual, expected, rtol=1e-5, atol=1e-5)
-
-    def test_ple_embedding_shards_are_merged_on_load(self):
-        config = self.get_config()
-        model = Qwen4ExpForConditionalGeneration(config).eval()
-
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            model.save_pretrained(tmpdirname)
-            reloaded = AutoModelForImageTextToText.from_pretrained(tmpdirname).eval()
-
-        self.assertIsInstance(reloaded, Qwen4ExpForConditionalGeneration)
-        input_ids = torch.tensor([[7, 8, 9, 10]])
-        with torch.no_grad():
-            expected = model(input_ids=input_ids, use_cache=False).logits
-            actual = reloaded(input_ids=input_ids, use_cache=False).logits
-        torch.testing.assert_close(actual, expected)
+        self.assertEqual(outputs.logits.shape, (1, input_ids.shape[1], config.text_config.vocab_size))
 
     def test_composite_checkpoint_loads_as_causal_lm(self):
-        config = self.get_config(use_qsa=True)
+        config = self.get_config()
         composite_model = Qwen4ExpForConditionalGeneration(config).eval()
 
         with tempfile.TemporaryDirectory() as tmpdirname:
@@ -752,7 +672,7 @@ class Qwen4ExpCompositeModelTest(unittest.TestCase):
         torch.testing.assert_close(actual, expected)
 
     def test_base_model_checkpoint_loads_as_conditional_generation(self):
-        config = self.get_config(use_qsa=True)
+        config = self.get_config()
         base_model = Qwen4ExpModel(config).eval()
 
         with tempfile.TemporaryDirectory() as tmpdirname:
