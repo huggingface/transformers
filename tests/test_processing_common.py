@@ -911,11 +911,11 @@ class ProcessorTesterMixin:
             return "feature_extractor"
         return None
 
-    def _skip_unless_modality_and_tokenizer_present_present(
+    def _skip_unless_modality_and_tokenizer_present(
         self, modality: str, attributes: list, require_tokenizer: bool = True
     ):
         attributes = self.processor_class.get_attributes()
-        component_key = self.get_subprocessor_name(modality, attributes)
+        component_key = self._get_subprocessor_name(modality, attributes)
         if component_key not in attributes:
             self.skipTest(f"{component_key} attribute not present in {self.processor_class}")
         if require_tokenizer and "tokenizer" not in attributes:

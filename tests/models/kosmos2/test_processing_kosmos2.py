@@ -383,12 +383,13 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     # Rewrite as Kosmos-2 supports custom padding only when image is None.
     def test_unstructured_kwargs_batched_0_image(self, modality="image"):
-        self._skip_unless_modality_and_tokenizer(modality)
+        attributes = self.processor_class.get_attributes()
+        self._skip_unless_modality_and_tokenizer_present(modality, attributes)
         processor = self.get_processor()
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = self.prepare_text_inputs(batch_size=2, modalities=modality)
-        modal_input = self._prepare_modal_input(modality, batch_size=2)
+        modal_input = self._prepare_modality_input(modality, batch_size=2)
         max_length = getattr(self, f"{modality}_unstructured_max_length")
         init_time_kwargs = MODALITY_CONFIG[modality]["init_time_kwargs"]
         inputs = self._call_processor(
