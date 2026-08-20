@@ -230,6 +230,13 @@ class Qwen4ExpTextConfig(PreTrainedConfig):
                 raise ValueError("Qwen4-Exp QSA requires indexer_kv_heads=1.")
             if self.indexer_budget % self.indexer_compress_ratio != 0:
                 raise ValueError("indexer_budget must be divisible by indexer_compress_ratio.")
+            partial_rotary_factor = (self.rope_parameters or {}).get("partial_rotary_factor", 1.0)
+            rotary_dim = int(self.head_dim * partial_rotary_factor)
+            if rotary_dim > self.indexer_head_dim:
+                raise ValueError(
+                    f"Qwen4-Exp attention RoPE dimensions must fit the QSA index head: rotary_dim={rotary_dim}, "
+                    f"indexer_head_dim={self.indexer_head_dim}."
+                )
 
         if self.ple_layer_ids:
             ngram_heads = (self.ngram_size - 1) * self.heads_per_ngram
@@ -248,14 +255,6 @@ class Qwen4ExpTextConfig(PreTrainedConfig):
                 )
             if self.eos_token_id is None or isinstance(self.eos_token_id, list) and not self.eos_token_id:
                 raise ValueError("eos_token_id must be set when Qwen4-Exp PLE layers are enabled.")
-
-        partial_rotary_factor = (self.rope_parameters or {}).get("partial_rotary_factor", 1.0)
-        rotary_dim = int(self.head_dim * partial_rotary_factor)
-        if rotary_dim > self.indexer_head_dim:
-            raise ValueError(
-                f"Qwen4-Exp attention RoPE dimensions must fit the QSA index head: rotary_dim={rotary_dim}, "
-                f"indexer_head_dim={self.indexer_head_dim}."
-            )
 
 
 @auto_docstring(checkpoint="Qwen/Qwen4-Exp")
