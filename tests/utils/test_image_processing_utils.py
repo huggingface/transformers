@@ -24,6 +24,7 @@ from transformers import AutoImageProcessor, ViTImageProcessor, ViTImageProcesso
 from transformers.image_processing_utils import get_size_dict
 from transformers.image_utils import SizeDict
 from transformers.testing_utils import TOKEN, TemporaryHubRepo, get_tests_dir, is_staging_test
+from transformers.utils.type_validators import image_size_validator
 
 
 sys.path.append(str(Path(__file__).parent.parent.parent / "utils"))
@@ -173,6 +174,12 @@ class ImageProcessorPushToHubTester(unittest.TestCase):
 
 
 class ImageProcessingUtilsTester(unittest.TestCase):
+    def test_image_size_validator(self):
+        image_size_validator({"min_pixels": 256, "max_pixels": 1024})
+
+        with self.assertRaises(ValueError):
+            image_size_validator({"min_pixels": 256, "unknown": 1024})
+
     def test_get_size_dict(self):
         # Test a dict with the wrong keys raises an error
         inputs = {"wrong_key": 224}

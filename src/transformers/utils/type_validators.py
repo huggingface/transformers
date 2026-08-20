@@ -52,7 +52,16 @@ def truncation_validator(value: bool | str | TruncationStrategy | None = None):
 
 
 def image_size_validator(value: int | Sequence[int] | dict[str, int] | None = None):
-    possible_keys = ["height", "width", "longest_edge", "shortest_edge", "max_height", "max_width"]
+    possible_keys = [
+        "height",
+        "width",
+        "longest_edge",
+        "shortest_edge",
+        "max_height",
+        "max_width",
+        "min_pixels",
+        "max_pixels",
+    ]
     if value is None:
         pass
     elif isinstance(value, dict) and any(k not in possible_keys for k in value.keys()):
