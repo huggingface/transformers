@@ -14,16 +14,14 @@
 """Testing suite for the PyTorch NeoMME model."""
 
 import unittest
-from typing import ClassVar
 from unittest.mock import patch
 
 import pytest
-from datasets import load_dataset
 from huggingface_hub.errors import StrictDataclassClassValidationError, StrictDataclassFieldValidationError
 
 from transformers import NeoMMEConfig, is_torch_available
 from transformers.modeling_outputs import BaseModelOutput
-from transformers.testing_utils import cleanup, require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import require_torch, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
@@ -33,12 +31,9 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        AutoModelForMaskedLM,
-        AutoProcessor,
         NeoMMEForMaskedLM,
         NeoMMEForRetrieval,
         NeoMMEModel,
-        NeoMMEProcessor,
     )
     from transformers import initialization as init
     from transformers.models.neomme.modeling_neomme import (
@@ -48,28 +43,6 @@ if is_torch_available():
         NeoMMEPreTrainedModel,
         apply_rotary_pos_emb,
     )
-
-
-def _apply_text(processor, text, task):
-    messages = [[{"role": "user", "content": value}] for value in text]
-    return processor.apply_chat_template(messages, task=task, tokenize=True, return_dict=True)
-
-
-def _apply_images(processor, images):
-    messages = [[{"role": "user", "content": [{"type": "image", "image": image}]}] for image in images]
-    return processor.apply_chat_template(messages, task="document", tokenize=True, return_dict=True)
-
-
-def _score_retrieval(queries, documents):
-    if queries.ndim == 2:
-        return queries @ documents.T
-
-    query_mask = queries.abs().sum(-1) > 0
-    document_mask = documents.abs().sum(-1) > 0
-    similarities = torch.einsum("qid,pjd->qpij", queries, documents)
-    similarities.masked_fill_(~document_mask[None, :, None, :], torch.finfo(similarities.dtype).min)
-    scores = similarities.max(dim=-1).values.sum(dim=-1)
-    return scores / query_mask.sum(-1, keepdim=True).clamp_min(1)
 
 
 def _patch_residual_init(test_case: unittest.TestCase) -> None:
@@ -727,170 +700,3 @@ class NeoMMEForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
         expanded_mask = input_mask.unsqueeze(-1).expand(hidden_states.shape).to(hidden_states.dtype)
         expected = (hidden_states * expanded_mask).sum(1) / expanded_mask.sum(1).clamp_min(1e-9)
         torch.testing.assert_close(actual, torch.nn.functional.normalize(expected, dim=-1))
-
-
-@unittest.skip("NeoMME checkpoints are not public yet.")
-@slow
-@require_torch
-@require_vision
-class NeoMMEModelIntegrationTest(unittest.TestCase):
-    model_name: ClassVar[str] = "Hcompany/NeoMME-260M-Retriever"
-    model_dtype: ClassVar["torch.dtype"] = torch.float32 if is_torch_available() else None
-
-    TEXT_QUERIES: ClassVar[list[str]] = [
-        "How many people live in the capital of France?",
-        "When was the United States Declaration of Independence proclaimed?",
-    ]
-    TEXT_DOCUMENTS: ClassVar[list[str]] = [
-        "Paris is the capital of France and has a population of about 2.1 million people.",
-        "The United States Declaration of Independence was proclaimed in 1776.",
-    ]
-
-    @classmethod
-    def setUpClass(cls):
-        cls.processor = NeoMMEProcessor.from_pretrained(cls.model_name)
-        cls.model, cls.loading_info = NeoMMEForRetrieval.from_pretrained(
-            cls.model_name, dtype=cls.model_dtype, output_loading_info=True
-        )
-        cls.model = cls.model.to(torch_device).eval()
-        cls.dataset = load_dataset("hf-internal-testing/document-visual-retrieval-test", split="test")
-
-    @classmethod
-    def tearDownClass(cls):
-        del cls.model
-        del cls.processor
-        cleanup(torch_device, gc_collect=True)
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
-
-    def test_checkpoint_loads_cleanly(self):
-        self.assertFalse(self.loading_info["missing_keys"])
-        self.assertFalse(self.loading_info["unexpected_keys"])
-        self.assertFalse(self.loading_info["mismatched_keys"])
-        self.assertFalse(self.loading_info["error_msgs"])
-
-    def test_multivector_image_retrieval(self):
-        """Each query ranks its paired image first with MaxSim."""
-        queries, images = self._embed_image_pair(head="multivector")
-        self._assert_diagonal_retrieval(_score_retrieval(queries, images))
-
-    def test_dense_image_retrieval(self):
-        """Each query ranks its paired image first with dense cosine similarity."""
-        queries, images = self._embed_image_pair(head="dense")
-
-        self.assertEqual(images.shape, (len(self.dataset), self.model.config.hidden_size))
-        torch.testing.assert_close(images.norm(dim=-1), torch.ones_like(images[:, 0]), rtol=1e-3, atol=1e-3)
-        self._assert_diagonal_retrieval(_score_retrieval(queries, images))
-
-    def test_multivector_text_retrieval(self):
-        """Each query ranks its paired text first with MaxSim."""
-        queries, documents = self._embed_text_pair(head="multivector")
-        self._assert_diagonal_retrieval(_score_retrieval(queries, documents))
-
-    def test_dense_text_retrieval(self):
-        """Each query ranks its paired text first with dense cosine similarity."""
-        queries, documents = self._embed_text_pair(head="dense")
-
-        torch.testing.assert_close(documents.norm(dim=-1), torch.ones_like(documents[:, 0]), rtol=1e-3, atol=1e-3)
-        self._assert_diagonal_retrieval(_score_retrieval(queries, documents))
-
-    def _embed(self, batch, head: str) -> "torch.Tensor":
-        """Compute only the requested retrieval head."""
-        only_this_head = {"output_multivector": False} if head == "dense" else {"output_dense": False}
-        with torch.inference_mode():
-            outputs = self.model(**batch.to(torch_device), **only_this_head)
-        return outputs.dense_embeddings if head == "dense" else outputs.embeddings
-
-    def _embed_image_pair(self, head: str) -> tuple["torch.Tensor", "torch.Tensor"]:
-        queries = _apply_text(self.processor, self.dataset["query"][:], task="query")
-        images = _apply_images(self.processor, self.dataset["image"][:])
-        return self._embed(queries, head), self._embed(images, head)
-
-    def _embed_text_pair(self, head: str) -> tuple["torch.Tensor", "torch.Tensor"]:
-        queries = _apply_text(self.processor, self.TEXT_QUERIES, task="query")
-        documents = _apply_text(self.processor, self.TEXT_DOCUMENTS, task="document")
-        return self._embed(queries, head), self._embed(documents, head)
-
-    def _assert_diagonal_retrieval(self, scores: "torch.Tensor") -> None:
-        self.assertEqual(scores.shape[0], scores.shape[1])
-        self.assertTrue((scores.argmax(dim=1) == torch.arange(len(scores), device=scores.device)).all())
-        self.assertTrue(((scores >= -1.0) & (scores <= 1.0)).all())
-
-
-@unittest.skip("NeoMME checkpoints are not public yet.")
-@slow
-@require_torch
-@require_vision
-class NeoMMEBaseModelIntegrationTest(unittest.TestCase):
-    model_name: ClassVar[str] = "Hcompany/NeoMME-260M"
-    model_dtype: ClassVar["torch.dtype"] = torch.float32 if is_torch_available() else None
-
-    @classmethod
-    def setUpClass(cls):
-        cls.processor = NeoMMEProcessor.from_pretrained(cls.model_name)
-        cls.model, cls.loading_info = NeoMMEModel.from_pretrained(
-            cls.model_name, dtype=cls.model_dtype, output_loading_info=True
-        )
-        cls.model = cls.model.to(torch_device).eval()
-        cls.dataset = load_dataset("hf-internal-testing/document-visual-retrieval-test", split="test")
-
-    @classmethod
-    def tearDownClass(cls):
-        del cls.model
-        del cls.processor
-        cleanup(torch_device, gc_collect=True)
-
-    def test_checkpoint_loads_cleanly(self):
-        self.assertFalse(self.loading_info["missing_keys"])
-        self.assertFalse(self.loading_info["unexpected_keys"])
-        self.assertFalse(self.loading_info["mismatched_keys"])
-        self.assertFalse(self.loading_info["error_msgs"])
-
-    def test_text_and_image_forward(self):
-        inputs = [
-            _apply_text(
-                self.processor,
-                ["When was the Declaration of Independence proclaimed?"],
-                task="query",
-            ),
-            _apply_images(self.processor, [self.dataset[0]["image"]]),
-        ]
-
-        for batch in inputs:
-            with self.subTest(batch=batch.keys()), torch.inference_mode():
-                outputs = self.model(**batch.to(torch_device))
-
-            self.assertEqual(outputs.last_hidden_state.shape[:2], batch.input_ids.shape)
-            self.assertTrue(torch.isfinite(outputs.last_hidden_state).all())
-
-
-@unittest.skip("NeoMME checkpoints are not public yet.")
-@slow
-@require_torch
-class NeoMMEMaskedLMIntegrationTest(unittest.TestCase):
-    model_name: ClassVar[str] = "Hcompany/NeoMME-260M"
-    model_dtype: ClassVar["torch.dtype"] = torch.float32 if is_torch_available() else None
-
-    @classmethod
-    def setUpClass(cls):
-        cls.processor = AutoProcessor.from_pretrained(cls.model_name)
-        cls.model = AutoModelForMaskedLM.from_pretrained(cls.model_name, dtype=cls.model_dtype)
-        cls.model = cls.model.to(torch_device).eval()
-
-    @classmethod
-    def tearDownClass(cls):
-        del cls.model
-        del cls.processor
-        cleanup(torch_device, gc_collect=True)
-
-    def test_fill_mask(self):
-        text = f"The capital of {self.processor.tokenizer.mask_token} is London."
-        inputs = _apply_text(self.processor, [text], task="document").to(torch_device)
-
-        with torch.inference_mode():
-            outputs = self.model(**inputs)
-
-        masked_index = (inputs.input_ids[0] == self.processor.tokenizer.mask_token_id).nonzero().item()
-        predicted_token_id = outputs.logits[0, masked_index].argmax(dim=-1)
-        self.assertEqual(self.processor.tokenizer.decode(predicted_token_id).strip(), "UK")
