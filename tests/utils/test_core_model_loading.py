@@ -1197,7 +1197,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             )
         ]
         load_config = LoadStateDictConfig(weight_mapping=weight_mapping)
-        loading_info, _ = convert_and_load_state_dict_in_model(model, state_dict_fused, load_config, tp_plan=None)
+        loading_info, _ = convert_and_load_state_dict_in_model(model, state_dict_fused, load_config)
 
         self.assertEqual(loading_info.missing_keys, set())
         self.assertEqual(loading_info.unexpected_keys, set())
@@ -1229,9 +1229,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             )
         ]
         load_config = LoadStateDictConfig(weight_mapping=weight_mapping)
-        loading_info, _ = convert_and_load_state_dict_in_model(
-            model_fused, state_dict_unfused, load_config, tp_plan=None
-        )
+        loading_info, _ = convert_and_load_state_dict_in_model(model_fused, state_dict_unfused, load_config)
 
         self.assertEqual(loading_info.missing_keys, set())
         self.assertEqual(loading_info.unexpected_keys, set())
