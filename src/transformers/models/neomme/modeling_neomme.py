@@ -35,7 +35,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import can_return_tuple, maybe_autocast, merge_with_config_defaults
+from ...utils.generic import can_return_tuple, maybe_autocast
 from ...utils.output_capturing import capture_outputs
 from .configuration_neomme import NeoMMEConfig
 
@@ -126,18 +126,33 @@ class NeoMMERotaryEmbedding(nn.Module):
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
     @staticmethod
+    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
-        config: NeoMMEConfig,
-        device: torch.device | None = None,
-        seq_len: int | None = None,
-        layer_type: str | None = None,
+        config: NeoMMEConfig, device=None, layer_type: str | None = None, **kwargs
     ) -> tuple[torch.Tensor, float]:
-        """Default inverse frequencies for a layer type."""
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+            layer_type (`str`, *optional*):
+                The current layer type if the model has different RoPE parameters per type.
+                Should not be used unless `config.layer_types is not None`
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters[layer_type]["rope_theta"]
+        # key difference to gemma3: partial rope
         partial_rotary_factor = config.rope_parameters[layer_type].get("partial_rotary_factor", 1.0)
-        rotary_dim = int(config.head_dim * partial_rotary_factor)
-        theta = config.rope_parameters[layer_type]["rope_theta"]
-        inv_freq = theta ** -(torch.arange(0, rotary_dim, 2, dtype=torch.float, device=device) / rotary_dim)
-        return inv_freq, 1.0
+        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        dim = int(head_dim * partial_rotary_factor)
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        return inv_freq.to(device), attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update
@@ -473,7 +488,6 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
         self.gradient_checkpointing = False
         self.post_init()
 
-    @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
     def forward(
@@ -542,7 +556,6 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
         hidden_states = self.final_norm(hidden_states)
         return BaseModelOutput(last_hidden_state=hidden_states)
 
-    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring(custom_intro="Projects flattened image patches into the model hidden space.")
     def get_image_features(
@@ -577,19 +590,20 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
 
         mask_kwargs = {"inputs_embeds": hidden_states, "attention_mask": attention_mask}
         masks: dict[int | None, torch.Tensor | None] = {}
-        windows = [layer_config.sliding_window for layer_config in self.config.per_layer_config]
-        for layer_config, window in zip(self.config.per_layer_config, windows):
-            if window in masks:
-                continue
-            if window is None:
-                masks[window] = create_bidirectional_mask(config=layer_config, **mask_kwargs)
-            else:
-                masks[window] = create_bidirectional_mask(
-                    config=layer_config,
-                    **mask_kwargs,
-                    and_mask_function=sliding_window_bidirectional_overlay(window),
-                )
-        return [masks[window] for window in windows]
+        attention_masks = []
+        for layer_config in self.config.per_layer_config:
+            window = layer_config.sliding_window
+            if window not in masks:
+                if window is None:
+                    masks[window] = create_bidirectional_mask(config=layer_config, **mask_kwargs)
+                else:
+                    masks[window] = create_bidirectional_mask(
+                        config=layer_config,
+                        **mask_kwargs,
+                        and_mask_function=sliding_window_bidirectional_overlay(window),
+                    )
+            attention_masks.append(masks[window])
+        return attention_masks
 
 
 @auto_docstring(

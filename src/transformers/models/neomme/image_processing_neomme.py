@@ -19,6 +19,7 @@
 # limitations under the License.
 
 import math
+from typing import Annotated
 
 import torch
 from torchvision.transforms.v2 import functional as tvF
@@ -30,6 +31,7 @@ from ...image_utils import ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
 from ...utils.constants import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
+from ...utils.type_validators import positive_int
 
 
 class NeoMMEImageProcessorKwargs(ImagesKwargs, total=False):
@@ -43,8 +45,8 @@ class NeoMMEImageProcessorKwargs(ImagesKwargs, total=False):
         Unset means no area-based resize.
     """
 
-    patch_size: int
-    max_side: int | None
+    patch_size: Annotated[int, positive_int()]
+    max_side: Annotated[int | None, positive_int()]
 
 
 def convert_image_to_patches(images: "torch.Tensor", patch_size: int) -> "torch.Tensor":
@@ -61,13 +63,6 @@ def convert_image_to_patches(images: "torch.Tensor", patch_size: int) -> "torch.
     patched_image = patched_image.permute(0, 2, 4, 3, 5, 1)
     patched_image = patched_image.reshape(batch_size, num_patches_height * num_patches_width, -1)
     return patched_image
-
-
-def _validate_image_dimensions(height: int, width: int) -> None:
-    if not isinstance(height, int) or isinstance(height, bool) or height <= 0:
-        raise ValueError(f"height must be a positive integer, got {height!r}.")
-    if not isinstance(width, int) or isinstance(width, bool) or width <= 0:
-        raise ValueError(f"width must be a positive integer, got {width!r}.")
 
 
 def get_resize_output_size(height: int, width: int, max_side: int | None, size: SizeDict | None) -> tuple[int, int]:
@@ -239,9 +234,6 @@ class NeoMMEImageProcessor(TorchvisionBackend):
         patch_size = images_kwargs.get("patch_size", self.patch_size)
         max_side = images_kwargs.get("max_side", self.max_side)
         size = self._standardize_kwargs(size=images_kwargs.get("size", self.size))["size"]
-
-        _validate_image_dimensions(height, width)
-        self._validate_size_settings(patch_size, max_side, size)
 
         if images_kwargs.get("do_resize", self.do_resize):
             height, width = get_resize_output_size(height, width, max_side, size)
