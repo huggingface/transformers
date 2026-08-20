@@ -108,17 +108,9 @@ class NeoMMEConfig(PreTrainedConfig):
 
         self.validate_layer_types()
 
-        per_layer_config = self._default_per_layer_config()
-        for layer_idx, layer_overrides in (kwargs.pop("per_layer_config", None) or {}).items():
-            layer_idx = int(layer_idx)
-            if "sliding_window" in layer_overrides:
-                self._check_sliding_window(
-                    layer_overrides["sliding_window"], f"per_layer_config[{layer_idx}].sliding_window"
-                )
-            per_layer_config.setdefault(layer_idx, {}).update(layer_overrides)
-        kwargs["per_layer_config"] = per_layer_config
-
         super().__post_init__(**kwargs)
+        for layer_idx, layer_config in enumerate(self.per_layer_config):
+            self._check_sliding_window(layer_config.sliding_window, f"per_layer_config[{layer_idx}].sliding_window")
         self.base_model_tp_plan.pop("embed_tokens", None)
         self.base_model_tp_plan["embeddings.word_embeddings"] = "embedding_rowwise"
 
@@ -199,19 +191,6 @@ class NeoMMEConfig(PreTrainedConfig):
     def patch_dim(self) -> int:
         """Width of one flattened image patch, `3 * patch_size ** 2`."""
         return 3 * self.patch_size**2
-
-    def _default_per_layer_config(self) -> dict[int, dict[str, int | None]]:
-        """Build NeoMME's alternating short/long window pattern."""
-        per_layer_config: dict[int, dict[str, int | None]] = {}
-        sliding_idx = 0
-        for layer_idx, layer_type in enumerate(self.layer_types):
-            if layer_type == "full_attention":
-                per_layer_config[layer_idx] = {"sliding_window": None}
-                continue
-            if sliding_idx % 2:
-                per_layer_config[layer_idx] = {"sliding_window": 1024}
-            sliding_idx += 1
-        return per_layer_config
 
     @staticmethod
     def _check_sliding_window(sliding_window: int | None, name: str) -> None:

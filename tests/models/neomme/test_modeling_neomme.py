@@ -313,13 +313,13 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
         """Global and per-layer windows must be positive; `None` selects full attention."""
         base = {"num_hidden_layers": 3, "layer_types": _layer_types(3, 3)}
         default = NeoMMEConfig(**base)
-        self.assertEqual([layer.sliding_window for layer in default.per_layer_config], [256, 1024, None])
+        self.assertEqual([layer.sliding_window for layer in default.per_layer_config], [256, 256, 256])
 
-        uniform = NeoMMEConfig(**base, per_layer_config={1: {"sliding_window": 256}})
-        self.assertEqual([layer.sliding_window for layer in uniform.per_layer_config], [256, 256, None])
+        configured = NeoMMEConfig(**base, per_layer_config={1: {"sliding_window": 1024}, 2: {"sliding_window": None}})
+        self.assertEqual([layer.sliding_window for layer in configured.per_layer_config], [256, 1024, None])
 
         overridden = NeoMMEConfig(**base, per_layer_config={0: {"sliding_window": 128}})
-        self.assertEqual([layer.sliding_window for layer in overridden.per_layer_config], [128, 1024, None])
+        self.assertEqual([layer.sliding_window for layer in overridden.per_layer_config], [128, 256, 256])
 
         for value in (0, -1, 1.5, True):
             with (
@@ -329,7 +329,12 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
                 ),
             ):
                 NeoMMEConfig(**base, sliding_window=value)
-            with self.subTest(value=value, global_value=False), self.assertRaises(ValueError):
+            with (
+                self.subTest(value=value, global_value=False),
+                self.assertRaises(
+                    (ValueError, StrictDataclassClassValidationError, StrictDataclassFieldValidationError)
+                ),
+            ):
                 NeoMMEConfig(**base, per_layer_config={0: {"sliding_window": value}})
 
     def test_rope_parameters_follow_layer_types(self):
@@ -417,6 +422,17 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertEqual(
             [layer.sliding_window for layer in moved_full.per_layer_config],
             [None, self.model_tester.sliding_window, self.model_tester.alternate_sliding_window],
+        )
+
+        homogeneous = self.model_tester.get_config(
+            num_hidden_layers=3,
+            layer_types=_layer_types(3, 3),
+            per_layer_config=None,
+        )
+        model = NeoMMEModel(homogeneous)
+        self.assertEqual(
+            [layer.self_attn.sliding_window for layer in model.layers],
+            [self.model_tester.sliding_window + 1, self.model_tester.sliding_window + 1, None],
         )
 
     def test_bidirectional_attention_windows(self):

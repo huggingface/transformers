@@ -282,7 +282,7 @@ class NeoMMEAttention(nn.Module):
 
         # `sliding_window` is a HALF-width (`abs(i - j) <= window`). The flash-attention path
         # builds an inclusive symmetric band of `sliding_window - 1` per side, hence the `+ 1`.
-        window = config.per_layer_config[layer_idx].sliding_window
+        window = None if self.attention_type == "full_attention" else config.per_layer_config[layer_idx].sliding_window
         self.sliding_window = None if window is None else window + 1
 
         self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * config.head_dim, bias=False)
@@ -591,8 +591,8 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
         mask_kwargs = {"inputs_embeds": hidden_states, "attention_mask": attention_mask}
         masks: dict[int | None, torch.Tensor | None] = {}
         attention_masks = []
-        for layer_config in self.config.per_layer_config:
-            window = layer_config.sliding_window
+        for layer_type, layer_config in zip(self.config.layer_types, self.config.per_layer_config):
+            window = None if layer_type == "full_attention" else layer_config.sliding_window
             if window not in masks:
                 if window is None:
                     masks[window] = create_bidirectional_mask(config=layer_config, **mask_kwargs)
