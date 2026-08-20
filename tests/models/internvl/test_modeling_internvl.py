@@ -382,6 +382,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): 'user\n\nDescribe this image\nassistant\nThe image shows a street scene with a traditional Chinese archway, known as a "Chinese Gate" or "Chinese Gate of',
+                ("cuda", 8): 'user\n\nDescribe this image\nassistant\nThe image shows a street scene with a traditional Chinese archway, known as a "Chinese Gate" or "Chinese Gate of',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -430,6 +431,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): 'user\n\nWrite a haiku for this image\nassistant\nSilky lake,  \nWooden pier,  \nNature\'s peace.',
+                ("cuda", 8): 'user\n\nWrite a haiku for this image\nassistant\nSilky lake,  \nWooden pier,  \nNature\'s peace.',
                 ("rocm", (9, 4)): 'user\n\nWrite a haiku for this image\nassistant\nSilky lake,  \nWooden pier,  \nNature\'s embrace.',
             }
         )  # fmt: skip
@@ -445,6 +447,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "user\n\nWhat are the differences between these two images?\nassistant\nThe images show the Statue of Liberty and the Golden Gate Bridge from different angles. Here are the differences:\n\n1. **Foreground",
+                ("cuda", 8): "user\n\nWhat are the differences between these two images?\nassistant\nThe images show the Statue of Liberty and the Golden Gate Bridge from different angles. Here are the differences:\n\n1. **Foreground",
                 ("rocm", (9, 4)): "user\n\nWhat are the differences between these two images?\nassistant\nThe images show the Statue of Liberty and the Golden Gate Bridge from different angles. Here are the main differences:\n\n1. **",
             }
         )  # fmt: skip
@@ -492,6 +495,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "The man is performing a forehand shot.",
+                ("cuda", 8): "The man is performing a forehand shot.",
                 ("rocm", (9, 5)): "The man is performing a volley shot.",
             }
         )  # fmt: skip
@@ -568,6 +572,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "user\n\n\nWhat are the differences between these two images?\nassistant\nThe images depict two distinct scenes:\n\n1. **Left Image:**\n   - The Statue of Liberty is prominently featured on an",
+                ("cuda", 8): 'user\n\n\nWhat are the differences between these two images?\nassistant\nThe images depict two distinct scenes:\n\n1. **Left Image:**\n   - The Statue of Liberty is prominently featured on an',
                 ("rocm", (9, 4)): 'user\n\n\nWhat are the differences between these two images?\nassistant\nThe images depict two distinct scenes:\n\n1. **Left Image:**\n   - This image features the Statue of Liberty on Liberty',
             }
         )  # fmt: skip
@@ -583,6 +588,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nA forehand shot",
+                ("cuda", 8): 'user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nA forehand shot',
                 ("rocm", (9, 4)): 'user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nA forehand shot',
             }
         )  # fmt: skip
@@ -598,6 +604,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): 'user\n\nWrite a haiku for this image\nassistant\nSilky lake,  \nWooden pier,  \nNature\'s peace.',
+                ("cuda", 8): 'user\n\nWrite a haiku for this image\nassistant\nSilky lake,  \nWooden pier,  \nNature\'s peace.',
                 ("rocm", (9, 4)): 'user\n\nWrite a haiku for this image\nassistant\nSilky lake,  \nWooden pier,  \nNature\'s embrace.',
             }
         )  # fmt: skip
