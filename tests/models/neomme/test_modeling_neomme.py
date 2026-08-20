@@ -50,6 +50,16 @@ if is_torch_available():
     )
 
 
+def _apply_text(processor, text, task):
+    messages = [[{"role": "user", "content": value}] for value in text]
+    return processor.apply_chat_template(messages, task=task, tokenize=True, return_dict=True)
+
+
+def _apply_images(processor, images):
+    messages = [[{"role": "user", "content": [{"type": "image", "image": image}]}] for image in images]
+    return processor.apply_chat_template(messages, task="document", tokenize=True, return_dict=True)
+
+
 def _patch_residual_init(test_case: unittest.TestCase) -> None:
     """Activate NeoMME's zero-initialized paths for mixin comparisons.
 
@@ -781,13 +791,13 @@ class NeoMMEModelIntegrationTest(unittest.TestCase):
         return outputs.dense_embeddings if head == "dense" else outputs.embeddings
 
     def _embed_image_pair(self, head: str) -> tuple["torch.Tensor", "torch.Tensor"]:
-        queries = self.processor(text=self.dataset["query"][:], task="query")
-        images = self.processor(images=self.dataset["image"][:])
+        queries = _apply_text(self.processor, self.dataset["query"][:], task="query")
+        images = _apply_images(self.processor, self.dataset["image"][:])
         return self._embed(queries, head), self._embed(images, head)
 
     def _embed_text_pair(self, head: str) -> tuple["torch.Tensor", "torch.Tensor"]:
-        queries = self.processor(text=self.TEXT_QUERIES, task="query")
-        documents = self.processor(text=self.TEXT_DOCUMENTS, task="document")
+        queries = _apply_text(self.processor, self.TEXT_QUERIES, task="query")
+        documents = _apply_text(self.processor, self.TEXT_DOCUMENTS, task="document")
         return self._embed(queries, head), self._embed(documents, head)
 
     def _assert_diagonal_retrieval(self, scores: "torch.Tensor") -> None:
@@ -827,8 +837,12 @@ class NeoMMEBaseModelIntegrationTest(unittest.TestCase):
 
     def test_text_and_image_forward(self):
         inputs = [
-            self.processor(text=["When was the Declaration of Independence proclaimed?"], task="query"),
-            self.processor(images=[self.dataset[0]["image"]]),
+            _apply_text(
+                self.processor,
+                ["When was the Declaration of Independence proclaimed?"],
+                task="query",
+            ),
+            _apply_images(self.processor, [self.dataset[0]["image"]]),
         ]
 
         for batch in inputs:
@@ -860,7 +874,7 @@ class NeoMMEMaskedLMIntegrationTest(unittest.TestCase):
 
     def test_fill_mask(self):
         text = f"The capital of {self.processor.tokenizer.mask_token} is London."
-        inputs = self.processor(text=[text], task="document").to(torch_device)
+        inputs = _apply_text(self.processor, [text], task="document").to(torch_device)
 
         with torch.inference_mode():
             outputs = self.model(**inputs)

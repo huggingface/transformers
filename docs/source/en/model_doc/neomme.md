@@ -38,7 +38,14 @@ processor = AutoProcessor.from_pretrained(checkpoint)
 model = AutoModelForMaskedLM.from_pretrained(checkpoint, device_map="auto")
 
 text = f"The capital of {processor.tokenizer.mask_token} is London."
-inputs = processor(text=[text], task="document").to(model.device)
+messages = [{"role": "user", "content": text}]
+inputs = processor.apply_chat_template(
+    messages,
+    task="document",
+    tokenize=True,
+    return_dict=True,
+    return_tensors="pt",
+).to(model.device)
 
 with torch.inference_mode():
     outputs = model(**inputs)
@@ -72,8 +79,25 @@ queries = [
     "Which hour of the day had the highest overall electricity generation in 2019?",
 ]
 
-inputs_documents = processor(images=documents).to(model.device)
-inputs_text = processor(text=queries, task="query").to(model.device)
+document_messages = [
+    [{"role": "user", "content": [{"type": "image", "image": document}]}] for document in documents
+]
+query_messages = [[{"role": "user", "content": query}] for query in queries]
+
+inputs_documents = processor.apply_chat_template(
+    document_messages,
+    task="document",
+    tokenize=True,
+    return_dict=True,
+    return_tensors="pt",
+).to(model.device)
+inputs_text = processor.apply_chat_template(
+    query_messages,
+    task="query",
+    tokenize=True,
+    return_dict=True,
+    return_tensors="pt",
+).to(model.device)
 
 with torch.inference_mode():
     document_embeddings = model(**inputs_documents).embeddings
@@ -97,9 +121,6 @@ print(scores)  # Expected: scores[0, 0] > scores[0, 1] and scores[1, 1] > scores
 [[autodoc]] NeoMMEProcessor
     - __call__
     - apply_chat_template
-    - process_queries
-    - process_text_documents
-    - process_images
     - score_retrieval
 
 ## NeoMMEModel

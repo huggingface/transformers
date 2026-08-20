@@ -20,7 +20,7 @@ from typing import Any, Literal
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, is_valid_image
+from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring, is_torch_available, logging
@@ -153,9 +153,9 @@ class NeoMMEProcessor(ProcessorMixin):
     r"""
     Constructs a processor that prepares text and document images for NeoMME retrieval models.
 
-    Queries, text documents, and image documents are encoded in separate forward passes. Pass exactly one of `text`
-    or `images` to each call. Queries receive a `<query>` prefix and `<mask>` expansion tokens. Text and image
-    documents receive a `<doc>` prefix, and image documents also receive a patch grid and two-axis positions.
+    Format retrieval inputs with [`~NeoMMEProcessor.apply_chat_template`]. Queries receive a `<query>` prefix and
+    `<mask>` expansion tokens. Text and image documents receive a `<doc>` prefix, and image documents also receive a
+    patch grid and two-axis positions.
     """
 
     valid_processor_kwargs = NeoMMEProcessorKwargs
@@ -253,7 +253,10 @@ class NeoMMEProcessor(ProcessorMixin):
             and `pixel_values`.
         """
         if not _chat_template_applied:
-            return self._apply_direct_template(images=images, text=text, task=task, **kwargs)
+            raise ValueError(
+                "NeoMMEProcessor formats retrieval inputs through `apply_chat_template`; pass a conversation and "
+                "set `task='query'` or `task='document'` there."
+            )
 
         images, text, _, _ = self.prepare_inputs_layout(images=images, text=text, **kwargs)
         self.validate_inputs(images=images, text=text, **kwargs)
@@ -278,40 +281,6 @@ class NeoMMEProcessor(ProcessorMixin):
             image_inputs=image_inputs,
             image_replacements=replacements,
             **text_kwargs,
-        )
-
-    def _apply_direct_template(
-        self,
-        images: ImageInput | None,
-        text: TextInput | list[TextInput] | None,
-        task: Literal["query", "document"],
-        **kwargs,
-    ) -> BatchFeature:
-        """Route the pre-refactor direct API through the standard template path during migration."""
-        if (text is None) == (images is None):
-            raise ValueError("Pass exactly one of `text` or `images`.")
-
-        if images is not None:
-            image_list = [images] if is_valid_image(images) else list(images)
-            conversations = [
-                [{"role": "user", "content": [{"type": "image", "image": image}]}] for image in image_list
-            ]
-            task = "document"
-        else:
-            text_list = [text] if isinstance(text, str) else text
-            assert text_list is not None
-            if not text_list:
-                raise ValueError("text must contain at least one string.")
-            if any(not isinstance(value, str) for value in text_list):
-                raise ValueError("Pretokenized text is not supported.")
-            conversations = [[{"role": "user", "content": value}] for value in text_list]
-
-        return self.apply_chat_template(
-            conversations,
-            task=task,
-            tokenize=True,
-            return_dict=True,
-            processor_kwargs=kwargs,
         )
 
     def _tokenize_rendered_inputs(
