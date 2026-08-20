@@ -1529,10 +1529,8 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
 
     def _prepare_static_cache(self, *args, model_kwargs, **kwargs) -> Cache:
         cache = super()._prepare_static_cache(*args, model_kwargs=model_kwargs, **kwargs)
-        # `StaticCache` sizes every layer from `max_cache_len`, which only counts text tokens. The interleaved
-        # cross-attention layers cache the vision states instead, so re-allocate them with the vision length. Same
-        # idea as the `is_encoder_decoder` branch of the parent, which cannot be reused here as mllama has a single
-        # interleaved stack rather than two separate ones.
+        # `max_cache_len` only counts text tokens. The interleaved cross-attention layers cache the vision states
+        # instead, so re-allocate them with the vision length, as the parent does for encoder-decoder models.
         pixel_values = model_kwargs.get("pixel_values")
         num_images = pixel_values.shape[1] if pixel_values is not None else 1
         vision_model = self.model.vision_model
