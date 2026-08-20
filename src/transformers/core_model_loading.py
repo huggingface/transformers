@@ -30,7 +30,6 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-from .distributed.pipeline_parallel import PipelineStage
 from .distributed.sharding_utils import DtensorShardOperation, _dtensor_from_local_like
 from .distributed.utils import is_dtensor
 from .integrations.accelerate import get_device, offload_weight
@@ -1468,7 +1467,7 @@ def _add_unmatched_checkpoint_key(
     model: PreTrainedModel,
     loading_info: LoadStateDictInfo,
 ) -> None:
-    stage = PipelineStage.from_device_mesh(model._device_mesh)
+    stage = getattr(model, "_pp_stage", None)
     if stage is None:
         loading_info.unexpected_keys.add(key)
         return

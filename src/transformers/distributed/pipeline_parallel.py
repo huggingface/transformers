@@ -18,7 +18,7 @@ from functools import wraps
 from typing import TYPE_CHECKING
 
 from ..modeling_outputs import CausalLMOutputWithPast
-from ..utils import is_torch_available
+from ..utils import is_torch_available, is_torch_distributed_available
 
 
 if TYPE_CHECKING:
@@ -51,44 +51,15 @@ class PipelineIdentityLayer(nn.Identity):
 class PipelineStage:
     """Pipeline-parallel stage metadata derived from a 1-D PP device mesh."""
 
-    def __init__(
-        self,
-        pp_rank: int,
-        pp_size: int,
-        pp_group: dist.ProcessGroup,
-        pp_is_first_stage: bool,
-        pp_is_last_stage: bool,
-        pp_prev_rank: int | None,
-        pp_next_rank: int | None,
-    ):
-        self.pp_rank = pp_rank
-        self.pp_size = pp_size
-        self.pp_group = pp_group
-        self.pp_is_first_stage = pp_is_first_stage
-        self.pp_is_last_stage = pp_is_last_stage
-        self.pp_prev_rank = pp_prev_rank
-        self.pp_next_rank = pp_next_rank
-        self.comm_on_cpu = dist.get_backend(pp_group) == "gloo"
-
-    @classmethod
-    def from_device_mesh(cls, pp_mesh) -> PipelineStage | None:
-        if pp_mesh is None:
-            return None
-        mesh_dim_names = getattr(pp_mesh, "mesh_dim_names", None)
-        if mesh_dim_names is None or "pp" not in mesh_dim_names:
-            return None
-        if pp_mesh.ndim != 1 or pp_mesh.size() <= 1:
-            return None
-
-        pp_rank = pp_mesh.get_local_rank()
-        pp_size = pp_mesh.size()
-        pp_group = pp_mesh.get_group()
-        pp_is_first_stage = pp_rank == 0
-        pp_is_last_stage = pp_rank == pp_size - 1
-        pp_prev_rank = pp_rank - 1 if pp_rank > 0 else None
-        pp_next_rank = pp_rank + 1 if pp_rank < pp_size - 1 else None
-
-        return cls(pp_rank, pp_size, pp_group, pp_is_first_stage, pp_is_last_stage, pp_prev_rank, pp_next_rank)
+    def __init__(self, pp_mesh: torch.distributed.device_mesh.DeviceMesh):
+        self.pp_rank = pp_mesh.get_local_rank()
+        self.pp_size = pp_mesh.size()
+        self.pp_group = pp_mesh.get_group()
+        self.pp_is_first_stage = self.pp_rank == 0
+        self.pp_is_last_stage = self.pp_rank == self.pp_size - 1
+        self.pp_prev_rank = self.pp_rank - 1 if self.pp_rank > 0 else None
+        self.pp_next_rank = self.pp_rank + 1 if self.pp_rank < self.pp_size - 1 else None
+        self.comm_on_cpu = dist.get_backend(self.pp_group) == "gloo"
 
     def communicate(
         self,
@@ -209,9 +180,8 @@ class PipelineStage:
 def apply_pipeline_parallelism(model: nn.Module, pp_mesh: torch.distributed.device_mesh.DeviceMesh) -> nn.Module:
     """Naive even split of `base_model.layers` across PP ranks."""
     # TODO(3outeille): involves pp_plan to do the split ?
-    stage = PipelineStage.from_device_mesh(pp_mesh)
-    if stage is None:
-        return model
+    stage = PipelineStage(pp_mesh)
+    model._pp_stage = stage
 
     base_model = getattr(model, model.base_model_prefix)
     layers = base_model.layers
@@ -272,9 +242,7 @@ def pipeline_parallel_naive_forward(
         fwd_kwargs["inputs_embeds"] = hidden_states
         return fwd_kwargs
 
-    stage = PipelineStage.from_device_mesh(model._device_mesh)
-    if stage is None:
-        return original_forward(*args, **kwargs)
+    stage = model._pp_stage
 
     device = next(model.parameters()).device
     dtype = next(model.parameters()).dtype

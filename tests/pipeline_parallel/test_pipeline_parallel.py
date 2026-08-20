@@ -16,6 +16,7 @@ import socket
 import tempfile
 import unittest
 from contextlib import contextmanager
+from unittest.mock import patch
 
 import torch
 import torch.distributed as dist
@@ -39,13 +40,19 @@ def _find_free_port():
 
 
 class _FakeDeviceMesh:
-    def __init__(self, *, ndim: int, size: int, mesh_dim_names: tuple[str, ...] | None):
-        self.ndim = ndim
+    def __init__(self, *, rank: int, size: int):
+        self._rank = rank
         self._size = size
-        self.mesh_dim_names = mesh_dim_names
+        self._group = object()
 
     def size(self):
         return self._size
+
+    def get_local_rank(self):
+        return self._rank
+
+    def get_group(self):
+        return self._group
 
 
 def init_process_group(rank, pp_size, port):
@@ -79,7 +86,7 @@ def _shared_model_dir(rank):
 
 
 def _verify_pp_split(model, tie_word_embeddings: bool = False):
-    stage = PipelineStage.from_device_mesh(model._device_mesh)
+    stage = model._pp_stage
     pp_rank = stage.pp_rank
     pp_size = stage.pp_size
     base_model = model.model
@@ -278,12 +285,21 @@ def _tiny_qwen2_config(num_hidden_layers, tie_word_embeddings: bool = True):
     )
 
 
-class TestPipelineStageFromDeviceMesh(unittest.TestCase):
-    def test_from_device_mesh_requires_pp_dimension(self):
-        self.assertIsNone(PipelineStage.from_device_mesh(None))
-        self.assertIsNone(PipelineStage.from_device_mesh(_FakeDeviceMesh(ndim=1, size=2, mesh_dim_names=("tp",))))
-        self.assertIsNone(PipelineStage.from_device_mesh(_FakeDeviceMesh(ndim=1, size=2, mesh_dim_names=None)))
-        self.assertIsNone(PipelineStage.from_device_mesh(_FakeDeviceMesh(ndim=1, size=1, mesh_dim_names=("pp",))))
+class TestPipelineStage(unittest.TestCase):
+    @patch("transformers.distributed.pipeline_parallel.dist.get_backend", return_value="gloo")
+    def test_init_from_device_mesh(self, mock_get_backend):
+        mesh = _FakeDeviceMesh(rank=1, size=3)
+        stage = PipelineStage(mesh)
+
+        self.assertEqual(stage.pp_rank, 1)
+        self.assertEqual(stage.pp_size, 3)
+        self.assertIs(stage.pp_group, mesh.get_group())
+        self.assertFalse(stage.pp_is_first_stage)
+        self.assertFalse(stage.pp_is_last_stage)
+        self.assertEqual(stage.pp_prev_rank, 0)
+        self.assertEqual(stage.pp_next_rank, 2)
+        self.assertTrue(stage.comm_on_cpu)
+        mock_get_backend.assert_called_once_with(stage.pp_group)
 
 
 @require_torch_greater_or_equal("2.5")

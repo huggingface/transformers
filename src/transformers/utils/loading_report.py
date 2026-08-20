@@ -243,7 +243,7 @@ class LoadStateDictInfo:
 
         stage = None
         if model is not None:
-            stage = PipelineStage.from_device_mesh(getattr(model, "_device_mesh", None))
+            stage = getattr(model, "_pp_stage", None)
         if stage is not None:
             owned, skipped = _pp_report_key_owners(stage, model, self.skipped_pp_keys)
             for status, color, note, key_owners in (
