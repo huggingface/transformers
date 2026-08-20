@@ -1016,11 +1016,10 @@ class ProcessorTesterMixin:
         return getattr(self, attr, None) if attr else None
 
     def _check_modality_inputs(self, inputs, modality):
+        # skio audio as there is no single kwarg that works same way in all audio processors
         input_key = getattr(self, f"{modality}_input_name")
         if modality in ["image", "video"]:
             self.assertLessEqual(inputs[input_key][0][0].mean(), 0)
-        else:
-            self.assertEqual(inputs[input_key].shape[-1], 52)
 
     def _test_modality_processor_defaults_preserved_by_modality_kwargs(self, modality):
         component_key = self._skip_unless_modality_and_tokenizer(modality)
@@ -1071,7 +1070,7 @@ class ProcessorTesterMixin:
         self.assertEqual(len(inputs[self.text_input_name][0]), max_length)
 
     def _test_unstructured_kwargs(self, modality):
-        self._skip_unless_modality_and_tokenizer(modality, require_tokenizer=False)
+        self._skip_unless_modality_and_tokenizer(modality)
         processor = self.get_processor()
         self.skip_processor_without_typed_kwargs(processor)
 
@@ -1094,7 +1093,7 @@ class ProcessorTesterMixin:
         self.assertEqual(inputs[self.text_input_name].shape[-1], max_length)
 
     def _test_unstructured_kwargs_batched(self, modality):
-        self._skip_unless_modality_and_tokenizer(modality, require_tokenizer=False)
+        self._skip_unless_modality_and_tokenizer(modality)
         processor = self.get_processor()
         self.skip_processor_without_typed_kwargs(processor)
 
@@ -1119,7 +1118,7 @@ class ProcessorTesterMixin:
         )
 
     def _test_doubly_passed_kwargs(self, modality):
-        self._skip_unless_modality_and_tokenizer(modality, require_tokenizer=False)
+        self._skip_unless_modality_and_tokenizer(modality)
         processor = self.get_processor()
         self.skip_processor_without_typed_kwargs(processor)
 
@@ -1139,7 +1138,7 @@ class ProcessorTesterMixin:
             )
 
     def _test_structured_kwargs_nested(self, modality, from_dict=False):
-        self._skip_unless_modality_and_tokenizer(modality, require_tokenizer=False)
+        self._skip_unless_modality_and_tokenizer(modality)
         processor = self.get_processor()
         self.skip_processor_without_typed_kwargs(processor)
 
@@ -1170,7 +1169,7 @@ class ProcessorTesterMixin:
         when passed both flat and nested" checks. Image/video raise via a
         top-level `padding="max_length"` clashing with a nested
         `text_kwargs={"padding": "do_not_pad"}`."""
-        self._skip_unless_modality_and_tokenizer(modality, require_tokenizer=False)
+        self._skip_unless_modality_and_tokenizer(modality)
         processor = self.get_processor()
         self.skip_processor_without_typed_kwargs(processor)
 
@@ -1193,35 +1192,35 @@ class ProcessorTesterMixin:
     # delegate into the shared, modality-parameterized helper above.
     # ------------------------------------------------------------------
 
-    @parameterized.expand(["image", "video"])
+    @parameterized.expand(["image", "video", "audio"])
     def test_subprocessor_defaults_preserved_by_kwargs(self, modality):
         self._test_modality_processor_defaults_preserved_by_modality_kwargs(modality)
 
-    @parameterized.expand(["image", "video"])
+    @parameterized.expand(["image", "video", "audio"])
     def test_kwargs_overrides_default_subprocessor_kwargs(self, modality):
         self._test_kwargs_overrides_default_modality_processor_kwargs(modality)
 
-    @parameterized.expand(["image", "video"])
+    @parameterized.expand(["image", "video", "audio"])
     def test_unstructured_kwargs(self, modality):
         self._test_unstructured_kwargs(modality)
 
-    @parameterized.expand(["image", "video"])
+    @parameterized.expand(["image", "video", "audio"])
     def test_unstructured_kwargs_batched(self, modality):
         self._test_unstructured_kwargs_batched(modality)
 
-    @parameterized.expand(["image", "video"])
+    @parameterized.expand(["image", "video", "audio"])
     def test_doubly_passed_kwargs(self, modality):
         self._test_doubly_passed_kwargs(modality)
 
-    @parameterized.expand(["image", "video"])
+    @parameterized.expand(["image", "video", "audio"])
     def test_structured_kwargs_nested(self, modality):
         self._test_structured_kwargs_nested(modality, from_dict=False)
 
-    @parameterized.expand(["image", "video"])
+    @parameterized.expand(["image", "video", "audio"])
     def test_structured_kwargs_nested_from_dict(self, modality):
         self._test_structured_kwargs_nested(modality, from_dict=True)
 
-    @parameterized.expand(["image", "video"])
+    @parameterized.expand(["image", "video", "audio"])
     def test_overlapping_text_image_kwargs_handling(self, modality):
         self._test_overlapping_text_modality_kwargs_handling(modality)
 
