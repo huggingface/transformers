@@ -43,7 +43,6 @@ class Ovis2_5VisionConfig(PreTrainedConfig):
 
     model_type = "ovis2_5_vision"
     base_config_key = "vision_config"
-
     hidden_size: int = 1152
     intermediate_size: int = 4304
     num_hidden_layers: int = 27
@@ -54,6 +53,7 @@ class Ovis2_5VisionConfig(PreTrainedConfig):
     layer_norm_eps: float = 1e-6
     attention_dropout: float | int = 0.0
     spatial_merge_size: int = 2
+
     image_size: int = 512
     window_size: int = 112
     layer_types: list[str] | tuple[str, ...] | None = None
