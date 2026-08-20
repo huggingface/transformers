@@ -145,6 +145,19 @@ class WeatherNext2FeatureExtractionTest(FeatureExtractionSavingTestMixin, unitte
         with self.assertRaises(TypeError):
             self.feature_extraction_class()
 
+    def test_grid_coordinates_describe_the_fields(self):
+        """The coordinates the fields are laid out on, which anything area-weighting them needs."""
+        extractor = self.feature_extraction_class(**self.feat_extract_dict)
+        latitudes, longitudes = extractor.latitudes, extractor.longitudes
+        self.assertEqual(latitudes.shape, (extractor.grid_latitudes,))
+        self.assertEqual(longitudes.shape, (extractor.grid_longitudes,))
+        # Latitudes run pole to pole inclusive, longitudes eastwards from zero and stop short of 360.
+        self.assertEqual((latitudes[0], latitudes[-1]), (-90.0, 90.0))
+        self.assertEqual(longitudes[0], 0.0)
+        self.assertLess(longitudes[-1], 360.0)
+        for values in (latitudes, longitudes):
+            np.testing.assert_allclose(np.diff(values), np.diff(values)[0])
+
     def test_call_returns_expected_shapes(self):
         tester = self.feat_extract_tester
         extractor = self.feature_extraction_class(**self.feat_extract_dict)

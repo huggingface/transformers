@@ -138,6 +138,10 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
         self.grid_longitudes = grid_longitudes
 
     @property
+    def latitudes(self) -> np.ndarray:
+        return np.linspace(-90.0, 90.0, self.grid_latitudes)
+
+    @property
     def longitudes(self) -> np.ndarray:
         return np.arange(self.grid_longitudes) * (360.0 / self.grid_longitudes)
 
