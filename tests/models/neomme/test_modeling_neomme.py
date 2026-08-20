@@ -60,6 +60,18 @@ def _apply_images(processor, images):
     return processor.apply_chat_template(messages, task="document", tokenize=True, return_dict=True)
 
 
+def _score_retrieval(queries, documents):
+    if queries.ndim == 2:
+        return queries @ documents.T
+
+    query_mask = queries.abs().sum(-1) > 0
+    document_mask = documents.abs().sum(-1) > 0
+    similarities = torch.einsum("qid,pjd->qpij", queries, documents)
+    similarities.masked_fill_(~document_mask[None, :, None, :], torch.finfo(similarities.dtype).min)
+    scores = similarities.max(dim=-1).values.sum(dim=-1)
+    return scores / query_mask.sum(-1, keepdim=True).clamp_min(1)
+
+
 def _patch_residual_init(test_case: unittest.TestCase) -> None:
     """Activate NeoMME's zero-initialized paths for mixin comparisons.
 
@@ -761,7 +773,7 @@ class NeoMMEModelIntegrationTest(unittest.TestCase):
     def test_multivector_image_retrieval(self):
         """Each query ranks its paired image first with MaxSim."""
         queries, images = self._embed_image_pair(head="multivector")
-        self._assert_diagonal_retrieval(self.processor.score_retrieval(queries, images))
+        self._assert_diagonal_retrieval(_score_retrieval(queries, images))
 
     def test_dense_image_retrieval(self):
         """Each query ranks its paired image first with dense cosine similarity."""
@@ -769,19 +781,19 @@ class NeoMMEModelIntegrationTest(unittest.TestCase):
 
         self.assertEqual(images.shape, (len(self.dataset), self.model.config.hidden_size))
         torch.testing.assert_close(images.norm(dim=-1), torch.ones_like(images[:, 0]), rtol=1e-3, atol=1e-3)
-        self._assert_diagonal_retrieval(self.processor.score_retrieval(queries, images))
+        self._assert_diagonal_retrieval(_score_retrieval(queries, images))
 
     def test_multivector_text_retrieval(self):
         """Each query ranks its paired text first with MaxSim."""
         queries, documents = self._embed_text_pair(head="multivector")
-        self._assert_diagonal_retrieval(self.processor.score_retrieval(queries, documents))
+        self._assert_diagonal_retrieval(_score_retrieval(queries, documents))
 
     def test_dense_text_retrieval(self):
         """Each query ranks its paired text first with dense cosine similarity."""
         queries, documents = self._embed_text_pair(head="dense")
 
         torch.testing.assert_close(documents.norm(dim=-1), torch.ones_like(documents[:, 0]), rtol=1e-3, atol=1e-3)
-        self._assert_diagonal_retrieval(self.processor.score_retrieval(queries, documents))
+        self._assert_diagonal_retrieval(_score_retrieval(queries, documents))
 
     def _embed(self, batch, head: str) -> "torch.Tensor":
         """Compute only the requested retrieval head."""

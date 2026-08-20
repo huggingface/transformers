@@ -15,13 +15,12 @@
 
 import tempfile
 import unittest
-from unittest import mock
 
 import numpy as np
 from jinja2.exceptions import TemplateError
 from parameterized import parameterized
 
-from transformers.testing_utils import require_tokenizers, require_torch, require_vision, torch_device
+from transformers.testing_utils import require_tokenizers, require_torch, require_vision
 from transformers.utils import is_tokenizers_available, is_torch_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
@@ -37,8 +36,6 @@ if is_vision_available():
 
 if is_torch_available():
     import torch
-
-    from transformers.models.neomme.processing_neomme import _pad_grids
 
 
 @require_torch
@@ -717,76 +714,3 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(batch["position_ids"][:, 1, 1].tolist(), [1, 1])
         self.assertEqual(batch["pixel_values"].shape[0], 2 * 3 + 1)
         self.assertEqual(int(batch["attention_mask"][1].sum()), 2 + 1 * (1 + 1))
-
-    def test_score_retrieval(self):
-        processor = self.get_processor()
-
-        with self.subTest(mode="maxsim"):
-            query = torch.tensor([[[1.0, 0.0], [0.0, 1.0]]])
-            passages = torch.tensor([[[1.0, 0.0], [0.0, 0.0]], [[0.0, 1.0], [0.0, 1.0]]])
-            scores = processor.score_retrieval(query, passages)
-            self.assertEqual(scores.shape, (1, 2))
-            # The zero row in passage 0 is padding and must be excluded from MaxSim.
-            torch.testing.assert_close(scores[0], torch.tensor([0.5, 0.5]))
-
-        with self.subTest(mode="maxsim_normalize"):
-            query = torch.tensor([[[1.0, 0.0], [1.0, 0.0]]])
-            passage = torch.tensor([[[1.0, 0.0]]])
-            torch.testing.assert_close(processor.score_retrieval(query, passage)[0], torch.tensor([1.0]))
-            torch.testing.assert_close(
-                processor.score_retrieval(query, passage, normalize=False)[0], torch.tensor([2.0])
-            )
-
-        with self.subTest(mode="maxsim_empty_passage"):
-            query = torch.tensor([[[1.0, 0.0]]])
-            passages = torch.tensor([[[1.0, 0.0]], [[0.0, 0.0]]])
-            torch.testing.assert_close(processor.score_retrieval(query, passages)[0], torch.tensor([1.0, -1.0]))
-
-        with self.subTest(mode="maxsim_list_grids"):
-            query = [torch.tensor([[1.0, 0.0], [0.0, 1.0]], device=torch_device)]
-            passages = [
-                torch.tensor([[1.0, 0.0]], device=torch_device),
-                torch.tensor([[0.0, 1.0], [0.0, 1.0]], device=torch_device),
-            ]
-            scores = processor.score_retrieval(query, passages, output_device=torch_device)
-            self.assertEqual(scores.device.type, torch_device)
-            torch.testing.assert_close(scores[0], torch.tensor([0.5, 0.5], device=torch_device))
-
-        with self.subTest(mode="dense_cosine"):
-            queries = torch.tensor([[1.0, 0.0]])
-            passages = torch.tensor([[2.0, 0.0], [0.0, 3.0]])
-            torch.testing.assert_close(processor.score_retrieval(queries, passages)[0], torch.tensor([1.0, 0.0]))
-
-        with self.subTest(mode="rejects_mixed_representations"):
-            dense = torch.ones(2, 3)
-            multi_vector = torch.ones(2, 4, 3)
-            with self.assertRaisesRegex(ValueError, "must both be dense or both be multi-vector"):
-                processor.score_retrieval(dense, multi_vector)
-            with self.assertRaisesRegex(ValueError, "must both be dense or both be multi-vector"):
-                processor.score_retrieval(multi_vector, dense)
-
-        with self.subTest(mode="rejects_mismatched_dimensions"):
-            with self.assertRaisesRegex(ValueError, "same embedding dimension"):
-                processor.score_retrieval(torch.ones(2, 3), torch.ones(4, 5))
-
-        with self.subTest(mode="rejects_empty"):
-            with self.assertRaises(ValueError):
-                processor.score_retrieval(torch.zeros(0, 2), torch.ones(1, 2))
-            with self.assertRaises(ValueError):
-                processor.score_retrieval(torch.ones(1, 2), torch.zeros(0, 2))
-
-        with self.subTest(mode="rejects_bad_batch_size"):
-            with self.assertRaises(ValueError):
-                processor.score_retrieval(torch.ones(1, 2), torch.ones(1, 2), batch_size=0)
-
-    def test_maxsim_pads_only_the_current_blocks(self):
-        processor = self.get_processor()
-        queries = [torch.randn(length, 4) for length in (2, 3, 4, 5, 6)]
-        passages = [torch.randn(length, 4) for length in (2, 3, 4, 5, 6, 7, 8)]
-        expected = processor.score_retrieval(queries, passages)
-
-        with mock.patch("transformers.models.neomme.processing_neomme._pad_grids", wraps=_pad_grids) as pad_grids:
-            actual = processor.score_retrieval(queries, passages, batch_size=2)
-
-        torch.testing.assert_close(actual, expected)
-        self.assertTrue(all(len(call.args[0]) <= 2 for call in pad_grids.call_args_list))

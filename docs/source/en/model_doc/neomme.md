@@ -59,6 +59,7 @@ print(processor.tokenizer.decode(predicted_token_id))
 import requests
 import torch
 from PIL import Image
+from sentence_transformers.util import mean_maxsim
 
 from transformers import NeoMMEForRetrieval, NeoMMEProcessor
 
@@ -103,7 +104,12 @@ with torch.inference_mode():
     document_embeddings = model(**inputs_documents).embeddings
     query_embeddings = model(**inputs_text).embeddings
 
-scores = processor.score_retrieval(query_embeddings, document_embeddings)
+scores = mean_maxsim(
+    query_embeddings,
+    document_embeddings,
+    a_mask=inputs_text["attention_mask"],
+    b_mask=inputs_documents["attention_mask"],
+)
 print(scores)  # Expected: scores[0, 0] > scores[0, 1] and scores[1, 1] > scores[1, 0].
 ```
 
@@ -121,7 +127,6 @@ print(scores)  # Expected: scores[0, 0] > scores[0, 1] and scores[1, 1] > scores
 [[autodoc]] NeoMMEProcessor
     - __call__
     - apply_chat_template
-    - score_retrieval
 
 ## NeoMMEModel
 
