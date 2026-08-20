@@ -231,10 +231,10 @@ class Ovis2_5VideoProcessor(Glm4vVideoProcessor):
     patch_size = 16
     temporal_patch_size = 1
     merge_size = 2
-    max_image_size = None
-    max_duration = None
-    num_frames = None
-    fps = None
+    max_image_size = AttributeError()
+    max_duration = AttributeError()
+    num_frames = AttributeError()
+    fps = AttributeError()
     valid_kwargs = Ovis2_5VideoProcessorInitKwargs
 
     def sample_frames(

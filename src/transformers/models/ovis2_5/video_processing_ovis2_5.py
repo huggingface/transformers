@@ -86,7 +86,6 @@ def smart_resize(
 class Ovis2_5VideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BILINEAR
     size = {"shortest_edge": 448 * 448, "longest_edge": 1344 * 1792}
-    max_image_size = None
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
     do_resize = True
@@ -96,11 +95,8 @@ class Ovis2_5VideoProcessor(BaseVideoProcessor):
     do_sample_frames = False
     patch_size = 16
     temporal_patch_size = 1
-    max_duration = None
     merge_size = 2
     valid_kwargs = Ovis2_5VideoProcessorInitKwargs
-    num_frames = None
-    fps = None
 
     model_input_names = ["pixel_values_videos", "video_grid_thw"]
 
