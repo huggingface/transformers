@@ -475,6 +475,32 @@ class ModelUtilsTest(TestCasePlus):
         self.assertEqual(model.config.output_hidden_states, True)
         self.assertEqual(model.config, config)
 
+    def test_initialize_weights_skips_module_with_all_params_flagged(self):
+        # Regression test for #47427: a built-in model must skip `_init_weights` when all of a module's params are
+        # already flagged (the FSDP non-rank-0 state, where the module flag itself is left unset).
+        config = BertConfig(
+            hidden_size=32, num_hidden_layers=1, num_attention_heads=2, intermediate_size=37, vocab_size=99
+        )
+        model = BertModel(config)
+
+        submodule = model.encoder.layer[0].attention.self.query
+        submodule._is_hf_initialized = False
+        for param in submodule.parameters(recurse=False):
+            param._is_hf_initialized = True
+        with mock.patch.object(type(model), "_init_weights") as mocked_init:
+            model._initialize_weights(submodule)
+        mocked_init.assert_not_called()
+        self.assertTrue(submodule._is_hf_initialized)
+
+        # A module with an unflagged param must still be initialized.
+        fresh = model.encoder.layer[0].attention.self.key
+        fresh._is_hf_initialized = False
+        for param in fresh.parameters(recurse=False):
+            param._is_hf_initialized = False
+        with mock.patch.object(type(model), "_init_weights") as mocked_init:
+            model._initialize_weights(fresh)
+        mocked_init.assert_called_once_with(fresh)
+
     def test_model_from_pretrained_subfolder(self):
         config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
         model = BertModel(config)
