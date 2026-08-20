@@ -105,7 +105,7 @@ class NeoMMEProcessor(ProcessorMixin):
         if isinstance(text, str):
             text = [text]
 
-        # What the caller actually named, flat or nested, as opposed to what `_merge_kwargs` injected.
+        # Reject only explicitly passed text options; `_merge_kwargs` also includes tokenizer defaults.
         requested = set(kwargs) | set(kwargs.get("text_kwargs", {}))
         text_kwargs = self._supported_text_kwargs(output_kwargs["text_kwargs"], requested)
         image_inputs, replacements = ({}, [])
@@ -249,28 +249,21 @@ class NeoMMEProcessor(ProcessorMixin):
                     marker_ids["image"],
                 ]
             )
-            if not is_image_document:
-                ids = self._finalize_text_sequence(ids, task, marker_ids, max_length)
-                finalized_sequences.append(ids)
-                if positions is not None:
-                    positions.append(self._text_positions(len(ids)))
-                continue
-            if image_index >= len(image_grid_hw):
-                raise ValueError("NeoMME rendered more image documents than the processor received.")
-
-            grid_height, grid_width = image_grid_hw[image_index].tolist()
-            expected_ids, position_ids = self._encode_image_grid(grid_height, grid_width, marker_ids)
-            if ids != expected_ids:
-                raise ValueError("NeoMME image template and placeholder replacement produced an invalid token layout.")
-            if max_length is not None and len(ids) > max_length:
-                raise ValueError(
-                    f"NeoMME image document length {len(ids)} exceeds max_length={max_length}; image grids cannot "
-                    "be truncated."
+            if is_image_document:
+                if image_index >= len(image_grid_hw):
+                    raise ValueError("NeoMME rendered more image documents than the processor received.")
+                ids, position_ids = self._finalize_image_sequence(
+                    ids, image_grid_hw[image_index], marker_ids, max_length
                 )
+                image_index += 1
+            else:
+                ids = self._truncate_retrieval_sequence(ids, task, marker_ids, max_length)
+                position_ids = self._text_positions(len(ids)) if positions is not None else None
+
             finalized_sequences.append(ids)
-            assert positions is not None
-            positions.append(position_ids)
-            image_index += 1
+            if positions is not None:
+                assert position_ids is not None
+                positions.append(position_ids)
 
         if image_grid_hw is not None and image_index != len(image_grid_hw):
             raise ValueError(f"Got {image_index} image prompts for {len(image_grid_hw)} images.")
@@ -285,7 +278,7 @@ class NeoMMEProcessor(ProcessorMixin):
         batch.update(image_inputs)
         return batch
 
-    def _finalize_text_sequence(
+    def _truncate_retrieval_sequence(
         self,
         ids: list[int],
         task: Literal["query", "document"],
@@ -296,22 +289,38 @@ class NeoMMEProcessor(ProcessorMixin):
         if not ids or ids[0] != prefix_id or ids.count(prefix_id) != 1:
             raise ValueError(f"NeoMME chat template must render exactly one leading {task} token.")
 
-        expansion_length = self.query_expand if task == "query" else 0
-        if expansion_length:
-            expansion = [marker_ids["mask"]] * expansion_length
-            if ids[-expansion_length:] != expansion or ids.count(marker_ids["mask"]) != expansion_length:
-                raise ValueError(f"NeoMME query template must render exactly {expansion_length} trailing mask tokens.")
-            content = ids[1:-expansion_length]
+        suffix_length = self.query_expand if task == "query" else 0
+        if suffix_length:
+            suffix = [marker_ids["mask"]] * suffix_length
+            if ids[-suffix_length:] != suffix or ids.count(marker_ids["mask"]) != suffix_length:
+                raise ValueError(f"NeoMME query template must render exactly {suffix_length} trailing mask tokens.")
+            content = ids[1:-suffix_length]
         else:
-            expansion = []
+            suffix = []
             content = ids[1:]
 
-        content_limit = None if max_length is None else max_length - 1 - expansion_length
+        content_limit = None if max_length is None else max_length - 1 - suffix_length
         if content_limit is not None and content_limit < 0:
+            raise ValueError(f"query_expand={suffix_length} leaves no room for content inside max_length={max_length}")
+        return [prefix_id, *content[:content_limit], *suffix]
+
+    def _finalize_image_sequence(
+        self,
+        ids: list[int],
+        grid_hw: Any,
+        marker_ids: dict[str, int],
+        max_length: int | None,
+    ) -> tuple[list[int], np.ndarray]:
+        grid_height, grid_width = grid_hw.tolist()
+        expected_ids, position_ids = self._encode_image_grid(grid_height, grid_width, marker_ids)
+        if ids != expected_ids:
+            raise ValueError("NeoMME image template and placeholder replacement produced an invalid token layout.")
+        if max_length is not None and len(ids) > max_length:
             raise ValueError(
-                f"query_expand={expansion_length} leaves no room for content inside max_length={max_length}"
+                f"NeoMME image document length {len(ids)} exceeds max_length={max_length}; image grids cannot be "
+                "truncated."
             )
-        return [prefix_id, *content[:content_limit], *expansion]
+        return ids, position_ids
 
     @staticmethod
     def _text_positions(length: int) -> np.ndarray:
