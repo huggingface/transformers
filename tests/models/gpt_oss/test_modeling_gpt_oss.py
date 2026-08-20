@@ -33,6 +33,7 @@ from transformers import (
 from transformers.testing_utils import (
     cleanup,
     get_accelerator_total_memory_gib,
+    get_cpu_ram_total_gib,
     is_kernels_available,
     require_deterministic_for_xpu,
     require_kernels,
@@ -64,9 +65,11 @@ if is_torch_available():
 
 # Accelerator memory (in GiB, summed over every visible device) needed by the integration tests below. The
 # checkpoints ship as mxfp4, but these tests materialize bfloat16 weights -- either explicitly through
-# `dtype=torch.bfloat16`, or through `dtype="auto"` when the mxfp4 path is unavailable -- so budget ~2 bytes per
-# parameter plus headroom for activations and the KV cache. Training additionally keeps a gradient for every
-# parameter, hence roughly twice the weights.
+# `dtype=torch.bfloat16`, or through `dtype="auto"` when the mxfp4 path is unavailable.
+#
+# The weight term is exact, from `modeling_utils.get_total_byte_count` on a meta-device model: 38.96 GiB for 20b and
+# 217.61 GiB for 120b. The budgets below add headroom for activations and the KV cache; training additionally keeps a
+# gradient per parameter, hence roughly twice the weights.
 #
 # These are deliberately upper bounds: on a machine where mxfp4 weights stay packed the model needs much less, so the
 # guard may skip a test that would in fact have fit. That trade is on purpose -- without the guard, loading 120b on a
@@ -285,6 +288,23 @@ class GptOssIntegrationTest(unittest.TestCase):
                 f"only {available:.1f} GiB is visible"
             )
 
+    def skip_if_host_ram_cannot_hold(self, model_size):
+        """
+        Skip unless host RAM can hold `model_size`.
+
+        `distributed_worker` loads without a `device_map` and moves the model afterwards, so the whole checkpoint
+        transits through host RAM before it reaches any device -- that is the allocation that got the CI container
+        OOM-killed. `get_cpu_ram_total_gib` reports the per-runner budget in CI (see `CI_CPU_MEMORY_LIMIT_GB`), not
+        the RAM of the shared host.
+        """
+        required = INFERENCE_MEMORY_GIB[model_size]
+        available = get_cpu_ram_total_gib()
+        if available < required:
+            self.skipTest(
+                f"gpt-oss-{model_size} transits ~{required} GiB through host RAM, "
+                f"only {available:.1f} GiB is available"
+            )
+
     def setUp(self):
         cleanup(torch_device, gc_collect=True)
 
@@ -493,6 +513,7 @@ if __name__ == "__main__":
 
         self.skip_if_kernels_are_required(kernels, attn_impl)
         self.skip_if_model_does_not_fit(model)
+        self.skip_if_host_ram_cannot_hold(model)
         self.run_distributed_test(quantized, model, kernels, attn_impl, mode)
 
     # ------------------------

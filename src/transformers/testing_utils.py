@@ -1199,17 +1199,88 @@ def require_rocm(test_case):
     return unittest.skipUnless(torch_device == "cuda" and IS_ROCM_SYSTEM, "test requires a ROCm (AMD) GPU")(test_case)
 
 
-def require_large_cpu_ram(test_case, memory: float = 80):
-    """Decorator marking a test that requires a CPU RAM with more than `memory` GiB of memory."""
-    if not is_psutil_available():
-        return test_case
+def get_cgroup_memory_limit_bytes() -> int | None:
+    """
+    Memory limit enforced on the current cgroup, or `None` when there is no limit / no cgroup to read.
 
-    import psutil
+    This is what the OOM killer actually enforces inside a container. `psutil.virtual_memory().total` reads the
+    *host* `/proc/meminfo`, so in a K8S pod it reports the whole node (~750 GiB) and says nothing about how much this
+    process may use before it is SIGKILLed.
+    """
+    candidates = (
+        ("/sys/fs/cgroup/memory.max", "max"),  # cgroup v2
+        ("/sys/fs/cgroup/memory/memory.limit_in_bytes", None),  # cgroup v1
+    )
+    for path, unlimited_marker in candidates:
+        try:
+            with open(path) as f:
+                raw = f.read().strip()
+        except OSError:
+            continue
+        if raw == unlimited_marker:
+            return None
+        try:
+            limit = int(raw)
+        except ValueError:
+            continue
+        # cgroup v1 writes a huge sentinel (a page-aligned 2**63-1) rather than a marker when unlimited
+        if limit <= 0 or limit >= 2**62:
+            return None
+        return limit
+    return None
 
-    return unittest.skipUnless(
-        psutil.virtual_memory().total / 1024**3 > memory,
-        f"test requires a machine with more than {memory} GiB of CPU RAM memory",
-    )(test_case)
+
+def get_cpu_ram_total_gib() -> float:
+    """
+    CPU RAM this process may actually use, in GiB. Returns 0 when it cannot be determined.
+
+    Takes the smallest of three views, because each one is wrong on its own:
+    - the cgroup limit, which is what the OOM killer enforces in a container but is absent outside one;
+    - `psutil.virtual_memory().total`, which is the right answer on bare metal but reports the whole node inside a
+      pod -- unless `conftest.py` has capped it, see `patch_psutil_cpu_memory`;
+    - `CI_CPU_MEMORY_LIMIT_GB`, the explicit per-runner budget set in CI. Note that `conftest.py` deliberately
+      multiplies it by the accelerator count when patching psutil (a `device_map="auto"` planning budget, not a
+      pod limit), so read the raw variable here instead of the patched psutil value.
+    """
+    limits = []
+
+    cgroup_limit = get_cgroup_memory_limit_bytes()
+    if cgroup_limit is not None:
+        limits.append(cgroup_limit / 1024**3)
+
+    if is_psutil_available():
+        import psutil
+
+        limits.append(psutil.virtual_memory().total / 1024**3)
+
+    ci_limit = os.environ.get("CI_CPU_MEMORY_LIMIT_GB")
+    if ci_limit is not None:
+        try:
+            limits.append(float(ci_limit))
+        except ValueError:
+            pass
+
+    return min(limits) if limits else 0.0
+
+
+def require_large_cpu_ram(test_case=None, *, memory: float = 80):
+    """
+    Decorator marking a test that requires a CPU RAM with more than `memory` GiB of memory.
+
+    Usable bare (`@require_large_cpu_ram`) or with a budget (`@require_large_cpu_ram(memory=48)`).
+    """
+
+    def memory_decorator(tc):
+        # Without psutil we cannot tell, so run the test rather than silently dropping coverage.
+        if not is_psutil_available():
+            return tc
+
+        return unittest.skipUnless(
+            get_cpu_ram_total_gib() > memory,
+            f"test requires a machine with more than {memory} GiB of CPU RAM memory",
+        )(tc)
+
+    return memory_decorator if test_case is None else memory_decorator(test_case)
 
 
 def require_torch_large_gpu(test_case, memory: float = 20):
