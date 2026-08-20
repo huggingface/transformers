@@ -395,6 +395,35 @@ class WeatherNext2GeometryTest(unittest.TestCase):
             else:
                 torch.testing.assert_close(prediction, reference, atol=1e-5, rtol=1e-5)
 
+    def test_the_forecast_reaches_every_parameter_that_shapes_it(self):
+        """Backward through a forecast, to catch anything accidentally cut out of the graph.
+
+        This needs the real geometry: with the placeholder, the edge features are zero and the edge
+        encoders would look dead when they are not.
+
+        The six weights of the decoder's mesh-node update are expected to get nothing. That block
+        updates the mesh nodes as well as the grid points, and the head reads only the grid, so they
+        cannot move. The original implementation has the same shape, and names the value it drops
+        `unused_updated_latent_mesh_data`.
+        """
+        model = WeatherNext2ForWeatherForecasting.from_pretrained(TINY_CHECKPOINT).to(torch_device).train()
+        config = model.config
+        prediction = model(
+            grid_features=floats_tensor(
+                [2, config.num_grid_input_channels - 3, config.grid_latitudes, config.grid_longitudes]
+            ).to(torch_device),
+            global_features=floats_tensor([2, config.num_mesh_input_channels - 3]).to(torch_device),
+            noise=floats_tensor([2, config.noise_channels]).to(torch_device),
+        ).prediction
+        prediction.square().mean().backward()
+
+        starved = {name for name, parameter in model.named_parameters() if parameter.grad is None}
+        expected = {
+            name for name, _ in model.named_parameters() if name.startswith("model.mesh_to_grid.mesh_node_update.")
+        }
+        self.assertEqual(starved, expected)
+        self.assertTrue(expected, "the decoder's mesh-node update went away; this test needs rethinking")
+
     def test_banded_attention_matches_dense_masking(self):
         """The three-block-diagonal attention must equal masking the full node-by-node matrix."""
         model = self.model.model

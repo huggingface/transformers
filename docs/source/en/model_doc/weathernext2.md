@@ -219,6 +219,34 @@ cyclones from vorticity and pressure, so it needs only `10m_u_component_of_wind`
 `10m_v_component_of_wind`, `mean_sea_level_pressure` and the 850 hPa winds, and runs on any of these
 checkpoints.
 
+### Training
+
+[`WeatherNext2ForWeatherForecasting`] does not take `labels` and returns no loss, because the loss
+WeatherNext 2 is trained on is not a per-example one. It is *fair CRPS* over an ensemble:
+
+```
+CRPS = mean over members of MAE(member, target) - 0.5 * mean over member pairs of MAE(member, member)
+```
+
+The second term rewards spread, so a model that hedges by predicting the ensemble mean is penalised,
+and a single prediction is not enough to score: each optimizer step needs several members, which is
+what the batch axis carries. The MAE is weighted by grid-cell area and by pressure level, and summed
+over variables.
+
+Two things to know when writing that loss:
+
+- It is computed in the model's own normalized residual space, not in physical units. That is what
+  `prediction` already is, so compare it against targets encoded the same way rather than calling
+  [`~WeatherNext2FeatureExtractor.postprocess`] first.
+- Wherever a target is missing (sea surface temperature over land) *both* terms have to be masked.
+  Masking only the accuracy term lets the loss be driven arbitrarily negative by pushing members
+  apart at points that are never scored.
+
+Gradients reach every parameter except the six of `model.mesh_to_grid.mesh_node_update`. The decoder
+updates the mesh nodes as well as the grid points, but the forecasting head reads only the grid, so
+those weights cannot move. This matches the original implementation, which names the same value
+`unused_updated_latent_mesh_data`.
+
 ## Notes
 
 - The mesh, both grid↔mesh graphs and the attention mask follow deterministically from the configuration, but nothing
