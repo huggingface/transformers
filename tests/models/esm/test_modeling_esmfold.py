@@ -16,7 +16,14 @@
 import unittest
 
 from transformers import EsmConfig, is_torch_available
-from transformers.testing_utils import TestCasePlus, is_flaky, require_torch, slow, torch_device
+from transformers.testing_utils import (
+    TestCasePlus,
+    is_flaky,
+    require_torch,
+    require_torch_fp16,
+    slow,
+    torch_device,
+)
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
@@ -257,3 +264,13 @@ class EsmModelIntegrationTest(TestCasePlus):
         position_outputs = model(input_ids)["positions"]
         expected_slice = torch.tensor([2.5828, 0.7993, -10.9334], dtype=torch.float32)
         torch.testing.assert_close(position_outputs[0, 0, 0, 0], expected_slice, rtol=1e-4, atol=1e-4)
+
+    @slow
+    @require_torch_fp16
+    def test_inference_protein_folding_fp16(self):
+        model = EsmForProteinFolding.from_pretrained("facebook/esmfold_v1", dtype=torch.float16)
+        model = model.to(torch_device).eval()
+        input_ids = torch.tensor([[0, 6, 4, 13, 5, 4, 16, 12, 11, 7, 2]]).to(torch_device)
+        with torch.no_grad():
+            position_outputs = model(input_ids)["positions"]
+        self.assertFalse(torch.isnan(position_outputs).any().item())
