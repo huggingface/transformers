@@ -15,6 +15,7 @@
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Annotated
 
 import torch
 import torch.nn.functional as F
@@ -42,6 +43,7 @@ from ...utils import (
 from ...utils.constants import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from ...utils.generic import can_return_tuple, maybe_autocast
 from ...utils.output_capturing import capture_outputs
+from ...utils.type_validators import positive_int
 from ..gemma4.modeling_gemma4 import Gemma4RMSNorm
 from ..gpt_neox.modeling_gpt_neox import apply_rotary_pos_emb
 from ..laguna.modeling_laguna import LagunaRotaryEmbedding
@@ -106,8 +108,8 @@ class NeoMMEImageProcessorKwargs(ImagesKwargs, total=False):
         Unset means no area-based resize.
     """
 
-    patch_size: int
-    max_side: int | None
+    patch_size: Annotated[int, positive_int()]
+    max_side: Annotated[int | None, positive_int()]
 
 
 @auto_docstring
