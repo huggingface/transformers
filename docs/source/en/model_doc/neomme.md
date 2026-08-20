@@ -38,12 +38,9 @@ processor = AutoProcessor.from_pretrained(checkpoint)
 model = AutoModelForMaskedLM.from_pretrained(checkpoint, device_map="auto")
 
 text = f"The capital of {processor.tokenizer.mask_token} is London."
-messages = [{"role": "user", "content": text}]
-inputs = processor.apply_chat_template(
-    messages,
+inputs = processor(
+    text=[text],
     task="document",
-    tokenize=True,
-    return_dict=True,
     return_tensors="pt",
 ).to(model.device)
 
@@ -82,23 +79,14 @@ queries = [
     "Which hour of the day had the highest overall electricity generation in 2019?",
 ]
 
-document_messages = [
-    [{"role": "user", "content": [{"type": "image", "image": document}]}] for document in documents
-]
-query_messages = [[{"role": "user", "content": query}] for query in queries]
-
-inputs_documents = processor.apply_chat_template(
-    document_messages,
+inputs_documents = processor(
+    images=documents,
     task="document",
-    tokenize=True,
-    return_dict=True,
     return_tensors="pt",
 ).to(model.device)
-inputs_text = processor.apply_chat_template(
-    query_messages,
+inputs_text = processor(
+    text=queries,
     task="query",
-    tokenize=True,
-    return_dict=True,
     return_tensors="pt",
 ).to(model.device)
 

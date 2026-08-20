@@ -207,6 +207,9 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIn(processor.tokenizer.convert_tokens_to_ids("hello"), ids)
         self.assertEqual(ids[-processor.query_expand :], [self.marker_ids["<mask>"]] * processor.query_expand)
 
+        direct = processor(text=["hello"], task="query", return_tensors="pt")
+        torch.testing.assert_close(inputs["input_ids"], direct["input_ids"])
+
     def test_apply_chat_template_text_document(self):
         processor = self.get_processor()
         self._set_retrieval_chat_template(processor)
@@ -221,6 +224,9 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIn(processor.tokenizer.convert_tokens_to_ids("hello"), ids)
         self.assertNotIn(self.marker_ids["<mask>"], ids)
 
+        direct = processor(text=["hello"], task="document", return_tensors="pt")
+        torch.testing.assert_close(inputs["input_ids"], direct["input_ids"])
+
     def test_apply_chat_template_preserves_processing_kwargs(self):
         processor = self.get_processor()
         self._set_retrieval_chat_template(processor)
@@ -234,6 +240,15 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_tensors="pt",
             processor_kwargs={"max_length": 2, "padding": "max_length"},
         )
+        direct = processor(
+            text=["hello world"],
+            task="document",
+            return_tensors="pt",
+            max_length=2,
+            padding="max_length",
+        )
+
+        torch.testing.assert_close(inputs["input_ids"], direct["input_ids"])
         self.assertEqual(inputs["input_ids"][0, 0], self.marker_ids["<doc>"])
         self.assertNotIn(self.marker_ids["<mask>"], inputs["input_ids"][0].tolist())
 
@@ -253,6 +268,11 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(inputs["position_ids"].shape[1], batch_size)
         self.assertNotIn("image_grid_hw", inputs)
         self.assertIn("pixel_values", inputs)
+
+        direct = processor(images=[image] * batch_size, return_tensors=return_tensors)
+        torch.testing.assert_close(inputs["input_ids"], direct["input_ids"])
+        torch.testing.assert_close(inputs["position_ids"], direct["position_ids"])
+        torch.testing.assert_close(inputs["pixel_values"], direct["pixel_values"])
 
     def test_apply_chat_template_rejects_invalid_task(self):
         processor = self.get_processor()
@@ -635,13 +655,20 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(len(ids), processor.tokenizer.model_max_length)
         self.assertEqual(ids[0], self.marker_ids["<doc>"])
 
-    def test_direct_processing_requires_chat_template(self):
+    def test_direct_processing_routes_through_chat_template(self):
         processor = self.get_processor()
         image = np.random.randint(0, 255, (8, 8, 3), dtype=np.uint8)
 
-        for kwargs in ({}, {"text": ["hello"]}, {"images": [image]}, {"text": ["hello"], "images": [image]}):
-            with self.subTest(kwargs=kwargs), self.assertRaisesRegex(ValueError, "apply_chat_template"):
+        for kwargs in ({}, {"text": ["hello"], "images": [image]}):
+            with self.subTest(kwargs=kwargs), self.assertRaisesRegex(ValueError, "exactly one"):
                 processor(**kwargs)
+
+        with self.assertRaisesRegex(TemplateError, "expected 'query' or 'document'"):
+            processor(text=["hello"], task="invalid")
+        with self.assertRaisesRegex(ValueError, "Pretokenized text"):
+            processor(text=[["hello", "world"]])
+        with self.assertRaisesRegex(ValueError, "at least one"):
+            processor(text=[])
 
     def test_missing_markers_raise(self):
         """A missing marker must raise instead of resolving to `unk_token_id`."""

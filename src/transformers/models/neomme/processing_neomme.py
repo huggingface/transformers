@@ -20,7 +20,7 @@ from typing import Any, Literal
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput
+from ...image_utils import ImageInput, is_valid_image
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring
@@ -38,9 +38,9 @@ class NeoMMEProcessor(ProcessorMixin):
     r"""
     Constructs a processor that prepares text and document images for NeoMME retrieval models.
 
-    Format retrieval inputs with [`~NeoMMEProcessor.apply_chat_template`]. Queries receive a `<query>` prefix and
-    `<mask>` expansion tokens. Text and image documents receive a `<doc>` prefix, and image documents also receive a
-    patch grid and two-axis positions.
+    Raw retrieval inputs are formatted with the checkpoint's chat template. Queries receive a `<query>` prefix and
+    `<mask>` expansion tokens. Text and image documents receive a `<doc>` prefix, and image documents also receive
+    a patch grid and two-axis positions.
     """
 
     valid_processor_kwargs = NeoMMEProcessorKwargs
@@ -128,22 +128,19 @@ class NeoMMEProcessor(ProcessorMixin):
         **kwargs: Unpack[NeoMMEProcessorKwargs],
     ) -> BatchFeature:
         r"""
-        Tokenize text rendered by [`~NeoMMEProcessor.apply_chat_template`] and process its document images.
+        Format and tokenize retrieval text, or process document images.
 
         _chat_template_applied (`bool`, *optional*, defaults to `False`):
-            Internal flag set by [`~NeoMMEProcessor.apply_chat_template`] after the retrieval markers are rendered.
+            Internal flag set after the retrieval markers are rendered.
         task (`str`, *optional*, defaults to `"query"`):
-            Retrieval side already rendered into `text` by [`~NeoMMEProcessor.apply_chat_template`].
+            Whether `text` is a retrieval query or text document. Ignored for images, which are always documents.
 
         Returns:
             A [`BatchFeature`] with `input_ids` and `attention_mask`. Image inputs also return `position_ids`,
             and `pixel_values`.
         """
         if not _chat_template_applied:
-            raise ValueError(
-                "NeoMMEProcessor formats retrieval inputs through `apply_chat_template`; pass a conversation and "
-                "set `task='query'` or `task='document'` there."
-            )
+            return self._apply_direct_template(images=images, text=text, task=task, **kwargs)
 
         images, text, _, _ = self.prepare_inputs_layout(images=images, text=text, **kwargs)
         self.validate_inputs(images=images, text=text, **kwargs)
@@ -168,6 +165,40 @@ class NeoMMEProcessor(ProcessorMixin):
             image_inputs=image_inputs,
             image_replacements=replacements,
             **text_kwargs,
+        )
+
+    def _apply_direct_template(
+        self,
+        images: ImageInput | None,
+        text: TextInput | list[TextInput] | None,
+        task: Literal["query", "document"],
+        **kwargs,
+    ) -> BatchFeature:
+        """Format raw retrieval inputs with the checkpoint's chat template."""
+        if (text is None) == (images is None):
+            raise ValueError("Pass exactly one of `text` or `images`.")
+
+        if images is not None:
+            image_list = [images] if is_valid_image(images) else list(images)
+            conversations = [
+                [{"role": "user", "content": [{"type": "image", "image": image}]}] for image in image_list
+            ]
+            task = "document"
+        else:
+            text_list = [text] if isinstance(text, str) else text
+            assert text_list is not None
+            if not text_list:
+                raise ValueError("text must contain at least one string.")
+            if any(not isinstance(value, str) for value in text_list):
+                raise ValueError("Pretokenized text is not supported.")
+            conversations = [[{"role": "user", "content": value}] for value in text_list]
+
+        return self.apply_chat_template(
+            conversations,
+            task=task,
+            tokenize=True,
+            return_dict=True,
+            processor_kwargs=kwargs,
         )
 
     def _tokenize_rendered_inputs(
