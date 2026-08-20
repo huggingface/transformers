@@ -901,6 +901,7 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
     _can_record_outputs = {
         "router_logits": OutputRecorder(Qwen4ExpTextTopKRouter, index=0),
         "attentions": Qwen4ExpTextAttention,
+        "hidden_states": Qwen4ExpTextDecoderLayer,
     }
 
     def __init__(self, config: Qwen4ExpTextConfig):
