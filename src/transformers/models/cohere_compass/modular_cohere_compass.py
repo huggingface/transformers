@@ -90,6 +90,12 @@ class CohereCompassTextConfig(Cohere2Config):
 
         super().__post_init__(**kwargs)
 
+    def convert_rope_params_to_dict(self, **kwargs):
+        # allow per layer rope with optional NoPE layers
+        self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else {}
+        self.standardize_rope_params()
+        return kwargs
+
 
 @auto_docstring(checkpoint="CohereLabs/North-Micro-Vision-Instruct")
 @strict
@@ -261,6 +267,7 @@ class CohereCompassDecoderLayer(Cohere2DecoderLayer):
 
 @auto_docstring
 class CohereCompassPreTrainedModel(Qwen3VLPreTrainedModel):
+    input_modalities = ("image", "text")
     _no_split_modules = [
         "CohereCompassDecoderLayer",
     ]

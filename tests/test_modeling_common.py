@@ -5928,7 +5928,18 @@ class ModelTesterMixin(ExportTesterMixin):
             self.skipTest("This model has no standardized RoPE module found.")
 
         # TODO: raushan, add separate tests for mrope in MultimodalTester
-        if text_config.rope_parameters.get("mrope_section") is not None:
+        is_nested_rope = (
+            "rope_theta" not in text_config.rope_parameters.keys()
+            and "rope_theta" in list(text_config.rope_parameters.values())[0]
+        )
+        if (not is_nested_rope and text_config.rope_parameters.get("mrope_section") is not None) or (
+            is_nested_rope
+            and any(
+                layer_rope.get("mrope_section") is not None
+                for layer_rope in text_config.rope_parameters.values()
+                if layer_rope is not None
+            )
+        ):
             self.skipTest("This model uses 3D multimodal RoPE, the test uses 2D position ids.")
 
         scaling_factor = 10
@@ -5937,10 +5948,6 @@ class ModelTesterMixin(ExportTesterMixin):
             "partial_rotary_factor", getattr(text_config, "partial_rotary_factor", 1.0)
         )
         long_input_length = int(text_config.max_position_embeddings * 1.5)
-        is_nested_rope = (
-            "rope_theta" not in text_config.rope_parameters.keys()
-            and "rope_theta" in list(text_config.rope_parameters.values())[0]
-        )
 
         kwargs = {}
         if is_nested_rope:
@@ -6185,6 +6192,9 @@ def _set_config_rope_params(config: PreTrainedConfig, rope_params: dict) -> bool
     layer_types = getattr(config, "_rope_type_labels", getattr(config, "layer_types", None))
     if layer_types is not None and set(config.rope_parameters.keys()).issubset(layer_types):
         for layer_type in layer_types:
+            # skip NoPE layers if any
+            if config.rope_parameters[layer_type] is None:
+                continue
             # Don't update gemma4 proportional rope, it is quite special and return `dim // 4` freqs
             if config.rope_parameters[layer_type].get("rope_type") != "proportional":
                 config.rope_parameters.setdefault(layer_type, {})
