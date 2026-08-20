@@ -954,8 +954,13 @@ def _patch_fuse_mean_std_and_rescale_factor(original):
     trace puts in it are handed back to every later call — poisoning the next export ("we found a
     fake tensor in the exported program constant's list") and eager preprocessing alike. Tracing
     without the cache recreates them per call and leaves the pre-export entries untouched.
+
+    Registered under both "dynamo" and "onnx", and `OnnxExporter.export` nests `apply_patches("onnx")`
+    around `DynamoExporter.export`'s `apply_patches("dynamo")` — so this runs twice against the same
+    class attribute. `original` has no `__wrapped__` the second time (it's already unwrapped), so fall
+    back to `original` unchanged rather than raising.
     """
-    return original.__wrapped__
+    return getattr(original, "__wrapped__", original)
 
 
 def _stage_input_names(stage: TorchvisionBackend | Callable, *, skip_first: bool = False) -> tuple[list[str], bool]:
