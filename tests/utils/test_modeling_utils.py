@@ -475,31 +475,36 @@ class ModelUtilsTest(TestCasePlus):
         self.assertEqual(model.config.output_hidden_states, True)
         self.assertEqual(model.config, config)
 
-    def test_initialize_weights_skips_module_with_all_params_flagged(self):
-        # Regression test for #47427: a built-in model must skip `_init_weights` when all of a module's params are
-        # already flagged (the FSDP non-rank-0 state, where the module flag itself is left unset).
+    def test_mark_fully_loaded_submodules_as_initialized(self):
+        # Regression test for #47427: on non-rank-0 FSDP/ZeRO processes the loaded params/buffers are flagged but
+        # their enclosing modules are not, so `_init_weights` would redundantly re-run on every submodule. A module
+        # whose params/buffers are all flagged must get the module-level flag (so `_initialize_weights` skips it),
+        # while a module with an unflagged buffer (e.g. a non-persistent buffer) must be left to re-initialize.
         config = BertConfig(
             hidden_size=32, num_hidden_layers=1, num_attention_heads=2, intermediate_size=37, vocab_size=99
         )
         model = BertModel(config)
+        for submodule in model.modules():
+            submodule._is_hf_initialized = False
 
-        submodule = model.encoder.layer[0].attention.self.query
-        submodule._is_hf_initialized = False
-        for param in submodule.parameters(recurse=False):
+        flagged = model.encoder.layer[0].attention.self.query
+        for param in flagged.parameters(recurse=False):
             param._is_hf_initialized = True
-        with mock.patch.object(type(model), "_init_weights") as mocked_init:
-            model._initialize_weights(submodule)
-        mocked_init.assert_not_called()
-        self.assertTrue(submodule._is_hf_initialized)
 
-        # A module with an unflagged param must still be initialized.
-        fresh = model.encoder.layer[0].attention.self.key
-        fresh._is_hf_initialized = False
-        for param in fresh.parameters(recurse=False):
-            param._is_hf_initialized = False
+        with_unflagged_buffer = model.embeddings
+        for param in with_unflagged_buffer.parameters(recurse=False):
+            param._is_hf_initialized = True
+        # position_ids is a (non-persistent) buffer left unflagged.
+
+        model._mark_fully_loaded_submodules_as_initialized()
+
+        self.assertTrue(flagged._is_hf_initialized)
+        self.assertFalse(with_unflagged_buffer._is_hf_initialized)
+
+        # And a module marked as initialized is then skipped by `_initialize_weights`.
         with mock.patch.object(type(model), "_init_weights") as mocked_init:
-            model._initialize_weights(fresh)
-        mocked_init.assert_called_once_with(fresh)
+            model._initialize_weights(flagged)
+        mocked_init.assert_not_called()
 
     def test_model_from_pretrained_subfolder(self):
         config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")

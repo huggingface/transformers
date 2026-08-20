@@ -2442,13 +2442,17 @@ class PreTrainedModel(
         if getattr(module, "_is_hf_initialized", False):
             return
 
-        # If every param/buffer owned by this module is already flagged as initialized, skip `_init_weights`. This also
-        # covers built-in models under FSDP/ZeRO on non-rank-0 processes, where `_initialize_missing_keys` flags the
-        # (broadcast) params/buffers but not the enclosing submodules, avoiding a redundant `_init_weights`.
-        if all(getattr(param, "_is_hf_initialized", False) for param in module.parameters(recurse=False)) and all(
-            getattr(buffer, "_is_hf_initialized", False)
-            for buffer in module.buffers(recurse=False)
-            if buffer is not None
+        # This check is for remote code that does NOT use either `torch.init` or `transformers.initialization` in `_init_weights`
+        # which allow to check the flag directly on param. As they don't and write the params in-place, params would be reinitialized
+        # otherwise
+        if (
+            is_custom_code
+            and all(getattr(param, "_is_hf_initialized", False) for param in module.parameters(recurse=False))
+            and all(
+                getattr(buffer, "_is_hf_initialized", False)
+                for buffer in module.buffers(recurse=False)
+                if buffer is not None
+            )
         ):
             module._is_hf_initialized = True
             return
@@ -4767,6 +4771,24 @@ class PreTrainedModel(
             value = torch.empty_like(buffer, device=buffer_device)
             _load_parameter_into_model(self, key, value)
 
+    def _mark_fully_loaded_submodules_as_initialized(self) -> None:
+        """Set the module-level `_is_hf_initialized` flag on every submodule (including `self`) whose parameters and
+        buffers are all already flagged as initialized, so `_initialize_weights` skips `_init_weights` for them.
+
+        Used on non-rank-0 FSDP/ZeRO processes, where the loaded params/buffers are flagged (they are broadcast from
+        rank 0) but their enclosing modules are not, which would otherwise re-run `_init_weights` on every submodule
+        (wasteful in general, and very costly on accelerators where `normal_` is far slower than on CUDA). Modules with
+        unflagged buffers (e.g. non-persistent buffers absent from the state dict) are left untouched so they are still
+        re-initialized with correct values.
+        """
+        for submodule in self.modules():
+            params_ready = all(getattr(p, "_is_hf_initialized", False) for p in submodule.parameters(recurse=False))
+            buffers_ready = all(
+                getattr(b, "_is_hf_initialized", False) for b in submodule.buffers(recurse=False) if b is not None
+            )
+            if params_ready and buffers_ready:
+                submodule._is_hf_initialized = True
+
     def _initialize_missing_keys(self, is_quantized: bool) -> None:
         """
         Initialize the missing keys (keys that are part of the model parameters, but were NOT found in the loaded state dicts), according to
@@ -4788,7 +4810,7 @@ class PreTrainedModel(
                     param_or_buffer._is_hf_initialized = True
                 except AttributeError:
                     pass  # may happen when handling pre-quantized weights
-            self._is_hf_initialized = True
+            self._mark_fully_loaded_submodules_as_initialized()
 
         # This will only initialize submodules that are not marked as initialized by the line above.
         if is_deepspeed_zero3_enabled() and not is_quantized:
