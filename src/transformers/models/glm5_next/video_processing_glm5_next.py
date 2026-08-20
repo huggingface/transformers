@@ -242,10 +242,10 @@ class Glm5NextVideoProcessor(BaseVideoProcessor):
         else:
             frame_indices = []
             current_second = 0
-            inverse_fps = 1 / target_fps
+            inv_fps = 1 / target_fps
             for frame_index, timestamp in enumerate(timestamps):
                 if timestamp >= current_second:
-                    current_second += inverse_fps
+                    current_second += inv_fps
                     frame_indices.append(frame_index)
                     if current_second >= max_second:
                         break

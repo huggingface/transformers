@@ -1688,7 +1688,22 @@ class Glm5NextForConditionalGeneration(Glm46VForConditionalGeneration, Glm5NextP
 
 
 class Glm5NextProcessor(Glm46VProcessor):
-    pass
+    _defaults = {
+        "text_kwargs": {
+            "padding": False,
+            "return_token_type_ids": False,
+            "return_mm_token_type_ids": False,
+        },
+        "videos_kwargs": {"return_metadata": True},
+    }
+
+    def create_mm_token_type_ids(self, input_ids: list) -> list[list[int]]:
+        mm_token_type_ids = []
+        for token_ids in input_ids:
+            token_ids = np.asarray(token_ids)
+            token_types = (token_ids == self.image_token_id).astype(np.int64)
+            mm_token_type_ids.append(token_types.tolist())
+        return mm_token_type_ids
 
 
 def smart_resize(
@@ -1969,10 +1984,10 @@ class Glm5NextVideoProcessor(GlmgaVideoProcessor):
         else:
             frame_indices = []
             current_second = 0
-            inverse_fps = 1 / target_fps
+            inv_fps = 1 / target_fps
             for frame_index, timestamp in enumerate(timestamps):
                 if timestamp >= current_second:
-                    current_second += inverse_fps
+                    current_second += inv_fps
                     frame_indices.append(frame_index)
                     if current_second >= max_second:
                         break

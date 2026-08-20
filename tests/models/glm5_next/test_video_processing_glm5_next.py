@@ -231,7 +231,7 @@ class Glm5NextVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
         video_processor = self.fast_video_processing_class.from_dict(self.video_processor_dict, size={"longest_edge": 42})
         self.assertEqual(video_processor.size, {"longest_edge": 42})
 
-    # GLM-5-Next samples by fps over the metadata duration, matching the sglang reference implementation
+    # GLM-5-Next samples by fps over the metadata duration
     def test_sample_frames_reference_cases(self):
         processor = Glm5NextVideoProcessor(**{**self.video_processor_dict, "fps": 1})
         cases = [
