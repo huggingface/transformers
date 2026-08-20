@@ -788,6 +788,10 @@ def get_kernel(
     )
 
 
+# Import name of the fallback package -> the distribution a user has to install to get it.
+_PACKAGE_TO_DISTRIBUTION = {"fla": "flash-linear-attention", "mamba_ssm": "mamba-ssm"}
+
+
 def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, internal_path: str | None = None):
     """
     The same as `use_kernel_forward_from_hub` but with the optional fallback to an original package if it exists, e.g.,
@@ -818,8 +822,19 @@ def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, interna
         # Make it "frozen" like to let dynamo not try to look into any ordering
         applicable_params = tuple(inspect.signature(implementation).parameters)
 
+        distribution = _PACKAGE_TO_DISTRIBUTION.get(package, package)
+
         @functools.wraps(torch_function)
         def wrapped(*args, **kwargs):
+            if implementation is torch_function:
+                # The pure-torch paths guarded by this decorator are readable references, not fast
+                # kernels -- for `chunk_gated_delta_rule` the gap is more than an order of magnitude
+                # on a H100 -- and nothing else tells the user which one they ended up on.
+                logger.warning_once(
+                    f"`{func_name}` is falling back to its reference PyTorch implementation because "
+                    f"`{distribution}` is not installed. This is correct but much slower; install "
+                    f"`{distribution}` for the optimized kernel."
+                )
             kwargs = {k: v for k, v in kwargs.items() if k in applicable_params}
             return implementation(*args, **kwargs)
 
