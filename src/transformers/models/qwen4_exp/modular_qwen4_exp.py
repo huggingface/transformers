@@ -756,7 +756,7 @@ class Qwen4ExpTextPLELayer(nn.Module):
         hidden_states: torch.Tensor,
         input_ids: torch.Tensor,
         past_key_values: Cache | None,
-        ple_padding_mask: torch.Tensor | None = None,
+        conv_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         embeddings = self.ple_embedding(input_ids, past_key_values, self.layer_idx)
         key_normed = self.norm_key(self.key_proj(embeddings)).unflatten(-1, (self.hc_count, self.hidden_size))
@@ -767,12 +767,12 @@ class Qwen4ExpTextPLELayer(nn.Module):
         gated_value = torch.sigmoid(gate) * value.unsqueeze(-2)
         gated_value_normed = self.norm_conv(gated_value.flatten(-2))
         gated_value = gated_value.flatten(-2)
-        if ple_padding_mask is not None:
-            current_ple_padding_mask = ple_padding_mask[:, -input_ids.shape[1] :].unsqueeze(-1).to(gated_value.dtype)
-            gated_value = gated_value * current_ple_padding_mask
-            gated_value_normed = gated_value_normed * current_ple_padding_mask
+        if conv_mask is not None:
+            current_conv_mask = conv_mask[:, -input_ids.shape[1] :].unsqueeze(-1).to(gated_value.dtype)
+            gated_value = gated_value * current_conv_mask
+            gated_value_normed = gated_value_normed * current_conv_mask
         output = gated_value + self._short_conv(gated_value_normed, past_key_values)
-        return output if ple_padding_mask is None else output * current_ple_padding_mask
+        return output if conv_mask is None else output * current_conv_mask
 
 
 class Qwen4ExpTextDecoderLayer(GradientCheckpointingLayer):
@@ -794,35 +794,27 @@ class Qwen4ExpTextDecoderLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None = None,
+        conv_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         ple_input_ids: torch.LongTensor | None = None,
-        ple_padding_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.FloatTensor:
         if self.ple is not None:
-            if ple_input_ids is None:
-                raise ValueError("input_ids are required when Qwen4-Exp PLE layers are enabled.")
             hidden_states = hidden_states + self.ple(
-                hidden_states,
-                ple_input_ids,
-                past_key_values,
-                ple_padding_mask=ple_padding_mask,
+                hidden_states, ple_input_ids, past_key_values, conv_mask=conv_mask
             )
 
         hidden_states, hyper_input, injection_weights = self.attn_hyper_connection(hidden_states)
         if self.layer_type == "linear_attention":
             hidden_states = self.linear_attn(
-                hidden_states=hidden_states,
-                cache_params=past_key_values,
-                attention_mask=attention_mask,
-                **kwargs,
+                hidden_states, cache_params=past_key_values, attention_mask=conv_mask, **kwargs
             )
         else:
             hidden_states, _ = self.self_attn(
-                hidden_states=hidden_states,
+                hidden_states,
+                position_embeddings,
                 attention_mask=attention_mask,
                 past_key_values=past_key_values,
-                position_embeddings=position_embeddings,
                 **kwargs,
             )
 
@@ -987,27 +979,24 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
                 "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
             }
 
-        ple_padding_mask = causal_mask_mapping.get("linear_attention")
-        if self.config.ple_layer_ids and ple_padding_mask is not None:
+        conv_mask = causal_mask_mapping.get("linear_attention")
+        if self.config.ple_layer_ids and conv_mask is not None:
             eos_token_id = self.config.eos_token_id
             eos_token_id = eos_token_id[0] if isinstance(eos_token_id, list) else eos_token_id
-            ple_input_ids = torch.where(ple_padding_mask.bool(), ple_input_ids, eos_token_id)
+            ple_input_ids = torch.where(conv_mask.bool(), ple_input_ids, eos_token_id)
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
         hidden_states = hidden_states.repeat(1, 1, self.config.hc_count)
 
         for layer_idx, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
-            layer_type = self.config.layer_types[layer_idx]
-            mask_key = "linear_attention" if layer_type == "linear_attention" else "full_attention"
             hidden_states = decoder_layer(
                 hidden_states,
                 position_embeddings=position_embeddings,
-                attention_mask=causal_mask_mapping[mask_key],
+                attention_mask=causal_mask_mapping["full_attention"],
+                conv_mask=conv_mask,
                 past_key_values=past_key_values,
                 ple_input_ids=ple_input_ids,
-                ple_padding_mask=ple_padding_mask,
-                use_cache=use_cache,
                 **kwargs,
             )
 
