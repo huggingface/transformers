@@ -168,24 +168,18 @@ class NeoMMEProcessor(ProcessorMixin):
         tokenizer=None,
         chat_template=None,
         query_expand: int = 10,
-        image_placeholder: str = "<|image_placeholder|>",
         **kwargs,
     ):
         r"""
         query_expand (`int`, *optional*, defaults to 10):
             Number of `<mask>` buffer tokens appended to every query.
-        image_placeholder (`str`, *optional*, defaults to `"<|image_placeholder|>"`):
-            Temporary string emitted by the chat template for one image. It is replaced before tokenization.
         """
         if not isinstance(query_expand, int) or isinstance(query_expand, bool) or query_expand < 0:
             raise ValueError(f"query_expand must be a non-negative integer, got {query_expand!r}.")
-        if not isinstance(image_placeholder, str) or not image_placeholder.strip():
-            raise ValueError("image_placeholder must be a non-empty string.")
 
         super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
         self.image_token = tokenizer.image_token
         self.query_expand = query_expand
-        self.image_placeholder = image_placeholder
 
     @property
     def model_input_names(self) -> list[str]:
@@ -233,8 +227,8 @@ class NeoMMEProcessor(ProcessorMixin):
         modality = self._validate_chat_conversation(
             conversation, task, require_image_source=bool(kwargs.get("tokenize"))
         )
-        if modality == "image" and "image_placeholder" not in template_variables:
-            raise ValueError("NeoMME image chat templates must use the `image_placeholder` variable.")
+        if modality == "image" and "image_token" not in template_variables:
+            raise ValueError("NeoMME image chat templates must use the `image_token` variable.")
         if modality == "image" and kwargs.get("return_assistant_tokens_mask"):
             raise ValueError("Image document templates do not support `return_assistant_tokens_mask`.")
 
@@ -253,8 +247,6 @@ class NeoMMEProcessor(ProcessorMixin):
         for name in list(kwargs):
             if name not in template_variables and name not in chat_control_kwargs:
                 processor_kwargs[name] = kwargs.pop(name)
-        if "image_placeholder" in template_variables:
-            kwargs["image_placeholder"] = self.image_placeholder
         return super().apply_chat_template(
             conversation,
             chat_template=chat_template,
@@ -396,9 +388,9 @@ class NeoMMEProcessor(ProcessorMixin):
         return False
 
     def _validate_user_text(self, text: str) -> None:
-        if self.image_placeholder in text:
+        if self.image_token in text:
             raise ValueError(
-                f"{self.image_placeholder!r} is reserved for internal image processing and cannot appear in user text."
+                f"{self.image_token!r} is reserved for internal image processing and cannot appear in user text."
             )
 
     def _render_template(self, conversations: list[list[dict]], task: Literal["query", "document"]) -> list[str]:
@@ -410,7 +402,6 @@ class NeoMMEProcessor(ProcessorMixin):
             conversations,
             chat_template=template,
             task=task,
-            image_placeholder=self.image_placeholder,
             tokenize=False,
         )
 
@@ -549,30 +540,6 @@ class NeoMMEProcessor(ProcessorMixin):
         grid_height, grid_width = image_inputs["image_grid_hw"][image_idx]
         row = self.tokenizer.image_token * int(grid_width) + self.tokenizer.row_token
         return self.tokenizer.image_token + row * int(grid_height)
-
-    def get_text_with_replacements(
-        self,
-        text: list[str],
-        images_replacements: list[str] | None = None,
-        videos_replacements: list[str] | None = None,
-        audio_replacements: list[str] | None = None,
-    ) -> tuple[list[str], list[dict[str, Any]]]:
-        """Replace temporary image placeholders with grid-dependent trained image tokens."""
-        images_replacements = images_replacements or []
-        if videos_replacements or audio_replacements:
-            raise ValueError("NeoMME supports image replacements only.")
-        if sum(sample.count(self.image_placeholder) for sample in text) != len(images_replacements):
-            raise ValueError("The number of image placeholders must match the number of images.")
-
-        replacements = iter(images_replacements)
-        for index, sample in enumerate(text):
-            while self.image_placeholder in sample:
-                sample = sample.replace(self.image_placeholder, next(replacements), 1)
-            text[index] = sample
-
-        if any(self.image_placeholder in sample for sample in text):
-            raise ValueError("An image placeholder remained after replacement.")
-        return text, []
 
     def score_retrieval(
         self,

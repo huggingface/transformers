@@ -51,7 +51,7 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         "{% elif task == 'query' %}{{ query_token }}{% else %}{{ document_token }}{% endif %}"
         "{% set content = messages[-1]['content'] %}"
         "{% if content is string %}{{ content }}{% else %}{% for item in content %}"
-        "{% if item['type'] == 'text' %}{{ item['text'] }}{% else %}{{ image_placeholder }}{% endif %}"
+        "{% if item['type'] == 'text' %}{{ item['text'] }}{% else %}{{ image_token }}{% endif %}"
         "{% endfor %}{% endif %}"
         "{% if task == 'query' %}{% for _ in range(10) %}{{ mask_token }}{% endfor %}{% endif %}"
     )
@@ -274,9 +274,9 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "do not support `return_assistant_tokens_mask`"):
             processor.apply_chat_template(messages, task="document", tokenize=True, return_assistant_tokens_mask=True)
 
-    def test_image_placeholder_is_reserved_and_required(self):
+    def test_image_token_is_reserved_and_required(self):
         processor = self.get_processor()
-        placeholder = processor.image_placeholder
+        placeholder = processor.image_token
 
         with self.assertRaisesRegex(ValueError, "reserved"):
             processor(text=[f"hello {placeholder}"], task="query")
@@ -286,7 +286,7 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor.chat_template = (
             "{% if task == 'document' %}{{ document_token }}{% else %}{{ query_token }}{% endif %}"
         )
-        with self.assertRaisesRegex(ValueError, "image_placeholder"):
+        with self.assertRaisesRegex(ValueError, "image_token"):
             processor.apply_chat_template(messages, task="document", tokenize=True)
 
     def test_zero_query_expansion_template(self):
@@ -303,7 +303,6 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         for kwargs, error in (
             ({"query_expand": -1}, "non-negative integer"),
             ({"query_expand": 1.5}, "non-negative integer"),
-            ({"image_placeholder": ""}, "non-empty string"),
         ):
             with self.subTest(kwargs=kwargs), self.assertRaisesRegex(ValueError, error):
                 NeoMMEProcessor(**components, **kwargs)
