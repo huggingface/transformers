@@ -581,12 +581,11 @@ class Mask2FormerImageProcessor(TorchvisionBackend):
             masks_queries_logits, size=(384, 384), mode="bilinear", align_corners=False
         )
 
-        # Remove the null class `[..., :-1]`
+        # Semantic segmentation logits of shape (batch_size, num_classes, height, width), without the null class
         masks_classes = class_queries_logits.softmax(dim=-1)[..., :-1]
         masks_probs = masks_queries_logits.sigmoid()  # [batch_size, num_queries, height, width]
-
-        # Semantic segmentation logits of shape (batch_size, num_classes, height, width)
-        segmentation = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
+        segmentation = masks_classes.transpose(1, 2) @ masks_probs.flatten(start_dim=2)
+        segmentation = segmentation.unflatten(dim=-1, sizes=masks_probs.shape[-2:])
 
         # Resize logits and compute semantic segmentation maps
         if target_sizes is not None:
@@ -670,11 +669,11 @@ class Mask2FormerImageProcessor(TorchvisionBackend):
                 - **label_id** -- An integer representing the label / semantic class id corresponding to `segment_id`.
                 - **score** -- Prediction score of segment with `segment_id`.
 
-            When `return_traceable_outputs=True`, a tuple `(pred_masks, pred_scores, pred_classes, keep)` of tensors
-            with a static `num_queries` dimension: `pred_masks` of shape `(batch_size, num_queries, height, width)`
-            with binary instance masks, `pred_scores` and `pred_classes` of shape `(batch_size, num_queries)`, and
-            `keep` of shape `(batch_size, num_queries)`, `True` for the instances that are above `threshold` and have a
-            non-empty mask. Everything up to that tuple is traceable, so passing it to
+            When `return_traceable_outputs=True`, a tuple `(masks, scores, classes, keep_instances)` of tensors with a
+            static `num_queries` dimension: `masks` of shape `(batch_size, num_queries, height, width)` with binary
+            instance masks, `scores` and `classes` of shape `(batch_size, num_queries)`, and `keep_instances` of shape
+            `(batch_size, num_queries)`, `True` for the instances that are above `threshold` and have a non-empty mask.
+            Everything up to that tuple is traceable, so passing it to
             [`~Mask2FormerImageProcessor.build_instance_segmentation_outputs`] outside of the traced code gives the
             same output as `return_traceable_outputs=False`.
         """
@@ -710,35 +709,33 @@ class Mask2FormerImageProcessor(TorchvisionBackend):
 
         # Remove the null class `[..., :-1]` and keep the `num_queries` highest scoring (query, class) pairs
         scores = torch.nn.functional.softmax(class_queries_logits, dim=-1)[..., :-1]
-        pred_scores, topk_indices = scores.flatten(1, 2).topk(num_queries, dim=-1, sorted=False)
-        pred_classes = topk_indices % num_classes
+        scores, topk_indices = scores.flatten(1, 2).topk(num_queries, dim=-1, sorted=False)
+        classes = topk_indices % num_classes
         query_indices = torch.div(topk_indices, num_classes, rounding_mode="floor")
 
         mask_logits = masks_queries_logits.gather(
             dim=1, index=query_indices[..., None, None].expand(-1, -1, height, width)
         )
-        pred_masks = (mask_logits > 0).to(mask_logits.dtype)
+        masks = (mask_logits > 0).to(mask_logits.dtype)
 
         # Calculate average mask prob
-        mask_scores = (mask_logits.sigmoid().flatten(2) * pred_masks.flatten(2)).sum(-1) / (
-            pred_masks.flatten(2).sum(-1) + 1e-6
-        )
-        pred_scores = pred_scores * mask_scores
+        mask_scores = (mask_logits.sigmoid().flatten(2) * masks.flatten(2)).sum(-1) / (masks.flatten(2).sum(-1) + 1e-6)
+        scores = scores * mask_scores
 
         if return_traceable_outputs and target_sizes is not None:
-            pred_masks = torch.nn.functional.interpolate(pred_masks, size=target_sizes[0], mode="nearest")
+            masks = torch.nn.functional.interpolate(masks, size=target_sizes[0], mode="nearest")
 
         # Discard instances with a low score or an empty mask
-        keep = (pred_scores >= threshold) & pred_masks.flatten(2).any(dim=-1)
+        keep_instances = (scores >= threshold) & masks.flatten(2).any(dim=-1)
 
         if return_traceable_outputs:
-            return pred_masks, pred_scores, pred_classes, keep
+            return masks, scores, classes, keep_instances
 
         return self.build_instance_segmentation_outputs(
-            pred_masks=pred_masks,
-            pred_scores=pred_scores,
-            pred_classes=pred_classes,
-            keep=keep,
+            masks=masks,
+            scores=scores,
+            classes=classes,
+            keep_instances=keep_instances,
             target_sizes=target_sizes,
             return_coco_annotation=return_coco_annotation,
             return_binary_maps=return_binary_maps,
@@ -793,9 +790,9 @@ class Mask2FormerImageProcessor(TorchvisionBackend):
                   Multiple instances of the same class / label were fused and assigned a single `segment_id`.
                 - **score** -- Prediction score of segment with `segment_id`.
 
-            When `return_traceable_outputs=True`, a tuple `(mask_probs, pred_scores, pred_labels, keep)` of tensors
-            with a static `num_queries` dimension: `mask_probs` of shape `(batch_size, num_queries, height, width)`,
-            `pred_scores` and `pred_labels` of shape `(batch_size, num_queries)`, and `keep` of shape `(batch_size,
+            When `return_traceable_outputs=True`, a tuple `(mask_probs, scores, labels, keep_queries)` of tensors with
+            a static `num_queries` dimension: `mask_probs` of shape `(batch_size, num_queries, height, width)`,
+            `scores` and `labels` of shape `(batch_size, num_queries)`, and `keep_queries` of shape `(batch_size,
             num_queries)`, `True` for the queries that are above `threshold` and do not predict the null class.
             Everything up to that tuple is traceable, so passing it to
             [`~Mask2FormerImageProcessor.build_panoptic_segmentation_outputs`] outside of the traced code gives the
@@ -821,14 +818,12 @@ class Mask2FormerImageProcessor(TorchvisionBackend):
                 raise ValueError("All target sizes must be identical when `return_traceable_outputs=True`.")
 
         # Scale back to preprocessed image size - (384, 384) for all models
-        masks_queries_logits = torch.nn.functional.interpolate(
+        mask_probs = torch.nn.functional.interpolate(
             masks_queries_logits, size=(384, 384), mode="bilinear", align_corners=False
-        )
-
-        mask_probs = masks_queries_logits.sigmoid()  # [batch_size, num_queries, height, width]
+        ).sigmoid()  # [batch_size, num_queries, height, width]
 
         # Predicted label and score of each query (batch_size, num_queries)
-        pred_scores, pred_labels = nn.functional.softmax(class_queries_logits, dim=-1).max(-1)
+        scores, labels = nn.functional.softmax(class_queries_logits, dim=-1).max(-1)
 
         # Masks are resized before filtering only in the traceable branch, `build_panoptic_segmentation_outputs`
         # resizes the remaining masks otherwise
@@ -838,16 +833,16 @@ class Mask2FormerImageProcessor(TorchvisionBackend):
             )
 
         # Discard queries with a low score or predicting the null class
-        keep = pred_labels.ne(num_labels) & (pred_scores > threshold)
+        keep_queries = labels.ne(num_labels) & (scores > threshold)
 
         if return_traceable_outputs:
-            return mask_probs, pred_scores, pred_labels, keep
+            return mask_probs, scores, labels, keep_queries
 
         return self.build_panoptic_segmentation_outputs(
             mask_probs=mask_probs,
-            pred_scores=pred_scores,
-            pred_labels=pred_labels,
-            keep=keep,
+            scores=scores,
+            labels=labels,
+            keep_queries=keep_queries,
             mask_threshold=mask_threshold,
             overlap_mask_area_threshold=overlap_mask_area_threshold,
             label_ids_to_fuse=label_ids_to_fuse,
@@ -882,10 +877,10 @@ class Mask2FormerImageProcessor(TorchvisionBackend):
 
     def build_instance_segmentation_outputs(
         self,
-        pred_masks: torch.Tensor,
-        pred_scores: torch.Tensor,
-        pred_classes: torch.Tensor,
-        keep: torch.Tensor,
+        masks: torch.Tensor,
+        scores: torch.Tensor,
+        classes: torch.Tensor,
+        keep_instances: torch.Tensor,
         target_sizes: list[tuple[int, int]] | None = None,
         return_coco_annotation: bool | None = False,
         return_binary_maps: bool | None = False,
@@ -906,33 +901,35 @@ class Mask2FormerImageProcessor(TorchvisionBackend):
             target_sizes = [tuple(size) for size in target_sizes]
 
         results: list[dict[str, TensorType]] = []
-        for idx, (masks, scores, classes, keep_item) in enumerate(zip(pred_masks, pred_scores, pred_classes, keep)):
-            masks = masks[keep_item]
-            scores = scores[keep_item]
-            classes = classes[keep_item]
+        for idx, (image_masks, image_scores, image_classes, image_keep) in enumerate(
+            zip(masks, scores, classes, keep_instances)
+        ):
+            image_masks = image_masks[image_keep]
+            image_scores = image_scores[image_keep]
+            image_classes = image_classes[image_keep]
 
             # Resizing is done after filtering, interpolating all masks to the target size is expensive
-            if target_sizes is not None and masks.shape[0] != 0:
-                masks = torch.nn.functional.interpolate(
-                    masks.unsqueeze(dim=0), size=target_sizes[idx], mode="nearest"
+            if target_sizes is not None and image_masks.shape[0] != 0:
+                image_masks = torch.nn.functional.interpolate(
+                    image_masks.unsqueeze(dim=0), size=target_sizes[idx], mode="nearest"
                 )[0]
                 # Masks can become empty when downsampled
-                non_empty_masks = masks.flatten(1).any(dim=-1)
-                masks = masks[non_empty_masks]
-                scores = scores[non_empty_masks]
-                classes = classes[non_empty_masks]
+                non_empty_masks = image_masks.flatten(1).any(dim=-1)
+                image_masks = image_masks[non_empty_masks]
+                image_scores = image_scores[non_empty_masks]
+                image_classes = image_classes[non_empty_masks]
 
-            height, width = target_sizes[idx] if target_sizes is not None else masks.shape[-2:]
+            height, width = target_sizes[idx] if target_sizes is not None else image_masks.shape[-2:]
             segmentation = torch.zeros((height, width)) - 1
             segments = []
-            for segment_id in range(masks.shape[0]):
-                segmentation[masks[segment_id] == 1] = segment_id
+            for segment_id in range(image_masks.shape[0]):
+                segmentation[image_masks[segment_id] == 1] = segment_id
                 segments.append(
                     {
                         "id": segment_id,
-                        "label_id": classes[segment_id].item(),
+                        "label_id": image_classes[segment_id].item(),
                         "was_fused": False,
-                        "score": round(scores[segment_id].item(), 6),
+                        "score": round(image_scores[segment_id].item(), 6),
                     }
                 )
 
@@ -941,8 +938,8 @@ class Mask2FormerImageProcessor(TorchvisionBackend):
                 segmentation = convert_segmentation_to_rle(segmentation)
 
             # Return a concatenated tensor of binary instance maps
-            if return_binary_maps and masks.shape[0] != 0:
-                segmentation = masks
+            if return_binary_maps and image_masks.shape[0] != 0:
+                segmentation = image_masks
 
             results.append({"segmentation": segmentation, "segments_info": segments})
         return results
@@ -950,9 +947,9 @@ class Mask2FormerImageProcessor(TorchvisionBackend):
     def build_panoptic_segmentation_outputs(
         self,
         mask_probs: torch.Tensor,
-        pred_scores: torch.Tensor,
-        pred_labels: torch.Tensor,
-        keep: torch.Tensor,
+        scores: torch.Tensor,
+        labels: torch.Tensor,
+        keep_queries: torch.Tensor,
         mask_threshold: float = 0.5,
         overlap_mask_area_threshold: float = 0.8,
         label_ids_to_fuse: set[int] | None = None,
@@ -975,15 +972,17 @@ class Mask2FormerImageProcessor(TorchvisionBackend):
             target_sizes = [tuple(size) for size in target_sizes]
 
         results: list[dict[str, TensorType]] = []
-        for idx, (masks, scores, labels, keep_item) in enumerate(zip(mask_probs, pred_scores, pred_labels, keep)):
-            masks = masks[keep_item]
-            scores = scores[keep_item]
-            labels = labels[keep_item]
+        for idx, (image_mask_probs, image_scores, image_labels, image_keep) in enumerate(
+            zip(mask_probs, scores, labels, keep_queries)
+        ):
+            image_mask_probs = image_mask_probs[image_keep]
+            image_scores = image_scores[image_keep]
+            image_labels = image_labels[image_keep]
             target_size = target_sizes[idx] if target_sizes is not None else None
 
             # No mask found
-            if masks.shape[0] <= 0:
-                height, width = target_size if target_size is not None else masks.shape[1:]
+            if image_mask_probs.shape[0] <= 0:
+                height, width = target_size if target_size is not None else image_mask_probs.shape[1:]
                 segmentation = torch.zeros((height, width)) - 1
                 results.append({"segmentation": segmentation, "segments_info": []})
                 continue
@@ -991,9 +990,9 @@ class Mask2FormerImageProcessor(TorchvisionBackend):
             # Get segmentation map and segment information of batch item, resizing the masks here keeps the
             # interpolation off the queries that were filtered out
             segmentation, segments = compute_segments(
-                mask_probs=masks,
-                pred_scores=scores,
-                pred_labels=labels,
+                mask_probs=image_mask_probs,
+                pred_scores=image_scores,
+                pred_labels=image_labels,
                 mask_threshold=mask_threshold,
                 overlap_mask_area_threshold=overlap_mask_area_threshold,
                 label_ids_to_fuse=label_ids_to_fuse,
