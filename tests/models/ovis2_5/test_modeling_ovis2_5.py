@@ -869,8 +869,7 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         rotary_embedding = model.rotary_emb
         spatial_dim = config.hidden_size // config.num_attention_heads // 2
         expected = 1.0 / (
-            config.rope_parameters["rope_theta"]
-            ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim)
+            config.rope_parameters["rope_theta"] ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim)
         )
         torch.testing.assert_close(rotary_embedding.inv_freq, expected)
 
