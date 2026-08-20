@@ -259,7 +259,6 @@ class NeoMMEImageProcessor(TorchvisionBackend):
         if (resized_height, resized_width) == (height, width):
             return image
         size = SizeDict(height=resized_height, width=resized_width)
-        # Explicit antialiasing keeps the Torchvision and PIL resize paths aligned.
         return self.resize(image=image, size=size, resample=resample, antialias=True)
 
     def _pad_to_patch_grid(self, image: "torch.Tensor", patch_size: int) -> tuple["torch.Tensor", int, int]:

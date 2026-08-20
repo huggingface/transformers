@@ -387,7 +387,6 @@ class NeoMMEEncoderLayer(GradientCheckpointingLayer):
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
-        # Keep gradient-carrying inputs positional for reentrant checkpointing.
         mixed_states = self.lambdas[0] * hidden_states + self.lambdas[1] * initial_hidden_states
         normed_states = self.input_layernorm(mixed_states)
         attn_output, _ = self.self_attn(
@@ -538,6 +537,7 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
         value_embeds = self.value_embeddings(input_ids)
 
         for layer_idx, encoder_layer in enumerate(self.layers):
+            # Pass gradient-carrying tensors positionally so reentrant checkpointing tracks them.
             hidden_states = encoder_layer(
                 hidden_states,
                 initial_hidden_states,
@@ -738,7 +738,7 @@ class NeoMMEForRetrieval(NeoMMEPreTrainedModel):
         proj_dtype = self.embedding_proj_layer.weight.dtype
         embeddings = self.embedding_proj_layer(hidden_states.to(proj_dtype))  # (batch, seq, embedding_dim)
         embeddings = F.normalize(embeddings, dim=-1)
-        # Overwrite padding rows rather than multiply them out, so a non-finite value cannot survive.
+        # Use masked_fill because multiplying NaN or Inf by zero would leave padding non-finite.
         return embeddings.masked_fill(~attention_mask.bool().unsqueeze(-1), 0.0)
 
     def _forward_dense_head(
@@ -750,7 +750,7 @@ class NeoMMEForRetrieval(NeoMMEPreTrainedModel):
         if dense_dim is None:
             return F.normalize(pooled, dim=-1)
 
-        # Reject widths that slicing would accept but that would return an unexpected vector size.
+        # Validate explicitly because slicing accepts zero, negative, and oversized bounds.
         if not 0 < dense_dim <= pooled.shape[-1]:
             raise ValueError(f"dense_dim must be in 1..{pooled.shape[-1]} (the pooled width), got {dense_dim}")
         return F.normalize(pooled[..., :dense_dim], dim=-1)
