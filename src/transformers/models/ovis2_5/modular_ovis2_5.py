@@ -811,14 +811,18 @@ class Ovis2_5Model(Ovis2Model):
         )
 
 
-@auto_docstring
-class Ovis2_5_Model(Ovis2_5Model):
-    pass
+# The Exaone constructor uses an underscored model name. Keep that copied
+# constructor pointed at the public Ovis2_5Model without exposing a second model.
+class Ovis2_5_Model:
+    def __new__(cls, config: Ovis2_5Config) -> Ovis2_5Model:
+        return Ovis2_5Model(config)
 
 
 @auto_docstring(custom_intro="The Ovis2.5 multimodal model with a language modeling head.")
 class Ovis2_5ForConditionalGeneration(Ovis2_5PreTrainedModel, Exaone4_5_ForConditionalGeneration):
     """Ovis2.5 multimodal conditional generation model."""
+
+    model: Ovis2_5Model
 
     def _get_image_nums_and_video_nums(
         self,

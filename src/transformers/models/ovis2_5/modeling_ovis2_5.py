@@ -820,9 +820,11 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
         )
 
 
-@auto_docstring
-class Ovis2_5_Model(Ovis2_5Model):
-    pass
+# The Exaone constructor uses an underscored model name. Keep that copied
+# constructor pointed at the public Ovis2_5Model without exposing a second model.
+class Ovis2_5_Model:
+    def __new__(cls, config: Ovis2_5Config) -> Ovis2_5Model:
+        return Ovis2_5Model(config)
 
 
 @auto_docstring(custom_intro="The Ovis2.5 multimodal model with a language modeling head.")
@@ -832,6 +834,8 @@ class Ovis2_5ForConditionalGeneration(Ovis2_5PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
+
+    model: Ovis2_5Model
 
     def __init__(self, config):
         super().__init__(config)
