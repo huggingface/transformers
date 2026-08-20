@@ -72,6 +72,19 @@ def _prepare_cross_attention_mask(
     return cross_attention_mask, full_text_row_masked_out_mask
 
 
+def _has_cached_cross_attention_states(past_key_values: Cache | None, layer_idx: int) -> bool:
+    """
+    Whether the cross-attention layer `layer_idx` already holds the projected vision states.
+
+    Note that we deliberately do not use `past_key_values.get_seq_length(layer_idx)` here: compileable layers store
+    their length as a 0-dim tensor, so branching on it is a data-dependent branch and graph breaks under
+    `torch.compile`. `is_initialized` is a plain python `bool` and is known at trace time.
+    """
+    if past_key_values is None or layer_idx >= len(past_key_values.layers):
+        return False
+    return past_key_values.layers[layer_idx].is_initialized
+
+
 def _prepare_aspect_ratio_attention_mask(
     aspect_ratio_mask: torch.Tensor,
     num_patches: int,
@@ -434,7 +447,7 @@ class MllamaTextCrossAttention(nn.Module):
                 # if we have a new image + new tokens, we only computed key_states on that new image
                 # we still update the cross key states, past_image, new_image. And use it!
                 key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
-        elif past_key_values is not None and past_key_values.get_seq_length() > 0:
+        elif _has_cached_cross_attention_states(past_key_values, self.layer_idx):
             key_states, value_states = (
                 past_key_values.layers[self.layer_idx].keys,
                 past_key_values.layers[self.layer_idx].values,
@@ -769,7 +782,6 @@ class MllamaPreTrainedModel(PreTrainedModel):
         "MllamaCrossAttentionDecoderLayer",
         "MllamaSelfAttentionDecoderLayer",
     ]
-    _can_compile_fullgraph = False  # static cache cannot have different shapes for each layer
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
@@ -1124,9 +1136,7 @@ class MllamaTextModel(MllamaPreTrainedModel):
             # Let's check if the layer is cross attention layer and if we have cross attention states
             # or cached cross attention states.
             is_cross_attention_layer = idx in self.cross_attention_layers
-            is_cross_attention_cache_empty = past_key_values is None or (
-                past_key_values is not None and past_key_values.get_seq_length(idx) == 0
-            )
+            is_cross_attention_cache_empty = not _has_cached_cross_attention_states(past_key_values, idx)
 
             if is_cross_attention_layer and cross_attention_states is None and is_cross_attention_cache_empty:
                 continue
@@ -1352,6 +1362,16 @@ class MllamaModel(MllamaPreTrainedModel):
             )
 
         if cross_attention_mask is not None:
+            # `cross_attention_mask` spans the whole sequence. `generate` already slices it down to the tokens being
+            # processed (see `prepare_inputs_for_generation`), but a plain `forward` call may still pass the full mask
+            # together with a cache, in which case we select the rows matching the current tokens here.
+            seq_len = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
+            if cross_attention_mask.shape[1] != seq_len:
+                # `int(...)` because compileable layers return their length as a 0-dim tensor, which would make the
+                # slice data-dependent. This branch is never taken from `generate`, so it is not traced.
+                past_seen_tokens = int(past_key_values.get_seq_length()) if past_key_values is not None else 0
+                cross_attention_mask = cross_attention_mask[:, past_seen_tokens : past_seen_tokens + seq_len]
+
             cross_attention_mask, full_text_row_masked_out_mask = _prepare_cross_attention_mask(
                 cross_attention_mask,
                 num_vision_tokens=self.vision_model.num_patches,
@@ -1359,15 +1379,6 @@ class MllamaModel(MllamaPreTrainedModel):
             )
         else:
             full_text_row_masked_out_mask = None
-
-        if cross_attention_mask is not None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            seq_len = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
-            device = input_ids.device if input_ids is not None else inputs_embeds.device
-            current_pos = torch.arange(seq_len, device=device) + past_seen_tokens
-
-            cross_attention_mask = cross_attention_mask[:, :, current_pos]
-            full_text_row_masked_out_mask = full_text_row_masked_out_mask[:, :, current_pos]
 
         outputs = self.language_model(
             input_ids=input_ids,
@@ -1397,6 +1408,9 @@ class MllamaModel(MllamaPreTrainedModel):
 )
 class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
     # _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    # The cross-attention layers hold a differently sized cache than the self-attention ones, but they are all
+    # `StaticLayer`s of a fixed length (see `_prepare_static_cache`), so the graph is fully static.
+    _can_compile_fullgraph = True
 
     def __init__(self, config: MllamaConfig):
         super().__init__(config)
@@ -1517,15 +1531,6 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
         )
 
-    def _valid_auto_compile_criteria(self, *args, **kwargs) -> bool:
-        # `generate` gates auto-compilation on `Cache.is_compileable` alone, which is `True` for the fully static cache
-        # built above. `cross_attention_mask` gains a row at every decoding step though, so `forward` sees a new input
-        # shape each step and dynamo recompiles the whole graph (measured ~17x slower than eager on the 11B
-        # checkpoint). Honour `_can_compile_fullgraph`, as its documentation states, and skip auto-compilation.
-        if not self._can_compile_fullgraph:
-            return False
-        return super()._valid_auto_compile_criteria(*args, **kwargs)
-
     def _prepare_static_cache(self, *args, model_kwargs, **kwargs) -> Cache:
         cache = super()._prepare_static_cache(*args, model_kwargs=model_kwargs, **kwargs)
         # `StaticCache` sizes every layer from `max_cache_len`, which counts text tokens and is therefore only correct
@@ -1585,6 +1590,19 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
             model_inputs["pixel_values"] = None
             model_inputs["aspect_ratio_ids"] = None
             model_inputs["aspect_ratio_mask"] = None
+
+        # `cross_attention_mask` covers the whole sequence and gains a row per decoded token (see
+        # `_update_model_kwargs_for_generation`). Slice it down to the tokens being processed so that `forward` always
+        # sees the same input shape, otherwise `torch.compile` guards on it and recompiles at every decoding step.
+        # This mirrors what the generic `prepare_inputs_for_generation` does with `attention_mask`, including the
+        # `clone` which is needed to give the slice a consistent stride (see #32227).
+        if model_inputs.get("cross_attention_mask") is not None:
+            input_tensor = model_inputs.get("inputs_embeds")
+            input_tensor = model_inputs["input_ids"] if input_tensor is None else input_tensor
+            sequence_length = input_tensor.shape[1]
+            model_inputs["cross_attention_mask"] = model_inputs["cross_attention_mask"][:, -sequence_length:].clone(
+                memory_format=torch.contiguous_format
+            )
 
         return model_inputs
 
