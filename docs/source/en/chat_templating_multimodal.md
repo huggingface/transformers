@@ -117,7 +117,7 @@ Audio models accept content blocks with `"type": "audio"` pointing at a URL, a l
 
 ### Audio decoding backends
 
-Decoding is done by one of three optional libraries, each with its own resampler, so the waveform reaching the model depends on which one runs. An array you decoded yourself passes through untouched, and none of this applies.
+Decoding is done by one of two optional libraries, each with its own resampler, so the waveform reaching the model depends on which one runs. An array you decoded yourself passes through untouched, and none of this applies.
 
 Unless the processor sets its own default, audio loads with `load_audio_backend="auto"`, which picks torchcodec when it's installed at 0.3.0 or newer and librosa otherwise.
 
@@ -125,7 +125,6 @@ Unless the processor sets its own default, audio loads with `load_audio_backend=
 |---|---|---|
 | `"torchcodec"` | `pip install torchcodec` | Plain audio, plus container formats such as MP4, WebM, M4A, and AAC. |
 | `"librosa"` | `pip install librosa` | Plain audio only, such as WAV, FLAC, and MP3. |
-| `"torchaudio"` | `pip install torchaudio` | Plain audio only. Resamples with `torchaudio.functional.resample`. |
 
 Only torchcodec reads the container formats, so a `.mp4` or `.webm` source fails at load time under librosa or torchaudio with a `RuntimeError` telling you to install torchcodec.
 
