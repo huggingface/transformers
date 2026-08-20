@@ -1021,9 +1021,11 @@ def _find_nth_prime_after(start: int, count: int) -> int:
 
 
 class Qwen4ExpTextNGramEmbedding(nn.Module):
-    def __init__(self, config: Qwen4ExpTextConfig, embedding_dim: int, ple_layer_index: int = 0):
+    def __init__(self, config: Qwen4ExpTextConfig, embedding_dim: int, layer_idx: int, ple_layer_index: int = 0):
         super().__init__()
+        self.layer_idx = layer_idx
         self.ngram_size = config.ngram_size
+        self.context_len = self.ngram_size - 1
         self.heads_per_ngram = config.heads_per_ngram
         self.ngram_heads = (self.ngram_size - 1) * self.heads_per_ngram
         self.ple_layer_index = ple_layer_index
@@ -1068,32 +1070,6 @@ class Qwen4ExpTextNGramEmbedding(nn.Module):
         valid = (position_in_segment >= shift) & (source_positions.unsqueeze(0) >= 0)
         return torch.where(valid, shifted, token_ids.new_full((), self.eos_token_id))
 
-    def _get_previous_context(
-        self,
-        input_ids: torch.Tensor,
-        past_key_values: Cache | None,
-        layer_idx: int,
-    ) -> torch.Tensor:
-        context_len = self.ngram_size - 1
-        previous_context = input_ids.new_full((input_ids.shape[0], context_len), self.eos_token_id)
-        if past_key_values is None:
-            return previous_context
-
-        if past_key_values.has_previous_state(layer_idx, state_idx=2):
-            context_update = input_ids
-        else:
-            # LinearAttentionLayer pads newly initialized states with zeros, while Qwen4-Exp n-grams must be padded
-            # with EOS. Seed the state explicitly on its first update to preserve prefill/decode parity.
-            context_update = torch.cat([previous_context, input_ids], dim=-1)
-        context_states = past_key_values.update_conv_state(
-            context_update,
-            layer_idx,
-            state_idx=2,
-            conv_kernel_size=context_len,
-        )
-        context_end = context_states.shape[-1] - input_ids.shape[-1]
-        return context_states[..., context_end - context_len : context_end].to(input_ids)
-
     def forward(
         self,
         input_ids: torch.Tensor,
@@ -1101,7 +1077,29 @@ class Qwen4ExpTextNGramEmbedding(nn.Module):
         layer_idx: int,
     ) -> torch.Tensor:
         input_ids = input_ids.long()
-        previous_context = self._get_previous_context(input_ids, past_key_values, layer_idx)
+        # This is a trick to store the previous N=self.context_len `input_ids` - indeed the manipulations are identical to storing
+        # a past conv_state, so we can use an additional conv_states inside the Cache for it
+        if past_key_values is not None and past_key_values.has_previous_state(self.layer_idx, state_idx=2):
+            previous_context = past_key_values.layers[self.layer_idx].conv_states[2]
+        else:
+            previous_context = input_ids.new_full((input_ids.shape[0], self.context_len), self.eos_token_id)
+        # Store the current input_ids for the next forward
+        if past_key_values is not None:
+            input_ids_to_cache = input_ids
+            # In the case where `input_ids` would be smaller than `self.context_len`, the `update_conv_state` will pad with zeros, whereas
+            # here we want to pad with eos, so we do it explicitly
+            if (
+                not past_key_values.has_previous_state(self.layer_idx, state_idx=2)
+                and input_ids.shape[1] < self.context_len
+            ):
+                input_ids_to_cache = torch.nn.functional.pad(
+                    input_ids_to_cache, (self.context_len - input_ids.shape[1], 0), value=self.eos_token_id
+                )
+            _ = past_key_values.update_conv_state(
+                input_ids_to_cache, self.layer_idx, state_idx=2, conv_kernel_size=self.context_len
+            )
+
+        # Get full token history
         token_history = torch.cat([previous_context, input_ids], dim=-1)
         shifted_tokens = [self._shift_right_ignore_eos(token_history, shift) for shift in range(self.ngram_size)]
 
@@ -1139,7 +1137,7 @@ class Qwen4ExpTextPLELayer(nn.Module):
         self.hc_count = config.hc_count
         ple_embed_dim = config.ple_embed_dim
         hc_hidden_size = self.hidden_size * self.hc_count
-        self.ple_embedding = Qwen4ExpTextNGramEmbedding(config, ple_embed_dim, ple_layer_index)
+        self.ple_embedding = Qwen4ExpTextNGramEmbedding(config, ple_embed_dim, layer_idx, ple_layer_index)
         conv_kernel_size = config.ple_conv_kernel_size
         conv_dilation = config.ngram_size
         self.short_conv_state_len = (conv_kernel_size - 1) * conv_dilation
