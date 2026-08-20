@@ -36,11 +36,10 @@ class NeoMMEProcessorKwargs(ProcessingKwargs, total=False):
 @auto_docstring
 class NeoMMEProcessor(ProcessorMixin):
     r"""
-    Constructs a processor that prepares text and document images for NeoMME retrieval models.
+    Constructs a processor that prepares text and images for NeoMME models.
 
-    Raw retrieval inputs are formatted with the checkpoint's chat template. Queries receive a `<query>` prefix and
-    `<mask>` expansion tokens. Text and image documents receive a `<doc>` prefix, and image documents also receive
-    a patch grid and two-axis positions.
+    Plain text is tokenized without retrieval markers. When `task` is `"query"` or `"document"`, text and images are
+    formatted with the checkpoint's retrieval template. Images receive a patch grid and two-axis positions.
     """
 
     valid_processor_kwargs = NeoMMEProcessorKwargs
@@ -51,11 +50,11 @@ class NeoMMEProcessor(ProcessorMixin):
         image_processor=None,
         tokenizer=None,
         chat_template=None,
-        query_expand: int = 10,
+        query_expand: int = 0,
         **kwargs,
     ):
         r"""
-        query_expand (`int`, *optional*, defaults to 10):
+        query_expand (`int`, *optional*, defaults to 0):
             Number of `<mask>` buffer tokens appended to every query.
         """
         if not isinstance(query_expand, int) or isinstance(query_expand, bool) or query_expand < 0:
@@ -70,7 +69,7 @@ class NeoMMEProcessor(ProcessorMixin):
         return super().model_input_names + ["position_ids"]
 
     def validate_inputs(self, images: ImageInput | None = None, text: TextInput | None = None, **kwargs):
-        """Validate rendered text before tokenization."""
+        """Validate text before tokenization."""
         super().validate_inputs(images=images, text=text, **kwargs)
         if text is not None:
             text = [text] if isinstance(text, str) else text
@@ -83,7 +82,7 @@ class NeoMMEProcessor(ProcessorMixin):
         self,
         conversation: list[dict[str, str]] | list[list[dict[str, str]]],
         chat_template: str | None = None,
-        task: Literal["query", "document"] = "query",
+        task: Literal["query", "document"] | None = None,
         processor_kwargs: dict | None = None,
         **kwargs,
     ):
@@ -123,24 +122,25 @@ class NeoMMEProcessor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: TextInput | list[TextInput] | None = None,
-        task: Literal["query", "document"] = "query",
+        task: Literal["query", "document"] | None = None,
         _chat_template_applied: bool = False,
         **kwargs: Unpack[NeoMMEProcessorKwargs],
     ) -> BatchFeature:
         r"""
-        Format and tokenize retrieval text, or process document images.
+        Tokenize plain text, format retrieval text, or process images.
 
         _chat_template_applied (`bool`, *optional*, defaults to `False`):
             Internal flag set after the retrieval markers are rendered.
-        task (`str`, *optional*, defaults to `"query"`):
-            Whether `text` is a retrieval query or text document. Ignored for images, which are always documents.
+        task (`str`, *optional*):
+            Set to `"query"` or `"document"` to apply the checkpoint's retrieval template. Leave unset for generic
+            NeoMME text or image processing.
 
         Returns:
             A [`BatchFeature`] with `input_ids` and `attention_mask`. Image inputs also return `position_ids`,
             and `pixel_values`.
         """
         if not _chat_template_applied:
-            return self._apply_direct_template(images=images, text=text, task=task, **kwargs)
+            return self._process_direct_inputs(images=images, text=text, task=task, **kwargs)
 
         images, text, _, _ = self.prepare_inputs_layout(images=images, text=text, **kwargs)
         self.validate_inputs(images=images, text=text, **kwargs)
@@ -167,23 +167,27 @@ class NeoMMEProcessor(ProcessorMixin):
             **text_kwargs,
         )
 
-    def _apply_direct_template(
+    def _process_direct_inputs(
         self,
         images: ImageInput | None,
         text: TextInput | list[TextInput] | None,
-        task: Literal["query", "document"],
+        task: Literal["query", "document"] | None,
         **kwargs,
     ) -> BatchFeature:
-        """Format raw retrieval inputs with the checkpoint's chat template."""
+        """Process generic inputs directly or format retrieval inputs with the checkpoint's chat template."""
         if (text is None) == (images is None):
             raise ValueError("Pass exactly one of `text` or `images`.")
+
+        if task is None:
+            if text is not None:
+                return self._tokenize_plain_text(text, **kwargs)
+            return self._process_generic_images(images, **kwargs)
 
         if images is not None:
             image_list = [images] if is_valid_image(images) else list(images)
             conversations = [
                 [{"role": "user", "content": [{"type": "image", "image": image}]}] for image in image_list
             ]
-            task = "document"
         else:
             text_list = [text] if isinstance(text, str) else text
             assert text_list is not None
@@ -199,6 +203,37 @@ class NeoMMEProcessor(ProcessorMixin):
             tokenize=True,
             return_dict=True,
             processor_kwargs=kwargs,
+        )
+
+    def _tokenize_plain_text(self, text: TextInput | list[TextInput], **kwargs) -> BatchFeature:
+        """Tokenize generic NeoMME text without retrieval markers."""
+        _, text, _, _ = self.prepare_inputs_layout(images=None, text=text, **kwargs)
+        self.validate_inputs(images=None, text=text, **kwargs)
+        output_kwargs = self._merge_kwargs(
+            NeoMMEProcessorKwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs
+        )
+        text_kwargs = output_kwargs["text_kwargs"]
+        text_kwargs.setdefault("add_special_tokens", False)
+        text_kwargs.setdefault("padding", "longest")
+        text_kwargs.setdefault("return_tensors", "pt")
+        return BatchFeature(data=dict(self.tokenizer(text, **text_kwargs)))
+
+    def _process_generic_images(self, images: ImageInput, **kwargs) -> BatchFeature:
+        """Build NeoMME's architecture-level image layout without applying the retrieval template."""
+        image_list = [images] if is_valid_image(images) else list(images)
+        output_kwargs = self._merge_kwargs(
+            NeoMMEProcessorKwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs
+        )
+        requested = set(kwargs) | set(kwargs.get("text_kwargs", {}))
+        text_kwargs = self._supported_text_kwargs(output_kwargs["text_kwargs"], requested)
+        image_inputs, replacements = self._process_images(image_list, **output_kwargs["images_kwargs"])
+        rendered_images = [self.tokenizer.document_token + self.tokenizer.image_token] * len(replacements)
+        return self._tokenize_rendered_inputs(
+            rendered_images,
+            task="document",
+            image_inputs=image_inputs,
+            image_replacements=replacements,
+            **text_kwargs,
         )
 
     def _tokenize_rendered_inputs(

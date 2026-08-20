@@ -140,6 +140,7 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             image_processor=NeoMMEImageProcessor(patch_size=cls.patch_size),
             tokenizer=cls._setup_tokenizer(),
             chat_template=cls.chat_template,
+            query_expand=10,
         )
         cls._setup_test_attributes(processor)
         processor.save_pretrained(cls.tmpdirname)
@@ -170,6 +171,10 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def _set_retrieval_chat_template(self, processor):
         processor.chat_template = self.chat_template
+
+    @staticmethod
+    def prepare_processor_dict():
+        return {"query_expand": 10}
 
     def _apply_text(self, processor, text, task="query", **processor_kwargs):
         text = [text] if isinstance(text, str) else text
@@ -387,6 +392,9 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         ):
             with self.subTest(kwargs=kwargs), self.assertRaisesRegex(ValueError, error):
                 NeoMMEProcessor(**components, **kwargs)
+
+    def test_query_expand_defaults_to_zero(self):
+        self.assertEqual(self.processor_class(**self.prepare_components()).query_expand, 0)
 
     def test_tokenizer_defaults_preserved_by_kwargs(self):
         processor_components = self.prepare_components()
@@ -669,6 +677,30 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             processor(text=[["hello", "world"]])
         with self.assertRaisesRegex(ValueError, "at least one"):
             processor(text=[])
+
+    def test_generic_processing_does_not_require_retrieval_template(self):
+        processor = self.get_processor()
+        processor.chat_template = None
+
+        text_batch = processor(text=["hello world"])
+        text_ids = text_batch["input_ids"][0].tolist()
+        self.assertEqual(
+            text_ids,
+            processor.tokenizer("hello world", add_special_tokens=False)["input_ids"],
+        )
+        self.assertFalse(
+            {
+                self.marker_ids["<query>"],
+                self.marker_ids["<doc>"],
+                self.marker_ids["<mask>"],
+            }
+            & set(text_ids)
+        )
+
+        image = np.random.randint(0, 255, (8, 8, 3), dtype=np.uint8)
+        image_batch = processor(images=[image])
+        self.assertEqual(image_batch["input_ids"][0, 0], self.marker_ids["<doc>"])
+        self.assertIn("pixel_values", image_batch)
 
     def test_missing_markers_raise(self):
         """A missing marker must raise instead of resolving to `unk_token_id`."""
