@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import http.client
 import logging
 import os
 import sys
@@ -227,6 +228,20 @@ class GithubRequestTest(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             github_request("https://api.github.com/x", token="t")
         self.assertEqual(mock.call_count, 1)
+
+    def test_connection_error_is_wrapped_as_url_error(self):
+        # ConnectionError (and subclasses) are OSError, not urllib.error.URLError — _request must
+        # normalize them so callers see a single consistent exception type.
+        with patch("urllib.request.urlopen", side_effect=ConnectionResetError("reset")):
+            with self.assertRaises(gh.urllib.error.URLError):
+                gh._request("https://api.github.com/x", {})
+
+    def test_remote_disconnected_is_wrapped_as_url_error(self):
+        # The concrete error seen in CI: RemoteDisconnected is a ConnectionResetError subclass.
+        exc = http.client.RemoteDisconnected("Remote end closed connection without response")
+        with patch("urllib.request.urlopen", side_effect=exc):
+            with self.assertRaises(gh.urllib.error.URLError):
+                gh._request("https://api.github.com/x", {})
 
     def test_network_error_retries_then_fails(self):
         # All attempts raise URLError → exhausts max_retries → raises RuntimeError.
