@@ -97,6 +97,8 @@ class AriaTextConfig(PreTrainedConfig):
                 f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
                 f"heads ({self.num_attention_heads})."
             )
+        if self.head_dim % 2 != 0:
+            raise ValueError(f"The head dimension ({self.head_dim}) must be even for rotary position embeddings.")
 
 
 @auto_docstring(checkpoint="rhymes-ai/Aria")
