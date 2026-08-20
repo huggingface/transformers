@@ -1459,8 +1459,8 @@ class ProcessorTesterMixin:
                 return_tensors="pt",
                 processor_kwargs=processor_kwargs,
             )
-            self.assertTrue(self.videos_input_name in out_dict_with_video)
-            self.assertEqual(out_dict_with_video[self.videos_input_name].shape[expected_dim], exp_output_length)
+            self.assertTrue(self.video_input_name in out_dict_with_video)
+            self.assertEqual(out_dict_with_video[self.video_input_name].shape[expected_dim], exp_output_length)
 
         messages[0][0]["content"][0] = {
             "type": "video",
@@ -1482,7 +1482,7 @@ class ProcessorTesterMixin:
             return_tensors="pt",
             processor_kwargs={"do_sample_frames": False},
         )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
+        self.assertTrue(self.video_input_name in out_dict_with_video)
 
         # When the inputs are frame URLs/paths we expect that those are already
         # sampled and will raise an error is asked to sample again.
@@ -1762,8 +1762,8 @@ class ProcessorTesterMixin:
 
         attr_to_input_param = {
             "tokenizer": ("text", "prepare_text_inputs", "text_input_name"),
-            "image_processor": ("images", "prepare_image_inputs", "images_input_name"),
-            "video_processor": ("videos", "prepare_video_inputs", "videos_input_name"),
+            "image_processor": ("images", "prepare_image_inputs", "image_input_name"),
+            "video_processor": ("videos", "prepare_video_inputs", "video_input_name"),
             "feature_extractor": ("audio", "prepare_audio_inputs", "audio_input_name"),
             "audio_processor": ("audio", "prepare_audio_inputs", "audio_input_name"),
         }
