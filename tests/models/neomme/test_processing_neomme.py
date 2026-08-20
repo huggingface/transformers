@@ -18,6 +18,7 @@ import unittest
 from unittest import mock
 
 import numpy as np
+from jinja2.exceptions import TemplateError
 from parameterized import parameterized
 
 from transformers.testing_utils import require_tokenizers, require_torch, require_vision, torch_device
@@ -46,15 +47,61 @@ if is_torch_available():
 class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = NeoMMEProcessor if is_vision_available() else None
     patch_size = 4
-    chat_template = (
-        "{% if task not in ['query', 'document'] %}{{ raise_exception(\"task must be 'query' or 'document'\") }}"
-        "{% elif task == 'query' %}{{ query_token }}{% else %}{{ document_token }}{% endif %}"
-        "{% set content = messages[-1]['content'] %}"
-        "{% if content is string %}{{ content }}{% else %}{% for item in content %}"
-        "{% if item['type'] == 'text' %}{{ item['text'] }}{% else %}{{ image_token }}{% endif %}"
-        "{% endfor %}{% endif %}"
-        "{% if task == 'query' %}{% for _ in range(10) %}{{ mask_token }}{% endfor %}{% endif %}"
-    )
+    chat_template = """
+{%- if task is not defined -%}
+    {{- raise_exception("NeoMME chat templates require task='query' or task='document'.") -}}
+{%- endif -%}
+{%- if task not in ['query', 'document'] -%}
+    {{- raise_exception("task=" ~ task ~ " is not supported: expected 'query' or 'document'.") -}}
+{%- endif -%}
+{%- if messages is not defined or not messages -%}
+    {{- raise_exception("NeoMME chat conversations must contain at least one message.") -}}
+{%- endif -%}
+
+{%- set state = namespace(text='', has_text=false, image_count=0) -%}
+{%- for message in messages -%}
+    {%- set content = message.content -%}
+    {%- set items = [{'type': 'text', 'text': content}] if content is string else content -%}
+    {%- for item in items -%}
+        {%- if item.type == 'text' -%}
+            {%- if image_token in item.text -%}
+                {{- raise_exception(image_token ~ " is reserved for image documents.") -}}
+            {%- endif -%}
+            {%- set state.has_text = true -%}
+            {%- set state.text = state.text + item.text -%}
+        {%- elif item.type == 'image' -%}
+            {%- if item.image is not defined or item.image is none or item.image == '' -%}
+                {{- raise_exception("NeoMME image content must provide an image source.") -}}
+            {%- endif -%}
+            {%- set state.image_count = state.image_count + 1 -%}
+        {%- elif item.type == 'image_url' -%}
+            {%- if item.image_url is not defined or not item.image_url -%}
+                {{- raise_exception("NeoMME image_url content must provide an image source.") -}}
+            {%- endif -%}
+            {%- set state.image_count = state.image_count + 1 -%}
+        {%- else -%}
+            {{- raise_exception("NeoMME chat templates do not support content type " ~ item.type ~ ".") -}}
+        {%- endif -%}
+    {%- endfor -%}
+{%- endfor -%}
+
+{%- if state.image_count and state.has_text -%}
+    {{- raise_exception("NeoMME cannot encode text and images in the same conversation.") -}}
+{%- endif -%}
+{%- if state.image_count > 1 -%}
+    {{- raise_exception("NeoMME accepts one image document per conversation.") -}}
+{%- endif -%}
+{%- if state.image_count and task != 'document' -%}
+    {{- raise_exception("NeoMME image content must use task='document'.") -}}
+{%- endif -%}
+
+{%- set content = image_token if state.image_count else state.text -%}
+{%- if task == 'query' -%}
+    {{- query_token + content + mask_token * 10 -}}
+{%- else -%}
+    {{- document_token + content -}}
+{%- endif -%}
+"""
     # Each token's ID must equal its index in this list.
     special_tokens = ["<pad>", "<bos>", "<eos>", "<unk>", "<mask>", "<doc>", "<img>", "<query>", "<row>"]
 
@@ -172,8 +219,7 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             tokenize=True,
             return_dict=True,
             return_tensors="pt",
-            max_length=2,
-            padding="max_length",
+            processor_kwargs={"max_length": 2, "padding": "max_length"},
         )
         direct = processor(
             text=["hello world"], task="document", return_tensors="pt", max_length=2, padding="max_length"
@@ -205,27 +251,18 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         torch.testing.assert_close(inputs["position_ids"], direct["position_ids"])
         torch.testing.assert_close(inputs["pixel_values"], direct["pixel_values"])
 
-    def test_apply_chat_template_requires_task_variable(self):
-        processor = self.get_processor()
-        processor.chat_template = "{{ messages[0]['content'][0]['text'] }}"
-        messages = [{"role": "user", "content": [{"type": "text", "text": "hello"}]}]
-
-        with self.assertRaisesRegex(ValueError, "must use the `task` variable"):
-            processor.apply_chat_template(messages, task="document", tokenize=True)
-
     def test_apply_chat_template_rejects_invalid_task(self):
         processor = self.get_processor()
         self._set_retrieval_chat_template(processor)
         messages = [{"role": "user", "content": [{"type": "text", "text": "hello"}]}]
 
-        with self.assertRaisesRegex(ValueError, "expected 'query' or 'document'"):
+        with self.assertRaisesRegex(TemplateError, "expected 'query' or 'document'"):
             processor.apply_chat_template(messages, task="invalid", tokenize=True)
 
     def test_apply_chat_template_rejects_unsupported_inputs(self):
         processor = self.get_processor()
         self._set_retrieval_chat_template(processor)
         image = Image.fromarray(np.random.randint(0, 255, (8, 8, 3), dtype=np.uint8))
-        text_messages = [{"role": "user", "content": [{"type": "text", "text": "hello"}]}]
         image_messages = [{"role": "user", "content": [{"type": "image", "image": image}]}]
         cases = [
             (
@@ -237,33 +274,50 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                     }
                 ],
                 "document",
-                "cannot encode text and images",
+                "cannot encode text and images in the same conversation",
             ),
             ("image query", image_messages, "query", "must use task='document'"),
-            ("mixed batch", [text_messages, image_messages], "document", "cannot mix text and image documents"),
             (
                 "multiple images",
                 [{"role": "user", "content": [{"type": "image", "image": image}] * 2}],
                 "document",
-                "one image document per chat item",
+                "one image document per conversation",
             ),
             (
                 "video",
                 [{"role": "user", "content": [{"type": "video", "video": "example.mp4"}]}],
                 "document",
-                "do not support content type 'video'",
+                "do not support content type video",
             ),
             (
                 "missing image source",
                 [{"role": "user", "content": [{"type": "image"}]}],
                 "document",
-                "must provide an image",
+                "must provide an image source",
             ),
         ]
 
         for name, messages, task, error in cases:
-            with self.subTest(name=name), self.assertRaisesRegex(ValueError, error):
+            with self.subTest(name=name), self.assertRaisesRegex(TemplateError, error):
                 processor.apply_chat_template(messages, task=task, tokenize=True)
+
+    def test_apply_chat_template_supports_mixed_document_batch(self):
+        processor = self.get_processor()
+        self._set_retrieval_chat_template(processor)
+        image = Image.fromarray(np.random.randint(0, 255, (8, 8, 3), dtype=np.uint8))
+        messages = [
+            [{"role": "user", "content": [{"type": "text", "text": "hello"}]}],
+            [{"role": "user", "content": [{"type": "image", "image": image}]}],
+        ]
+
+        inputs = processor.apply_chat_template(
+            messages, task="document", tokenize=True, return_dict=True, return_tensors="pt"
+        )
+
+        self.assertEqual(inputs["input_ids"].shape[0], 2)
+        self.assertTrue(torch.all(inputs["input_ids"][:, 0] == self.marker_ids["<doc>"]))
+        self.assertEqual(inputs["position_ids"].shape[1], 2)
+        self.assertIn("pixel_values", inputs)
 
     def test_apply_chat_template_image_rejects_assistant_mask(self):
         processor = self.get_processor()
@@ -278,7 +332,7 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.get_processor()
         placeholder = processor.image_token
 
-        with self.assertRaisesRegex(ValueError, "reserved"):
+        with self.assertRaisesRegex(TemplateError, "reserved"):
             processor(text=[f"hello {placeholder}"], task="query")
 
         image = Image.fromarray(np.random.randint(0, 255, (8, 8, 3), dtype=np.uint8))
@@ -286,13 +340,13 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor.chat_template = (
             "{% if task == 'document' %}{{ document_token }}{% else %}{{ query_token }}{% endif %}"
         )
-        with self.assertRaisesRegex(ValueError, "image_token"):
+        with self.assertRaisesRegex(ValueError, "image prompts"):
             processor.apply_chat_template(messages, task="document", tokenize=True)
 
     def test_zero_query_expansion_template(self):
         processor = self.get_processor()
         processor.query_expand = 0
-        processor.chat_template = self.chat_template.replace("range(10)", "range(0)")
+        processor.chat_template = self.chat_template.replace("mask_token * 10", "mask_token * 0")
 
         inputs = processor(text=["hello"], task="query", return_tensors="pt")
         hello_id = processor.tokenizer.convert_tokens_to_ids("hello")
@@ -539,7 +593,7 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def test_invalid_task_raises(self):
         processor = self.get_processor()
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TemplateError):
             processor(text=["hello"], task="passage")
 
     def test_one_modality_per_call(self):

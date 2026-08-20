@@ -24,7 +24,6 @@ from ...image_utils import ImageInput, is_valid_image
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring, is_torch_available, logging
-from ...utils.chat_template_utils import _get_template_variables
 from ...utils.import_utils import requires
 
 
@@ -200,11 +199,6 @@ class NeoMMEProcessor(ProcessorMixin):
             if any(not isinstance(value, str) for value in text):
                 raise ValueError("Pretokenized text is not supported.")
 
-    @staticmethod
-    def _validate_task(task: str) -> None:
-        if task not in {"query", "document"}:
-            raise ValueError(f"task={task!r} is not supported: expected 'query' or 'document'.")
-
     def apply_chat_template(
         self,
         conversation: list[dict[str, str]] | list[list[dict[str, str]]],
@@ -216,43 +210,32 @@ class NeoMMEProcessor(ProcessorMixin):
         """Apply the configured retrieval template and optionally tokenize its output.
 
         When `tokenize=True`, image content must include an image, URL, path, or base64 value. Pass processing
-        options such as `max_length` or `max_side` through `processor_kwargs` or as top-level keyword arguments.
+        options such as `max_length` or `max_side` through `processor_kwargs`.
         """
-        self._validate_task(task)
-        template = self._resolve_chat_template(chat_template)
-        template_variables = _get_template_variables(template)
-        if "task" not in template_variables:
-            raise ValueError("NeoMME chat templates must use the `task` variable to distinguish retrieval sides.")
-
-        modality = self._validate_chat_conversation(
-            conversation, task, require_image_source=bool(kwargs.get("tokenize"))
-        )
-        if modality == "image" and "image_token" not in template_variables:
-            raise ValueError("NeoMME image chat templates must use the `image_token` variable.")
-        if modality == "image" and kwargs.get("return_assistant_tokens_mask"):
+        if kwargs.get("return_assistant_tokens_mask") and self._batch_contains_image(conversation):
             raise ValueError("Image document templates do not support `return_assistant_tokens_mask`.")
 
         processor_kwargs = {**(processor_kwargs or {}), "task": task, "_chat_template_applied": True}
-        chat_control_kwargs = {
-            "add_generation_prompt",
-            "continue_final_message",
-            "documents",
-            "load_audio_from_video",
-            "return_assistant_tokens_mask",
-            "return_dict",
-            "return_tensors",
-            "tokenize",
-            "tools",
-        }
-        for name in list(kwargs):
-            if name not in template_variables and name not in chat_control_kwargs:
-                processor_kwargs[name] = kwargs.pop(name)
         return super().apply_chat_template(
             conversation,
             chat_template=chat_template,
             processor_kwargs=processor_kwargs,
             task=task,
             **kwargs,
+        )
+
+    @staticmethod
+    def _batch_contains_image(
+        conversation: list[dict[str, str]] | list[list[dict[str, str]]],
+    ) -> bool:
+        """Return whether an image is present for the assistant-mask restriction."""
+        is_batched = bool(conversation) and isinstance(conversation[0], (list, tuple))
+        conversations = conversation if is_batched else [conversation]
+        return any(
+            item.get("type") in {"image", "image_url"}
+            for messages in conversations
+            for message in messages
+            for item in (message.get("content") if isinstance(message.get("content"), list) else [])
         )
 
     @auto_docstring
@@ -277,7 +260,6 @@ class NeoMMEProcessor(ProcessorMixin):
             A [`BatchFeature`] with `input_ids` and `attention_mask`. Image inputs also return `position_ids`,
             and `pixel_values`.
         """
-        self._validate_task(task)
         rendered_text = text if _chat_template_applied else None
         if _chat_template_applied and images is not None:
             text = None
@@ -298,120 +280,18 @@ class NeoMMEProcessor(ProcessorMixin):
         # What the caller actually named, flat or nested, as opposed to what `_merge_kwargs` injected.
         requested = set(kwargs) | set(kwargs.get("text_kwargs", {}))
         text_kwargs = self._supported_text_kwargs(output_kwargs["text_kwargs"], requested)
-        if _chat_template_applied:
-            return self._tokenize_rendered_text(text, task=task, **text_kwargs)
-        if task == "query":
-            return self.process_queries(text, **text_kwargs)
-        return self.process_text_documents(text, **text_kwargs)
-
-    def _resolve_chat_template(self, chat_template: str | None) -> str:
-        """Resolve a template name or the configured default before validating its variables."""
-        if chat_template is None:
-            if isinstance(self.chat_template, dict):
-                chat_template = self.chat_template.get("default")
-            else:
-                chat_template = self.chat_template
-        elif isinstance(self.chat_template, dict) and chat_template in self.chat_template:
-            chat_template = self.chat_template[chat_template]
-
-        if not isinstance(chat_template, str):
-            raise ValueError("NeoMMEProcessor requires one default chat template or an explicit template.")
-        return chat_template
-
-    def _validate_chat_conversation(
-        self,
-        conversation: list[dict[str, str]] | list[list[dict[str, str]]],
-        task: Literal["query", "document"],
-        require_image_source: bool = False,
-    ) -> Literal["text", "image"]:
-        """Validate that each chat item represents one supported NeoMME retrieval side."""
-        if not conversation:
-            raise ValueError("NeoMME chat conversations must not be empty.")
-        is_batched = (
-            isinstance(conversation, (list, tuple)) and conversation and isinstance(conversation[0], (list, tuple))
-        )
-        conversations = conversation if is_batched else [conversation]
-        modalities = {self._conversation_modality(messages, task, require_image_source) for messages in conversations}
-
-        if len(modalities) != 1:
-            raise ValueError("A NeoMME chat template batch cannot mix text and image documents.")
-        return modalities.pop()
-
-    def _conversation_modality(
-        self,
-        messages: list[dict[str, Any]],
-        task: Literal["query", "document"],
-        require_image_source: bool,
-    ) -> Literal["text", "image"]:
-        """Validate one conversation and return its modality."""
-        if not messages:
-            raise ValueError("Each NeoMME chat conversation must contain at least one message.")
-
-        has_text = False
-        image_count = 0
-        for message in messages:
-            content = message.get("content") or []
-            items = [{"type": "text", "text": content}] if isinstance(content, str) else content
-            for item in items:
-                content_type = item.get("type")
-                if content_type == "text":
-                    text = item.get("text") or ""
-                    self._validate_user_text(text)
-                    has_text = has_text or bool(text)
-                elif content_type in {"image", "image_url"}:
-                    if require_image_source and not self._has_image_source(item):
-                        raise ValueError(
-                            "Tokenized NeoMME image content must provide an image, URL, path, or base64 value."
-                        )
-                    image_count += 1
-                else:
-                    raise ValueError(f"NeoMME chat templates do not support content type {content_type!r}.")
-
-        if image_count and has_text:
-            raise ValueError("NeoMME cannot encode text and images in the same chat item.")
-        if image_count > 1:
-            raise ValueError("NeoMME accepts one image document per chat item.")
-        if image_count and task != "document":
-            raise ValueError("Images in chat messages must use task='document'.")
-        return "image" if image_count else "text"
-
-    @staticmethod
-    def _has_image_source(item: dict[str, Any]) -> bool:
-        if item.get("type") == "image_url":
-            source = item.get("image_url")
-            source = source.get("url") if isinstance(source, dict) else source
-            return source not in (None, "")
-        for name in ("image", "url", "path", "base64"):
-            source = item.get(name)
-            if source is not None and (not isinstance(source, str) or source):
-                return True
-        return False
-
-    def _validate_user_text(self, text: str) -> None:
-        if self.image_token in text:
-            raise ValueError(
-                f"{self.image_token!r} is reserved for internal image processing and cannot appear in user text."
-            )
+        if not _chat_template_applied:
+            text = self._render_text(text, task=task)
+        return self._tokenize_rendered_text(text, task=task, **text_kwargs)
 
     def _render_template(self, conversations: list[list[dict]], task: Literal["query", "document"]) -> list[str]:
-        template = self._resolve_chat_template(None)
-        if "task" not in _get_template_variables(template):
-            raise ValueError("NeoMME chat templates must use the `task` variable to distinguish retrieval sides.")
-
-        return self.tokenizer.apply_chat_template(
-            conversations,
-            chat_template=template,
-            task=task,
-            tokenize=False,
-        )
+        return self.apply_chat_template(conversations, task=task, tokenize=False)
 
     def _render_text(self, text: list[str], task: Literal["query", "document"]) -> list[str]:
         if not text:
             raise ValueError("text must contain at least one string.")
         if any(not isinstance(value, str) for value in text):
             raise ValueError("Pretokenized text is not supported.")
-        for value in text:
-            self._validate_user_text(value)
 
         conversations = [[{"role": "user", "content": value}] for value in text]
         return self._render_template(conversations, task)
@@ -424,7 +304,6 @@ class NeoMMEProcessor(ProcessorMixin):
         padding: bool | str = "longest",
         return_tensors: str | None = "pt",
     ) -> BatchFeature:
-        self._validate_task(task)
         marker_ids = self._marker_ids()
         encodings = self.tokenizer(text, add_special_tokens=False)["input_ids"]
         sequences = []
@@ -511,7 +390,9 @@ class NeoMMEProcessor(ProcessorMixin):
         marker_ids = self._marker_ids()
 
         if rendered_text is None:
-            conversations = [[{"role": "user", "content": [{"type": "image"}]}] for _ in range(len(image_grid_hw))]
+            conversations = [
+                [{"role": "user", "content": [{"type": "image", "image": True}]}] for _ in range(len(image_grid_hw))
+            ]
             rendered_text = self._render_template(conversations, task="document")
         elif isinstance(rendered_text, str):
             rendered_text = [rendered_text]
@@ -522,15 +403,25 @@ class NeoMMEProcessor(ProcessorMixin):
         rendered_text, _ = self.get_text_with_replacements(list(rendered_text), images_replacements=replacements)
 
         sequences = self.tokenizer(rendered_text, add_special_tokens=False)["input_ids"]
-        if len(sequences) != len(image_grid_hw):
-            raise ValueError(f"Got {len(sequences)} image prompts for {len(image_grid_hw)} images.")
-
         positions: list[np.ndarray] = []
-        for ids, (grid_height, grid_width) in zip(sequences, image_grid_hw.tolist()):
+        image_index = 0
+        for ids in sequences:
+            is_image_document = len(ids) > 1 and ids[:2] == [marker_ids["document"], marker_ids["image"]]
+            if not is_image_document:
+                positions.append(self._text_positions(len(ids)))
+                continue
+            if image_index >= len(image_grid_hw):
+                raise ValueError("NeoMME rendered more image documents than the processor received.")
+
+            grid_height, grid_width = image_grid_hw[image_index].tolist()
             expected_ids, position_ids = self._encode_image_grid(grid_height, grid_width, marker_ids)
             if ids != expected_ids:
                 raise ValueError("NeoMME image template and placeholder replacement produced an invalid token layout.")
             positions.append(position_ids)
+            image_index += 1
+
+        if image_index != len(image_grid_hw):
+            raise ValueError(f"Got {image_index} image prompts for {len(image_grid_hw)} images.")
 
         batch = self._pad_sequences(sequences, positions, return_tensors=return_tensors)
         batch["pixel_values"] = image_inputs["pixel_values"]  # (num_patches, 3 * patch_size ** 2)
@@ -540,6 +431,11 @@ class NeoMMEProcessor(ProcessorMixin):
         grid_height, grid_width = image_inputs["image_grid_hw"][image_idx]
         row = self.tokenizer.image_token * int(grid_width) + self.tokenizer.row_token
         return self.tokenizer.image_token + row * int(grid_height)
+
+    @staticmethod
+    def _text_positions(length: int) -> np.ndarray:
+        positions = np.arange(length, dtype=np.int64)
+        return np.stack((positions, positions), axis=-1)
 
     def score_retrieval(
         self,
