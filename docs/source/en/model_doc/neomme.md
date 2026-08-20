@@ -14,35 +14,31 @@ rendered properly in your Markdown viewer.
 
 -->
 
-*This model was contributed to Hugging Face Transformers on 2026-08-19.*
+*This model was contributed to Hugging Face Transformers on 2026-08-20.*
 
 # NeoMME
 
+[![arXiv](https://img.shields.io/badge/arXiv-coming_soon-b31b1b.svg?style=for-the-badge)](https://arxiv.org)
 [![Hugging Face](https://img.shields.io/badge/NeoMME_Collection-FFD21E?style=for-the-badge&logo=huggingface&logoColor=000)](https://huggingface.co/collections/Hcompany/neomme)
 
-NeoMME is a family of bidirectional multilingual encoders for text and images, including natural images and documents. Text tokens and raw image patches use one shared Transformer encoder, without a separately pretrained vision encoder. The pretrained backbone returns contextual token representations for task-specific fine-tuning.
+NeoMME is a family of bidirectional multilingual encoders for text and images (natural images and document pages). Text tokens and raw image patches use one shared Transformer encoder, without a separately pretrained vision encoder. The pretrained backbone returns contextual token representations for task-specific fine-tuning.
 
-NeoMME-Retriever is a downstream model fine-tuned for text and document retrieval. It returns token embeddings for MaxSim scoring and mean-pooled embeddings for cosine similarity.
+NeoMME-Retriever is a downstream model fine-tuned for text and document retrieval. It returns token embeddings for MeanMaxSim scoring and mean-pooled embeddings for cosine similarity.
 
 Training details, evaluations, benchmark results, and ablations will be included in the technical report. Apache-2.0 weights are available in the [NeoMME collection](https://huggingface.co/collections/Hcompany/neomme).
-
-Each checkpoint includes a task-aware chat template that adds the `<query>` or `<doc>` prefix and the fixed query expansion. These named special tokens are reserved model tokens. The processor handles tokenization, truncation, image-grid expansion, padding, and position IDs.
 
 ```python
 import torch
 
 from transformers import AutoModelForMaskedLM, AutoProcessor
 
-checkpoint = "Hcompany/NeoMME-260M"
-processor = AutoProcessor.from_pretrained(checkpoint)
-model = AutoModelForMaskedLM.from_pretrained(checkpoint, device_map="auto")
+
+model_name = "Hcompany/NeoMME-260M"
+processor = AutoProcessor.from_pretrained(model_name)
+model = AutoModelForMaskedLM.from_pretrained(model_name, device_map="auto")
 
 text = f"The capital of {processor.tokenizer.mask_token} is London."
-inputs = processor(
-    text=[text],
-    task="document",
-    return_tensors="pt",
-).to(model.device)
+inputs = processor(text=[text], return_tensors="pt").to(model.device)
 
 with torch.inference_mode():
     outputs = model(**inputs)
@@ -52,7 +48,9 @@ predicted_token_id = outputs.logits[0, masked_index].argmax(dim=-1)
 print(processor.tokenizer.decode(predicted_token_id))
 ```
 
-Install `sentence-transformers>=6.0.0` to use MeanMaxSim scoring in the retrieval example below.
+> [!IMPORTANT]
+> Install `sentence-transformers>=6.0.0` to use MeanMaxSim scoring in the retrieval example below. For the
+> Sentence Transformers API, see the [Multi-Vector Encoder quickstart](https://sbert.net/docs/quickstart.html#multi-vector-encoder).
 
 ```python
 import requests
@@ -62,11 +60,12 @@ from sentence_transformers.util import mean_maxsim
 
 from transformers import NeoMMEForRetrieval, NeoMMEProcessor
 
-checkpoint = "Hcompany/NeoMME-260M-Retriever"
-processor = NeoMMEProcessor.from_pretrained(checkpoint)
-model = NeoMMEForRetrieval.from_pretrained(checkpoint).eval()
 
-# Document images to search
+model_name = "Hcompany/NeoMME-260M-Retriever"
+processor = NeoMMEProcessor.from_pretrained(model_name)
+model = NeoMMEForRetrieval.from_pretrained(model_name)
+
+# Document images (our corpus)
 image_urls = [
     "https://github.com/tonywu71/colpali-cookbooks/blob/6ef1332da6bcb48c7ef1f19b25bfa555be7031a8/examples/data/shift_kazakhstan.jpg?raw=true",
     "https://github.com/tonywu71/colpali-cookbooks/blob/6ef1332da6bcb48c7ef1f19b25bfa555be7031a8/examples/data/energy_electricity_generation.jpg?raw=true",
@@ -79,16 +78,8 @@ queries = [
     "Which hour of the day had the highest overall electricity generation in 2019?",
 ]
 
-inputs_documents = processor(
-    images=documents,
-    task="document",
-    return_tensors="pt",
-).to(model.device)
-inputs_text = processor(
-    text=queries,
-    task="query",
-    return_tensors="pt",
-).to(model.device)
+inputs_documents = processor(images=documents, task="document", return_tensors="pt").to(model.device)
+inputs_text = processor(text=queries, task="query", return_tensors="pt").to(model.device)
 
 with torch.inference_mode():
     document_embeddings = model(**inputs_documents).embeddings
