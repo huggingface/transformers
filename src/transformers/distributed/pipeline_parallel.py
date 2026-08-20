@@ -31,8 +31,8 @@ if is_torch_available():
 if is_torch_distributed_available():
     import torch.distributed as dist
 
-def _bind_forward_kwargs(forward_fn, args: tuple, kwargs: dict) -> dict:
-    bound = inspect.signature(forward_fn).bind_partial(*args, **kwargs)
+def _bind_forward_kwargs(forward_signature: inspect.Signature, args: tuple, kwargs: dict) -> dict:
+    bound = forward_signature.bind_partial(*args, **kwargs)
     bound.apply_defaults()
     return dict(bound.arguments)
 
@@ -240,10 +240,11 @@ def apply_pipeline_parallelism(model: nn.Module, pp_mesh: torch.distributed.devi
     # TODO(3outeille): dispatch to different pipeline parallelism schedules (gpipe, 1f1b, etc.)
     if not getattr(model, "_pp_forward_wrapped", False):
         original_forward = model.forward
+        forward_signature = inspect.signature(original_forward)
 
         @wraps(original_forward)
         def pp_naive_forward(*args, **kwargs):
-            return pipeline_parallel_naive_forward(model, original_forward, *args, **kwargs)
+            return pipeline_parallel_naive_forward(model, original_forward, forward_signature, *args, **kwargs)
 
         # @wraps(original_forward)
         # def pp_gpipe_forward(*args, **kwargs):
@@ -255,7 +256,9 @@ def apply_pipeline_parallelism(model: nn.Module, pp_mesh: torch.distributed.devi
     return model
 
 
-def pipeline_parallel_naive_forward(model: nn.Module, original_forward, *args, **kwargs):
+def pipeline_parallel_naive_forward(
+    model: nn.Module, original_forward, forward_signature: inspect.Signature, *args, **kwargs
+):
     def _hidden_states_shape(fwd_kwargs: dict, hidden_size: int) -> tuple[int, ...]:
         if (inputs_embeds := fwd_kwargs.get("inputs_embeds")) is not None:
             return tuple(inputs_embeds.shape)
@@ -277,7 +280,7 @@ def pipeline_parallel_naive_forward(model: nn.Module, original_forward, *args, *
     dtype = next(model.parameters()).dtype
 
     # Bind the forward function to the arguments so that we can easily access them regardless of the number of arguments or the way we called the forward function.
-    caller_kwargs = _bind_forward_kwargs(original_forward, args, kwargs)
+    caller_kwargs = _bind_forward_kwargs(forward_signature, args, kwargs)
     fwd_kwargs = caller_kwargs
 
     # Non-first stages: recv activations from prev stage and use them as inputs_embeds.
