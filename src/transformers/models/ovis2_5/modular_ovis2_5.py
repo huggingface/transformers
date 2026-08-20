@@ -350,9 +350,8 @@ class Ovis2_5VisionConfig(Cosmos3EdgeVisionConfig):
 
     # Ignore copy
     def __post_init__(self, **kwargs):
-        legacy_hidden_stride = kwargs.pop("hidden_stride", None)
-        if legacy_hidden_stride is not None and self.spatial_merge_size == 2:
-            self.spatial_merge_size = legacy_hidden_stride
+        # Released configs use `hidden_stride=2`, matching the inherited spatial merge default.
+        kwargs.pop("hidden_stride", None)
         full_attention_indexes = kwargs.pop("fullatt_block_indexes", None)
         if self.layer_types is None:
             if full_attention_indexes is None:
