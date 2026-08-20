@@ -375,7 +375,7 @@ class Ovis2_5VisionEncoder(nn.Module):
 class Ovis2_5VisualTokenProjector(nn.Module):
     def __init__(self, config: Ovis2_5VisionConfig):
         super().__init__()
-        self.spatial_merge_unit = config.hidden_stride**2
+        self.spatial_merge_unit = config.spatial_merge_size**2
         visual_token_vocab_size = config.vocab_size - config.num_visual_indicator_tokens
         self.head_linear = nn.Linear(
             config.hidden_size * self.spatial_merge_unit,
