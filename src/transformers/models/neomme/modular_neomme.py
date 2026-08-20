@@ -56,13 +56,6 @@ from .configuration_neomme import NeoMMEConfig
 logger = logging.get_logger(__name__)
 
 
-def _validate_image_dimensions(height: int, width: int) -> None:
-    if not isinstance(height, int) or isinstance(height, bool) or height <= 0:
-        raise ValueError(f"height must be a positive integer, got {height!r}.")
-    if not isinstance(width, int) or isinstance(width, bool) or width <= 0:
-        raise ValueError(f"width must be a positive integer, got {width!r}.")
-
-
 def get_resize_output_size(height: int, width: int, max_side: int | None, size: SizeDict | None) -> tuple[int, int]:
     """Compute integer height and width from the configured image size targets."""
     min_pixels = size.min_pixels if size is not None else None
@@ -247,9 +240,6 @@ class NeoMMEImageProcessor(TorchvisionBackend):
         patch_size = images_kwargs.get("patch_size", self.patch_size)
         max_side = images_kwargs.get("max_side", self.max_side)
         size = self._standardize_kwargs(size=images_kwargs.get("size", self.size))["size"]
-
-        _validate_image_dimensions(height, width)
-        self._validate_size_settings(patch_size, max_side, size)
 
         if images_kwargs.get("do_resize", self.do_resize):
             height, width = get_resize_output_size(height, width, max_side, size)
