@@ -1573,6 +1573,10 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             if config.is_encoder_decoder or not model_class._supports_default_dynamic_cache():
                 self.skipTest(reason="This model does not support the quantized cache format")
 
+            layer_types = getattr(config.get_text_config(), "layer_types", None) or []
+            if any(layer_type != "full_attention" for layer_type in layer_types):
+                self.skipTest(reason="`QuantizedCache` is only supported for models with full attention layers")
+
             config.is_decoder = True
             model = model_class(config).to(torch_device).eval()
             generation_kwargs = {
