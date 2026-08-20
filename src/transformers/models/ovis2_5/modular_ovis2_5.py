@@ -563,7 +563,7 @@ class Ovis2_5VisionModel(Ovis2_5PreTrainedModel, MuseGlimmerVisionModel):
 
     def __init__(self, config: Ovis2_5VisionConfig):
         Ovis2_5PreTrainedModel.__init__(self, config)
-        self.spatial_merge_size = config.hidden_stride
+        self.spatial_merge_size = config.spatial_merge_size
         self.window_size = config.window_size
         self.patch_size = config.patch_size
         self.embeddings = Ovis2_5VisionEmbeddings(config)
