@@ -820,15 +820,6 @@ class Ovis2_5_Model(Ovis2_5Model):
 class Ovis2_5ForConditionalGeneration(Ovis2_5PreTrainedModel, Exaone4_5_ForConditionalGeneration):
     """Ovis2.5 multimodal conditional generation model."""
 
-    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
-
-    def __init__(self, config: Ovis2_5Config):
-        super().__init__(config)
-        self.model = Ovis2_5Model(config)
-        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
-
-        self.post_init()
-
     @can_return_tuple
     @auto_docstring
     def forward(
