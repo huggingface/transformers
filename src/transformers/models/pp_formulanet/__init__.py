@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 from typing import TYPE_CHECKING
 
 from ...utils import _LazyModule
@@ -22,6 +21,7 @@ if TYPE_CHECKING:
     from .configuration_pp_formulanet import *
     from .image_processing_pp_formulanet import *
     from .modeling_pp_formulanet import *
+    from .processing_pp_formulanet import *
 else:
     import sys
 

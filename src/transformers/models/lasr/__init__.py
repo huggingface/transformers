@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from .configuration_lasr import *
     from .feature_extraction_lasr import *
     from .modeling_lasr import *
+    from .processing_lasr import *
     from .tokenization_lasr import *
 else:
     import sys

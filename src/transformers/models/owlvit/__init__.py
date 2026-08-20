@@ -19,7 +19,6 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_owlvit import *
-    from .feature_extraction_owlvit import *
     from .image_processing_owlvit import *
     from .image_processing_pil_owlvit import *
     from .modeling_owlvit import *
