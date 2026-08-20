@@ -459,6 +459,7 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
                 )
                 self.assertEqual(layer.keys.shape[-2], expected_length)
 
+    @require_torch_accelerator  # `generate` only auto-compiles on an accelerator
     def test_generate_compile_matches_eager(self):
         """Generating with a static cache traces a single graph, without breaks, and matches eager."""
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
