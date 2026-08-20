@@ -35,7 +35,6 @@ from transformers import (
 from transformers.data.data_collator import default_data_collator as _default_data_collator
 from transformers.modeling_outputs import SequenceClassifierOutput
 from transformers.testing_utils import (
-    CaptureLogger,
     TestCasePlus,
     backend_device_count,
     require_accelerate,
@@ -717,71 +716,6 @@ class TrainerSamplerTest(unittest.TestCase):
                 total, effective_batch_size, f"gb={gb}: expected {effective_batch_size} samples, got {total}"
             )
 
-    def test_batch_rebalance_max_tokens(self):
-        """Test that max_tokens constraint limits padded tokens per micro-batch."""
-        lengths = [100] * 40 + [3000] * 8  # 48 samples
-        dp_size = 2
-        grad_accum = 2
-        effective_batch_size = 12
-        max_tokens = 4000
-
-        for rank in range(dp_size):
-            sampler = BatchRebalanceSampler(
-                lengths=lengths,
-                effective_batch_size=effective_batch_size,
-                dp_size=dp_size,
-                grad_accum=grad_accum,
-                rank=rank,
-                max_tokens=max_tokens,
-            )
-            for batch in sampler:
-                if batch:
-                    max_len = max(lengths[i] for i in batch)
-                    padded = len(batch) * max_len
-                    self.assertLessEqual(
-                        padded, max_tokens + max(lengths), f"bs={len(batch)}, max_len={max_len}, padded={padded}"
-                    )
-
-    def test_batch_rebalance_max_tokens_infeasible_no_data_loss(self):
-        """
-        Test that when `max_tokens` cannot be satisfied for a group (no other group has spare
-        capacity to donate/receive samples), the sampler does not silently drop samples. Instead it
-        should keep all samples (falling back to exceeding `max_tokens` for that group) and emit a
-        warning via `logger.warning_once`.
-
-        Regression test for a bug where `counts[gi] -= 1` was applied unconditionally before checking
-        whether any other group could absorb the extra sample, causing `sum(counts) < n` and therefore
-        silently dropping samples from the batch.
-        """
-        # K = dp_size * grad_accum = 1, so the "donor" search loop (`for r in range(K): if r != gi`)
-        # can never find a candidate — this deterministically reproduces the infeasible case.
-        lengths = [100] * 10 + [5000] * 2  # 12 samples
-        dp_size = 1
-        grad_accum = 1
-        effective_batch_size = 12
-        max_tokens = 1  # impossibly small, guarantees the limit can never be satisfied
-
-        sampler = BatchRebalanceSampler(
-            lengths=lengths,
-            effective_batch_size=effective_batch_size,
-            dp_size=dp_size,
-            grad_accum=grad_accum,
-            rank=0,
-            max_tokens=max_tokens,
-        )
-
-        from transformers.trainer_pt_utils import logger as trainer_pt_utils_logger
-
-        with CaptureLogger(trainer_pt_utils_logger) as cl:
-            all_indices = []
-            for batch in sampler:
-                all_indices.extend(batch)
-
-        # No samples should have been dropped.
-        self.assertEqual(sorted(all_indices), list(range(len(lengths))))
-        # A warning should have been emitted since the `max_tokens` constraint could not be satisfied.
-        self.assertIn("max_tokens", cl.out)
-
     def test_batch_rebalance_deterministic(self):
         """Test that same seed produces same results, and different ranks produce same partition."""
         lengths = [100 * (i + 1) for i in range(32)]
@@ -1059,7 +993,6 @@ class TrainerSamplerTest(unittest.TestCase):
             fake_trainer.args.train_batch_size = per_device_train_batch_size * max(1, n_gpu)
             fake_trainer.args.gradient_accumulation_steps = grad_accum
             fake_trainer.args.length_column_name = "length"
-            fake_trainer.args.batch_rebalance_max_tokens = 0
             fake_trainer.args.dataloader_drop_last = True
             fake_trainer.processing_class = None
             fake_trainer.train_dataset = [{"input_ids": list(range((i % 5) + 1))} for i in range(n)]

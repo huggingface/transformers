@@ -1362,12 +1362,6 @@ class TrainingArguments:
             "help": "Column name for precomputed lengths. Ignored unless `train_sampling_strategy` is 'group_by_length' or 'batch_rebalance'."
         },
     )
-    batch_rebalance_max_tokens: int = field(
-        default=0,
-        metadata={
-            "help": "Max padded tokens (bs * max_len) per micro-batch for BatchRebalanceSampler. 0 = unlimited."
-        },
-    )
 
     # --- DDP ---
     ddp_find_unused_parameters: bool | None = field(

@@ -1106,7 +1106,6 @@ class Trainer:
                 grad_accum=grad_accum,
                 rank=rank,
                 drop_last=self.args.dataloader_drop_last,
-                max_tokens=self.args.batch_rebalance_max_tokens,
             )
         elif self.args.train_sampling_strategy == "sequential":
             return SequentialSampler(train_dataset)

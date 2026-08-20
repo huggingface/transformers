@@ -697,9 +697,6 @@ class BatchRebalanceSampler(Sampler):
             Current rank index.
         drop_last (`bool`, *optional*, defaults to `True`):
             Drop incomplete last batch.
-        max_tokens (`int`, *optional*, defaults to 0):
-            Maximum padded tokens (`bs * max_len`) per micro-batch. 0 = unlimited. Prevents OOM
-            when many short sequences are assigned to one group.
 
     Example:
 
@@ -731,7 +728,6 @@ class BatchRebalanceSampler(Sampler):
         seed: int = 42,
         rank: int = 0,
         drop_last: bool = True,
-        max_tokens: int = 0,
     ):
         assert dp_size >= 1
         assert grad_accum >= 1
@@ -745,7 +741,6 @@ class BatchRebalanceSampler(Sampler):
         self.seed = seed
         self.rank = rank
         self.drop_last = drop_last
-        self.max_tokens = max_tokens
         self.epoch = 0
 
         self.num_full_batches = len(self.lengths) // effective_batch_size
@@ -803,17 +798,6 @@ class BatchRebalanceSampler(Sampler):
     def _cost(self, bs: int, max_len: int) -> float:
         return bs * max_len + self.QUADRATIC_COST_COEF * bs * max_len * max_len
 
-    def _padded_tokens(self, count, sorted_pairs, group_start):
-        if count <= 0:
-            return 0
-        max_len = sorted_pairs[group_start][1]
-        return count * max_len
-
-    def _within_token_limit(self, count, sorted_pairs, group_start):
-        if self.max_tokens <= 0:
-            return True
-        return self._padded_tokens(count, sorted_pairs, group_start) <= self.max_tokens
-
     def _assign(self, indices, lengths):
         sorted_pairs = sorted(zip(indices, lengths), key=lambda x: x[1], reverse=True)
 
@@ -847,42 +831,6 @@ class BatchRebalanceSampler(Sampler):
                 f"Reduce effective_batch_size or increase the dataset size."
             )
         counts = [base + (1 if i < remainder else 0) for i in range(K)]
-
-        def group_start_index(cts, gi):
-            return sum(cts[:gi])
-
-        def can_transfer(cts, from_idx, to_idx):
-            if self.max_tokens <= 0:
-                return True
-            new_cts = list(cts)
-            new_cts[from_idx] -= 1
-            new_cts[to_idx] += 1
-            gs = sum(new_cts[:to_idx])
-            return self._within_token_limit(new_cts[to_idx], sorted_pairs, gs)
-
-        if self.max_tokens > 0:
-            for gi in range(K):
-                while counts[gi] > min_per_group + 1:
-                    gs = group_start_index(counts, gi)
-                    if not self._within_token_limit(counts[gi], sorted_pairs, gs):
-                        donor_found = False
-                        for r in range(K):
-                            if r != gi and can_transfer(counts, gi, r):
-                                counts[gi] -= 1
-                                counts[r] += 1
-                                donor_found = True
-                                break
-                        if not donor_found:
-                            logger.warning_once(
-                                "BatchRebalanceSampler: unable to satisfy `max_tokens` constraint for one or more "
-                                "groups in this batch — no other group has spare capacity to absorb the excess "
-                                "sample(s). Falling back to leaving the group over the limit for this batch rather "
-                                "than dropping samples. Consider increasing `batch_rebalance_max_tokens` or "
-                                "decreasing the effective batch size if this occurs frequently."
-                            )
-                            break
-                    else:
-                        break
 
         def compute_groups_costs(cts):
             groups = []
@@ -933,7 +881,7 @@ class BatchRebalanceSampler(Sampler):
             for lo_idx in lo_candidates:
                 if lo_idx == hi_idx or costs[lo_idx] == costs[hi_idx]:
                     continue
-                if counts[hi_idx] > min_per_group and can_transfer(counts, hi_idx, lo_idx):
+                if counts[hi_idx] > min_per_group:
                     counts[hi_idx] -= 1
                     counts[lo_idx] += 1
                     transferred = True
@@ -957,10 +905,7 @@ class BatchRebalanceSampler(Sampler):
                             idx_start = sum(counts[:gi])
                             gi_max_len = sorted_pairs[idx_start][1] if counts[gi] > 0 else 0
                             projected = self._cost(counts[gi] + 1, gi_max_len)
-                            projected_tokens = self._padded_tokens(counts[gi] + 1, sorted_pairs, idx_start)
                             if projected > cap_cost:
-                                break
-                            if self.max_tokens > 0 and projected_tokens > self.max_tokens:
                                 break
                             donors = [
                                 i
