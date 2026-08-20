@@ -63,6 +63,19 @@ from sentence_transformers.util import mean_maxsim
 from transformers import BatchFeature, NeoMMEForRetrieval, NeoMMEProcessor
 
 
+def encode(
+    messages: list[list[dict[str, Any]]],
+    task: Literal["query", "document"],
+) -> BatchFeature:
+    return processor.apply_chat_template(
+        messages,
+        task=task,
+        tokenize=True,
+        return_dict=True,
+        return_tensors="pt",
+    )
+
+
 model_name = "Hcompany/NeoMME-260M-Retriever"
 processor = NeoMMEProcessor.from_pretrained(model_name)
 model = NeoMMEForRetrieval.from_pretrained(model_name)
@@ -85,22 +98,8 @@ document_messages = [
 ]
 query_messages = [[{"role": "user", "content": query}] for query in queries]
 
-
-def encode(
-    messages: list[list[dict[str, Any]]],
-    task: Literal["query", "document"],
-) -> BatchFeature:
-    return processor.apply_chat_template(
-        messages,
-        task=task,
-        tokenize=True,
-        return_dict=True,
-        return_tensors="pt",
-    ).to(model.device)
-
-
-inputs_documents = encode(document_messages, "document")
-inputs_text = encode(query_messages, "query")
+inputs_documents = encode(document_messages, "document").to(model.device)
+inputs_text = encode(query_messages, "query").to(model.device)
 
 with torch.inference_mode():
     document_embeddings = model(**inputs_documents).embeddings
