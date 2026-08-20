@@ -50,7 +50,6 @@ from ..muse_glimmer.modeling_muse_glimmer import MuseGlimmerVisionModel, MuseGli
 from ..ovis2.modeling_ovis2 import Ovis2Model
 from ..paddleocr_vl.modeling_paddleocr_vl import PaddleOCRVisionEmbeddings
 from ..video_llama_3.modeling_video_llama_3 import (
-    VideoLlama3CausalLMOutputWithPast,
     VideoLlama3ModelOutputWithPast,
     VideoLlama3PreTrainedModel,
     VideoLlama3VisionAttention,
@@ -535,10 +534,6 @@ class Ovis2_5VisualFeaturesOutput(BaseModelOutputWithPooling):
 
 
 class Ovis2_5ModelOutputWithPast(VideoLlama3ModelOutputWithPast):
-    pass
-
-
-class Ovis2_5CausalLMOutputWithPast(VideoLlama3CausalLMOutputWithPast):
     pass
 
 
