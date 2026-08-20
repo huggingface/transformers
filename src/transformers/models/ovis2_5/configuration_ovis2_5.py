@@ -51,11 +51,12 @@ class Ovis2_5VisionConfig(PreTrainedConfig):
     num_hidden_layers: int = 27
     num_attention_heads: int = 16
     num_channels: int = 3
-    image_size: int = 512
     patch_size: int = 16
     hidden_act: str = "gelu_pytorch_tanh"
     layer_norm_eps: float = 1e-6
     attention_dropout: float | int = 0.0
+    spatial_merge_size: int = 2
+    image_size: int = 512
     hidden_stride: int = 2
     window_size: int = 112
     layer_types: list[str] | tuple[str, ...] | None = None

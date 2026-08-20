@@ -41,6 +41,7 @@ from ...vision_utils import (
     get_vision_window_index,
 )
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ..cosmos3_edge.configuration_cosmos3_edge import Cosmos3EdgeVisionConfig
 from ..exaone4_5.modeling_exaone4_5 import Exaone4_5_ForConditionalGeneration
 from ..glm4v.image_processing_glm4v import Glm4vImageProcessor, Glm4vImageProcessorKwargs
 from ..glm4v.image_processing_pil_glm4v import Glm4vImageProcessorPil
@@ -320,7 +321,7 @@ class Ovis2_5VideoProcessor(Glm4vVideoProcessor):
 
 @auto_docstring(checkpoint="AIDC-AI/Ovis2.5-2B")
 @strict
-class Ovis2_5VisionConfig(PreTrainedConfig):
+class Ovis2_5VisionConfig(Cosmos3EdgeVisionConfig):
     r"""
     hidden_stride (`int`, *optional*, defaults to 2):
         Spatial grouping factor applied before the visual-tokenizer head.
@@ -357,6 +358,7 @@ class Ovis2_5VisionConfig(PreTrainedConfig):
     vocab_size: int = 65536
     num_visual_indicator_tokens: int = 4
     initializer_range: float = 0.02
+    num_patches = AttributeError()
 
     # Ignore copy
     def __post_init__(self, **kwargs):
@@ -374,7 +376,7 @@ class Ovis2_5VisionConfig(PreTrainedConfig):
                 ]
         else:
             self.layer_types = list(self.layer_types)
-        super().__post_init__(**kwargs)
+        PreTrainedConfig.__post_init__(self, **kwargs)
 
 
 @auto_docstring(checkpoint="AIDC-AI/Ovis2.5-2B")
