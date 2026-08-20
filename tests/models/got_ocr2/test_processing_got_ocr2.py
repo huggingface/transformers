@@ -17,7 +17,7 @@ import unittest
 from transformers import GotOcr2Processor
 from transformers.testing_utils import is_torch_available, require_vision
 
-from ...test_processing_common import MODALITY_PARAMETERIZED_DATA, ProcessorTesterMixin
+from ...test_processing_common import MODALITY_CONFIG, ProcessorTesterMixin
 
 
 if is_torch_available():
@@ -93,10 +93,10 @@ class GotOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             inputs[self.text_input_name][1:].tolist(), inputs_nested[self.text_input_name][1:].tolist()
         )
 
-    def test_subprocessor_defaults_1_images(self):
+    def test_subprocessor_defaults_1_image(self):
         # overriden - pop certina keys from `merged_kwargs` which are used only by processor
-        parameterized_data = MODALITY_PARAMETERIZED_DATA["images"]
-        subprocessor = self.get_component(parameterized_data["processing_class"])
+        parameterized_config = MODALITY_CONFIG["image"]
+        subprocessor = self.get_component(parameterized_config["component_key"])
 
         # Get all other required components for processor
         components = {}
@@ -104,10 +104,10 @@ class GotOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             components[attribute] = self.get_component(attribute)
 
         processor = self.processor_class(**components, **self.prepare_processor_dict())
-        modality_input = self.prepare_modality_inputs("images")
+        modality_input = self._prepare_modality_input("image")
 
         # merge processor defaults when calling a subprocessor
-        kwargs = parameterized_data["kwargs"]
+        kwargs = parameterized_config["call_time_kwargs"]
         kwargs["return_tensors"] = "pt"
         merged_kwargs = processor._merge_kwargs(
             processor.valid_processor_kwargs,

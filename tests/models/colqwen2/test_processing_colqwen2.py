@@ -56,8 +56,8 @@ class ColQwen2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @parameterized.expand(
         [
             ("text",),
-            ("images",),
-            ("videos",),
+            ("image",),
+            ("video",),
             ("audio",),
         ]
     )

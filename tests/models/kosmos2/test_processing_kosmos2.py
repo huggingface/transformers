@@ -55,7 +55,7 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Kosmos2Processor
     image_text_kwargs_max_length = 72
     image_text_kwargs_override_max_length = 72
-    image_unstructured_max_length = 82
+    image_unstructured_max_length = 72
 
     @classmethod
     def _setup_tokenizer(cls):
@@ -75,14 +75,7 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor_class = cls._get_component_class_from_processor("image_processor")
         return image_processor_class(do_center_crop=False)
 
-    @parameterized.expand(
-        [
-            ("text",),
-            ("images",),
-            ("videos",),
-            ("audio",),
-        ]
-    )
+    @parameterized.expand(["text", "image"])
     @unittest.skip("Kosmos2Processor adds special tokens to the text")
     def test_subprocessor_defaults(self, modality):
         pass

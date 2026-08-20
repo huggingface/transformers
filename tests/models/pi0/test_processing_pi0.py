@@ -56,7 +56,7 @@ class PI0ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def prepare_image_inputs(self, batch_size: int | None = None, nested: bool = True):
         return super().prepare_image_inputs(batch_size, nested=nested)
 
-    def test_subprocessor_defaults_1_images(self):
+    def test_subprocessor_defaults_1_image(self):
         image_processor = self.get_component("image_processor")
         processor = self.get_processor()
         image_input = self.prepare_image_inputs()

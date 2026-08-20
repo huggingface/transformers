@@ -48,7 +48,7 @@ class Kosmos2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     tiny_model_id = "hf-internal-testing/tiny-processor-kosmos2_5"
 
     @unittest.skip("Kosmos2_5Processor removes 'rows' and 'cols' from the output")
-    def test_subprocessor_defaults_1_images(self):
+    def test_subprocessor_defaults_1_image(self):
         pass
 
     def test_image_procesor_load_save_reload(self):
@@ -92,110 +92,11 @@ class Kosmos2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         with pytest.raises(ValueError):
             processor()
 
-    @require_torch
-    @require_vision
-    def test_subprocessor_defaults_preserved_by_kwargs_0_image(self):
-        # Rewrite as KOSMOS-2.5 processor appliescustom normalization and we can't check `out.mean()`
-        image_processor = self.get_component("image_processor", max_patches=1024, patch_size={"height": 8, "width": 8})
-        tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
-
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
-        self.skip_processor_without_typed_kwargs(processor)
-
-        input_str = self.prepare_text_inputs()
-        image_input = self.prepare_image_inputs()
-
-        inputs = processor(text=input_str, images=image_input)
-        self.assertEqual(len(inputs["flattened_patches"][0][0]), 194)
-
-    @require_torch
-    @require_vision
-    def test_kwargs_overrides_default_subprocessor_kwargs_0_image(self):
-        # Rewrite as KOSMOS-2.5 processor appliescustom normalization and we can't check `out.mean()`
-        image_processor = self.get_component("image_processor", max_patches=4096)
-        tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
-
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
-        self.skip_processor_without_typed_kwargs(processor)
-
-        input_str = self.prepare_text_inputs()
-        image_input = self.prepare_image_inputs()
-
-        inputs = processor(text=input_str, images=image_input, max_patches=1024)
-        self.assertEqual(len(inputs["flattened_patches"][0]), 1024)
-
-    @require_torch
-    @require_vision
-    def test_unstructured_kwargs_0_image(self):
-        # Rewrite as KOSMOS-2.5 processor appliescustom normalization and we can't check `out.mean()`
-        image_processor = self.get_component("image_processor")
-        tokenizer = self.get_component("tokenizer")
-
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
-        self.skip_processor_without_typed_kwargs(processor)
-
-        input_str = self.prepare_text_inputs()
-        image_input = self.prepare_image_inputs()
-        inputs = processor(
-            text=input_str,
-            images=image_input,
-            return_tensors="pt",
-            max_patches=1024,
-            padding="max_length",
-            max_length=76,
-        )
-
-        self.assertEqual(inputs["flattened_patches"].shape[1], 1024)
-        self.assertEqual(len(inputs["input_ids"][0]), 76)
-
-    @require_torch
-    @require_vision
-    def test_unstructured_kwargs_batched_0_image(self):
-        # Rewrite as KOSMOS-2.5 processor appliescustom normalization and we can't check `out.mean()`
-        image_processor = self.get_component("image_processor")
-        tokenizer = self.get_component("tokenizer")
-
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
-        self.skip_processor_without_typed_kwargs(processor)
-
-        input_str = self.prepare_text_inputs(batch_size=2)
-        image_input = self.prepare_image_inputs(batch_size=2)
-        inputs = processor(
-            text=input_str,
-            images=image_input,
-            return_tensors="pt",
-            max_patches=1024,
-            padding="longest",
-            max_length=76,
-        )
-
-        self.assertEqual(inputs["flattened_patches"].shape[1], 1024)
-
-        self.assertEqual(len(inputs["input_ids"][0]), 76)
-
-    @require_torch
-    @require_vision
-    def test_structured_kwargs_nested_from_dict_0_image(self):
-        # Rewrite as KOSMOS-2.5 processor appliescustom normalization and we can't check `out.mean()`
-        image_processor = self.get_component("image_processor")
-        tokenizer = self.get_component("tokenizer")
-
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
-        self.skip_processor_without_typed_kwargs(processor)
-        input_str = self.prepare_text_inputs()
-        image_input = self.prepare_image_inputs()
-
-        # Define the kwargs for each modality
-        all_kwargs = {
-            "common_kwargs": {"return_tensors": "pt"},
-            "images_kwargs": {"max_patches": 1024},
-            "text_kwargs": {"padding": "max_length", "max_length": 76},
-        }
-
-        inputs = processor(text=input_str, images=image_input, **all_kwargs)
-        self.assertEqual(inputs["flattened_patches"].shape[1], 1024)
-
-        self.assertEqual(len(inputs["input_ids"][0]), 76)
+    # Rewrite as KOSMOS-2.5 processor applies custom normalization and we can't check `out.mean()`
+    def _check_modality_outputs(self, inputs: dict, modality: str):
+        input_key = getattr(self, f"{modality}_input_name")
+        if modality in ["image"]:
+            self.assertEqual(len(inputs[input_key][0]), 4096)
 
     @require_torch
     def test_full_processor(self):

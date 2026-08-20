@@ -177,7 +177,7 @@ class ShieldGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip("model creates new samples on-the-fly and thus requires padding. Not worth testing")
-    def test_subprocessor_defaults_1_images(self):
+    def test_subprocessor_defaults_1_image(self):
         pass
 
     def test_processor_text_has_no_visual(self):

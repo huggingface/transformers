@@ -66,8 +66,8 @@ class GlmImageProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @parameterized.expand(
         [
             ("text",),
-            ("images",),
-            ("videos",),
+            ("image",),
+            ("video",),
             ("audio",),
         ]
     )

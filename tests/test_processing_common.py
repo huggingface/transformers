@@ -676,10 +676,13 @@ class ProcessorTesterMixin:
         """
         # Skip if processor doesn't have image_processor
         parameterized_config = MODALITY_CONFIG[modality]
-        if parameterized_config["component_key"] not in self.processor_class.get_attributes():
-            self.skipTest(f"{parameterized_config['component_key']} attribute not present in {self.processor_class}")
+        attributes = self.processor_class.get_attributes()
+        component_key = self._get_subprocessor_name(modality, attributes)
 
-        subprocessor = self.get_component(parameterized_config["component_key"])
+        if component_key not in self.processor_class.get_attributes():
+            self.skipTest(f"{component_key} attribute not present in {self.processor_class}")
+
+        subprocessor = self.get_component(component_key)
         input_key = parameterized_config["input_kwarg"]  # images/videos/audio
 
         # Get all other required components for processor
@@ -943,7 +946,7 @@ class ProcessorTesterMixin:
         return processor(text=text, **{config["input_kwarg"]: modal_input}, **call_kwargs)
 
     def _check_modality_outputs(self, inputs: dict, modality: str):
-        # skio audio as there is no single kwarg that works same way in all audio processors
+        # skip audio as there is no single kwarg that works same way in all audio processors
         input_key = getattr(self, f"{modality}_input_name")
         if modality in ["image", "video"]:
             self.assertLessEqual(inputs[input_key][0][0].mean(), 0)
