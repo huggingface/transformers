@@ -648,12 +648,7 @@ class Qwen4ExpTextNGramEmbedding(nn.Module):
         valid = (position_in_segment >= shift) & (source_positions.unsqueeze(0) >= 0)
         return torch.where(valid, shifted, token_ids.new_full((), self.eos_token_id))
 
-    def forward(
-        self,
-        input_ids: torch.Tensor,
-        past_key_values: Cache | None,
-        layer_idx: int,
-    ) -> torch.Tensor:
+    def forward(self, input_ids: torch.Tensor, past_key_values: Cache | None) -> torch.Tensor:
         input_ids = input_ids.long()
         # This is a trick to store the previous N=self.context_len `input_ids` - indeed the manipulations are identical to storing
         # a past conv_state, so we can use an additional conv_states inside the Cache for it
@@ -756,7 +751,7 @@ class Qwen4ExpTextPLELayer(nn.Module):
         past_key_values: Cache | None,
         conv_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        embeddings = self.ple_embedding(input_ids, past_key_values, self.layer_idx)
+        embeddings = self.ple_embedding(input_ids, past_key_values)
         key_normed = self.norm_key(self.key_proj(embeddings)).unflatten(-1, (self.hc_count, self.hidden_size))
         value = self.value_proj(embeddings)
         query_normed = self.norm_query(hidden_states).unflatten(-1, (self.hc_count, self.hidden_size))
