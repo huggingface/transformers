@@ -185,13 +185,8 @@ class NeoMMEProcessor(ProcessorMixin):
         return super().model_input_names + ["position_ids"]
 
     def validate_inputs(self, images: ImageInput | None = None, text: TextInput | None = None, **kwargs):
-        """Validate that each call contains exactly one NeoMME input modality."""
+        """Validate rendered text before tokenization."""
         super().validate_inputs(images=images, text=text, **kwargs)
-        if text is not None and images is not None:
-            raise ValueError(
-                "Pass exactly one of `text` or `images`: they are opposite retrieval sides, encoded in "
-                "separate forward passes."
-            )
         if text is not None:
             text = [text] if isinstance(text, str) else text
             if not text:
@@ -248,21 +243,18 @@ class NeoMMEProcessor(ProcessorMixin):
         **kwargs: Unpack[NeoMMEProcessorKwargs],
     ) -> BatchFeature:
         r"""
-        Pass exactly one of `text` or `images`. Pretokenized text is not supported.
+        Tokenize text rendered by [`~NeoMMEProcessor.apply_chat_template`] and process its document images.
 
-        task (`str`, *optional*, defaults to `"query"`):
-            Whether `text` is a retrieval query or a text document. Queries receive `<query>` and `<mask>` tokens.
-            Text documents receive `<doc>`. Ignored for `images`, which are always document inputs.
         _chat_template_applied (`bool`, *optional*, defaults to `False`):
-            Internal flag set by [`~NeoMMEProcessor.apply_chat_template`] to avoid adding special tokens a second time.
+            Internal flag set by [`~NeoMMEProcessor.apply_chat_template`] after the retrieval markers are rendered.
 
         Returns:
             A [`BatchFeature`] with `input_ids` and `attention_mask`. Image inputs also return `position_ids`,
             and `pixel_values`.
         """
-        rendered_text = text if _chat_template_applied else None
-        if _chat_template_applied and images is not None:
-            text = None
+        if not _chat_template_applied:
+            return self._apply_direct_template(images=images, text=text, task=task, **kwargs)
+
         images, text, _, _ = self.prepare_inputs_layout(images=images, text=text, **kwargs)
         self.validate_inputs(images=images, text=text, **kwargs)
         if "task" in kwargs.get("text_kwargs", {}):
@@ -271,141 +263,92 @@ class NeoMMEProcessor(ProcessorMixin):
         output_kwargs = self._merge_kwargs(
             NeoMMEProcessorKwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs
         )
-        if images is not None:
-            return self.process_images(images, rendered_text=rendered_text, **output_kwargs["images_kwargs"])
-
         if isinstance(text, str):
             text = [text]
 
         # What the caller actually named, flat or nested, as opposed to what `_merge_kwargs` injected.
         requested = set(kwargs) | set(kwargs.get("text_kwargs", {}))
         text_kwargs = self._supported_text_kwargs(output_kwargs["text_kwargs"], requested)
-        if not _chat_template_applied:
-            text = self._render_text(text, task=task)
-        return self._tokenize_rendered_text(text, task=task, **text_kwargs)
+        image_inputs, replacements = ({}, [])
+        if images is not None:
+            image_inputs, replacements = self._process_images(images, **output_kwargs["images_kwargs"])
+        return self._tokenize_rendered_inputs(
+            text,
+            task=task,
+            image_inputs=image_inputs,
+            image_replacements=replacements,
+            **text_kwargs,
+        )
 
-    def _render_template(self, conversations: list[list[dict]], task: Literal["query", "document"]) -> list[str]:
-        return self.apply_chat_template(conversations, task=task, tokenize=False)
+    def _apply_direct_template(
+        self,
+        images: ImageInput | None,
+        text: TextInput | list[TextInput] | None,
+        task: Literal["query", "document"],
+        **kwargs,
+    ) -> BatchFeature:
+        """Route the pre-refactor direct API through the standard template path during migration."""
+        if (text is None) == (images is None):
+            raise ValueError("Pass exactly one of `text` or `images`.")
 
-    def _render_text(self, text: list[str], task: Literal["query", "document"]) -> list[str]:
-        if not text:
-            raise ValueError("text must contain at least one string.")
-        if any(not isinstance(value, str) for value in text):
-            raise ValueError("Pretokenized text is not supported.")
+        if images is not None:
+            image_list = [images] if is_valid_image(images) else list(images)
+            conversations = [
+                [{"role": "user", "content": [{"type": "image", "image": image}]}] for image in image_list
+            ]
+            task = "document"
+        else:
+            text_list = [text] if isinstance(text, str) else text
+            assert text_list is not None
+            if not text_list:
+                raise ValueError("text must contain at least one string.")
+            if any(not isinstance(value, str) for value in text_list):
+                raise ValueError("Pretokenized text is not supported.")
+            conversations = [[{"role": "user", "content": value}] for value in text_list]
 
-        conversations = [[{"role": "user", "content": value}] for value in text]
-        return self._render_template(conversations, task)
+        return self.apply_chat_template(
+            conversations,
+            task=task,
+            tokenize=True,
+            return_dict=True,
+            processor_kwargs=kwargs,
+        )
 
-    def _tokenize_rendered_text(
+    def _tokenize_rendered_inputs(
         self,
         text: list[str],
         task: Literal["query", "document"],
+        image_inputs: dict[str, Any],
+        image_replacements: list[str],
         max_length: int | None = None,
         padding: bool | str = "longest",
         return_tensors: str | None = "pt",
     ) -> BatchFeature:
         marker_ids = self._marker_ids()
-        encodings = self.tokenizer(text, add_special_tokens=False)["input_ids"]
-        sequences = []
+        image_grid_hw = image_inputs.pop("image_grid_hw", None)
+        text, _ = self.get_text_with_replacements(text, images_replacements=image_replacements)
+        sequences = self.tokenizer(text, add_special_tokens=False)["input_ids"]
+        if image_replacements:
+            self._check_special_mm_tokens(text, {"input_ids": sequences}, modalities=["image"])
 
-        for ids in encodings:
-            prefix_id = marker_ids["query"] if task == "query" else marker_ids["document"]
-            if not ids or ids[0] != prefix_id or ids.count(prefix_id) != 1:
-                raise ValueError(f"NeoMME chat template must render exactly one leading {task} token.")
-
-            expansion_length = self.query_expand if task == "query" else 0
-            if expansion_length:
-                expansion = [marker_ids["mask"]] * expansion_length
-                if ids[-expansion_length:] != expansion or ids.count(marker_ids["mask"]) != expansion_length:
-                    raise ValueError(
-                        f"NeoMME query template must render exactly {expansion_length} trailing mask tokens."
-                    )
-                content = ids[1:-expansion_length]
-            else:
-                expansion = []
-                content = ids[1:]
-
-            content_limit = None if max_length is None else max_length - 1 - expansion_length
-            if content_limit is not None and content_limit < 0:
-                raise ValueError(
-                    f"query_expand={expansion_length} leaves no room for content inside max_length={max_length}"
-                )
-
-            sequences.append([prefix_id, *content[:content_limit], *expansion])
-
-        return self._pad_sequences(sequences, padding=padding, max_length=max_length, return_tensors=return_tensors)
-
-    def process_queries(
-        self,
-        text: list[str] | str,
-        max_length: int | None = None,
-        padding: bool | str = "longest",
-        return_tensors: str | None = "pt",
-    ) -> BatchFeature:
-        """
-        Prepare text queries with a `<query>` prefix and `<mask>` expansion tokens.
-
-        `max_length` includes the query marker and expansion tokens. The returned [`BatchFeature`] contains
-        `input_ids` and `attention_mask`.
-        """
-        if isinstance(text, str):
-            text = [text]
-        rendered = self._render_text(list(text), task="query")
-        return self._tokenize_rendered_text(rendered, "query", max_length, padding, return_tensors)
-
-    def process_text_documents(
-        self,
-        text: list[str] | str,
-        max_length: int | None = None,
-        padding: bool | str = "longest",
-        return_tensors: str | None = "pt",
-    ) -> BatchFeature:
-        """
-        Prepare text documents with a `<doc>` prefix.
-
-        `max_length` includes the document marker. The returned [`BatchFeature`] contains `input_ids` and
-        `attention_mask`.
-        """
-        if isinstance(text, str):
-            text = [text]
-        rendered = self._render_text(list(text), task="document")
-        return self._tokenize_rendered_text(rendered, "document", max_length, padding, return_tensors)
-
-    def process_images(
-        self, images: ImageInput, rendered_text: list[str] | str | None = None, **kwargs
-    ) -> BatchFeature:
-        """
-        Prepare document images as image patch grids with two-axis positions.
-
-        Each image starts with `<doc> <img>`, followed by row-major patch placeholders and one `<row>` marker per
-        patch row. Image arguments such as `max_side` are forwarded to the image processor. The returned
-        [`BatchFeature`] contains `input_ids`, `attention_mask`, `position_ids`, and `pixel_values`.
-        """
-        if is_valid_image(images):
-            images = [images]
-
-        return_tensors = kwargs.setdefault("return_tensors", "pt")
-        image_inputs, replacements = self._process_images(images, **kwargs)
-        image_grid_hw = image_inputs.pop("image_grid_hw")
-        marker_ids = self._marker_ids()
-
-        if rendered_text is None:
-            conversations = [
-                [{"role": "user", "content": [{"type": "image", "image": True}]}] for _ in range(len(image_grid_hw))
-            ]
-            rendered_text = self._render_template(conversations, task="document")
-        elif isinstance(rendered_text, str):
-            rendered_text = [rendered_text]
-
-        rendered_text, _ = self.get_text_with_replacements(list(rendered_text), images_replacements=replacements)
-
-        sequences = self.tokenizer(rendered_text, add_special_tokens=False)["input_ids"]
-        positions: list[np.ndarray] = []
+        finalized_sequences = []
+        positions: list[np.ndarray] | None = [] if image_grid_hw is not None else None
         image_index = 0
         for ids in sequences:
-            is_image_document = len(ids) > 1 and ids[:2] == [marker_ids["document"], marker_ids["image"]]
+            is_image_document = (
+                image_grid_hw is not None
+                and len(ids) > 1
+                and ids[:2]
+                == [
+                    marker_ids["document"],
+                    marker_ids["image"],
+                ]
+            )
             if not is_image_document:
-                positions.append(self._text_positions(len(ids)))
+                ids = self._finalize_text_sequence(ids, task, marker_ids, max_length)
+                finalized_sequences.append(ids)
+                if positions is not None:
+                    positions.append(self._text_positions(len(ids)))
                 continue
             if image_index >= len(image_grid_hw):
                 raise ValueError("NeoMME rendered more image documents than the processor received.")
@@ -414,15 +357,58 @@ class NeoMMEProcessor(ProcessorMixin):
             expected_ids, position_ids = self._encode_image_grid(grid_height, grid_width, marker_ids)
             if ids != expected_ids:
                 raise ValueError("NeoMME image template and placeholder replacement produced an invalid token layout.")
+            if max_length is not None and len(ids) > max_length:
+                raise ValueError(
+                    f"NeoMME image document length {len(ids)} exceeds max_length={max_length}; image grids cannot "
+                    "be truncated."
+                )
+            finalized_sequences.append(ids)
+            assert positions is not None
             positions.append(position_ids)
             image_index += 1
 
-        if image_index != len(image_grid_hw):
+        if image_grid_hw is not None and image_index != len(image_grid_hw):
             raise ValueError(f"Got {image_index} image prompts for {len(image_grid_hw)} images.")
 
-        batch = self._pad_sequences(sequences, positions, return_tensors=return_tensors)
-        batch["pixel_values"] = image_inputs["pixel_values"]  # (num_patches, 3 * patch_size ** 2)
+        batch = self._pad_sequences(
+            finalized_sequences,
+            positions,
+            padding=padding,
+            max_length=max_length,
+            return_tensors=return_tensors,
+        )
+        for name, value in image_inputs.items():
+            if name not in self.unused_input_names:
+                batch[name] = value
         return batch
+
+    def _finalize_text_sequence(
+        self,
+        ids: list[int],
+        task: Literal["query", "document"],
+        marker_ids: dict[str, int],
+        max_length: int | None,
+    ) -> list[int]:
+        prefix_id = marker_ids["query"] if task == "query" else marker_ids["document"]
+        if not ids or ids[0] != prefix_id or ids.count(prefix_id) != 1:
+            raise ValueError(f"NeoMME chat template must render exactly one leading {task} token.")
+
+        expansion_length = self.query_expand if task == "query" else 0
+        if expansion_length:
+            expansion = [marker_ids["mask"]] * expansion_length
+            if ids[-expansion_length:] != expansion or ids.count(marker_ids["mask"]) != expansion_length:
+                raise ValueError(f"NeoMME query template must render exactly {expansion_length} trailing mask tokens.")
+            content = ids[1:-expansion_length]
+        else:
+            expansion = []
+            content = ids[1:]
+
+        content_limit = None if max_length is None else max_length - 1 - expansion_length
+        if content_limit is not None and content_limit < 0:
+            raise ValueError(
+                f"query_expand={expansion_length} leaves no room for content inside max_length={max_length}"
+            )
+        return [prefix_id, *content[:content_limit], *expansion]
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         grid_height, grid_width = image_inputs["image_grid_hw"][image_idx]
