@@ -811,6 +811,11 @@ class Ovis2_5Model(Ovis2Model):
         )
 
 
+@auto_docstring
+class Ovis2_5_Model(Ovis2_5Model):
+    pass
+
+
 @auto_docstring(custom_intro="The Ovis2.5 multimodal model with a language modeling head.")
 class Ovis2_5ForConditionalGeneration(Ovis2_5PreTrainedModel, Exaone4_5_ForConditionalGeneration):
     """Ovis2.5 multimodal conditional generation model."""
