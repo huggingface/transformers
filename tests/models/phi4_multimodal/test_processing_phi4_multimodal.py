@@ -31,6 +31,9 @@ if is_vision_available():
 @require_vision
 class Phi4MultimodalProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Phi4MultimodalProcessor
+    # Tiny processor created with make_tiny_processor.py from "microsoft/Phi-4-multimodal-instruct"
+    # revision "refs/pr/70" (main branch adds auto_map requiring trust_remote_code).
+    tiny_model_id = "hf-internal-testing/tiny-processor-phi4_multimodal"
     checkpoint_path = "microsoft/Phi-4-multimodal-instruct"
     revision = "refs/pr/70"
     text_input_name = "input_ids"
@@ -51,11 +54,6 @@ class Phi4MultimodalProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     video_text_kwargs_max_length = 167
     video_text_kwargs_override_max_length = 162
     video_unstructured_max_length = 176
-
-    @classmethod
-    def _setup_tokenizer(cls):
-        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
-        return tokenizer_class.from_pretrained(cls.checkpoint_path, revision=cls.revision)
 
     @classmethod
     def _setup_test_attributes(cls, processor):

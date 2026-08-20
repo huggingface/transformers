@@ -52,7 +52,7 @@ print(tokenizer.decode(outputs[0]))
 
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
-The example below uses [BitsAndBytesConfig](../quantizationbitsandbytes) to quantize the weights to 4-bit.
+The example below uses [BitsAndBytesConfig](../quantization/bitsandbytes) to quantize the weights to 4-bit.
 
 ```python
 import torch

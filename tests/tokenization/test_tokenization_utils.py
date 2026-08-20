@@ -15,6 +15,7 @@
 ruff: isort: skip_file
 """
 
+import json
 import os
 import tempfile
 import unittest
@@ -263,6 +264,26 @@ class TokenizerUtilsTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             bert_tokenizer.save(os.path.join(tmpdirname, "tokenizer.json"))
             PreTrainedTokenizerFast(tokenizer_file=os.path.join(tmpdirname, "tokenizer.json"))
+
+    def test_vocab_file_in_config_does_not_escape_repo(self):
+        # Regression test for path traversal (CWE-22): a vocab-file argument injected into
+        # `tokenizer_config.json` must not override the repository-resolved path nor be opened
+        # verbatim. Otherwise an attacker-controlled repo could read an arbitrary local file via
+        # `AutoTokenizer.from_pretrained(...)` with no `trust_remote_code`.
+        with tempfile.TemporaryDirectory() as repo, tempfile.TemporaryDirectory() as outside:
+            secret_path = os.path.join(outside, "secret.txt")
+            with open(secret_path, "w", encoding="utf-8") as f:
+                f.write("\n".join(["[PAD]", "[UNK]", "[CLS]", "[SEP]", "[MASK]", "secret_leaked_token"]))
+            with open(os.path.join(repo, "vocab.txt"), "w", encoding="utf-8") as f:
+                f.write("\n".join(["[PAD]", "[UNK]", "[CLS]", "[SEP]", "[MASK]", "benign_repo_token"]))
+            with open(os.path.join(repo, "tokenizer_config.json"), "w", encoding="utf-8") as f:
+                json.dump({"tokenizer_class": "BertTokenizer", "vocab_file": secret_path}, f)
+
+            tokenizer = AutoTokenizer.from_pretrained(repo, use_fast=False)
+            vocab = tokenizer.get_vocab()
+            # The repository's own vocab must win; the injected out-of-repo file must not be read.
+            self.assertIn("benign_repo_token", vocab)
+            self.assertNotIn("secret_leaked_token", vocab)
 
     def test_len_tokenizer(self):
         for tokenizer_class in [BertTokenizer, BertTokenizer]:

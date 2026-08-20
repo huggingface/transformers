@@ -14,7 +14,7 @@
 """PyTorch Laguna model."""
 
 from collections.abc import Callable
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 import torch
 import torch.nn.functional as F
@@ -49,6 +49,10 @@ logger = logging.get_logger(__name__)
 @strict
 class LagunaConfig(Qwen2MoeConfig):
     r"""
+    gating (`bool` or `str`, *optional*, defaults to `True`):
+        Softplus output-gate granularity. ``True`` or ``"per-head"`` applies one gate per head,
+        broadcast across ``head_dim``; ``"per-element"`` applies one gate per ``(head, head_dim)``
+        channel.
     num_attention_heads_per_layer (`list[int]`, *optional*):
         Per-layer override for ``num_attention_heads``. Length must equal ``num_hidden_layers``.
     mlp_layer_types (`list[str]`, *optional*):
@@ -108,6 +112,7 @@ class LagunaConfig(Qwen2MoeConfig):
     # Laguna-specific attention
     head_dim: int = 128
     attention_bias: bool = False
+    gating: bool | str = True
     num_attention_heads_per_layer: list[int] | None = None
     # Laguna-specific MoE
     mlp_layer_types: list[str] | None = None
@@ -180,25 +185,17 @@ class LagunaRMSNorm(Qwen2MoeRMSNorm):
 
 
 class LagunaRotaryEmbedding(Gemma3RotaryEmbedding):
-    def __init__(self, config: LagunaConfig):
+    def __init__(self, config: LagunaConfig, device=None):
         super().__init__(config)
 
-    @staticmethod
     def compute_default_rope_parameters(
-        config: LagunaConfig | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-        layer_type: str | None = None,
-    ) -> tuple["torch.Tensor", float]:
+        config: LagunaConfig, device=None, layer_type: str | None = None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
             config ([`~transformers.PreTrainedConfig`]):
                 The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
             layer_type (`str`, *optional*):
                 The current layer type if the model has different RoPE parameters per type.
                 Should not be used unless `config.layer_types is not None`
@@ -215,10 +212,8 @@ class LagunaRotaryEmbedding(Gemma3RotaryEmbedding):
         attention_factor = 1.0  # Unused in this type of RoPE
 
         # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
-        return inv_freq, attention_factor
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        return inv_freq.to(device), attention_factor
 
 
 class LagunaMLP(Qwen2MoeMLP):
@@ -291,9 +286,10 @@ class LagunaAttention(AfmoeAttention):
         self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, config.hidden_size, bias=config.attention_bias)
 
-        # Custom per-head gating
         del self.gate_proj
-        self.g_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
+        self.gate_per_head = config.gating is True or config.gating == "per-head"
+        g_proj_dim = self.num_heads if self.gate_per_head else self.num_heads * self.head_dim
+        self.g_proj = nn.Linear(config.hidden_size, g_proj_dim, bias=False)
 
     def forward(
         self,
@@ -338,7 +334,12 @@ class LagunaAttention(AfmoeAttention):
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
 
         gate = F.softplus(self.g_proj(hidden_states).float()).to(attn_output.dtype)
-        attn_output = (attn_output.view(*input_shape, -1, self.head_dim) * gate.unsqueeze(-1)).view(*input_shape, -1)
+        if self.gate_per_head:
+            attn_output = (attn_output.view(*input_shape, -1, self.head_dim) * gate.unsqueeze(-1)).view(
+                *input_shape, -1
+            )
+        else:
+            attn_output = attn_output * gate
 
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights

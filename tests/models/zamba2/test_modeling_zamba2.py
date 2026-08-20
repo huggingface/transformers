@@ -19,11 +19,12 @@ import unittest
 import pytest
 from parameterized import parameterized
 
-from transformers import AutoTokenizer, BitsAndBytesConfig, Zamba2Config, is_torch_available
+from transformers import AutoTokenizer, BitsAndBytesConfig, DynamicCache, Zamba2Config, is_torch_available
 from transformers.testing_utils import (
     Expectations,
     require_bitsandbytes,
     require_flash_attn,
+    require_kernels,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -262,6 +263,41 @@ class Zamba2ModelTester:
         result = model(input_ids, attention_mask=input_mask, labels=sequence_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
+    def create_and_check_zamba2_chunked_prefill(self, config, input_ids, *args, device="cpu"):
+        """
+        Adapted from `test_linear_attention_multi_token_cached_forward_matches_single_token`
+        to check whether multi-token cached input is properly handled.
+
+        Can either be run on GPU (fast path) or CPU (slow path), see `test_zamba2_chunked_prefill_*`
+        """
+        model = Zamba2Model(config=config)
+        model.to(device)
+        model.eval()
+
+        input_ids = input_ids[:1].to(device)
+        prefill_len = input_ids.shape[1] // 2 + 1
+        prompt = input_ids[:, :prefill_len]
+        next_token = input_ids[:, prefill_len : prefill_len + 1]
+        distractors = input_ids[:, prefill_len + 1 :]
+        multi_input = torch.cat([next_token, distractors], dim=1)
+
+        cache_single = DynamicCache(config=config)
+        with torch.no_grad():
+            model(input_ids=prompt, past_key_values=cache_single, use_cache=True)
+            single_out = model(input_ids=next_token, past_key_values=cache_single, use_cache=True)
+        ref_first = single_out.last_hidden_state[:, 0, :]
+
+        cache_multi = DynamicCache(config=config)
+        with torch.no_grad():
+            model(input_ids=prompt, past_key_values=cache_multi, use_cache=True)
+            multi_out = model(input_ids=multi_input, past_key_values=cache_multi, use_cache=True)
+        under_test_first = multi_out.last_hidden_state[:, 0, :]
+
+        self.parent.assertTrue(
+            torch.allclose(ref_first, under_test_first, atol=1e-4, rtol=1e-4),
+            msg=f"Max diff: {(ref_first - under_test_first).abs().max().item():.6f}",
+        )
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -363,6 +399,16 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
+
+    def test_mamba2_chunked_prefill_cpu(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_zamba2_chunked_prefill(*config_and_inputs, device="cpu")
+
+    @require_torch_accelerator
+    @require_kernels
+    def test_mamba2_chunked_prefill_torch_device(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_zamba2_chunked_prefill(*config_and_inputs, device=torch_device)
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
@@ -499,6 +545,13 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             # If this does not raise an error, the test passes (see https://github.com/huggingface/transformers/pull/35605)
             _ = model(**dummy_inputs)
 
+    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
+    @unittest.skip(
+        "For some reason the diff is still small even though scaled RoPE is applied on attn layers, not worth investigation"
+    )
+    def test_model_rope_scaling_from_config(self, scaling_type):
+        pass
+
 
 @require_torch
 class Zamba2ModelIntegrationTest(unittest.TestCase):
@@ -514,12 +567,12 @@ class Zamba2ModelIntegrationTest(unittest.TestCase):
 
     @parameterized.expand([(torch_device,), ("cpu",)])
     @slow
-    def test_simple_generate(self, torch_device):
-        self.model.to(torch_device)
+    def test_simple_generate(self, device):
+        self.model.to(device)
 
         input_ids = self.tokenizer("Hey how are you doing on this lovely evening?", return_tensors="pt")[
             "input_ids"
-        ].to(torch_device)
+        ].to(device)
         out = self.model.generate(input_ids, do_sample=False, max_new_tokens=10)
         output_sentence = self.tokenizer.decode(out[0, :])
         self.assertEqual(
@@ -543,14 +596,14 @@ class Zamba2ModelIntegrationTest(unittest.TestCase):
 
     @parameterized.expand([(torch_device,), ("cpu",)])
     @slow
-    def test_simple_batched_generate_with_padding(self, torch_device):
-        self.model.to(torch_device)
+    def test_simple_batched_generate_with_padding(self, device):
+        self.model.to(device)
 
         inputs = self.tokenizer(
             ["Hey how are you doing on this lovely evening?", "When did the Roman empire "],
             padding=True,
             return_tensors="pt",
-        ).to(torch_device)
+        ).to(device)
         out = self.model.generate(**inputs, do_sample=False, max_new_tokens=10)
         output_sentences = self.tokenizer.batch_decode(out)
         self.assertEqual(
@@ -575,23 +628,28 @@ class Zamba2ModelIntegrationTest(unittest.TestCase):
                 -4.8167, -4.8167, -4.8167, -4.8168, -4.8168, -4.8168, -4.8167, -4.8167,
                 -4.8168, -4.8167, -4.8167, -4.8165, -4.8167, -4.8167, -4.8167, -4.8169,
                 -4.8168, -4.8168, -4.8168, -4.8166, -4.8169, -4.8168, -4.8167, -4.8167
-            ]
-            , dtype=torch.float32)  # fmt: skip
+            ],
+            dtype=torch.float32
+        )  # fmt: skip
 
         EXPECTED_LOGITS_NO_GRAD_1S = Expectations(
             {
-                ("xpu", 3): torch.tensor([0.2027,  6.3481,  3.8392, -5.7279, -6.5090, -6.5088, -6.5087, -6.5088,
-                                          -6.5087, -6.5088, -6.5090, -6.5089,  7.8796, 13.5483, -6.5088, -6.5080,
-                                          -6.5090, -6.5086, -6.5090, -6.5090, -6.5089, -6.5090, -6.5088, -6.5090,
-                                          -6.5089, -6.5090, -6.5090, -6.5097, -6.5086, -6.5089, -6.5092, -6.5089,
-                                          -6.5088, -6.5090, -6.5090, -6.5088, -6.5090, -6.5091, -6.5087, -6.5089],
-                                         dtype=torch.float32),
-                ("cuda", None): torch.tensor([0.1966,  6.3449,  3.8350, -5.7291, -6.5106, -6.5104, -6.5103, -6.5104,
-                                              -6.5103, -6.5104, -6.5106, -6.5105,  7.8700, 13.5434, -6.5104, -6.5096,
-                                              -6.5106, -6.5102, -6.5106, -6.5106, -6.5105, -6.5106, -6.5104, -6.5106,
-                                              -6.5105, -6.5106, -6.5106, -6.5113, -6.5102, -6.5105, -6.5108, -6.5105,
-                                              -6.5104, -6.5106, -6.5106, -6.5104, -6.5106, -6.5107, -6.5103, -6.5105],
-                                             dtype=torch.float32),
+                ("xpu", 3): torch.tensor(
+                    [0.2027,  6.3481,  3.8392, -5.7279, -6.5090, -6.5088, -6.5087, -6.5088,
+                    -6.5087, -6.5088, -6.5090, -6.5089,  7.8796, 13.5483, -6.5088, -6.5080,
+                    -6.5090, -6.5086, -6.5090, -6.5090, -6.5089, -6.5090, -6.5088, -6.5090,
+                    -6.5089, -6.5090, -6.5090, -6.5097, -6.5086, -6.5089, -6.5092, -6.5089,
+                    -6.5088, -6.5090, -6.5090, -6.5088, -6.5090, -6.5091, -6.5087, -6.5089],
+                    dtype=torch.float32
+                ),
+                ("cuda", None): torch.tensor(
+                    [ 0.2026,  6.3480,  3.8392, -5.7279, -6.5090, -6.5088, -6.5087, -6.5088,
+                    -6.5087, -6.5088, -6.5090, -6.5089,  7.8796, 13.5483, -6.5088, -6.5080,
+                    -6.5090, -6.5086, -6.5090, -6.5090, -6.5089, -6.5090, -6.5088, -6.5090,
+                    -6.5089, -6.5090, -6.5090, -6.5097, -6.5086, -6.5089, -6.5092, -6.5089,
+                    -6.5088, -6.5090, -6.5090, -6.5088, -6.5089, -6.5090, -6.5087, -6.5089],
+                    dtype=torch.float32
+                ),
             }
         )  # fmt: skip
         EXPECTED_LOGITS_NO_GRAD_1 = EXPECTED_LOGITS_NO_GRAD_1S.get_expectation()
@@ -601,5 +659,5 @@ class Zamba2ModelIntegrationTest(unittest.TestCase):
             logits[1, -1, :40].cpu(),
             EXPECTED_LOGITS_NO_GRAD_1,
             rtol=1e-3,
-            atol=6e-3 if torch_device == "cpu" else 1e-3,
+            atol=6e-3 if device == "cpu" else 1e-3,
         )

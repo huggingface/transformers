@@ -14,7 +14,15 @@
 
 import io
 
-from ...utils import auto_docstring, is_mistral_common_available, is_soundfile_available, is_torch_available, logging
+from ...utils import (
+    auto_docstring,
+    is_mistral_common_available,
+    is_soundfile_available,
+    is_torch_available,
+    logging,
+    requires_backends,
+)
+from ...utils.import_utils import requires
 
 
 if is_torch_available():
@@ -25,6 +33,7 @@ if is_soundfile_available():
 
 if is_mistral_common_available():
     from mistral_common.protocol.transcription.request import TranscriptionRequest
+    from mistral_common.tokens.tokenizers.base import SpecialTokenPolicy
 
 from ...audio_utils import AudioInput, load_audio_as, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
@@ -66,6 +75,7 @@ class VoxtralProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@requires(backends=("torch",))
 @auto_docstring
 class VoxtralProcessor(ProcessorMixin):
     def __init__(
@@ -241,6 +251,7 @@ class VoxtralProcessor(ProcessorMixin):
         return BatchFeature(data=out, tensor_type=output_kwargs["text_kwargs"].get("return_tensors", None))
 
     # TODO: @eustlb, this should be moved to mistral_common + testing
+    @requires(backends=("mistral-common",))
     def apply_transcription_request(
         self,
         audio: str | list[str] | AudioInput,
@@ -328,11 +339,22 @@ class VoxtralProcessor(ProcessorMixin):
                 load_audio_as(el, return_format="buffer", force_mono=True, sampling_rate=sampling_rate) for el in audio
             ]
         else:
+            requires_backends(self, ["soundfile"])
             audio = make_list_of_audio(audio)
+            if format is None:
+                raise ValueError("`format` must be provided when passing audio arrays to VoxtralProcessor.")
+
+            if isinstance(format, str):
+                format = [format] * len(audio)
+
             if len(audio) != len(format):
                 raise ValueError(
                     f"When passed as a list of audio, the length ({len(audio)}) must match the number of format ({len(format)})"
                 )
+
+            if not is_soundfile_available():
+                raise ImportError("Please install `soundfile` to encode audio arrays with VoxtralProcessor.")
+
             audio_buffers = []
             for array, f in zip(audio, format):
                 # Create new BytesIO object and write audio data to it
@@ -371,7 +393,11 @@ class VoxtralProcessor(ProcessorMixin):
             tokenized_transcription_request = self.tokenizer.tokenizer.encode_transcription(transcription_request)
 
             input_ids.append(tokenized_transcription_request.tokens)
-            texts.append(tokenized_transcription_request.text)
+            texts.append(
+                self.tokenizer.tokenizer.decode(
+                    tokens=tokenized_transcription_request.tokens, special_token_policy=SpecialTokenPolicy.KEEP
+                )
+            )
             audio_arrays.extend([el.audio_array for el in tokenized_transcription_request.audios])
 
         if tokenize:

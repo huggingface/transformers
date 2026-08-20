@@ -230,7 +230,7 @@ def add_model_to_auto_mappings(
     for filename, to_add in corrected_filenames_to_add:
         if to_add:
             if filename in _AUTO_MAPPING_NAMES:
-                # These are saved in `auto_mapping.py` and require a slighlty diff regex match
+                # These are saved in `auto_mapping.py` and require a slightly diff regex match
                 mapping_name = _AUTO_MAPPING_NAMES[filename]
                 filename = "auto_mappings.py"  # use the unified mapping filename to write content!
                 block_match = re.search(

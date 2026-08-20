@@ -236,10 +236,10 @@ def update_pipeline_and_auto_class_table(table: dict[str, tuple[str, str]]) -> d
             for name in names:
                 # For multimodal LLMs, keep the fine-grained pipeline tag but use a generic `AutoClass`
                 if name in MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES.values():
-                    cls = "AutoModelForMultimodalLM"
-
-                # Add pipeline tag and auto model class for those models
-                table[name] = (pipeline_tag, cls)
+                    table[name] = (pipeline_tag, "AutoModelForMultimodalLM")
+                else:
+                    # Add pipeline tag and auto model class for those models
+                    table[name] = (pipeline_tag, cls)
 
     return table
 
@@ -351,6 +351,30 @@ def check_pipeline_tags():
         )
 
 
+def check_multimodal_auto_class_assignment():
+    """
+    Check that non-multimodal models are never assigned ``AutoModelForMultimodalLM`` as their auto
+    class by ``update_pipeline_and_auto_class_table``.
+
+    The bug this guards against: the old code mutated the ``cls`` loop variable when a multimodal
+    model was encountered, causing subsequent non-multimodal models processed in the same outer
+    loop iteration to inherit ``"AutoModelForMultimodalLM"`` instead of their correct auto class.
+    """
+    table = update_pipeline_and_auto_class_table({})
+    multimodal_names = set(MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES.values())
+    incorrect = [
+        name
+        for name, (_, auto_class) in table.items()
+        if auto_class == "AutoModelForMultimodalLM" and name not in multimodal_names
+    ]
+    if incorrect:
+        raise ValueError(
+            "The following non-multimodal models were incorrectly assigned `AutoModelForMultimodalLM` "
+            f"by `update_pipeline_and_auto_class_table`: {', '.join(sorted(incorrect))}. "
+            "This is likely caused by mutating the `cls` loop variable inside the function."
+        )
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--token", type=str, help="The token to use to push to the transformers-metadata dataset.")
@@ -360,5 +384,6 @@ if __name__ == "__main__":
 
     if args.check_only:
         check_pipeline_tags()
+        check_multimodal_auto_class_assignment()
     else:
         update_metadata(args.token, args.commit_sha)

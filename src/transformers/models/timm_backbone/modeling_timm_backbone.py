@@ -20,13 +20,16 @@ from ... import initialization as init
 from ...backbone_utils import BackboneMixin
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import is_timm_available, requires_backends
+from ...utils import is_timm_available, logging, requires_backends
 from ...utils.generic import can_return_tuple
 from .configuration_timm_backbone import TimmBackboneConfig
 
 
 if is_timm_available():
     import timm
+
+
+logger = logging.get_logger(__name__)
 
 
 class TimmBackbone(BackboneMixin, PreTrainedModel):
@@ -39,6 +42,8 @@ class TimmBackbone(BackboneMixin, PreTrainedModel):
     input_modalities = ("image",)
     supports_gradient_checkpointing = False
     config: TimmBackboneConfig
+    # `timm` attention layers already dispatch to `F.scaled_dot_product_attention` by default
+    _supports_sdpa = True
 
     def __init__(self, config, **kwargs):
         requires_backends(self, "timm")
@@ -79,6 +84,14 @@ class TimmBackbone(BackboneMixin, PreTrainedModel):
         }
         self._all_layers = {layer["module"]: str(i) for i, layer in enumerate(self._backbone.feature_info.info)}
 
+        # trf-ignore: TRF051 (warning only, `timm` owns its own attention dispatch)
+        if self.config._attn_implementation == "eager":
+            # `timm` resolves the attention implementation on its own, there is no model level API to change it yet
+            logger.warning_once(
+                "`attn_implementation='eager'` is not propagated to the wrapped `timm` model, which keeps using "
+                "`F.scaled_dot_product_attention` whenever it is available."
+            )
+
         self.post_init()
 
     @classmethod
@@ -104,6 +117,7 @@ class TimmBackbone(BackboneMixin, PreTrainedModel):
         timm.utils.model.unfreeze_batch_norm_2d(self._backbone)
 
     @torch.no_grad()
+    # trf-ignore: TRF018
     def _init_weights(self, module):
         """We need to at least re-init the non-persistent buffers if the model was initialized on meta device (we
         assume weights and persistent buffers will be part of checkpoint as we have no way to control timm inits)"""

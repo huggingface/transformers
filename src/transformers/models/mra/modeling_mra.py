@@ -55,7 +55,7 @@ def load_cuda_kernels():
         raise ImportError("kernels is not installed, please install it with `pip install kernels`")
     from ...integrations.hub_kernels import get_kernel
 
-    mra_cuda_kernel = get_kernel("kernels-community/mra")
+    mra_cuda_kernel = get_kernel("kernels-community/mra", version=1)
 
 
 def sparse_max(sparse_qk_prod, indices, query_num_block, key_num_block):
@@ -475,11 +475,9 @@ class MraEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)) + 2)
-        self.register_buffer(
-            "token_type_ids",
-            torch.zeros(self.position_ids.size(), dtype=torch.long, device=self.position_ids.device),
-            persistent=False,
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)) + 2)
+        self.token_type_ids = nn.Buffer(
+            torch.zeros(self.position_ids.size(), dtype=torch.long, device=self.position_ids.device), persistent=False
         )
 
     def forward(self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None):
@@ -870,8 +868,8 @@ class MraModel(MraPreTrainedModel):
             config=self.config,
             inputs_embeds=embedding_output[:, 0:1, :],  # Force q_len == 1
             attention_mask=attention_mask,
-            # Force mask creation
-            and_mask_function=lambda *args: torch.tensor(True, dtype=torch.bool),
+            # Always materialize the mask; the encoder below consumes it as a tensor.
+            allow_is_bidirectional_skip=False,
         )
 
         encoder_outputs = self.encoder(

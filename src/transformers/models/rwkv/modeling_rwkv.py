@@ -49,7 +49,7 @@ def load_wkv_cuda_kernel(context_length):
 
     from ...integrations.hub_kernels import get_kernel
 
-    rwkv_cuda_kernel = get_kernel("kernels-community/rwkv")
+    rwkv_cuda_kernel = get_kernel("kernels-community/rwkv", version=1)
     rwkv_cuda_kernel.max_seq_length = context_length
 
 
@@ -368,6 +368,7 @@ class RwkvPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights."""
+        super()._init_weights(module)
         if isinstance(module, RwkvSelfAttention):
             layer_id = module.layer_id
             num_hidden_layers = module.config.num_hidden_layers
@@ -437,9 +438,6 @@ class RwkvPreTrainedModel(PreTrainedModel):
             shape = module.weight.shape
             gain = 1e-4 * math.sqrt(max(shape[0], shape[1]))
             init.orthogonal_(module.weight, gain=gain)
-        elif isinstance(module, nn.LayerNorm):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
 
 
 @auto_docstring(

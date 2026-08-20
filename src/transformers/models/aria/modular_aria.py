@@ -11,6 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import math
+
 import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
@@ -492,7 +494,7 @@ class AriaImageProcessor(TorchvisionBackend):
             tensor_type=return_tensors,
         )
 
-    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:
         """
         A utility that returns number of image patches for a given image size.
 
@@ -507,11 +509,17 @@ class AriaImageProcessor(TorchvisionBackend):
         Returns:
             `int`: Number of patches per image.
         """
+        images_kwargs = images_kwargs or {}
         split_image = images_kwargs.get("split_image", self.split_image)
         max_image_size = images_kwargs.get("max_image_size", self.max_image_size)
+        split_resolutions = images_kwargs.get("split_resolutions", self.split_resolutions)
 
-        resized_height, resized_width = select_best_resolution((height, width), self.split_resolutions)
-        num_patches = 1 if not split_image else resized_height // max_image_size * resized_width // max_image_size
+        resized_height, resized_width = select_best_resolution((height, width), split_resolutions)
+        num_patches = (
+            1
+            if not split_image
+            else math.ceil(resized_height / max_image_size) * math.ceil(resized_width / max_image_size)
+        )
         return num_patches
 
 
@@ -578,7 +586,7 @@ class AriaProcessor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
-    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         tokens_per_image = self.size_conversion[image_inputs["pixel_values"].shape[2]]
         num_image_tokens = image_inputs["num_crops"] * tokens_per_image
         return self.image_token * num_image_tokens
@@ -1056,38 +1064,6 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        inputs_embeds=None,
-        pixel_values=None,
-        pixel_mask=None,
-        attention_mask=None,
-        logits_to_keep=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            logits_to_keep=logits_to_keep,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
-        if is_first_iteration or not kwargs.get("use_cache", True):
-            # Pixel values are used only in the first iteration if available
-            # In subsequent iterations, they are already merged with text and cached
-            # NOTE: first iteration doesn't have to be prefill, it can be the first
-            # iteration with a question and cached system prompt (continue generate from cache)
-            model_inputs["pixel_values"] = pixel_values
-            model_inputs["pixel_mask"] = pixel_mask
-
-        return model_inputs
 
 
 __all__ = [
