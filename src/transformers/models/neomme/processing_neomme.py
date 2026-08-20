@@ -385,7 +385,7 @@ class NeoMMEProcessor(ProcessorMixin):
             images = [images]
 
         return_tensors = kwargs.setdefault("return_tensors", "pt")
-        image_inputs = self.image_processor(images=images, **kwargs)
+        image_inputs, replacements = self._process_images(images, **kwargs)
         image_grid_hw = image_inputs.pop("image_grid_hw")
         marker_ids = self._marker_ids()
 
@@ -397,9 +397,6 @@ class NeoMMEProcessor(ProcessorMixin):
         elif isinstance(rendered_text, str):
             rendered_text = [rendered_text]
 
-        replacements = [
-            self.replace_image_token({"image_grid_hw": image_grid_hw}, index) for index in range(len(image_grid_hw))
-        ]
         rendered_text, _ = self.get_text_with_replacements(list(rendered_text), images_replacements=replacements)
 
         sequences = self.tokenizer(rendered_text, add_special_tokens=False)["input_ids"]

@@ -625,6 +625,18 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "distinct token IDs"):
             processor(text=["hello"], task="query")
 
+    def test_process_images_uses_standard_hook(self):
+        processor = self.get_processor()
+        image = Image.fromarray(np.random.randint(0, 255, (8, 12, 3), dtype=np.uint8))
+
+        image_inputs, replacements = processor._process_images([image], return_tensors="pt")
+
+        self.assertSetEqual(set(image_inputs), {"pixel_values", "image_grid_hw"})
+        self.assertEqual(len(replacements), 1)
+        grid_height, grid_width = image_inputs["image_grid_hw"][0].tolist()
+        row = processor.image_token * grid_width + processor.tokenizer.row_token
+        self.assertEqual(replacements[0], processor.image_token + row * grid_height)
+
     def test_image_layout(self):
         processor = self.get_processor()
         grid_height, grid_width = 2, 3
