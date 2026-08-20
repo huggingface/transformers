@@ -300,7 +300,7 @@ class Cosmos3OmniForConditionalGenerationIntegrationTest(unittest.TestCase):
             {
                 ("cuda", None): [
                     "user\nWhat kind of dog is this?\nassistant\nThe dog in the image appears to be a Labrador Retriever. It has a light brown or golden coat, which is characteristic of this breed. Labrador Retrievers are known for their friendly demeanor and",
-                    "user\nWhat do you see in this image?\nassistant\nIn this image, I see two cats sleeping on a pink couch. The cats appear to be of the same breed, with brown and black striped fur. They're both lying down in a relaxed position",
+                    "user\nWhat do you see in this image?\nassistant\nIn this image, I see two cats sleeping on a pink blanket. The cats appear to be of the same breed, with brown and black striped fur. They are lying on their sides, facing each",
                 ],
                 ("xpu", None): [
                     'user\nWhat kind of dog is this?\nassistant\nThe dog in the image appears to be a Labrador Retriever. It has a light brown or golden color, which is characteristic of this breed. Labrador Retrievers are known for their friendly demeanor and',
