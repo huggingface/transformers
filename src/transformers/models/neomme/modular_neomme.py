@@ -293,11 +293,6 @@ class NeoMMEEmbeddings(nn.Module):
             inputs_embeds = self.word_embeddings(input_ids)
         return self.embedding_projection(inputs_embeds)
 
-    def decode(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        """Project hidden states through the tied factorized embedding for MLM logits."""
-        projected = hidden_states @ self.embedding_projection.weight  # (batch, seq, embedding_rank)
-        return projected @ self.word_embeddings.weight.t()  # (batch, seq, vocab_size)
-
 
 class NeoMMEPatchEmbeddings(nn.Module):
     """Patch stem that maps flattened image patches to hidden size."""
@@ -514,6 +509,8 @@ class NeoMMEPreTrainedModel(PreTrainedModel):
             init.copy_(module.lambdas, torch.tensor([1.0, 0.0]))
         elif isinstance(module, NeoMMEModel):
             init.zeros_(module.value_embeddings.weight)
+        elif isinstance(module, NeoMMEForMaskedLM):
+            init.normal_(module.lm_head.weight, mean=0.0, std=self.config.embedding_rank**-0.5)
         elif isinstance(module, NeoMMERotaryEmbedding):
             for layer_type in module.layer_types:
                 rope_init_fn = module.compute_default_rope_parameters
@@ -678,13 +675,16 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    The NeoMME model with a masked language modeling head.
+    The NeoMME model with a factorized masked token decoder.
     """
 )
 class NeoMMEForMaskedLM(NeoMMEPreTrainedModel):
+    _tied_weights_keys = {"lm_head.weight": "model.embeddings.word_embeddings.weight"}
+
     def __init__(self, config: NeoMMEConfig):
         super().__init__(config)
         self.model = NeoMMEModel(config)
+        self.lm_head = nn.Linear(config.embedding_rank, config.vocab_size, bias=False)
         self.post_init()
 
     @can_return_tuple
@@ -712,7 +712,9 @@ class NeoMMEForMaskedLM(NeoMMEPreTrainedModel):
             inputs_embeds=inputs_embeds,
             **kwargs,
         )
-        logits = self.model.embeddings.decode(outputs.last_hidden_state)  # (batch, seq, vocab_size)
+        hidden_states = outputs.last_hidden_state
+        hidden_states = hidden_states @ self.model.embeddings.embedding_projection.weight
+        logits = self.lm_head(hidden_states)  # (batch, seq, vocab_size)
 
         loss = None
         if labels is not None:

@@ -536,10 +536,39 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
                 input_ids=input_ids, pixel_values=torch.cat([pixel_values, pixel_values[:1]])
             )
 
-    def test_masked_lm_adds_no_parameters(self):
-        config = self.model_tester.get_config()
-        self.assertEqual(NeoMMEForMaskedLM(config).num_parameters(), NeoMMEModel(config).num_parameters())
-        self.assertIsNone(NeoMMEForMaskedLM(config).get_output_embeddings())
+    def test_masked_lm_ties_word_embeddings(self):
+        config, input_ids, attention_mask, _ = self.model_tester.prepare_config_and_inputs()
+        model = NeoMMEForMaskedLM(config).to(torch_device).eval()
+        input_ids, attention_mask = input_ids.to(torch_device), attention_mask.to(torch_device)
+
+        self.assertEqual(model.num_parameters(), NeoMMEModel(config).num_parameters())
+        self.assertIs(model.get_output_embeddings().weight, model.model.embeddings.word_embeddings.weight)
+
+        with torch.no_grad():
+            hidden_states = model.model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
+            expected = (hidden_states @ model.model.embeddings.embedding_projection.weight) @ (
+                model.model.embeddings.word_embeddings.weight.t()
+            )
+            actual = model(input_ids=input_ids, attention_mask=attention_mask).logits
+        torch.testing.assert_close(actual, expected)
+
+    def test_masked_lm_can_untie_word_embeddings(self):
+        config, input_ids, attention_mask, _ = self.model_tester.prepare_config_and_inputs()
+        config.tie_word_embeddings = False
+        model = NeoMMEForMaskedLM(config).to(torch_device).eval()
+        input_ids, attention_mask = input_ids.to(torch_device), attention_mask.to(torch_device)
+
+        self.assertIsNot(model.lm_head.weight, model.model.embeddings.word_embeddings.weight)
+        self.assertEqual(
+            model.num_parameters() - NeoMMEModel(config).num_parameters(),
+            config.embedding_rank * config.vocab_size,
+        )
+
+        with torch.no_grad():
+            hidden_states = model.model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
+            expected = model.lm_head(hidden_states @ model.model.embeddings.embedding_projection.weight)
+            actual = model(input_ids=input_ids, attention_mask=attention_mask).logits
+        torch.testing.assert_close(actual, expected)
 
     def test_partial_rotary_standard_layout(self):
         """Rotation acts on the standard half layout and leaves the NoPE tail untouched."""

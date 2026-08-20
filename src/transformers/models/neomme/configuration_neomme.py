@@ -44,6 +44,8 @@ class NeoMMEConfig(PreTrainedConfig):
         `embedding_rank`.
     document_token_id (`int`, *optional*, defaults to 5):
         Token ID for the `<doc>` marker.
+    tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+        Whether the masked token decoder reuses the token embedding table.
 
     ```python
     >>> from transformers import NeoMMEModel, NeoMMEConfig
@@ -95,6 +97,7 @@ class NeoMMEConfig(PreTrainedConfig):
     pad_token_id: int | None = 0
     document_token_id: int | None = 5
     image_token_id: int | None = 6
+    tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
         if self.layer_types is None:
