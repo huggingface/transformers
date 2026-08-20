@@ -18,6 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
+    from .audio_processing_gemma3n import *
+    from .audio_processing_numpy_gemma3n import *
     from .configuration_gemma3n import *
     from .feature_extraction_gemma3n import *
     from .modeling_gemma3n import *

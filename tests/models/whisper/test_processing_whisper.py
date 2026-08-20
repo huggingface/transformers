@@ -22,7 +22,7 @@ import pytest
 from transformers import WhisperTokenizer, WhisperTokenizerFast, is_speech_available
 from transformers.testing_utils import require_sentencepiece, require_torch, require_torchaudio
 
-from .test_feature_extraction_whisper import floats_list
+from ...test_processing_common import floats_list
 
 
 if is_speech_available():
