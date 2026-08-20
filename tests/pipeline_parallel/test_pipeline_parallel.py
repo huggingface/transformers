@@ -137,9 +137,7 @@ def _pp_load_report(rank, config_dict, pp_size, port):
     if rank == 0:
         full_model = Qwen2ForCausalLM(config)
         load_config = LoadStateDictConfig()
-        loading_info, _ = convert_and_load_state_dict_in_model(
-            model, full_model.state_dict(), load_config, tp_plan=None
-        )
+        loading_info, _ = convert_and_load_state_dict_in_model(model, full_model.state_dict(), load_config)
 
         report = loading_info.create_loading_report(model)
         assert report is not None
