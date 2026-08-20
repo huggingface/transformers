@@ -85,8 +85,8 @@ class CohereCompassProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             text="<|VISION_START|><|IMAGE_PAD|><|VISION_END|> describe this image",
             return_tensors="pt",
         )
-        self.assertEqual(output.image_grid_thw.tolist(), [[1, 8, 8]])
-        self.assertEqual((output.input_ids == processor.image_token_id).sum().item(), 16)
+        self.assertEqual(output.image_grid_thw.tolist(), [[1, 2, 2]])
+        self.assertEqual((output.input_ids == processor.image_token_id).sum().item(), 1)
         self.assertTrue(output.mm_token_type_ids.equal((output.input_ids == processor.image_token_id).int()))
 
     def test_multiple_images_preserve_grid_order(self):
@@ -99,8 +99,8 @@ class CohereCompassProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             ),
             return_tensors="pt",
         )
-        self.assertEqual(output.image_grid_thw.tolist(), [[1, 8, 8], [1, 6, 12]])
-        self.assertEqual((output.input_ids == processor.image_token_id).sum().item(), 34)
+        self.assertEqual(output.image_grid_thw.tolist(), [[1, 2, 2], [1, 2, 4]])
+        self.assertEqual((output.input_ids == processor.image_token_id).sum().item(), 3)
 
     def test_get_num_multimodal_tokens(self):
         processor = self.get_processor()

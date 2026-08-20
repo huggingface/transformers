@@ -55,7 +55,7 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Kosmos2Processor
     image_text_kwargs_max_length = 72
     image_text_kwargs_override_max_length = 72
-    image_unstructured_max_length = 72
+    image_unstructured_max_length = 82
 
     @classmethod
     def _setup_tokenizer(cls):
@@ -389,7 +389,7 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         input_str = self.prepare_text_inputs(batch_size=2, modalities=modality)
         modal_input = self._prepare_modal_input(modality, batch_size=2)
-        max_length = 76
+        max_length = getattr(self, f"{modality}_unstructured_max_length")
         component_init_kwargs = MODALITY_CONFIG[modality]["component_init_kwargs"]
         inputs = self._call_processor(
             processor,

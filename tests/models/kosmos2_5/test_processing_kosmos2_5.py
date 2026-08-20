@@ -94,10 +94,8 @@ class Kosmos2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_torch
     @require_vision
-    def test_image_processor_defaults_preserved_by_image_kwargs(self):
-        # Rewrite as KOSMOS-2.5 processor return "flattened_patches" and not "pixel_values"
-        if "image_processor" not in self.processor_class.get_attributes():
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+    def test_subprocessor_defaults_preserved_by_kwargs_0_image(self):
+        # Rewrite as KOSMOS-2.5 processor appliescustom normalization and we can't check `out.mean()`
         image_processor = self.get_component("image_processor", max_patches=1024, patch_size={"height": 8, "width": 8})
         tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
 
@@ -112,10 +110,8 @@ class Kosmos2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_torch
     @require_vision
-    def test_kwargs_overrides_default_image_processor_kwargs(self):
-        # Rewrite as KOSMOS-2.5 processor return "flattened_patches" and not "pixel_values"
-        if "image_processor" not in self.processor_class.get_attributes():
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+    def test_kwargs_overrides_default_subprocessor_kwargs_0_image(self):
+        # Rewrite as KOSMOS-2.5 processor appliescustom normalization and we can't check `out.mean()`
         image_processor = self.get_component("image_processor", max_patches=4096)
         tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
 
@@ -130,10 +126,8 @@ class Kosmos2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_torch
     @require_vision
-    def test_unstructured_kwargs(self):
-        # Rewrite as KOSMOS-2.5 processor doesn't use `rescale_factor`
-        if "image_processor" not in self.processor_class.get_attributes():
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+    def test_unstructured_kwargs_0_image(self):
+        # Rewrite as KOSMOS-2.5 processor appliescustom normalization and we can't check `out.mean()`
         image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer")
 
@@ -156,10 +150,8 @@ class Kosmos2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_torch
     @require_vision
-    def test_unstructured_kwargs_batched(self):
-        # Rewrite as KOSMOS-2.5 processor doesn't use `rescale_factor`
-        if "image_processor" not in self.processor_class.get_attributes():
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+    def test_unstructured_kwargs_batched_0_image(self):
+        # Rewrite as KOSMOS-2.5 processor appliescustom normalization and we can't check `out.mean()`
         image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer")
 
@@ -183,40 +175,8 @@ class Kosmos2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_torch
     @require_vision
-    def test_structured_kwargs_nested(self):
-        # Rewrite as KOSMOS-2.5 processor doesn't use `rescale_factor`
-        if "image_processor" not in self.processor_class.get_attributes():
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor")
-        tokenizer = self.get_component("tokenizer")
-
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
-        self.skip_processor_without_typed_kwargs(processor)
-
-        input_str = self.prepare_text_inputs()
-        image_input = self.prepare_image_inputs()
-
-        # Define the kwargs for each modality
-        all_kwargs = {
-            "common_kwargs": {"return_tensors": "pt"},
-            "images_kwargs": {"max_patches": 1024},
-            "text_kwargs": {"padding": "max_length", "max_length": 76},
-        }
-
-        inputs = processor(text=input_str, images=image_input, **all_kwargs)
-        self.skip_processor_without_typed_kwargs(processor)
-
-        self.assertEqual(inputs["flattened_patches"].shape[1], 1024)
-
-        self.assertEqual(len(inputs["input_ids"][0]), 76)
-
-    @require_torch
-    @require_vision
-    def test_structured_kwargs_nested_from_dict(self):
-        # Rewrite as KOSMOS-2.5 processor doesn't use `rescale_factor`
-        if "image_processor" not in self.processor_class.get_attributes():
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-
+    def test_structured_kwargs_nested_from_dict_0_image(self):
+        # Rewrite as KOSMOS-2.5 processor appliescustom normalization and we can't check `out.mean()`
         image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer")
 

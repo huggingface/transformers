@@ -59,14 +59,9 @@ class Pix2StructProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             self.assertEqual(inputs["flattened_patches"][0].shape[0], max_patch)
             self.assertEqual(inputs["flattened_patches"][0].shape[1], expected_hidden_size[i])
 
-    @require_torch
-    @require_vision
     def test_image_processor_defaults_preserved_by_image_kwargs(self):
-        # Rewrite as pix2struct processor return "flattened_patches" and not "pixel_values"
-        if "image_processor" not in self.processor_class.get_attributes():
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        # Rewrite as pix2struct processor applies custom normalization, can;t check `out.mean()`
         image_processor = self.get_component("image_processor", max_patches=1024, patch_size={"height": 8, "width": 8})
-        print("image_processor", image_processor)
         tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
 
         processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
@@ -78,12 +73,8 @@ class Pix2StructProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         inputs = processor(text=input_str, images=image_input)
         self.assertEqual(len(inputs["flattened_patches"][0][0]), 194)
 
-    @require_torch
-    @require_vision
-    def test_kwargs_overrides_default_image_processor_kwargs(self):
-        # Rewrite as pix2struct processor return "flattened_patches" and not "pixel_values"
-        if "image_processor" not in self.processor_class.get_attributes():
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+    def test_kwargs_overrides_default_subprocessor_kwargs_0_image(self):
+        # Rewrite as pix2struct processor applies custom normalization, can;t check `out.mean()`
         image_processor = self.get_component("image_processor", max_patches=4096)
         tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
 
@@ -96,12 +87,8 @@ class Pix2StructProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         inputs = processor(text=input_str, images=image_input, max_patches=1024)
         self.assertEqual(len(inputs["flattened_patches"][0]), 1024)
 
-    @require_torch
-    @require_vision
-    def test_unstructured_kwargs(self):
-        # Rewrite as pix2struct processor return "decoder_input_ids" and not "input_ids"
-        if "image_processor" not in self.processor_class.get_attributes():
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+    def test_unstructured_kwargs_0_image(self):
+        # Rewrite as pix2struct processor applies custom normalization, can;t check `out.mean()`
         image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer")
 
@@ -122,12 +109,8 @@ class Pix2StructProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(inputs["flattened_patches"].shape[1], 1024)
         self.assertEqual(len(inputs["decoder_input_ids"][0]), 76)
 
-    @require_torch
-    @require_vision
-    def test_unstructured_kwargs_batched(self):
-        # Rewrite as pix2struct processor return "decoder_input_ids" and not "input_ids"
-        if "image_processor" not in self.processor_class.get_attributes():
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+    def test_unstructured_kwargs_batched_0_image(self):
+        # Rewrite as pix2struct processor applies custom normalization, can;t check `out.mean()`
         image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer")
 
@@ -149,12 +132,8 @@ class Pix2StructProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertEqual(len(inputs["decoder_input_ids"][0]), 5)
 
-    @require_torch
-    @require_vision
-    def test_structured_kwargs_nested(self):
-        # Rewrite as pix2struct processor return "decoder_input_ids" and not "input_ids"
-        if "image_processor" not in self.processor_class.get_attributes():
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+    def test_structured_kwargs_nested_0_image(self):
+        # Rewrite as pix2struct processor applies custom normalization, can;t check `out.mean()`
         image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer")
 
@@ -178,13 +157,8 @@ class Pix2StructProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertEqual(len(inputs["decoder_input_ids"][0]), 76)
 
-    @require_torch
-    @require_vision
-    def test_structured_kwargs_nested_from_dict(self):
-        # Rewrite as pix2struct processor return "decoder_input_ids" and not "input_ids"
-        if "image_processor" not in self.processor_class.get_attributes():
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-
+    def test_structured_kwargs_nested_from_dict_0_image(self):
+        # Rewrite as pix2struct processor applies custom normalization, can;t check `out.mean()`
         image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer")
 
