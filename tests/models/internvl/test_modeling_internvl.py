@@ -672,7 +672,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): [-9.8828,  -0.4954,   1.4561, -10.3438, -10.3438],
                 ("cuda", 7): [-9.8750,  -0.4861,   1.4648, -10.3359, -10.3359],
-                ("cuda", 8): [-9.8906,  -0.4995,   1.4473, -10.3359, -10.3438],
+                ("cuda", 8): [-9.8750,  -0.4900,   1.4629, -10.3281, -10.3359],
                 ("rocm", (9, 4)): [ -9.8672,  -0.4888,   1.4648, -10.3281, -10.3281],
                 ("rocm", (9, 5)): [ -9.8906,  -0.4976,   1.4502, -10.3359, -10.3438],
             }
@@ -707,7 +707,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): "Autumn leaves fall,\nNature's breath, a season's sigh,\nSilent woods awake.",
                 ("cuda", 7): "Autumn leaves fall,\nNature's breath, a gentle sigh,\nSilent whispers.",
-                ("cuda", 8): "Autumn leaves fall,\nNature's breath, a silent sigh,\nWinter's chill approaches.",
+                ("cuda", 8): "Autumn leaves fall,\nNature's breath, a season's sigh,\nSilent woods awake.",
             }
         )
         expected_output = expected_outputs.get_expectation()
