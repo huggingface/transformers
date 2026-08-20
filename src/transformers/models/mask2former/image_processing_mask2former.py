@@ -554,7 +554,8 @@ class Mask2FormerImageProcessor(TorchvisionBackend):
 
             When `return_traceable_outputs=True`, a tuple `(semantic_map,)` of shape `(batch_size, height, width)`,
             extended with the segmentation scores of shape `(batch_size, num_classes, height, width)` if
-            `return_segmentation_scores=True`. Everything up to that tuple is traceable, so passing it to
+            `return_segmentation_scores=True`. The maps are already resized to the target size, so they can be used
+            as is; passing `segmentation_scores` to
             [`~Mask2FormerImageProcessor.build_semantic_segmentation_outputs`] outside of the traced code gives the
             same output as `return_traceable_outputs=False`.
         """
@@ -572,8 +573,7 @@ class Mask2FormerImageProcessor(TorchvisionBackend):
                 raise ValueError(
                     "Make sure that you pass in as many target sizes as the batch dimension of the logits"
                 )
-            num_unique_target_sizes = len(set(target_sizes))
-            if return_traceable_outputs and num_unique_target_sizes != 1:
+            if return_traceable_outputs and len(set(target_sizes)) != 1:
                 raise ValueError("All target sizes must be identical when `return_traceable_outputs=True`.")
 
         # Scale back to preprocessed image size - (384, 384) for all models
@@ -584,39 +584,22 @@ class Mask2FormerImageProcessor(TorchvisionBackend):
         # Semantic segmentation logits of shape (batch_size, num_classes, height, width), without the null class
         masks_classes = class_queries_logits.softmax(dim=-1)[..., :-1]
         masks_probs = masks_queries_logits.sigmoid()  # [batch_size, num_queries, height, width]
-        segmentation = masks_classes.transpose(1, 2) @ masks_probs.flatten(start_dim=2)
-        segmentation = segmentation.unflatten(dim=-1, sizes=masks_probs.shape[-2:])
+        segmentation_scores = masks_classes.transpose(1, 2) @ masks_probs.flatten(start_dim=2)
+        segmentation_scores = segmentation_scores.unflatten(dim=-1, sizes=masks_probs.shape[-2:])
 
-        # Resize logits and compute semantic segmentation maps
-        if target_sizes is not None:
-            if num_unique_target_sizes == 1:
-                resized_logits = torch.nn.functional.interpolate(
-                    segmentation, size=target_sizes[0], mode="bilinear", align_corners=False
-                )
-                semantic_map = resized_logits.argmax(dim=1)
-            else:
-                resized_logits = []
-                semantic_map = []
-                for idx in range(batch_size):
-                    logits = torch.nn.functional.interpolate(
-                        segmentation[idx].unsqueeze(dim=0),
-                        size=target_sizes[idx],
-                        mode="bilinear",
-                        align_corners=False,
-                    )
-                    resized_logits.append(logits[0])
-                    semantic_map.append(logits[0].argmax(dim=0))
-
-        else:
-            resized_logits = segmentation
-            semantic_map = resized_logits.argmax(dim=1)
-
+        # Logits are resized before the argmax only in the traceable branch,
+        # `build_semantic_segmentation_outputs` resizes them otherwise
         if return_traceable_outputs:
-            return (semantic_map, resized_logits) if return_segmentation_scores else (semantic_map,)
+            if target_sizes is not None:
+                segmentation_scores = torch.nn.functional.interpolate(
+                    segmentation_scores, size=target_sizes[0], mode="bilinear", align_corners=False
+                )
+            semantic_map = segmentation_scores.argmax(dim=1)
+            return (semantic_map, segmentation_scores) if return_segmentation_scores else (semantic_map,)
 
         return self.build_semantic_segmentation_outputs(
-            semantic_map=semantic_map,
-            segmentation_scores=resized_logits,
+            segmentation_scores=segmentation_scores,
+            target_sizes=target_sizes,
             return_segmentation_scores=return_segmentation_scores,
         )
 
@@ -851,29 +834,46 @@ class Mask2FormerImageProcessor(TorchvisionBackend):
 
     def build_semantic_segmentation_outputs(
         self,
-        semantic_map: torch.Tensor | list[torch.Tensor],
-        segmentation_scores: torch.Tensor | list[torch.Tensor] | None = None,
+        segmentation_scores: torch.Tensor,
+        target_sizes: list[tuple[int, int]] | None = None,
         return_segmentation_scores: bool = False,
     ) -> "list[torch.Tensor] | list[SemanticSegmentationPostProcessorOutput]":
         """
         Builds semantic segmentation maps from the tensors returned by
         `post_process_semantic_segmentation(..., return_traceable_outputs=True)`. See
         [`~Mask2FormerImageProcessor.post_process_semantic_segmentation`] for the arguments and the returned values.
+        `target_sizes` must be left to `None` if the logits were already resized by
+        `post_process_semantic_segmentation`.
         """
-        if return_segmentation_scores:
-            if segmentation_scores is None:
-                raise ValueError("`segmentation_scores` are required when `return_segmentation_scores=True`.")
+        if target_sizes is not None:
+            if isinstance(target_sizes, (torch.Tensor, np.ndarray)):
+                target_sizes = target_sizes.tolist()
+            target_sizes = [tuple(size) for size in target_sizes]
 
-            semantic_segmentation = [
-                SemanticSegmentationPostProcessorOutput(
-                    data={"segmentation": segmentation, "segmentation_scores": scores}
+        if target_sizes is None or len(set(target_sizes)) == 1:
+            if target_sizes is not None:
+                segmentation_scores = torch.nn.functional.interpolate(
+                    segmentation_scores, size=target_sizes[0], mode="bilinear", align_corners=False
                 )
-                for segmentation, scores in zip(semantic_map, segmentation_scores)
-            ]
+            semantic_map = segmentation_scores.argmax(dim=1)
         else:
-            semantic_segmentation = list(semantic_map)
+            segmentation_scores = [
+                torch.nn.functional.interpolate(
+                    image_scores.unsqueeze(dim=0), size=target_size, mode="bilinear", align_corners=False
+                )[0]
+                for image_scores, target_size in zip(segmentation_scores, target_sizes)
+            ]
+            semantic_map = [image_scores.argmax(dim=0) for image_scores in segmentation_scores]
 
-        return semantic_segmentation
+        if not return_segmentation_scores:
+            return list(semantic_map)
+
+        return [
+            SemanticSegmentationPostProcessorOutput(
+                data={"segmentation": segmentation, "segmentation_scores": image_scores}
+            )
+            for segmentation, image_scores in zip(semantic_map, segmentation_scores)
+        ]
 
     def build_instance_segmentation_outputs(
         self,
