@@ -69,45 +69,6 @@ class NeoMMEProcessor(ProcessorMixin):
         self.image_token = tokenizer.image_token
         self.query_expand = query_expand
 
-    @property
-    def model_input_names(self) -> list[str]:
-        return super().model_input_names + ["position_ids"]
-
-    def validate_inputs(self, images: ImageInput | None = None, text: TextInput | None = None, **kwargs):
-        """Validate text before tokenization."""
-        super().validate_inputs(images=images, text=text, **kwargs)
-        if text is not None:
-            text = [text] if isinstance(text, str) else text
-            if not text:
-                raise ValueError("text must contain at least one string.")
-            if any(not isinstance(value, str) for value in text):
-                raise ValueError("Pretokenized text is not supported.")
-
-    def apply_chat_template(
-        self,
-        conversation: list[dict[str, str]] | list[list[dict[str, str]]],
-        chat_template: str | None = None,
-        task: Literal["query", "document"] | None = None,
-        processor_kwargs: dict | None = None,
-        **kwargs,
-    ):
-        """Apply the configured retrieval template and optionally tokenize its output.
-
-        When `tokenize=True`, image content must include an image, URL, path, or base64 value. Pass processing
-        options such as `max_length` or `max_side` through `processor_kwargs`.
-        """
-        if kwargs.get("return_assistant_tokens_mask"):
-            raise ValueError("NeoMME retrieval templates do not support `return_assistant_tokens_mask`.")
-
-        processor_kwargs = {**(processor_kwargs or {}), "task": task, "_chat_template_applied": True}
-        return super().apply_chat_template(
-            conversation,
-            chat_template=chat_template,
-            processor_kwargs=processor_kwargs,
-            task=task,
-            **kwargs,
-        )
-
     @auto_docstring
     def __call__(
         self,
@@ -157,6 +118,50 @@ class NeoMMEProcessor(ProcessorMixin):
             image_replacements=replacements,
             **text_kwargs,
         )
+
+    def validate_inputs(self, images: ImageInput | None = None, text: TextInput | None = None, **kwargs):
+        """Validate text before tokenization."""
+        super().validate_inputs(images=images, text=text, **kwargs)
+        if text is not None:
+            text = [text] if isinstance(text, str) else text
+            if not text:
+                raise ValueError("text must contain at least one string.")
+            if any(not isinstance(value, str) for value in text):
+                raise ValueError("Pretokenized text is not supported.")
+
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
+        grid_height, grid_width = image_inputs["image_grid_hw"][image_idx]
+        row = self.tokenizer.image_token * int(grid_width) + self.tokenizer.row_token
+        return self.tokenizer.image_token + row * int(grid_height)
+
+    def apply_chat_template(
+        self,
+        conversation: list[dict[str, str]] | list[list[dict[str, str]]],
+        chat_template: str | None = None,
+        task: Literal["query", "document"] | None = None,
+        processor_kwargs: dict | None = None,
+        **kwargs,
+    ):
+        """Apply the configured retrieval template and optionally tokenize its output.
+
+        When `tokenize=True`, image content must include an image, URL, path, or base64 value. Pass processing
+        options such as `max_length` or `max_side` through `processor_kwargs`.
+        """
+        if kwargs.get("return_assistant_tokens_mask"):
+            raise ValueError("NeoMME retrieval templates do not support `return_assistant_tokens_mask`.")
+
+        processor_kwargs = {**(processor_kwargs or {}), "task": task, "_chat_template_applied": True}
+        return super().apply_chat_template(
+            conversation,
+            chat_template=chat_template,
+            processor_kwargs=processor_kwargs,
+            task=task,
+            **kwargs,
+        )
+
+    @property
+    def model_input_names(self) -> list[str]:
+        return super().model_input_names + ["position_ids"]
 
     def _process_direct_inputs(
         self,
@@ -307,11 +312,6 @@ class NeoMMEProcessor(ProcessorMixin):
                 f"query_expand={expansion_length} leaves no room for content inside max_length={max_length}"
             )
         return [prefix_id, *content[:content_limit], *expansion]
-
-    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
-        grid_height, grid_width = image_inputs["image_grid_hw"][image_idx]
-        row = self.tokenizer.image_token * int(grid_width) + self.tokenizer.row_token
-        return self.tokenizer.image_token + row * int(grid_height)
 
     @staticmethod
     def _text_positions(length: int) -> np.ndarray:
