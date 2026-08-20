@@ -45,7 +45,7 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ...utils.generic import accepts_precomputed_kwargs, merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import (
     get_vision_attention_seqlens,
@@ -716,21 +716,12 @@ class PaddleOCRVLModel(Qwen2VLModel):
     def get_video_features(self):
         raise AttributeError("PaddleOCRVLModel does not support video.")
 
-    @accepts_precomputed_kwargs(modality="image")
-    @can_return_tuple
-    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input images.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-        """
         pixel_values = pixel_values.type(self.visual.dtype).unsqueeze(0)
         vision_outputs = self.visual(pixel_values=pixel_values, grid_thw=image_grid_thw, **kwargs)
         image_embeds = vision_outputs.last_hidden_state
@@ -777,10 +768,6 @@ class PaddleOCRVLModel(Qwen2VLModel):
         mm_token_type_ids: torch.IntTensor | None = None,
         **kwargs,
     ) -> tuple | PaddleOCRVLModelOutputWithPast:
-        r"""
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-        """
         if inputs_embeds is None:
             inputs_embeds = self.language_model.embed_tokens(input_ids)
 
@@ -845,13 +832,6 @@ class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | PaddleOCRVLCausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-
         Example:
 
         ```python

@@ -72,7 +72,7 @@ The repository consistency check is similar to `make check-repo`, except it stop
 
 | Category | What it validates | Auto-fixed? |
 |---|---|---|
-| Init files | Every new public object must appear in both `_import_structure` (lazy loading) and the `if TYPE_CHECKING` block (type checker imports) in `__init__.py` | Manual |
+| Init files | `src/transformers/models/__init__.py` matches the import structure on disk, so the `if TYPE_CHECKING` block (type checker imports) exposes the same models as the lazy runtime half | `make fix-repo` |
 | Copies and modular | `# Copied from` blocks match their source and modular-generated files are up to date | `make fix-repo` |
 | Docstrings and docs | Argument docstrings match function signatures and documentation table of contents | `make fix-repo` |
 | Auto-generated files | Dummies, pipeline typing, doctest list, metadata, dependency table | `make fix-repo` |
