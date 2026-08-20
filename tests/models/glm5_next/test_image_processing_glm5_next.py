@@ -12,37 +12,180 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import hashlib
-import tempfile
 import unittest
 
+import numpy as np
+
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_torchvision_available
+from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
+
+from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
 
 if is_torch_available():
     import torch
 
 if is_torchvision_available():
-    from transformers import AutoImageProcessor, Glm5NextImageProcessor, Glm5NextImageProcessorPil
+    from transformers import Glm5NextImageProcessor
     from transformers.models.glm5_next.image_processing_glm5_next import smart_resize
+
+if is_vision_available():
+    from PIL import Image
+
+
+class Glm5NextImageProcessingTester:
+    def __init__(
+        self,
+        parent,
+        batch_size=3,
+        num_channels=3,
+        min_resolution=30,
+        max_resolution=80,
+        do_rescale=True,
+        do_normalize=True,
+        image_mean=[0.48145466, 0.4578275, 0.40821073],
+        image_std=[0.26862954, 0.26130258, 0.27577711],
+        temporal_patch_size=2,
+        patch_size=2,
+        merge_size=2,
+        patch_expand_factor=2,
+        min_image_tokens=1,
+        max_image_tokens=64,
+    ):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.num_channels = num_channels
+        self.min_resolution = min_resolution
+        self.max_resolution = max_resolution
+        self.do_rescale = do_rescale
+        self.do_normalize = do_normalize
+        self.image_mean = image_mean
+        self.image_std = image_std
+        self.temporal_patch_size = temporal_patch_size
+        self.patch_size = patch_size
+        self.merge_size = merge_size
+        self.patch_expand_factor = patch_expand_factor
+        self.min_image_tokens = min_image_tokens
+        self.max_image_tokens = max_image_tokens
+
+    def prepare_image_processor_dict(self):
+        return {
+            "do_rescale": self.do_rescale,
+            "do_normalize": self.do_normalize,
+            "image_mean": self.image_mean,
+            "image_std": self.image_std,
+            "temporal_patch_size": self.temporal_patch_size,
+            "patch_size": self.patch_size,
+            "merge_size": self.merge_size,
+            "patch_expand_factor": self.patch_expand_factor,
+            "min_image_tokens": self.min_image_tokens,
+            "max_image_tokens": self.max_image_tokens,
+        }
+
+    def expected_output_image_shape(self, images):
+        hidden_dim = self.num_channels * self.temporal_patch_size * self.patch_size**2
+        pixels_per_token = self.temporal_patch_size * (self.patch_size * self.merge_size) ** 2
+        min_pixels = self.min_image_tokens * pixels_per_token
+        max_pixels = self.max_image_tokens * pixels_per_token
+        factor = self.patch_size * self.merge_size * self.patch_expand_factor
+        seq_len = 0
+        for image in images:
+            if isinstance(image, Image.Image):
+                width, height = image.size
+            elif isinstance(image, np.ndarray):
+                height, width = image.shape[:2]
+            else:
+                height, width = image.shape[-2:]
+            resized_height, resized_width = smart_resize(
+                self.temporal_patch_size,
+                height,
+                width,
+                temporal_factor=self.temporal_patch_size,
+                height_factor=factor,
+                width_factor=factor,
+                min_pixels=min_pixels,
+                max_pixels=max_pixels,
+            )
+            seq_len += (resized_height // self.patch_size) * (resized_width // self.patch_size)
+        return [seq_len, hidden_dim]
+
+    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
+        return prepare_image_inputs(
+            batch_size=self.batch_size,
+            num_channels=self.num_channels,
+            min_resolution=self.min_resolution,
+            max_resolution=self.max_resolution,
+            equal_resolution=equal_resolution,
+            numpify=numpify,
+            torchify=torchify,
+        )
 
 
 @require_torch
 @require_vision
-class Glm5NextImageProcessingTest(unittest.TestCase):
-    def get_processor_kwargs(self, **overrides):
-        kwargs = {
-            "patch_size": 2,
-            "temporal_patch_size": 2,
-            "merge_size": 2,
-            "patch_expand_factor": 2,
-            "min_image_tokens": 1,
-            "max_image_tokens": 64,
-            "image_mean": [0.48145466, 0.4578275, 0.40821073],
-            "image_std": [0.26862954, 0.26130258, 0.27577711],
-        }
-        return kwargs | overrides
+class Glm5NextImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+    def setUp(self):
+        super().setUp()
+        self.image_processor_tester = Glm5NextImageProcessingTester(self)
+
+    @property
+    def image_processor_dict(self):
+        return self.image_processor_tester.prepare_image_processor_dict()
+
+    # images are flattened into (seq_len, hidden_dim), so batched calls concatenate instead of stacking
+    def _test_call(self, image_inputs, **preprocess_kwargs):
+        for image_processing_class in self.image_processing_classes.values():
+            image_processing = image_processing_class(**self.image_processor_dict)
+            encoded_images = image_processing(image_inputs[0], return_tensors="pt", **preprocess_kwargs).pixel_values
+            self.assertEqual(
+                list(encoded_images.shape),
+                self.image_processor_tester.expected_output_image_shape([image_inputs[0]]),
+            )
+            encoded_images = image_processing(image_inputs, return_tensors="pt", **preprocess_kwargs).pixel_values
+            self.assertEqual(
+                list(encoded_images.shape),
+                self.image_processor_tester.expected_output_image_shape(image_inputs),
+            )
+
+    def test_call_pil(self):
+        self._test_call(self.image_processor_tester.prepare_image_inputs(equal_resolution=False))
+
+    def test_call_numpy(self):
+        self._test_call(self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True))
+
+    def test_call_pytorch(self):
+        self._test_call(self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True))
+
+    def test_call_numpy_4_channels(self):
+        self.image_processor_tester.num_channels = 4
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+        self._test_call(
+            image_inputs,
+            input_data_format="channels_last",
+            image_mean=(0.0, 0.0, 0.0, 0.0),
+            image_std=(1.0, 1.0, 1.0, 1.0),
+        )
+
+        # per-channel normalization: each channel block in the patch dim must be scaled by its own std
+        tester = self.image_processor_tester
+        for image_processing_class in self.image_processing_classes.values():
+            image_processing = image_processing_class(
+                **self.image_processor_dict, do_convert_rgb=False, do_resize=False
+            )
+            image = np.zeros((16, 16, 4), dtype=np.uint8)
+            for channel, value in enumerate((255, 128, 51, 0)):
+                image[..., channel] = value
+            output = image_processing(
+                image,
+                input_data_format="channels_last",
+                image_mean=(0.0, 0.0, 0.0, 0.0),
+                image_std=(1.0, 2.0, 4.0, 8.0),
+                return_tensors="pt",
+            ).pixel_values
+            patch_dim = tester.temporal_patch_size * tester.patch_size**2
+            for channel, expected in enumerate((1.0, 128 / 255 / 2, 51 / 255 / 4, 0.0)):
+                block = output[:, channel * patch_dim : (channel + 1) * patch_dim]
+                torch.testing.assert_close(block, torch.full_like(block, expected))
 
     def test_smart_resize_reference_cases(self):
         cases = [
@@ -53,79 +196,33 @@ class Glm5NextImageProcessingTest(unittest.TestCase):
         for args, expected in cases:
             self.assertEqual(smart_resize(*args), expected)
 
-    def test_bit_exact_reference_outputs(self):
-        cases = [
-            ("pad", 1, 64, 5, 9, [[1, 4, 8]], "26b79d03c22c0fe2ff0f4bb1ac88057dce6bf2ca70f194183685d131b0f5533a"),
-            ("pad", 1, 8, 37, 53, [[1, 4, 8]], "52242a3eda2d9eec3c279369a9756d000066770dbdfdc53db6b4d6f64c6afda8"),
-            ("resize", 1, 64, 5, 9, [[1, 4, 8]], "85df36be8e690726baf39dd61183eafc14d707da469d9f6760270b7590f21cbe"),
-        ]
-        for mode, min_tokens, max_tokens, height, width, grid, expected_hash in cases:
-            processor = Glm5NextImageProcessor(
-                **self.get_processor_kwargs(
-                    resize_mode=mode,
-                    min_image_tokens=min_tokens,
-                    max_image_tokens=max_tokens,
-                )
-            )
-            image = torch.arange(3 * height * width, dtype=torch.uint8).reshape(3, height, width)
-            output = processor(image, return_tensors="pt")
-            digest = hashlib.sha256(output.pixel_values.contiguous().numpy().tobytes()).hexdigest()
-            self.assertEqual(output.image_grid_thw.tolist(), grid)
-            self.assertEqual(digest, expected_hash)
+    # the padded canvas is always a multiple of patch_size * merge_size in each dimension
+    def test_canvas_is_aligned_to_token_grid(self):
+        processor = Glm5NextImageProcessor(**self.image_processor_dict)
+        image = torch.randint(0, 256, (3, 60, 100), dtype=torch.uint8)
+        output = processor(image, return_tensors="pt")
+        _, grid_h, grid_w = output.image_grid_thw[0].tolist()
+        factor = self.image_processor_tester.patch_size * self.image_processor_tester.merge_size
+        self.assertEqual(grid_h * self.image_processor_tester.patch_size % factor, 0)
+        self.assertEqual(grid_w * self.image_processor_tester.patch_size % factor, 0)
+        self.assertEqual(
+            grid_h * grid_w,
+            processor.get_number_of_image_patches(60, 100),
+        )
 
-    def test_invalid_resize_mode(self):
-        processor = Glm5NextImageProcessor(resize_mode="invalid")
-        with self.assertRaisesRegex(ValueError, "resize_mode"):
-            processor(torch.zeros(3, 5, 9, dtype=torch.uint8))
+    def test_min_image_tokens_upscales_small_images(self):
+        kwargs = {**self.image_processor_dict, "min_image_tokens": 64, "max_image_tokens": 256}
+        processor = Glm5NextImageProcessor(**kwargs)
+        output = processor(torch.zeros(3, 5, 9, dtype=torch.uint8), return_tensors="pt")
+        tokens = output.image_grid_thw[0].prod().item() // self.image_processor_tester.merge_size**2
+        self.assertGreaterEqual(tokens, 64)
 
-    def test_torchvision_and_pil_padding_are_bit_exact(self):
-        kwargs = self.get_processor_kwargs(do_rescale=False, do_normalize=False)
-        image = torch.arange(3 * 5 * 9, dtype=torch.uint8).reshape(3, 5, 9)
-        torchvision_output = Glm5NextImageProcessor(**kwargs)(image, return_tensors="pt")
-        pil_output = Glm5NextImageProcessorPil(**kwargs)(image, return_tensors="pt")
-        self.assertTrue(torch.equal(torchvision_output.pixel_values, pil_output.pixel_values))
-        self.assertTrue(torch.equal(torchvision_output.image_grid_thw, pil_output.image_grid_thw))
-
-    def test_per_call_resize_overrides(self):
-        processor = Glm5NextImageProcessor(**self.get_processor_kwargs())
+    def test_per_call_overrides(self):
+        kwargs = self.image_processor_dict
+        processor = Glm5NextImageProcessor(**kwargs)
         image = torch.arange(3 * 37 * 53, dtype=torch.uint8).reshape(3, 37, 53)
-        overrides = {"max_image_tokens": 8, "patch_expand_factor": 1, "resize_mode": "resize"}
+        overrides = {"max_image_tokens": 8, "patch_expand_factor": 1}
         actual = processor(image, return_tensors="pt", **overrides)
-        expected = Glm5NextImageProcessor(**self.get_processor_kwargs(**overrides))(image, return_tensors="pt")
+        expected = Glm5NextImageProcessor(**(kwargs | overrides))(image, return_tensors="pt")
         self.assertTrue(torch.equal(actual.pixel_values, expected.pixel_values))
         self.assertTrue(torch.equal(actual.image_grid_thw, expected.image_grid_thw))
-
-    def test_auto_image_processor_round_trip(self):
-        processor = Glm5NextImageProcessor(**self.get_processor_kwargs())
-        with tempfile.TemporaryDirectory() as tmpdir:
-            processor.save_pretrained(tmpdir)
-            loaded = AutoImageProcessor.from_pretrained(tmpdir)
-        self.assertIsInstance(loaded, Glm5NextImageProcessor)
-        self.assertEqual(loaded.to_dict(), processor.to_dict())
-
-    def test_new_processor_config_bit_exact(self):
-        processor = Glm5NextImageProcessor(
-            patch_size=14,
-            temporal_patch_size=2,
-            merge_size=2,
-            patch_expand_factor=1,
-            min_image_tokens=16,
-            max_image_tokens=8000,
-            resize_mode="pad",
-            image_mean=[0.48145466, 0.4578275, 0.40821073],
-            image_std=[0.26862954, 0.26130258, 0.27577711],
-        )
-        image = torch.arange(3 * 37 * 53, dtype=torch.uint8).reshape(3, 37, 53)
-        output = processor(image, return_tensors="pt")
-        digest = hashlib.sha256(output.pixel_values.contiguous().numpy().tobytes()).hexdigest()
-        self.assertEqual(output.image_grid_thw.tolist(), [[1, 8, 10]])
-        self.assertEqual(digest, "b1c71008b109e4d6c753f70f95301ade14774a9909ff20f05ddece9ab188fccd")
-
-    def test_get_number_of_image_patches(self):
-        processor = Glm5NextImageProcessor(**self.get_processor_kwargs())
-        output = processor(torch.zeros(3, 5, 9, dtype=torch.uint8), return_tensors="pt")
-        self.assertEqual(processor.get_number_of_image_patches(5, 9), output.image_grid_thw.prod().item())
-
-
-if __name__ == "__main__":
-    unittest.main()

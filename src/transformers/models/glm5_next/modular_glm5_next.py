@@ -1754,7 +1754,7 @@ def _prepare_processor(processor, kwargs=None):
     nested_kwargs = kwargs.get("kwargs") or kwargs.get("super_kwargs") or {}
     overrides = {
         name: value
-        for name in ("min_image_tokens", "max_image_tokens", "patch_expand_factor", "resize_mode")
+        for name in ("min_image_tokens", "max_image_tokens", "patch_expand_factor")
         if (value := kwargs.get(name, nested_kwargs.get(name))) is not None
     }
     if overrides:
@@ -1764,8 +1764,6 @@ def _prepare_processor(processor, kwargs=None):
 
     if processor.min_image_tokens is None or processor.max_image_tokens is None:
         raise ValueError("min_image_tokens and max_image_tokens must be provided.")
-    if processor.resize_mode not in ("resize", "pad"):
-        raise ValueError("resize_mode must be either 'resize' or 'pad'.")
     return processor
 
 
@@ -1782,9 +1780,6 @@ def _get_resize_geometry(processor, num_frames, height, width, factor, temporal_
         min_pixels=min_pixels,
         max_pixels=processor.max_image_tokens * pixels_per_token,
     )
-    if processor.resize_mode == "resize":
-        return target_height, target_width, target_height, target_width
-
     scale = min(target_height / height, target_width / width)
     if num_frames * height * width >= min_pixels:
         scale = min(1.0, scale)
@@ -1824,13 +1819,10 @@ class Glm5NextImageProcessorKwargs(GlmgaImageProcessorKwargs, total=False):
         Minimum number of tokens per image.
     max_image_tokens (`int`):
         Maximum number of tokens per image.
-    resize_mode (`str`, *optional*, defaults to `"pad"`):
-        Whether to distort to the aligned canvas (`"resize"`) or preserve aspect ratio and pad (`"pad"`).
     """
 
     min_image_tokens: int
     max_image_tokens: int
-    resize_mode: str
 
 
 class Glm5NextImageProcessor(GlmgaImageProcessor):
@@ -1843,7 +1835,6 @@ class Glm5NextImageProcessor(GlmgaImageProcessor):
     patch_expand_factor = 1
     min_image_tokens = 16
     max_image_tokens = 8000
-    resize_mode = "pad"
     valid_kwargs = Glm5NextImageProcessorKwargs
 
     def preprocess(self, images, **kwargs):
@@ -1855,10 +1846,6 @@ class Glm5NextImageProcessor(GlmgaImageProcessor):
         target_height, target_width, content_height, content_width = _get_resize_geometry(
             self, temporal_factor, height, width, factor, temporal_factor
         )
-        if self.resize_mode == "resize":
-            return TorchvisionBackend.resize(
-                self, images, SizeDict(height=target_height, width=target_width), resample=resample
-            )
         if (content_height, content_width) != (height, width):
             images = TorchvisionBackend.resize(
                 self, images, SizeDict(height=content_height, width=content_width), resample=resample
@@ -1879,7 +1866,6 @@ class Glm5NextImageProcessorPil(GlmgaImageProcessorPil):
     patch_expand_factor = 1
     min_image_tokens = 16
     max_image_tokens = 8000
-    resize_mode = "pad"
     valid_kwargs = Glm5NextImageProcessorKwargs
 
     def preprocess(self, images, **kwargs):
@@ -1892,10 +1878,6 @@ class Glm5NextImageProcessorPil(GlmgaImageProcessorPil):
         target_height, target_width, content_height, content_width = _get_resize_geometry(
             self, temporal_factor, height, width, factor, temporal_factor
         )
-        if self.resize_mode == "resize":
-            return PilBackend.resize(
-                self, image, SizeDict(height=target_height, width=target_width), resample=resample
-            )
         if (content_height, content_width) != (height, width):
             image = PilBackend.resize(
                 self, image, SizeDict(height=content_height, width=content_width), resample=resample
@@ -1932,15 +1914,12 @@ class Glm5NextVideoProcessorInitKwargs(GlmgaVideoProcessorInitKwargs, total=Fals
         Maximum spatial token budget for a video.
     max_frame_count_dynamic (`int`, *optional*, defaults to 2048):
         Maximum number of dynamically sampled frames.
-    resize_mode (`str`, *optional*, defaults to `"pad"`):
-        Whether to distort to the aligned canvas (`"resize"`) or preserve aspect ratio and pad (`"pad"`).
     """
 
     max_duration: int
     min_image_tokens: int
     max_image_tokens: int
     max_frame_count_dynamic: int
-    resize_mode: str
 
 
 class Glm5NextVideoProcessor(GlmgaVideoProcessor):
@@ -1958,7 +1937,6 @@ class Glm5NextVideoProcessor(GlmgaVideoProcessor):
     fps = 2.0
     max_frame_count_dynamic = 2048
     max_frames = None
-    resize_mode = "pad"
     valid_kwargs = Glm5NextVideoProcessorInitKwargs
 
     def __init__(self, **kwargs: Unpack[Glm5NextVideoProcessorInitKwargs]):
@@ -2022,10 +2000,6 @@ class Glm5NextVideoProcessor(GlmgaVideoProcessor):
         target_height, target_width, content_height, content_width = _get_resize_geometry(
             self, videos.shape[1], height, width, factor, temporal_factor
         )
-        if self.resize_mode == "resize":
-            return TorchvisionBackend.resize(
-                self, videos, SizeDict(height=target_height, width=target_width), resample=resample
-            )
         if (content_height, content_width) != (height, width):
             videos = TorchvisionBackend.resize(
                 self, videos, SizeDict(height=content_height, width=content_width), resample=resample

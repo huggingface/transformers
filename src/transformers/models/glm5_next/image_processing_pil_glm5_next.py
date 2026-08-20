@@ -44,8 +44,6 @@ class Glm5NextImageProcessorKwargs(ImagesKwargs, total=False):
         Minimum number of tokens per image.
     max_image_tokens (`int`):
         Maximum number of tokens per image.
-    resize_mode (`str`, *optional*, defaults to `"pad"`):
-        Whether to distort to the aligned canvas (`"resize"`) or preserve aspect ratio and pad (`"pad"`).
     """
 
     patch_size: int
@@ -55,7 +53,6 @@ class Glm5NextImageProcessorKwargs(ImagesKwargs, total=False):
 
     min_image_tokens: int
     max_image_tokens: int
-    resize_mode: str
 
 
 def smart_resize(
@@ -121,7 +118,7 @@ def _prepare_processor(processor, kwargs=None):
     nested_kwargs = kwargs.get("kwargs") or kwargs.get("super_kwargs") or {}
     overrides = {
         name: value
-        for name in ("min_image_tokens", "max_image_tokens", "patch_expand_factor", "resize_mode")
+        for name in ("min_image_tokens", "max_image_tokens", "patch_expand_factor")
         if (value := kwargs.get(name, nested_kwargs.get(name))) is not None
     }
     if overrides:
@@ -131,8 +128,6 @@ def _prepare_processor(processor, kwargs=None):
 
     if processor.min_image_tokens is None or processor.max_image_tokens is None:
         raise ValueError("min_image_tokens and max_image_tokens must be provided.")
-    if processor.resize_mode not in ("resize", "pad"):
-        raise ValueError("resize_mode must be either 'resize' or 'pad'.")
     return processor
 
 
@@ -149,9 +144,6 @@ def _get_resize_geometry(processor, num_frames, height, width, factor, temporal_
         min_pixels=min_pixels,
         max_pixels=processor.max_image_tokens * pixels_per_token,
     )
-    if processor.resize_mode == "resize":
-        return target_height, target_width, target_height, target_width
-
     scale = min(target_height / height, target_width / width)
     if num_frames * height * width >= min_pixels:
         scale = min(1.0, scale)
@@ -197,7 +189,6 @@ class Glm5NextImageProcessorPil(PilBackend):
     patch_expand_factor = 1
     min_image_tokens = 16
     max_image_tokens = 8000
-    resize_mode = "pad"
 
     @auto_docstring
     def preprocess(self, images, **kwargs) -> BatchFeature:
@@ -211,8 +202,6 @@ class Glm5NextImageProcessorPil(PilBackend):
         target_height, target_width, content_height, content_width = _get_resize_geometry(
             self, temporal_factor, height, width, factor, temporal_factor
         )
-        if self.resize_mode == "resize":
-            return super().resize(image, SizeDict(height=target_height, width=target_width), resample=resample)
         if (content_height, content_width) != (height, width):
             image = super().resize(image, SizeDict(height=content_height, width=content_width), resample=resample)
         return np.pad(
