@@ -24,7 +24,6 @@ from ...image_utils import ImageInput, make_flat_list_of_images
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring
-from ...utils.chat_template_utils import _get_template_variables
 from ...utils.import_utils import requires
 
 
@@ -157,18 +156,13 @@ class NeoMMEProcessor(ProcessorMixin):
         if kwargs.get("return_assistant_tokens_mask"):
             raise ValueError("NeoMME retrieval templates do not support `return_assistant_tokens_mask`.")
 
-        template = chat_template or self.chat_template
-        if isinstance(self.chat_template, dict):
-            template = self.chat_template.get(chat_template or "default", template)
-        if isinstance(template, str) and "task" not in _get_template_variables(template):
-            raise ValueError("NeoMME retrieval templates must use the `task` variable.")
-
         processor_kwargs = {**(processor_kwargs or {}), "_retrieval_task": task}
+        template_kwargs = {"task": task} if task is not None else {}
         return super().apply_chat_template(
             conversation,
             chat_template=chat_template,
             processor_kwargs=processor_kwargs,
-            task=task,
+            **template_kwargs,
             **kwargs,
         )
 

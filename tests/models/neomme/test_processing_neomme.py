@@ -268,6 +268,13 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "leading task marker"):
             processor.apply_chat_template(messages, task="query", tokenize=True)
 
+    def test_apply_chat_template_does_not_require_task(self):
+        processor = self.get_processor()
+        processor.chat_template = "{{ messages[0].content }}"
+        messages = [{"role": "user", "content": "hello"}]
+
+        self.assertEqual(processor.apply_chat_template(messages, tokenize=False), "hello")
+
     def test_apply_chat_template_rejects_unsupported_inputs(self):
         processor = self.get_processor()
         self._set_retrieval_chat_template(processor)
