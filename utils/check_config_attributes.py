@@ -40,14 +40,13 @@ transformers = direct_transformers_import(PATH_TO_TRANSFORMERS)
 
 CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
-# Usually of small list of allowed attrs, but can be True to allow all
 # Shared modeling code that reads config attributes on a model's behalf, so an attribute used there counts
 # as used (it is still modeling code, just not the model's own file).
 SHARED_MODELING_SOURCES = [
-    "src/transformers/modeling_rope_utils.py",
     "src/transformers/modeling_multimodal_utils.py",
 ]
 
+# Usually of small list of allowed attrs, but can be True to allow all
 SPECIAL_CASES_TO_ALLOW = {
     # EP related refactor that also relies on correct naming for FP8/4 conventions
     "DeepseekV3Config": ["n_routed_experts"],
