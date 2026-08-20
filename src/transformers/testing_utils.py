@@ -176,7 +176,6 @@ from .utils import (
     is_torchaudio_available,
     is_torchcodec_available,
     is_torchvision_available,
-    is_trimesh_available,
     is_triton_available,
     is_vision_available,
     is_vptq_available,
@@ -617,13 +616,6 @@ def require_rjieba(test_case):
     Decorator marking a test that requires rjieba. These tests are skipped when rjieba isn't installed.
     """
     return unittest.skipUnless(is_rjieba_available(), "test requires rjieba")(test_case)
-
-
-def require_trimesh(test_case):
-    """
-    Decorator marking a test that requires trimesh. These tests are skipped when trimesh isn't installed.
-    """
-    return unittest.skipUnless(is_trimesh_available(), "test requires trimesh")(test_case)
 
 
 def require_jinja(test_case):

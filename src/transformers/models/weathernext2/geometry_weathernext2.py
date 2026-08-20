@@ -11,17 +11,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Static geometry for WeatherNext 2.
+"""Static geometry for WeatherNext 2, used when converting a checkpoint.
 
 WeatherNext 2 has no learned positional encodings: every position-dependent quantity is a
-deterministic function of the icosahedral mesh and of the lat/lon grid. This module builds all of
-it with numpy/scipy only, so it can run at model construction time and be stored in non-persistent
-buffers.
+deterministic function of the icosahedral mesh and of the lat/lon grid. None of it is learned and
+none of it ever changes, so it is computed once here, at conversion time, and written into the
+checkpoint as buffers. The modeling code only ever loads it, and so needs neither scipy nor trimesh.
 
 The construction mirrors ``weathernext/utils/icosahedral_mesh.py`` and
 ``weathernext/utils/model_utils.py`` from https://github.com/google-deepmind/weathernext, and must
 stay bit-compatible with them: the reverse Cuthill-McKee permutation in particular decides the node
-ordering that the attention mask is built from.
+ordering that the attention mask is built from, and the triangle lookup is trimesh's, whose
+tie-breaking is not reproduced by a hand-written one.
 """
 
 from __future__ import annotations
@@ -30,15 +31,13 @@ from dataclasses import dataclass
 
 import numpy as np
 import scipy.sparse as sp
+import torch
+import trimesh
 from scipy.sparse.csgraph import reverse_cuthill_mckee
 from scipy.spatial import cKDTree
 from scipy.spatial.transform import Rotation
 
-from ...utils import is_trimesh_available, logging, requires_backends
-
-
-if is_trimesh_available():
-    import trimesh
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
@@ -229,7 +228,6 @@ def in_triangle_edges(
     as the original implementation does. A different tie-break changes the forecast locally by up to
     about 1 K in 2m temperature.
     """
-    requires_backends(in_triangle_edges, ["trimesh"])
     mesh = trimesh.Trimesh(vertices=mesh_xyz, faces=mesh_faces, process=False)
     _, _, face_indices = mesh.nearest.on_surface(grid_xyz)
 
@@ -383,3 +381,30 @@ def build_geometry(
         mesh_to_grid_receivers=m2g_receivers,
         mesh_to_grid_edge_features=m2g_edge_features.astype(np.float32),
     )
+
+
+def build_banded_attention_mask(geometry: WeatherNext2Geometry) -> torch.Tensor:
+    """Rewrites the k-hop mask as `[num_blocks, 1, block_size, 3 * block_size]`.
+
+    After the reverse Cuthill-McKee permutation every non-zero of the mask lies within
+    `geometry.attention_bandwidth` of the diagonal, so a block of that many consecutive nodes can
+    only reach itself and its two neighbours. This is the form the model stores and attends with.
+    """
+    block_size = min(geometry.attention_bandwidth, geometry.num_mesh_nodes)
+    num_blocks = -(-geometry.num_mesh_nodes // block_size)
+    padded_size = num_blocks * block_size
+
+    mask = geometry.attention_mask.tocsr()
+    mask = sp.vstack([mask, sp.csr_matrix((padded_size - mask.shape[0], mask.shape[1]), dtype=bool)])
+    mask = sp.hstack([mask, sp.csr_matrix((padded_size, padded_size - mask.shape[1]), dtype=bool)]).tocsr()
+
+    blocks = np.zeros((num_blocks, 1, block_size, 3 * block_size), dtype=bool)
+    for block in range(num_blocks):
+        rows = slice(block * block_size, (block + 1) * block_size)
+        for offset, position in ((-1, 0), (0, 1), (1, 2)):
+            neighbour = block + offset
+            if 0 <= neighbour < num_blocks:
+                columns = slice(neighbour * block_size, (neighbour + 1) * block_size)
+                target = slice(position * block_size, (position + 1) * block_size)
+                blocks[block, 0, :, target] = mask[rows, columns].toarray()
+    return torch.from_numpy(blocks)

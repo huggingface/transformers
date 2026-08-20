@@ -20,9 +20,7 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
-import numpy as np
 import torch
 from torch import nn
 
@@ -33,14 +31,10 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, requires_backends
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_weathernext2 import WeatherNext2Config
-
-
-if TYPE_CHECKING:
-    from .geometry_weathernext2 import WeatherNext2Geometry
 
 
 class WeatherNext2FiLM(nn.Module):
@@ -413,11 +407,8 @@ class WeatherNext2PreTrainedModel(PreTrainedModel):
         if isinstance(module, WeatherNext2EdgeUpdate):
             # The shared bias of the split first matmul is a bare parameter.
             init.zeros_(module.bias)
-        # The geometry travels with the checkpoint, so it only has to be built when it was not
-        # loaded - a model created from scratch, or an older checkpoint that predates it.
         elif isinstance(module, WeatherNext2Model):
-            if not getattr(module.attention_mask, "_is_hf_initialized", False):
-                module.register_geometry_buffers()
+            module.init_geometry_buffers()
         elif isinstance(module, WeatherNext2ForWeatherForecasting):
             module.register_output_activation_buffers()
 
@@ -455,33 +446,18 @@ class WeatherNext2ForecastOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-def build_banded_attention_mask(geometry: "WeatherNext2Geometry") -> torch.Tensor:
-    """Rewrites the k-hop mask as `[num_blocks, 1, block_size, 3 * block_size]`.
-
-    After the reverse Cuthill-McKee permutation every non-zero of the mask lies within
-    `geometry.attention_bandwidth` of the diagonal, so a block of that many consecutive nodes can
-    only reach itself and its two neighbours.
-    """
-    import scipy.sparse as sp
-
-    block_size = min(geometry.attention_bandwidth, geometry.num_mesh_nodes)
-    num_blocks = -(-geometry.num_mesh_nodes // block_size)
-    padded_size = num_blocks * block_size
-
-    mask = geometry.attention_mask.tocsr()
-    mask = sp.vstack([mask, sp.csr_matrix((padded_size - mask.shape[0], mask.shape[1]), dtype=bool)])
-    mask = sp.hstack([mask, sp.csr_matrix((padded_size, padded_size - mask.shape[1]), dtype=bool)]).tocsr()
-
-    blocks = np.zeros((num_blocks, 1, block_size, 3 * block_size), dtype=bool)
-    for block in range(num_blocks):
-        rows = slice(block * block_size, (block + 1) * block_size)
-        for offset, position in ((-1, 0), (0, 1), (1, 2)):
-            neighbour = block + offset
-            if 0 <= neighbour < num_blocks:
-                columns = slice(neighbour * block_size, (neighbour + 1) * block_size)
-                target = slice(position * block_size, (position + 1) * block_size)
-                blocks[block, 0, :, target] = mask[rows, columns].toarray()
-    return torch.from_numpy(blocks)
+# The buffers the geometry lives in, in the order they are registered.
+GEOMETRY_BUFFERS = (
+    "grid_spatial_features",
+    "mesh_spatial_features",
+    "grid_to_mesh_senders",
+    "grid_to_mesh_receivers",
+    "grid_to_mesh_edge_features",
+    "mesh_to_grid_senders",
+    "mesh_to_grid_receivers",
+    "mesh_to_grid_edge_features",
+    "attention_mask",
+)
 
 
 @auto_docstring
@@ -501,82 +477,56 @@ class WeatherNext2Model(WeatherNext2PreTrainedModel):
         self.mesh_transformer = WeatherNext2MeshTransformer(config)
         self.mesh_to_grid = WeatherNext2BipartiteGraphNetwork(config, grid_to_mesh=False)
 
-        # CODEPATH: every published checkpoint records its graph sizes, so `from_pretrained` always
-        # takes the first path and the buffers are filled from the weights. The second is for a
-        # config written by hand, where the geometry has to be derived from the mesh and the grid.
-        if config.num_grid_to_mesh_edges is not None and config.attention_bandwidth is not None:
-            self.allocate_geometry_buffers()
-        else:
-            self.register_geometry_buffers()
+        self.allocate_geometry_buffers()
         self.post_init()
 
     def allocate_geometry_buffers(self):
         """Registers the geometry buffers, empty, at the shapes the checkpoint stores them in.
 
-        Building the geometry takes about two minutes at 0.25 degrees, so it is not something to
-        redo on every load: the buffers are persistent and travel with the weights. Allocating them
-        here only needs the two derived sizes the config records; `_init_weights` fills them in when
-        they are not in the checkpoint, which is also what happens for a model built from scratch.
+        The mesh, the two bipartite graphs and the banded attention mask are not learned: they follow
+        from the mesh refinement level and the grid, and deriving them is slow and pulls in libraries
+        the forward pass has no other use for. So every checkpoint carries them, and loading is the
+        only way they are ever filled. Allocating them here needs only the two sizes the config
+        records, which are the ones that cannot be derived in closed form.
         """
         config = self.config
         edges = config.num_grid_to_mesh_edges
         block_size = min(config.attention_bandwidth, config.num_mesh_nodes)
         num_blocks = -(-config.num_mesh_nodes // block_size)
         mesh_to_grid_edges = 3 * config.num_grid_points
-
-        def register(name, shape, dtype):
+        shapes = {
+            "grid_spatial_features": ((config.num_grid_points, 3), torch.float32),
+            "mesh_spatial_features": ((config.num_mesh_nodes, 3), torch.float32),
+            "grid_to_mesh_senders": ((edges,), torch.int64),
+            "grid_to_mesh_receivers": ((edges,), torch.int64),
+            "grid_to_mesh_edge_features": ((edges, 4), torch.float32),
+            "mesh_to_grid_senders": ((mesh_to_grid_edges,), torch.int64),
+            "mesh_to_grid_receivers": ((mesh_to_grid_edges,), torch.int64),
+            "mesh_to_grid_edge_features": ((mesh_to_grid_edges, 4), torch.float32),
+            "attention_mask": ((num_blocks, 1, block_size, 3 * block_size), torch.bool),
+        }
+        for name in GEOMETRY_BUFFERS:
+            shape, dtype = shapes[name]
             self.register_buffer(name, torch.zeros(shape, dtype=dtype), persistent=True)
+        self.init_geometry_buffers()
 
-        register("grid_spatial_features", (config.num_grid_points, 3), torch.float32)
-        register("mesh_spatial_features", (config.num_mesh_nodes, 3), torch.float32)
-        register("grid_to_mesh_senders", (edges,), torch.int64)
-        register("grid_to_mesh_receivers", (edges,), torch.int64)
-        register("grid_to_mesh_edge_features", (edges, 4), torch.float32)
-        register("mesh_to_grid_senders", (mesh_to_grid_edges,), torch.int64)
-        register("mesh_to_grid_receivers", (mesh_to_grid_edges,), torch.int64)
-        register("mesh_to_grid_edge_features", (mesh_to_grid_edges, 4), torch.float32)
-        register("attention_mask", (num_blocks, 1, block_size, 3 * block_size), torch.bool)
+    def init_geometry_buffers(self):
+        """Fills the geometry buffers of a model that has none, so that it is at least runnable.
 
-    def register_geometry_buffers(self, device: torch.device | None = None):
-        """Builds the mesh, the local attention mask and both bipartite graphs, and stores them.
-
-        None of this is learned; it follows deterministically from the mesh refinement level and the
-        grid. Checkpoints carry the result, so this only runs when it is absent.
+        A model built from a config rather than loaded has no mesh, so the node coordinates and the
+        edges are zero and every mesh node attends to its own block and nothing else. That is a
+        placeholder rather than a geometry: it exists so a randomly initialized model can run a
+        forward pass, and so a model moved off the meta device has no uninitialized tensor left. A
+        real forecast needs the geometry that came with the weights.
         """
-        # scipy builds the sparse adjacency and trimesh the grid-to-mesh connectivity. Neither is
-        # needed to load a checkpoint that already carries the geometry, nor by the forward pass.
-        requires_backends(self, ["scipy"])
-        from .geometry_weathernext2 import build_geometry
-
-        config = self.config
-        latitudes = np.linspace(-90.0, 90.0, config.grid_latitudes)
-        longitudes = np.arange(config.grid_longitudes) * (360.0 / config.grid_longitudes)
-        geometry = build_geometry(
-            mesh_splits=config.mesh_splits,
-            grid_lat=latitudes,
-            grid_lon=longitudes,
-            attention_k_hop=config.attention_k_hop,
-            ball_query_radius_fraction=config.ball_query_radius_fraction,
-        )
-        if device is None:
-            existing = next(self.parameters(), None)
-            device = existing.device if existing is not None and existing.device.type != "meta" else None
-
-        def register(name, value):
-            self.register_buffer(name, torch.as_tensor(value).to(device), persistent=True)
-
-        register("grid_spatial_features", geometry.grid_spatial_features)
-        register("mesh_spatial_features", geometry.mesh_spatial_features)
-        register("grid_to_mesh_senders", geometry.grid_to_mesh_senders)
-        register("grid_to_mesh_receivers", geometry.grid_to_mesh_receivers)
-        register("grid_to_mesh_edge_features", geometry.grid_to_mesh_edge_features)
-        register("mesh_to_grid_senders", geometry.mesh_to_grid_senders)
-        register("mesh_to_grid_receivers", geometry.mesh_to_grid_receivers)
-        register("mesh_to_grid_edge_features", geometry.mesh_to_grid_edge_features)
-        register("attention_mask", build_banded_attention_mask(geometry))
-        # Record the two sizes that cannot be derived in closed form, so a reload can allocate first.
-        config.num_grid_to_mesh_edges = int(geometry.grid_to_mesh_senders.shape[0])
-        config.attention_bandwidth = int(geometry.attention_bandwidth)
+        # `init.zeros_` leaves anything that was loaded alone, so this is a no-op for a checkpoint
+        # that carries its geometry. The mask needs the same guard written out, because it is filled
+        # through a slice and a slice does not carry the flag the guard reads.
+        for name in GEOMETRY_BUFFERS:
+            init.zeros_(getattr(self, name))
+        if not getattr(self.attention_mask, "_is_hf_initialized", False):
+            block_size = self.attention_mask.shape[2]
+            self.attention_mask[:, :, :, block_size : 2 * block_size] = True
 
     @merge_with_config_defaults
     @capture_outputs
@@ -655,7 +605,7 @@ class WeatherNext2ForWeatherForecasting(WeatherNext2PreTrainedModel):
         self.register_output_activation_buffers()
         self.post_init()
 
-    def register_output_activation_buffers(self, device: torch.device | None = None):
+    def register_output_activation_buffers(self):
         """Marks which output channels are squashed, and by how much.
 
         A few targets are probabilities rather than physical quantities. The negative shift keeps
@@ -672,9 +622,10 @@ class WeatherNext2ForWeatherForecasting(WeatherNext2PreTrainedModel):
                 gate[offset : offset + levels] = True
                 shifts[offset : offset + levels] = config.sigmoid_shifted_outputs[variable]
             offset += levels
-        if device is None:
-            existing = next(self.parameters(), None)
-            device = existing.device if existing is not None and existing.device.type != "meta" else None
+        # `_init_weights` re-registers these after a meta-device init, by which point the parameters
+        # say where the model actually lives.
+        existing = next(self.parameters(), None)
+        device = existing.device if existing is not None and existing.device.type != "meta" else None
         self.register_buffer("sigmoid_gate", gate.to(device), persistent=False)
         self.register_buffer("sigmoid_shift", shifts.to(device), persistent=False)
 
@@ -708,6 +659,7 @@ class WeatherNext2ForWeatherForecasting(WeatherNext2PreTrainedModel):
         >>> config = WeatherNext2Config(
         ...     mesh_splits=2, hidden_size=32, num_hidden_layers=2, num_attention_heads=2,
         ...     grid_latitudes=19, grid_longitudes=36,
+        ...     num_grid_to_mesh_edges=2048, attention_bandwidth=64,
         ... )
         >>> model = WeatherNext2ForWeatherForecasting(config)
 

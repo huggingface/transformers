@@ -111,11 +111,11 @@ class WeatherNext2Config(PreTrainedConfig):
         attention_k_hop (`int`, *optional*, defaults to 32):
             Radius, in mesh edges, of the local attention neighbourhood. Each mesh node attends to every node reachable
             within this many hops.
-        num_grid_to_mesh_edges (`int`, *optional*):
+        num_grid_to_mesh_edges (`int`, *optional*, defaults to 1618824):
             Number of grid-to-mesh edges the ball query produces. Follows from the mesh and the grid, but cannot be
             derived in closed form, so checkpoints record it: it is the shape the geometry buffers are allocated with
-            before they are loaded. Leave unset to build the geometry instead of loading it.
-        attention_bandwidth (`int`, *optional*):
+            before they are loaded.
+        attention_bandwidth (`int`, *optional*, defaults to 10273):
             Width of the banded mesh adjacency after the reverse Cuthill-McKee ordering, recorded for the same reason.
         ball_query_radius_fraction (`float`, *optional*, defaults to 0.6):
             Radius used to connect grid points to mesh nodes, as a fraction of the longest mesh edge.
@@ -185,8 +185,8 @@ class WeatherNext2Config(PreTrainedConfig):
     mesh_splits: int = 6
     attention_k_hop: int = 32
     ball_query_radius_fraction: float = 0.6
-    num_grid_to_mesh_edges: int | None = None
-    attention_bandwidth: int | None = None
+    num_grid_to_mesh_edges: int = 1618824
+    attention_bandwidth: int = 10273
     aggregate_normalization: float | int | None = 4.0
 
     grid_latitudes: int = 721

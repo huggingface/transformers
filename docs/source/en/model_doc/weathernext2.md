@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was published in HF papers on 2025-06-12 and contributed to Hugging Face Transformers on 2026-08-17.*
+*This model was published in HF papers on 2025-06-12 and contributed to Hugging Face Transformers on 2026-08-20.*
 
 # WeatherNext 2
 
@@ -221,10 +221,12 @@ checkpoints.
 
 ## Notes
 
-- The mesh, both grid↔mesh graphs and the attention mask follow deterministically from the configuration, but they are
-  stored as buffers in the checkpoint and travel with the weights, so loading one needs no geometry library. Deriving
-  them instead, for a configuration that does not carry them, needs `scipy` and `trimesh` and takes about two minutes
-  at 0.25°.
+- The mesh, both grid↔mesh graphs and the attention mask follow deterministically from the configuration, but nothing
+  about them is learned and nothing about them ever changes, so they are computed once when a checkpoint is converted
+  and stored in it as buffers. Loading a model needs no geometry library; a model built from a config rather than
+  loaded gets a placeholder in their place and will not forecast anything meaningful until weights are loaded. The
+  derivation lives in `convert_weathernext2_original_checkpoint.py`, needs `scipy` and `trimesh`, and takes about two
+  minutes at 0.25°.
 - Attention is computed over the three block-diagonals induced by the reverse Cuthill-McKee ordering of the mesh. This
   is exactly equivalent to masking the full attention matrix, but avoids materializing a mask that would be 1.7 GB at
   0.25°.

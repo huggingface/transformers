@@ -48,6 +48,7 @@ import torch
 
 from transformers.models.weathernext2.configuration_weathernext2 import WeatherNext2Config
 from transformers.models.weathernext2.feature_extraction_weathernext2 import WeatherNext2FeatureExtractor
+from transformers.models.weathernext2.geometry_weathernext2 import build_banded_attention_mask, build_geometry
 from transformers.models.weathernext2.modeling_weathernext2 import WeatherNext2ForWeatherForecasting
 
 
@@ -311,6 +312,37 @@ def convert_state_dict(params: dict[str, np.ndarray], config: WeatherNext2Config
     return state_dict
 
 
+def geometry_state_dict(config: WeatherNext2Config) -> dict[str, torch.Tensor]:
+    """Builds the mesh and both bipartite graphs, and records the two sizes that follow from them.
+
+    This is the only place the geometry is ever derived. It needs scipy and trimesh, takes about two
+    minutes at 0.25 degrees, and its result is written into the checkpoint so that loading a model
+    never has to repeat it.
+    """
+    geometry = build_geometry(
+        mesh_splits=config.mesh_splits,
+        grid_lat=np.linspace(-90.0, 90.0, config.grid_latitudes),
+        grid_lon=np.arange(config.grid_longitudes) * (360.0 / config.grid_longitudes),
+        attention_k_hop=config.attention_k_hop,
+        ball_query_radius_fraction=config.ball_query_radius_fraction,
+    )
+    config.num_grid_to_mesh_edges = int(geometry.grid_to_mesh_senders.shape[0])
+    config.attention_bandwidth = int(geometry.attention_bandwidth)
+
+    tensors = {
+        "grid_spatial_features": geometry.grid_spatial_features,
+        "mesh_spatial_features": geometry.mesh_spatial_features,
+        "grid_to_mesh_senders": geometry.grid_to_mesh_senders,
+        "grid_to_mesh_receivers": geometry.grid_to_mesh_receivers,
+        "grid_to_mesh_edge_features": geometry.grid_to_mesh_edge_features,
+        "mesh_to_grid_senders": geometry.mesh_to_grid_senders,
+        "mesh_to_grid_receivers": geometry.mesh_to_grid_receivers,
+        "mesh_to_grid_edge_features": geometry.mesh_to_grid_edge_features,
+        "attention_mask": build_banded_attention_mask(geometry),
+    }
+    return {f"model.{name}": torch.as_tensor(value) for name, value in tensors.items()}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--checkpoint_path", required=True, help="Original `.npz` parameter file.")
@@ -335,6 +367,8 @@ def main():
 
     config = config_from_fiddle(fiddle, grid_latitudes, grid_longitudes)
     state_dict = convert_state_dict(params, config)
+    # Sets `num_grid_to_mesh_edges` and `attention_bandwidth`, so build it before the model.
+    state_dict.update(geometry_state_dict(config))
 
     model = WeatherNext2ForWeatherForecasting(config)
     missing, unexpected = model.load_state_dict(state_dict, strict=False)
