@@ -202,6 +202,12 @@ class NeoMMEProcessor(ProcessorMixin):
                 "Pass exactly one of `text` or `images`: they are opposite retrieval sides, encoded in "
                 "separate forward passes."
             )
+        if text is not None:
+            text = [text] if isinstance(text, str) else text
+            if not text:
+                raise ValueError("text must contain at least one string.")
+            if any(not isinstance(value, str) for value in text):
+                raise ValueError("Pretokenized text is not supported.")
 
     @staticmethod
     def _validate_task(task: str) -> None:
@@ -299,10 +305,6 @@ class NeoMMEProcessor(ProcessorMixin):
 
         if isinstance(text, str):
             text = [text]
-        if not text:
-            raise ValueError("text must contain at least one string.")
-        if any(not isinstance(value, str) for value in text):
-            raise ValueError("Pretokenized text is not supported.")
 
         # What the caller actually named, flat or nested, as opposed to what `_merge_kwargs` injected.
         requested = set(kwargs) | set(kwargs.get("text_kwargs", {}))
