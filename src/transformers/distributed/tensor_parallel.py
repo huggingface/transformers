@@ -575,21 +575,21 @@ class MoeExpertsParallel(TensorParallelLayer):
         return True
 
     def transform_inputs_pre_forward(self, module, args, kwargs, mesh, *, is_expert_parallel=False):
-        hidden_states, *remaining_args = args
+        hidden_states, *routing_args = args
         tp_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
         if isinstance(hidden_states, DTensor):
             hidden_states = hidden_states.to_local()
         hidden_states = _AllReduceBackward.apply(hidden_states, tp_group)
 
-        if len(remaining_args) >= 2:
-            top_k_weights = remaining_args[1]
+        if len(routing_args) >= 2:
+            top_k_index, top_k_weights, *extra_args = routing_args
             if isinstance(top_k_weights, DTensor):
                 top_k_weights = top_k_weights.to_local()
             if not is_expert_parallel:
                 top_k_weights = _AllReduceBackward.apply(top_k_weights, tp_group)
-            remaining_args[1] = top_k_weights
+            routing_args = [top_k_index, top_k_weights, *extra_args]
 
-        return (hidden_states, *remaining_args), kwargs
+        return (hidden_states, *routing_args), kwargs
 
     def install_forward(self, module, mesh, *, is_expert_parallel=False):
         """Install the transforms but pass `is_expert_parallel` in the forward call."""
@@ -695,7 +695,7 @@ class EpRouterParallel(TensorParallelLayer):
             raise ValueError(f"num_experts must be divisible by ep_size: {num_experts} % {ep_size} != 0")
         num_local_experts = num_experts // ep_size
 
-        router_logits, router_scores, router_indices = output
+        router_logits, router_scores, router_indices, *extra_outputs = output
         non_local_mask = (router_indices // num_local_experts) != ep_rank
         router_scores = router_scores.masked_fill(non_local_mask, 0.0)
         router_indices = router_indices.masked_fill(non_local_mask, -1)
@@ -704,7 +704,7 @@ class EpRouterParallel(TensorParallelLayer):
         else:
             router_indices = router_indices.masked_fill(router_indices > 0, 0).masked_fill(router_indices < 0, -1)
         router_indices = router_indices.masked_fill(router_indices == -1, num_local_experts)
-        return router_logits, router_scores, router_indices
+        return router_logits, router_scores, router_indices, *extra_outputs
 
 
 class RouterParallelMegaMoe(EpRouterParallel):
