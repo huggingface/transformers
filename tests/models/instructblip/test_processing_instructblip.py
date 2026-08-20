@@ -32,7 +32,9 @@ class InstructBlipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def _setup_tokenizer(cls):
         tokenizer_class = cls._get_component_class_from_processor("tokenizer")
-        return tokenizer_class.from_pretrained("hf-internal-testing/tiny-random-GPT2Model")
+        tokenizer = tokenizer_class.from_pretrained("hf-internal-testing/tiny-random-GPT2Model")
+        tokenizer.pad_token_id = tokenizer.eos_token_id
+        return tokenizer
 
     @classmethod
     def _setup_qformer_tokenizer(cls):

@@ -51,8 +51,6 @@ class CohereCompassProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def _setup_tokenizer(cls):
         # For some reason the tokenizer has saved image processing fields, unset it all!
         tokenizer = AutoTokenizer.from_pretrained(cls.model_id)
-        del tokenizer.init_kwargs["min_pixels"]  # delete and not set `None` - it causes another error
-        del tokenizer.init_kwargs["max_pixels"]
         return tokenizer
 
     @property

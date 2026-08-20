@@ -50,6 +50,7 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     video_unstructured_max_length = 690
     video_text_kwargs_max_length = 690
     video_text_kwargs_override_max_length = 690
+    audio_unstructured_max_length = 257
 
     @classmethod
     def _setup_image_processor(cls):

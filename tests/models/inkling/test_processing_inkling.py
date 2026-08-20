@@ -281,7 +281,7 @@ class InklingProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(len(out_dict["input_ids"]), batch_size)
         self.assertEqual(len(out_dict["attention_mask"]), batch_size)
 
-        mm_len = 408  # hardcode, the model uses patches as input
+        mm_len = 204 * batch_size  # hardcode, the model uses patches as input
         self.assertEqual(len(out_dict[input_name]), mm_len)
 
         return_tensor_to_type = {"pt": torch.Tensor, "np": np.ndarray, None: list}

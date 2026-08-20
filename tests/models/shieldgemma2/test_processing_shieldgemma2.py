@@ -66,6 +66,10 @@ _SHIELDGEMMA2_POLICIES: Mapping[str, str] = {
 class ShieldGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = ShieldGemma2Processor
 
+    image_text_kwargs_max_length = 740
+    image_text_kwargs_override_max_length = 750
+    image_unstructured_max_length = 742
+
     @classmethod
     def _setup_image_processor(cls):
         # Use 64×64 instead of the default 224×224 to avoid large tensors.
@@ -162,41 +166,6 @@ class ShieldGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @parameterized.expand([(1, "np"), (1, "pt"), (2, "np"), (2, "pt")])
     @unittest.skip("ShieldGemma 2 chat template requires different message structure from parent.")
     def test_apply_chat_template_image(self, batch_size: int, return_tensors: str):
-        pass
-
-    # TODO(ryanmullins): Adapt this test for ShieldGemma 2
-    @unittest.skip("Parent test needs to be adapted for ShieldGemma 2.")
-    def test_unstructured_kwargs_batched(self):
-        pass
-
-    # TODO(ryanmullins): Adapt this test for ShieldGemma 2
-    @unittest.skip("Parent test needs to be adapted for ShieldGemma 2.")
-    def test_unstructured_kwargs(self):
-        pass
-
-    # TODO(ryanmullins): Adapt this test for ShieldGemma 2
-    @unittest.skip("Parent test needs to be adapted for ShieldGemma 2.")
-    def test_tokenizer_defaults_preserved_by_kwargs(self):
-        pass
-
-    # TODO(ryanmullins): Adapt this test for ShieldGemma 2
-    @unittest.skip("Parent test needs to be adapted for ShieldGemma 2.")
-    def test_structured_kwargs_nested_from_dict(self):
-        pass
-
-    # TODO(ryanmullins): Adapt this test for ShieldGemma 2
-    @unittest.skip("Parent test needs to be adapted for ShieldGemma 2.")
-    def test_structured_kwargs_nested(self):
-        pass
-
-    # TODO(ryanmullins): Adapt this test for ShieldGemma 2
-    @unittest.skip("Parent test needs to be adapted for ShieldGemma 2.")
-    def test_kwargs_overrides_default_tokenizer_kwargs(self):
-        pass
-
-    # TODO(ryanmullins): Adapt this test for ShieldGemma 2
-    @unittest.skip("Parent test needs to be adapted for ShieldGemma 2.")
-    def test_kwargs_overrides_default_image_processor_kwargs(self):
         pass
 
     @unittest.skip("ShieldGemma requires images in input, and fails in text-only processing")

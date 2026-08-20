@@ -102,7 +102,7 @@ class Emu3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(len(output["num_image_patches"]), 3)
 
     @unittest.skip("Processor adds BOS manually to the input text")
-    def test_tokenizer_defaults(self):
+    def test_subprocessor_defaults_0_text(self):
         pass
 
     @parameterized.expand([(1, "pt"), (2, "pt")])

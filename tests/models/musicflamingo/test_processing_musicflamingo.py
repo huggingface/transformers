@@ -36,6 +36,8 @@ class MusicFlamingoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     tiny_model_id = "hf-internal-testing/tiny-processor-musicflamingo"
     checkpoint = "nvidia/music-flamingo-2601-hf"
 
+    audio_unstructured_max_length = 201
+
     @classmethod
     @require_torch
     def setUpClass(cls):

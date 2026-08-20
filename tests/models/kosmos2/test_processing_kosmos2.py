@@ -31,7 +31,7 @@ from transformers.testing_utils import (
 from transformers.tokenization_utils_sentencepiece import SentencePieceExtractor
 from transformers.utils import is_vision_available
 
-from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
+from ...test_processing_common import MODALITY_CONFIG, ProcessorTesterMixin, url_to_local_path
 
 
 if is_vision_available():
@@ -54,6 +54,8 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Kosmos2Processor
     image_text_kwargs_max_length = 72
+    image_text_kwargs_override_max_length = 72
+    image_unstructured_max_length = 72
 
     @classmethod
     def _setup_tokenizer(cls):
@@ -380,145 +382,27 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertListEqual(outputs.image_embeds_position_mask.numpy().tolist()[-1], EXPECTED_IMG_POS_MASK_BATCH[-1])
 
     # Rewrite as Kosmos-2 supports custom padding only when image is None.
-    @require_vision
-    @require_torch
-    def test_kwargs_overrides_default_tokenizer_kwargs(self):
-        if "image_processor" not in self.processor_class.get_attributes():
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor")
-        tokenizer = self.get_component("tokenizer", max_length=117)
-
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+    def test_unstructured_kwargs_batched_0_image(self, modality="image"):
+        self._skip_unless_modality_and_tokenizer(modality)
+        processor = self.get_processor()
         self.skip_processor_without_typed_kwargs(processor)
-        input_str = self.prepare_text_inputs()
-        # set image input to None
-        image_input = None
 
-        inputs = processor(
-            text=input_str,
-            images=image_input,
+        input_str = self.prepare_text_inputs(batch_size=2, modalities=modality)
+        modal_input = self._prepare_modal_input(modality, batch_size=2)
+        max_length = 76
+        component_init_kwargs = MODALITY_CONFIG[modality]["component_init_kwargs"]
+        inputs = self._call_processor(
+            processor,
+            modality,
+            input_str,
+            modal_input,
             return_tensors="pt",
-            max_length=112,
-            padding="max_length",
-        )
-
-        self.assertEqual(len(inputs["input_ids"][0]), 112)
-
-    # Rewrite to test only image_processor kwargs
-    @require_torch
-    @require_vision
-    def test_structured_kwargs_nested(self):
-        if "image_processor" not in self.processor_class.get_attributes():
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor")
-        tokenizer = self.get_component("tokenizer")
-
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
-        self.skip_processor_without_typed_kwargs(processor)
-
-        input_str = self.prepare_text_inputs()
-        image_input = self.prepare_image_inputs()
-
-        # Define the kwargs for each modality
-        all_kwargs = {
-            "common_kwargs": {"return_tensors": "pt"},
-            "images_kwargs": {"size": {"height": 214, "width": 214}},
-        }
-
-        inputs = processor(text=input_str, images=image_input, **all_kwargs)
-        self.skip_processor_without_typed_kwargs(processor)
-
-        self.assertEqual(inputs["pixel_values"].shape[2], 214)
-
-    # Rewrite to test only image_processor kwargs
-    @require_torch
-    @require_vision
-    def test_structured_kwargs_nested_from_dict(self):
-        if "image_processor" not in self.processor_class.get_attributes():
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-
-        image_processor = self.get_component("image_processor")
-        tokenizer = self.get_component("tokenizer")
-
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
-        self.skip_processor_without_typed_kwargs(processor)
-        input_str = self.prepare_text_inputs()
-        image_input = self.prepare_image_inputs()
-
-        # Define the kwargs for each modality
-        all_kwargs = {
-            "common_kwargs": {"return_tensors": "pt"},
-            "images_kwargs": {"size": {"height": 214, "width": 214}},
-        }
-
-        inputs = processor(text=input_str, images=image_input, **all_kwargs)
-        self.assertEqual(inputs["pixel_values"].shape[2], 214)
-
-    # Rewrite as Kosmos-2 supports custom padding only when image is None.
-    @require_vision
-    @require_torch
-    def test_tokenizer_defaults_preserved_by_kwargs(self):
-        if "image_processor" not in self.processor_class.get_attributes():
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor")
-        tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
-
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
-        self.skip_processor_without_typed_kwargs(processor)
-        input_str = self.prepare_text_inputs()
-        # set image input to None
-        image_input = None
-
-        inputs = processor(text=input_str, images=image_input, return_tensors="pt")
-        self.assertEqual(len(inputs["input_ids"][0]), 117)
-
-    # Rewrite as Kosmos-2 supports custom padding only when image is None.
-    @require_torch
-    @require_vision
-    def test_unstructured_kwargs(self):
-        if "image_processor" not in self.processor_class.get_attributes():
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor")
-        tokenizer = self.get_component("tokenizer")
-
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
-        self.skip_processor_without_typed_kwargs(processor)
-
-        input_str = self.prepare_text_inputs()
-        # set image input to None
-        image_input = None
-        inputs = processor(
-            text=input_str,
-            images=image_input,
-            return_tensors="pt",
-            padding="max_length",
-            max_length=76,
-        )
-
-        self.assertEqual(len(inputs["input_ids"][0]), 76)
-
-    # Rewrite as Kosmos-2 supports custom padding only when image is None.
-    @require_torch
-    @require_vision
-    def test_unstructured_kwargs_batched(self):
-        if "image_processor" not in self.processor_class.get_attributes():
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor")
-        tokenizer = self.get_component("tokenizer")
-
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
-        self.skip_processor_without_typed_kwargs(processor)
-
-        input_str = self.prepare_text_inputs(batch_size=2)
-        # set image input to None
-        image_input = None
-        inputs = processor(
-            text=input_str,
-            images=image_input,
-            return_tensors="pt",
-            size={"height": 214, "width": 214},
             padding="longest",
-            max_length=76,
+            max_length=max_length,
+            **component_init_kwargs,
         )
-
-        self.assertEqual(len(inputs["input_ids"][0]), 10)
+        self._check_modality_inputs(inputs, modality)
+        self.assertTrue(
+            len(inputs[self.text_input_name][0]) == len(inputs[self.text_input_name][1])
+            and len(inputs[self.text_input_name][1]) < max_length
+        )

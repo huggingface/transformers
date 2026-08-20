@@ -1148,7 +1148,8 @@ class ProcessorTesterMixin:
     def test_unstructured_kwargs_batched(self, modality):
         self._test_unstructured_kwargs_batched(modality)
 
-    @parameterized.expand(["image", "video", "audio"])
+    # skip audio - no single shared arg that behaves same way - can't test
+    @parameterized.expand(["image", "video"])
     def test_doubly_passed_kwargs(self, modality):
         self._test_doubly_passed_kwargs(modality)
 
