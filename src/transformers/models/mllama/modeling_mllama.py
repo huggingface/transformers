@@ -1584,8 +1584,8 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
             model_inputs["aspect_ratio_mask"] = None
 
         # `cross_attention_mask` gains a row per decoded token, so slice it down to the tokens being processed to keep
-        # the input shape constant, otherwise `torch.compile` recompiles at every step. Same as what the generic
-        # `prepare_inputs_for_generation` does with `attention_mask`, `clone` included (consistent stride, see #32227).
+        # the input shape constant, otherwise `torch.compile` recompiles at every step. The `clone` gives the slice a
+        # consistent stride, which dynamo also guards on.
         if model_inputs.get("cross_attention_mask") is not None:
             input_tensor = model_inputs.get("inputs_embeds")
             input_tensor = model_inputs["input_ids"] if input_tensor is None else input_tensor
