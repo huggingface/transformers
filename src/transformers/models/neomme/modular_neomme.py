@@ -323,20 +323,6 @@ class NeoMMEPatchEmbeddings(nn.Module):
 class NeoMMERotaryEmbedding(LagunaRotaryEmbedding):
     """Two-axis interleaved M-RoPE with per-layer-type frequency spectra."""
 
-    @staticmethod
-    def compute_default_rope_parameters(
-        config: NeoMMEConfig,
-        device: torch.device | None = None,
-        seq_len: int | None = None,
-        layer_type: str | None = None,
-    ) -> tuple[torch.Tensor, float]:
-        """Default inverse frequencies for a layer type."""
-        partial_rotary_factor = config.rope_parameters[layer_type].get("partial_rotary_factor", 1.0)
-        rotary_dim = int(config.head_dim * partial_rotary_factor)
-        theta = config.rope_parameters[layer_type]["rope_theta"]
-        inv_freq = theta ** -(torch.arange(0, rotary_dim, 2, dtype=torch.float, device=device) / rotary_dim)
-        return inv_freq, 1.0
-
     @torch.no_grad()
     @dynamic_rope_update
     def forward(
