@@ -146,9 +146,7 @@ class InitializeMissingKeysTest(unittest.TestCase):
             patch("transformers.modeling_utils.is_fsdp_enabled", return_value=True),
             patch("transformers.distributed.utils.is_local_dist_rank_0", return_value=False),
         ):
-            model._move_missing_keys_from_meta_to_device(
-                missing_keys=set(), device_map=None, device_mesh=None, hf_quantizer=None
-            )
+            model._move_missing_keys_from_meta_to_device(missing_keys=set(), device_map=None, hf_quantizer=None)
 
         for name, param in model.named_parameters():
             self.assertEqual(param.device, torch.device("cpu"), f"param {name} should be on CPU after FSDP move")
@@ -163,9 +161,7 @@ class InitializeMissingKeysTest(unittest.TestCase):
             patch("transformers.modeling_utils.is_fsdp_enabled", return_value=True),
             patch("transformers.distributed.utils.is_local_dist_rank_0", return_value=False),
         ):
-            model._move_missing_keys_from_meta_to_device(
-                missing_keys=set(), device_map=None, device_mesh=None, hf_quantizer=None
-            )
+            model._move_missing_keys_from_meta_to_device(missing_keys=set(), device_map=None, hf_quantizer=None)
             pre_init_values = {name: param.clone() for name, param in model.named_parameters()}
             self._clear_init_flags(model)
             model._initialize_missing_keys(is_quantized=False)
