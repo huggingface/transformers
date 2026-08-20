@@ -538,7 +538,7 @@ class Ovis2_5VisionModel(Ovis2_5PreTrainedModel):
         )
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
 
-        position_ids = get_vision_position_ids(grid_thw, self.config.hidden_stride, kwargs=kwargs)
+        position_ids = get_vision_position_ids(grid_thw, self.config.spatial_merge_size, kwargs=kwargs)
         rotary_pos_emb = self.rotary_pos_emb(position_ids)
         rotary_pos_emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
         rotary_cos, rotary_sin = rotary_pos_emb.cos(), rotary_pos_emb.sin()
