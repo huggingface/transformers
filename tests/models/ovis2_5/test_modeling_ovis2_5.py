@@ -750,10 +750,10 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
             captured_position_ids = []
 
             def capture_position_ids(module, args):
-                captured_position_ids.append(args[0])
+                captured_position_ids.append(args[1])
 
             with self.subTest(position_ids_key=position_ids_key):
-                hook = model.model.vision_tower.rotary_pos_emb.register_forward_pre_hook(capture_position_ids)
+                hook = model.model.vision_tower.rotary_emb.register_forward_pre_hook(capture_position_ids)
                 try:
                     with torch.no_grad():
                         model(**inputs, **{position_ids_key: position_ids})
