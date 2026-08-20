@@ -114,6 +114,7 @@ class PipelineStage:
             rank 1 -> [10, 20)  # layers 10-19
             rank 2 -> [20, 32)  # layers 20-31 (10 + 2 remainder)
         """
+        # TODO(3outeille): Balance stages by layer type or parameter bytes instead of splitting solely by layer count.
         layers_per_rank = num_layers // self.pp_size
         start_layer = rank * layers_per_rank
         # last rank will always have more layers if uneven split. Else, it will have the same number of layers as the other ranks.
