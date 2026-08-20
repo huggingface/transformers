@@ -117,6 +117,19 @@ class NemotronH_Omni_Reasoning_V3VisionProjector(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.downsample_ratio = config.downsample_ratio
+        # Mirror Megatron training behavior: when the language model has MTP,
+        # Megatron-Core's TransformerBlock places a final LayerNorm with the last
+        # layer of every block built from the (shared) config -- including the
+        # vision tower, whose config inherits `mtp_num_layers` from the language
+        # model. The vision tower output is therefore layer-normalized before the
+        # projector. LayerNorm is applied per token, so normalizing the RADIO
+        # features here is exactly equivalent to Megatron's block-internal
+        # placement before class-token stripping.
+        # CODEPATH: only checkpoints whose language model carries MTP layers build this norm.
+        if (getattr(config.llm_config, "num_nextn_predict_layers", 0) or 0) > 0:
+            self.vision_final_layernorm = nn.LayerNorm(config.vit_hidden_size, eps=config.vision_config.layer_norm_eps)
+        else:
+            self.vision_final_layernorm = None
         self.mlp1 = NemotronH_Omni_Reasoning_V3MLP(
             config.vit_hidden_size * int(1 / config.downsample_ratio) ** 2,
             config.projector_hidden_size,
@@ -136,6 +149,8 @@ class NemotronH_Omni_Reasoning_V3VisionProjector(nn.Module):
         return x.permute(0, 2, 1, 3).contiguous()
 
     def forward(self, vit_embeds, height, width):
+        if self.vision_final_layernorm is not None:
+            vit_embeds = self.vision_final_layernorm(vit_embeds)
         vit_embeds = vit_embeds.reshape(vit_embeds.shape[0], height, width, -1)
         vit_embeds = self.pixel_shuffle(vit_embeds, scale_factor=self.downsample_ratio)
         vit_embeds = vit_embeds.reshape(vit_embeds.shape[0], -1, vit_embeds.shape[-1])
