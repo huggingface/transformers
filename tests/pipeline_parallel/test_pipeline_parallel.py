@@ -151,7 +151,7 @@ def _pp_load_report(rank, config_dict, pp_size, port):
         assert "lm_head.weight" in report
         assert loading_info.unexpected_keys == set()
 
-        with unittest.TestCase().assertLogs("transformers.utils.loading_report", level="WARNING") as logs:
+        with unittest.TestCase().assertLogs("transformers.utils.loading_report", level="INFO") as logs:
             log_state_dict_report(model, "/tmp/pp-test", True, loading_info)
 
         log_text = "\n".join(logs.output)

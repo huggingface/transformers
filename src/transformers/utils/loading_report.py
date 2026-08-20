@@ -295,8 +295,9 @@ def log_state_dict_report(
             )
         raise RuntimeError(f"Error(s) in loading state_dict for {model.__class__.__name__}:\n\t{error_msg}")
 
-    # Create the report table
-    report = loading_info.create_loading_report(model)
+    # Pipeline-parallel details require walking the model state dict, so only collect them at info verbosity.
+    report_model = model if logger.isEnabledFor(logging.INFO) else None
+    report = loading_info.create_loading_report(report_model)
     if report is None:
         return
 
