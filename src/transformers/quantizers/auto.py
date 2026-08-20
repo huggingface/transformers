@@ -94,6 +94,7 @@ AUTO_QUANTIZER_MAPPING = {
     "vptq": VptqHfQuantizer,
     "spqr": SpQRHfQuantizer,
     "fp8": FineGrainedFP8HfQuantizer,
+    "gguf": GgufHfQuantizer,
     "nvfp4": NVFP4HfQuantizer,
     # MXFP8 = FP8 (E4M3 weights) with per-block ``[1, 32]`` E8M0 (uint8) scales —
     # reuses the FineGrainedFP8 dequant path, with the E8M0 byte→exponent
