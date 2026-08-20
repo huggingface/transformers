@@ -1773,7 +1773,9 @@ class ModelUtilsTest(TestCasePlus):
                 with CaptureLogger(logger) as cl:
                     _, loading_info = ModelWithHead.from_pretrained(tmp_dir, output_loading_info=True)
             # Will be colored if terminal is interactive
-            expected_output = "added_key | [38;5;208mUNEXPECTED" if sys.stdout.isatty() else "added_key | UNEXPECTED"
+            expected_output = (
+                "added_key | \x1b[38;5;208mUNEXPECTED" if sys.stdout.isatty() else "added_key | UNEXPECTED"
+            )
             self.assertIn(expected_output, cl.out)
             self.assertEqual(loading_info["unexpected_keys"], {"added_key"})
 
