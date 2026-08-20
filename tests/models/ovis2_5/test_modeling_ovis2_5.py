@@ -766,12 +766,13 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
     def test_video_forward(self):
         config = self.model_tester.get_config()
         model = Ovis2_5ForConditionalGeneration(config).to(torch_device).eval()
+        inputs = self.model_tester.prepare_video_inputs()
 
         with torch.no_grad():
-            outputs = model(**self.model_tester.prepare_video_inputs())
+            outputs = model(**inputs)
 
-        self.assertIsNotNone(outputs.video_hidden_states)
-        self.assertIsNone(outputs.image_hidden_states)
+        self.assertEqual(outputs.logits.shape[:2], inputs["input_ids"].shape)
+        self.assertTrue(torch.isfinite(outputs.logits).all())
 
     def test_vision_hidden_states_do_not_change_outputs(self):
         config = self.model_tester.get_vision_config()
