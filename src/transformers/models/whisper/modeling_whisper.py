@@ -1014,6 +1014,21 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
     def get_input_embeddings(self) -> nn.Module:
         return self.model.get_input_embeddings()
 
+    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, attention_mask=None, **kwargs):
+        # During Whisper longform generation with condition_on_prev_tokens=True, shorter sequences
+        # in a batch are left-padded. Compute decoder_position_ids from decoder_attention_mask so
+        # each item gets correct positions regardless of padding, before the base class processes it.
+        if (
+            "decoder_position_ids" not in kwargs
+            and (decoder_attention_mask := kwargs.get("decoder_attention_mask")) is not None
+        ):
+            position_ids = decoder_attention_mask.long().cumsum(-1) - 1
+            position_ids = position_ids.masked_fill(decoder_attention_mask == 0, 0)
+            kwargs["decoder_position_ids"] = position_ids[..., -input_ids.shape[1] :]
+        return super().prepare_inputs_for_generation(
+            input_ids, past_key_values=past_key_values, attention_mask=attention_mask, **kwargs
+        )
+
     def freeze_encoder(self):
         """
         Calling this function will disable the gradient computation for the Whisper encoder so that its parameters will
