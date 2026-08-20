@@ -228,7 +228,16 @@ class DequantizeMxfp4Experts(ConversionOps):
     def __init__(self, hf_quantizer: "Mxfp4HfQuantizer"):
         self.hf_quantizer = hf_quantizer
 
-    def convert(self, input_dict: dict[str, torch.Tensor], **kwargs) -> dict[str, torch.Tensor]:
+    def convert(
+        self,
+        input_dict: dict[str, torch.Tensor],
+        model: nn.Module | None = None,
+        full_layer_name: str | None = None,
+        **kwargs,
+    ) -> dict[str, torch.Tensor]:
+        module, _ = get_module_from_name(model, full_layer_name)
+        is_transposed = getattr(module, "is_transposed", False)
+
         processed_out = {}
         for key, blocks in input_dict.items():
             if not key.rstrip("$").endswith("weight_blocks"):
@@ -236,8 +245,10 @@ class DequantizeMxfp4Experts(ConversionOps):
             scales = input_dict[key.replace("weight_blocks", "weight_scales")]
             blocks = torch.stack(blocks) if isinstance(blocks, list) else blocks
             scales = torch.stack(scales) if isinstance(scales, list) else scales
-            # `(num_experts, in_dim, out_dim)` comes out; the merge expects the dense module layout.
-            processed_out[key] = convert_moe_packed_tensors(blocks, scales).transpose(-1, -2).contiguous()
+            dequantized = convert_moe_packed_tensors(blocks, scales)
+            # dequantized has shape [num_experts, in_dim, out_dim], which is the transposed layout
+            dequantized = dequantized if is_transposed else dequantized.transpose(-1, -2)
+            processed_out[key] = dequantized.contiguous()
         return processed_out
 
     @property
