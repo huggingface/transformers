@@ -392,6 +392,14 @@ class ProcessorArgs:
     """,
     }
 
+    videos = {
+        "description": """
+    Video to preprocess. Expects a single or batch of videos with pixel values ranging from 0 to 255. If
+    passing in videos with pixel values between 0 and 1, set `do_rescale=False`.
+    """,
+        "shape": None,
+    }
+
     audio = {
         "description": """
     The audio or batch of audios to be prepared. Each audio can be a NumPy array or PyTorch tensor.
