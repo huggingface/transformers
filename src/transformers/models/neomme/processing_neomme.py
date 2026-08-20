@@ -229,6 +229,7 @@ class NeoMMEProcessor(ProcessorMixin):
         padding: bool | str = "longest",
         return_tensors: str | None = "pt",
     ) -> BatchFeature:
+        """Tokenize rendered inputs and assemble a padded text/image batch."""
         marker_ids = self._marker_ids()
         image_grid_hw = image_inputs.pop("image_grid_hw", None)
         text, _ = self.get_text_with_replacements(text, images_replacements=image_replacements)
@@ -285,6 +286,7 @@ class NeoMMEProcessor(ProcessorMixin):
         marker_ids: dict[str, int],
         max_length: int | None,
     ) -> list[int]:
+        """Truncate content while preserving the retrieval prefix and query suffix."""
         prefix_id = marker_ids["query"] if task == "query" else marker_ids["document"]
         if not ids or ids[0] != prefix_id or ids.count(prefix_id) != 1:
             raise ValueError(f"NeoMME chat template must render exactly one leading {task} token.")
@@ -311,6 +313,7 @@ class NeoMMEProcessor(ProcessorMixin):
         marker_ids: dict[str, int],
         max_length: int | None,
     ) -> tuple[list[int], np.ndarray]:
+        """Validate an image token grid and return its two-axis positions."""
         grid_height, grid_width = grid_hw.tolist()
         expected_ids, position_ids = self._encode_image_grid(grid_height, grid_width, marker_ids)
         if ids != expected_ids:
