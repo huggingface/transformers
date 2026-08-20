@@ -17,6 +17,8 @@ import os
 import tempfile
 import unittest
 
+from huggingface_hub.errors import StrictDataclassClassValidationError
+
 from transformers import is_torch_available
 from transformers.testing_utils import require_torch, torch_device
 
@@ -236,6 +238,15 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
             super().test_tp_plan_matches_params()
         finally:
             self.model_tester.ple_layer_ids = []
+
+    def test_ple_layers_must_use_linear_attention(self):
+        with self.assertRaisesRegex(
+            StrictDataclassClassValidationError, "PLE is only supported on linear_attention layers"
+        ):
+            self.model_tester.get_config(
+                ple_layer_ids=[2],
+                layer_types=["linear_attention", "deepseek_sparse_attention"],
+            )
 
     def test_ple_padding_and_static_cache_match_unpadded_sequence(self):
         torch.manual_seed(0)

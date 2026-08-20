@@ -175,27 +175,18 @@ class Qwen4ExpTextConfig(PreTrainedConfig):
         # Without PLE, only the GatedDeltaNet state is needed.
         self.number_of_conv_states = 3 if self.ple_layer_ids else 1
 
-        # Full-attention layers use an indexed cache when QSA is enabled. If PLE is also attached to that layer, the hybrid
-        # indexed cache additionally carries its convolution and n-gram context states
         if self.layer_types is None:
             interval_pattern = kwargs.pop("full_attention_interval", 4)
-            layer_types = []
-            for i in range(self.num_hidden_layers):
-                if bool((i + 1) % interval_pattern):
-                    layer_types.append("linear_attention")
-                elif i + 1 in self.ple_layer_ids:
-                    layer_types.append("hybrid_indexed")
-                else:
-                    layer_types.append("deepseek_sparse_attention")
-            self.layer_types = layer_types
+            self.layer_types = [
+                "linear_attention" if (i + 1) % interval_pattern else "deepseek_sparse_attention"
+                for i in range(self.num_hidden_layers)
+            ]
 
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates Qwen4-Exp architecture invariants."""
-        unsupported_layer_types = sorted(
-            set(self.layer_types) - {"linear_attention", "hybrid_indexed", "deepseek_sparse_attention"}
-        )
+        unsupported_layer_types = sorted(set(self.layer_types) - {"linear_attention", "deepseek_sparse_attention"})
         if unsupported_layer_types:
             raise ValueError(f"Unsupported Qwen4-Exp layer types: {unsupported_layer_types}.")
         output_gate_type = self.output_gate_type or self.hidden_act
@@ -252,6 +243,14 @@ class Qwen4ExpTextConfig(PreTrainedConfig):
                 raise ValueError(
                     f"ple_layer_ids must contain one-indexed ids in [1, {self.num_hidden_layers}], "
                     f"got {invalid_ple_layers}."
+                )
+            non_linear_ple_layers = [
+                layer_id for layer_id in self.ple_layer_ids if self.layer_types[layer_id - 1] != "linear_attention"
+            ]
+            if non_linear_ple_layers:
+                raise ValueError(
+                    "Qwen4-Exp PLE is only supported on linear_attention layers, "
+                    f"got PLE on layers {non_linear_ple_layers}."
                 )
             if self.eos_token_id is None or isinstance(self.eos_token_id, list) and not self.eos_token_id:
                 raise ValueError("eos_token_id must be set when Qwen4-Exp PLE layers are enabled.")
