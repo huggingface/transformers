@@ -28,6 +28,11 @@ from ...test_modeling_common import (
 )
 
 
+# A 15 degree grid on a twice-split icosahedron, randomly initialized, carrying the geometry trimesh
+# and scipy build at conversion time. 152 KB, so the tests that need a real mesh can have one.
+TINY_CHECKPOINT = "hf-internal-testing/tiny-random-WeatherNext2ForWeatherForecasting"
+
+
 if is_torch_available():
     import torch
 
@@ -36,7 +41,11 @@ if is_torch_available():
 
 
 class WeatherNext2ModelTester:
-    """Builds a model small enough to test: a twice-refined icosahedron (162 nodes) on a 10 degree grid."""
+    """Builds a model small enough to test: a twice-refined icosahedron (162 nodes) on a 15 degree grid.
+
+    The shape matches `TINY_CHECKPOINT`, so a model built here and one loaded from the Hub differ only
+    in whether their geometry is real.
+    """
 
     def __init__(
         self,
@@ -50,10 +59,10 @@ class WeatherNext2ModelTester:
         noise_channels=4,
         mesh_splits=2,
         attention_k_hop=2,
-        attention_bandwidth=64,
-        num_grid_to_mesh_edges=2048,
-        grid_latitudes=19,
-        grid_longitudes=36,
+        attention_bandwidth=43,
+        num_grid_to_mesh_edges=576,
+        grid_latitudes=13,
+        grid_longitudes=24,
         pressure_levels=(500, 850),
         is_training=False,
     ):
@@ -259,24 +268,6 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
             sum(levels for _, _, levels in config.input_channel_layout) + 3, config.num_grid_input_channels
         )
 
-    def test_attention_backends_agree(self):
-        """`eager`, `sdpa` and `flex_attention` must all produce the same forecast."""
-        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-        reference, state_dict = None, None
-        for implementation in ("eager", "sdpa", "flex_attention"):
-            model = WeatherNext2ForWeatherForecasting._from_config(config, attn_implementation=implementation)
-            if state_dict is None:
-                state_dict = model.state_dict()
-            else:
-                model.load_state_dict(state_dict)
-            model.to(torch_device).eval()
-            with torch.no_grad():
-                prediction = model(**inputs).prediction
-            if reference is None:
-                reference = prediction
-            else:
-                torch.testing.assert_close(prediction, reference, atol=1e-5, rtol=1e-5)
-
     def test_attention_outputs(self):
         """Same contract as the shared test, with this model's block-local attention shape.
 
@@ -318,16 +309,102 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
                 outputs = model_class._from_config(config).to(torch_device).eval()(**inputs_dict)
             self.assertIsNone(outputs.attentions)
 
+    # WeatherNext 2 consumes gridded physical fields, not tokens or images, and masks by mesh
+    # adjacency rather than by sequence position, so several of the shared tests do not apply.
+    @unittest.skip(reason="WeatherNext 2 has no token embeddings.")
+    def test_model_get_set_embeddings(self):
+        pass
+
+    @unittest.skip(reason="Hidden states are per grid point and per mesh node, not per token.")
+    def test_hidden_states_output(self):
+        pass
+
+    @unittest.skip(reason="Hidden states are per grid point and per mesh node, not per token.")
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
+
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    @unittest.skip(reason="The attention mask is geometric and internal, so external masks do not apply.")
+    def test_eager_matches_sdpa_inference(self, *args, **kwargs):
+        pass
+
+    @unittest.skip(
+        reason="The shared test calls `state_dict()` on the state dict it already has whenever a buffer is a "
+        "`BoolTensor`, which the banded attention mask is."
+    )
+    def test_torch_save_load(self):
+        pass
+
+
+@require_torch
+class WeatherNext2GeometryTest(unittest.TestCase):
+    """Checks the things that only hold for a real mesh, on the tiny checkpoint.
+
+    A model built from a config has no geometry, only a placeholder, so none of this can be tested
+    there. The geometry itself is built by the conversion script; what these check is the shape of
+    what it produced and that the model's banded attention reads it correctly.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.model = WeatherNext2ForWeatherForecasting.from_pretrained(TINY_CHECKPOINT).to(torch_device).eval()
+
+    def test_graphs_are_shaped_the_way_the_model_reads_them(self):
+        model, config = self.model.model, self.model.config
+        self.assertEqual(config.num_mesh_nodes, 10 * 4**2 + 2)
+        # Mesh-to-grid connects every grid point to the three vertices of one face.
+        self.assertEqual(len(model.mesh_to_grid_senders), 3 * config.num_grid_points)
+        # Edges are sorted by receiver so the aggregation can use a segmented sum.
+        self.assertTrue((model.mesh_to_grid_receivers.diff() >= 0).all())
+        self.assertTrue((model.grid_to_mesh_receivers.diff() >= 0).all())
+        # Indices stay inside the node sets they point at.
+        self.assertLess(int(model.grid_to_mesh_senders.max()), config.num_grid_points)
+        self.assertLess(int(model.mesh_to_grid_senders.max()), config.num_mesh_nodes)
+        # Edge features are normalized to the unit interval.
+        self.assertLessEqual(float(model.mesh_to_grid_edge_features[:, 0].max()), 1.0 + 1e-6)
+        self.assertLessEqual(float(model.mesh_to_grid_edge_features[:, 1:].abs().max()), 1.0 + 1e-6)
+
+    def test_every_mesh_node_attends_and_the_padding_does_not(self):
+        model = self.model.model
+        num_nodes = self.model.config.num_mesh_nodes
+        reaches = model.attention_mask.any(-1).reshape(-1)
+        self.assertTrue(reaches[:num_nodes].all(), "a mesh node attends to nothing, which is a NaN row")
+        self.assertFalse(reaches[num_nodes:].any(), "the padding past the last mesh node is attended to")
+
+    def test_attention_backends_agree(self):
+        """`eager`, `sdpa` and `flex_attention` must all produce the same forecast."""
+        config = self.model.config
+        inputs = {
+            "grid_features": floats_tensor(
+                [2, config.num_grid_input_channels - 3, config.grid_latitudes, config.grid_longitudes]
+            ).to(torch_device),
+            "global_features": floats_tensor([2, config.num_mesh_input_channels - 3]).to(torch_device),
+            "noise": floats_tensor([2, config.noise_channels]).to(torch_device),
+        }
+        reference = None
+        for implementation in ("eager", "sdpa", "flex_attention"):
+            model = WeatherNext2ForWeatherForecasting.from_pretrained(
+                TINY_CHECKPOINT, attn_implementation=implementation
+            )
+            model.to(torch_device).eval()
+            with torch.no_grad():
+                prediction = model(**inputs).prediction
+            if reference is None:
+                reference = prediction
+            else:
+                torch.testing.assert_close(prediction, reference, atol=1e-5, rtol=1e-5)
+
     def test_banded_attention_matches_dense_masking(self):
         """The three-block-diagonal attention must equal masking the full node-by-node matrix."""
-        config = self.model_tester.get_config()
-        model = WeatherNext2Model(config).to(torch_device).eval()
+        model = self.model.model
+        config = self.model.config
         attention: WeatherNext2Attention = model.mesh_transformer.layers[0].self_attn
 
         banded_mask = model.attention_mask
         num_blocks, _, block_size, _ = banded_mask.shape
         padded = num_blocks * block_size
-        hidden_states = floats_tensor([1, padded, config.hidden_size])
+        hidden_states = floats_tensor([1, padded, config.hidden_size]).to(torch_device)
 
         with torch.no_grad():
             banded, _ = attention(hidden_states.view(1, num_blocks, block_size, -1), banded_mask)
@@ -354,32 +431,6 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
             dense = attention.o_proj(dense.transpose(1, 2).reshape(1, padded, -1))
 
         torch.testing.assert_close(banded, dense, atol=1e-4, rtol=1e-4)
-
-    # WeatherNext 2 consumes gridded physical fields, not tokens or images, and masks by mesh
-    # adjacency rather than by sequence position, so several of the shared tests do not apply.
-    @unittest.skip(reason="WeatherNext 2 has no token embeddings.")
-    def test_model_get_set_embeddings(self):
-        pass
-
-    @unittest.skip(reason="Hidden states are per grid point and per mesh node, not per token.")
-    def test_hidden_states_output(self):
-        pass
-
-    @unittest.skip(reason="Hidden states are per grid point and per mesh node, not per token.")
-    def test_retain_grad_hidden_states_attentions(self):
-        pass
-
-    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
-    @unittest.skip(reason="The attention mask is geometric and internal, so external masks do not apply.")
-    def test_eager_matches_sdpa_inference(self, *args, **kwargs):
-        pass
-
-    @unittest.skip(
-        reason="The shared test calls `state_dict()` on the state dict it already has whenever a buffer is a "
-        "`BoolTensor`, which the banded attention mask is."
-    )
-    def test_torch_save_load(self):
-        pass
 
 
 @require_torch
