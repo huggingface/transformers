@@ -785,13 +785,6 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
         )
 
 
-# The Exaone constructor uses an underscored model name. Keep that copied
-# constructor pointed at the public Ovis2_5Model without exposing a second model.
-class Ovis2_5_Model:
-    def __new__(cls, config: Ovis2_5Config) -> Ovis2_5Model:
-        return Ovis2_5Model(config)
-
-
 @auto_docstring(custom_intro="The Ovis2.5 multimodal model with a language modeling head.")
 class Ovis2_5ForConditionalGeneration(Ovis2_5PreTrainedModel, GenerationMixin):
     """Ovis2.5 multimodal conditional generation model."""
@@ -802,9 +795,10 @@ class Ovis2_5ForConditionalGeneration(Ovis2_5PreTrainedModel, GenerationMixin):
 
     model: Ovis2_5Model
 
-    def __init__(self, config):
+    def __init__(self, config: Ovis2_5Config):
         super().__init__(config)
-        self.model = Ovis2_5_Model(config)
+        # Exaone uses an underscored model class, while Ovis exposes `Ovis2_5Model`.
+        self.model = Ovis2_5Model(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
 
         self.post_init()
