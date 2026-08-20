@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import copy
-import functools
 import inspect
 import itertools
 import re
@@ -22,6 +21,7 @@ import pytest
 import torch
 from parameterized import parameterized
 
+from tests.exporters.export_utils import disable_hub_kernels
 from tests.exporters.export_utils import run_executorch_program as _run_executorch_program
 from tests.exporters.export_utils import run_onnx_program as _run_onnx_program
 from transformers import GenerationConfig, set_seed
@@ -379,34 +379,6 @@ MIN_EXPORT_TORCH_VERSION = DynamoExporter.min_versions["torch"]
 
 
 # ──────────────────────────── helpers ────────────────────────────
-
-
-def disable_hub_kernels(test_fn):
-    """Force `is_kernels_available()` to `False` for the duration of an export test.
-
-    Export must trace the pure-PyTorch path, never a Hub kernel (`mamba-ssm`, `causal-conv1d`, …): those
-    need optional deps (`einops`, triton, …) and aren't exportable anyway. Kernels load lazily on the first
-    (eager) forward — outside the exporter's own trace-time patch — so the whole test is wrapped. With
-    `is_kernels_available()` False, `lazy_load_kernel` short-circuits to `None` and the fallback runs.
-    """
-
-    @functools.wraps(test_fn)
-    def wrapper(*args, **kwargs):
-        from transformers.integrations import hub_kernels
-        from transformers.utils import import_utils
-
-        # `lazy_load_kernel` gates on `hub_kernels`'s own binding; patch the canonical def too.
-        targets = [(hub_kernels, "is_kernels_available"), (import_utils, "is_kernels_available")]
-        saved = [(obj, name, getattr(obj, name)) for obj, name in targets]
-        for obj, name in targets:
-            setattr(obj, name, lambda *args, **kwargs: False)
-        try:
-            return test_fn(*args, **kwargs)
-        finally:
-            for obj, name, original in saved:
-                setattr(obj, name, original)
-
-    return wrapper
 
 
 def _clean_inputs_for_export(inputs_dict, config):

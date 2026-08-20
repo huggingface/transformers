@@ -19,6 +19,7 @@ either test module so neither imports the other; the filename doesn't match pyte
 so it isn't collected.
 """
 
+import functools
 import re
 
 from transformers import set_seed
@@ -134,3 +135,31 @@ def is_executorch_runtime_limit(exc):
         return True
     execute = re.search(r"(?:execute\(\)|set_inputs\(\) for method '\w+') failed with error 0x([0-9a-fA-F]+)", msg)
     return bool(execute and f"0x{execute.group(1)}" in _ET_EXECUTE_LIMIT_CODES)
+
+
+def disable_hub_kernels(test_fn):
+    """Force `is_kernels_available()` to `False` for the duration of an export test.
+
+    Export must trace the pure-PyTorch path, never a Hub kernel (`mamba-ssm`, `causal-conv1d`, …): those
+    need optional deps (`einops`, triton, …) and aren't exportable anyway. Kernels load lazily on the first
+    (eager) forward — outside the exporter's own trace-time patch — so the whole test is wrapped. With
+    `is_kernels_available()` False, `lazy_load_kernel` short-circuits to `None` and the fallback runs.
+    """
+
+    @functools.wraps(test_fn)
+    def wrapper(*args, **kwargs):
+        from transformers.integrations import hub_kernels
+        from transformers.utils import import_utils
+
+        # `lazy_load_kernel` gates on `hub_kernels`'s own binding; patch the canonical def too.
+        targets = [(hub_kernels, "is_kernels_available"), (import_utils, "is_kernels_available")]
+        saved = [(obj, name, getattr(obj, name)) for obj, name in targets]
+        for obj, name in targets:
+            setattr(obj, name, lambda *args, **kwargs: False)
+        try:
+            return test_fn(*args, **kwargs)
+        finally:
+            for obj, name, original in saved:
+                setattr(obj, name, original)
+
+    return wrapper

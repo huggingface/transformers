@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import math
 import operator
+import os
 import re
 from collections.abc import MutableMapping
 from typing import Any
@@ -268,7 +269,9 @@ def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any], c
 
     model.requires_grad_(False)
     model = model.to(device="cpu")
-    # XNNPACK has no `_grouped_mm.out` kernel — force MoE experts to `batched_mm`.
+    # Force MoE experts to `batched_mm`: on this CPU fp32 trace the "grouped_mm" implementation
+    # dispatches to the opaque `transformers.grouped_mm_fallback` custom op, which has no ExecuTorch
+    # lowering (`aten._grouped_mm` itself is bf16-only at trace time).
     if isinstance(model, PreTrainedModel) and model._can_set_experts_implementation():
         model.set_experts_implementation("batched_mm")
     partitioner = [XnnpackPartitioner()]
@@ -289,6 +292,13 @@ def prepare_for_qnn(model: PreTrainedModel, sample_inputs: dict[str, Any], confi
     `executorch.backends.qualcomm` imports are local because that package raises on import without the
     SDK — a module-level import would break the ExecuTorch exporter for the XNNPACK/CUDA backends too.
     """
+    # QNN has no builder for `aten.empty_permuted` (an MoE's expert buffers land on it, and core-ATen
+    # decomposition re-creates it from `empty.memory_format` at to_edge, so it cannot be rewritten away
+    # upstream of the partitioner). The op only allocates uninitialized memory — the permuted strides are
+    # host-side hints — so register a builder that emits a zero-filled static tensor of the right shape,
+    # the same thing `op_full` does. TODO: drop once ExecuTorch ships an `empty_permuted` builder.
+    from executorch.backends.qualcomm.builders.node_visitor import NodeVisitor
+    from executorch.backends.qualcomm.builders.node_visitor_manager import register_node_visitor
     from executorch.backends.qualcomm.partition.qnn_partitioner import QnnPartitioner
     from executorch.backends.qualcomm.serialization.qc_schema import QcomChipset
     from executorch.backends.qualcomm.utils.utils import (
@@ -296,8 +306,29 @@ def prepare_for_qnn(model: PreTrainedModel, sample_inputs: dict[str, Any], confi
         generate_qnn_executorch_compiler_spec,
     )
 
+    if not any("aten.empty_permuted.default" in getattr(cls, "target", ()) for cls in NodeVisitor.__subclasses__()):
+        import executorch.backends.qualcomm.python.PyQnnManagerAdaptor as PyQnnManager
+
+        @register_node_visitor
+        class _EmptyPermuted(NodeVisitor):
+            target = ["aten.empty_permuted.default"]
+
+            def define_node(self, node, nodes_to_wrappers):
+                out_tensor = torch.zeros(list(self.get_tensor(node, node).shape), dtype=node.meta["val"].dtype)
+                self.define_tensor(
+                    node,
+                    node,
+                    out_tensor,
+                    PyQnnManager.Qnn_TensorType_t.QNN_TENSOR_TYPE_STATIC,
+                    nodes_to_wrappers,
+                )
+
     model.requires_grad_(False)
     model = model.to(device="cpu")
+    # As on XNNPACK: the "grouped_mm" implementation's fp32 trace carries the opaque
+    # `transformers.grouped_mm_fallback` custom op, which no backend can lower.
+    if isinstance(model, PreTrainedModel) and model._can_set_experts_implementation():
+        model.set_experts_implementation("batched_mm")
 
     # The HTP has no rank-0 tensors, so QNN promotes scalars to rank-1 — but leaves mutable-buffer
     # placeholders rank-0, so `StaticLayer.cumulative_length` (a scalar counter) fails its input-mutation
@@ -313,7 +344,9 @@ def prepare_for_qnn(model: PreTrainedModel, sample_inputs: dict[str, Any], confi
     # and chipset only tunes the HTP compiler, so a recent default serves it.
     quantizer_soc = getattr(getattr(config.quantizer, "soc_info", None), "soc_model", None)
     soc_model = quantizer_soc if quantizer_soc is not None else QcomChipset.SM8650
-    compiler_specs = generate_qnn_executorch_compiler_spec(soc_model=soc_model, backend_options=backend_options)
+    compiler_specs = generate_qnn_executorch_compiler_spec(
+        soc_model=soc_model, backend_options=backend_options, debug=os.environ.get("QNN_DEBUG") == "1"
+    )
     partitioner = [QnnPartitioner(compiler_specs)]
     return model, _make_contiguous(sample_inputs), partitioner
 
@@ -1188,6 +1221,34 @@ def _patch_squeeze_node_visitors(original):
         cls = original[key]
         new[key] = type(cls.__name__, (cls,), {"define_node": _make_squeeze_define_node(cls.define_node)})
     return new
+
+
+@register_patch("executorch.qnn", "executorch.backends.qualcomm.quantizer.quantizer.QnnQuantizer.annotate")
+def _patch_qnn_annotate_integer_tensors(original):
+    """QNN's quantizer annotates integer tensors (an MoE's int64 routing `arange`) for per-tensor quant,
+    which `quantize_per_tensor`'s meta kernel rejects at `convert_pt2e` ("Expecting input to have dtype
+    torch.float32"). The 1.4.1 dtype guard covers constant tensors only, not activations. Until the
+    annotators guard on dtype upstream, strip the annotations back off every non-float node — both its
+    own output qspec and its entry in any consumer's input qspec map."""
+
+    def _is_non_float(node):
+        value = getattr(node, "meta", {}).get("val")
+        return isinstance(value, torch.Tensor) and not value.is_floating_point()
+
+    def annotate(self, model):
+        model = original(self, model)
+        for node in model.graph.nodes:
+            annotation = node.meta.get("quantization_annotation")
+            if annotation is None:
+                continue
+            if annotation.input_qspec_map:
+                for input_node in [n for n in annotation.input_qspec_map if _is_non_float(n)]:
+                    annotation.input_qspec_map.pop(input_node)
+            if _is_non_float(node):
+                annotation.output_qspec = None
+        return model
+
+    return annotate
 
 
 # ── Stage 4: FX program fixes ─────────────────────────────────────────────────

@@ -44,7 +44,7 @@ from unittest.mock import patch
 import pytest
 from parameterized import parameterized
 
-from tests.exporters.export_utils import run_onnx_program
+from tests.exporters.export_utils import disable_hub_kernels, run_onnx_program
 from transformers import GenerationConfig, LlamaConfig, LlamaForCausalLM
 from transformers.exporters.utils import capture_calibration_inputs, decompose_for_generation
 from transformers.testing_utils import (
@@ -243,6 +243,7 @@ class QuantizationExportTest(unittest.TestCase):
     # ──────────────────────────────── Dynamo ────────────────────────────────
 
     @pytest.mark.torch_export_test
+    @disable_hub_kernels
     def test_calibration_defaults_to_sample_inputs_with_warning(self):
         """With no `calibration_dataset`, calibration falls back to a single pass on the sample inputs and
         warns (one sample can hurt accuracy) — quantization still applies."""
@@ -259,6 +260,7 @@ class QuantizationExportTest(unittest.TestCase):
         self.assertTrue(_has_quantize_ops(exported))
 
     @pytest.mark.torch_export_test
+    @disable_hub_kernels
     def test_calibration_dataset_captured_per_component(self):
         """One generate-level `calibration_dataset` becomes a separate calibration set for each generation
         component: running it through `generate` captures every component's real inputs, so each calibrates
@@ -278,6 +280,7 @@ class QuantizationExportTest(unittest.TestCase):
 
     @parameterized.expand([("dense",), ("moe",), ("ssm",)])
     @pytest.mark.torch_export_test
+    @disable_hub_kernels
     def test_quantized_dynamo(self, family):
         """Every architecture family quantizes to a quantized FX graph on the Dynamo backend, via the
         torchao-native x86 quantizer (the natural graph-level PT2E quantizer, no executorch dependency) —
@@ -327,6 +330,7 @@ class QuantizationExportTest(unittest.TestCase):
 
     @parameterized.expand([("dense",), ("moe",), ("ssm",)])
     @pytest.mark.onnx_export_test
+    @disable_hub_kernels
     def test_quantized_onnx(self, family):
         """The same x86-quantizer recipe, lowered to ONNX: every family produces a QDQ graph
         (QuantizeLinear nodes) that runs in ONNX Runtime. Static export throughout."""
@@ -362,6 +366,7 @@ class QuantizationExportTest(unittest.TestCase):
     )
     @require_executorch
     @pytest.mark.executorch_export_test
+    @disable_hub_kernels
     def test_quantized_executorch(self, family, quantizer):
         """The same `config.quantizer` recipe, lowered to an ExecuTorch `.pte`: every family × delegatable
         quantizer produces a program. The x86 quantizer is absent — its per-channel q/dq ops have no out
@@ -372,16 +377,18 @@ class QuantizationExportTest(unittest.TestCase):
         if quantizer == "qnn":
             if not _qnn_available():
                 self.skipTest("requires the Qualcomm QNN SDK")
-            if family == "moe":
-                # QNN's quantizer annotates the int64 routing `arange` for per-tensor quant, which its
-                # `quantize_per_tensor` meta kernel rejects (float-only; the 1.4.1 dtype guard covers
-                # constant tensors, not activations). Re-verified on ExecuTorch 1.4.1.
-                self.skipTest("QNN HTP quantizer can't annotate MoE integer routing tensors")
             if family == "ssm":
-                # 1.4.1 fixed `CanonicalizeConv` for Mamba's bias-less `conv1d`, but the graph now trips
-                # the next pass over: `LiftConstantScalarOperands` fails on the quantized SSM graph.
-                # Re-verified on ExecuTorch 1.4.1.
-                self.skipTest("QNN HTP `LiftConstantScalarOperands` pass fails on Mamba's quantized graph")
+                # Mamba does not lower to the HTP on ExecuTorch 1.4.1 + QNN SDK 2.37. Everything
+                # graph-side was cleared experimentally (weight-view observer chains folded back into
+                # the constant, `bitwise_not`/scalar-comparison builder gaps worked around, rank-6 scan
+                # intermediates kept off the delegate) — but each workaround needs *partial* delegation,
+                # and the HTP cannot host a partition boundary inside a quantized graph: a bare
+                # `Dequantize` at the cut is disabled in its op registry ("Selecting disabled op ...
+                # q::Dequantize" -> "Oops: Could not prepare op"), so every fallback set aborts
+                # graph-prepare. Needs upstream support for standalone (de)quantize ops on the HTP, or
+                # full-graph support for the scan (rank-6 tensors, int64 index grids, in-graph bool
+                # masks). See the PR thread for the verified per-issue breakdown.
+                self.skipTest("QNN cannot partially delegate quantized graphs (standalone q::Dequantize disabled)")
 
         et_backend = "qnn" if quantizer == "qnn" else "xnnpack"
         model, inputs = self._quantization_target(family)
