@@ -91,6 +91,7 @@ PRIVATE_MODELS = [
     "Qwen3VLMoeVisionModel",
     "Qwen3_5VisionModel",
     "Qwen3_5MoeVisionModel",
+    "Qwen4ExpVisionModel",  # Building part of Qwen4ExpModel and tested through its multimodal forward.
     "SwitchTransformersStack",
     "SiglipTextTransformer",
     "Siglip2TextTransformer",
