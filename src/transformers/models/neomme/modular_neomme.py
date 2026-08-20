@@ -37,7 +37,6 @@ from ...utils import (
     TensorType,
     TransformersKwargs,
     auto_docstring,
-    logging,
     torch_compilable_check,
 )
 from ...utils.constants import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
@@ -51,9 +50,6 @@ from ..lfm2_vl.image_processing_lfm2_vl import convert_image_to_patches
 from ..llama.modeling_llama import eager_attention_forward, repeat_kv
 from ..nemotron.modeling_nemotron import NemotronMLP
 from .configuration_neomme import NeoMMEConfig
-
-
-logger = logging.get_logger(__name__)
 
 
 def get_resize_output_size(height: int, width: int, max_side: int | None, size: SizeDict | None) -> tuple[int, int]:
@@ -74,18 +70,25 @@ def get_resize_output_size(height: int, width: int, max_side: int | None, size: 
         max_pixels is not None and resized_height * resized_width > max_pixels
     )
     if exceeds_cap:
-        return max(1, math.floor(height * scale)), max(1, math.floor(width * scale))
+        resized_height = max(1, math.floor(height * scale))
+        resized_width = max(1, math.floor(width * scale))
+        if max_pixels is not None and resized_height * resized_width > max_pixels:
+            if resized_height >= resized_width:
+                resized_height = max(1, max_pixels // resized_width)
+            else:
+                resized_width = max(1, max_pixels // resized_height)
+        return resized_height, resized_width
 
     if min_pixels is not None and height * width < min_pixels:
         if resized_height * resized_width >= min_pixels:
             return resized_height, resized_width
-        resized_height = max(1, math.ceil(height * scale))
-        resized_width = max(1, math.ceil(width * scale))
-        exceeds_cap = (max_side is not None and max(resized_height, resized_width) > max_side) or (
-            max_pixels is not None and resized_height * resized_width > max_pixels
+        ceiled_height = max(1, math.ceil(height * scale))
+        ceiled_width = max(1, math.ceil(width * scale))
+        exceeds_cap = (max_side is not None and max(ceiled_height, ceiled_width) > max_side) or (
+            max_pixels is not None and ceiled_height * ceiled_width > max_pixels
         )
         if not exceeds_cap:
-            return resized_height, resized_width
+            return ceiled_height, ceiled_width
 
     return resized_height, resized_width
 
@@ -581,15 +584,13 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
             Token embeddings before projection to `hidden_size`. Use `input_ids` for image inputs because the model
             needs the image placeholders to place `pixel_values`.
         """
-        if (input_ids is None) == (inputs_embeds is None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+        if input_ids is None:
+            raise ValueError("NeoMME requires `input_ids` because value embeddings are token-ID lookups.")
         if inputs_embeds is not None:
-            logger.warning_once("inputs_embeds cannot apply value embeddings without token IDs")
+            raise ValueError("You cannot specify both `input_ids` and `inputs_embeds`.")
 
-        hidden_states = self.embeddings(input_ids=input_ids, inputs_embeds=inputs_embeds)  # (batch, seq, hidden_size)
+        hidden_states = self.embeddings(input_ids=input_ids)  # (batch, seq, hidden_size)
         if pixel_values is not None:
-            if input_ids is None:
-                raise ValueError("`pixel_values` requires `input_ids` to locate image placeholder tokens.")
             image_outputs = self.get_image_features(pixel_values, return_dict=True)
             image_features = image_outputs.pooler_output
             image_mask = self.get_placeholder_mask(input_ids, image_features)
@@ -611,8 +612,7 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
             for layer_type in set(self.config.layer_types)
         }
 
-        # Value embeddings are token-ID lookups and cannot be recovered from `inputs_embeds`.
-        value_embeds = self.value_embeddings(input_ids) if input_ids is not None else None
+        value_embeds = self.value_embeddings(input_ids)
 
         for layer_idx, encoder_layer in enumerate(self.layers):
             hidden_states = encoder_layer(

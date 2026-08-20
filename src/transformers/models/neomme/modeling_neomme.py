@@ -33,14 +33,11 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, Mas
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, logging, torch_compilable_check
+from ...utils import TransformersKwargs, auto_docstring, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import can_return_tuple, maybe_autocast
 from ...utils.output_capturing import capture_outputs
 from .configuration_neomme import NeoMMEConfig
-
-
-logger = logging.get_logger(__name__)
 
 
 class NeoMMERMSNorm(nn.Module):
@@ -510,15 +507,13 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
             Token embeddings before projection to `hidden_size`. Use `input_ids` for image inputs because the model
             needs the image placeholders to place `pixel_values`.
         """
-        if (input_ids is None) == (inputs_embeds is None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+        if input_ids is None:
+            raise ValueError("NeoMME requires `input_ids` because value embeddings are token-ID lookups.")
         if inputs_embeds is not None:
-            logger.warning_once("inputs_embeds cannot apply value embeddings without token IDs")
+            raise ValueError("You cannot specify both `input_ids` and `inputs_embeds`.")
 
-        hidden_states = self.embeddings(input_ids=input_ids, inputs_embeds=inputs_embeds)  # (batch, seq, hidden_size)
+        hidden_states = self.embeddings(input_ids=input_ids)  # (batch, seq, hidden_size)
         if pixel_values is not None:
-            if input_ids is None:
-                raise ValueError("`pixel_values` requires `input_ids` to locate image placeholder tokens.")
             image_outputs = self.get_image_features(pixel_values, return_dict=True)
             image_features = image_outputs.pooler_output
             image_mask = self.get_placeholder_mask(input_ids, image_features)
@@ -540,8 +535,7 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
             for layer_type in set(self.config.layer_types)
         }
 
-        # Value embeddings are token-ID lookups and cannot be recovered from `inputs_embeds`.
-        value_embeds = self.value_embeddings(input_ids) if input_ids is not None else None
+        value_embeds = self.value_embeddings(input_ids)
 
         for layer_idx, encoder_layer in enumerate(self.layers):
             hidden_states = encoder_layer(

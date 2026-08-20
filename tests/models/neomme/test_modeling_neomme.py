@@ -247,19 +247,25 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
     def test_for_masked_lm(self):
         self.model_tester.create_and_check_for_masked_lm(*self.model_tester.prepare_config_and_inputs())
 
-    @unittest.skip(reason="value embeddings require token ids and are omitted by inputs_embeds-only forwards")
+    @unittest.skip(reason="NeoMME value embeddings require token IDs")
+    def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip(reason="NeoMME value embeddings require token IDs")
     def test_inputs_embeds_matches_input_ids(self):
         pass
 
-    def test_requires_exactly_one_model_input(self):
+    def test_requires_input_ids(self):
         config, input_ids, _, _ = self.model_tester.prepare_config_and_inputs()
         model = NeoMMEModel(config).to(torch_device).eval()
         inputs_embeds = model.get_input_embeddings()(input_ids)
 
-        with self.assertRaisesRegex(ValueError, "exactly one"):
+        with self.assertRaisesRegex(ValueError, "requires `input_ids`"):
             model()
-        with self.assertRaisesRegex(ValueError, "exactly one"):
+        with self.assertRaisesRegex(ValueError, "cannot specify both"):
             model(input_ids=input_ids, inputs_embeds=inputs_embeds)
+        with self.assertRaisesRegex(ValueError, "requires `input_ids`"):
+            model(inputs_embeds=inputs_embeds)
 
     @unittest.skip(reason="the generic check compares an unused layer spectrum that differs by one floating-point ULP")
     def test_model_rope_scaling_frequencies(self):
@@ -611,6 +617,10 @@ class NeoMMEForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = NeoMMEModelTester(self, is_training=False)
         _patch_residual_init(self)
+
+    @unittest.skip(reason="NeoMME value embeddings require token IDs")
+    def test_inputs_embeds(self):
+        pass
 
     @unittest.skip(reason="the generic test cannot read a heterogeneous global window; covered on NeoMMEModel")
     def test_sliding_window_mask(self):

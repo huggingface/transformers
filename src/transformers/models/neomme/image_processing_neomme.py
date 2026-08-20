@@ -83,18 +83,25 @@ def get_resize_output_size(height: int, width: int, max_side: int | None, size: 
         max_pixels is not None and resized_height * resized_width > max_pixels
     )
     if exceeds_cap:
-        return max(1, math.floor(height * scale)), max(1, math.floor(width * scale))
+        resized_height = max(1, math.floor(height * scale))
+        resized_width = max(1, math.floor(width * scale))
+        if max_pixels is not None and resized_height * resized_width > max_pixels:
+            if resized_height >= resized_width:
+                resized_height = max(1, max_pixels // resized_width)
+            else:
+                resized_width = max(1, max_pixels // resized_height)
+        return resized_height, resized_width
 
     if min_pixels is not None and height * width < min_pixels:
         if resized_height * resized_width >= min_pixels:
             return resized_height, resized_width
-        resized_height = max(1, math.ceil(height * scale))
-        resized_width = max(1, math.ceil(width * scale))
-        exceeds_cap = (max_side is not None and max(resized_height, resized_width) > max_side) or (
-            max_pixels is not None and resized_height * resized_width > max_pixels
+        ceiled_height = max(1, math.ceil(height * scale))
+        ceiled_width = max(1, math.ceil(width * scale))
+        exceeds_cap = (max_side is not None and max(ceiled_height, ceiled_width) > max_side) or (
+            max_pixels is not None and ceiled_height * ceiled_width > max_pixels
         )
         if not exceeds_cap:
-            return resized_height, resized_width
+            return ceiled_height, ceiled_width
 
     return resized_height, resized_width
 
