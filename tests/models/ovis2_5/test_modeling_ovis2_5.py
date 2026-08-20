@@ -69,7 +69,7 @@ class Ovis2_5VisionModelTester:
             num_channels=self.num_channels,
             image_size=self.image_size,
             patch_size=self.patch_size,
-            hidden_stride=2,
+            spatial_merge_size=2,
             window_size=self.image_size,
             attention_dropout=0.0,
             vocab_size=12,
@@ -167,7 +167,7 @@ class Ovis2_5VisionText2TextModelTester(VLMModelTester):
             num_channels=self.num_channels,
             image_size=self.image_size,
             patch_size=self.patch_size,
-            hidden_stride=2,
+            spatial_merge_size=2,
             window_size=self.image_size,
             attention_dropout=self.attention_dropout,
             vocab_size=self.visual_vocab_size,
@@ -595,6 +595,9 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         self.assertNotIn("vit_config", serialized_config)
         self.assertNotIn("visual_vocab_size", serialized_config)
         self.assertNotIn("visual_atom_token_id", serialized_config)
+        self.assertNotIn("hidden_stride", serialized_config["vision_config"])
+        self.assertNotIn("num_patches", serialized_config["vision_config"])
+        self.assertEqual(serialized_config["vision_config"]["spatial_merge_size"], 2)
         self.assertEqual(config.vision_config.vocab_size, self.model_tester.visual_vocab_size)
         self.assertEqual(config.image_token_id, config.video_token_id)
 
@@ -639,6 +642,8 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         text_config = self.model_tester.get_text_config().to_dict()
         text_config["hidden_size"] = 2048
         vision_config = self.model_tester.get_vision_config().to_dict()
+        vision_config.pop("spatial_merge_size")
+        vision_config["hidden_stride"] = 2
         vision_config.pop("layer_types")
         vision_config["num_hidden_layers"] = 3
         vision_config["fullatt_block_indexes"] = [1]
@@ -664,6 +669,8 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         self.assertFalse(hasattr(config.vision_config, "num_patches"))
         self.assertFalse(hasattr(config.vision_config, "preserve_original_pe"))
         self.assertFalse(hasattr(config.vision_config, "use_rope"))
+        self.assertFalse(hasattr(config.vision_config, "hidden_stride"))
+        self.assertEqual(config.vision_config.spatial_merge_size, 2)
         serialized_config = config.to_dict()
         self.assertNotIn("llm_config", serialized_config)
         self.assertNotIn("vit_config", serialized_config)
@@ -920,10 +927,10 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
                 positions = positions.permute(0, 2, 3, 1).reshape(grid_h * grid_w, -1).repeat(grid_t, 1)
                 positions = positions.reshape(
                     grid_t,
-                    grid_h // config.hidden_stride,
-                    config.hidden_stride,
-                    grid_w // config.hidden_stride,
-                    config.hidden_stride,
+                    grid_h // config.spatial_merge_size,
+                    config.spatial_merge_size,
+                    grid_w // config.spatial_merge_size,
+                    config.spatial_merge_size,
                     config.hidden_size,
                 )
                 expected_positions.append(positions.permute(0, 1, 3, 2, 4, 5).reshape(-1, config.hidden_size))

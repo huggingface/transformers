@@ -323,8 +323,6 @@ class Ovis2_5VideoProcessor(Glm4vVideoProcessor):
 @strict
 class Ovis2_5VisionConfig(Cosmos3EdgeVisionConfig):
     r"""
-    hidden_stride (`int`, *optional*, defaults to 2):
-        Spatial grouping factor applied before the visual-tokenizer head.
     window_size (`int`, *optional*, defaults to 112):
         Window size, in input pixels, used by windowed vision-attention layers.
     layer_types (`list[str]`, *optional*):
@@ -351,7 +349,6 @@ class Ovis2_5VisionConfig(Cosmos3EdgeVisionConfig):
     hidden_act: str = "gelu_pytorch_tanh"
     layer_norm_eps: float = 1e-6
     attention_dropout: float | int = 0.0
-    hidden_stride: int = 2
     window_size: int = 112
     layer_types: list[str] | tuple[str, ...] | None = None
     temporal_patch_size: int = 1
@@ -362,6 +359,9 @@ class Ovis2_5VisionConfig(Cosmos3EdgeVisionConfig):
 
     # Ignore copy
     def __post_init__(self, **kwargs):
+        legacy_hidden_stride = kwargs.pop("hidden_stride", None)
+        if legacy_hidden_stride is not None and self.spatial_merge_size == 2:
+            self.spatial_merge_size = legacy_hidden_stride
         full_attention_indexes = kwargs.pop("fullatt_block_indexes", None)
         if self.layer_types is None:
             if full_attention_indexes is None:
