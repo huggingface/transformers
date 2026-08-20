@@ -638,7 +638,7 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
             [self.index_n_heads * self.index_head_dim, self.index_kv_heads * self.index_head_dim],
             dim=-1,
         )
-        q, token_k = q.reshape(*hidden_shape), token_k.reshape(*hidden_shape)
+        q, token_k = q.reshape(*hidden_shape), token_k.reshape(*hidden_shape).squeeze(2)
         q = self.q_layernorm(q)
         q = apply_rotary_pos_emb(q, cos, sin, unsqueeze_dim=2)
 
@@ -659,10 +659,12 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
             dtype=torch.int32,
             device=hidden_states.device,
         )
-        num_complete_blocks = visible_token_indices.shape[-1] // self.compress_ratio
         for batch_idx in range(batch_size):
             for query_idx in range(sequence_length):
-                local_visible_indices = visible_token_indices[batch_idx, 0, query_idx]
+                local_visible_indices = torch.nonzero(
+                    visible_token_indices[batch_idx, 0, query_idx], as_tuple=False
+                ).flatten()
+                num_complete_blocks = local_visible_indices.shape[-1] // self.compress_ratio
                 # Compute selected tokens
                 if num_complete_blocks > 0:
                     block_token_indices = local_visible_indices[: num_complete_blocks * self.compress_ratio].view(
