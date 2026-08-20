@@ -1250,6 +1250,7 @@ class Qwen4ExpVisionRotaryEmbedding(nn.Module):
         return (position_ids.unsqueeze(-1) * self.inv_freq).flatten(1)
 
 
+@auto_docstring
 class Qwen4ExpPreTrainedModel(PreTrainedModel):
     config: Qwen4ExpConfig
     base_model_prefix = "model"
@@ -1311,6 +1312,7 @@ class Qwen4ExpModelOutputWithPast(BaseModelOutputWithPast):
     router_logits: tuple[torch.FloatTensor] | None = None
 
 
+@auto_docstring
 class Qwen4ExpTextModel(Qwen4ExpPreTrainedModel):
     config: Qwen4ExpTextConfig
     _no_split_modules = ["Qwen4ExpTextDecoderLayer"]
@@ -1832,6 +1834,7 @@ class Qwen4ExpVisionBlock(GradientCheckpointingLayer):
         return hidden_states
 
 
+@auto_docstring
 class Qwen4ExpVisionModel(Qwen4ExpPreTrainedModel):
     config: Qwen4ExpVisionConfig
     input_modalities = ("image", "video")
@@ -2322,6 +2325,7 @@ class Qwen4ExpCausalLMOutputWithPast(CausalLMOutputWithPast):
     aux_loss: torch.FloatTensor | None = None
 
 
+@auto_docstring
 class Qwen4ExpForConditionalGeneration(Qwen4ExpPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     # Reference: fix gemma3 grad acc #37208

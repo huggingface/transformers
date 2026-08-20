@@ -828,6 +828,7 @@ class Qwen4ExpTextDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+@auto_docstring
 class Qwen4ExpPreTrainedModel(Qwen3_5MoePreTrainedModel):
     config: Qwen4ExpConfig
     _no_split_modules = None  # will be set on text and vision separately
@@ -874,6 +875,7 @@ class Qwen4ExpModelOutputWithPast(Qwen3_5MoeModelOutputWithPast):
     pass
 
 
+@auto_docstring
 class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
     config: Qwen4ExpTextConfig
     _no_split_modules = ["Qwen4ExpTextDecoderLayer"]
@@ -1035,6 +1037,7 @@ class Qwen4ExpForCausalLM(Qwen3_5MoeForCausalLM):
         return causal_mask_mapping
 
 
+@auto_docstring
 class Qwen4ExpVisionModel(Qwen3_5MoeVisionModel):
     _no_split_modules = ["Qwen4ExpVisionBlock"]
     config: Qwen4ExpVisionConfig
@@ -1117,6 +1120,7 @@ class Qwen4ExpModel(Qwen3_5MoeModel):
         )
 
 
+@auto_docstring
 class Qwen4ExpForConditionalGeneration(Qwen3_5MoeForConditionalGeneration):
     @staticmethod
     def create_masks_for_generate(
