@@ -459,8 +459,8 @@ def scatter_atom_to_token(
 class EsmFold2AtomEncoder(nn.Module):
     """SWA atom encoder: embeds per-atom features, runs the atom layers and pools atoms into tokens.
 
-    We need to pass atom_config separately because different configs are used in different
-    instantiations of this class.
+    Dims come from ``atom_config``, the atom sub-config resolved for this call site (the trunk's input
+    featurizer or the diffusion module).
     """
 
     def __init__(self, config: EsmFold2Config, atom_config: EsmFold2AtomEncoderConfig) -> None:
@@ -1853,7 +1853,18 @@ class EsmFold2PreTrainedModel(PreTrainedModel):
         "EsmFold2DiffusionTransformer",
     ]
     supports_gradient_checkpointing = True
-    _keep_in_fp32_modules_strict = ["fourier", "norm", "boundaries"]
+    # The patterns regex-search the full parameter key, so a bare "norm" would also pin the adaLN-Zero
+    # Linears (`input_layernorm.gate_proj`, ...) and crash bf16 runs on an fp32-weight matmul: pin the
+    # norm parameters and the prefix-named norms (tri-mul, MSA averaging) explicitly instead.
+    _keep_in_fp32_modules_strict = [
+        "fourier",
+        "norm.weight",
+        "norm.bias",
+        "norm_mix",
+        "norm_start",
+        "norm_single",
+        "boundaries",
+    ]
     _supports_sdpa = True
 
     def _init_weights(self, module):

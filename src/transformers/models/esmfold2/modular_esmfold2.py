@@ -1785,7 +1785,15 @@ class EsmFold2PreTrainedModel(PreTrainedModel):
         "EsmFold2DiffusionTransformer",
     ]
     supports_gradient_checkpointing = True
-    _keep_in_fp32_modules_strict = ["fourier", "norm", "boundaries"]
+    _keep_in_fp32_modules_strict = [
+        "fourier",
+        "norm.weight",
+        "norm.bias",
+        "norm_mix",
+        "norm_start",
+        "norm_single",
+        "boundaries",
+    ]
     _supports_sdpa = True
 
     def _init_weights(self, module):

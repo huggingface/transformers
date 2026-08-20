@@ -195,6 +195,24 @@ class EsmFold2ModelTest(unittest.TestCase):
         self.assertTrue(all(m.config is model.config for m in swa_modules))
         self.assertTrue(all(m.config._attn_implementation == "eager" for m in swa_modules))
 
+    def test_bf16_load_pins_norms_but_not_adaln_linears(self):
+        """The fp32-strict patterns regex-search full keys, so an over-broad pattern pins the adaLN
+        Linears (``input_layernorm.gate_proj``, ...) and the first diffusion layer crashes on an
+        fp32-weight x bf16-activation matmul. Guard the pin boundary and the end-to-end bf16 fold.
+        """
+        model = self._build()
+        with tempfile.TemporaryDirectory() as tmp:
+            model.save_pretrained(tmp)
+            reloaded = EsmFold2Model.from_pretrained(tmp, dtype=torch.bfloat16).eval()
+        adaln = reloaded.structure_head.token_transformer.layers[0].input_layernorm
+        self.assertEqual(adaln.gate_proj.weight.dtype, torch.bfloat16)  # a Linear, despite its parent's name
+        self.assertEqual(adaln.cond_norm.weight.dtype, torch.float32)
+        tri_mul = reloaded.msa_encoder.layers[0].tri_mul_in
+        self.assertEqual(tri_mul.norm_start.weight.dtype, torch.float32)  # prefix-named norm stays pinned
+        with torch.no_grad():
+            out = reloaded.infer_protein(self.seq, num_loops=1, num_diffusion_samples=1, num_sampling_steps=2)
+        self.assertTrue(torch.isfinite(out["sample_atom_coords"].float()).all())
+
     @staticmethod
     def _pad_features(features, num_tokens, num_atoms):
         """Right-pad a single-sequence feature dict out to ``(num_tokens, num_atoms)``.
