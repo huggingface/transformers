@@ -153,14 +153,6 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_processor_with_multiple_inputs(self):
         pass
 
-    @unittest.skip(reason="every text gets a marker prefix, so processor output never equals raw tokenizer output")
-    def test_tokenizer_defaults(self):
-        pass
-
-    @unittest.skip(reason="every text gets a marker prefix, so processor output never equals raw tokenizer output")
-    def test_tokenizer_decode_defaults(self):
-        pass
-
     @unittest.skip(reason="NeoMME chat templates must declare the retrieval task")
     def test_apply_chat_template_assistant_mask(self):
         pass

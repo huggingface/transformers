@@ -28,8 +28,13 @@ from ...utils.import_utils import requires
 
 
 class NeoMMEProcessorKwargs(ProcessingKwargs, total=False):
-    # `_merge_kwargs` reads this attribute directly, but TypedDict subclasses do not inherit it.
-    _defaults = {}
+    _defaults = {
+        "text_kwargs": {
+            "add_special_tokens": False,
+            "padding": "longest",
+        },
+        "common_kwargs": {"return_tensors": "pt"},
+    }
 
 
 @requires(backends=("torch",))
@@ -180,7 +185,7 @@ class NeoMMEProcessor(ProcessorMixin):
 
         if task is None:
             if text is not None:
-                return self._tokenize_plain_text(text, **kwargs)
+                return super().__call__(text=text, **kwargs)
             return self._process_generic_images(images, **kwargs)
 
         if images is not None:
@@ -204,19 +209,6 @@ class NeoMMEProcessor(ProcessorMixin):
             return_dict=True,
             processor_kwargs=kwargs,
         )
-
-    def _tokenize_plain_text(self, text: TextInput | list[TextInput], **kwargs) -> BatchFeature:
-        """Tokenize generic NeoMME text without retrieval markers."""
-        _, text, _, _ = self.prepare_inputs_layout(images=None, text=text, **kwargs)
-        self.validate_inputs(images=None, text=text, **kwargs)
-        output_kwargs = self._merge_kwargs(
-            NeoMMEProcessorKwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs
-        )
-        text_kwargs = output_kwargs["text_kwargs"]
-        text_kwargs.setdefault("add_special_tokens", False)
-        text_kwargs.setdefault("padding", "longest")
-        text_kwargs.setdefault("return_tensors", "pt")
-        return BatchFeature(data=dict(self.tokenizer(text, **text_kwargs)))
 
     def _process_generic_images(self, images: ImageInput, **kwargs) -> BatchFeature:
         """Build NeoMME's architecture-level image layout without applying the retrieval template."""
@@ -299,9 +291,7 @@ class NeoMMEProcessor(ProcessorMixin):
             max_length=max_length,
             return_tensors=return_tensors,
         )
-        for name, value in image_inputs.items():
-            if name not in self.unused_input_names:
-                batch[name] = value
+        batch.update(image_inputs)
         return batch
 
     def _finalize_text_sequence(
@@ -418,7 +408,7 @@ class NeoMMEProcessor(ProcessorMixin):
     def _padded_length(self, lengths: list[int], padding: bool | str, max_length: int | None) -> int:
         """The width every row is padded to, following the tokenizer's `padding` vocabulary."""
         longest = max(lengths)
-        if padding in ("max_length",):
+        if padding == "max_length":
             if max_length is None:
                 raise ValueError("padding='max_length' needs a `max_length`.")
             if max_length < longest:
