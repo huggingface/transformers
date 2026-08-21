@@ -79,5 +79,14 @@ class GlmConfig(PreTrainedConfig):
             self.eos_token_id = [151329, 151336, 151338]
         super().__post_init__(**kwargs)
 
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        super().validate_architecture()
+        if self.num_attention_heads % self.num_key_value_heads != 0:
+            raise ValueError(
+                f"`num_attention_heads` ({self.num_attention_heads}) must be a multiple of "
+                f"`num_key_value_heads` ({self.num_key_value_heads})."
+            )
+
 
 __all__ = ["GlmConfig"]
