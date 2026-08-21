@@ -22,7 +22,7 @@ import time
 import numpy as np
 
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring, logging, to_numpy
 
 
 logger = logging.get_logger(__name__)
@@ -76,7 +76,7 @@ class Kimi_K25Processor(ProcessorMixin):
         temporal_patch_size = self.video_processor.temporal_patch_size
 
         num_chunks = video_inputs["num_chunks_per_video"][video_idx]
-        start = 0 if video_idx == 0 else np.cumsum(video_inputs["num_chunks_per_video"])[video_idx - 1]
+        start = 0 if video_idx == 0 else np.cumsum(to_numpy(video_inputs["num_chunks_per_video"]))[video_idx - 1]
         video_grid_thw = video_inputs["video_grid_thw"][start : start + num_chunks]
         video_structure = ""
 

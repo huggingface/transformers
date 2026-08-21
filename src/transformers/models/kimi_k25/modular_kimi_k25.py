@@ -31,6 +31,7 @@ from ...utils import (
     auto_docstring,
     can_return_tuple,
     logging,
+    to_numpy,
     torch_compilable_check,
 )
 from ...utils.generic import get_max_seqlen, is_flash_attention_requested, maybe_autocast
@@ -779,7 +780,7 @@ class Kimi_K25Processor(Qwen2VLProcessor):
         temporal_patch_size = self.video_processor.temporal_patch_size
 
         num_chunks = video_inputs["num_chunks_per_video"][video_idx]
-        start = 0 if video_idx == 0 else np.cumsum(video_inputs["num_chunks_per_video"])[video_idx - 1]
+        start = 0 if video_idx == 0 else np.cumsum(to_numpy(video_inputs["num_chunks_per_video"]))[video_idx - 1]
         video_grid_thw = video_inputs["video_grid_thw"][start : start + num_chunks]
         video_structure = ""
 

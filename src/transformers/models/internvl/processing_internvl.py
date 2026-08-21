@@ -20,7 +20,7 @@ from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, concatenate_list
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import auto_docstring
+from ...utils import auto_docstring, to_numpy
 from ...video_utils import VideoInput
 
 
@@ -107,7 +107,7 @@ class InternVLProcessor(ProcessorMixin):
 
         # Merge image and video pixel into a single array, as model expects only `pixel_values` as arg
         if images is not None:
-            image_num_patches_indices = np.cumsum(model_inputs.pop("num_patches"))
+            image_num_patches_indices = np.cumsum(to_numpy(model_inputs.pop("num_patches")))
         if videos is not None:
             video_pixel_values = model_inputs.pop("pixel_values_videos")
             batch_size, num_frames, *_ = video_pixel_values.shape

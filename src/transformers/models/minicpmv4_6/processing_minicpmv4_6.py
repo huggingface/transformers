@@ -17,7 +17,7 @@ import numpy as np
 from ...image_utils import ImageInput, make_flat_list_of_images
 from ...processing_utils import BatchFeature, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring, logging, to_numpy
 from ...video_utils import VideoInput, make_batched_videos
 
 
@@ -148,7 +148,7 @@ class MiniCPMV4_6Processor(ProcessorMixin):
         num_patches_per_image = image_inputs["num_patches_per_image"]
         target_sizes = image_inputs["target_sizes"]
 
-        cum_patches = np.cumsum(num_patches_per_image)
+        cum_patches = np.cumsum(to_numpy(num_patches_per_image))
         start_idx = cum_patches[image_idx - 1] if image_idx > 0 else 0
         end_idx = cum_patches[image_idx]
         img_target_sizes = target_sizes[start_idx:end_idx]
@@ -189,8 +189,8 @@ class MiniCPMV4_6Processor(ProcessorMixin):
         num_patches_per_frame = video_grids.prod(-1) + 1
 
         num_frames = num_frames_per_video[video_idx]
-        cum_patches_per_frame = np.cumsum(num_patches_per_frame)
-        num_past_frames = np.cumsum(num_frames_per_video)[video_idx] - num_frames
+        cum_patches_per_frame = np.cumsum(to_numpy(num_patches_per_frame))
+        num_past_frames = np.cumsum(to_numpy(num_frames_per_video))[video_idx] - num_frames
 
         video_placeholder = ""
         for frame_idx in range(num_frames):
