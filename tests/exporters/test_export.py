@@ -946,19 +946,21 @@ class ExportTesterMixin:
             # which the runtime's query=1 steps violate. Single-token decode over a growing sliding cache
             # works (within the window), and static sliding caches work in every mode.
             return
+
         if (
             backend == "executorch"
-            and getattr(config, "sliding_window", None) is not None
             and dynamic
-            and (not multi_token_decode or _needs_static_cache(generation_config))
+            and not multi_token_decode
+            and not _needs_static_cache(generation_config)
+            and getattr(config, "sliding_window", None) is not None
         ):
-            # The `.pte` method rejects these feeds at `set_inputs` (0x10 "can't resize static tensor" /
-            # 0x12). Root cause is broader than sliding: ET's cache dynamism is bounded AT the traced
-            # shapes — any model's growing-cache decode rejects (or segfaults on) cache lengths past the
-            # traced one, and the passing ET growing-cache variants only fit because 2-token generation
-            # never exceeds them; sliding caches additionally trip it within the window in these variants.
-            # Deployment guidance for ET is a static cache. TODO: real upper-bound dynamism in the ET
-            # lowering, then ungate.
+            # A sliding model's *growing* cache, driven one token at a time, outgrows what the XNNPACK
+            # lowering will resize: the decode `.pte` refuses the feed at `set_inputs` with 0x10 ("can't
+            # resize a static tensor"). Measured scope — the same three models pass every other variant,
+            # so this is not the blanket "ET cache dynamism is bounded at the traced shapes" it was once
+            # gated as: a static cache is fine (fixed shapes), and so is the merged multi-token decode,
+            # whose query axis is dynamic by construction. Deployment guidance for ET remains a static
+            # cache. TODO: real upper-bound dynamism in the ET lowering, then ungate.
             return
 
         if not dynamic and "embed_tokens" in components:
