@@ -553,7 +553,10 @@ def ensure_requirements(names):
     except (OSError, ValueError, KeyError):
         pass  # no stamp, unreadable, or from another environment -- install and write a fresh one
 
-    print(f"Installing {REQUIREMENTS_PATH.relative_to(REPO_ROOT)} (once per environment)")
+    # Displayed as `utils/<name>`, built from the path itself: REPO_ROOT is patched in tests, and
+    # `relative_to` on a path that is not under it raises.
+    display = f"{REQUIREMENTS_PATH.parent.name}/{REQUIREMENTS_PATH.name}"
+    print(f"Installing {display} (once per environment)")
     result = subprocess.run(
         [sys.executable, "-m", "pip", "install", "-q", "-r", str(REQUIREMENTS_PATH)],
         capture_output=True,
