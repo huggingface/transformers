@@ -307,14 +307,14 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
     },
 }
 
-# torch >= 2.13.0 introduced two regressions in dynamo ONNX export that affect models using
+# torch == 2.13.x introduced two regressions in dynamo ONNX export that affect models using
 # ``scalar - int_tensor`` or ``tensor * float_scalar`` patterns. All affected model classes are
-# skipped until the upstream fix lands.
+# skipped for that release only; the guard auto-lifts on torch 2.14+.
 #   pytorch/pytorch#194381 — aten.sub type-promotion failure (step 2/3)
 #   pytorch/pytorch#194382 — aten.mul.Scalar missing ONNX decomposition (step 3/3)
 if is_torch_greater_or_equal("2.13") and not is_torch_greater_or_equal("2.14"):
-    _r194381 = "torch >= 2.13 aten.sub type-promotion regression (pytorch/pytorch#194381)"
-    _r194382 = "torch >= 2.13 aten.mul.Scalar missing ONNX decomposition (pytorch/pytorch#194382)"
+    _r194381 = "torch == 2.13 aten.sub type-promotion regression (pytorch/pytorch#194381)"
+    _r194382 = "torch == 2.13 aten.mul.Scalar missing ONNX decomposition (pytorch/pytorch#194382)"
     EXPORT_SKIPS.setdefault("onnx", {}).update(
         {
             "BigBirdModel": _r194381,
