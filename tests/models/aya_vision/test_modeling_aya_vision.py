@@ -347,7 +347,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
                 ("xpu", 3): 'The image depicts a cozy scene of two cats resting on a bright pink blanket. The cats,',
                 # 4-bit
                 ("cuda", 7): 'The image depicts two cats comfortably resting on a pink blanket spread across a sofa. The cats,',
-                ("cuda", 8): 'The image depicts a cozy scene of two cats resting on a bright pink blanket. The cats,',
+                ("cuda", 8): 'The image depicts a cozy scene of two cats resting on a bright pink blanket spread across a red',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
