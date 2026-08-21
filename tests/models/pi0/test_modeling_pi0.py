@@ -24,6 +24,7 @@ from transformers.image_utils import load_image
 from transformers.testing_utils import (
     require_torch,
     require_torch_large_gpu,
+    require_torch_non_multi_accelerator,
     slow,
     torch_device,
 )
@@ -414,6 +415,7 @@ class PI0ModelIntegrationTest(unittest.TestCase):
         )
 
     @require_torch_large_gpu
+    @require_torch_non_multi_accelerator
     def test_train_pi0_base_libero(self):
         model = PI0ForConditionalGeneration.from_pretrained("lerobot/pi0_base", torch_dtype=torch.bfloat16).eval()
         processor = PI0Processor.from_pretrained("google/paligemma-3b-pt-224")
@@ -461,13 +463,6 @@ class PI0ModelIntegrationTest(unittest.TestCase):
                 callbacks=[loss_callback],
                 processing_class=processor,
             )
-            # Force single-GPU training to avoid nn.DataParallel on multi-GPU runners.
-            # DataParallel scatters float32 dataset inputs to replicas but the model weights
-            # are bfloat16, causing a dtype mismatch. This test is not intended to test
-            # multi-GPU training, so single-device is correct. Trainer only skips DataParallel
-            # automatically when the device_map spans multiple GPUs (model parallelism), not
-            # when the whole model sits on one GPU, hence we override _n_gpu directly.
-            trainer.args._n_gpu = 1
             trainer.train()
 
         # Loss should decrease for most steps. With a small batch size (2) and bf16 precision,
