@@ -1511,8 +1511,10 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         audio_outputs = self.audio_tower(
             input_features, feature_lens=feature_lens, aftercnn_lens=audio_feat_lengths, **kwargs
         )
-        if audio_outputs.last_hidden_state.shape[0] != sum(audio_output_lengths.tolist()):
-            raise ValueError("length of audio_features should match audio_output_lengths")
+        torch_compilable_check(
+            audio_outputs.last_hidden_state.shape[0] == audio_output_lengths.sum(),
+            "length of audio_features should match audio_output_lengths",
+        )
 
         return audio_outputs
 

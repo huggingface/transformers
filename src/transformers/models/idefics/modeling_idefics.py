@@ -576,15 +576,20 @@ class IdeficsAttention(nn.Module):
         if not is_cross_attention:
             key_states = self.k_proj(hidden_states).view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
             value_states = self.v_proj(hidden_states).view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        else:
+        elif key_value_states is not None:
             _, kv_len, _ = key_value_states.size()  # Note that, in this case, `kv_len` == `kv_seq_len`
             key_states = self.k_proj(key_value_states).view(bsz, kv_len, self.num_heads, self.head_dim).transpose(1, 2)
             value_states = (
                 self.v_proj(key_value_states).view(bsz, kv_len, self.num_heads, self.head_dim).transpose(1, 2)
             )
+        else:
+            # cached cross-attention: the image K/V were computed on the first step and stored in this
+            # layer's slot, so a later step carries no image features at all
+            key_states = past_key_values.layers[self.layer_idx].keys
+            value_states = past_key_values.layers[self.layer_idx].values
 
         kv_seq_len = key_states.shape[-2]
-        if past_key_values is not None:
+        if past_key_values is not None and not is_cross_attention:
             kv_seq_len += past_key_values.get_seq_length()
 
         if not is_cross_attention:
@@ -593,7 +598,20 @@ class IdeficsAttention(nn.Module):
         # [bsz, nh, t, hd]
 
         if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+            if not is_cross_attention:
+                key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+            elif key_value_states is not None:
+                # Cache the image K/V the first time only — appending on a warm slot would duplicate the
+                # image tokens for a caller that re-feeds features every step (the pre-cache stepping
+                # pattern); such a caller just keeps using its fresh projections.
+                cached_keys = (
+                    past_key_values.layers[self.layer_idx].keys
+                    if self.layer_idx < len(past_key_values.layers)
+                    else None
+                )
+                filled = cached_keys is not None and cached_keys.dim() >= 3 and cached_keys.shape[-2] > 0
+                if not filled:
+                    key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         if self.qk_layer_norms:
             query_states = self.q_layer_norm(query_states)
@@ -762,7 +780,7 @@ class IdeficsGatedCrossAttentionLayer(GradientCheckpointingLayer):
         cross_attention_gate (`torch.FloatTensor`, *optional*):
             gate of size `(batch, seq_len)` used to zero-out cross-attention output for tokens attending no images.
         """
-        if image_hidden_states is None:
+        if image_hidden_states is None and past_key_values is None:
             raise ValueError(
                 "`image_hidden_states` is required for Idefics cross attention module which are visual features to be"
                 " conditioned on."
@@ -773,18 +791,17 @@ class IdeficsGatedCrossAttentionLayer(GradientCheckpointingLayer):
                 "`cross_attention_gate` is required for Idefics cross attention module to zero-out the cross-attention hidden_states attending to no images."
             )
 
-        if past_key_values is not None:
-            raise NotImplementedError("Past key value states are not implemented for Idefics cross attention module.")
-
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
 
-        # Self Attention
+        # Cross attention — on the image K/V, either fresh from `image_hidden_states` (cached for the
+        # steps after) or read back from this layer's cache slot (`image_hidden_states` absent).
         hidden_states, _ = self.cross_attn(
             hidden_states=hidden_states,
             key_value_states=image_hidden_states,
             attention_mask=image_attention_mask,
+            past_key_values=past_key_values,
             **kwargs,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.config, training=self.training)
@@ -899,8 +916,13 @@ class IdeficsModel(IdeficsPreTrainedModel):
 
         self.cross_layer_interval = config.cross_layer_interval
         num_cross_layers = config.num_hidden_layers // self.cross_layer_interval
+        # Cache slots for the gated layers' image K/V come after the decoder layers' (see
+        # `IdeficsConfig.layer_types`), so their `layer_idx` starts past them.
         self.gated_cross_attn_layers = nn.ModuleList(
-            [IdeficsGatedCrossAttentionLayer(config, layer_idx=i) for i in range(num_cross_layers)]
+            [
+                IdeficsGatedCrossAttentionLayer(config, layer_idx=config.num_hidden_layers + i)
+                for i in range(num_cross_layers)
+            ]
         )
         self.gradient_checkpointing = False
 
@@ -978,7 +1000,24 @@ class IdeficsModel(IdeficsPreTrainedModel):
             position_ids = torch.arange(seq_length, device=inputs_embeds.device) + past_key_values_length
             position_ids = position_ids.unsqueeze(0)
 
-        if sum(x is None for x in [pixel_values, image_encoder_embeddings, perceiver_embeddings]) != 2:
+        # Once the gated layers' image K/V are cached (any step after the first), no image input is
+        # expected — the mask geometry below is read off the cached keys instead.
+        cached_cross_keys = (
+            past_key_values.layers[len(self.layers)].keys
+            if past_key_values is not None and len(past_key_values.layers) > len(self.layers)
+            else None
+        )
+        cross_kv_cached = (
+            cached_cross_keys is not None and cached_cross_keys.dim() >= 3 and cached_cross_keys.shape[-2] > 0
+        )
+        no_image_inputs = pixel_values is None and image_encoder_embeddings is None and perceiver_embeddings is None
+        if no_image_inputs and cross_kv_cached:
+            image_hidden_states = None
+            batch_size = inputs_embeds.shape[0]
+            num_images = image_attention_mask.shape[-1]
+            image_seq_len = cached_cross_keys.shape[-2] // num_images
+
+        elif sum(x is None for x in [pixel_values, image_encoder_embeddings, perceiver_embeddings]) != 2:
             raise ValueError(
                 "Exactly 1 of pixel_values, image_encoder_embeddings or perceiver_embeddings has to be not-None."
             )
@@ -998,19 +1037,20 @@ class IdeficsModel(IdeficsPreTrainedModel):
             image_hidden_states = image_encoder_embeddings.to(dtype=self.dtype, device=device)
             image_hidden_states = image_hidden_states.view(batch_size * num_images, image_seq_len, image_hidden_size)
 
-        if self.config.use_resampler:
-            if perceiver_embeddings is None:
-                perceiver_embeddings = self.perceiver_resampler(image_hidden_states)
-                image_seq_len, image_hidden_size = perceiver_embeddings.size(1), perceiver_embeddings.size(2)
+        if image_hidden_states is not None or perceiver_embeddings is not None:
+            if self.config.use_resampler:
+                if perceiver_embeddings is None:
+                    perceiver_embeddings = self.perceiver_resampler(image_hidden_states)
+                    image_seq_len, image_hidden_size = perceiver_embeddings.size(1), perceiver_embeddings.size(2)
+                else:
+                    batch_size, num_images, image_seq_len, image_hidden_size = perceiver_embeddings.size()
+                image_hidden_states = perceiver_embeddings
+            elif perceiver_embeddings is None:
+                image_seq_len, image_hidden_size = image_hidden_states.size(1), image_hidden_states.size(2)
             else:
-                batch_size, num_images, image_seq_len, image_hidden_size = perceiver_embeddings.size()
-            image_hidden_states = perceiver_embeddings
-        elif perceiver_embeddings is None:
-            image_seq_len, image_hidden_size = image_hidden_states.size(1), image_hidden_states.size(2)
-        else:
-            raise ValueError("If `perceiver_embeddings` are passed, use_resampler should be True")
+                raise ValueError("If `perceiver_embeddings` are passed, use_resampler should be True")
 
-        image_hidden_states = image_hidden_states.view(batch_size, num_images * image_seq_len, image_hidden_size)
+            image_hidden_states = image_hidden_states.view(batch_size, num_images * image_seq_len, image_hidden_size)
 
         # Mask is in 3D (incompatible with our mask API --> manual expansion)
         # image_attention_mask:    [batch_size,    text_seq_length,       num_images          ]
@@ -1022,8 +1062,8 @@ class IdeficsModel(IdeficsPreTrainedModel):
         )
         image_attention_mask = torch.where(
             image_attention_mask[:, None, :, :].bool(),
-            torch.full((), 0.0, device=device, dtype=image_hidden_states.dtype),
-            torch.finfo(image_hidden_states.dtype).min,
+            torch.full((), 0.0, device=device, dtype=inputs_embeds.dtype),
+            torch.finfo(inputs_embeds.dtype).min,
         )
 
         # For any tokens attending to no images, the hidden_states coming out of the cross-attention should be zeroed-out.
@@ -1050,7 +1090,6 @@ class IdeficsModel(IdeficsPreTrainedModel):
         hidden_states = inputs_embeds
 
         for idx, decoder_layer in enumerate(self.layers):
-            # TODO(ls): Add cross attention values to respective lists
             if idx % self.cross_layer_interval == 0:
                 cross_attn_block = self.gated_cross_attn_layers[idx // self.cross_layer_interval]
                 hidden_states = cross_attn_block(
@@ -1059,7 +1098,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
                     image_hidden_states,
                     image_attention_mask=image_attention_mask,
                     cross_attention_gate=cross_attention_gate,
-                    past_key_values=None,  # not implemented
+                    past_key_values=past_key_values,
                     **kwargs,
                 )
 
@@ -1072,7 +1111,8 @@ class IdeficsModel(IdeficsPreTrainedModel):
             )
 
         hidden_states = self.norm(hidden_states)
-        image_hidden_states = image_hidden_states.view(batch_size, num_images, image_seq_len, image_hidden_size)
+        if image_hidden_states is not None:
+            image_hidden_states = image_hidden_states.view(batch_size, num_images, image_seq_len, image_hidden_size)
 
         return IdeficsBaseModelOutputWithPast(
             last_hidden_state=hidden_states,
@@ -1208,6 +1248,7 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
         **kwargs,
     ):
         # Overwritten -- custom processing based on `config.use_resampler`
+        interpolate_pos_encoding = kwargs.pop("interpolate_pos_encoding", False)
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
@@ -1219,14 +1260,21 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
             **kwargs,
         )
 
-        if image_hidden_states is not None:
-            if self.config.use_resampler:
-                model_inputs["perceiver_embeddings"] = image_hidden_states
+        # After the first cached step the image K/V live in the cache (the gated layers' own slots), so no
+        # image input goes back in — only the per-step `image_attention_mask` below.
+        past_length = past_key_values.get_seq_length() if past_key_values is not None else 0
+        if past_length == 0 or not use_cache:
+            if image_hidden_states is not None:
+                if self.config.use_resampler:
+                    model_inputs["perceiver_embeddings"] = image_hidden_states
+                else:
+                    model_inputs["image_encoder_embeddings"] = image_hidden_states
             else:
-                model_inputs["image_encoder_embeddings"] = image_hidden_states
-        else:
-            model_inputs["pixel_values"] = pixel_values
-        model_inputs["interpolate_pos_encoding"] = kwargs.pop("interpolate_pos_encoding", False)
+                model_inputs["pixel_values"] = pixel_values
+        # Only when explicitly requested — the forward defaults it to `False`, and keeping it out of the
+        # per-step inputs otherwise keeps it out of exported signatures too.
+        if interpolate_pos_encoding:
+            model_inputs["interpolate_pos_encoding"] = interpolate_pos_encoding
 
         if image_attention_mask is not None and inputs_embeds is None:
             seq_length = model_inputs["input_ids"].shape[1]

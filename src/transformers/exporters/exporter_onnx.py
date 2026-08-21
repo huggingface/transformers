@@ -1168,6 +1168,57 @@ def _compiled_varlen_translation():
     return _aten_varlen_attn
 
 
+def _translate_associative_scan(combine, xs, additional_inputs):
+    """Translate the `higher_order.associative_scan` the SSM mixers trace under export.
+
+    The combine subgraph arrives as an `onnx_ir.Function`; the one combine the mixers use —
+    `(a_l * a_r, a_r * b_l + b_r)`, a first-order recurrence over two leaves — is lowered by
+    `_compiled_ssm_scan_translation` to an ONNX `Loop`. Anything else is rejected here, loudly."""
+    combine_ops = sorted(node.op_type for node in combine)
+    if combine_ops != ["Add", "Mul", "Mul"] or len(xs) != 2 or len(additional_inputs) != 0:
+        raise NotImplementedError(
+            f"No ONNX translation for an associative_scan with combine {combine_ops} over {len(xs)} leaves "
+            "— only the SSM mixers' first-order recurrence is supported."
+        )
+    return _compiled_ssm_scan_translation()(*xs)
+
+
+@functools.cache
+def _compiled_ssm_scan_translation():
+    """Compile (once) the `@script` body of `_translate_associative_scan` — see
+    `_compiled_varlen_translation` for why the compile lives behind a cache instead of a module-level
+    decorator. Lowers the first-order recurrence to an ONNX `Loop` with a *dynamic* trip count, so the
+    step axis stays symbolic where torch's python scan loop would unroll it. Sequential like the mixers'
+    own fallback — same numerics, O(seq) iterations. The carried states start at the combine monoid's
+    identity (`a` products at 1, states at 0 — any cached initial state is already folded into `b`'s
+    first step by the mixer)."""
+
+    @script()
+    def _transformers_ssm_scan(a: FLOAT, b: FLOAT) -> tuple[FLOAT, FLOAT]:
+        one = op.Constant(value_ints=[1])
+        axis0 = op.Constant(value_ints=[0])
+        zero_f = op.CastLike(op.Constant(value_float=0.0), b)
+        one_f = op.CastLike(op.Constant(value_float=1.0), a)
+        seq_len = op.Squeeze(op.Slice(op.Shape(a), axis0, one, axis0))
+        # carried states, kept `[1, ...]` so each step concatenates straight into the outputs
+        state = op.Mul(op.Slice(b, axis0, one, axis0), zero_f)
+        a_acc = op.Add(op.Mul(op.Slice(a, axis0, one, axis0), zero_f), one_f)
+        # empty `(0, ...)` accumulators, the varlen translation's trick
+        a_products = op.Slice(a, axis0, axis0, axis0)
+        states = op.Slice(b, axis0, axis0, axis0)
+        for i in range(seq_len):
+            index = op.Reshape(i, one)
+            a_step = op.Slice(a, index, op.Add(index, one), axis0)
+            b_step = op.Slice(b, index, op.Add(index, one), axis0)
+            a_acc = op.Mul(a_acc, a_step)
+            state = op.Add(op.Mul(a_step, state), b_step)
+            a_products = op.Concat(a_products, a_acc, axis=0)
+            states = op.Concat(states, state, axis=0)
+        return a_products, states
+
+    return _transformers_ssm_scan
+
+
 def _get_onnx_translation_table() -> dict[Any, Any]:
     """Assemble the `custom_translation_table` for `torch.onnx.export`.
 
@@ -1190,6 +1241,8 @@ def _get_onnx_translation_table() -> dict[Any, Any]:
         table[torch.ops.transformers.grouped_mm_fallback.default] = _aten_grouped_mm
     if hasattr(torch.ops.torch_attn, "_varlen_attn"):
         table[torch.ops.torch_attn._varlen_attn.default] = _compiled_varlen_translation()
+    if hasattr(torch.ops.higher_order, "associative_scan"):
+        table[torch.ops.higher_order.associative_scan] = _translate_associative_scan
     return table
 
 

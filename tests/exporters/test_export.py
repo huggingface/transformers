@@ -144,6 +144,11 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "test timeout (12 attention blocks × 3 Q-pool stage transitions on symbolic H/W). Backend-"
             "agnostic — the torch.export step itself overruns, so every backend hits it."
         ),
+        "Sam2VisionModel": (
+            "Same Hiera backbone as `Sam2Model`; when it doesn't overrun it dies in torch's symbolic-shapes "
+            "engine instead — sympy cannot solve the windowing shape expressions "
+            "(`solveset is unable to solve this equation`, `KeyError: ((s100/4)//8)`)."
+        ),
     },
     # Generate path, dynamic-shape only. Backend-agnostic (it's in the shared decomposition).
     "generate.dynamic": {
@@ -221,6 +226,25 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "spec, because the traced pair's halves are not both empty. TODO: derive the pair's shape from "
             "the trace rather than guessing it."
         ),
+        "RwkvForCausalLM": (
+            "Carries its fixed-size state as a plain tensor list under its own `state` kwarg and output "
+            "field — not a `Cache` under `past_key_values`/`cache_params` — so the runtime's cache plumbing "
+            "(runner choice, feed, write-back, propagation through `generate`) has no counterpart: every "
+            "decode step re-picks the prefill graph and trips its baked prompt-length guard. TODO: teach "
+            "`cache_input`/`forward` the `state` kwarg, or port RWKV onto a `Cache` subclass."
+        ),
+        "ProphetNetForConditionalGeneration": (
+            "N-gram decoding ties its stream positions to the cache length, which the decode capture bakes "
+            "(`1 + past_key_values[0].size(2) == 3`, the second-step cache the encoder-decoder capture "
+            "traces at) — so every later step trips the guard. The length cannot stay symbolic while the "
+            "ngram streams index relative to it. Export itself is covered by the non-generate variants."
+        ),
+        "PerceptionLMForConditionalGeneration": (
+            "Routes videos through a *second* `get_image_features` call (`pixel_values=pixel_values_videos`); "
+            "the decomposition and runtime model one modality per getter, so the video kwarg has no route "
+            "and its features would need the image runner run twice with different scatter targets. "
+            "TODO: let a modality spec share another's runner."
+        ),
     },
     # Generate path, multi-token decode capture only — the two decode steps merged by
     # `_merge_decode_calls` into one graph whose query axis stays symbolic, so a single graph serves both
@@ -250,13 +274,18 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "axis is genuinely constant, so one spec cannot cover both cache kinds."
         ),
         "Gemma4ForConditionalGeneration": "Same sliding-window-plus-multi-modal shape as `Gemma3ForConditionalGeneration`.",
-        "MambaForCausalLM": (
-            "The selective-scan fallback unrolls the recurrence with `for index in range(seq_len)`, which "
-            "bakes the query length into the graph; the associative-scan alternative is deliberately "
-            "disabled while exporting (no ONNX translation). A single graph serving both a prompt and "
-            "2-token decode steps needs a symbolic query axis, so the baked guard fires."
+        "ZambaForCausalLM": (
+            "Its hand-copied mixer runs the selective scan per head with the associative path deliberately "
+            "off ('Old model: only when user request it explicitly'), so the sequential scan unrolls and "
+            "bakes the query length. The rest of the family (mamba / falcon_mamba / jamba) traces "
+            "length-generically (the associative scan + its `initial_states`); aligning "
+            "zamba's per-head mixer with mamba's would lift this."
         ),
-        "JambaForCausalLM": "Same unrolled selective scan as `MambaForCausalLM` — it reuses the Mamba mixer.",
+        "ProphetNetForCausalLM": (
+            'The eager model itself refuses the merged capture: its forward asserts "`use_cache` is only '
+            'supported for `decoder_input_ids` of length 1", so a 2-token continuation-from-past cannot '
+            "even run, let alone trace."
+        ),
         "MllamaForConditionalGeneration": (
             "Cross-attention decode indexes `cross_attention_mask[:, :, arange(seq) + past_seen_tokens]`; "
             "the multi-token merge grows the query axis but not the captured cross-attention mask, so the "
@@ -268,6 +297,16 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "(seq 2) mismatches the chunked key axis (`size 2 vs 6`). "
             "Same chunked-attention limitation as the `onnx.generate` skip."
         ),
+    },
+    # Multi-token decode capture on ExecuTorch: the SSM associative scan (what keeps the query axis
+    # symbolic under export) has no ExecuTorch lowering and the runtime has no loop
+    # primitive to lower it to, so those exports keep the sequential scan — which unrolls and pins the
+    # merged decode to the traced step length. torch.export runs the scan natively; ONNX lowers it to a
+    # dynamic-trip-count `Loop` (`_translate_associative_scan`).
+    "executorch.generate.multi_token": {
+        "MambaForCausalLM": "Sequential selective scan bakes the query length (no ExecuTorch associative_scan).",
+        "FalconMambaForCausalLM": "Same as `MambaForCausalLM`.",
+        "JambaForCausalLM": "Same as `MambaForCausalLM`.",
     },
     # ONNX, every variant.
     "onnx": {
@@ -744,14 +783,13 @@ class ExportTesterMixin:
     ):
         """Return True if this model class should be skipped for export tests.
 
-        Walks the scopes in ``EXPORT_SKIPS`` from broad to specific that match the current
-        ``(backend, generate, dynamic)`` triple — ``"all"`` always applies, ``"generate"`` only
-        for generate tests, ``"dynamic"`` / ``"static"`` for that shape variant on every backend,
-        ``"generate.multi_token"`` for the merged multi-token decode capture,
+        Walks the scopes in ``EXPORT_SKIPS`` from broad to specific that match the current test —
+        ``"all"`` always applies, ``"generate"`` only for generate tests, ``"dynamic"`` / ``"static"``
+        for that shape variant, ``"generate.multi_token"`` for the merged multi-token decode capture, and
         ``"generate.runtime"`` for driving the exported graphs through `generate` (the export itself still
-        runs — use it when a model exports fine and only the runtime cannot serve it), ``"<backend>"`` for
-        that backend, and
-        ``"<backend>.<variant>"`` for the more-specific intersections. Also skips static-cache variants
+        runs — use it when a model exports fine and only the runtime cannot serve it). Every one of these
+        also exists ``"<backend>."``-prefixed (``"onnx.generate.multi_token"``, …) to skip on one backend
+        only, plus the bare ``"<backend>"`` for that whole backend. Also skips static-cache variants
         (a ``generation_config`` requesting one) on models that can't compile fullgraph — they don't
         support a static cache.
         """
@@ -769,10 +807,7 @@ class ExportTesterMixin:
                 scopes.append("generate.runtime")
         scopes.append("dynamic" if dynamic else "static")
         if backend:
-            scopes.append(backend)
-            if generate:
-                scopes.append(f"{backend}.generate")
-            scopes.append(f"{backend}.dynamic" if dynamic else f"{backend}.static")
+            scopes += [backend] + [f"{backend}.{scope}" for scope in scopes if scope != "all"]
         return any(name in EXPORT_SKIPS.get(scope, {}) for scope in scopes)
 
     def _prepare_export_model_and_inputs(self, model_class, backend, device=torch_device):

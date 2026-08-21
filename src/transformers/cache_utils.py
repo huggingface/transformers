@@ -200,6 +200,18 @@ class DynamicLayer(CacheLayerMixin):
             self.values = self.values[indices, ...]
 
 
+class DynamicCrossAttentionLayer(DynamicLayer):
+    """
+    A `DynamicLayer` holding *cross-attention* K/V: computed once from a source stream the decoder attends
+    to (e.g. the image features of Idefics' gated cross-attention) rather than accumulated from the
+    generated tokens. Its sequence axis counts source tokens, not text — so rolling the generation back
+    (`crop`, assisted decoding's rejection path) must leave it whole.
+    """
+
+    def crop(self, tokens_to_remove: int) -> None:
+        """The cached source K/V are not part of the generated text — a rollback leaves them whole."""
+
+
 class DynamicSlidingWindowLayer(DynamicLayer):
     """
     A cache layer that grows dynamically as more tokens are generated, up until the sliding window size.
@@ -1220,6 +1232,8 @@ DYNAMIC_LAYER_TYPE_MAPPING = {
     # From a cache point of view, sliding and chunked are the same in how they should behave, only the mask differs
     "sliding_attention": DynamicSlidingWindowLayer,
     "chunked_attention": DynamicSlidingWindowLayer,
+    # Cross-attention K/V over a source stream: written once, immune to text rollbacks (`crop`)
+    "cross_attention": DynamicCrossAttentionLayer,
     # Linear-attention-shaped placeholders (no per-token KV; recurrent state only).
     # "conv" reuses the same cache shape as linear attention but stores a conv state buffer rather than recurrent SSM state
     "conv": LinearAttentionLayer,
@@ -1245,6 +1259,9 @@ STATIC_LAYER_TYPE_MAPPING = {
     # LinearAttention layers are considered both static and dynamic (they are static, but are used as-is for any cache type)
     "conv": LinearAttentionLayer,
     "linear_attention": LinearAttentionLayer,
+    # Cross-attention K/V are written once with a data-dependent (source-stream) length, so no static
+    # buffer can be pre-sized for them — the dynamic layer serves both cache kinds
+    "cross_attention": DynamicCrossAttentionLayer,
     # Hybrid layers carry both a linear-attention state and a dynamic-attention state.
     "hybrid": LinearAttentionAndStaticFullAttentionLayer,
     "hybrid_sliding": LinearAttentionAndStaticSlidingWindowAttentionLayer,

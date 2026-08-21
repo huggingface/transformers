@@ -54,6 +54,7 @@ from .utils import (
     apply_patches,
     get_leaf_tensors,
     module_dtype,
+    patch_attributes,
     register_fx_node_fix,
     register_fx_program_fix,
     register_patch,
@@ -142,7 +143,21 @@ class ExecutorchExporter(DynamoExporter):
 
         model, sample_inputs, partitioner = prepare_for_backend(model, sample_inputs)
 
-        with apply_patches("executorch"), apply_patches(f"executorch.{config.backend}"):
+        # The SSM mixers' associative scan (their export path) has no ExecuTorch lowering and the runtime
+        # has no loop primitive to run it as — flip the mixers' own `use_associative_scan` switch (they
+        # snapshot the config knob at init) to keep them on the sequential scan, the way
+        # `patch_model_config` turns off `use_mamba_kernels`. The sequential path unrolls, pinning the
+        # traced step length — why the multi-token decode variants are skipped on this backend.
+        mixer_patches = [
+            (module, "use_associative_scan", lambda _original: False)
+            for module in model.modules()
+            if hasattr(module, "use_associative_scan")
+        ]
+        with (
+            apply_patches("executorch"),
+            apply_patches(f"executorch.{config.backend}"),
+            patch_attributes(mixer_patches),
+        ):
             exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
             apply_fx_program_fixes("executorch", exported_program)
             apply_fx_node_fixes("executorch", exported_program.graph_module)

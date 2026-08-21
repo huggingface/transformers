@@ -165,5 +165,19 @@ class IdeficsConfig(PreTrainedConfig):
 
         super().__post_init__(**kwargs)
 
+    @property
+    def layer_types(self) -> list[str]:
+        """One entry per cache-carrying attention module: the `num_hidden_layers` decoder layers followed by
+        the gated cross-attention layers interleaved every `cross_layer_interval`. The gated layers cache the
+        image K/V they compute on the first step (slots appended after the decoder layers'), and the cache
+        builders size themselves from `layer_types` — so it deliberately has more entries than
+        `num_hidden_layers`. A property, so it never lands in serialized configs."""
+        num_cross_layers = self.num_hidden_layers // self.cross_layer_interval
+        return ["full_attention"] * self.num_hidden_layers + ["cross_attention"] * num_cross_layers
+
+    def validate_layer_type(self):
+        """`layer_types` counts the gated cross-attention layers on top of `num_hidden_layers` (see the
+        property) — the generic length check does not apply."""
+
 
 __all__ = ["IdeficsConfig", "IdeficsPerceiverConfig", "IdeficsVisionConfig"]

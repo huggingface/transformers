@@ -213,10 +213,28 @@ def _advance_cache(past_key_values, outputs: dict[str, torch.Tensor], num_new_to
                 for old, new in zip(cache_leaves, updated):
                     if old is not new:
                         old.copy_(new)
+    _mark_existing_states(past_key_values)
     for layer in _self_attention_layers(past_key_values):
-        # A recurrent layer records "these states exist now" as python bools in the pytree context, so the
-        # graph cannot flip them — the write-back above filled the states, so mark them the way the eager
-        # `update` would, or the next step's cache no longer matches the traced spec.
+        if hasattr(layer, "cumulative_length_int"):
+            layer.cumulative_length_int += num_new_tokens
+        elif isinstance(getattr(layer, "cumulative_length", None), int):
+            layer.cumulative_length += num_new_tokens
+    # An `EncoderDecoderCache` also keeps `is_updated` python flags (pytree context, so the graph never
+    # flips them and the growing rebuild resurrects the pre-step values): every decoder step leaves the
+    # cross cache written — the prefill graph writes it, decode graphs read it.
+    if getattr(past_key_values, "is_updated", None):
+        past_key_values.is_updated = dict.fromkeys(past_key_values.is_updated, True)
+    return past_key_values
+
+
+def _mark_existing_states(past_key_values) -> None:
+    """Mark each layer's recurrent states as existing, exactly where they do.
+
+    A recurrent layer records "these states exist now" as python bools in the pytree context, so the
+    graph cannot flip them — whoever filled the states (a decode step's write-back, or the fresh-cache
+    materialization) marks them the way the eager `update` would, or the cache no longer matches the
+    traced spec."""
+    for layer in _self_attention_layers(past_key_values):
         conv_states = getattr(layer, "conv_states", None)
         if isinstance(conv_states, dict):
             # ... and the scalars its `lazy_initialization` records alongside them
@@ -248,16 +266,6 @@ def _advance_cache(past_key_values, outputs: dict[str, torch.Tensor], num_new_to
                     present = isinstance(states, dict) and isinstance(states.get(key), torch.Tensor)
                 if present:
                     marks[key] = True
-        if hasattr(layer, "cumulative_length_int"):
-            layer.cumulative_length_int += num_new_tokens
-        elif isinstance(getattr(layer, "cumulative_length", None), int):
-            layer.cumulative_length += num_new_tokens
-    # An `EncoderDecoderCache` also keeps `is_updated` python flags (pytree context, so the graph never
-    # flips them and the growing rebuild resurrects the pre-step values): every decoder step leaves the
-    # cross cache written — the prefill graph writes it, decode graphs read it.
-    if getattr(past_key_values, "is_updated", None):
-        past_key_values.is_updated = dict.fromkeys(past_key_values.is_updated, True)
-    return past_key_values
 
 
 def _traced_input_shapes(module) -> dict[str, tuple[int | None, ...]]:
@@ -576,13 +584,14 @@ def _grid_renamed(key: str) -> str:
 class Modality:
     """Routes one input modality (image / video / audio) of an `ExportedGenerator`:
 
-    - `token_id`: the placeholder id in `input_ids` its features scatter into (`config.image_token_id`, …).
+    - `token_id`: the placeholder id in `input_ids` its features scatter into (`config.image_token_id`, …);
+      `None` for a model that marks the rows with an explicit `*_position_mask` kwarg instead (kosmos2_5).
     - `runner`: the exported `get_<modality>_features` graph.
     - `input_keys`: the generate kwargs that belong to it (e.g. `("pixel_values", "image_grid_thw")`); the
       first is the presence key — the modality runs only when it's passed.
     """
 
-    token_id: int
+    token_id: int | None
     runner: ModelRunner
     input_keys: tuple
 
@@ -1095,7 +1104,11 @@ class ExportedGenerator(GenerationMixin):
             if name in runner.input_names and name not in feed:
                 # Rank 2 or 3 only — those have the sequence at axis 1 (higgs_audio_v2's audio ids carry a
                 # codebook axis after it). A 4-D mask is `[batch, 1, query, key]`, where axis 1 is heads.
-                if isinstance(value, torch.Tensor) and value.dim() in (2, 3) and value.shape[1] > text.shape[1]:
+                # A modality's own tensors (`pixel_values`, packed patches, …) are features, not per-token
+                # kwargs — their axis 1 is patches or channels, so they go through whole (a prefill graph
+                # with the vision tower inline takes them directly).
+                is_per_token = isinstance(value, torch.Tensor) and name not in getattr(self, "_modality_keys", ())
+                if is_per_token and value.dim() in (2, 3) and value.shape[1] > text.shape[1]:
                     value = value[:, -text.shape[1] :]
                 feed[name] = value
         cache_len = (
@@ -1217,7 +1230,20 @@ class ExportedMultimodalGenerator(ExportedGenerator):
         for modality in self._modalities:
             # Presence keys on whichever of the modality's own input names this call carries — never the
             # aux keys, which `generate` may keep after dropping the features themselves.
-            if all(kwargs.get(key) is None for key in modality.input_keys if not key.endswith("_grid_thw")):
+            aux_suffixes = ("_grid_thw", "_position_mask", "_attention_mask", "_sizes")
+            if all(kwargs.get(key) is None for key in modality.input_keys if not key.endswith(aux_suffixes)):
+                continue
+            if modality.token_id is not None:
+                mask = (input_ids == modality.token_id).unsqueeze(-1)
+            else:
+                # A model with no placeholder token id (kosmos2_5) marks the feature rows with an explicit
+                # mask kwarg instead — the same tensor its own forward scatters by. `generate` keeps the
+                # full-prompt mask across steps, so align it to this step's ids (its tail) first.
+                mask_key = next(key for key in modality.input_keys if key.endswith("_position_mask"))
+                mask = (kwargs[mask_key][:, -input_ids.shape[1] :] == 1).unsqueeze(-1)
+            # A step with no placeholder rows has nothing to scatter into — a decode step whose feature
+            # kwarg `generate` kept around would otherwise re-encode for nothing.
+            if not mask.any():
                 continue
             feed = self._modality_feed(modality, kwargs, input_ids)
             # An anyres image graph stops at the projector (`PatchVisionEncoder`) because the packing's token
@@ -1233,7 +1259,6 @@ class ExportedMultimodalGenerator(ExportedGenerator):
                 tower_input = modality.runner.input_names[0]
                 feed[tower_input] = flatten_anyres_patches(self.config, feed[tower_input], image_sizes)
             outputs = modality.runner(**feed)
-            mask = (input_ids == modality.token_id).unsqueeze(-1)
             # A deepstack tower emits one feature tensor per decoder layer it is injected at
             # (`image_features.<layer>`). Those are summed in inside the decoder rather than scattered, so the
             # placeholder rows are zeroed here and the packed tensors go on to the decode graph by name.
@@ -1284,7 +1309,9 @@ class ExportedMultimodalGenerator(ExportedGenerator):
             (
                 key
                 for key in modality.input_keys
-                if not key.endswith("_grid_thw") and key not in declared and kwargs.get(key) is not None
+                if not key.endswith(("_grid_thw", "_position_mask", "_attention_mask", "_sizes"))
+                and key not in declared
+                and kwargs.get(key) is not None
             ),
             None,
         )
@@ -1308,6 +1335,13 @@ class ExportedMultimodalGenerator(ExportedGenerator):
         # weights), so casting after would hand the graph bf16 weights it never saw.
         inputs = cast_leaf_tensors(inputs, dtype=modality.runner.dtype, device=self._device)
         inputs = precompute_export_inputs(self.config, inputs)
+        # Device-only move for what the precompute added — it builds some index tensors on CPU
+        # (minicpmv4_6's `window_index` comes out of python list ops). No dtype cast: the graph was traced
+        # with whatever dtype the precompute produces (see above).
+        inputs = {
+            name: value.to(self._device) if isinstance(value, torch.Tensor) else value
+            for name, value in inputs.items()
+        }
         feed = {name: value for name, value in inputs.items() if name in declared}
         if "input_ids" in declared:
             feed["input_ids"] = input_ids
@@ -1341,6 +1375,11 @@ class ExportedMultimodalGenerator(ExportedGenerator):
             inputs_tensor = model_kwargs["input_ids"]
         # No `attention_mask`: unpadded single sequence, and `generate` has already turned the mask into the
         # per-layer form the attention needs, not the 2D form `get_rope_index` wants. `None` = all valid.
+        # An audio-carrying layout (the omni thinkers) places its spans from the mel lengths, which
+        # `generate` carries as the padding mask — derive them the way the eager forward does.
+        audio_seqlens = model_kwargs.get("audio_feature_lengths")
+        if audio_seqlens is None and model_kwargs.get("feature_attention_mask") is not None:
+            audio_seqlens = model_kwargs["feature_attention_mask"].sum(-1)
         vision_positions, self._rope_deltas = get_mrope_index(
             self.config,
             inputs_tensor,
@@ -1350,5 +1389,6 @@ class ExportedMultimodalGenerator(ExportedGenerator):
             image_grid_thw=model_kwargs.get("image_grid_thw"),
             video_grid_thw=model_kwargs.get("video_grid_thw"),
             second_per_grid_ts=model_kwargs.get("second_per_grid_ts"),
+            audio_seqlens=audio_seqlens,
         )
         return torch.cat([text_positions[None, ...], vision_positions], dim=0)

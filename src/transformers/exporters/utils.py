@@ -610,6 +610,22 @@ def _prepare_omni_audio_inputs(config: Any, inputs: dict[str, Any]) -> None:
     inputs["max_seqlen"] = get_max_seqlen(inputs["cu_seqlens"], config, kwargs=inputs)
 
 
+@register_export_input_preparer("input_features", "feature_attention_mask")
+def _prepare_masked_omni_audio_inputs(config: Any, inputs: dict[str, Any]) -> None:
+    """The Omni `get_audio_features` seam carries the padded features and their padding mask rather than
+    the packed `feature_lens` pair — pack them the way the getter's own masking branch does (eagerly,
+    outside the trace) and hand the packed pair to `_prepare_omni_audio_inputs`; its precompute rides in
+    as extra graph inputs while the graph keeps taking the raw features and mask."""
+    mask = inputs["feature_attention_mask"]
+    derived = dict(inputs)
+    derived["input_features"] = inputs["input_features"].permute(0, 2, 1)[mask.bool()].permute(1, 0)
+    derived["feature_lens"] = mask.sum(-1)
+    _prepare_omni_audio_inputs(config, derived)
+    for key in ("padded_feature", "chunk_lengths", "cu_seqlens", "valid_indices", "pool_indices", "max_seqlen"):
+        if key in derived:
+            inputs[key] = derived[key]
+
+
 @register_export_input_preparer("input_features", "input_features_mask")
 def _prepare_qwen3_asr_audio_inputs(config: Any, inputs: dict[str, Any]) -> None:
     """Precompute `cu_seqlens` and `max_seqlen` for Qwen3-ASR so the encoder pops them from
@@ -665,6 +681,12 @@ def precompute_export_inputs(config: PreTrainedConfig, inputs: Mapping[str, Any]
                 for key in ("attention_mask", "image_grid_thw", "video_grid_thw", "second_per_grid_ts")
                 if inputs.get(key) is not None
             }
+            # An audio-carrying layout (the omni thinkers) places its spans from the mel lengths, which
+            # arrive as the padding mask — derive them the way the eager forward does.
+            if inputs.get("audio_feature_lengths") is not None:
+                rope_inputs["audio_seqlens"] = inputs["audio_feature_lengths"]
+            elif inputs.get("feature_attention_mask") is not None:
+                rope_inputs["audio_seqlens"] = inputs["feature_attention_mask"].sum(-1)
             inputs["position_ids"] = get_mrope_index(
                 config, input_ids, inputs.get("mm_token_type_ids"), **rope_inputs
             )[0]
@@ -695,6 +717,7 @@ def _capture_forward(module: torch.nn.Module):
 
     calls: list[dict] = []
     original = module.forward
+    was_instance_attr = "forward" in vars(module)
     sig = inspect.signature(original)
 
     @functools.wraps(original)
@@ -714,7 +737,15 @@ def _capture_forward(module: torch.nn.Module):
     try:
         yield calls
     finally:
-        module.forward = original
+        # Restore by *deleting* the wrapper unless `forward` was an instance attribute to begin with:
+        # assigning the bound method back would pin it in the instance dict, and a later `copy.copy` of
+        # the module (the prefill/decode split) would then carry a `forward` bound to the original —
+        # calls on the copy would run with `self` = the original, silently escaping any patch or capture
+        # applied to the copy (that is how the modality-getter capture came back empty on qwen2_5_omni).
+        if was_instance_attr:
+            module.forward = original
+        else:
+            del module.__dict__["forward"]
 
 
 def _merge_decode_calls(decode_calls: list[dict]) -> dict:
@@ -954,6 +985,24 @@ def materialize_cache_layers(
 def _materialize_layers(cache, batch_size, config, dtype, device, kv_geometry) -> None:
     """`materialize_cache_layers` for one flat cache — see there."""
     for layer_idx, layer in enumerate(cache.layers):
+        # A sparse-indexer layer (deepseek_v32, axk2, glm_moe_dsa) caches a *third* tensor beside keys and
+        # values, and it is a graph input like the others — leave it lazy and every later cache leaf shifts
+        # by one. Its own `lazy_initialization` covers only the main K/V, so this cannot wait behind the
+        # `is_initialized` skip below: `early_initialization` marks the layer initialized while the indexer
+        # (and its cpu `indexer_cumulative_length` counter) is still untouched. Rank-3 zero-length for the
+        # same reason the others are rank-4: the indexer's lazy init makes a 1-D empty, which would bake a
+        # rank-1 guard into the graph.
+        if hasattr(layer, "is_indexer_initialized") and not layer.is_indexer_initialized:
+            index_head_dim = config.get_text_config().index_head_dim
+            empty_indexer_keys = torch.zeros(batch_size, 0, index_head_dim, dtype=dtype, device=device)
+            if layer.get_max_length() == -1:
+                layer.indexer_dtype, layer.indexer_device = dtype, device
+                layer.indexer_keys = empty_indexer_keys
+                layer.is_indexer_initialized = True
+            else:
+                # allocates the full `[batch, max_cache_len, index_head_dim]` buffer from the hint's shape,
+                # and puts the layer's own `indexer_cumulative_length` counter on the right device
+                layer.lazy_initialization_indexer(empty_indexer_keys)
         # `is_initialized` is not enough on its own: a layer whose own lazy init already ran holds a *rank-1*
         # empty, and the graph was traced against the rank-4 `[batch, kv_heads, 0, head_dim]` form this
         # helper builds. Feeding the rank-1 one indexes an axis that isn't there, inside the graph.
@@ -990,21 +1039,6 @@ def _materialize_layers(cache, batch_size, config, dtype, device, kv_geometry) -
                     setattr(layer, attribute, value.to(device))
         else:
             layer.lazy_initialization(empty_keys, empty_values)
-        # A sparse-indexer layer (deepseek_v32, axk2) caches a *third* tensor beside keys and values, and
-        # it is a graph input like the others — leave it lazy and every later cache leaf shifts by one.
-        # Rank-3 zero-length for the same reason the others are rank-4: its own lazy init makes a 1-D
-        # empty, which would bake a rank-1 guard into the graph.
-        if hasattr(layer, "is_indexer_initialized") and not layer.is_indexer_initialized:
-            index_head_dim = config.get_text_config().index_head_dim
-            empty_indexer_keys = torch.zeros(batch_size, 0, index_head_dim, dtype=dtype, device=device)
-            if layer.get_max_length() == -1:
-                layer.indexer_dtype, layer.indexer_device = dtype, device
-                layer.indexer_keys = empty_indexer_keys
-                layer.is_indexer_initialized = True
-            else:
-                # allocates the full `[batch, max_cache_len, index_head_dim]` buffer from the hint's shape,
-                # and puts the layer's own `indexer_cumulative_length` counter on the right device
-                layer.lazy_initialization_indexer(empty_indexer_keys)
 
 
 def decompose_prefill_decode(
@@ -1311,11 +1345,28 @@ _MODALITY_SPECS = (
     (
         "image_encoder",
         "get_image_features",
-        ("pixel_values", "pixel_values_images"),
+        # `image_embeds_position_mask` (kosmos2_5) is the modality's scatter mask, `pixel_attention_mask`
+        # (lfm2_vl's NaViT packing) its per-patch padding mask and `target_sizes` (minicpmv4_6) its grid in
+        # all but name — aux kwargs, not features: every presence check skips `*_position_mask` /
+        # `*_attention_mask` / `*_sizes` keys the way it skips the grids.
+        (
+            "pixel_values",
+            "pixel_values_images",
+            "flattened_patches",
+            "image_embeds_position_mask",
+            "pixel_attention_mask",
+            "target_sizes",
+        ),
         "image_grid_thw",
         "image_token_id",
     ),
-    ("video_encoder", "get_video_features", ("pixel_values_videos",), "video_grid_thw", "video_token_id"),
+    (
+        "video_encoder",
+        "get_video_features",
+        ("pixel_values_videos", "target_sizes_videos"),
+        "video_grid_thw",
+        "video_token_id",
+    ),
     # `audio_input_ids` (inkling) is the same slot as `input_features` — the tensor whose presence means
     # this call carries audio — just named for a getter that takes discrete codes rather than a spectrogram.
     ("audio_encoder", "get_audio_features", ("input_features", "audio_input_ids"), None, "audio_token_id"),
@@ -1643,28 +1694,63 @@ def decompose_for_generation(
                     kv_geometry=kv_geometry_of(stages["decode"][1].get("past_key_values")),
                 )
             components["prefill"] = stages["prefill"]
+    # Two more shapes whose prompt cannot go through the merged decode graph, so the captured prefill —
+    # traced in the fresh-cache regime — stays a component of its own:
+    # - a decoder-only model whose images enter through *cross-attention* (idefics): no modality getter to
+    #   split out, and after the first step its image K/V live in the cache (the gated layers' own slots),
+    #   so the prefill, vision tower inside, is the one graph that writes them and decode graphs only read;
+    # - a *hybrid* text stack (conv / linear-attention layers, lfm2_vl, qwen3_5, minimax_m3_vl, …): a graph
+    #   traced mid-generation bakes its step-regime python branches (the conv path's mask-width comparison,
+    #   lightning attention's chunk boundary), which a prompt on a fresh cache cannot satisfy.
+    elif any(
+        hasattr(layer, "conv_states") or hasattr(layer, "recurrent_states") or hasattr(layer, "idx_keys")
+        for layer in getattr(stages["decode"][1].get("past_key_values"), "layers", [])
+    ) or (
+        not any(name.endswith("_encoder") for name in components)
+        and any(_present_input_key(prefill_inputs, spec[2]) is not None for spec in _MODALITY_SPECS)
+    ):
+        if (cache := prefill_inputs.get("past_key_values")) is not None:
+            batch_size = next(t for t in prefill_inputs.values() if isinstance(t, torch.Tensor)).shape[0]
+            materialize_cache_layers(
+                cache,
+                batch_size,
+                model.config,
+                module_dtype(model),
+                module_device(model),
+                kv_geometry=kv_geometry_of(stages["decode"][1].get("past_key_values")),
+            )
+        components["prefill"] = stages["prefill"]
 
     # Feed the decode graph `inputs_embeds` (not `input_ids`) so the runtime can scatter the encoder embeds
     # into the embeddings before the text stack; the full forward accepts `inputs_embeds` and — with no
     # modality inputs — skips the encoders. This is what lets the components reassemble into a loop.
-    decode_model, decode_inputs = stages["decode"]
-    decode_inputs = copy.copy(decode_inputs)
-    for _name, _getter, _input_keys, grid_key, _token_field in _MODALITY_SPECS:
-        for _input_key in _input_keys:
-            decode_inputs.pop(_input_key, None)
-        if grid_key is not None:
-            decode_inputs.pop(grid_key, None)
-    # `mm_token_type_ids` only drives the model's internal M-RoPE (`get_rope_index`); once `position_ids`
-    # is captured, the decode forward never reads it. Drop it from the decode graph's inputs so the runtime
-    # (which supplies `position_ids` via `modeling_rope_utils.get_mrope_index`) needn't thread a per-step token-type tensor.
-    if decode_inputs.get("position_ids") is not None:
-        decode_inputs.pop("mm_token_type_ids", None)
-    if decode_inputs.get("input_ids") is not None and "embed_tokens" in components:
-        embedding = components["embed_tokens"][0]
-        with torch.no_grad():
-            embedded = embedding(decode_inputs.pop("input_ids"))
-        # A decoder with per-layer embeddings returns those alongside `inputs_embeds`; both are per-token
-        # inputs of the decode graph, so they go in as they come out.
-        decode_inputs.update(embedded if isinstance(embedded, dict) else {"inputs_embeds": embedded})
-    components["decode"] = (decode_model, decode_inputs)
+    def as_embedded_inputs(call_inputs: dict) -> dict:
+        call_inputs = copy.copy(call_inputs)
+        for _name, _getter, _input_keys, grid_key, _token_field in _MODALITY_SPECS:
+            for _input_key in _input_keys:
+                call_inputs.pop(_input_key, None)
+            if grid_key is not None:
+                call_inputs.pop(grid_key, None)
+        # `mm_token_type_ids` only drives the model's internal M-RoPE (`get_rope_index`); once `position_ids`
+        # is captured, the forward never reads it. Drop it from the graph's inputs so the runtime (which
+        # supplies `position_ids` via `modeling_rope_utils.get_mrope_index`) needn't thread a per-step
+        # token-type tensor.
+        if call_inputs.get("position_ids") is not None:
+            call_inputs.pop("mm_token_type_ids", None)
+        if call_inputs.get("input_ids") is not None and "embed_tokens" in components:
+            embedding = components["embed_tokens"][0]
+            with torch.no_grad():
+                embedded = embedding(call_inputs.pop("input_ids"))
+            # A decoder with per-layer embeddings returns those alongside `inputs_embeds`; both are per-token
+            # inputs of the decode graph, so they go in as they come out.
+            call_inputs.update(embedded if isinstance(embedded, dict) else {"inputs_embeds": embedded})
+        return call_inputs
+
+    components["decode"] = (stages["decode"][0], as_embedded_inputs(stages["decode"][1]))
+    # Same treatment for a kept prefill when the modality graphs exist: the runtime scatters the features
+    # in front of it, and the vision tower — whose data-dependent packing only traces at the getter seam,
+    # where the precompute injects its tensors — stays out of the graph. The idefics-style writer (no
+    # modality getter) keeps its raw inputs: the tower inline is the point there.
+    if "prefill" in components and any(name.endswith("_encoder") for name in components):
+        components["prefill"] = (components["prefill"][0], as_embedded_inputs(components["prefill"][1]))
     return components

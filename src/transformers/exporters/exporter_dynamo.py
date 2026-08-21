@@ -609,6 +609,11 @@ def _flatten_to_context(obj: Any, tensors: list) -> Any:
         # counter still rides along as a leaf, exactly as before.
         if "sliding_window" in attributes and not isinstance(attributes.get("cumulative_length", 0), torch.Tensor):
             attributes["cumulative_length"] = 0
+        # A *static* sliding layer keeps the same counter under `cumulative_length_int` (its
+        # `cumulative_length` is the tensor the traced arithmetic reads), and it pins the graph the same
+        # way: the traced branch is baked either way, so the counter is regime metadata, not structure.
+        if "cumulative_length_int" in attributes:
+            attributes["cumulative_length_int"] = 0
         state = {k: _flatten_to_context(v, tensors) for k, v in attributes.items()}
         if "sliding_window" in state and "cumulative_length" in state:
             state["cumulative_length"] = 0

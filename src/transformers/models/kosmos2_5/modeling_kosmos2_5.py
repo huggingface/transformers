@@ -246,6 +246,26 @@ KOSMOS2_5_INPUTS_DOCSTRING = r"""
 
 
 @dataclass
+class Kosmos2_5ImageFeaturesOutput(ModelOutput):
+    """
+    Output of [`~Kosmos2_5Model.get_image_features`].
+
+    Args:
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`):
+            Sequence of hidden-states at the output of `Kosmos2_5ImageToTextProjection` — the image
+            embeddings the text stack scatters at the `image_embeds_position_mask` positions.
+        projection_attentions (`tuple(torch.FloatTensor)`, *optional*):
+            Attentions weights given by `Kosmos2_5ImageToTextProjection`, after the attention softmax.
+        vision_model_output (`BaseModelOutputWithPooling`, *optional*):
+            The output of the [`Kosmos2_5VisionModel`].
+    """
+
+    last_hidden_state: torch.FloatTensor | None = None
+    projection_attentions: tuple[torch.FloatTensor] | None = None
+    vision_model_output: BaseModelOutputWithPooling = None
+
+
+@dataclass
 class Kosmos2_5ModelOutput(ModelOutput):
     """
     Base class for text model's outputs that also contains a pooling of the last hidden states.
@@ -1159,6 +1179,19 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
     def set_input_embeddings(self, value):
         self.text_model.model.embed_tokens = value
 
+    def get_image_features(self, flattened_patches: torch.Tensor, **kwargs: Unpack[TransformersKwargs]):
+        """Encode `flattened_patches` into the text stack's image embeddings: vision encoder, feature
+        normalization, then the image-to-text projection."""
+        vision_model_output = self.vision_model(flattened_patches=flattened_patches, **kwargs)
+        # normalized features
+        image_embeds = nn.functional.normalize(vision_model_output.last_hidden_state, dim=-1)
+        image_embeds, projection_attentions = self.image_to_text_projection(image_embeds)
+        return Kosmos2_5ImageFeaturesOutput(
+            last_hidden_state=image_embeds,
+            projection_attentions=projection_attentions,
+            vision_model_output=vision_model_output,
+        )
+
     @can_return_tuple
     @add_start_docstrings_to_model_forward(KOSMOS2_5_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Kosmos2_5ModelOutput, config_class=_CONFIG_FOR_DOC)
@@ -1216,13 +1249,10 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
         projection_attentions = None
         if image_embeds is None:
             if flattened_patches is not None:
-                vision_model_output = self.vision_model(
-                    flattened_patches=flattened_patches,
-                    **kwargs,
-                )
-                # normalized features
-                image_embeds = nn.functional.normalize(vision_model_output.last_hidden_state, dim=-1)
-                image_embeds, projection_attentions = self.image_to_text_projection(image_embeds)
+                image_features = self.get_image_features(flattened_patches, **kwargs)
+                image_embeds = image_features.last_hidden_state
+                projection_attentions = image_features.projection_attentions
+                vision_model_output = image_features.vision_model_output
 
         outputs = self.text_model(
             input_ids=input_ids,
@@ -1425,6 +1455,19 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
     def set_output_embeddings(self, new_embeddings):
         self.text_model.set_output_embeddings(new_embeddings)
 
+    def get_image_features(self, flattened_patches: torch.Tensor, **kwargs: Unpack[TransformersKwargs]):
+        """Encode `flattened_patches` into the text stack's image embeddings: vision encoder, feature
+        normalization, then the image-to-text projection."""
+        vision_model_output = self.vision_model(flattened_patches=flattened_patches, **kwargs)
+        # normalized features
+        image_embeds = nn.functional.normalize(vision_model_output.last_hidden_state, dim=-1)
+        image_embeds, projection_attentions = self.image_to_text_projection(image_embeds)
+        return Kosmos2_5ImageFeaturesOutput(
+            last_hidden_state=image_embeds,
+            projection_attentions=projection_attentions,
+            vision_model_output=vision_model_output,
+        )
+
     @can_return_tuple
     @add_start_docstrings_to_model_forward(KOSMOS2_5_INPUTS_DOCSTRING)
     @replace_return_docstrings(
@@ -1493,12 +1536,10 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
 
         if image_embeds is None:
             if flattened_patches is not None:
-                vision_model_output = self.vision_model(
-                    flattened_patches=flattened_patches,
-                    **kwargs,
-                )
-                image_embeds = nn.functional.normalize(vision_model_output.last_hidden_state, dim=-1)
-                image_embeds, projection_attentions = self.image_to_text_projection(image_embeds)
+                image_features = self.get_image_features(flattened_patches, **kwargs)
+                image_embeds = image_features.last_hidden_state
+                projection_attentions = image_features.projection_attentions
+                vision_model_output = image_features.vision_model_output
 
         lm_outputs: CausalLMOutputWithCrossAttentions = self.text_model(
             input_ids=input_ids,
