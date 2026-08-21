@@ -13,18 +13,36 @@
 # limitations under the License.
 
 from copy import deepcopy
+from typing import TYPE_CHECKING
 
-from ..utils import is_compressed_tensors_available, is_torch_available, logging
+from ..utils import (
+    is_compressed_tensors_available,
+    is_kernels_available,
+    is_torch_available,
+    logging,
+)
 from ..utils.quantization_config import CompressedTensorsConfig
 from .base import HfQuantizer
+from .quantizer_mxfp4 import check_mxfp4_kernel_support, packed_experts_param_element_size
+from .quantizers_utils import try_set_experts_implementation
+
+
+if TYPE_CHECKING:
+    from ..core_model_loading import WeightTransform
+    from ..modeling_utils import PreTrainedModel
 
 
 if is_torch_available():
     import torch
 
     from ..core_model_loading import WeightConverter
-    from ..integrations.compressed_tensors import DecompressExperts, get_experts_scheme
-
+    from ..integrations.compressed_tensors import (
+        DecompressExperts,
+        LoadPackedFp4Experts,
+        get_experts_scheme,
+        is_runnable_expert_format,
+    )
+    from .quantizers_utils import is_packed_experts_module
 
 logger = logging.get_logger(__name__)
 
@@ -37,12 +55,15 @@ def _is_fp8_scheme(scheme) -> bool:
 
 class CompressedTensorsHfQuantizer(HfQuantizer):
     """
-    Quantizer for the compressed_tensors package. Loads and restores models to
-    quantized state with compressed_tensors.
+    Quantizer for the compressed_tensors package. Loads and restores models to quantized state with compressed_tensors.
 
-    With `use_optimized_inference=True`, FP8 checkpoints are kept in FP8 and their matmuls run through
-    row-wise FP8 kernels (`torch.nn.functional.scaled_mm`) via `CompressedTensorsFP8Linear`, when FP8 matmul
-    hardware is available (CUDA SM89+ or XPU). This is opt-in and inference only.
+    With `use_optimized_inference=True`, FP8 checkpoints are kept in FP8 and their matmuls run through row-wise FP8
+    kernels (`torch.nn.functional.scaled_mm`) via `CompressedTensorsFP8Linear`, when FP8 matmul hardware is available
+    (CUDA SM89+ or XPU). This is opt-in and inference only.
+
+    MoE experts quantized to a packed FP4 format keep their 4-bit weights in memory and run through the matching kernels
+    which is what makes those checkpoints loadable at their on-disk size. This needs the right hardware and kernels for
+    the format; anything missing falls back to decompressing the experts to the model dtype at load time.
 
     Otherwise the model goes through the regular compressed-tensors route: `dequantize=True`
     dequantizes the weights at load time, while `dequantize=False` leaves them compressed and lets
@@ -54,16 +75,23 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
     def __init__(self, quantization_config: CompressedTensorsConfig, **kwargs):
         super().__init__(quantization_config, **kwargs)
+        # Call post_init here to ensure proper config setup when `dequantize` / `use_optimized_inference` are provided
+        # directly via CompressedTensorsConfig, and to avoid duplicate logging.
+        self.quantization_config = quantization_config
+        self.quantization_config.post_init()
 
-        # Call post_init here to ensure proper config setup when `dequantize` /
-        # `use_optimized_inference` are provided directly via CompressedTensorsConfig, and to avoid
-        # duplicate logging.
+        # This class needs objects from compressed_tensors, raise early with the install hint if it is missing.
+        if not is_compressed_tensors_available():
+            raise ImportError(
+                "Using `compressed_tensors` quantized models requires compressed-tensors>=0.15.0: "
+                "`pip install compressed-tensors>=0.15.0`"
+            )
 
-        quantization_config.post_init()
+        # Deliberately lazy: `compressed_tensors` imports transformers back at import time, so importing
+        # it at module level is circular (transformers -> quantizers -> compressed_tensors -> transformers).
         from compressed_tensors.compressors import ModelCompressor
 
         self.compressor = ModelCompressor.from_compression_config(quantization_config)
-        self.quantization_config = quantization_config
 
     def validate_environment(self, *args, **kwargs):
         if not is_compressed_tensors_available():
@@ -71,23 +99,100 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
                 "Using `compressed_tensors` quantized models requires compressed-tensors>=0.15.0: "
                 "`pip install compressed-tensors>=0.15.0`"
             )
-
-        # `use_optimized_inference` has been resolved against the checkpoint by
+        # For FP8 quantization: `use_optimized_inference` has been resolved against the checkpoint by
         # `CompressedTensorsConfig.post_init`; what is left to check is whether the hardware can run
         # the kernels. When it cannot, the model goes through the regular compressed-tensors route.
         self.use_fp8_kernel = self.quantization_config.use_optimized_inference
-        if self.use_fp8_kernel and not (
-            torch.xpu.is_available() or (torch.cuda.is_available() and torch.cuda.get_device_capability() >= (8, 9))
-        ):
+        is_xpu = torch.xpu.is_available()
+        is_fp8_compatible_cuda = torch.cuda.is_available() and torch.cuda.get_device_capability() >= (8, 9)
+        if self.use_fp8_kernel and not (is_xpu or is_fp8_compatible_cuda):
             logger.warning_once(
                 "Ignoring `use_optimized_inference=True`: FP8 matmul kernels need a CUDA GPU with compute capability "
                 ">= 8.9 (e.g. 4090/H100) or an Intel XPU, and none was found."
             )
             self.use_fp8_kernel = False
+        # For FP4 packed experts: resolve the format the experts can run in, or `None` when they have to be decompressed
+        # Resolved here against hardware and kernels; `_process_model_before_weight_loading` then checks that
+        # the model's experts can actually take packed weights, and clears this if they cannot.
+        self.packed_experts_format = self._resolve_packed_experts_format()
+
+    def _resolve_packed_experts_format(self) -> str | None:
+        """Returns the packed FP4 format the experts can run in, or `None` when they have to be decompressed."""
+        if self.quantization_config.dequantize or not self.quantization_config.is_quantization_compressed:
+            return None
+
+        ct_config = self.compressor.quantization_config
+        if ct_config is None:
+            return None
+
+        format = is_runnable_expert_format(ct_config)
+        if format is None:
+            return None
+
+        supported_device, has_triton = check_mxfp4_kernel_support(allow_cpu=False)
+
+        if not (supported_device and has_triton and is_kernels_available()):
+            logger.warning_once(
+                f"This checkpoint stores its MoE experts in `{format}`, but running them in that format needs a CUDA "
+                "GPU with compute capability >= 7.5 + Triton >= 3.4 (or an XPU + Triton >= 3.5) and the `kernels` "
+                "package. Something is missing, so the experts will be decompressed to the model dtype at load time."
+            )
+            return None
+        return format
+
+    def param_element_size(self, model: "PreTrainedModel", param_name: str, param: "torch.Tensor") -> float:
+        """Average bytes per weight value, used to size the caching-allocator warmup. The warmup reserves what the
+        loaded model will occupy based on the size of the meta parameters. For experts quantized to packed FP4, it's
+        half a byte per value, plus one e8m0 scale per group of 32. For anything else, we use the param size."""
+        module_name = param_name.rpartition(".")[0]
+        is_packed = self.packed_experts_format is not None and module_name.endswith(".experts")
+        return packed_experts_param_element_size(param_name, param, is_packed)
+
+    def _setup_packed_experts(self, model: "PreTrainedModel") -> None:
+        """Route the model's fused-experts modules to the packed runtime, or give up on it.
+
+        The runtime replaces the experts' dense weights with kernel-ready packed ones, so it is only usable when every
+        fused-experts module can take them and the model dispatches its experts forward through `ExpertsInterface`.
+        `self.packed_experts_format` is cleared otherwise, which sends the loader back to decompressing the experts.
+        """
+        from compressed_tensors.utils.match import is_match
+
+        # Check all experts have the same CT scheme: if not, we cannot set `mxfp4` experts implementation for all
+        ct_config = self.compressor.quantization_config
+        scheme = get_experts_scheme(ct_config)
+
+        experts_modules = []
+        for name, module in model.named_modules():
+            # Skip modules not affected by `set_experts_implementation`
+            if not (name.endswith(".experts") and is_packed_experts_module(module)):
+                continue
+            experts_modules.append(name)
+
+            # Exit if an affected expert does not match the CT scheme
+            if not is_match(name, module, scheme.targets, ct_config.ignore or ()):
+                logger.warning_once(
+                    f"The expert {name} in this checkpoint does not match the CT mxfp4 quantization scheme, but the "
+                    "packed mxfp4 runtime must dispatch one implementation to every MoE layer. Decompressing the model."
+                )
+                self.packed_experts_format = None
+                return
+
+        failed_to_switch = try_set_experts_implementation(model, experts_modules, "mxfp4")
+
+        if not experts_modules or failed_to_switch:
+            logger.warning_once(
+                f"This checkpoint stores its MoE experts in `{self.packed_experts_format}`, but "
+                f"{model.__class__.__name__} cannot run them in that format. The experts will be decompressed "
+                "to the model dtype at load time instead, which uses several times more memory."
+            )
+            self.packed_experts_format = None
 
     def _process_model_before_weight_loading(self, model, **kwargs):
         ct_config = self.compressor.quantization_config
         remaining_groups = dict(ct_config.config_groups)
+
+        if self.packed_experts_format is not None:
+            self._setup_packed_experts(model)
 
         if self.use_fp8_kernel:
             from ..integrations.compressed_tensors import replace_with_compressed_tensors_fp8_linear
@@ -144,8 +249,8 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
     @property
     def is_trainable(self):
-        # The FP8 kernel path is inference-only; load with `dequantize=True` to fine-tune.
-        return not self.use_fp8_kernel
+        # The FP8 kernel and packed-experts paths are inference-only; load with `dequantize=True` to fine-tune.
+        return not self.use_fp8_kernel and self.packed_experts_format is None
 
     @property
     def is_compileable(self) -> bool:
@@ -153,14 +258,23 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
     def is_qat_trainable(self) -> bool:
         """Loaded Models can carry out quantization aware training"""
-        if self.use_fp8_kernel:
+        if self.use_fp8_kernel or self.packed_experts_format is not None:
             return False
         # models need to be decompressed carry out qat
         return self.quantization_config.dequantize or not self.quantization_config.is_quantization_compressed
 
     def is_serializable(self) -> bool:
         """Models quantized using compressed tensors can be saved to disk"""
-        return True
+        was_dequantized = self.packed_experts_format is None
+        if not was_dequantized:
+            # If the experts were not dequantized, they were converted from CT format to a swizzled format to be
+            # readable by the kernel. Good news: we can keep the quantized weights at runtime. Bad news: we can't save
+            # the model back as a CT checkpoint. Not an issue because the checkpoint already exists (it was loaded)
+            logger.warning(
+                "A model whose MoE experts were loaded in their packed form cannot be saved: reload it with "
+                "`CompressedTensorsConfig(dequantize=True)` to get expert weights back as plain parameters."
+            )
+        return was_dequantized
 
     def get_weight_conversions(self):
         """On the FP8 kernel path, a generic converter reshapes the checkpoint ``weight_scale``
@@ -179,12 +293,16 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
             )
         ]
 
-    def update_weight_conversions(self, weight_conversions):
+    def update_weight_conversions(self, weight_conversions: list["WeightTransform"]) -> list["WeightTransform"]:
         """Attach the quantization sources (scales, packed weights) of MoE expert converters
         to their bucket and prepend a :class:`DecompressExperts` op, so the per-expert
         (weight, scale) pairs are dequantized *before* the merge / concat ops collapse the
         per-expert structure. FP8 checkpoints keep the plain ``weight`` name; packed formats
         use ``weight_packed`` / ``weight_shape``.
+
+        When the experts run packed, :class:`LoadPackedExperts` replaces that chain instead: it drives
+        the model's own merge / concat ops over the packed weights and their scales and never
+        decompresses anything.
 
         The generic converters from :meth:`get_weight_conversions` are appended at the end:
         converters are matched in order, so the expert converters keep their scale keys.
@@ -210,7 +328,12 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
                     packed_weight = [p + "_packed$" for p in weight_sources]
                     shape_sources = [p + "_shape$" for p in weight_sources]
                     new_sources = packed_weight + scale_sources + shape_sources + other
-                new_ops = [DecompressExperts(self, scheme=scheme)] + list(conv.operations)
+                if self.packed_experts_format is not None:
+                    # The packed runtime needs the merge to happen on the packed bytes, so it runs the model's ops
+                    # itself instead of being an additional operation.
+                    new_ops = [LoadPackedFp4Experts(self, scheme=scheme, operations=list(conv.operations))]
+                else:
+                    new_ops = [DecompressExperts(self, scheme=scheme)] + list(conv.operations)
                 conv = WeightConverter(
                     source_patterns=new_sources,
                     target_patterns=conv._original_target_patterns,

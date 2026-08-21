@@ -13,33 +13,83 @@
 # limitations under the License.
 "CompressedTensors integration file"
 
+from typing import TYPE_CHECKING
+
 import torch
 from torch import nn
 
 from ..core_model_loading import ConversionOps, _IdentityOp
+from ..integrations.mxfp4 import LoadPackedMxfp4Experts
 from ..utils import logging
 from ..utils.import_utils import is_torch_greater_or_equal
 
 
+if TYPE_CHECKING:
+    from compressed_tensors.quantization import QuantizationConfig, QuantizationScheme
+
+    from ..quantizers.quantizer_compressed_tensors import CompressedTensorsHfQuantizer
+
 logger = logging.get_logger(__name__)
 
 
-def get_experts_scheme(quantization_config):
-    """Resolve which config group quantizes the MoE experts. Mixed configs quantize
-    different layers with different schemes (e.g. Kimi: FP8 attention + INT4 experts), so
-    the experts' scheme cannot be assumed global: the experts' group is the one whose
-    `re:` targets mention the expert modules.
+# List of formats that can be executed straight from their packed bytes
+RUNNABLE_EXPERTS_FORMATS = ("mxfp4-pack-quantized",)
+
+
+def get_experts_scheme(quantization_config: "QuantizationConfig") -> "QuantizationScheme":
+    """Returns which config group quantizes the MoE experts.
+    Mixed configs quantize different layers with different schemes (e.g. Kimi: FP8 attention + INT4 experts), so the
+    experts' scheme cannot be assumed global. The experts' group is the one whose `re:` targets mention the experts
+    modules.
     """
     groups = list(quantization_config.config_groups.values())
+    # Best match: a `re:` regex pattern mentioning "experts"
     for group in groups:
         if any(target.startswith("re:") and "experts" in target for target in group.targets):
             return group
-    # Class-name targets (e.g. "Linear"): expert projections are Linear submodules in
-    # the checkpoint layout, so the first such group covers them.
+    # Second best: a group with no regex pattern target, that would match a whole class (e.g. "Linear"). Since expert
+    # projections are Linear submodules in the checkpoint layout, the first such group covers them.
     for group in groups:
         if any(not target.startswith("re:") for target in group.targets):
             return group
+    # Last resort: the first group in the config
     return groups[0]
+
+
+def is_runnable_expert_format(quantization_config: "QuantizationConfig") -> str | None:
+    """Retrieves the quantization scheme used for the MoE experts, and if it can be used as is during a forward, returns
+    it. Otherwise, returns `None`. Only the formats in `RUNNABLE_EXPERTS_FORMATS` can be executed straight from their
+    packed bytes; anything else (FP8, int4 `pack-quantized`, …) still has to be decompressed at load time.
+    """
+    scheme = get_experts_scheme(quantization_config)
+    weights = getattr(scheme, "weights", None)
+    # The kernels cannot read `weight_zero_point` or non-symmetric quantization
+    if weights is None or not getattr(weights, "symmetric", True):
+        return None
+    # If the per-group `format` is set, use it. Otherwise, use the checkpoint-level `format`.
+    format = scheme.format or quantization_config.format
+    format = getattr(format, "value", format)
+    return format if format in RUNNABLE_EXPERTS_FORMATS else None
+
+
+class LoadPackedFp4Experts(LoadPackedMxfp4Experts):
+    """`LoadPackedMxfp4Experts` for compressed-tensors `mxfp4-pack-quantized` checkpoints, which hold one
+    `weight_packed` / `weight_scale` pair per expert projection instead of native mxfp4's `weight_blocks` /
+    `weight_scales`. Only the checkpoint's component names differ: everything else stays the same.
+    """
+
+    component_names: tuple[str, str] = ("weight_packed", "weight_scale")
+
+    def __init__(
+        self,
+        hf_quantizer: "CompressedTensorsHfQuantizer",
+        scheme: "QuantizationScheme",
+        operations: list[ConversionOps],
+    ):
+        self.scheme = scheme
+        super().__init__(hf_quantizer, operations)
+
+    # TODO: if the compressed tensor format becomes serializable, a reverse op will be needed
 
 
 class DecompressExperts(ConversionOps):

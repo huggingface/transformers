@@ -22,6 +22,7 @@ from transformers import AutoTokenizer, GptOssForCausalLM, Mxfp4Config
 from transformers.testing_utils import (
     require_kernels,
     require_torch,
+    require_torch_accelerator,
     require_torch_large_accelerator,
     require_triton,
     slow,
@@ -369,6 +370,275 @@ class Mxfp4IntegrationTest(unittest.TestCase):
 
         # Check that shapes are reasonable
         self.assertEqual(quantized_w.dtype, torch.uint8)
+
+
+@require_torch
+@require_torch_accelerator
+@REQUIRE_TRITON_MXFP4
+@require_kernels
+class Mxfp4GenericMoeTest(unittest.TestCase):
+    """Mxfp4Config on a MoE that is not gpt-oss: the experts module keeps its class and dispatches
+    through `ExpertsInterface`, quantized on the fly, saved per expert, and loadable back packed or
+    dequantized."""
+
+    @classmethod
+    def setUpClass(cls):
+        from transformers import Qwen3MoeConfig, Qwen3MoeForCausalLM
+
+        config = Qwen3MoeConfig(
+            vocab_size=256,
+            hidden_size=128,
+            intermediate_size=128,
+            moe_intermediate_size=64,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            num_experts=8,
+            num_experts_per_tok=2,
+            decoder_sparse_step=1,
+            mlp_only_layers=[],
+            max_position_embeddings=64,
+            tie_word_embeddings=False,
+        )
+        torch.manual_seed(0)
+        model = Qwen3MoeForCausalLM(config).to(torch.bfloat16)
+        with torch.no_grad():
+            for parameter in model.parameters():
+                parameter.normal_(0, 0.05)
+
+        cls.directory = tempfile.TemporaryDirectory()
+        model.save_pretrained(cls.directory.name)
+        cls.input_ids = torch.randint(0, 256, (2, 16)).to(torch_device)
+        model = model.to(torch_device).eval()
+        with torch.no_grad():
+            cls.reference_logits = model(cls.input_ids).logits.float().cpu()
+        cls.reference_gate_up = model.model.layers[0].mlp.experts.gate_up_proj.detach().cpu()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.directory.cleanup()
+
+    def tearDown(self):
+        gc.collect()
+        _empty_accelerator_cache()
+
+    def _quantized_model(self, path=None, **kwargs):
+        from transformers import AutoModelForCausalLM
+
+        return AutoModelForCausalLM.from_pretrained(
+            path or self.directory.name, dtype=torch.bfloat16, device_map=torch_device, **kwargs
+        ).eval()
+
+    def test_quantize_on_the_fly(self):
+        model = self._quantized_model(quantization_config=Mxfp4Config())
+        experts = model.model.layers[0].mlp.experts
+
+        self.assertEqual(model.config._experts_implementation, "mxfp4")
+        self.assertEqual(type(experts).__name__, "Qwen3MoeExperts")
+        # The packed bytes are ordinary parameters, so torch and accelerate keep managing them.
+        self.assertIsInstance(experts.gate_up_proj_swizzled, torch.nn.Parameter)
+        self.assertEqual(experts.gate_up_proj_swizzled.dtype, torch.uint8)
+        self.assertIsInstance(experts.down_proj_swizzled_scales, torch.nn.Parameter)
+
+        with torch.no_grad():
+            logits = model(self.input_ids).logits.float().cpu()
+        self.assertTrue(logits.isfinite().all())
+        similarity = torch.nn.functional.cosine_similarity(logits.flatten(1), self.reference_logits.flatten(1), dim=-1)
+        self.assertGreater(similarity.min().item(), 0.97)
+
+    def test_weights_are_actually_quantized(self):
+        model = self._quantized_model(quantization_config=Mxfp4Config())
+        with tempfile.TemporaryDirectory() as saved:
+            model.save_pretrained(saved)
+            dequantized = self._quantized_model(saved, quantization_config=Mxfp4Config(dequantize=True))
+        weight = dequantized.model.layers[0].mlp.experts.gate_up_proj.detach().float().cpu()
+        reference = self.reference_gate_up.float()
+        relative_error = (weight - reference).abs().mean() / reference.abs().mean()
+        # e2m1 with one e8m0 scale per 32 values sits around 10% mean relative error on gaussian
+        # weights; anything much lower means the weights silently skipped quantization.
+        self.assertGreater(relative_error.item(), 0.01)
+        self.assertLess(relative_error.item(), 0.3)
+
+    def test_save_and_reload(self):
+        model = self._quantized_model(quantization_config=Mxfp4Config())
+        with torch.no_grad():
+            quantized_logits = model(self.input_ids).logits.float().cpu()
+
+        with tempfile.TemporaryDirectory() as saved:
+            model.save_pretrained(saved)
+            del model
+            _empty_accelerator_cache()
+
+            from safetensors import safe_open
+
+            with safe_open(f"{saved}/model.safetensors", framework="pt") as handle:
+                expert_keys = [key for key in handle.keys() if ".mlp.experts." in key]
+            # The model's reverse conversions apply to the packed tensors too: one
+            # `(weight_blocks, weight_scales)` pair per expert projection.
+            self.assertTrue(all(key.endswith(("weight_blocks", "weight_scales")) for key in expert_keys))
+
+            reloaded = self._quantized_model(saved)
+            self.assertEqual(reloaded.config._experts_implementation, "mxfp4")
+            with torch.no_grad():
+                reloaded_logits = reloaded(self.input_ids).logits.float().cpu()
+            # Saving and reloading the packed bytes must not change a single value.
+            torch.testing.assert_close(reloaded_logits, quantized_logits, atol=0, rtol=0)
+
+    def test_reload_dequantized(self):
+        model = self._quantized_model(quantization_config=Mxfp4Config())
+        with torch.no_grad():
+            quantized_logits = model(self.input_ids).logits.float().cpu()
+
+        with tempfile.TemporaryDirectory() as saved:
+            model.save_pretrained(saved)
+            dequantized = self._quantized_model(saved, quantization_config=Mxfp4Config(dequantize=True))
+        experts = dequantized.model.layers[0].mlp.experts
+        self.assertIsInstance(experts.gate_up_proj, torch.nn.Parameter)
+        self.assertEqual(experts.gate_up_proj.dtype, torch.bfloat16)
+        with torch.no_grad():
+            dequantized_logits = dequantized(self.input_ids).logits.float().cpu()
+        # Same weights, kernel matmul against dense matmul: only accumulation differences remain.
+        torch.testing.assert_close(dequantized_logits, quantized_logits, atol=5e-3, rtol=5e-2)
+
+    def test_quantized_model_can_change_device(self):
+        """The packed bytes are registered parameters, so `.to()` carries them like any other weight —
+        the kernel wrappers are rebuilt around wherever the parameters live."""
+        model = self._quantized_model(quantization_config=Mxfp4Config())
+        with torch.no_grad():
+            reference = model(self.input_ids).logits.float().cpu()
+
+        if torch.cuda.is_available() and torch.cuda.device_count() > 1:
+            model = model.to("cuda:1")
+            experts = model.model.layers[0].mlp.experts
+            self.assertEqual(experts.gate_up_proj_swizzled.device, torch.device("cuda:1"))
+            with torch.no_grad():
+                moved = model(self.input_ids.to("cuda:1")).logits.float().cpu()
+            torch.testing.assert_close(moved, reference, atol=0, rtol=0)
+
+        # A cpu round trip must also carry the packed bytes (running there is a different matter).
+        model = model.to("cpu").to(torch_device)
+        with torch.no_grad():
+            back = model(self.input_ids.to(torch_device)).logits.float().cpu()
+        torch.testing.assert_close(back, reference, atol=0, rtol=0)
+
+    def test_kernel_wrappers_follow_the_parameters(self):
+        """The kernel wrappers are rebuilt per call around the registered parameters, so they read the
+        bytes wherever a device move last put them."""
+        from transformers.integrations.mxfp4 import make_packed_mxfp4_proj
+
+        model = self._quantized_model(quantization_config=Mxfp4Config())
+        experts = model.model.layers[0].mlp.experts
+
+        weight, precision_config = make_packed_mxfp4_proj(experts, "gate_up_proj")
+        self.assertIs(weight.storage.data, experts.gate_up_proj_swizzled)
+        self.assertIsNotNone(precision_config)
+
+        model.to("cpu")
+        moved_weight, _ = make_packed_mxfp4_proj(experts, "gate_up_proj")
+        self.assertEqual(moved_weight.storage.data.device.type, "cpu")
+        model.to(torch_device)
+
+    def test_quantized_model_cpu_offload(self):
+        """Expert layers offloaded to CPU stream through the accelerate hooks like dense weights."""
+        from transformers import AutoModelForCausalLM
+
+        device_map = {"model.embed_tokens": 0, "model.rotary_emb": 0, "model.norm": 0, "lm_head": 0}
+        device_map |= {"model.layers.0": 0, "model.layers.1": "cpu"}
+        model = AutoModelForCausalLM.from_pretrained(
+            self.directory.name, quantization_config=Mxfp4Config(), dtype=torch.bfloat16, device_map=device_map
+        ).eval()
+        reference = self._quantized_model(quantization_config=Mxfp4Config())
+        with torch.no_grad():
+            offloaded_logits = model(self.input_ids.to(0)).logits.float().cpu()
+            reference_logits = reference(self.input_ids).logits.float().cpu()
+        torch.testing.assert_close(offloaded_logits, reference_logits, atol=0, rtol=0)
+
+    def test_non_moe_model_warns_and_loads_dense(self):
+        from transformers import AutoModelForCausalLM, LlamaConfig, LlamaForCausalLM
+
+        config = LlamaConfig(
+            vocab_size=256, hidden_size=64, intermediate_size=128, num_hidden_layers=1, num_attention_heads=4
+        )
+        model = LlamaForCausalLM(config).to(torch.bfloat16)
+        with tempfile.TemporaryDirectory() as directory:
+            model.save_pretrained(directory)
+            loaded = AutoModelForCausalLM.from_pretrained(
+                directory, quantization_config=Mxfp4Config(), dtype=torch.bfloat16, device_map=torch_device
+            )
+        # Nothing to quantize: the model loads dense and usable.
+        self.assertIsInstance(loaded.model.layers[0].mlp.gate_proj.weight, torch.nn.Parameter)
+
+
+@require_torch
+@require_torch_accelerator
+@REQUIRE_TRITON_MXFP4
+@require_kernels
+class Mxfp4TinyGptOssTest(unittest.TestCase):
+    """On-the-fly quantization of a bf16 gpt-oss, on a configuration whose hidden and intermediate sizes
+    differ: the quantization used to transpose the already-transposed gpt-oss layout, which only crashes
+    when the projections are not square. The weight-level check guards the second failure mode, where the
+    loader cast the dense bf16 weights to the module's uint8 blocks dtype before quantizing them — the
+    logits of a tiny model stay plausible even with destroyed experts, the weights do not."""
+
+    def tearDown(self):
+        gc.collect()
+        _empty_accelerator_cache()
+
+    def test_quantize_on_the_fly_non_square(self):
+        from transformers import GptOssConfig
+
+        config = GptOssConfig(
+            vocab_size=256,
+            hidden_size=64,
+            intermediate_size=128,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            head_dim=16,
+            num_local_experts=4,
+            num_experts_per_tok=2,
+            max_position_embeddings=64,
+            tie_word_embeddings=False,
+        )
+        torch.manual_seed(0)
+        model = GptOssForCausalLM(config).to(torch.bfloat16)
+        with torch.no_grad():
+            for parameter in model.parameters():
+                parameter.normal_(0, 0.05)
+
+        input_ids = torch.randint(0, 256, (1, 16)).to(torch_device)
+        with tempfile.TemporaryDirectory() as directory:
+            model.save_pretrained(directory)
+            model = model.to(torch_device).eval()
+            with torch.no_grad():
+                reference_logits = model(input_ids).logits.float()
+
+            quantized = GptOssForCausalLM.from_pretrained(
+                directory, quantization_config=Mxfp4Config(), dtype=torch.bfloat16, device_map=torch_device
+            ).eval()
+        experts = quantized.model.layers[0].mlp.experts
+        self.assertEqual(type(experts).__name__, "Mxfp4GptOssExperts")
+        from transformers.integrations.mxfp4 import make_packed_mxfp4_proj
+
+        weight, precision_config = make_packed_mxfp4_proj(experts, "gate_up_proj")
+        self.assertIsNotNone(precision_config)
+        self.assertEqual(tuple(weight.shape), (4, 64, 256))
+
+        with torch.no_grad():
+            quantized_logits = quantized(input_ids).logits.float()
+        similarity = torch.nn.functional.cosine_similarity(
+            quantized_logits.flatten(1), reference_logits.flatten(1), dim=-1
+        )
+        self.assertGreater(similarity.min().item(), 0.97)
+
+        from transformers.integrations.mxfp4 import convert_moe_packed_tensors, unswizzle_mxfp4_proj
+
+        blocks, scales = unswizzle_mxfp4_proj(experts, "gate_up_proj")
+        dequantized = convert_moe_packed_tensors(blocks, scales).float().cpu()
+        reference = model.model.layers[0].mlp.experts.gate_up_proj.detach().float().cpu()
+        relative_error = (dequantized - reference).abs().mean() / reference.abs().mean()
+        self.assertGreater(relative_error.item(), 0.01)
+        self.assertLess(relative_error.item(), 0.3)
 
 
 @require_torch

@@ -16,9 +16,21 @@ rendered properly in your Markdown viewer.
 
 # MXFP4
 
-Note: MXFP4 quantization currently only works for OpenAI GPT-OSS 120b and 20b.
-
 MXFP4 is a 4-bit floating point format that dramatically reduces the memory requirements of large models. Large models (GPT-OSS-120B) can fit on a single 80GB GPU and smaller models (GPT-OSS-20B) only require 16GB of memory. It uses blockwise scaling to preserve its range and accuracy, which typically becomes degraded at lower precisions.
+
+MXFP4 quantizes the MoE experts of any mixture-of-experts model, which hold nearly all of its weights. Pass `Mxfp4Config()` to quantize a model on the fly at load time; the quantized model can be saved with [`~PreTrainedModel.save_pretrained`] and loads back in its quantized form.
+
+```py
+from transformers import AutoModelForCausalLM, Mxfp4Config
+
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen3-30B-A3B-Instruct-2507",
+    quantization_config=Mxfp4Config(),
+    dtype="bfloat16",
+    device_map="auto",
+)
+model.save_pretrained("qwen3-30b-a3b-mxfp4")
+```
 
 To use MXPF4, make sure your hardware meets the following requirements.
 

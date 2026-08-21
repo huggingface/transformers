@@ -13,7 +13,11 @@
 # limitations under the License.
 import re
 from contextlib import contextmanager
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+
+if TYPE_CHECKING:
+    import torch
 
 
 def get_module_from_name(module, tensor_name: str) -> tuple[Any, str]:
@@ -21,6 +25,35 @@ def get_module_from_name(module, tensor_name: str) -> tuple[Any, str]:
         module_name, tensor_name = tensor_name.rsplit(".", 1)
         module = module.get_submodule(module_name)
     return module, tensor_name
+
+
+def is_packed_experts_module(module: "torch.nn.Module") -> bool:
+    """Returns whether `module` is a fused-experts module. This requires the module to be decorated with
+    `use_experts_implementation` (which sets the `has_gate` and `num_experts` attributes), to have the right projections
+    (`gate_up_proj` for gated MoEs, `up_proj` for non-gated ones, and `down_proj` either way).
+    """
+    # Check for everything but the gate_up or up projection
+    if not (hasattr(module, "has_gate") and hasattr(module, "down_proj") and hasattr(module, "num_experts")):
+        return False
+    # Now that we know there is a "has_gate" attribute, we can check for the right projection
+    first_proj_name = "gate_up_proj" if module.has_gate else "up_proj"
+    return hasattr(module, first_proj_name)
+
+
+def try_set_experts_implementation(model, module_names: list[str], implementation: str) -> list[str]:
+    """Attempts to switch `model`'s named `.experts` modules to `implementation` via `set_experts_implementation`,
+    and returns the subset of `module_names` whose module failed to adopt it (e.g. because the model architecture
+    does not support that implementation). Does nothing and returns `[]` if `module_names` is empty.
+
+    This is not mxfp4-specific: `set_experts_implementation` is the general mechanism MoE modules use to switch
+    between any registered experts implementation (`"eager"`, `"grouped_mm"`, a quantizer-provided one, ...).
+    """
+    if not module_names:
+        return []
+    model.set_experts_implementation(implementation)
+    return [
+        name for name in module_names if model.get_submodule(name).config._experts_implementation != implementation
+    ]
 
 
 def should_convert_module(full_name, patterns: list[str] | None = None):

@@ -1230,11 +1230,12 @@ def spawn_materialize(
     sharding_op: DtensorShardOperation | None = None,
     tensor_idx: int | None = None,
 ) -> Future | Callable:
-    """Materialize (and optionally shard) a tensor, asynchronously if a thread pool is provided.
+    """Materialize (and optionally shard) a tensor, asynchronously if a thread pool is provided. Returns a Future if a
+    thread pool is provided and a Callable if not. Actual weight loading and dispatching happens inside this Future or
+    Callable.
 
-    When ``sharding_op`` is given the tensor is sharded (DTensor placement or legacy TP plan);
-    otherwise it is simply copied to *device*/*dtype*. Without a thread pool a deferred
-    callable is returned instead of a Future.
+    When ``sharding_op`` is given the tensor is sharded (DTensor placement or legacy TP plan); otherwise it is simply
+    copied to *device*/*dtype*. Without a thread pool a deferred callable is returned instead of a Future.
     """
 
     def _job():
@@ -1630,37 +1631,36 @@ def convert_and_load_state_dict_in_model(
                 source_pattern = original_key
 
             # 3. Handle dtype casting
-            needs_quantization = (
-                hf_quantizer
-                and not hf_quantizer.pre_quantized
-                and hf_quantizer.param_needs_quantization(model, renamed_key)
-            )
-            if needs_quantization:
-                mapping.quantization_operation = hf_quantizer.get_quantize_ops()
+            materialize_dtype = dtype
 
-            _dtype = dtype
-            if (
-                hf_quantizer
-                and hf_quantizer.pre_quantized
-                and (
-                    original_key != renamed_key
-                    or not (
-                        tensor.get_dtype().startswith(("F", "BF"))
-                        if hasattr(tensor, "get_dtype")
-                        else tensor.is_floating_point()
-                    )
-                )
-            ):
-                # if the key was renamed as it is not available in the state dict otherwise, it means that we are deserializing it,
-                # so we need to make sure to load the tensor with the same dtype from the checkpoint
+            if hasattr(tensor, "get_dtype"):  # if `tensor` is a safetensors object, this is how we get the dtype
+                is_floating_point = tensor.get_dtype().startswith(("F", "BF"))
+            else:  # otherwise tensor is a torch.Tensor
+                is_floating_point = tensor.is_floating_point()
+
+            # Only quantize the parameter if it needs to be quantized and it isn't already
+            if hf_quantizer is not None and not hf_quantizer.pre_quantized:
+                needs_quantization = hf_quantizer.param_needs_quantization(model, renamed_key)
+                if needs_quantization:
+                    mapping.quantization_operation = hf_quantizer.get_quantize_ops()
+            else:
+                needs_quantization = False
+
+            is_pre_quantized = hf_quantizer is not None and hf_quantizer.pre_quantized
+            if is_pre_quantized and (original_key != renamed_key or not is_floating_point):
+                # if the key was renamed as it is not available in the state dict otherwise, it means that we are
+                # deserializing it, so we need to make sure to load the tensor with the same dtype from the checkpoint
                 # TODO: make the condition more srict for native fp8 model such as qwen2moe fp8
-                _dtype = None
+                materialize_dtype = None
             elif dtype_plan != {} and dtype_policy_alt.search(renamed_key):
                 matched_dtype_pattern = dtype_policy_alt.search(renamed_key)
                 if matched_dtype_pattern is not None:
-                    _dtype = dtype_plan[dtype_policy_by_group_name[matched_dtype_pattern.lastgroup]]
-            elif empty_param is not None and empty_param.dtype != _dtype:
-                _dtype = empty_param.dtype  # usually correct when initializing
+                    materialize_dtype = dtype_plan[dtype_policy_by_group_name[matched_dtype_pattern.lastgroup]]
+            elif empty_param is not None and empty_param.dtype != materialize_dtype and not needs_quantization:
+                # A param about to be quantized on the fly must keep its checkpoint precision: the meta model may
+                # already declare the quantized container for it (e.g. uint8 mxfp4 blocks), and casting the dense
+                # weight to that dtype would destroy it before the quantize op runs.
+                materialize_dtype = empty_param.dtype
 
             # Per-expert sharding (EP) needs `tensor_idx` = the expert index so the
             # distributed op selects whole experts. The signal is a `MergeModulelist`
@@ -1695,7 +1695,7 @@ def convert_and_load_state_dict_in_model(
                 thread_pool,
                 tensor,
                 materialize_device,
-                _dtype,
+                materialize_dtype,
                 sharding_op=sharding_op,
                 tensor_idx=tensor_idx,
             )
