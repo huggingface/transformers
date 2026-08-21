@@ -277,7 +277,7 @@ class Dots1MLP(nn.Module):
 
 
 class Dots1TopkRouter(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: Dots1Config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts

@@ -19,7 +19,6 @@
 # limitations under the License.
 
 
-import math
 from collections.abc import Callable
 
 import torch
@@ -27,42 +26,45 @@ import torch.nn.functional as F
 from einops import rearrange
 from torch import nn
 
-from transformers.activations import ACT2FN
-from transformers.cache_utils import Cache
-from transformers.generation import GenerationMixin
-from transformers.masking_utils import create_causal_mask
-from transformers.modeling_flash_attention_utils import FlashAttentionKwargs
-from transformers.modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from transformers.processing_utils import Unpack
-from transformers.utils import TransformersKwargs, auto_docstring, can_return_tuple
-from transformers.utils.generic import OutputRecorder, check_model_inputs
-
+from ...activations import ACT2FN
+from ...cache_utils import Cache
+from ...generation import GenerationMixin
+from ...integrations import use_kernel_forward_from_hub
+from ...masking_utils import create_causal_mask
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.generic import OutputRecorder, check_model_inputs
 from .configuration_kimi_linear import KimiLinearConfig
 
 
-# Closest parent: LlamaRMSNorm. PERFECT match, drop-in T5-style RMSNorm — no adjustment needed.
-class KimiRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
+@use_kernel_forward_from_hub("RMSNorm")
+class KimiLinearRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
-        KimiRMSNorm is equivalent to T5LayerNorm
+        KimiLinearRMSNorm is equivalent to T5LayerNorm
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
         return self.weight * hidden_states.to(input_dtype)
 
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
 
 # Closest parent: DeepseekV3Experts. NEEDS ADJUSTMENT: the SwiGLU math per expert (w1/w2/w3) is identical,
 # but this is written as one `nn.Module` per expert in an `nn.ModuleList` + a manual `moe_infer` loop; the
 # modern equivalent batches every expert's weights into one module (packed tensors + grouped gemm).
-class KimiBlockSparseMLP(nn.Module):
+class KimiLinearBlockSparseMLP(nn.Module):
     def __init__(self, config: KimiLinearConfig, hidden_size=None, intermediate_size=None):
         super().__init__()
         self.config = config
@@ -81,13 +83,11 @@ class KimiBlockSparseMLP(nn.Module):
         return current_hidden_states
 
 
-# Closest parent: DeepseekV3MLP. PERFECT match (same gate/up/down SwiGLU MLP, used for shared experts and
-# dense layers) — no adjustment needed.
-class KimiMLP(nn.Module):
-    def __init__(self, config: KimiLinearConfig, hidden_size=None, intermediate_size=None):
+class KimiLinearMLP(nn.Module):
+    def __init__(self, config, intermediate_size=None):
         super().__init__()
         self.config = config
-        self.hidden_size = config.hidden_size if hidden_size is None else hidden_size
+        self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
@@ -99,8 +99,6 @@ class KimiMLP(nn.Module):
         return down_proj
 
 
-# Closest parent: llama.modeling_llama.repeat_kv. PERFECT match, byte-identical helper — import instead of
-# redefining.
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
@@ -113,8 +111,6 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-# Closest parent: llama.modeling_llama.eager_attention_forward. PERFECT match, byte-identical helper —
-# import instead of redefining.
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -130,8 +126,7 @@ def eager_attention_forward(
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
@@ -145,7 +140,7 @@ def eager_attention_forward(
 # kv_b_proj/o_proj, the flash-attn v_head_dim padding trick, and the eager_attention_forward call are all
 # identical. Only difference: DeepseekV3Attention.forward requires `position_embeddings` and always applies
 # rope; this needs it to become optional and skip rope when `None` (Kimi's NoPE full-attention layers).
-class KimiMLAAttention(nn.Module):
+class KimiLinearMLAAttention(nn.Module):
     """
     Multi-Latent Attention adapted from deepseek-v3
     """
@@ -185,7 +180,7 @@ class KimiMLAAttention(nn.Module):
             self.kv_lora_rank + self.qk_rope_head_dim,
             bias=False,
         )
-        self.kv_a_layernorm = KimiRMSNorm(self.kv_lora_rank)
+        self.kv_a_layernorm = KimiLinearRMSNorm(self.kv_lora_rank)
         self.kv_b_proj = nn.Linear(
             self.kv_lora_rank,
             self.num_heads * (self.q_head_dim - self.qk_rope_head_dim + self.v_head_dim),
@@ -262,7 +257,7 @@ class KimiMLAAttention(nn.Module):
 # torch_recurrent_gated_delta_rule, causal_conv1d_fn/update, Qwen3NextRMSNormGated) — should be ported onto
 # those to drop the hard dependency. KDA also adds two low-rank bottlenecks Qwen3Next doesn't have: the
 # forget gate (f_a_proj -> f_b_proj) and the output gate (g_a_proj -> g_b_proj); those are genuinely new code.
-class KimiDeltaAttention(nn.Module):
+class KimiLinearDeltaAttention(nn.Module):
     def __init__(self, config: KimiLinearConfig, layer_idx: int):
         super().__init__()
         self.config = config
@@ -401,90 +396,51 @@ class KimiDeltaAttention(nn.Module):
         return o
 
 
-# Closest parent: DeepseekV3TopkRouter. NEAR-PERFECT: bias-corrected sigmoid gate, grouped top-k,
-# renormalize, and `routed_scaling_factor` are the same computation — once `moe_router_activation_func` is
-# hardcoded to sigmoid (dropped as a config field, per earlier discussion), this can likely be a bare
-# `pass` subclass.
-class KimiMoEGate(nn.Module):
-    """
-    MoEGate adapted from Deepseek-V3.
-    Parameter correspondences:
-        num_experts -> n_routed_experts
-        num_experts_per_token -> num_experts_per_tok
-        num_expert_group -> n_group
-        moe_router_activation_func -> scoring_func
-    """
-
+class KimiLinearMoEGate(nn.Module):
     def __init__(self, config: KimiLinearConfig):
         super().__init__()
-        self.config = config
-        self.top_k = config.num_experts_per_token
-        self.num_experts = config.num_experts
+        self.top_k = config.num_experts_per_tok
+        self.num_experts = config.num_local_experts
+        self.hidden_dim = config.hidden_size
+        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
         self.routed_scaling_factor = config.routed_scaling_factor
-        self.moe_router_activation_func = config.moe_router_activation_func
-        self.num_expert_group = getattr(config, "num_expert_group", 1)
-        self.topk_group = getattr(config, "topk_group", 1)
-
-        # topk selection algorithm
-        self.moe_renormalize = config.moe_renormalize
-        self.gating_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.empty((self.num_experts, self.gating_dim)))
-
-        self.e_score_correction_bias = nn.Parameter(torch.empty(self.num_experts))
-        self.reset_parameters()
-
-    def reset_parameters(self) -> None:
-        import torch.nn.init as init
-
-        init.kaiming_uniform_(self.weight, a=math.sqrt(5))
+        self.num_group = config.n_group
+        self.topk_group = config.topk_group
+        self.norm_topk_prob = config.norm_topk_prob
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts))
 
     def forward(self, hidden_states):
-        bsz, seq_len, h = hidden_states.shape
-        # compute gating score
-        hidden_states = hidden_states.view(-1, h)
-        logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32), None)
-        if self.moe_router_activation_func == "sigmoid":
-            scores = logits.sigmoid()
-        elif self.moe_router_activation_func == "softmax":
-            scores = logits.softmax(dim=1)
-        else:
-            raise NotImplementedError(
-                f"insupportable scoring function for MoE gating: {self.moe_router_activation_func}"
-            )
-
-        # select top-k experts
-        assert not self.training
-        scores_for_choice = scores.view(bsz * seq_len, -1)
-        scores_for_choice += self.e_score_correction_bias.unsqueeze(0)
+        hidden_states = hidden_states.view(-1, self.hidden_dim)
+        router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
+        scores = router_logits.sigmoid()
+        scores_for_choice = scores + self.e_score_correction_bias
         group_scores = (
-            scores_for_choice.view(bsz * seq_len, self.num_expert_group, -1).topk(2, dim=-1)[0].sum(dim=-1)
-        )  # [n, num_expert_group]
-        group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]  # [n, top_k_group]
-        group_mask = torch.zeros_like(group_scores)  # [n, num_expert_group]
-        group_mask.scatter_(1, group_idx, 1)  # [n, num_expert_group]
+            scores_for_choice.view(-1, self.num_group, self.num_experts // self.num_group)
+            .topk(2, dim=-1)[0]
+            .sum(dim=-1)
+        )
+        group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
+        group_mask = torch.zeros_like(group_scores)
+        group_mask.scatter_(1, group_idx, 1)
         score_mask = (
             group_mask.unsqueeze(-1)
-            .expand(bsz * seq_len, self.num_expert_group, self.num_experts // self.num_expert_group)
-            .reshape(bsz * seq_len, -1)
-        )  # [n, e]
-        tmp_scores = scores_for_choice.masked_fill(~score_mask.bool(), 0.0)  # [n, e]
-        _, topk_idx = torch.topk(tmp_scores, k=self.top_k, dim=-1, sorted=False)
-        topk_weight = scores.gather(1, topk_idx)
-
-        # norm gate to sum 1
-        if self.top_k > 1 and self.moe_renormalize:
-            denominator = topk_weight.sum(dim=-1, keepdim=True) + 1e-20
-            topk_weight = topk_weight / denominator
-        # must multiply the scaling factor
-        topk_weight = topk_weight * self.routed_scaling_factor
-
-        return topk_idx, topk_weight
+            .expand(-1, self.num_group, self.num_experts // self.num_group)
+            .reshape(-1, self.num_experts)
+        )
+        scores_for_choice = scores_for_choice.masked_fill(~score_mask.bool(), float("-inf"))
+        topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
+        topk_weights = scores.gather(1, topk_indices)
+        if self.norm_topk_prob:
+            denominator = topk_weights.sum(dim=-1, keepdim=True) + 1e-20
+            topk_weights /= denominator
+        topk_weights = topk_weights * self.routed_scaling_factor
+        return router_logits, topk_weights, topk_indices
 
 
 # Closest parent: DeepseekV3MoE. PERFECT match: gate + experts + shared_experts with the same
 # `identity + shared_experts(identity)` residual pattern — the manual `moe_infer` loop should be replaced by
-# DeepseekV3MoE's batched-expert forward once `KimiBlockSparseMLP` is ported to `DeepseekV3Experts`.
-class KimiSparseMoeBlock(nn.Module):
+# DeepseekV3MoE's batched-expert forward once `KimiLinearBlockSparseMLP` is ported to `DeepseekV3Experts`.
+class KimiLinearSparseMoeBlock(nn.Module):
     """
     Adapted from Deepseek-V3's MOE implementation
     The namings are consistent with Kimi's version.
@@ -503,14 +459,14 @@ class KimiSparseMoeBlock(nn.Module):
         self.ep_rank = 0
         self.experts = nn.ModuleList(
             [
-                KimiBlockSparseMLP(config, intermediate_size=config.moe_intermediate_size)
+                KimiLinearBlockSparseMLP(config, intermediate_size=config.moe_intermediate_size)
                 for _ in range(config.num_experts)
             ]
         )
-        self.gate = KimiMoEGate(config)
+        self.gate = KimiLinearMoEGate(config)
         if config.num_shared_experts is not None:
             intermediate_size = config.moe_intermediate_size * config.num_shared_experts
-            self.shared_experts = KimiMLP(config=config, intermediate_size=intermediate_size)
+            self.shared_experts = KimiLinearMLP(config=config, intermediate_size=intermediate_size)
 
     def forward(self, hidden_states):
         identity = hidden_states
@@ -521,7 +477,7 @@ class KimiSparseMoeBlock(nn.Module):
         if not self.training:
             y = self.moe_infer(hidden_states, topk_idx, topk_weight).view(*orig_shape)
         else:
-            raise NotImplementedError("Training mode is not supported in KimiSparseMoeBlock")
+            raise NotImplementedError("Training mode is not supported in KimiLinearSparseMoeBlock")
         if self.config.num_shared_experts is not None:
             y = y + self.shared_experts(identity)
         return y
@@ -565,17 +521,17 @@ class KimiSparseMoeBlock(nn.Module):
 # Closest parent: Qwen3NextDecoderLayer. NEEDS ADJUSTMENT: same idea (per-layer dispatch between a linear-
 # attention branch and a full-attention branch, driven by `config.layer_types`), but Qwen3Next's own
 # attention/MoE choice for the full-attention branch must be swapped for DeepSeek V3's MLA + MoE.
-class KimiDecoderLayer(nn.Module):
+class KimiLinearDecoderLayer(nn.Module):
     def __init__(self, config: KimiLinearConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.config = config
         if config.is_kda_layer(layer_idx):
             self.is_linear_attn = True
-            self.self_attn = KimiDeltaAttention(config=config, layer_idx=layer_idx)
+            self.self_attn = KimiLinearDeltaAttention(config=config, layer_idx=layer_idx)
         elif config.is_mla:
             self.is_linear_attn = False
-            self.self_attn = KimiMLAAttention(config=config, layer_idx=layer_idx)
+            self.self_attn = KimiLinearMLAAttention(config=config, layer_idx=layer_idx)
         else:
             raise NotImplementedError
         if (
@@ -583,11 +539,11 @@ class KimiDecoderLayer(nn.Module):
             and layer_idx >= config.first_k_dense_replace
             and layer_idx % getattr(config, "moe_layer_freq", 1) == 0
         ):
-            self.block_sparse_moe = KimiSparseMoeBlock(config)
+            self.block_sparse_moe = KimiLinearSparseMoeBlock(config)
         else:
-            self.mlp = KimiMLP(config)
-        self.input_layernorm = KimiRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = KimiRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+            self.mlp = KimiLinearMLP(config)
+        self.input_layernorm = KimiLinearRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = KimiLinearRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -653,19 +609,19 @@ class KimiDecoderLayer(nn.Module):
 
 # Closest parent: Qwen3NextPreTrainedModel (hybrid-model base, e.g. `_is_stateful`), not
 # DeepseekV3PreTrainedModel (pure full-attention). NEEDS ADJUSTMENT: `_can_record_outputs`/
-# `_no_split_modules`/`_init_weights` must point at Kimi's own classes (KimiDecoderLayer, KimiMLAAttention,
-# KimiBlockSparseMLP), and MoE weight init should reuse DeepseekV3's expert-init convention.
-class KimiPreTrainedModel(PreTrainedModel):
+# `_no_split_modules`/`_init_weights` must point at Kimi's own classes (KimiLinearDecoderLayer, KimiLinearMLAAttention,
+# KimiLinearBlockSparseMLP), and MoE weight init should reuse DeepseekV3's expert-init convention.
+class KimiLinearPreTrainedModel(PreTrainedModel):
     config_class = KimiLinearConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["KimiDecoderLayer"]
+    _no_split_modules = ["KimiLinearDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
     _can_record_outputs = {
-        "router_logits": OutputRecorder(KimiBlockSparseMLP, index=1),
-        "hidden_states": KimiDecoderLayer,
-        "attentions": KimiMLAAttention,
+        "router_logits": OutputRecorder(KimiLinearBlockSparseMLP, index=1),
+        "hidden_states": KimiLinearDecoderLayer,
+        "attentions": KimiLinearMLAAttention,
     }
     _is_stateful = True
 
@@ -686,7 +642,7 @@ class KimiPreTrainedModel(PreTrainedModel):
 # become `create_recurrent_attention_mask` from `masking_utils` (used together with `create_causal_mask`,
 # same pattern as olmo_hybrid), and the hardcoded "force flash_attention_2" block should be dropped —
 # that's a remote-code hack, not transformers convention.
-class KimiLinearModel(KimiPreTrainedModel):
+class KimiLinearModel(KimiLinearPreTrainedModel):
     def __init__(self, config: KimiLinearConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -694,9 +650,9 @@ class KimiLinearModel(KimiPreTrainedModel):
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
-            [KimiDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [KimiLinearDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.norm = KimiRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.norm = KimiLinearRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         if getattr(config, "_attn_implementation", None) is not None:
             if config._attn_implementation != "flash_attention_2":
@@ -727,7 +683,7 @@ class KimiLinearModel(KimiPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
@@ -735,7 +691,7 @@ class KimiLinearModel(KimiPreTrainedModel):
         cache_position: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPast:
+    ) -> BaseModelOutputWithPast:
         use_cache = use_cache if use_cache is not None else self.config.use_cache
 
         if (input_ids is None) and (inputs_embeds is None):

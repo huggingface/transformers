@@ -85,7 +85,7 @@ def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze
 
 
 class DeepseekV3TopkRouter(DeepseekV2TopkRouter):
-    def __init__(self, config):
+    def __init__(self, config: DeepseekV3Config):
         super().__init__(config)
         del self.topk_method
         self.num_experts = config.num_local_experts

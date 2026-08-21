@@ -129,7 +129,7 @@ class DeepseekV3MLP(nn.Module):
 
 
 class DeepseekV3TopkRouter(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: DeepseekV3Config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
