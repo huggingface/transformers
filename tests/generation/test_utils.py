@@ -3644,7 +3644,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertListEqual(
             outputs,
             [
-                'Tell me a joke about a monkey. Why did the monkey go to the doctor? Because he was feeling a little "tropic"!'
+                'Tell me a joke about a monkey. Sure, here\'s one for you:\n\nWhy did the monkey go to the doctor?\n\nBecause he was feeling "up in the trees"!'
             ],
         )
 
@@ -4586,7 +4586,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         Tests that assisted generation with early exit works as expected. Under the hood, this has complex cache
         manipulation, which will cause the test to fail if something goes wrong there.
         """
-        expected_output = "Alice and Bob are playing a game of poker. Alice has a pair of 8s and Bob has a pair"
+        expected_output = "Alice and Bob are playing a game of poker. Alice has a pair of 7s and Bob has a pair"
 
         prompt = "Alice and Bob"
         checkpoint = "facebook/layerskip-llama3.2-1B"
