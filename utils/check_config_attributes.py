@@ -49,6 +49,11 @@ SPECIAL_CASES_TO_ALLOW = {
     "Glm4vMoeTextConfig": ["n_routed_experts"],
     "Mistral4Config": ["n_routed_experts"],
     "SolarOpenConfig": ["n_routed_experts"],
+    "SolarOpen2Config": [
+        # Builder attributes consumed in __post_init__ to derive layer_types.
+        "gqa_interval",
+        "gqa_layers",
+    ],
     "NemotronAsrStreamingEncoderConfig": ["num_mel_bins"],  # Used via the `subsampling_out_hidden_size` property
     "Gemma4UnifiedAudioConfig": ["audio_embed_dim"],  # Used as meta data for other attributes/properties
     "Gemma4UnifiedVisionConfig": [
