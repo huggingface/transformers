@@ -302,6 +302,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("longformer", "LongformerModel"),
         ("longt5", "LongT5Model"),
         ("luke", "LukeModel"),
+        ("lumma", "LummaModel"),
         ("lw_detr", "LwDetrModel"),
         ("lxmert", "LxmertModel"),
         ("m2m_100", "M2M100Model"),
@@ -629,6 +630,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("llava_onevision", "LlavaOnevisionForConditionalGeneration"),
         ("longformer", "LongformerForMaskedLM"),
         ("luke", "LukeForMaskedLM"),
+        ("lumma", "LummaForCausalLM")
         ("lxmert", "LxmertForPreTraining"),
         ("mamba", "MambaForCausalLM"),
         ("mamba2", "Mamba2ForCausalLM"),
@@ -778,6 +780,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("lfm2", "Lfm2ForCausalLM"),
         ("lfm2_moe", "Lfm2MoeForCausalLM"),
         ("llama", "LlamaForCausalLM"),
+        ("lumma", "LummaForCausalLM"),
         ("llama4", "Llama4ForCausalLM"),
         ("llama4_text", "Llama4ForCausalLM"),
         ("longcat_flash", "LongcatFlashForCausalLM"),
