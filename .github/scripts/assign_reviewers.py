@@ -13,6 +13,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Request reviewers on a pull request, ranked by how much of the code they own.
+
+Runs from `pull_request_target`, so it has a write token and reads some files at the PR's head
+commit (`read_head_file`) to see models and `# Reviewers:` tags the PR adds. Nothing from the head
+is ever checked out or executed: the fetched content is only parsed as text, and `is_collaborator`
+gates every name before a review is requested, so a `# Reviewers:` tag in an untrusted PR cannot
+be used to ping arbitrary accounts.
+"""
+
 import json
 import os
 from collections import Counter

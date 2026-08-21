@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Who reviews a given file, from `.github/scripts/codeowners_for_review_action`.
+"""A shared module to determine who should review a given file, using `.github/scripts/codeowners_for_review_action`.
 
 Shared by the reviewer-assignment workflow (`assign_reviewers.py`, which resolves against the PR
 being opened) and by the repository check (`utils/check_reviewers.py`, which resolves against the

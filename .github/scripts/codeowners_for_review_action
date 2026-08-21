@@ -14,6 +14,11 @@ docs/ @stevhliu
 # Fallback by modality for any model file with no rule of its own, so a new model reaches someone
 # without anybody adding a line here. The modality is the model's section in
 # docs/source/en/_toctree.yml, which every model must appear in (utils/check_doc_toc.py).
+#
+# `@@modality/<section>` is not a path pattern: the `@@` marks a rule that matches a model by its
+# doc section rather than by where its files live, so it cannot be confused with a glob. See the
+# "Reviewer assignment" section of docs/source/en/pr_checks.md.
+#
 # A model that needs a specific reviewer says so in its own file:
 #   # Reviewers: @someone
 # in the leading comment block of modular_<model>.py / modeling_<model>.py, which wins over both.
