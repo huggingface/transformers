@@ -1154,13 +1154,13 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
         output_values = model.generate(**unconditional_inputs, do_sample=False, max_new_tokens=10, guidance_scale=1.0)
 
         # fmt: off
-        EXPECTED_VALUES = torch.tensor(
-            [
-                1.2741e-04, -8.0466e-05,  5.5789e-04,  1.0402e-03,  2.6547e-04,
-                1.5587e-05, -1.4210e-04, -9.7303e-05,  6.4504e-04,  5.0903e-04,
-                9.6474e-04,  1.0498e-03,  3.7210e-05, -5.3652e-04, -3.6579e-04, -2.5678e-04
-            ]
-        )
+        expectations = Expectations(
+            {
+                (None, None): [1.2741e-04, -8.0466e-05,  5.5789e-04,  1.0402e-03,  2.6547e-04,  1.5587e-05, -1.4210e-04, -9.7303e-05,  6.4504e-04,  5.0903e-04,  9.6474e-04,  1.0498e-03,  3.7210e-05, -5.3652e-04, -3.6579e-04, -2.5678e-04],
+                ("cuda", 8): [-6.8330e-02, -7.3174e-02, -6.7078e-02, -6.8757e-02, -7.2394e-02, -7.1931e-02, -7.2182e-02, -7.5186e-02, -6.4069e-02, -5.6421e-02, -5.1357e-02, -5.5733e-02, -7.5279e-02, -9.1668e-02, -8.7682e-02, -6.2800e-02],
+            }
+        )  # fmt: skip
+        EXPECTED_VALUES = torch.tensor(expectations.get_expectation())
         # fmt: on
 
         self.assertTrue(output_values.shape == (1, 1, 4480))
@@ -1180,12 +1180,13 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
         )
 
         # fmt: off
-        EXPECTED_VALUES = torch.tensor(
-            [
-                -0.0085, -0.0160,  0.0028,  0.0005, -0.0095,  0.0028, -0.0122, -0.0299,
-                -0.0052, -0.0145,  0.0092,  0.0063, -0.0378, -0.0621, -0.0784, -0.0120,
-            ]
-        )
+        expectations = Expectations(
+            {
+                (None, None): [-0.0085, -0.0160,  0.0028,  0.0005, -0.0095,  0.0028, -0.0122, -0.0299, -0.0052, -0.0145,  0.0092,  0.0063, -0.0378, -0.0621, -0.0784, -0.0120],
+                ("cuda", 8): [ 0.0294,  0.0293,  0.0399,  0.0446,  0.0445,  0.0466,  0.0457,  0.0393,  0.0432,  0.0382,  0.0275,  0.0037, -0.0370, -0.0772, -0.1019, -0.1047],
+            }
+        )  # fmt: skip
+        EXPECTED_VALUES = torch.tensor(expectations.get_expectation())
         # fmt: on
 
         self.assertTrue(output_values.shape == (2, 1, 4480))
@@ -1207,12 +1208,13 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
         )
 
         # fmt: off
-        EXPECTED_VALUES = torch.tensor(
-            [
-                1.2741e-04, -8.0474e-05,  5.5789e-04,  1.0402e-03,  2.6547e-04,
-                1.5597e-05, -1.4210e-04, -9.7309e-05,  6.4504e-04,  5.0903e-04
-            ]
-        )
+        expectations = Expectations(
+            {
+                (None, None): [1.2741e-04, -8.0474e-05,  5.5789e-04,  1.0402e-03,  2.6547e-04,  1.5597e-05, -1.4210e-04, -9.7309e-05,  6.4504e-04,  5.0903e-04],
+                ("cuda", 8): [-6.8265e-02, -7.3176e-02, -6.7119e-02, -6.8749e-02, -7.2387e-02, -7.1909e-02, -7.2149e-02, -7.5149e-02, -6.4040e-02, -5.6397e-02],
+            }
+        )  # fmt: skip
+        EXPECTED_VALUES = torch.tensor(expectations.get_expectation())
         # fmt: on
 
         self.assertTrue(output_values.shape == (2, 1, 4480))
@@ -1234,13 +1236,13 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
         )
 
         # fmt: off
-        EXPECTED_VALUES = torch.tensor(
-            [
-                1.2741e-04, -8.0474e-05,  5.5789e-04,  1.0402e-03,  2.6547e-04,
-                1.5597e-05, -1.4210e-04, -9.7309e-05,  6.4504e-04,  5.0903e-04,
-                9.6475e-04,  1.0499e-03,  3.7215e-05, -5.3651e-04, -3.6578e-04, -2.5678e-04
-            ]
-        )
+        expectations = Expectations(
+            {
+                (None, None): [1.2741e-04, -8.0474e-05,  5.5789e-04,  1.0402e-03,  2.6547e-04,  1.5597e-05, -1.4210e-04, -9.7309e-05,  6.4504e-04,  5.0903e-04,  9.6475e-04,  1.0499e-03,  3.7215e-05, -5.3651e-04, -3.6578e-04, -2.5678e-04],
+                ("cuda", 8): [-6.8265e-02, -7.3176e-02, -6.7119e-02, -6.8749e-02, -7.2387e-02, -7.1909e-02, -7.2149e-02, -7.5149e-02, -6.4040e-02, -5.6397e-02, -5.1289e-02, -5.5736e-02, -7.5268e-02, -9.1684e-02, -8.7713e-02, -6.2817e-02],
+            }
+        )  # fmt: skip
+        EXPECTED_VALUES = torch.tensor(expectations.get_expectation())
         # fmt: on
 
         self.assertTrue(output_values.shape == (2, 1, 4480))
@@ -1272,7 +1274,7 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
         expectations = Expectations(
             {
                 (None, None): [-0.0165, -0.0222, -0.0041, -0.0058, -0.0145, -0.0023, -0.0160, -0.0310, -0.0055, -0.0127,  0.0104,  0.0105, -0.0326, -0.0611, -0.0744, -0.0083],
-                ("cuda", 8): [-0.0165, -0.0221, -0.0040, -0.0058, -0.0145, -0.0024, -0.0160, -0.0310, -0.0055, -0.0127,  0.0104,  0.0105, -0.0326, -0.0612, -0.0744, -0.0082],
+                ("cuda", 8): [ 0.0294,  0.0293,  0.0399,  0.0446,  0.0445,  0.0466,  0.0457,  0.0393,  0.0432,  0.0382,  0.0275,  0.0037, -0.0370, -0.0772, -0.1019, -0.1047],
             }
         )
         EXPECTED_VALUES = torch.tensor(expectations.get_expectation()).to(torch_device)
@@ -1294,13 +1296,13 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
         output_values = model.generate(**inputs, do_sample=False, guidance_scale=None, max_new_tokens=10)
 
         # fmt: off
-        EXPECTED_VALUES = torch.tensor(
-            [
-                -1.1999e-04, -2.2303e-04,  4.6296e-04,  1.0524e-03,  2.4827e-04,
-                -4.0294e-05, -1.2468e-04,  4.9846e-05,  7.1484e-04,  4.4198e-04,
-                7.9063e-04,  8.8141e-04, -6.1807e-05, -6.1856e-04, -3.6235e-04, -2.7226e-04
-            ]
-        )
+        expectations = Expectations(
+            {
+                (None, None): [-1.1999e-04, -2.2303e-04,  4.6296e-04,  1.0524e-03,  2.4827e-04, -4.0294e-05, -1.2468e-04,  4.9846e-05,  7.1484e-04,  4.4198e-04,  7.9063e-04,  8.8141e-04, -6.1807e-05, -6.1856e-04, -3.6235e-04, -2.7226e-04],
+                ("cuda", 8): [-6.8265e-02, -7.3176e-02, -6.7119e-02, -6.8749e-02, -7.2387e-02, -7.1909e-02, -7.2149e-02, -7.5149e-02, -6.4040e-02, -5.6397e-02, -5.1289e-02, -5.5736e-02, -7.5268e-02, -9.1684e-02, -8.7713e-02, -6.2817e-02],
+            }
+        )  # fmt: skip
+        EXPECTED_VALUES = torch.tensor(expectations.get_expectation())
         # fmt: on
 
         self.assertTrue(output_values.shape == (2, 1, 4480))
@@ -1330,13 +1332,13 @@ class MusicgenMelodyStereoIntegrationTests(unittest.TestCase):
         output_values = model.generate(**unconditional_inputs, do_sample=False, max_new_tokens=12, guidance_scale=1.0)
 
         # fmt: off
-        EXPECTED_VALUES_LEFT = torch.tensor(
-            [
-                1.2742e-04, -8.0480e-05,  5.5788e-04,  1.0401e-03,  2.6547e-04,
-                1.5587e-05, -1.4211e-04, -9.7308e-05,  6.4503e-04,  5.0903e-04,
-                9.6475e-04,  1.0499e-03,  3.7205e-05, -5.3652e-04, -3.6579e-04, 2.5679e-04
-            ]
-        )
+        expectations = Expectations(
+            {
+                (None, None): [1.2742e-04, -8.0480e-05,  5.5788e-04,  1.0401e-03,  2.6547e-04,  1.5587e-05, -1.4211e-04, -9.7308e-05,  6.4503e-04,  5.0903e-04,  9.6475e-04,  1.0499e-03,  3.7205e-05, -5.3652e-04, -3.6579e-04,  2.5679e-04],
+                ("cuda", 8): [-4.1490e-04, -4.0598e-03,  2.5465e-03,  9.2663e-03,  1.3971e-02,  2.2554e-02,  3.0581e-02,  3.5337e-02,  4.9062e-02,  5.8328e-02,  6.7489e-02,  6.8658e-02,  5.5601e-02,  4.3756e-02,  4.3502e-02,  5.4448e-02],
+            }
+        )  # fmt: skip
+        EXPECTED_VALUES_LEFT = torch.tensor(expectations.get_expectation())
         # fmt: on
 
         # (bsz, channels, seq_len)
@@ -1357,18 +1359,20 @@ class MusicgenMelodyStereoIntegrationTests(unittest.TestCase):
         output_values = model.generate(**inputs, do_sample=False, guidance_scale=3.0, max_new_tokens=12)
 
         # fmt: off
-        EXPECTED_VALUES_LEFT_FIRST_SAMPLE = torch.tensor(
-            [
-                -0.0862, -0.1021, -0.0936, -0.0754, -0.0616, -0.0456, -0.0354, -0.0298,
-                -0.0036,  0.0222,  0.0523,  0.0660,  0.0496,  0.0356,  0.0457,  0.0769
-            ]
-        )
-        EXPECTED_VALUES_RIGHT_SECOND_SAMPLE = torch.tensor(
-            [
-                -0.0327, -0.0450, -0.0264, -0.0278, -0.0365, -0.0272, -0.0401, -0.0574,
-                -0.0413, -0.0508, -0.0269, -0.0323, -0.0762, -0.1115, -0.1390, -0.0790
-            ]
-        )
+        expectations_left = Expectations(
+            {
+                (None, None): [-0.0862, -0.1021, -0.0936, -0.0754, -0.0616, -0.0456, -0.0354, -0.0298, -0.0036,  0.0222,  0.0523,  0.0660,  0.0496,  0.0356,  0.0457,  0.0769],
+                ("cuda", 8): [-0.0004, -0.0041,  0.0025,  0.0093,  0.0140,  0.0226,  0.0306,  0.0353,  0.0491,  0.0583,  0.0675,  0.0686,  0.0556,  0.0438,  0.0435,  0.0544],
+            }
+        )  # fmt: skip
+        EXPECTED_VALUES_LEFT_FIRST_SAMPLE = torch.tensor(expectations_left.get_expectation())
+        expectations_right = Expectations(
+            {
+                (None, None): [-0.0327, -0.0450, -0.0264, -0.0278, -0.0365, -0.0272, -0.0401, -0.0574, -0.0413, -0.0508, -0.0269, -0.0323, -0.0762, -0.1115, -0.1390, -0.0790],
+                ("cuda", 8): [-0.1028, -0.1076, -0.1071, -0.1088, -0.1132, -0.1172, -0.1221, -0.1284, -0.1279, -0.1300, -0.1329, -0.1394, -0.1538, -0.1655, -0.1675, -0.1599],
+            }
+        )  # fmt: skip
+        EXPECTED_VALUES_RIGHT_SECOND_SAMPLE = torch.tensor(expectations_right.get_expectation())
         # fmt: on
 
         # (bsz, channels, seq_len)
