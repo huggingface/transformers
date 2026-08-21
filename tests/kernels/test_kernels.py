@@ -51,8 +51,11 @@ from transformers.utils.kernel_config import add_to_mapping_local
 
 class TestUseKernelFuncFromHubWithFallback(TestCasePlus):
     def test_resolves_function_from_nested_optional_module(self):
-        torch_function = lambda: "torch"
-        nested_function = lambda: "nested"
+        def torch_function():
+            return "torch"
+
+        def nested_function():
+            return "nested"
         nested_module = types.SimpleNamespace(chunk_gated_delta_rule=nested_function)
         package_module = types.SimpleNamespace(ops=types.SimpleNamespace(gated_delta_rule=nested_module))
 
