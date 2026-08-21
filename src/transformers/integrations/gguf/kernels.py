@@ -13,7 +13,7 @@
 # limitations under the License.
 import torch
 
-from ...utils import is_kernels_available, logging
+from ...utils import logging
 from .dequant import dequantize
 
 
@@ -101,7 +101,10 @@ def get_gguf_kernel() -> "GgufKernel | bool":
 
         module = get_kernel(
             "marcsun13/ggml-quantization",
+            # `kernels` requires the API version to be pinned, so a repo cannot change under a release
             version=1,
+            # Waived only for repos under a publisher the Hub marks as trusted, which a personal repo
+            # is not -- so loading one means opting into running code from it.
             # TODO: move the kernels under `kernels-community` and drop this.
             allow_all_kernels=True,
         )
@@ -113,48 +116,3 @@ def get_gguf_kernel() -> "GgufKernel | bool":
         )
         _gguf_kernel = False
     return _gguf_kernel
-
-
-def get_ggml_layer_mapping() -> dict:
-    """The layers ggml has a fused kernel for, in `kernels`' mapping form."""
-    from kernels import LayerRepository, Mode
-
-    return {
-        "Qwen3_5GatedDeltaNet": {
-            "mps": {
-                Mode.INFERENCE: LayerRepository(
-                    repo_id="marcsun13/ggml-gated-delta-net",
-                    layer_name="Qwen3_5GatedDeltaNet",
-                    version=1,
-                    # TODO: drop once the kernels move under an allow-listed trusted publisher
-                    trust_remote_code=True,
-                )
-            },
-        },
-    }
-
-
-def kernelize_ggml_layers(model) -> None:
-    """Graft ggml's layer kernels onto a GGUF model, and nothing else.
-
-    Applied on load, and registered so that a later `kernelize` re-applies them: that walk restores the
-    original forward of every layer it has no mapping for, which would otherwise undo this graft.
-    """
-    if not is_kernels_available():
-        return
-
-    from kernels import Mode, kernelize, register_kernel_mapping, use_kernel_mapping
-
-    mapping = get_ggml_layer_mapping()
-    register_kernel_mapping(mapping)
-    try:
-        # `inherit_mapping=False` narrows what `kernelize` can see to ggml's own layers. Inheriting would
-        # add everything else registered for the device -- by another library, a user, a later transformers
-        # release -- so this would fetch and run kernels nobody asked it for, and a failure in any of them
-        # would take ggml's own down with it.
-        with use_kernel_mapping(mapping, inherit_mapping=False):
-            kernelize(model, mode=Mode.INFERENCE, device=model.device.type)
-    except Exception as error:  # noqa: BLE001
-        # `kernelize` stops where it raises, so with more than one entry this can leave the layers it had
-        # already reached grafted. Harmless -- each is a drop-in for the implementation it replaced.
-        logger.info(f"ggml layer kernels not fully grafted ({error}); the rest keeps the model's own layers.")

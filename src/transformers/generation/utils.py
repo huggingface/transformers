@@ -17,7 +17,6 @@ import functools
 import inspect
 import os
 import warnings
-from collections import deque
 from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -355,41 +354,6 @@ class GenerateBeamEncoderDecoderOutput(ModelOutput):
 GenerateNonBeamOutput = GenerateDecoderOnlyOutput | GenerateEncoderDecoderOutput
 GenerateBeamOutput = GenerateBeamDecoderOnlyOutput | GenerateBeamEncoderDecoderOutput
 GenerateOutput = GenerateNonBeamOutput | GenerateBeamOutput
-
-
-class PipelinedStopCheck:
-    """Reads "are all sequences finished?" off the device one step late, so the host never waits for it."""
-
-    def __init__(self, device: torch.device, max_length: int):
-        self.max_length = max_length
-        pinned = device.type == "cuda"
-        self.slots = deque(
-            (
-                torch.zeros((), dtype=torch.bool, pin_memory=pinned),
-                torch.Event(device=device.type, blocking=True),
-            )
-            for _ in range(2)
-        )
-        self.reported = False  # whether a read has come back saying every sequence was finished
-
-    def __call__(self, unfinished_sequences: torch.Tensor, length: int) -> bool:
-        all_finished, copy_done = self.slots[0]
-        all_finished.copy_(unfinished_sequences.max() == 0, non_blocking=True)
-        copy_done.record()
-
-        self.slots.rotate(-1)  # what was just started is what gets read next step
-        all_finished, copy_done = self.slots[0]
-        copy_done.synchronize()
-        self.reported = bool(all_finished)
-        # `max_length` is the one stop condition the host already knows, and the only one this pipeline may
-        # not run past: a `StaticCache` is allocated to exactly that many positions.
-        return self.reported or length >= self.max_length
-
-    def drain(self) -> int:
-        """Wait out the copy still in flight, and report how many tokens ran past the stopping one."""
-        for _, copy_done in self.slots:
-            copy_done.synchronize()
-        return 1 if self.reported else 0
 
 
 class GenerationMixin(ContinuousMixin):
@@ -2887,11 +2851,6 @@ class GenerationMixin(ContinuousMixin):
         this_peer_finished = False
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
 
-        host_max_length = max((c.max_length for c in stopping_criteria if hasattr(c, "max_length")), default=None)
-        stop_check = None
-        if host_max_length is not None and streamer is None and input_ids.device.type != "cpu":
-            stop_check = PipelinedStopCheck(input_ids.device, host_max_length)
-
         # `pad_token_id` is created on `inputs_tensor.device` in `_prepare_special_tokens`. For multimodal models
         # (e.g. BLIP-2, LLaVA) sharded across devices via `device_map="auto"`, `inputs_tensor` (e.g. `pixel_values`
         # on the vision encoder) and `input_ids` (on the language model) can live on different devices, so we need to
@@ -2975,20 +2934,11 @@ class GenerationMixin(ContinuousMixin):
                     streamer.put(next_tokens.cpu())
 
                 unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
-
-                if stop_check is None:
-                    this_peer_finished = unfinished_sequences.max() == 0
-                else:
-                    this_peer_finished = stop_check(unfinished_sequences, input_ids.shape[1])
+                this_peer_finished = unfinished_sequences.max() == 0
 
                 # This is needed to properly delete outputs.logits which may be very large for first iteration
                 # Otherwise a reference to outputs is kept which keeps the logits alive in the next iteration
                 del outputs
-
-        if stop_check is not None:
-            overshoot = stop_check.drain()
-            if overshoot:
-                input_ids = input_ids[:, :-overshoot]
 
         if streamer is not None:
             streamer.end()
