@@ -714,6 +714,7 @@ class DPTPreTrainedModel(PreTrainedModel):
     base_model_prefix = "dpt"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
+    _keys_to_ignore_on_load_unexpected = [r"neck\.fusion_stage\.layers\.0\.residual_layer1\..*"]
     supports_gradient_checkpointing = True
     _supports_sdpa = True
     _supports_flash_attn = True
@@ -939,6 +940,10 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+        # The first fusion layer never receives a residual. Remove its dead parameters after initialization so the
+        # initialization order of all remaining parameters stays unchanged.
+        self.neck.fusion_stage.layers[0].residual_layer1 = None
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1091,6 +1096,10 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+        # The first fusion layer never receives a residual. Remove its dead parameters after initialization so the
+        # initialization order of all remaining parameters stays unchanged.
+        self.neck.fusion_stage.layers[0].residual_layer1 = None
 
     @can_return_tuple
     @auto_docstring
