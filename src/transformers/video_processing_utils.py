@@ -636,8 +636,11 @@ class BaseVideoProcessor(TorchvisionBackend):
         """
         video_processor_dict = video_processor_dict.copy()
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
+        use_kernels = kwargs.pop("use_kernels", None)
         video_processor_dict.update({k: v for k, v in kwargs.items() if k in cls.valid_kwargs.__annotations__})
         video_processor = cls(**video_processor_dict)
+        if use_kernels is not None:
+            video_processor.use_kernels = use_kernels
 
         # Apply extra kwargs to instance (BC for remote code, e.g. phi4_multimodal)
         extra_keys = []

@@ -282,6 +282,63 @@ Set the environment variable to disable kernels globally.
 export USE_HUB_KERNELS=0  # or OFF or NO
 ```
 
+## Processor kernels
+
+Preprocessing and postprocessing ops can be offloaded to Hub kernels the same way model layers are. `use_kernels=True` swaps a processor op for a registered Hub kernel and falls back to the default implementation when none applies — so custom, hot, or hard-to-vectorize ops (resize, normalize, patchify, NMS, mask decoding, ...) can move onto the GPU without rewriting the processor or the call site.
+
+Currently kernelized: the fast image processors' resize + normalize. The kernel batches the resize over a ragged set of images and folds rescale and normalize into the same pass.
+
+```py
+from transformers import AutoImageProcessor
+
+processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224", use_kernels=True)
+pixel_values = processor(images, return_tensors="pt", device="cuda")["pixel_values"]
+```
+
+For vision-language models the image processor is wrapped in a processor, so the flag passes through [`AutoProcessor`] to the inner image processor.
+
+```py
+from transformers import AutoProcessor
+
+processor = AutoProcessor.from_pretrained("facebook/chameleon-7b", use_kernels=True)
+inputs = processor(text=prompt, images=images, return_tensors="pt", device="cuda")
+```
+
+This is opt-in and CUDA only. The kernel runs on the device the images are already on, so pass `device="cuda"` to the
+processor call: images left on CPU fall back to torchvision. It also falls back when the kernel cannot run or the
+arguments are not supported.
+
+Two ops are registered today.
+
+`resize_normalize` handles a fixed-size resize, optionally with a center crop or a shortest-edge resize, followed by
+rescale and normalize. It is called from `TorchvisionBackend._preprocess`, so it reaches the processors that use that
+method as written: ViT, CLIP, SigLIP, DeiT, Levit, Blip, Chameleon, Chinese-CLIP, MobileNetV1, OwlViT, Pvt, PI0,
+PPChart2Table, and Bit, which is what DINOv2 loads. A processor that defines its own `_preprocess` does not reach it,
+which covers most vision language models, every tiling processor, and the detection and segmentation processors.
+
+`resize_normalize_ragged` handles a batch where every image has its own output size. It is called from
+`TorchvisionBackend.resize_normalize_batch`, the primitive a dynamic-resolution processor calls once for the whole
+batch after it has computed the target sizes itself. Qwen2-VL uses it.
+
+The kernel resizes in float, so outputs are parity-close to torchvision (around `1e-4` against the float reference) but not byte-identical to the legacy uint8 resize path. Use the default backend if you need exact reproduction of the original processor.
+
+### Registering a processing kernel
+
+Processing ops have no shared signature to swap, so a kernel is plugged in through an adapter instead of a `kernelize` pass. `register_processing_kernel` maps an op name to a Hub repository, and the decorated adapter receives the loaded kernel module followed by the arguments of the op. Return `None` for arguments the kernel cannot reproduce, and the caller keeps its default implementation.
+
+```py
+from transformers.integrations.hub_kernels import register_processing_kernel
+
+
+@register_processing_kernel("my_op", repo_id="my-org/my-processing-kernel", version=1)
+def my_op_kernel(kernel, images, **kwargs):
+    if kwargs.get("do_pad"):  # the kernel does not pad, keep the default path
+        return None
+    return kernel.my_op(images, **kwargs)
+```
+
+The processor calls `run_processing_kernel("my_op", images, **kwargs)` and uses its default implementation when the result is `None`, which happens when the kernel is disabled, unavailable, or declined by the adapter. The kernel is downloaded on the first call that reaches it, and only on an accelerator.
+
 ## Troubleshooting
 
 Kernel integration depends on hardware, drivers, and package versions working together. The following sections cover common failures.

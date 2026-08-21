@@ -70,6 +70,16 @@ if is_vision_available():
 if is_torch_available():
     import torch
 
+    from .integrations.hub_kernels import register_processing_kernel, run_processing_kernel
+else:
+
+    def register_processing_kernel(name, repo_id, version=1, revision=None):
+        return lambda adapter: adapter
+
+    def run_processing_kernel(name, *args, **kwargs):
+        return None
+
+
 if is_torchvision_available():
     from torchvision.transforms.v2 import functional as tvF
 
@@ -82,11 +92,125 @@ else:
 logger = logging.get_logger(__name__)
 
 
+def _resample_to_interpolation(resample):
+    if resample is None:
+        return None
+    try:
+        return {2: "bilinear", 3: "bicubic"}.get(int(resample))
+    except (TypeError, ValueError):
+        name = getattr(resample, "name", str(resample)).upper()
+        return "bicubic" if "BICUBIC" in name else "bilinear" if "BILINEAR" in name else None
+
+
+def _resize_normalize_target(size, crop):
+    """Resize target the kernel can reproduce as `(resize_size, crop_size, resize_mode)`, `None` to fall back.
+
+    The kernel crops inside the resized image, so a crop larger than the resize target, which the default path
+    reaches by zero-padding, falls back.
+    """
+    if size is None:
+        return None
+    if size.shortest_edge and not size.longest_edge:
+        if crop is None or not (crop.height and crop.width) or size.shortest_edge < max(crop.height, crop.width):
+            return None
+        return size.shortest_edge, (crop.height, crop.width), "shortest_edge"
+    if size.height and size.width:
+        if crop is None or (crop.height, crop.width) == (size.height, size.width):
+            return (size.height, size.width), None, "square"
+        if not (crop.height and crop.width) or crop.height > size.height or crop.width > size.width:
+            return None
+        return (size.height, size.width), (crop.height, crop.width), "square"
+    return None
+
+
+def _per_channel_stats(stats, channels):
+    """Normalization stats as one value per channel, `None` when they do not describe these images."""
+    if isinstance(stats, (int, float)):
+        return [float(stats)] * channels
+    if stats is None or len(stats) != channels:
+        return None
+    return [float(stat) for stat in stats]
+
+
+_KERNEL_DEVICE_TYPE = "cuda"
+_KERNEL_REPO = "Molbap/kernel_image_resize"
+# Pinned by tag: `version=1` resolution does not find the tag of a repo outside `kernels-community`.
+_KERNEL_REVISION = "v1.0.0"
+
+
+def _kernel_channel_count(images):
+    """Channel count when the batch is uint8 CHW on one CUDA device, `None` when the kernel cannot run on it."""
+    if not images or any(not isinstance(image, torch.Tensor) or image.ndim != 3 for image in images):
+        return None
+    reference = images[0]
+    if reference.device.type != _KERNEL_DEVICE_TYPE or any(
+        image.dtype != torch.uint8 or image.device != reference.device or image.shape[0] != reference.shape[0]
+        for image in images
+    ):
+        return None
+    return reference.shape[0]
+
+
+@register_processing_kernel("resize_normalize", repo_id=_KERNEL_REPO, version=None, revision=_KERNEL_REVISION)
+def _resize_normalize_kernel(kernel, images, **kwargs):
+    if kwargs.get("do_pad") or not (kwargs.get("do_resize") and kwargs.get("do_normalize")):
+        return None
+    channels = _kernel_channel_count(images)
+    if channels is None:
+        return None
+    image_mean = _per_channel_stats(kwargs.get("image_mean"), channels)
+    image_std = _per_channel_stats(kwargs.get("image_std"), channels)
+    interpolation = _resample_to_interpolation(kwargs.get("resample"))
+    target = _resize_normalize_target(
+        kwargs.get("size"), kwargs.get("crop_size") if kwargs.get("do_center_crop") else None
+    )
+    if image_mean is None or image_std is None or interpolation is None or target is None:
+        return None
+    resize_size, crop_size, resize_mode = target
+    rescale_factor = float(kwargs["rescale_factor"]) if kwargs.get("do_rescale") else 1.0
+    pixel_values = kernel.resize_normalize(
+        images,
+        resize_size,
+        image_mean,
+        image_std,
+        rescale_factor=rescale_factor,
+        resample=interpolation,
+        antialias=True,
+        crop_size=crop_size,
+        resize_mode=resize_mode,
+    )
+    return BatchFeature(data={"pixel_values": list(pixel_values)}, tensor_type=kwargs.get("return_tensors"))
+
+
+@register_processing_kernel("resize_normalize_ragged", repo_id=_KERNEL_REPO, version=None, revision=_KERNEL_REVISION)
+def _resize_normalize_ragged_kernel(kernel, images, target_sizes, **kwargs):
+    """One launch for a batch where every image has its own output size, as dynamic-resolution VLMs need."""
+    channels = _kernel_channel_count(images)
+    if channels is None or len(target_sizes) != len(images):
+        return None
+    image_mean = _per_channel_stats(kwargs.get("image_mean"), channels)
+    image_std = _per_channel_stats(kwargs.get("image_std"), channels)
+    interpolation = _resample_to_interpolation(kwargs.get("resample"))
+    if image_mean is None or image_std is None or interpolation is None:
+        return None
+    rescale_factor = float(kwargs["rescale_factor"]) if kwargs.get("do_rescale") else 1.0
+    return kernel.resize_normalize_ragged_output(
+        images,
+        [(int(height), int(width)) for height, width in target_sizes],
+        image_mean,
+        image_std,
+        rescale_factor,
+        interpolation,
+        True,
+    )
+
+
 @requires(backends=("torch", "torchvision"))
 class TorchvisionBackend(BaseImageProcessor):
     """Torchvision backend for GPU-accelerated batched image processing."""
 
     def __init__(self, **kwargs: Unpack[ImagesKwargs]):
+        self.use_kernels = kwargs.pop("use_kernels", False)
         super().__init__(**kwargs)
         self._set_attributes(**kwargs)
 
@@ -337,6 +461,60 @@ class TorchvisionBackend(BaseImageProcessor):
 
         return images
 
+    def resize_normalize_batch(
+        self,
+        images: list["torch.Tensor"],
+        target_sizes: list[tuple[int, int]],
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        disable_grouping: bool | None = None,
+    ) -> list["torch.Tensor"]:
+        """Resize every image to its own target size, then rescale and normalize it.
+
+        Processors whose output size depends on the input, such as the dynamic-resolution vision language models,
+        compute `target_sizes` themselves and call this once for the whole batch. The default implementation groups
+        the batch by shape and loops, which is what those processors used to write inline. A registered kernel does
+        the whole batch in one launch, which is why the loop lives here instead of in each processor.
+
+        The target of a group is read from its first image, so images that share an input shape must share a target.
+        That holds for a rule computed from the input size, such as `smart_resize`.
+        """
+        if self.use_kernels:
+            pixel_values = run_processing_kernel(
+                "resize_normalize_ragged",
+                images,
+                target_sizes,
+                resample=resample,
+                do_rescale=do_rescale,
+                rescale_factor=rescale_factor,
+                image_mean=image_mean,
+                image_std=image_std,
+            )
+            if pixel_values is not None:
+                return list(pixel_values)
+
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        target_per_group = {}
+        for image_index, (group_key, _) in grouped_images_index.items():
+            if isinstance(image_index, int):
+                target_per_group.setdefault(group_key, target_sizes[image_index])
+        processed_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            target_height, target_width = target_per_group[shape]
+            stacked_images = self.resize(
+                image=stacked_images,
+                size=SizeDict(height=int(target_height), width=int(target_width)),
+                resample=resample,
+            )
+            processed_images_grouped[shape] = self.rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+        return reorder_images(processed_images_grouped, grouped_images_index)
+
     def center_crop(
         self,
         image: "torch.Tensor",
@@ -385,6 +563,26 @@ class TorchvisionBackend(BaseImageProcessor):
         **kwargs,
     ) -> BatchFeature:
         """Preprocess using Torchvision backend (fast, GPU-accelerated)."""
+        if self.use_kernels:
+            pixel_values = run_processing_kernel(
+                "resize_normalize",
+                images,
+                do_resize=do_resize,
+                size=size,
+                resample=resample,
+                do_center_crop=do_center_crop,
+                crop_size=crop_size,
+                do_rescale=do_rescale,
+                rescale_factor=rescale_factor,
+                do_normalize=do_normalize,
+                image_mean=image_mean,
+                image_std=image_std,
+                do_pad=do_pad,
+                return_tensors=return_tensors,
+            )
+            if pixel_values is not None:
+                return pixel_values
+
         # Group images by size for batched resizing
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
