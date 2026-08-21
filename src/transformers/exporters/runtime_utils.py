@@ -566,6 +566,19 @@ class ExecutorchModelRunner(ModelRunner):
         # Same contract as the other runners': a graph that took a *dict* of masks declares one input per
         # attention type, so the generation loop has the ranks to build it rather than assuming a single mask.
         self.mask_dict_ranks = _mask_dict_ranks_from_shapes(self.input_shapes)
+        # Precision the program was lowered at, read off its first floating-point input. A `.pte` says
+        # nothing else about what the model was built in, and the generation layer sizes the cache it feeds
+        # from `dtype` — a half-precision export (a grouped-mm MoE, a varlen-attention VLM) declares
+        # bf16 cache leaves, and handing it the base class's fp32 default is rejected outright when the
+        # method binds its inputs (`set_inputs ... error 0x12`). Integer inputs (ids, masks) say nothing
+        # about compute precision, so they are skipped.
+        from torch.onnx import JitScalarType
+
+        declared_dtypes = (
+            JitScalarType(int(self._method.metadata.input_tensor_meta(index).dtype())).dtype()
+            for index in range(len(self.input_names))
+        )
+        self.dtype = next((dtype for dtype in declared_dtypes if dtype.is_floating_point), torch.float32)
 
     def __call__(self, **kwargs) -> dict[str, torch.Tensor]:
         from .utils import get_leaf_tensors
