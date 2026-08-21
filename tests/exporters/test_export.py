@@ -945,6 +945,13 @@ class ExportTesterMixin:
             # lowering, then ungate.
             return
 
+        if not dynamic and "embed_tokens" in components:
+            # A multi-modal model embeds its text in a graph of its own, captured on the *prompt* — under
+            # static shapes that graph is specialized to the prompt's length and cannot serve the 1-token
+            # decode steps the loop makes (`Guard failed: input_ids.size()[1] == 39`). The static-shape
+            # exports themselves are still asserted above; driving them needs a length-generic embedder.
+            return
+
         wanted = {"decode", "prefill", "encoder", "embed_tokens", *(spec[0] for spec in _MODALITY_SPECS)}
         runners = {name: self._make_backend_runner(backend, name, exported) for name in components if name in wanted}
         runtime = ExportedGenerator.from_runners(runners, model.config, model.generation_config)

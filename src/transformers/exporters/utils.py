@@ -990,6 +990,17 @@ def materialize_cache_layers(
 def _materialize_layers(cache, batch_size, config, dtype, device, kv_geometry) -> None:
     """`materialize_cache_layers` for one flat cache — see there."""
     for layer_idx, layer in enumerate(cache.layers):
+        # Every tensor the layer built in `__init__` goes to the target device first, before any skip
+        # below can `continue` past it. A layer relies on its own lazy initialization to move these, which
+        # either never runs (the growing branch below skips it — its rank-1 empties would bake a rank-1
+        # guard) or moves only the counters it knows about: `StaticLayer.lazy_initialization` moves
+        # `cumulative_length`, not a sparse-index layer's `idx_cumulative_length` (minimax_m3_vl), and
+        # `early_initialization` marks the layer initialized before either gets the chance. Left behind,
+        # they are cpu leaves among cuda ones and the graph's input spec mismatches on device. Dtypes stay
+        # as they are — those counters are `long`, not the cache dtype.
+        for attribute, value in vars(layer).items():
+            if isinstance(value, torch.Tensor) and attribute not in ("keys", "values"):
+                setattr(layer, attribute, value.to(device))
         # A sparse-indexer layer (deepseek_v32, axk2, glm_moe_dsa) caches a *third* tensor beside keys and
         # values, and it is a graph input like the others — leave it lazy and every later cache leaf shifts
         # by one. Its own `lazy_initialization` covers only the main K/V, so this cannot wait behind the
@@ -1034,14 +1045,6 @@ def _materialize_layers(cache, batch_size, config, dtype, device, kv_geometry) -
             layer.dtype, layer.device = dtype, device
             layer.keys, layer.values = empty_keys, empty_values
             layer.is_initialized = True
-            # Whatever else the layer already holds goes to the same device: a sliding layer builds
-            # `_sliding_window_tensor` in `__init__` and relies on its own `lazy_initialization` to move it,
-            # which this branch skips (those rank-1 empties would bake a rank-1 guard). Left behind, it is a
-            # cpu leaf among cuda ones and the graph's input spec mismatches on device. Dtypes stay as they
-            # are — that tensor is `long`, not the cache dtype.
-            for attribute, value in vars(layer).items():
-                if isinstance(value, torch.Tensor) and attribute not in ("keys", "values"):
-                    setattr(layer, attribute, value.to(device))
         else:
             layer.lazy_initialization(empty_keys, empty_values)
 
