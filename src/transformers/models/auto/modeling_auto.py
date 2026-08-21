@@ -1125,6 +1125,7 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
         ("mistral4", "Mistral4ForCausalLM"),
         ("mllama", "MllamaForConditionalGeneration"),
         ("muse_glimmer", "MuseGlimmerForConditionalGeneration"),
+        ("nemotron_h_omni", "NemotronH_Omni_Reasoning_V3"),
         ("ovis2", "Ovis2ForConditionalGeneration"),
         ("paddleocr_vl", "PaddleOCRVLForConditionalGeneration"),
         ("paligemma", "PaliGemmaForConditionalGeneration"),
