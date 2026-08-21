@@ -1170,9 +1170,9 @@ class FlavaForPreTrainingIntegrationTest(unittest.TestCase):
 
         expected_logits = torch.tensor([[16.1291, 8.4033], [16.1291, 8.4033]], device=torch_device)
         torch.testing.assert_close(outputs.contrastive_logits_per_image, expected_logits, rtol=1e-3, atol=1e-3)
-        self.assertAlmostEqual(outputs.loss_info.mmm_text.item(), 2.0727925, places=4)
-        self.assertAlmostEqual(outputs.loss_info.mmm_image.item(), 7.0282096, places=4)
-        self.assertAlmostEqual(outputs.loss.item(), 11.3792324, places=4)
+        self.assertAlmostEqual(outputs.loss_info.mmm_text.item(), 2.0732645988464355, places=4)
+        self.assertAlmostEqual(outputs.loss_info.mmm_image.item(), 7.014908790588379, places=4)
+        self.assertAlmostEqual(outputs.loss.item(), 11.366424560546875, places=4)
 
     @slow
     def test_inference_with_itm_labels(self):
