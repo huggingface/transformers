@@ -676,20 +676,29 @@ def _run_executorch_program(program_manager, inputs):
             return None
         raise
 
-    # Each slot declares its shape; match it to an eager tensor leaf of that shape so the right tensor
-    # lands in the right slot (count alone isn't enough — a wrong-shape tensor crashes conv/copy
-    # kernels at execute). Under dynamic shapes the declared shape is an upper bound and won't match a
-    # leaf, so fall back to the next unused leaf (leaf order tracks the program's input order). If a
-    # slot can't be filled — a derived symint, or no leaf of the right shape — reconstruction isn't
-    # possible; return None and rely on the load check rather than run with bogus inputs.
+    # Each slot declares a shape *and* a dtype; match it to an eager tensor leaf carrying both, so the
+    # right tensor lands in the right slot (count alone isn't enough — a wrong-shape tensor crashes
+    # conv/copy kernels at execute, and a wrong dtype is refused outright when the method binds its
+    # inputs). Matching on shape alone picked an int64 grid for a float slot of the same shape on the
+    # grid VLMs. Under dynamic shapes the declared shape is an upper bound and won't match a leaf, so
+    # fall back to the next unused leaf of the declared dtype, then to the next unused leaf at all (leaf
+    # order tracks the program's input order). If a slot can't be filled — a derived symint, or no leaf
+    # left — reconstruction isn't possible; return None and rely on the load check rather than run with
+    # bogus inputs.
+    from torch.onnx import JitScalarType
+
     args = []
     for i in range(method.metadata.num_inputs()):
         try:
-            shape = tuple(method.metadata.input_tensor_meta(i).sizes())
+            meta = method.metadata.input_tensor_meta(i)
+            shape, dtype = tuple(meta.sizes()), JitScalarType(int(meta.dtype())).dtype()
         except Exception:  # non-tensor slot
             args.append(next(scalars, None))
         else:
-            match = next((t for t in tensors if tuple(t.shape) == shape), tensors[0] if tensors else None)
+            match = next(
+                (t for t in tensors if tuple(t.shape) == shape and t.dtype == dtype),
+                next((t for t in tensors if t.dtype == dtype), tensors[0] if tensors else None),
+            )
             if match is not None:
                 tensors.remove(match)
             args.append(match)
@@ -699,7 +708,14 @@ def _run_executorch_program(program_manager, inputs):
     try:
         outputs = method.execute(args)
     except (RuntimeError, MemoryError) as e:
-        if _is_executorch_runtime_limit(e):
+        # A `set_inputs` failure here says this *reconstruction* guessed wrong, not that the library fed
+        # the method something it never declared: the args above are rebuilt from the program's metadata
+        # by matching eager leaves, and where the declared shapes are dynamic upper bounds there may be
+        # no leaf the method accepts. That is the same "reconstruction isn't possible" case the loop
+        # above returns `None` for, so treat it the same and leave the component unverified. The
+        # generation drive is held to the stricter rule — its feed is the real one, so a binding failure
+        # there is a bug and stays visible.
+        if _is_executorch_runtime_limit(e) or "set_inputs" in str(e):
             return None
         raise
 

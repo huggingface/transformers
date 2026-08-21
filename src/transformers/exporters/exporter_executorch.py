@@ -345,6 +345,30 @@ _BACKEND_PREPARE = {
 # `@register_patch("executorch", "dotted.path")` and installed through `apply_patches`.
 
 
+@register_patch("executorch", "torch.split", "torch.Tensor.split")
+def _patch_unbacked_split(original):
+    """Keep a split whose *sizes are data-dependent* out of the graph.
+
+    A grid VLM cuts its flat vision output back into per-image runs with
+    `(grid_thw.prod(-1) // merge**2).tolist()`, i.e. sizes read off a tensor. Under export those are
+    unbacked symbols, and `split_with_sizes_copy` with unbacked sizes is the one thing ExecuTorch's
+    verifier cannot lower ("Could not extract specialized integer") — it fails every variant of every
+    such model, ~17 of them. Both consumers in this position immediately concatenate the pieces again
+    (the model's own `torch.cat(image_features, dim=0)`, and `ModalityEncoder.forward`), so handing back
+    the tensor whole is the same value with nothing for the verifier to choke on. A consumer that really
+    wanted the pieces indexes past the end of a 1-tuple, which fails loudly rather than quietly.
+    """
+
+    def patch(input, split_size_or_sections, dim=0):
+        if isinstance(split_size_or_sections, (list, tuple)) and not all(
+            isinstance(size, int) for size in split_size_or_sections
+        ):
+            return (input,)
+        return original(input, split_size_or_sections, dim)
+
+    return patch
+
+
 @register_patch("executorch.cuda", "torch.split", "torch.Tensor.split")
 def _patch_split(original):
     """Narrow-based split for the CUDA backend, which can't lower `split_copy`.
