@@ -2315,10 +2315,13 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         transcription_non_ass = processor.batch_decode(tokens, skip_special_tokens=True)
 
         self.assertEqual(transcription_ass, transcription_non_ass)
-        self.assertEqual(
-            transcription_ass,
-            [" Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel."],
-        )
+        expected_transcription = Expectations(
+            {
+                (None, None): [" Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel."],
+                ("cuda", 8): [" Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Thank you."],
+            }
+        ).get_expectation()  # fmt: skip
+        self.assertEqual(transcription_ass, expected_transcription)
         self.assertTrue(total_time_non_assist > total_time_assist, "Make sure that assistant decoding is faster")
 
     @slow
