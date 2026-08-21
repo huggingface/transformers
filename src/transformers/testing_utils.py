@@ -3394,8 +3394,8 @@ def supports_sdpa_flash_backend() -> bool | None:
 
     Ask torch instead of guessing from the ROCm architecture number: CDNA
     (flash-capable) reports major 9 while RDNA parts report 10/11/12, so a
-    ``major >= 9`` gate admits RDNA hardware that has no flash kernel. Returns
-    ``None`` when torch's capability API is unavailable.
+    "major >= 9" gate admits RDNA hardware that has no flash kernel. Returns
+    None when torch's capability API is unavailable.
     """
     import torch
 
@@ -3414,7 +3414,7 @@ def supports_sdpa_flash_backend() -> bool | None:
 
 def rocm_has_sdpa_flash_backend(major: int) -> bool:
     """Whether this ROCm device can dispatch the SDPA flash backend, falling back
-    to the historical ``major >= 9`` heuristic when torch's query is unavailable.
+    to the historical "major >= 9" heuristic when torch's query is unavailable.
     """
     supported = supports_sdpa_flash_backend()
     if supported is None:
