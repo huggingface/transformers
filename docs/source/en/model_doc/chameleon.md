@@ -26,7 +26,7 @@ rendered properly in your Markdown viewer.
 
 The Chameleon model was proposed in [Chameleon: Mixed-Modal Early-Fusion Foundation Models](https://huggingface.co/papers/2405.09818) by META AI Chameleon Team. Chameleon is a Vision-Language Model that use vector quantization to tokenize images which enables the model to generate multimodal output. The model takes images and texts as input, including an interleaved format, and generates textual response. Image generation module is not released yet.
 
-The abstract from the paper is the following:
+The abstract from the paper is as follows:
 
 *We present Chameleon, a family of early-fusion token-based mixed-modal models capable of understanding and generating images and text in any arbitrary sequence. We outline a stable training
 approach from inception, an alignment recipe, and an architectural parameterization tailored for the
@@ -57,7 +57,7 @@ The original code can be found [here](https://github.com/facebookresearch/chamel
 - Chameleon generates in chat format which means that the generated text will always be the "assistant's turn". You can enable a text completion generation by passing `return_for_text_completion=True` when calling the processor.
 
 > [!NOTE]
-> Chameleon implementation in Transformers uses a special image token to indicate where to merge image embeddings. For special image token we didn't add a new one but used one of the reserved tokens: `<reserved08707>`. You have to add `<image>` to your prompt in the place where the image should be embedded for correct generation.
+> Image tokenization happens dynamically when calling the `ChameleonModel`, rather than in the processor. If you want to obtain the actual image tokens for a given image, use the model's `get_image_tokens()` method by passing it the `pixel_values`.
 
 ## Usage example
 
