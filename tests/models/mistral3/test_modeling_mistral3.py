@@ -13,6 +13,8 @@
 # limitations under the License.
 """Testing suite for the PyTorch GotOcr2 model."""
 
+import json
+import tempfile
 import unittest
 
 import accelerate
@@ -43,7 +45,9 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        AutoModelForSequenceClassification,
         Mistral3ForConditionalGeneration,
+        Mistral3ForSequenceClassification,
         Mistral3Model,
     )
 
@@ -162,6 +166,7 @@ class Mistral3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         (
             Mistral3Model,
             Mistral3ForConditionalGeneration,
+            Mistral3ForSequenceClassification,
         )
         if is_torch_available()
         else ()
@@ -192,6 +197,63 @@ class Mistral3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 
         self.config_tester.check_config_can_be_init_without_params = check_config_can_be_init_without_params
         self.config_tester.run_common_tests()
+
+    def test_sequence_classification_pooling(self):
+        from transformers.modeling_outputs import BaseModelOutputWithPast
+
+        class StaticBackbone(torch.nn.Module):
+            def __init__(self, hidden_states):
+                super().__init__()
+                self.hidden_states = hidden_states
+
+            def forward(self, *args, **kwargs):
+                return BaseModelOutputWithPast(last_hidden_state=self.hidden_states)
+
+        input_ids = torch.tensor([[1, 2, self.model_tester.pad_token_id]], device=torch_device)
+        attention_mask = torch.tensor([[1, 1, 0]], device=torch_device)
+        hidden_states = torch.zeros(1, 3, self.model_tester.hidden_size, device=torch_device)
+        hidden_states[0, :, 0] = torch.tensor([1.0, 2.0, 10.0], device=torch_device)
+
+        for pooling, expected_score in {"bos": 1.0, "eos": 2.0, "mean": 1.5}.items():
+            config = self.model_tester.get_config()
+            config.num_labels = 1
+            config.pooling = pooling
+            model = Mistral3ForSequenceClassification(config).to(torch_device).eval()
+            model.model = StaticBackbone(hidden_states)
+            with torch.no_grad():
+                model.score.weight.zero_()
+                model.score.weight[0, 0] = 1
+                output = model(input_ids=input_ids, attention_mask=attention_mask)
+            expected = torch.tensor([[expected_score]], device=torch_device)
+            torch.testing.assert_close(output.logits, expected)
+
+    def test_sequence_classification_multimodal_auto_round_trip(self):
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 1
+        config.pooling = "mean"
+        config.text_config.is_causal = False
+        model = Mistral3ForSequenceClassification(config).to(torch_device).eval()
+
+        with torch.no_grad():
+            expected_logits = model(**inputs).logits
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+            with open(f"{tmp_dir}/config.json", encoding="utf-8") as config_file:
+                saved_config = json.load(config_file)
+
+            self.assertNotIn("auto_map", saved_config)
+            self.assertEqual(saved_config["architectures"], ["Mistral3ForSequenceClassification"])
+            self.assertFalse(saved_config["text_config"]["is_causal"])
+            reloaded = AutoModelForSequenceClassification.from_pretrained(
+                tmp_dir,
+                trust_remote_code=False,
+            ).to(torch_device)
+            self.assertIsInstance(reloaded, Mistral3ForSequenceClassification)
+            with torch.no_grad():
+                actual_logits = reloaded(**inputs).logits
+
+        torch.testing.assert_close(actual_logits, expected_logits)
 
     @unittest.skip(reason="Compile not yet supported because in LLava models")
     @pytest.mark.torch_compile_test

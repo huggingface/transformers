@@ -245,3 +245,8 @@ messages = [
 [[autodoc]] Mistral3ForConditionalGeneration
     - forward
     - get_image_features
+
+## Mistral3ForSequenceClassification
+
+[[autodoc]] Mistral3ForSequenceClassification
+    - forward
