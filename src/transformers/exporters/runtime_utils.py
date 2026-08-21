@@ -100,6 +100,27 @@ def _cache_tensors(past_key_values) -> list[torch.Tensor]:
     return [t for t in tree_leaves(past_key_values) if isinstance(t, torch.Tensor)]
 
 
+def _read_cache_step(container, part: str):
+    """One step of a cache leaf path: an index into a list, a key into a dict (a layer may keep its state
+    dict-keyed by entry name — deepseek_v4's `buffer_kv["compressor"]`), or an attribute."""
+    if part.isdigit():
+        return container[int(part)]
+    if isinstance(container, dict):
+        return container.get(part)
+    return getattr(container, part, None)
+
+
+def _read_cache_entry(cache, path: list[str]):
+    """The cache's entry at a named leaf path (`layers.0.conv_states.0`), or `None` where the path does
+    not (yet) lead anywhere — a recurrent layer's states are `None` until a step produces them."""
+    target = cache
+    for part in path:
+        if target is None:
+            return None
+        target = _read_cache_step(target, part)
+    return target
+
+
 def _assign_cache_entry(cache, path: list[str], value) -> None:
     """Write a decode step's cache output back at its named path (`layers.0.conv_states.0`).
 
@@ -107,21 +128,11 @@ def _assign_cache_entry(cache, path: list[str], value) -> None:
     valid) and replaces the entry outright when it grew or did not exist yet — a growing `DynamicCache`
     returns longer tensors, and a recurrent layer's states start as `None`.
     """
-
-    # A step is an index into a list, a key into a dict (a layer may keep its state dict-keyed by entry
-    # name — deepseek_v4's `buffer_kv["compressor"]`), or an attribute.
-    def read(container, part):
-        if part.isdigit():
-            return container[int(part)]
-        if isinstance(container, dict):
-            return container.get(part)
-        return getattr(container, part, None)
-
     target = cache
     for part in path[:-1]:
-        target = read(target, part)
+        target = _read_cache_step(target, part)
     last = path[-1]
-    current = read(target, last)
+    current = _read_cache_step(target, last)
     if isinstance(current, torch.Tensor) and isinstance(value, torch.Tensor) and current.shape == value.shape:
         if current is not value:
             current.copy_(value)
@@ -381,23 +392,22 @@ class DynamoModelRunner(ModelRunner):
 
 
 def _ort_to_torch_dtype(ort_type: str | None) -> torch.dtype | None:
-    """torch dtype for an ORT input/output type string (`"tensor(float)"`), or `None` if it names no tensor.
+    """torch dtype for an ORT input/output type string (`"tensor(float)"`), or `None` if it names no
+    tensor — the caller then keeps the tensor's own dtype.
 
-    ORT spells the element type in ONNX's own vocabulary, so go through ONNX's enum and torch's mapping
-    instead of keeping a table by hand: that covers every dtype ONNX has (fp8, int4, …) rather than the few
-    someone happened to add, and a missing entry can't quietly become `None`. `onnx` / `onnxruntime` are
-    optional dependencies, hence the local import — only an ONNX runner ever asks.
+    Resolved by *name* against `torch` rather than through `JitScalarType`: that helper aliases ONNX's
+    plain integer types onto torch's quantized ones (`int32` -> `qint32`, `int8`/`uint8` -> `qint8`/
+    `quint8`), and casting a real tensor to a quantized dtype raises `empty_strided not supported on
+    quantized tensors` — which is what a grid VLM's int32 `cu_seqlens` hit. ONNX spells every type the
+    way torch does apart from the two float aliases and the fp8 family's underscore.
     """
-    import onnx
-    from torch.onnx import JitScalarType
-
     match = re.fullmatch(r"tensor\((\w+)\)", ort_type or "")
     if match is None:
         return None
-    try:
-        return JitScalarType.from_onnx_type(onnx.TensorProto.DataType.Value(match.group(1).upper())).dtype()
-    except (ValueError, KeyError):
-        return None
+    name = {"float": "float32", "double": "float64"}.get(match.group(1), match.group(1))
+    name = re.sub(r"^float8(e\d+m\d+.*)", r"float8_\1", name)
+    dtype = getattr(torch, name, None)
+    return dtype if isinstance(dtype, torch.dtype) else None
 
 
 def _session_kv_geometry(shapes: dict[str, tuple]) -> dict[int, tuple[int, int, int]]:
@@ -441,7 +451,13 @@ class OnnxModelRunner(ModelRunner):
 
         self._session_names = {exposed(i.name): i.name for i in session.get_inputs()}
         self.input_names = tuple(self._session_names)
-        self._cache_names = [n for n in self.input_names if n.startswith("input.")]
+        # `{declared cache input: its leaf path in the cache}`, e.g.
+        # `input.cache_params.layers.0.conv_states.0` -> `["layers", "0", "conv_states", "0"]`. Keyed by
+        # path rather than by position: a recurrent layer's states are `None` until a step produces them,
+        # so the cache's tensor leaves are a *subset* of what the graph declares and in a different order.
+        self._cache_paths = {
+            n: n.removeprefix("input.").split(".")[1:] for n in self.input_names if n.startswith("input.")
+        }
         shapes = {exposed(i.name): tuple(i.shape) for i in session.get_inputs()}
         # ORT rejects a feed whose dtype differs from the declared one, and the masks the runtime builds are
         # not always the type the graph was traced with (a bool padding mask vs a float causal one).
@@ -473,7 +489,20 @@ class OnnxModelRunner(ModelRunner):
 
         cache = kwargs.pop(self.cache_input, None) if self.cache_input else None
         if cache is not None:
-            kwargs.update({name: t.detach() for name, t in zip(self._cache_names, _cache_tensors(cache))})
+            batch = next((t.shape[0] for t in kwargs.values() if isinstance(t, torch.Tensor) and t.dim() > 0), 1)
+            for name, path in self._cache_paths.items():
+                entry = _read_cache_entry(cache, path)
+                # A slot the cache still holds as `None` is a state the model has not created yet (a
+                # recurrent layer's conv / SSM state before its first step). The graph takes it as an
+                # input all the same, so hand it the zeros its own lazy initialization would have made,
+                # sized from the shape the graph declares — only the batch axis is symbolic there.
+                if entry is None:
+                    shape = [
+                        batch if axis == 0 or not isinstance(dim, int) else dim
+                        for axis, dim in enumerate(self.input_shapes.get(name, ()))
+                    ]
+                    entry = torch.zeros(*shape, dtype=self._input_dtypes.get(name) or self.dtype)
+                kwargs[name] = entry.detach()
         # Non-tensor kwargs are pytrees (`encoder_outputs`, …) — the graph declares their leaves by dotted
         # path, the exporter's own naming.
         for name in [n for n, v in kwargs.items() if not isinstance(v, torch.Tensor)]:

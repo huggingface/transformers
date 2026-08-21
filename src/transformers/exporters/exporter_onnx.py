@@ -58,6 +58,8 @@ from .utils import (
     apply_patches,
     duplicate_leaf_tensors,
     get_leaf_tensors,
+    module_device,
+    patch_attributes,
     register_fx_node_fix,
     register_patch,
 )
@@ -116,7 +118,25 @@ class OnnxExporter(DynamoExporter):
         elif type(config) is not OnnxConfig:
             raise TypeError(f"Expected config to be an OnnxConfig or dict, got {type(config)}")
 
-        with patch_model_outputs(model) as (inputs_names, outputs_names), apply_patches("onnx"):
+        # The SSM mixers' associative scan is only ONNX-exportable in its `pointwise` combine mode (cuda /
+        # xpu): the `generic` mode a cpu tensor selects lowers through `vmap`, which `run_decompositions`
+        # cannot take apart ("tensor may have escaped from inside a function being vmapped"), and it pins
+        # the scan's step axis anyway. Keep a cpu export on the sequential scan, through the mixers' own
+        # switch — the way `patch_model_config` turns off `use_mamba_kernels`.
+        mixer_patches = (
+            [
+                (module, "use_associative_scan", lambda _original: False)
+                for module in model.modules()
+                if hasattr(module, "use_associative_scan")
+            ]
+            if (device := module_device(model)) is not None and device.type not in ("cuda", "xpu")
+            else []
+        )
+        with (
+            patch_model_outputs(model) as (inputs_names, outputs_names),
+            apply_patches("onnx"),
+            patch_attributes(mixer_patches),
+        ):
             exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
             inputs_names, outputs_names = disambiguate_io_names(inputs_names, outputs_names)
             apply_fx_node_fixes("onnx", exported_program.graph_module)
@@ -155,9 +175,14 @@ def patch_model_outputs(model):
 
     @functools.wraps(original_forward)
     def patched_forward(*args, **kwargs):
+        # Input names BEFORE the forward, and replacing rather than appending: the forward mutates its
+        # pytree kwargs in place, so a cache whose states the model creates on this very call would
+        # otherwise contribute leaf names the graph never took as inputs — shifting every later name onto
+        # the wrong tensor (a recurrent model's `attention_mask` came out named
+        # `cache_params.layers.0.conv_states.0`). Repeated traces then compounded it by appending again.
+        inputs_names[:] = get_leaf_tensors(kwargs).keys()
         outputs = get_leaf_tensors(duplicate_leaf_tensors(original_forward(*args, **kwargs)))
-        inputs_names.extend(get_leaf_tensors(kwargs).keys())
-        outputs_names.extend(outputs.keys())
+        outputs_names[:] = outputs.keys()
         return outputs
 
     try:

@@ -615,7 +615,12 @@ def _prepare_masked_omni_audio_inputs(config: Any, inputs: dict[str, Any]) -> No
     """The Omni `get_audio_features` seam carries the padded features and their padding mask rather than
     the packed `feature_lens` pair — pack them the way the getter's own masking branch does (eagerly,
     outside the trace) and hand the packed pair to `_prepare_omni_audio_inputs`; its precompute rides in
-    as extra graph inputs while the graph keeps taking the raw features and mask."""
+    as extra graph inputs while the graph keeps taking the raw features and mask.
+
+    Unlike `feature_lens`, this marker pair is not omni-specific (qwen2_audio carries it too), so fire
+    only for a model whose own modeling module has the chunked-audio helpers."""
+    if not hasattr(_resolve_modeling_module(config), "chunk_and_pad_features"):
+        return
     mask = inputs["feature_attention_mask"]
     derived = dict(inputs)
     derived["input_features"] = inputs["input_features"].permute(0, 2, 1)[mask.bool()].permute(1, 0)

@@ -206,6 +206,13 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "Driving it needs the model's own two-stage loop, not a generic one; the graphs themselves "
             "export and match eager (the non-generate variants cover them)."
         ),
+        "HiggsAudioV2ForConditionalGeneration": (
+            "Its `prepare_inputs_for_generation` does per-step surgery no generic loop reproduces: it "
+            "counts how many audio ids the cache already holds, masks those out, and in decode drops "
+            "`input_ids` entirely to pass only the last audio-codebook row. The runtime feeds the generic "
+            "text+kwargs step instead, so generation diverges from the first token. Export itself and the "
+            "per-component parity still run."
+        ),
         "XLMWithLMHeadModel": (
             "Its `prepare_inputs_for_generation` appends a mask token to `input_ids` every step and builds a "
             "`langs` tensor from `config.lang_id`, so the graph takes a per-step input only that model can "
@@ -496,6 +503,11 @@ ONNX_DISABLE_OPTIMIZE: dict[str, dict[str, str]] = {
         "ProphetNetDecoder": "Same `SplitToSequence` issue as `ProphetNetModel`.",
         "ProphetNetForCausalLM": "Same `SplitToSequence` issue as `ProphetNetModel`.",
         "ZoeDepthForDepthEstimation": "Same `SplitToSequence` issue as `ProphetNetModel`.",
+        "LlavaNextVideoModel": (
+            "Same `SplitToSequence` folding crash as `ProphetNetModel` — here from the per-image "
+            "`torch.split` of the anyres video features."
+        ),
+        "LlavaNextVideoForConditionalGeneration": "Same `SplitToSequence` issue as `LlavaNextVideoModel`.",
     },
 }
 
