@@ -262,6 +262,23 @@ for prompt in user_prompts:
     messages.append({"role": "assistant", "content": completion})
 ```
 
+## Crop a cache
+
+Use [`~Cache.crop`] to roll back tokens from a cache, such as when a candidate continuation is rejected during iterative generation. Pass the number of tokens to remove as a negative integer.
+
+```py
+# Enable this before the forward pass if you need to roll back tokens.
+past_key_values.activate_past_recording()
+
+# Remove the last three tokens from the cache.
+past_key_values.crop(-3)
+```
+
+`crop(0)` does not clear the cache. It removes no tokens from the cached sequence and is a no-op for full-attention layers. For sliding-window and linear-attention layers, it can discard cached information that the next model call will not use. This reduces memory use without rolling back tokens.
+
+> [!NOTE]
+> If you need to crop a cache with sliding-window or linear-attention layers, call [`~Cache.activate_past_recording`] before the forward pass. Without it, `crop` raises an error after a sliding-window layer fills its configured window. Linear-attention layers also require past recording before they can be cropped.
+
 ## Prefill a cache (prefix caching)
 
 In some situations, you may want to fill a [`Cache`] with kv pairs for a certain prefix prompt and reuse it to generate different sequences.
