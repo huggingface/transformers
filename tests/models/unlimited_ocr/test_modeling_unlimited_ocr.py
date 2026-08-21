@@ -147,7 +147,7 @@ class UnlimitedOcrModelTest(VLMModelTest, unittest.TestCase):
         seq_length = min(seq_length, max_length) if max_length >= 0 else seq_length
         super()._check_past_key_values_for_generate(batch_size, past_key_values, seq_length, config)
 
-    def _check_attention_shapes(self, layer, attention_shape, seq_length):
+    def _check_attention_shapes(self, layer, seq_length, k_shape, v_shape):
         # Super method assumes that there is only layer.keys/values but reference sliding window layers
         # can have layer.prefill_keys/prefill_values as well which results in wrong assertions in the
         # super method.
@@ -156,11 +156,9 @@ class UnlimitedOcrModelTest(VLMModelTest, unittest.TestCase):
 
         combined_keys_length = seq_len(layer.prefill_keys) + seq_len(layer.keys)
         combined_values_length = seq_len(layer.prefill_values) + seq_len(layer.values)
+        self.assertEqual((*layer.prefill_keys.shape[:-2], combined_keys_length, layer.prefill_keys.shape[-1]), k_shape)
         self.assertEqual(
-            (*layer.prefill_keys.shape[:-2], combined_keys_length, layer.prefill_keys.shape[-1]), attention_shape
-        )
-        self.assertEqual(
-            (*layer.prefill_values.shape[:-2], combined_values_length, layer.prefill_values.shape[-1]), attention_shape
+            (*layer.prefill_values.shape[:-2], combined_values_length, layer.prefill_values.shape[-1]), v_shape
         )
 
     def _check_generate_cache_sliding_window_too_small(self, cache_implementation: str, prefill_max_new_tokens: int):

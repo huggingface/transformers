@@ -238,8 +238,8 @@ class UnlimitedOcrImageProcessor(TorchvisionBackend):
         num_local_patches_grouped = {}
 
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
-        for shape, stacked_images in grouped_images.items():
-            height, width = shape[-2:]
+        for key, stacked_images in grouped_images.items():
+            height, width = stacked_images.shape[-2:]
             num_images = stacked_images.shape[0]
             if crop_to_patches and max(height, width) > tile_size:
                 num_columns, num_rows = get_optimal_tiled_canvas(
@@ -256,12 +256,12 @@ class UnlimitedOcrImageProcessor(TorchvisionBackend):
                 flat_patches = self.rescale_and_normalize(
                     flat_patches, do_rescale, rescale_factor, do_normalize, image_mean, image_std
                 )
-                local_patches_grouped[shape] = flat_patches.reshape(stacked_patches.shape)
+                local_patches_grouped[key] = flat_patches.reshape(stacked_patches.shape)
             else:
                 num_columns, num_rows, num_patches = 1, 1, 0
-                local_patches_grouped[shape] = [None] * num_images
-            patches_grid_grouped[shape] = [[num_columns, num_rows]] * num_images
-            num_local_patches_grouped[shape] = [num_patches] * num_images
+                local_patches_grouped[key] = [None] * num_images
+            patches_grid_grouped[key] = [[num_columns, num_rows]] * num_images
+            num_local_patches_grouped[key] = [num_patches] * num_images
 
         ordered_local = reorder_images(local_patches_grouped, grouped_images_index)
         patches_grid = reorder_images(patches_grid_grouped, grouped_images_index)
@@ -274,14 +274,14 @@ class UnlimitedOcrImageProcessor(TorchvisionBackend):
         global_target_size = max(size.height, size.width)
 
         processed_global_grouped = {}
-        for shape, stacked in grouped_images.items():
+        for key, stacked in grouped_images.items():
             # Different from DeepseekOcr2 which crops and pads all images
             if not crop_to_patches and global_target_size <= maximum_pad_value:
                 stacked = self.resize(
                     stacked, SizeDict(height=global_target_size, width=global_target_size), resample=resample
                 )
             else:
-                height, width = shape[-2:]
+                height, width = stacked.shape[-2:]
                 scale = global_target_size / max(height, width)
                 new_height = round(height * scale)
                 new_width = round(width * scale)
@@ -290,7 +290,7 @@ class UnlimitedOcrImageProcessor(TorchvisionBackend):
             stacked = self.rescale_and_normalize(
                 stacked, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
-            processed_global_grouped[shape] = stacked
+            processed_global_grouped[key] = stacked
         all_pixel_values_global = reorder_images(processed_global_grouped, grouped_images_index)
 
         data = {"pixel_values": all_pixel_values_global}
@@ -304,12 +304,11 @@ class UnlimitedOcrImageProcessor(TorchvisionBackend):
             tensor_type=return_tensors,
         )
 
-    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None) -> int:
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:
         """
         Returns the number of image patches for a given image size (1 global + local patches).
         """
-        if images_kwargs is None:
-            images_kwargs = {}
+        images_kwargs = images_kwargs or {}
         min_patches = images_kwargs.get("min_patches", self.min_patches)
         max_patches = images_kwargs.get("max_patches", self.max_patches)
         tile_size = images_kwargs.get("tile_size", self.tile_size)

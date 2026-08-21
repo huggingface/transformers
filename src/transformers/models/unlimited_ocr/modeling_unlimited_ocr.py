@@ -276,11 +276,6 @@ class UnlimitedOcrPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
-    _no_split_modules = [
-        "UnlimitedOcrEncoderLayer",
-        "UnlimitedOcrSamVisionLayer",
-        "UnlimitedOcrTextDecoderLayer",
-    ]
     _skip_keys_device_placement = ["past_key_values"]
     # SAM uses rel-pos bias, incompatible with flash attention.
     _supports_flash_attn = False
@@ -290,6 +285,11 @@ class UnlimitedOcrPreTrainedModel(PreTrainedModel):
     # SAM doesn't support flex attention
     _supports_flex_attn = False
     _supports_attention_backend = True
+    _no_split_modules = [
+        "UnlimitedOcrEncoderLayer",
+        "UnlimitedOcrSamVisionLayer",
+        "UnlimitedOcrTextDecoderLayer",
+    ]
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -782,7 +782,7 @@ class UnlimitedOcrVisionEmbeddings(nn.Module):
         self.num_patches = (self.image_size // self.patch_size) ** 2
         self.num_positions = self.num_patches + 1
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
-        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
+        self.position_ids = nn.Buffer(torch.arange(self.num_positions).expand((1, -1)), persistent=False)
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
@@ -1614,8 +1614,6 @@ class UnlimitedOcrStaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
 
 
 class UnlimitedOcrTextRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: UnlimitedOcrTextConfig, device=None):
         super().__init__()
@@ -1630,8 +1628,8 @@ class UnlimitedOcrTextRotaryEmbedding(nn.Module):
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
     @deprecate_kwarg("device", version="5.18")
