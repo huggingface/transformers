@@ -59,7 +59,7 @@ from transformers import (
     is_torch_available,
     logging,
 )
-from transformers.modeling_flash_attention_utils import is_flash_attn_available
+from transformers.modeling_flash_attention_utils import _is_packed_sequence, is_flash_attn_available
 from transformers.models.mistral.modeling_mistral import MistralModel
 from transformers.testing_utils import (
     TOKEN,
@@ -3048,6 +3048,15 @@ class TestAttentionImplementation(unittest.TestCase):
         with sdpa_kernel([backends[expected_backend]]):
             attn_output, _ = sdpa_attention_forward(module, query, key, value, attention_mask=attention_mask)
         self.assertEqual(attn_output.shape, (1, 16, 8, value_head_dim))
+
+    def test_flash_attn_decode_skips_packed_sequence_check(self):
+        position_ids = torch.arange(4).unsqueeze(0)
+        with patch("transformers.modeling_flash_attention_utils.torch.arange") as mock_arange:
+            self.assertFalse(_is_packed_sequence(position_ids, batch_size=1, query_length=1))
+        mock_arange.assert_not_called()
+
+        packed_position_ids = torch.tensor([[0, 1, 2, 0]])
+        self.assertTrue(_is_packed_sequence(packed_position_ids, batch_size=1, query_length=4))
 
     def test_flash_attn_available_no_keyerror_when_missing_from_distribution_map(self):
         # Regression test for https://github.com/huggingface/transformers/issues/45520.
