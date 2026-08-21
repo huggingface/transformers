@@ -56,7 +56,7 @@ logger = logging.get_logger(__name__)
 if is_torch_available():
     import torch
 
-    from ..cache_utils import StaticLayer
+    from ..cache_utils import DynamicCrossAttentionLayer, StaticLayer
     from ..configuration_utils import PreTrainedConfig
     from ..modeling_outputs import BaseModelOutput
     from ..modeling_utils import PreTrainedModel
@@ -1711,11 +1711,16 @@ def decompose_for_generation(
     #   traced mid-generation bakes its step-regime python branches (the conv path's mask-width comparison,
     #   lightning attention's chunk boundary), which a prompt on a fresh cache cannot satisfy.
     elif any(
-        hasattr(layer, "conv_states") or hasattr(layer, "recurrent_states") or hasattr(layer, "idx_keys")
+        hasattr(layer, "conv_states")
+        or hasattr(layer, "recurrent_states")
+        or hasattr(layer, "idx_keys")
+        # `cross_attention` cache slots the prefill fills (idefics' gated layers). Keyed on the layer
+        # kind, not on "a multi-modal model with no modality getter": that also caught mllama, whose
+        # cross-attention reads a per-step `cross_attention_mask` no generic loop grows — driving it
+        # indexes past that mask (out of bounds, a device-side assert that poisons the whole worker),
+        # which is why its multi-token variant is skipped rather than served.
+        or isinstance(layer, DynamicCrossAttentionLayer)
         for layer in getattr(stages["decode"][1].get("past_key_values"), "layers", [])
-    ) or (
-        not any(name.endswith("_encoder") for name in components)
-        and any(_present_input_key(prefill_inputs, spec[2]) is not None for spec in _MODALITY_SPECS)
     ):
         if (cache := prefill_inputs.get("past_key_values")) is not None:
             batch_size = next(t for t in prefill_inputs.values() if isinstance(t, torch.Tensor)).shape[0]
