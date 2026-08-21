@@ -407,6 +407,19 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "LlavaOnevisionModel": "Same native ExecuTorch crash as `LlavaOnevisionForConditionalGeneration`.",
         "PaddleOCRVLForConditionalGeneration": "Same native ExecuTorch vision-stack crash as `FastVlmForConditionalGeneration`.",
         "PaddleOCRVLModel": "Same native ExecuTorch crash as `PaddleOCRVLForConditionalGeneration`.",
+        "Lfm2VlForConditionalGeneration": (
+            "Its NaViT-style packer sizes the vision stack from the number of patches each image really "
+            "has, so those extents are unbacked, and ExecuTorch plans memory ahead of time — every "
+            "tensor needs a size or at least a bound, which an unbacked extent has neither of. The trace "
+            "stops in torch's own `slice` decomposition, on a question no reasoning can settle "
+            "(`_decomp/decompositions.py` in `slice_forward`). The other backends allocate while they "
+            "run, so they carry it: dynamo keeps the symbol and ONNX emits shape-dynamic ops. Lifting "
+            "this needs the data dependence gone — the per-image geometry precomputed outside the graph, "
+            "the way the grid VLMs feed `cu_seqlens` / `window_index` — not a change of backend."
+        ),
+        "Lfm2VlModel": "Same unbacked NaViT extents as `Lfm2VlForConditionalGeneration`.",
+        "MiniCPMV4_6ForConditionalGeneration": "Same unbacked NaViT extents as `Lfm2VlForConditionalGeneration`.",
+        "MiniCPMV4_6Model": "Same unbacked NaViT extents as `Lfm2VlForConditionalGeneration`.",
         "Qwen3ASRForConditionalGeneration": (
             "Audio encoder packs valid frames with a data-dependent `.nonzero()`; the unbacked "
             "packed length can't be sized by ExecuTorch's ahead-of-time memory planner "

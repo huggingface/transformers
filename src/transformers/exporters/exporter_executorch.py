@@ -761,8 +761,15 @@ def _patch_reshape(original):
     hit by xcodec2's ISTFT head).
     """
 
+    from torch._prims_common import is_contiguous_or_false
+
     def patch(input, *shape, **kwargs):
-        if not input.is_contiguous():
+        # `is_contiguous_or_false`, not `is_contiguous()`: deciding contiguity compares the strides
+        # against the products of the sizes, which has no answer on a tensor sized by *unbacked* symbols
+        # (a NaViT packer's data-dependent patch count) — plain `is_contiguous()` raises
+        # `GuardOnDataDependentSymNode` there and fails the export on a check meant only to pick a fast
+        # path. "Not provably contiguous" lands on the copy, which is the safe direction anyway.
+        if not is_contiguous_or_false(input):
             input = input.clone(memory_format=torch.contiguous_format)
         return original(input, *shape, **kwargs)
 
@@ -1475,8 +1482,12 @@ def _fix_clone_memory_format(gm: torch.fx.GraphModule, node: torch.fx.Node) -> b
         return False
     if node.kwargs.get("memory_format") is not None:
         return False
+    from torch._prims_common import is_contiguous_or_false
+
     input_val = node.args[0].meta.get("val") if hasattr(node.args[0], "meta") else None
-    if not (isinstance(input_val, torch.Tensor) and not input_val.is_contiguous()):
+    # Guard-free contiguity, for the same reason as the reshape patch above: this runs on the traced
+    # `FakeTensor`, whose sizes may be unbacked.
+    if not (isinstance(input_val, torch.Tensor) and not is_contiguous_or_false(input_val)):
         return False
     node.kwargs = {**node.kwargs, "memory_format": torch.contiguous_format}
     return True
