@@ -30,6 +30,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_multimodal_utils import MultiModalPreTrainedModelMixin
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_rope_utils import RopeParameters, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -114,8 +115,17 @@ class Qwen3VLVisionConfig(PreTrainedConfig):
     temporal_patch_size: int | list[int] | tuple[int, int] = 2
     out_hidden_size: int = 3584
     num_position_embeddings: int = 2304
+    # How the vision embedding resamples its learned position-embedding grid, so that
+    # `vision_utils.get_vision_interpolation_indices_and_weights` can be called from the config alone.
+    interpolation_mode: str = "bilinear"
+    interpolation_align_corners: bool = True
     deepstack_visual_indexes: list[int] | tuple[int, ...] = (8, 16, 24)
     initializer_range: float = 0.02
+
+    @property
+    def num_grid_per_side(self) -> int:
+        """Side length of the square learned position-embedding grid, as the vision module derives it."""
+        return int(self.num_position_embeddings**0.5)
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-VL-4B-Instruct")
@@ -431,9 +441,9 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
 
         self.pos_embed = nn.Embedding(config.num_position_embeddings, config.hidden_size)
         # How the (square) learned position grid is resampled to each image's grid.
-        self.num_grid_per_side = int(config.num_position_embeddings**0.5)
-        self.interpolation_align_corners = True
-        self.interpolation_mode = "bilinear"
+        self.num_grid_per_side = config.num_grid_per_side
+        self.interpolation_align_corners = config.interpolation_align_corners
+        self.interpolation_mode = config.interpolation_mode
 
         head_dim = config.hidden_size // config.num_heads
         self.rotary_pos_emb = Qwen3VLVisionRotaryEmbedding(head_dim // 2)
@@ -480,7 +490,7 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
             num_grid_per_side=self.num_grid_per_side,
             mode=self.interpolation_mode,
             align_corners=self.interpolation_align_corners,
-            spatial_merge_size=self.config.spatial_merge_size,
+            spatial_merge_size=self.spatial_merge_size,
         )
         return (self.pos_embed(interp_indices) * interp_weights[:, :, None]).sum(1)
 
@@ -504,7 +514,7 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
             num_grid_per_side=self.num_grid_per_side,
             mode=self.interpolation_mode,
             align_corners=self.interpolation_align_corners,
-            spatial_merge_size=self.config.spatial_merge_size,
+            spatial_merge_size=self.spatial_merge_size,
             kwargs=kwargs,
         )
         position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
@@ -660,47 +670,20 @@ class Qwen3VLTextModel(Qwen3VLPreTrainedModel, Qwen3Model):
 
 @auto_docstring
 class Qwen3VLModel(Qwen2VLModel):
+    def get_rope_index(self, input_ids, mm_token_type_ids, image_grid_thw=None, video_grid_thw=None, **kwargs):
+        # The processor separates video frames with timestamp text, so each frame is its own visual span:
+        # lay a video out one `T=1` frame grid at a time.
+        if video_grid_thw is not None:
+            video_grid_thw = torch.repeat_interleave(video_grid_thw, video_grid_thw[:, 0], dim=0)
+            video_grid_thw[:, 0] = 1
+        return MultiModalPreTrainedModelMixin.get_rope_index(
+            self, input_ids, mm_token_type_ids, image_grid_thw=image_grid_thw, video_grid_thw=video_grid_thw, **kwargs
+        )
+
     def __init__(self, config):
         super().__init__(config)
         self.visual = AutoModel.from_config(config.vision_config)
         self.language_model = AutoModel.from_config(config.text_config)
-
-    def get_rope_index(
-        self,
-        video_grid_thw: torch.LongTensor | None = None,
-        **super_kwargs,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Difference from Qwen2VL/Qwen2.5VL's get_rope_index:
-        - Since Qwen3.5 use timestamps to separate videos, like <t1> <vision_start> <frame1> <vision_end> <t2> <vision_start> <frame2> <vision_end>, the video_grid_thw should also be split too.
-
-        Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-                it.
-            mm_token_type_ids (`torch.IntTensor` of shape `(batch_size, sequence_length)`):
-                Token type ids matching each modality to a different value in the input sequence, i.e. text (0), image (1), video (2).
-            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-                The temporal, height and width of feature shape of each image in LLM.
-            video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-                The temporal, height and width of feature shape of each video in LLM.
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-        Returns:
-            position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
-            mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
-        """
-
-        # Separate video grid thw into multiple grids because timestamps are used to separate videos.
-        if video_grid_thw is not None:
-            video_grid_thw = torch.repeat_interleave(video_grid_thw, video_grid_thw[:, 0], dim=0)
-            video_grid_thw[:, 0] = 1
-
-        return super().get_rope_index(video_grid_thw=video_grid_thw, **super_kwargs)
 
     def get_image_features(
         self,

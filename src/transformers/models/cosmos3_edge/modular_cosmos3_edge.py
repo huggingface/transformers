@@ -24,12 +24,12 @@ from huggingface_hub.dataclasses import strict
 
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
-from ...generation import GenerationMixin
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
 )
 from ...masking_utils import create_causal_mask
+from ...modeling_multimodal_utils import MultiModalPreTrainedModelMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
@@ -610,6 +610,16 @@ class Cosmos3EdgePatchMerger(Qwen3_5MoeVisionPatchMerger):
 
 
 class Cosmos3EdgeModel(Qwen2VLModel, Cosmos3EdgePreTrainedModel):
+    def get_rope_index(self, input_ids, mm_token_type_ids, image_grid_thw=None, video_grid_thw=None, **kwargs):
+        # The processor separates video frames with timestamp text, so each frame is its own visual span:
+        # lay a video out one `T=1` frame grid at a time.
+        if video_grid_thw is not None:
+            video_grid_thw = torch.repeat_interleave(video_grid_thw, video_grid_thw[:, 0], dim=0)
+            video_grid_thw[:, 0] = 1
+        return MultiModalPreTrainedModelMixin.get_rope_index(
+            self, input_ids, mm_token_type_ids, image_grid_thw=image_grid_thw, video_grid_thw=video_grid_thw, **kwargs
+        )
+
     config_class = Cosmos3EdgeConfig
     accepts_loss_kwargs = False
 
@@ -645,30 +655,6 @@ class Cosmos3EdgeModel(Qwen2VLModel, Cosmos3EdgePreTrainedModel):
     ) -> tuple | BaseModelOutputWithPooling:
         # Video frames use the same vision tower and projector path as images.
         return self.get_image_features(pixel_values_videos, video_grid_thw, **kwargs)
-
-    def get_rope_index(
-        self,
-        input_ids: torch.LongTensor,
-        mm_token_type_ids: torch.IntTensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        video_grid_thw: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        **super_kwargs,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        # Edge's processor emits one timestamped visual span per frame, so split each video's temporal grid before
-        # applying Qwen2-VL's common multimodal position-index routine.
-        if video_grid_thw is not None:
-            video_grid_thw = torch.repeat_interleave(video_grid_thw, video_grid_thw[:, 0], dim=0).clone()
-            video_grid_thw[:, 0] = 1
-
-        return super().get_rope_index(
-            input_ids=input_ids,
-            image_grid_thw=image_grid_thw,
-            video_grid_thw=video_grid_thw,
-            attention_mask=attention_mask,
-            mm_token_type_ids=mm_token_type_ids,
-            **super_kwargs,
-        )
 
     @can_return_tuple
     @auto_docstring
@@ -740,10 +726,9 @@ class Cosmos3EdgeForConditionalGeneration(Qwen2VLForConditionalGeneration, Cosmo
     _tied_weights_keys = {}
     accepts_loss_kwargs = False
 
-    def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
+    def _prepare_mrope_position_ids_for_generation(self, text_positions, inputs_tensor, model_kwargs):
         # Qwen2-VL exposes four axes (text plus three visual axes). Edge's interleaved M-RoPE consumes the three
-        # visual axes directly, so start from the common 2D text positions rather than Qwen2-VL's four-axis helper.
-        text_positions = GenerationMixin._prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs)
+        # visual axes directly, so it returns those three rather than the shared four-axis layout.
 
         # Early exit in case we are continuing generation from past kv.
         past_length = 0

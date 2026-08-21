@@ -34,6 +34,12 @@ from ...generation import GenerationMixin
 from ...image_utils import ImageInput
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_multimodal_utils import (
+    _mrope_place_positions,
+    _mrope_positions_block,
+    get_mrope_text_positions,
+    get_mrope_vision_positions,
+)
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
@@ -222,6 +228,170 @@ class BaseModelOutputWithDeepstackFeatures(BaseModelOutputWithPooling):
     """
 
     deepstack_features: list[torch.FloatTensor] | None = None
+
+
+def _mrope_index_audio_merged(
+    input_ids: torch.LongTensor,
+    mm_token_type_ids: torch.IntTensor | None = None,
+    *,
+    spatial_merge_size: int,
+    image_token_id: int,
+    video_token_id: int,
+    audio_token_id: int,
+    vision_start_token_id: int,
+    audio_start_token_id: int,
+    position_id_per_seconds: float,
+    audio_window_size: int,
+    attention_mask: torch.Tensor | None = None,
+    image_grid_thw: torch.LongTensor | None = None,
+    video_grid_thw: torch.LongTensor | None = None,
+    second_per_grid_ts: torch.Tensor | None = None,
+    audio_seqlens: torch.LongTensor | None = None,
+    use_audio_in_video: bool = False,
+    **unused,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    r"""Qwen3-Omni's M-RoPE: like Qwen2.5-Omni's but audio lengths follow the windowed encoder
+    (`audio_window_size`), and an audio-in-video span emits the video whole with the audio positions
+    merged onto the same clock rather than chunk-interleaved. Temporal positions are fractional (float).
+    """
+
+    def _audio_length_windowed(audio_seqlen):
+        # Decoder tokens one audio takes: three stride-2 convs over fixed-size windows, each full
+        # `2 * audio_window_size`-frame window collapsing to 13 tokens.
+        chunk_len = audio_window_size * 2
+        feat_len = (audio_seqlen % chunk_len - 1) // 2 + 1
+        return ((feat_len - 1) // 2 + 1 - 1) // 2 + 1 + (audio_seqlen // chunk_len) * 13
+
+    image_idx, video_idx, audio_idx = 0, 0, 0
+
+    def positions_for_sequence(token_ids, _token_types):
+        nonlocal image_idx, video_idx, audio_idx
+        device = token_ids.device
+        input_tokens = token_ids.tolist()
+        blocks = []
+
+        def block(length, start_position):
+            return _mrope_positions_block(length, start_position, dtype=torch.float, device=device)
+
+        vision_start_indices = torch.argwhere(token_ids == vision_start_token_id).squeeze(1)
+        vision_tokens = token_ids[vision_start_indices + 1]
+        num_audios = (token_ids == audio_start_token_id).sum()
+        num_images = (vision_tokens == image_token_id).sum()
+        num_videos = (
+            (vision_tokens == audio_start_token_id).sum()
+            if use_audio_in_video
+            else (vision_tokens == video_token_id).sum()
+        )
+        remain_images, remain_videos, remain_audios = num_images, num_videos, num_audios
+        num_spans = num_images + num_audios if use_audio_in_video else num_images + num_videos + num_audios
+
+        st = 0
+        for _ in range(num_spans):
+            start_position = blocks[-1].max() + 1 if blocks else 0
+            unreachable = len(input_tokens) + 1
+            ed_vision_start = (
+                input_tokens.index(vision_start_token_id, st)
+                if (image_token_id in input_tokens or video_token_id in input_tokens)
+                and (remain_videos > 0 or remain_images > 0)
+                else unreachable
+            )
+            ed_audio_start = (
+                input_tokens.index(audio_start_token_id, st)
+                if audio_token_id in input_tokens and remain_audios > 0
+                else unreachable
+            )
+            min_ed = min(ed_vision_start, ed_audio_start)
+
+            text_len = min_ed - st
+            if text_len != 0:
+                blocks.append(block(text_len, start_position))
+                start_position += text_len
+
+            audio_in_video = min_ed == ed_vision_start and ed_vision_start + 1 == ed_audio_start
+            bos_len = eos_len = 2 if audio_in_video else 1
+            blocks.append(block(bos_len, start_position))
+            start_position += bos_len
+
+            if min_ed == ed_audio_start:
+                audio_len = _audio_length_windowed(audio_seqlens[audio_idx])
+                blocks.append(block(audio_len, start_position))
+                st += int(text_len + bos_len + audio_len + eos_len)
+                audio_idx += 1
+                remain_audios -= 1
+
+            elif min_ed == ed_vision_start and token_ids[ed_vision_start + 1] == image_token_id:
+                grid_thw = image_grid_thw[image_idx]
+                blocks.append(
+                    get_mrope_vision_positions(
+                        start_position,
+                        grid_thw,
+                        spatial_merge_size=spatial_merge_size,
+                        time_interval=position_id_per_seconds,
+                        dtype=torch.float,
+                        device=device,
+                    )
+                )
+                st += int(text_len + bos_len + grid_thw.prod() // (spatial_merge_size**2) + eos_len)
+                image_idx += 1
+                remain_images -= 1
+
+            elif min_ed == ed_vision_start and token_ids[ed_vision_start + 1] == video_token_id:
+                grid_thw = video_grid_thw[video_idx]
+                blocks.append(
+                    get_mrope_vision_positions(
+                        start_position,
+                        grid_thw,
+                        spatial_merge_size=spatial_merge_size,
+                        time_interval=float(second_per_grid_ts[video_idx]) * position_id_per_seconds,
+                        dtype=torch.float,
+                        device=device,
+                    )
+                )
+                st += int(text_len + bos_len + grid_thw.prod() // (spatial_merge_size**2) + eos_len)
+                video_idx += 1
+                remain_videos -= 1
+
+            elif audio_in_video:
+                grid_thw = video_grid_thw[video_idx]
+                audio_len = _audio_length_windowed(audio_seqlens[audio_idx])
+                audio_positions = block(audio_len, start_position)
+                video_positions = get_mrope_vision_positions(
+                    start_position,
+                    grid_thw,
+                    spatial_merge_size=spatial_merge_size,
+                    time_interval=float(second_per_grid_ts[video_idx]) * position_id_per_seconds,
+                    dtype=torch.float,
+                    device=device,
+                )
+                # merge the two streams by temporal position, one token at a time, video first on a tie
+                video_pos, audio_pos = 0, 0
+                while video_pos < video_positions.shape[-1] and audio_pos < audio_positions.shape[-1]:
+                    if video_positions[0][video_pos] <= audio_positions[0][audio_pos]:
+                        blocks.append(video_positions[:, video_pos : video_pos + 1])
+                        video_pos += 1
+                    else:
+                        blocks.append(audio_positions[:, audio_pos : audio_pos + 1])
+                        audio_pos += 1
+                if video_pos < video_positions.shape[-1]:
+                    blocks.append(video_positions[:, video_pos:])
+                if audio_pos < audio_positions.shape[-1]:
+                    blocks.append(audio_positions[:, audio_pos:])
+                video_len = grid_thw.prod() // (spatial_merge_size**2)
+                st += int(text_len + bos_len + audio_len + video_len + eos_len)
+                audio_idx += 1
+                video_idx += 1
+                remain_videos -= 1
+                remain_audios -= 1
+
+            blocks.append(block(eos_len, blocks[-1].max() + 1))
+
+        if st < len(input_tokens):
+            blocks.append(block(len(input_tokens) - st, blocks[-1].max() + 1 if blocks else 0))
+        return torch.cat(blocks, dim=1).reshape(3, -1)
+
+    return _mrope_place_positions(
+        input_ids, mm_token_type_ids, 3, attention_mask, positions_for_sequence, dtype=torch.float
+    )
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-Omni-30B-A3B-Instruct")
@@ -715,26 +885,6 @@ class Qwen3OmniMoePreTrainedModel(Qwen2_5OmniPreTrainedModel, PreTrainedModel):
 
 
 class Qwen3OmniMoePreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedModelForConditionalGeneration):
-    def get_llm_pos_ids_for_vision(
-        self,
-        start_idx: int,
-        vision_idx: int,
-        spatial_merge_size: int,
-        t_index: list[torch.Tensor],
-        grid_hs: list[torch.Tensor],
-        grid_ws: list[torch.Tensor],
-    ):
-        llm_pos_ids_list = []
-        llm_grid_h = grid_hs[vision_idx] // spatial_merge_size
-        llm_grid_w = grid_ws[vision_idx] // spatial_merge_size
-        h_index = torch.arange(llm_grid_h).view(1, -1, 1).expand(len(t_index), -1, llm_grid_w).flatten().float()
-        w_index = torch.arange(llm_grid_w).view(1, 1, -1).expand(len(t_index), llm_grid_h, -1).flatten().float()
-        t_index = torch.Tensor(t_index).view(-1, 1).expand(-1, llm_grid_h * llm_grid_w).flatten().float()
-        _llm_pos_ids = torch.stack([t_index, h_index, w_index])
-        llm_pos_ids_list.append(_llm_pos_ids + start_idx)
-        llm_pos_ids = torch.cat(llm_pos_ids_list, dim=1)
-        return llm_pos_ids
-
     def get_rope_index(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -746,240 +896,51 @@ class Qwen3OmniMoePreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedM
         second_per_grids: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Calculate the 3D rope index based on image and video's temporal, height and width in LLM.
-
-        Explanation:
-            Each embedding sequence contains vision embedding and text embedding or just contains text embedding.
-
-            For pure text embedding sequence, the rotary position embedding has no difference with modern LLMs.
-            Examples:
-                input_ids: [T T T T T], here T is for text.
-                temporal position_ids: [0, 1, 2, 3, 4]
-                height position_ids: [0, 1, 2, 3, 4]
-                width position_ids: [0, 1, 2, 3, 4]
-
-            For vision and text embedding sequence, we calculate 3D rotary position embedding for vision part
-            and 1D rotary position embedding for text part.
-            Examples:
-                Temporal (Time): 3 patches, representing different segments of the video in time.
-                Height: 2 patches, dividing each frame vertically.
-                Width: 2 patches, dividing each frame horizontally.
-                We also have some important parameters:
-                fps (Frames Per Second): The video's frame rate, set to 1. This means one frame is processed each second.
-                tokens_per_second: This is a crucial parameter. It dictates how many "time-steps" or "temporal tokens" are conceptually packed into a one-second interval of the video. In this case, we have 25 tokens per second. So each second of the video will be represented with 25 separate time points. It essentially defines the temporal granularity.
-                temporal_patch_size: The number of frames that compose one temporal patch. Here, it's 2 frames.
-                interval: The step size for the temporal position IDs, calculated as tokens_per_second * temporal_patch_size / fps. In this case, 25 * 2 / 1 = 50. This means that each temporal patch will have a difference of 50 in the temporal position IDs.
-                input_ids: [V V V V V V V V V V V V T T T T T], here V is for vision.
-                vision temporal position_ids: [0, 0, 0, 0, 50, 50, 50, 50, 100, 100, 100, 100]
-                vision height position_ids: [0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1]
-                vision width position_ids: [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1]
-                text temporal position_ids: [101, 102, 103, 104, 105]
-                text height position_ids: [101, 102, 103, 104, 105]
-                text width position_ids: [101, 102, 103, 104, 105]
-                Here we calculate the text start position_ids as the max vision position_ids plus 1.
+        Calculate the 3D rope index for a `vision + audio + text` sequence: vision spans use 3D RoPE
+        (temporal, height, width) and audio spans are laid out along the temporal axis, merged position by
+        position with the video they belong to when `use_audio_in_video` (see
+        `_mrope_index_audio_merged`). A sequence with no vision falls back to plain 1D positions
+        on all three axes.
 
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-                it.
+                Indices of input sequence tokens in the vocabulary.
             image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
                 The temporal, height and width of feature shape of each image in LLM.
             video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
                 The temporal, height and width of feature shape of each video in LLM.
             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
+                Mask to avoid performing attention on padding token indices.
             use_audio_in_video (`bool`, *optional*):
-                 If set to `True`, use the audio in video.
+                If set to `True`, use the audio in video.
             audio_seqlens (`torch.LongTensor` of shape `(num_audios)`, *optional*):
                 The length of feature shape of each audio in LLM.
             second_per_grids (`torch.LongTensor` of shape `(num_videos)`, *optional*):
                 The time interval (in seconds) for each grid along the temporal dimension in the 3D position IDs.
 
         Returns:
-            position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
+            position_ids (`torch.FloatTensor` of shape `(3, batch_size, sequence_length)`)
             mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
         """
-        spatial_merge_size = self.spatial_merge_size
-        image_token_id = self.config.image_token_id
-        video_token_id = self.config.video_token_id
-        audio_token_id = self.config.audio_token_id
-        vision_start_token_id = self.config.vision_start_token_id
-        audio_start_token_id = self.config.audio_start_token_id
-        position_id_per_seconds = self.config.position_id_per_seconds
-
-        mrope_position_deltas = []
-        if input_ids is not None and (image_grid_thw is not None or video_grid_thw is not None):
-            total_input_ids = input_ids
-            if attention_mask is not None:
-                attention_mask = attention_mask == 1
-            position_ids = torch.zeros(
-                3,
-                input_ids.shape[0],
-                input_ids.shape[1],
-                dtype=torch.float,
-                device=input_ids.device,
-            )
-            image_idx, video_idx, audio_idx = 0, 0, 0
-            for i, input_ids in enumerate(total_input_ids):
-                if attention_mask is not None:
-                    input_ids = input_ids[attention_mask[i]]
-                image_nums, video_nums, audio_nums = 0, 0, 0
-                vision_start_indices = torch.argwhere(input_ids == vision_start_token_id).squeeze(1)
-                vision_tokens = input_ids[vision_start_indices + 1]
-                audio_nums = torch.sum(input_ids == audio_start_token_id)
-                image_nums = (vision_tokens == image_token_id).sum()
-                video_nums = (
-                    (vision_tokens == audio_start_token_id).sum()
-                    if use_audio_in_video
-                    else (vision_tokens == video_token_id).sum()
-                )
-                input_tokens = input_ids.tolist()
-                llm_pos_ids_list: list = []
-                st = 0
-                remain_images, remain_videos, remain_audios = image_nums, video_nums, audio_nums
-                multimodal_nums = (
-                    image_nums + audio_nums if use_audio_in_video else image_nums + video_nums + audio_nums
-                )
-                for _ in range(multimodal_nums):
-                    st_idx = llm_pos_ids_list[-1].max() + 1 if len(llm_pos_ids_list) > 0 else 0
-                    if (image_token_id in input_tokens or video_token_id in input_tokens) and (
-                        remain_videos > 0 or remain_images > 0
-                    ):
-                        ed_vision_start = input_tokens.index(vision_start_token_id, st)
-                    else:
-                        ed_vision_start = len(input_tokens) + 1
-                    if audio_token_id in input_tokens and remain_audios > 0:
-                        ed_audio_start = input_tokens.index(audio_start_token_id, st)
-                    else:
-                        ed_audio_start = len(input_tokens) + 1
-                    min_ed = min(ed_vision_start, ed_audio_start)
-
-                    text_len = min_ed - st
-                    if text_len != 0:
-                        llm_pos_ids_list.append(torch.arange(text_len).view(1, -1).expand(3, -1) + st_idx)
-                        st_idx += text_len
-                    # Audio in Video
-                    if min_ed == ed_vision_start and ed_vision_start + 1 == ed_audio_start:
-                        bos_len, eos_len = 2, 2
-                    else:
-                        bos_len, eos_len = 1, 1
-                    llm_pos_ids_list.append(torch.arange(bos_len).view(1, -1).expand(3, -1) + st_idx)
-                    st_idx += bos_len
-                    # Audio Only
-                    if min_ed == ed_audio_start:
-                        audio_len = _get_feat_extract_output_lengths(
-                            audio_seqlens[audio_idx], self.config.audio_config.n_window
-                        )
-                        llm_pos_ids = torch.arange(audio_len).view(1, -1).expand(3, -1) + st_idx
-                        llm_pos_ids_list.append(llm_pos_ids)
-
-                        st += int(text_len + bos_len + audio_len + eos_len)
-                        audio_idx += 1
-                        remain_audios -= 1
-
-                    # Image Only
-                    elif min_ed == ed_vision_start and input_ids[ed_vision_start + 1] == image_token_id:
-                        grid_t = image_grid_thw[image_idx][0]
-                        grid_hs = image_grid_thw[:, 1]
-                        grid_ws = image_grid_thw[:, 2]
-                        t_index = (torch.arange(grid_t) * 1 * position_id_per_seconds).float()
-                        llm_pos_ids = self.get_llm_pos_ids_for_vision(
-                            st_idx, image_idx, spatial_merge_size, t_index, grid_hs, grid_ws
-                        )
-                        image_len = image_grid_thw[image_idx].prod() // (spatial_merge_size**2)
-                        llm_pos_ids_list.append(llm_pos_ids)
-
-                        st += int(text_len + bos_len + image_len + eos_len)
-                        image_idx += 1
-                        remain_images -= 1
-
-                    # Video Only
-                    elif min_ed == ed_vision_start and input_ids[ed_vision_start + 1] == video_token_id:
-                        grid_t = video_grid_thw[video_idx][0]
-                        grid_hs = video_grid_thw[:, 1]
-                        grid_ws = video_grid_thw[:, 2]
-                        t_index = (
-                            torch.arange(grid_t) * second_per_grids[video_idx].cpu().float() * position_id_per_seconds
-                        ).float()
-                        llm_pos_ids = self.get_llm_pos_ids_for_vision(
-                            st_idx, video_idx, spatial_merge_size, t_index, grid_hs, grid_ws
-                        )
-                        video_len = video_grid_thw[video_idx].prod() // (spatial_merge_size**2)
-                        llm_pos_ids_list.append(llm_pos_ids)
-
-                        st += int(text_len + bos_len + video_len + eos_len)
-                        video_idx += 1
-                        remain_videos -= 1
-
-                    # Audio in Video
-                    elif min_ed == ed_vision_start and ed_vision_start + 1 == ed_audio_start:
-                        audio_len = _get_feat_extract_output_lengths(
-                            audio_seqlens[audio_idx], self.config.audio_config.n_window
-                        )
-                        audio_llm_pos_ids = torch.arange(audio_len).view(1, -1).expand(3, -1) + st_idx
-                        grid_t = video_grid_thw[video_idx][0]
-                        grid_hs = video_grid_thw[:, 1]
-                        grid_ws = video_grid_thw[:, 2]
-
-                        t_index = (
-                            torch.arange(grid_t) * second_per_grids[video_idx].cpu().float() * position_id_per_seconds
-                        ).float()
-                        video_llm_pos_ids = self.get_llm_pos_ids_for_vision(
-                            st_idx, video_idx, spatial_merge_size, t_index, grid_hs, grid_ws
-                        )
-                        video_data_index, audio_data_index = 0, 0
-                        while (
-                            video_data_index < video_llm_pos_ids.shape[-1]
-                            and audio_data_index < audio_llm_pos_ids.shape[-1]
-                        ):
-                            if video_llm_pos_ids[0][video_data_index] <= audio_llm_pos_ids[0][audio_data_index]:
-                                llm_pos_ids_list.append(video_llm_pos_ids[:, video_data_index : video_data_index + 1])
-                                video_data_index += 1
-                            else:
-                                llm_pos_ids_list.append(audio_llm_pos_ids[:, audio_data_index : audio_data_index + 1])
-                                audio_data_index += 1
-                        if video_data_index < video_llm_pos_ids.shape[-1]:
-                            llm_pos_ids_list.append(
-                                video_llm_pos_ids[:, video_data_index : video_llm_pos_ids.shape[-1]]
-                            )
-                        if audio_data_index < audio_llm_pos_ids.shape[-1]:
-                            llm_pos_ids_list.append(
-                                audio_llm_pos_ids[:, audio_data_index : audio_llm_pos_ids.shape[-1]]
-                            )
-                        video_len = video_grid_thw[video_idx].prod() // (spatial_merge_size**2)
-
-                        st += int(text_len + bos_len + audio_len + video_len + eos_len)
-
-                        audio_idx += 1
-                        video_idx += 1
-                        remain_videos -= 1
-                        remain_audios -= 1
-                    st_idx = llm_pos_ids_list[-1].max() + 1 if len(llm_pos_ids_list) > 0 else 0
-                    llm_pos_ids_list.append(torch.arange(eos_len).view(1, -1).expand(3, -1) + st_idx)
-
-                if st < len(input_tokens):
-                    st_idx = llm_pos_ids_list[-1].max() + 1 if len(llm_pos_ids_list) > 0 else 0
-                    text_len = len(input_tokens) - st
-                    llm_pos_ids_list.append(torch.arange(text_len).view(1, -1).expand(3, -1) + st_idx)
-
-                llm_positions = torch.cat([item.float() for item in llm_pos_ids_list], dim=1).reshape(3, -1)
-
-                position_ids[..., i, attention_mask[i] == 1] = llm_positions.to(position_ids.device)
-                mrope_position_deltas.append(llm_positions.max() + 1 - len(input_ids))
-            mrope_position_deltas = torch.tensor(mrope_position_deltas, device=input_ids.device).unsqueeze(1)
-
-            return position_ids, mrope_position_deltas
-        else:
-            position_ids = attention_mask.float().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-            position_ids = position_ids.unsqueeze(0).expand(3, -1, -1).to(attention_mask.device)
-            max_position_ids = position_ids.max(0, keepdim=False)[0].max(-1, keepdim=True)[0]
-            mrope_position_deltas = max_position_ids + 1 - torch.sum(attention_mask, dim=-1, keepdim=True)
-
-            return position_ids, mrope_position_deltas
+        if input_ids is None or (image_grid_thw is None and video_grid_thw is None):
+            return get_mrope_text_positions(attention_mask, dtype=torch.float)
+        return _mrope_index_audio_merged(
+            input_ids,
+            spatial_merge_size=self.config.vision_config.spatial_merge_size,
+            image_token_id=self.config.image_token_id,
+            video_token_id=self.config.video_token_id,
+            audio_token_id=self.config.audio_token_id,
+            vision_start_token_id=self.config.vision_start_token_id,
+            audio_start_token_id=self.config.audio_start_token_id,
+            position_id_per_seconds=self.config.position_id_per_seconds,
+            audio_window_size=self.config.audio_config.n_window,
+            attention_mask=attention_mask,
+            image_grid_thw=image_grid_thw,
+            video_grid_thw=video_grid_thw,
+            second_per_grid_ts=second_per_grids,
+            audio_seqlens=audio_seqlens,
+            use_audio_in_video=use_audio_in_video,
+        )
 
 
 class Qwen3OmniMoeAudioAttention(Qwen2_5OmniAudioAttention):
@@ -1710,28 +1671,24 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3MoeForCausalLM):
         audio_seqlens: torch.LongTensor | None = None,
         second_per_grids: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        return Qwen3OmniMoePreTrainedModelForConditionalGeneration.get_rope_index(
-            self,
+        if input_ids is None or (image_grid_thw is None and video_grid_thw is None):
+            return get_mrope_text_positions(attention_mask, dtype=torch.float)
+        return _mrope_index_audio_merged(
             input_ids,
-            image_grid_thw,
-            video_grid_thw,
-            attention_mask,
-            use_audio_in_video,
-            audio_seqlens,
-            second_per_grids,
-        )
-
-    def get_llm_pos_ids_for_vision(
-        self,
-        start_idx: int,
-        vision_idx: int,
-        spatial_merge_size: int,
-        t_index: list[torch.Tensor],
-        grid_hs: list[torch.Tensor],
-        grid_ws: list[torch.Tensor],
-    ):
-        return Qwen3OmniMoePreTrainedModelForConditionalGeneration.get_llm_pos_ids_for_vision(
-            self, start_idx, vision_idx, spatial_merge_size, t_index, grid_hs, grid_ws
+            spatial_merge_size=self.config.vision_config.spatial_merge_size,
+            image_token_id=self.config.image_token_id,
+            video_token_id=self.config.video_token_id,
+            audio_token_id=self.config.audio_token_id,
+            vision_start_token_id=self.config.vision_start_token_id,
+            audio_start_token_id=self.config.audio_start_token_id,
+            position_id_per_seconds=self.config.position_id_per_seconds,
+            audio_window_size=self.config.audio_config.n_window,
+            attention_mask=attention_mask,
+            image_grid_thw=image_grid_thw,
+            video_grid_thw=video_grid_thw,
+            second_per_grid_ts=second_per_grids,
+            audio_seqlens=audio_seqlens,
+            use_audio_in_video=use_audio_in_video,
         )
 
     def get_input_embeddings(self):

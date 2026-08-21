@@ -12,11 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import math
 import warnings
 from collections.abc import Callable
 from functools import wraps
-from typing import TYPE_CHECKING, Optional, TypedDict
+from typing import TYPE_CHECKING, TypedDict
 
 from .utils import is_torch_available, logging
 
@@ -131,11 +133,11 @@ def dynamic_rope_update(rope_forward):
 
 
 def _compute_linear_scaling_rope_parameters(
-    config: Optional["PreTrainedConfig"] = None,
-    device: Optional["torch.device"] = None,
+    config: PreTrainedConfig | None = None,
+    device: torch.device | None = None,
     seq_len: int | None = None,
     layer_type: str | None = None,
-) -> tuple["torch.Tensor", float]:
+) -> tuple[torch.Tensor, float]:
     """
     Computes the inverse frequencies with linear scaling. Credits to the Reddit user /u/kaiokendev
     Args:
@@ -191,12 +193,12 @@ def _compute_linear_scaling_rope_parameters(
 
 
 def _compute_proportional_rope_parameters(
-    config: Optional["PreTrainedConfig"] = None,
-    device: Optional["torch.device"] = None,
+    config: PreTrainedConfig | None = None,
+    device: torch.device | None = None,
     seq_len: int | None = None,
     layer_type: str | None = None,
     head_dim_key: str = "head_dim",
-) -> tuple["torch.Tensor", float]:
+) -> tuple[torch.Tensor, float]:
     """
     Computes the inverse frequencies with proportional RoPE.
 
@@ -267,11 +269,11 @@ def _compute_proportional_rope_parameters(
 
 
 def _compute_dynamic_ntk_parameters(
-    config: Optional["PreTrainedConfig"] = None,
-    device: Optional["torch.device"] = None,
+    config: PreTrainedConfig | None = None,
+    device: torch.device | None = None,
     seq_len: int | None = None,
     layer_type: str | None = None,
-) -> tuple["torch.Tensor", float]:
+) -> tuple[torch.Tensor, float]:
     """
     Computes the inverse frequencies with NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla
 
@@ -343,11 +345,11 @@ def _compute_dynamic_ntk_parameters(
 
 
 def _compute_yarn_parameters(
-    config: "PreTrainedConfig",
-    device: Optional["torch.device"] = None,
+    config: PreTrainedConfig,
+    device: torch.device | None = None,
     seq_len: int | None = None,
     layer_type: str | None = None,
-) -> tuple["torch.Tensor", float]:
+) -> tuple[torch.Tensor, float]:
     """
     Computes the inverse frequencies with NTK scaling. Please refer to the
     [original paper](https://huggingface.co/papers/2309.00071)
@@ -484,11 +486,11 @@ def _compute_yarn_parameters(
 
 
 def _compute_longrope_parameters(
-    config: "PreTrainedConfig",
-    device: Optional["torch.device"] = None,
+    config: PreTrainedConfig,
+    device: torch.device | None = None,
     seq_len: int | None = None,
     layer_type: str | None = None,
-) -> tuple["torch.Tensor", float]:
+) -> tuple[torch.Tensor, float]:
     """
     Computes the inverse frequencies with LongRoPE scaling. Please refer to the
     [original implementation](https://github.com/microsoft/LongRoPE)
@@ -578,11 +580,11 @@ def _compute_longrope_parameters(
 
 
 def _compute_llama3_parameters(
-    config: "PreTrainedConfig",
-    device: Optional["torch.device"] = None,
+    config: PreTrainedConfig,
+    device: torch.device | None = None,
     seq_len: int | None = None,
     layer_type: str | None = None,
-) -> tuple["torch.Tensor", float]:
+) -> tuple[torch.Tensor, float]:
     """
     Computes the inverse frequencies for llama 3.1.
 
@@ -665,7 +667,7 @@ def _compute_llama3_parameters(
 # This maps the "rope_type" string field in rope config to the corresponding function to compute the RoPE parameters
 # from the model config. You can append new {'rope_type': callable} pairs to this rope_parameters to enable custom RoPE
 # parameterizations, as long as the callable has the same signature.
-ROPE_INIT_FUNCTIONS: dict[str, Callable[..., tuple["torch.Tensor", float]]] = {
+ROPE_INIT_FUNCTIONS: dict[str, Callable[..., tuple[torch.Tensor, float]]] = {
     "linear": _compute_linear_scaling_rope_parameters,
     "dynamic": _compute_dynamic_ntk_parameters,
     "yarn": _compute_yarn_parameters,
@@ -815,7 +817,7 @@ class RotaryEmbeddingConfigMixin:
 
         self.rope_parameters = rope_parameters
 
-    def validate_rope(self: "PreTrainedConfig"):
+    def validate_rope(self: PreTrainedConfig):
         """
         Validate the RoPE config arguments, given a `"PreTrainedConfig"` object
         """

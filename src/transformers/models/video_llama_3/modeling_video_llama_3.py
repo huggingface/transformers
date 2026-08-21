@@ -30,6 +30,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_multimodal_utils import MultiModalGenerationMixin, MultiModalPreTrainedModelMixin
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -496,7 +497,7 @@ class VideoLlama3ModelOutputWithPast(ModelOutput):
 
 
 @auto_docstring
-class VideoLlama3Model(VideoLlama3PreTrainedModel):
+class VideoLlama3Model(VideoLlama3PreTrainedModel, MultiModalPreTrainedModelMixin):
     base_model_prefix = "model"
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
@@ -712,7 +713,7 @@ class VideoLlama3CausalLMOutputWithPast(ModelOutput):
     video_hidden_states: torch.FloatTensor | None = None
 
 
-class VideoLlama3ForConditionalGeneration(VideoLlama3PreTrainedModel, GenerationMixin):
+class VideoLlama3ForConditionalGeneration(VideoLlama3PreTrainedModel, MultiModalGenerationMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _can_compile_fullgraph = False
 

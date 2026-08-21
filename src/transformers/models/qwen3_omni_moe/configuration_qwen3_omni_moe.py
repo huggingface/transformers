@@ -100,8 +100,17 @@ class Qwen3OmniMoeVisionEncoderConfig(PreTrainedConfig):
     temporal_patch_size: int | list[int] | tuple[int, int] = 2
     out_hidden_size: int = 3584
     num_position_embeddings: int = 2304
+    # How the vision embedding resamples its learned position-embedding grid, so that
+    # `vision_utils.get_vision_interpolation_indices_and_weights` can be called from the config alone.
+    interpolation_mode: str = "bilinear"
+    interpolation_align_corners: bool = True
     deepstack_visual_indexes: list[int] | tuple[int, ...] = (8, 16, 24)
     initializer_range: float = 0.02
+
+    @property
+    def num_grid_per_side(self) -> int:
+        """Side length of the square learned position-embedding grid, as the vision module derives it."""
+        return int(self.num_position_embeddings**0.5)
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-Omni-30B-A3B-Instruct")
@@ -224,6 +233,7 @@ class Qwen3OmniMoeThinkerConfig(PreTrainedConfig):
     text_config: dict | PreTrainedConfig | None = None
     position_id_per_seconds: int = 25
     audio_start_token_id: int = 151647
+    vision_start_token_id: int = 151652
     user_token_id: int = 872
     initializer_range: float = 0.02
     tie_word_embeddings: bool = False
