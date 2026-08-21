@@ -1114,7 +1114,7 @@ def register_dynamic_cache_export_support():
             raise
 
 
-def _get_dynamic_cache_layout(cache: DynamicCache) -> list[list[int | bool | None]]:
+def _get_dynamic_cache_layout(cache: DynamicCache) -> list[int | None]:
     return [getattr(layer, "sliding_window", None) for layer in cache.layers]
 
 
