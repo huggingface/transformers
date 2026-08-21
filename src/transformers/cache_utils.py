@@ -425,17 +425,17 @@ class StaticLayer(CacheLayerMixin):
         prefill itself ends up in a compiled region (with chunked prefill for instance).
         """
         self.dtype, self.device = key_states.dtype, key_states.device
-        self.batch_size, self.num_heads = key_states.shape[:2]
-        self.v_head_dim = value_states.shape[-1]
-        self.k_head_dim = key_states.shape[-1]
+        self.batch_size, self.num_k_heads, _, self.k_head_dim = key_states.shape
+        _, self.num_v_heads, _, self.v_head_dim = value_states.shape
+        self.num_heads = self.num_k_heads  # for BC compatibility
 
         self.keys = torch.zeros(
-            (self.batch_size, self.num_heads, self.max_cache_len, self.k_head_dim),
+            (self.batch_size, self.num_k_heads, self.max_cache_len, self.k_head_dim),
             dtype=self.dtype,
             device=self.device,
         )
         self.values = torch.zeros(
-            (self.batch_size, self.num_heads, self.max_cache_len, self.v_head_dim),
+            (self.batch_size, self.num_v_heads, self.max_cache_len, self.v_head_dim),
             dtype=self.dtype,
             device=self.device,
         )
