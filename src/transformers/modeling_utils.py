@@ -72,7 +72,7 @@ from .integrations.accelerate import (
 )
 from .integrations.deepspeed import _load_state_dict_into_zero3_model
 from .integrations.eager_paged import eager_paged_attention_forward
-from .integrations.finegrained_fp8 import ALL_FP8_EXPERTS_FUNCTIONS
+from .integrations.finegrained import ALL_FINEGRAINED_EXPERTS_FUNCTIONS
 from .integrations.flash_attention import flash_attention_forward
 from .integrations.flash_paged import paged_attention_forward
 from .integrations.flex_attention import flex_attention_forward
@@ -1964,7 +1964,9 @@ class PreTrainedModel(
 
     def get_correct_experts_implementation(self, requested_experts: str | None) -> str:
         applicable_experts = "grouped_mm" if requested_experts is None else requested_experts
-        base_experts_fns = ["eager"] + list(set(ALL_EXPERTS_FUNCTIONS.keys()) | set(ALL_FP8_EXPERTS_FUNCTIONS.keys()))
+        base_experts_fns = ["eager"] + list(
+            set(ALL_EXPERTS_FUNCTIONS.keys()) | set(ALL_FINEGRAINED_EXPERTS_FUNCTIONS.keys())
+        )
         valid_experts_str_list = [f'`experts_implementation="{fn}"`' for fn in base_experts_fns]
         valid_experts_str_list[-1] = "and " + valid_experts_str_list[-1]
         valid_experts_str = ", ".join(valid_experts_str_list)

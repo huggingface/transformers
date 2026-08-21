@@ -355,6 +355,13 @@ def get_tensor_shard(param, empty_param, device_mesh, rank, dim, tensor_idx: int
     world_size = reduce(operator.mul, mesh_shape)
     # Get param shape: works for both torch.Tensor and safetensors TensorInfo
     param_shape = list(param.shape) if isinstance(param, torch.Tensor) else param.get_shape()
+    # A 0-dim parameter has no axis to shard — every rank needs the whole value. Guarded here
+    # rather than at the call sites (there are nine) so the invariant holds for all of them:
+    # below, `dim` normalizes to -1 and indexes `param_shape[-1]` on an empty list. Per-tensor
+    # scalar scales make this reachable in practice — a ModelOpt NVFP4 checkpoint ships one
+    # `weight_scale_2` / `input_scale` per projection, thousands of 0-dim tensors per model.
+    if not param_shape:
+        return param[...] if not isinstance(param, torch.Tensor) else param
     if dim < 0:
         dim = param_dim + dim
     if empty_param.dim() == 3 and dim == 1 and len(param_shape) == 2:
@@ -1077,6 +1084,15 @@ class GroupedGemmParallel(TensorParallelLayer):
         end = (self.rank + 1) * shard_size
         # special case we don't "shard" just send this entire tensor to the correct rank.
         shape = param.get_shape() if not isinstance(param, torch.Tensor) else param.shape
+        # A 0-dim scalar has no expert axis to split on: ModelOpt NVFP4 checkpoints ship one
+        # `weight_scale_2` / `input_scale` per expert projection. Every path below indexes, and
+        # both `param[:]` and `param[start:end]` raise on a scalar (`[...]` is the one form a
+        # lazy safetensors slice accepts), so route scalars before reaching them — taking the
+        # value whole for this rank's experts and dropping the rest, exactly as for >=1-dim.
+        if len(shape) == 0:
+            if tensor_idx is None or start <= tensor_idx < end:
+                return param[...].to(device=device, dtype=dtype)
+            return None
         if tensor_idx is not None and start <= tensor_idx < end:
             # this tensor does need to be materialized on this device:
             return param[:].to(device=device)

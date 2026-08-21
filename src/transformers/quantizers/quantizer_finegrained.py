@@ -1,4 +1,3 @@
-import warnings
 from typing import TYPE_CHECKING
 
 from ..utils import is_accelerate_available, is_torch_available, is_torch_xpu_available, logging
@@ -9,16 +8,6 @@ from .quantizers_utils import get_module_from_name
 if is_torch_available():
     import torch
 
-
-warnings.warn(
-    "quantizer_finegrained_fp8 is frozen for backward compatibility and no longer "
-    "receives new recipes; the fine-grained quantization machinery lives in transformers.quantizers.quantizer_finegrained "
-    "(block-FP8, MXFP8, MXFP4, NVFP4, weight-only).",
-    DeprecationWarning,
-    stacklevel=2,
-)
-
-
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
     from ..utils.quantization_config import FineGrainedFP8Config
@@ -26,7 +15,7 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-class FineGrainedFP8HfQuantizer(HfQuantizer):
+class FineGrainedHfQuantizer(HfQuantizer):
     """
     FP8 quantization implementation supporting both standard and MoE models.
     Supports both e4m3fn formats based on platform.
@@ -87,11 +76,11 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
                 )
 
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
-        # `FP8GroupedLinear` is a subclass of `FP8Linear`, so the tuple covers it implicitly.
-        from ..integrations.finegrained_fp8 import FP8Experts, FP8Linear
+        # `FP8GroupedLinear` is a subclass of `FineGrainedLinear`, so the tuple covers it implicitly.
+        from ..integrations.finegrained import FineGrainedExperts, FineGrainedLinear
 
         module, tensor_name = get_module_from_name(model, param_name)
-        if isinstance(module, (FP8Linear, FP8Experts)):
+        if isinstance(module, (FineGrainedLinear, FineGrainedExperts)):
             if self.pre_quantized or tensor_name == "bias":
                 return False
             else:
@@ -101,7 +90,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
     def param_element_size(self, model: "PreTrainedModel", param_name: str, param: "torch.Tensor") -> float:
         "Return the element size (in bytes) for `param_name`."
         if self.param_needs_quantization(model, param_name):
-            # 8 bit, this is needed as when `pre_quantized`` is False, we don't set the dtype of the FP8Linear in order to correctly load the weights
+            # 8 bit, this is needed as when `pre_quantized`` is False, we don't set the dtype of the FineGrainedLinear in order to correctly load the weights
             return 1
         return super().param_element_size(model, param_name, param)
 
@@ -131,14 +120,18 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         model: "PreTrainedModel",
         **kwargs,
     ):
-        from ..integrations.finegrained_fp8 import replace_with_fp8_linear
+        from ..integrations.finegrained import replace_with_finegrained_layer
 
         self._normalize_modules_to_not_convert(model)
+        if self._quant_method() == "mxfp4" and getattr(self.quantization_config, "activation_format", None) is None:
+            # GPT-OSS MXFP4 runs weight-only (W4A16): raw bf16 activations against packed
+            # weights. The kernels' weight-native default would quantize activations to mxfp4.
+            self.quantization_config.activation_format = "bf16"
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
 
-        model = replace_with_fp8_linear(
+        model = replace_with_finegrained_layer(
             model,
             modules_to_not_convert=self.modules_to_not_convert,
             quantization_config=self.quantization_config,
@@ -151,7 +144,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         # dtype the kernels expect (exact, since the values are powers of two). Checkpoints that
         # already ship the native float8 E8M0 dtype (e.g. dsv4-flash) are left untouched.
         if self.quantization_config.scale_fmt == "ue8m0":
-            from ..integrations.finegrained_fp8 import _get_ue8m0_dtype
+            from ..integrations.finegrained import _get_ue8m0_dtype
 
             ue8m0 = _get_ue8m0_dtype()
             float32_scales = [
@@ -167,9 +160,18 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
 
         # Single-process multi-device is unsafe for DeepGEMM (its kernels are bound to one CUDA
         # context); route those models through Triton/grouped_mm instead.
-        from ..integrations.finegrained_fp8 import _disable_deepgemm_on_multi_device
+        from ..integrations.finegrained import _disable_deepgemm_on_multi_device
 
         _disable_deepgemm_on_multi_device(model)
+
+        from ..integrations.finegrained import (
+            interleave_gate_up_after_loading,
+            swizzle_scales_after_loading,
+        )
+
+        # order matters: the swizzle below packs whatever row order gate_up ends up in
+        interleave_gate_up_after_loading(model, already_interleaved=self._quant_method() == "mxfp4")
+        swizzle_scales_after_loading(model)
         return model
 
     def update_tp_plan(self, config):
@@ -196,11 +198,11 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         # Per-impl rewrite of the experts parallel-layer kind. Applied LAST so it composes
         # on top of any plan written above (e.g. the Qwen3 dense plan). Models carry the
         # experts mapping under `base_model_tp_plan` and/or `base_model_ep_plan` — rewrite
-        # both. See `FP8Experts._impl_tp_layer_overrides`.
-        from ..integrations.finegrained_fp8 import FP8Experts
+        # both. See `FineGrainedExperts._impl_tp_layer_overrides`.
+        from ..integrations.finegrained import FineGrainedExperts
 
         impl = getattr(config, "_experts_implementation", None)
-        layer_overrides = FP8Experts._impl_tp_layer_overrides.get(impl)
+        layer_overrides = FineGrainedExperts._impl_tp_layer_overrides.get(impl)
         if layer_overrides:
             for plan_attr in ("base_model_tp_plan", "base_model_ep_plan"):
                 base_plan = getattr(config, plan_attr, None) or {}
@@ -222,13 +224,89 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         return True
 
     def get_quantize_ops(self):
-        from ..integrations.finegrained_fp8 import Fp8Quantize
+        from ..integrations.finegrained import FineGrainedQuantize
 
-        return Fp8Quantize(self)
+        return FineGrainedQuantize(self)
+
+    def _quant_method(self) -> str:
+        method = getattr(self.quantization_config, "quant_method", None)
+        return getattr(method, "value", method)
 
     def get_weight_conversions(self):
         from ..core_model_loading import WeightConverter
-        from ..integrations.finegrained_fp8 import Fp8Dequantize
+        from ..integrations.finegrained import (
+            FineGrainedDequantize,
+            FineGrainedMxfp4Deserialize,
+        )
+
+        # GPT-OSS-style MXFP4 checkpoints ship {proj}_blocks + {proj}_scales; deserialize them
+        # into the packed weight + e8m0 scale pair the finegrained kernels read. The gate_up bias
+        # needs no converter — it already follows the interleaved row order.
+        if self.pre_quantized and self._quant_method() == "mxfp4" and not self.quantization_config.dequantize:
+            return [
+                WeightConverter(
+                    source_patterns=["gate_up_proj_blocks", "gate_up_proj_scales"],
+                    target_patterns=r"gate_up_proj$",
+                    operations=[FineGrainedMxfp4Deserialize(self)],
+                ),
+                WeightConverter(
+                    source_patterns=["down_proj_blocks", "down_proj_scales"],
+                    target_patterns=r"down_proj$",
+                    operations=[FineGrainedMxfp4Deserialize(self)],
+                ),
+            ]
+
+        # NVIDIA modelopt NVFP4 checkpoints: per-expert split gate/up projections with
+        # packed-uint8 weights, E4M3 group-16 `weight_scale`, and fp32 `weight_scale_2`
+        # second-level globals (bit-identical across the gate/up halves — asserted by the
+        # fuse op). The arch conversion plan already stacks the expert WEIGHTS; these add
+        # the same stacking for scales and globals, plus the uint8 -> int8 packed bitcast.
+        # Calibrated `input_scale` entries are left unconsumed (activations run the
+        # kernels' dynamic quant); they surface as unexpected keys, which is intended.
+        if self.pre_quantized and self._quant_method() == "modelopt" and not self.quantization_config.dequantize:
+            from ..core_model_loading import Concatenate, MergeModulelist
+            from ..integrations.finegrained import FineGrainedFuseEqualGlobals
+
+            return [
+                WeightConverter(
+                    source_patterns=[
+                        "mlp.experts.*.gate_proj.weight_scale$",
+                        "mlp.experts.*.up_proj.weight_scale$",
+                    ],
+                    target_patterns="mlp.experts.gate_up_proj_scale_inv",
+                    operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+                ),
+                WeightConverter(
+                    source_patterns="mlp.experts.*.down_proj.weight_scale$",
+                    target_patterns="mlp.experts.down_proj_scale_inv",
+                    operations=[MergeModulelist(dim=0)],
+                ),
+                WeightConverter(
+                    source_patterns=[
+                        "mlp.experts.*.gate_proj.weight_scale_2",
+                        "mlp.experts.*.up_proj.weight_scale_2",
+                    ],
+                    target_patterns="mlp.experts.gate_up_proj_global_scale",
+                    # MergeModulelist is what stamps each source with its expert index, which
+                    # is what lets expert parallelism keep only this rank's experts (see
+                    # `tensor_idx` in core_model_loading). Without it every rank collects all
+                    # E globals and the forward asserts on the per-expert count.
+                    operations=[MergeModulelist(dim=0), FineGrainedFuseEqualGlobals(self)],
+                ),
+                WeightConverter(
+                    source_patterns="mlp.experts.*.down_proj.weight_scale_2",
+                    target_patterns="mlp.experts.down_proj_global_scale",
+                    operations=[MergeModulelist(dim=0), FineGrainedFuseEqualGlobals(self)],
+                ),
+            ]
+            # No converters for non-expert modules: this checkpoint family quantizes ONLY
+            # the routed experts (every attention / shared-expert / dense-MLP module sits
+            # in the ignore list and ships bf16). Generic weight_scale* renames here would
+            # run BEFORE converter collection and mangle the expert keys out from under
+            # the converters above (per-expert `weight_global_scale` orphans and
+            # `_scale_inv_inv` double-suffix targets — the saturation bug of round 8).
+            # Quantized-dense modelopt checkpoints need scoped per-module converters when
+            # one shows up.
 
         if self.pre_quantized and self.quantization_config.dequantize:
             return [
@@ -237,13 +315,13 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
                 WeightConverter(
                     source_patterns=["weight$", "weight_scale_inv", "activation_scale"],
                     target_patterns="weight",
-                    operations=[Fp8Dequantize(self)],
+                    operations=[FineGrainedDequantize(self)],
                 )
             ]
         return []
 
     def update_weight_conversions(self, weight_conversions):
-        """When loading with ``dequantize=True``, attach an :class:`Fp8Dequantize` op to
+        """When loading with ``dequantize=True``, attach an :class:`FineGrainedDequantize` op to
         every existing :class:`WeightConverter` so that per-block scales are folded into
         the weight *before* any later merge/concat ops collapse the per-expert structure.
 
@@ -254,7 +332,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
           2. add anchored ``*.weight_scale_inv`` sources next to each weight pattern so
              the loader collects scale tensors alongside the weight tensors into the
              *same* converter bucket (both keys rewrite to the same target);
-          3. prepend a fresh :class:`Fp8Dequantize` op so dequant runs first, before
+          3. prepend a fresh :class:`FineGrainedDequantize` op so dequant runs first, before
              any merge/concat collapses the per-expert structure.
 
         The generic ``weight$ + weight_scale_inv → weight`` converter from
@@ -262,16 +340,35 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         plain ``nn.Linear`` weights with no model-specific converter.
         """
         from ..core_model_loading import WeightConverter, WeightRenaming
-        from ..integrations.finegrained_fp8 import Fp8Dequantize
+        from ..integrations.finegrained import FineGrainedDequantize
 
         # `*.scale` → `*.weight_scale_inv`. Some FP8 checkpoints (e.g. DeepSeek-V4-Flash)
         # ship per-block scales under `.scale`; the model expects `.weight_scale_inv`.
         # Lives here (not in each model's `conversion_mapping`) so non-FP8 round-trips
         # don't see a stray rule. Needed in both dequantize modes — `dequantize=False`
-        # loads scales as parameters, `dequantize=True` feeds them into `Fp8Dequantize`.
+        # loads scales as parameters, `dequantize=True` feeds them into `FineGrainedDequantize`.
         scale_rename = WeightRenaming(source_patterns=r"^(.+)\.scale$", target_patterns=r"\1.weight_scale_inv")
         weight_conversions = [scale_rename] + list(weight_conversions)
 
+        if self.pre_quantized and self._quant_method() == "modelopt" and not self.quantization_config.dequantize:
+            # Anchor the arch plan's `.weight` sources so they don't also swallow the
+            # modelopt `weight_scale`/`weight_scale_2` keys into the weight merge chain
+            # (unanchored patterns are searched — same trap the dequantize path guards).
+            from ..integrations.finegrained import FineGrainedViewPackedInt8
+
+            updated = []
+            for conv in weight_conversions:
+                if isinstance(conv, WeightConverter) and any(p.endswith(".weight") for p in conv.source_patterns):
+                    conv = WeightConverter(
+                        source_patterns=[p + "$" if p.endswith(".weight") else p for p in conv.source_patterns],
+                        target_patterns=conv.target_patterns,
+                        # the stacked packed-fp4 expert weights need the same uint8 -> int8
+                        # bitcast the standalone-linear converter applies (pass-through on
+                        # any unquantized weights the plan also routes here)
+                        operations=list(conv.operations) + [FineGrainedViewPackedInt8(self)],
+                    )
+                updated.append(conv)
+            return updated + self.get_weight_conversions()
         if not (self.pre_quantized and self.quantization_config.dequantize):
             return weight_conversions + self.get_weight_conversions()
 
@@ -288,7 +385,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
                 scale_sources = [p[: -len(".weight")] + ".weight_scale_inv$" for p in weight_sources]
                 other = [p for p in conv.source_patterns if not p.endswith(".weight")]
                 new_sources = anchored_weight + scale_sources + other
-                new_ops = [Fp8Dequantize(self)] + list(conv.operations)
+                new_ops = [FineGrainedDequantize(self)] + list(conv.operations)
                 conv = WeightConverter(
                     source_patterns=new_sources,
                     target_patterns=conv._original_target_patterns,

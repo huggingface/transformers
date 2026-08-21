@@ -18,6 +18,7 @@ import copy
 import importlib.metadata
 import json
 import os
+import re
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Optional, Union
@@ -1689,15 +1690,22 @@ class SpQRConfig(QuantizationConfigMixin):
 
 
 @dataclass
-class FineGrainedFP8Config(QuantizationConfigMixin):
+class FineGrainedConfig(QuantizationConfigMixin):
     """
-    FineGrainedFP8Config is a configuration class for fine-grained FP8 quantization used mainly for deepseek models.
+    Configuration for the fine-grained quantization family served by the
+    `kernels-community/finegrained-kernels` package: block-FP8 (DeepSeek-style, fp32 or UE8M0
+    scales), MXFP8, MXFP4 and NVFP4 weights, with dynamic, static or weight-matched activation
+    quantization. The weight FORMAT is never declared here — it is resolved from the checkpoint
+    tensors themselves (value dtype, scale dtype/shape, presence of a global scale), exactly the
+    way the kernels resolve it, so the config cannot disagree with the weights.
 
     Args:
         activation_scheme (`str`, *optional*, defaults to `"dynamic"`):
-            The scheme used for activation, the defaults and only support scheme for now is "dynamic".
+            The scheme used for activation quantization: "dynamic" (inline per-token/per-block)
+            or "static" (calibrated per-tensor scale stored in the checkpoint).
         weight_block_size (`typing.tuple[int, int]`, *optional*, defaults to `(128, 128)`):
-            The size of the weight blocks for quantization, default is (128, 128).
+            The size of the weight blocks for block-FP8 quantization, default is (128, 128).
+            Group-scaled formats (MX/NV) carry their granularity in the scale tensors instead.
         dequantize (`bool`, *optional*, defaults to `False`):
             Whether to dequantize the model during loading.
         modules_to_not_convert (`list`, *optional*):
@@ -1705,6 +1713,10 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
         scale_fmt (`str`, *optional*, defaults to `"float"`):
             Storage dtype of the per-block weight scales: `"float"` (fp32, V3-style) or
             `"ue8m0"` (1-byte `torch.float8_e8m0fnu`, V4-style).
+        activation_format (`str`, *optional*):
+            Activation quantization format, needed only where the weights leave it ambiguous
+            (MXFP4 weights run as W4A16 with `"bf16"`, W4A8 with `"mxfp8"`, W4A4 with
+            `"mxfp4"`). `None` (default) matches the kernels' weight-native choice.
     """
 
     def __init__(
@@ -1714,12 +1726,40 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
         dequantize: bool = False,
         modules_to_not_convert: list | None = None,
         scale_fmt: str = "float",
+        activation_format: str | None = None,
         **kwargs,
     ):
         self.quant_method = kwargs.pop("quant_method", QuantizationMethod.FP8)
+        self.activation_format = activation_format
         # MiniMax ships the skip-list under ``ignored_layers``; accept it as an alias.
         if modules_to_not_convert is None and "ignored_layers" in kwargs:
             modules_to_not_convert = kwargs.pop("ignored_layers")
+        # NVIDIA modelopt exports (quant_method "modelopt"): translate the payload —
+        # quant_algo names the format (NVFP4 is the one the finegrained kernels serve),
+        # ``ignore`` is a glob-style skip list, and the calibrated per-tensor
+        # ``input_scale``/``kv_cache_scheme`` entries are dropped for now (activations run
+        # the kernels' dynamic quant, KV cache stays in the compute dtype).
+        if str(self.quant_method) == "modelopt" or kwargs.get("quant_algo") is not None:
+            quant_algo = kwargs.pop("quant_algo", None)
+            kwargs.pop("config_groups", None)
+            kwargs.pop("kv_cache_scheme", None)
+            kwargs.pop("producer", None)
+            if quant_algo != "NVFP4":
+                raise ValueError(f"modelopt checkpoints are supported for quant_algo='NVFP4' only; got {quant_algo!r}")
+            self.activation_format = activation_format or "nvfp4"
+            ignore = kwargs.pop("ignore", None)
+            if modules_to_not_convert is None and ignore is not None:
+                # modelopt ships glob-style subtree entries ("model.layers.0*",
+                # "model.layers.1.*"); translate each to a BOUNDED regex — a naive
+                # "*" -> ".*" leaves the dots unescaped and "layers.1..*" swallows
+                # layers 10-19 (and ``should_convert_module``'s bare-prefix clause
+                # would even match "layers.16" from "layers.1")
+
+                def _subtree_regex(glob):
+                    prefix = glob[:-2] if glob.endswith(".*") else glob.rstrip("*").rstrip(".")
+                    return re.escape(prefix) + r"(\..*)?$"
+
+                modules_to_not_convert = [_subtree_regex(g) for g in ignore]
         self.modules_to_not_convert = modules_to_not_convert
         self.activation_scheme = activation_scheme
         self.weight_block_size = weight_block_size
@@ -1740,9 +1780,18 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
             raise ValueError("weight_block_size must be a tuple of two positive integers")
         if self.scale_fmt not in ("float", "ue8m0"):
             raise ValueError(f"scale_fmt must be 'float' or 'ue8m0'; got {self.scale_fmt!r}")
+        if self.activation_format not in (None, "bf16", "fp8", "mxfp8", "mxfp4", "nvfp4"):
+            raise ValueError(
+                "activation_format must be one of None, 'bf16', 'fp8', 'mxfp8', 'mxfp4', "
+                f"'nvfp4'; got {self.activation_format!r}"
+            )
 
     def get_loading_attributes(self):
         return {"dequantize": self.dequantize, "modules_to_not_convert": self.modules_to_not_convert}
+
+
+# Back-compat alias: serialized checkpoints and released code reference the FP8-era name.
+FineGrainedFP8Config = FineGrainedConfig
 
 
 class QuarkConfig(QuantizationConfigMixin):

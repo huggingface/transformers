@@ -27,6 +27,7 @@ from transformers.integrations.tensor_parallel import (
     RowwiseParallel,
     add_tensor_parallel_hooks_to_module,
     get_packed_weights,
+    get_tensor_shard,
     repack_weights,
 )
 from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test
@@ -445,3 +446,49 @@ class TestTensorParallelLayer(TestCasePlus):
             sharded = layer.shard_tensor(full_unpacked)
             expected_shape = (16, 16)  # last dim is not packed, so just sharded
             self.assertEqual(sharded.shape, expected_shape)
+
+
+@is_tensor_parallel_test
+class TestZeroDimParameterSharding(TestCasePlus):
+    """A 0-dim parameter has no axis to shard, so every rank needs the whole value.
+
+    This is reachable in practice: quantized checkpoints carry per-tensor scalar scales, and a
+    ModelOpt NVFP4 model ships one `weight_scale_2` / `input_scale` per projection — thousands of
+    0-dim tensors. Both sharding paths used to index a shape that isn't there, and neither failure
+    is visible single-process: `get_tensor_shard` normalizes `dim` to -1 and reads
+    `param_shape[-1]` on an empty list, while `GroupedGemmParallel` slices `param[start:end]`.
+    """
+
+    class _Mesh:
+        shape = (2,)
+
+        def size(self):
+            return 2
+
+    def test_get_tensor_shard_replicates_a_scalar(self):
+        """Root guard: nine call sites reach this, so it is fixed here rather than at each."""
+        scalar = torch.tensor(3.5)
+        for rank in (0, 1):
+            out = get_tensor_shard(scalar, scalar, self._Mesh(), rank, -1)
+            assert out.shape == torch.Size([]), f"rank {rank} got {out.shape}, expected 0-dim"
+            assert out.item() == 3.5, "a replicated scalar must keep its value on every rank"
+
+    def test_get_tensor_shard_still_shards_a_matrix(self):
+        """The guard must not swallow the normal path."""
+        param = torch.randn(8, 4)
+        shard = get_tensor_shard(param, param, self._Mesh(), 0, 0)
+        assert shard.shape == (4, 4), f"expected a half-shard, got {shard.shape}"
+
+    def test_grouped_gemm_replicates_a_scalar_for_local_experts(self):
+        """Expert parallelism: a scalar belonging to this rank's expert range comes back whole,
+        and one belonging to another rank is dropped — the same contract as for >=1-dim."""
+        layer = GroupedGemmParallel()
+        layer.empty_param = torch.empty(4, 8, 8)  # 4 experts over 2 ranks -> 2 each
+        layer.device_mesh = self._Mesh()
+        layer.rank = 0
+
+        mine = layer.shard_tensor(torch.tensor(1.25), tensor_idx=1, device="cpu", dtype=torch.float32)
+        assert mine is not None and mine.item() == 1.25
+
+        theirs = layer.shard_tensor(torch.tensor(1.25), tensor_idx=3, device="cpu", dtype=torch.float32)
+        assert theirs is None, "an expert owned by another rank must be dropped, not materialized"
