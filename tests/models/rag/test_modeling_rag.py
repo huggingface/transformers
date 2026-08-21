@@ -26,6 +26,7 @@ import requests
 from transformers import BartTokenizer, T5Tokenizer
 from transformers.models.dpr.tokenization_dpr import DPRContextEncoderTokenizer, DPRQuestionEncoderTokenizer
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
     get_tests_dir,
     require_sentencepiece,
@@ -848,8 +849,20 @@ class RagModelIntegrationTests(unittest.TestCase):
         output_text_2 = rag_decoder_tokenizer.decode(output_ids[1], skip_special_tokens=True)
 
         # Expected outputs as given by model at integration time.
-        EXPECTED_OUTPUT_TEXT_1 = '"She\'s My Kind of Girl" was released through Epic Records in Japan in March 1972. The song was a Top 10 hit in the country. It was the first single to be released by ABBA in the UK. The single was followed by "En Carousel" and "Love Has Its Uses"'
-        EXPECTED_OUTPUT_TEXT_2 = '"She\'s My Kind of Girl" was released through Epic Records in Japan in March 1972. The song was a Top 10 hit in the country. It was the first single to be released by ABBA in the UK. The single was followed by "En Carousel" and "Love Has Its Ways"'
+        expectations_1 = Expectations(
+            {
+                (None, None): '"She\'s My Kind of Girl" was released through Epic Records in Japan in March 1972. The song was a Top 10 hit in the country. It was the first single to be released by ABBA in the UK. The single was followed by "En Carousel" and "Love Has Its Uses"',
+                ("cuda", 8): '"She\'s My Kind of Girl',
+            }
+        )  # fmt: skip
+        expectations_2 = Expectations(
+            {
+                (None, None): '"She\'s My Kind of Girl" was released through Epic Records in Japan in March 1972. The song was a Top 10 hit in the country. It was the first single to be released by ABBA in the UK. The single was followed by "En Carousel" and "Love Has Its Ways"',
+                ("cuda", 8): '"She\'s My Kind of Love',
+            }
+        )  # fmt: skip
+        EXPECTED_OUTPUT_TEXT_1 = expectations_1.get_expectation()
+        EXPECTED_OUTPUT_TEXT_2 = expectations_2.get_expectation()
 
         self.assertEqual(output_text_1, EXPECTED_OUTPUT_TEXT_1)
         self.assertEqual(output_text_2, EXPECTED_OUTPUT_TEXT_2)
@@ -886,8 +899,20 @@ class RagModelIntegrationTests(unittest.TestCase):
         output_text_2 = rag_decoder_tokenizer.decode(output_ids[1], skip_special_tokens=True)
 
         # Expected outputs as given by model at integration time.
-        EXPECTED_OUTPUT_TEXT_1 = """\"She's My Kind of Girl\" was released through Epic Records in Japan in March 1972, giving the duo a Top 10 hit. Two more singles were released in Japan, \"En Carousel\" and \"Love Has Its Ways\" Ulvaeus and Andersson persevered with their songwriting and experimented with new sounds and vocal arrangements."""
-        EXPECTED_OUTPUT_TEXT_2 = """In September 2018, Björn Ulvaeus revealed that the two new songs, \"I Still Have Faith In You\" and \"Don't Shut Me Down\", would be released no earlier than March 2019. The two new tracks will feature in a TV special set to air later in the year."""
+        expectations_1 = Expectations(
+            {
+                (None, None): '"She\'s My Kind of Girl" was released through Epic Records in Japan in March 1972, giving the duo a Top 10 hit. Two more singles were released in Japan, "En Carousel" and "Love Has Its Ways" Ulvaeus and Andersson persevered with their songwriting and experimented with new sounds and vocal arrangements.',
+                ("cuda", 8): '" in the United States. "People Need Love" was released in June 1972, featuring guest vocals by. "Enigmas" and "Merry-Go-Round" "My Kind of Girl" is released in March 1972, giving the duo a Top 10 hit.',
+            }
+        )  # fmt: skip
+        expectations_2 = Expectations(
+            {
+                (None, None): 'In September 2018, Björn Ulvaeus revealed that the two new songs, "I Still Have Faith In You" and "Don\'t Shut Me Down", would be released no earlier than March 2019. The two new tracks will feature in a TV special set to air later in the year.',
+                ("cuda", 8): 'The song is called "The Winner Takes It All" and is about a man who is a father and a father-of-two. The song is about the man who has a son and daughter who are both parents. It is also about a woman who has two children and a husband.',
+            }
+        )  # fmt: skip
+        EXPECTED_OUTPUT_TEXT_1 = expectations_1.get_expectation()
+        EXPECTED_OUTPUT_TEXT_2 = expectations_2.get_expectation()
 
         self.assertEqual(output_text_1, EXPECTED_OUTPUT_TEXT_1)
         self.assertEqual(output_text_2, EXPECTED_OUTPUT_TEXT_2)
