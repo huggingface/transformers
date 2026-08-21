@@ -1401,7 +1401,10 @@ class Trainer:
 
         # Activate gradient checkpointing if needed
         if args.gradient_checkpointing:
-            self.model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=args.gradient_checkpointing_kwargs)
+            self.model.gradient_checkpointing_enable(
+                gradient_checkpointing_kwargs=args.gradient_checkpointing_kwargs,
+                every_n_layers=args.gradient_checkpointing_every_n_layers,
+            )
 
         # If the model uses a tokenizer, it may have a new tokens for fine-tuning purposes.
         if isinstance(self.processing_class, (PreTrainedTokenizerBase, ProcessorMixin)) and hasattr(

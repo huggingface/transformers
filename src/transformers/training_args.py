@@ -303,6 +303,10 @@ class TrainingArguments:
             Enable gradient checkpointing to trade compute for memory. Reduces memory usage by
             clearing activations during forward pass and recomputing them during backward pass.
             Enables training larger models or batch sizes at the cost of ~20% slower training.
+        gradient_checkpointing_every_n_layers (`int`, *optional*, defaults to 1):
+            Checkpoint only every n-th decoder layer instead of all of them. `1` is the usual all-or-nothing
+            behavior; larger values give some memory back to speed, which pays off whenever the memory freed by
+            full checkpointing would otherwise go unused.
         gradient_checkpointing_kwargs (`dict`, *optional*, defaults to `None`):
             Keyword arguments passed to `gradient_checkpointing_enable()`.
 
@@ -902,6 +906,14 @@ class TrainingArguments:
     gradient_checkpointing_kwargs: dict[str, Any] | str | None = field(
         default=None,
         metadata={"help": "Keyword arguments passed to `gradient_checkpointing_enable()`."},
+    )
+    gradient_checkpointing_every_n_layers: int = field(
+        default=1,
+        metadata={
+            "help": "Checkpoint only every n-th decoder layer instead of all of them. `1` is the usual "
+            "all-or-nothing behavior; larger values give some memory back to speed, which pays off whenever "
+            "the memory freed by full checkpointing would otherwise go unused."
+        },
     )
 
     # --- Compilation ---
