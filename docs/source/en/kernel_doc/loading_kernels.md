@@ -37,7 +37,7 @@ from transformers import AutoModelForCausalLM
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-0.6B",
     use_kernels=True,
-    device_map="cuda"
+    device_map="auto"
 )
 ```
 
@@ -69,7 +69,7 @@ from transformers import AutoModelForCausalLM
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-0.6B",
     attn_implementation="kernels-community/flash-attn2",
-    device_map="cuda"
+    device_map="auto"
 )
 ```
 
@@ -82,7 +82,7 @@ model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-0.6B",
     attn_implementation="random-repo/random-attention",
     allow_all_kernels=True,
-    device_map="cuda"
+    device_map="auto"
 )
 ```
 
@@ -98,13 +98,13 @@ from transformers import AutoModelForCausalLM
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-0.6B",
     attn_implementation="kernels-community/flash-attn2@v2.1.0",
-    device_map="cuda"
+    device_map="auto"
 )
 # use semantic versioning constraints
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-0.6B",
     attn_implementation="kernels-community/flash-attn2@>=2.0,<3.0",
-    device_map="cuda"
+    device_map="auto"
 )
 ```
 
@@ -137,7 +137,7 @@ from transformers import AutoModelForCausalLM
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-0.6B",
     use_kernels=True,
-    device_map="cuda"
+    device_map="auto"
 )
 
 # Switch to inference mode - uses inference-optimized kernels
@@ -186,7 +186,7 @@ model = AutoModelForCausalLM.from_pretrained(
     attn_implementation="kernels-community/flash-attn2:FlashAttention2",
     use_kernels=True,
     kernel_config=kernel_config,
-    device_map="cuda"
+    device_map="auto"
 )
 ```
 
@@ -226,7 +226,7 @@ model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-0.6B",
     use_kernels=True,
     kernel_config=kernel_config,
-    device_map="cuda",
+    device_map="auto",
 )
 ```
 
@@ -272,7 +272,7 @@ model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-0.6B",
     use_kernels=True,
     kernel_config=kernel_config,
-    device_map="cuda"
+    device_map="auto"
 )
 ```
 

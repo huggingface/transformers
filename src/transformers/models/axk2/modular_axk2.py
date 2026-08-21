@@ -46,6 +46,7 @@ from ..deepseek_v32.modeling_deepseek_v32 import (
     DeepseekV32PreTrainedModel,
     DeepseekV32RotaryEmbedding,
     DeepseekV32TopkRouter,
+    yarn_apply_mscale,
 )
 
 
@@ -198,9 +199,9 @@ class AXK2GatedRMSNorm(nn.Module):
     return y * sigmoid(gate_mlp(y))
     """
 
-    def __init__(self, config: AXK2Config, eps: float):
+    def __init__(self, config: AXK2Config):
         super().__init__()
-        self.norm = AXK2RMSNorm(config.hidden_size, eps=eps)
+        self.norm = AXK2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.mlp = AXK2GateMLP(config)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -213,9 +214,7 @@ class AXK2RotaryEmbedding(DeepseekV32RotaryEmbedding):
 
 
 class AXK2Indexer(DeepseekV32Indexer):
-    def __init__(self, config: AXK2Config, layer_idx: int):
-        super().__init__(config, layer_idx)
-        self.k_norm = nn.LayerNorm(self.head_dim, eps=1e-5)
+    pass
 
 
 class AXK2TopkRouter(DeepseekV32TopkRouter):
@@ -267,14 +266,50 @@ class AXK2MoE(DeepseekV32MoE):
 
 class AXK2Attention(DeepseekV32Attention):
     def __init__(self, config: AXK2Config, layer_idx: int):
-        super().__init__()
-        # Fused projection for q and gate, needs to be kept fused as the FP8 scales won't match otherwise in split variation
-        del self.q_proj
-        del self.q_b_proj
+        nn.Module.__init__(self)
+        self.config = config
+        self.layer_idx = layer_idx
+        self.attention_dropout = config.attention_dropout
+        self.hidden_size = config.hidden_size
+        self.num_heads = config.num_attention_heads
 
+        self.q_lora_rank = config.q_lora_rank
+        self.qk_rope_head_dim = config.qk_rope_head_dim
+        self.kv_lora_rank = config.kv_lora_rank
+        self.v_head_dim = config.v_head_dim
+        self.qk_nope_head_dim = config.qk_nope_head_dim
+        self.qk_head_dim = config.qk_nope_head_dim + config.qk_rope_head_dim
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+
+        self.is_causal = True
+        # Unlike DeepseekV3.2, this model does not use q_b_proj
+        self.q_a_proj = nn.Linear(self.hidden_size, self.q_lora_rank, bias=config.attention_bias)
+        self.q_a_layernorm = AXK2RMSNorm(self.q_lora_rank)
+        # Fused projection for q and gate, needs to be kept fused as the FP8 scales won't match otherwise when split
         self.q_gate_proj = nn.Linear(
-            2 * config.q_lora_rank, self.num_heads * (self.qk_head_dim + self.v_head_dim), bias=False
+            2 * self.q_lora_rank, self.num_heads * (self.qk_head_dim + self.v_head_dim), bias=False
         )
+
+        self.kv_a_proj_with_mqa = nn.Linear(
+            self.hidden_size,
+            self.kv_lora_rank + self.qk_rope_head_dim,
+            bias=config.attention_bias,
+        )
+        self.kv_a_layernorm = AXK2RMSNorm(self.kv_lora_rank)
+        self.kv_b_proj = nn.Linear(
+            self.kv_lora_rank,
+            self.num_heads * (self.qk_nope_head_dim + self.v_head_dim),
+            bias=False,
+        )
+
+        self.o_proj = nn.Linear(
+            self.num_heads * self.v_head_dim,
+            self.hidden_size,
+            bias=config.attention_bias,
+        )
+
+        self.scaling = yarn_apply_mscale(config.rope_parameters, self.qk_head_dim ** (-0.5))
+        self.indexer = AXK2Indexer(config, layer_idx)
 
     def forward(
         self,
@@ -301,7 +336,8 @@ class AXK2Attention(DeepseekV32Attention):
 
         compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
         kv_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
-        k_pass = self.kv_a_layernorm(kv_pass)
+        # Both latents are viewed as single-head, 4D tensors, as expected by `expand_kv`
+        k_pass = self.kv_a_layernorm(kv_pass).view(batch_size, 1, seq_length, self.kv_lora_rank)
         k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
 
         cos, sin = position_embeddings
@@ -311,6 +347,7 @@ class AXK2Attention(DeepseekV32Attention):
 
         key_states, value_states = self.expand_kv(k_pass, k_rot)
 
+        # Sparse-attention models cache the expanded K/V, not the compressed latents
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
@@ -318,7 +355,7 @@ class AXK2Attention(DeepseekV32Attention):
         indexer_mask = attention_mask[:, 0, :, :] if attention_mask is not None else None
         topk_indices = self.indexer(
             hidden_states,
-            q_compressed,
+            q_resid,
             position_embeddings,
             indexer_mask,
             position_ids,
@@ -365,9 +402,9 @@ class AXK2Attention(DeepseekV32Attention):
 class AXK2DecoderLayer(DeepseekV32DecoderLayer):
     def __init__(self, config: AXK2Config, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.input_layernorm = AXK2GatedRMSNorm(config, eps=config.rms_norm_eps)
+        self.input_layernorm = AXK2GatedRMSNorm(config)
         self.post_attention_layernorm = (
-            AXK2GatedRMSNorm(config, eps=config.rms_norm_eps)
+            AXK2GatedRMSNorm(config)
             if config.mlp_layer_types[layer_idx] == "sparse"
             else AXK2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         )

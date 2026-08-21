@@ -32,14 +32,8 @@ from ...test_modeling_common import ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers import (
-        DynamicCache,
-        OlmoHybridForCausalLM,
-        OlmoHybridModel,
-    )
-    from transformers.models.olmo_hybrid.modeling_olmo_hybrid import (
-        OlmoHybridRotaryEmbedding,
-    )
+    from transformers import DynamicCache, OlmoHybridForCausalLM, OlmoHybridModel
+    from transformers.models.olmo_hybrid.modeling_olmo_hybrid import OlmoHybridRotaryEmbedding
 
 
 class OlmoHybridModelTester(CausalLMModelTester):
@@ -69,11 +63,7 @@ class OlmoHybridModelTest(CausalLMModelTest, unittest.TestCase):
         conv_kernel = config.linear_conv_kernel_dim
         key_dim = config.linear_key_head_dim * config.linear_num_key_heads
         value_dim = config.linear_value_head_dim * config.linear_num_value_heads
-        return (
-            batch_size,
-            key_dim * 2 + value_dim,
-            conv_kernel,
-        )
+        return (batch_size, key_dim * 2 + value_dim, conv_kernel)
 
     def _get_recurrent_state_shape(self, batch_size: int, config):
         return (batch_size, config.linear_num_value_heads, config.linear_key_head_dim, config.linear_value_head_dim)
