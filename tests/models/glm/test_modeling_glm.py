@@ -55,6 +55,18 @@ class GlmModelTester(CausalLMModelTester):
 class GlmModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = GlmModelTester
 
+    def test_gqa_heads_validation(self):
+        from transformers import GlmConfig
+
+        # Incompatible head counts should raise ValueError / Strict validation error
+        with self.assertRaises(Exception) as ctx:
+            GlmConfig(num_attention_heads=7, num_key_value_heads=2)
+        self.assertIn("must be a multiple of", str(ctx.exception))
+
+        # Compatible head counts should instantiate and pass validation
+        valid_config = GlmConfig(num_attention_heads=8, num_key_value_heads=2)
+        valid_config.validate_architecture()
+
 
 @slow
 @require_torch_large_accelerator
