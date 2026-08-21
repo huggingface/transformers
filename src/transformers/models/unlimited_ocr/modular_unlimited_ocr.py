@@ -1082,8 +1082,13 @@ class UnlimitedOcrTextModel(DeepseekOcr2TextModel):
 
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
-                "reference_sliding_attention": create_reference_sliding_window_causal_mask(**mask_kwargs),
             }
+            # CODEPATH: create_sliding_window_causal_mask errors if config.sliding_window is None.
+            # Without the check here a model with full attention crashes.
+            if self.config.sliding_window is not None:
+                causal_mask_mapping["reference_sliding_attention"] = create_reference_sliding_window_causal_mask(
+                    **mask_kwargs
+                )
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
