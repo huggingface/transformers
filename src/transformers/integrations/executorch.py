@@ -1158,6 +1158,7 @@ def _unflatten_dynamic_cache(values, context: torch.utils._pytree.Context):
     key_states = dictionary["key_cache"]
     value_states = dictionary["value_cache"]
     layout = [torch.tensor([sliding_window]) if sliding_window is not None else None for sliding_window in layout]
+    # The k/v states do not contain data for empty layers, so we need to zip to longest, i.e. zip to layout's size
     ddp_cache_data = zip_longest(key_states, value_states, layout)
 
     return DynamicCache(ddp_cache_data)
