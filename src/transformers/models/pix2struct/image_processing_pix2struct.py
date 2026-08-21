@@ -400,7 +400,7 @@ class Pix2StructImageProcessor(TorchvisionBackend):
         flattened_patches_grouped = {}
         attention_masks_grouped = {}
 
-        for shape, stacked_images in grouped_images.items():
+        for key, stacked_images in grouped_images.items():
             # Convert to float if needed (for resize and other operations)
             if stacked_images.dtype == torch.uint8:
                 stacked_images = stacked_images.float()
@@ -414,8 +414,8 @@ class Pix2StructImageProcessor(TorchvisionBackend):
             )
             masks = (patches.sum(dim=-1) != 0).float()
 
-            flattened_patches_grouped[shape] = patches
-            attention_masks_grouped[shape] = masks
+            flattened_patches_grouped[key] = patches
+            attention_masks_grouped[key] = masks
 
         flattened_patches = reorder_images(flattened_patches_grouped, grouped_images_index)
         attention_masks = reorder_images(attention_masks_grouped, grouped_images_index)

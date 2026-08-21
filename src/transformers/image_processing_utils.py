@@ -120,12 +120,12 @@ class BaseImageProcessor(ImageProcessingMixin):
                 # Group images by shape for efficient batched operations
                 grouped_images, grouped_images_index = group_images_by_shape(images)
                 processed_groups = {}
-                for shape, stacked_images in grouped_images.items():
+                for key, stacked_images in grouped_images.items():
                     if do_resize:
                         stacked_images = self.resize(stacked_images, size=size)
                     if do_normalize:
                         stacked_images = self.normalize(stacked_images, mean=image_mean, std=image_std)
-                    processed_groups[shape] = stacked_images
+                    processed_groups[key] = stacked_images
                 processed_images = reorder_images(processed_groups, grouped_images_index)
                 return BatchFeature(data={"pixel_values": processed_images})
 

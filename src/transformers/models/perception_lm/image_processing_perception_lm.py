@@ -271,7 +271,7 @@ class PerceptionLMImageProcessor(TorchvisionBackend):
         # Group images by size for batched transformation
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
+        for key, stacked_images in grouped_images.items():
             if do_resize:
                 if vision_input_type == "thumb+tile":
                     thumbnails, _ = self.resize(stacked_images, tile_size, max_num_tiles=1, resample=resample)
@@ -283,12 +283,12 @@ class PerceptionLMImageProcessor(TorchvisionBackend):
                 else:  # vanilla single tile for low memory devices
                     stacked_images, _ = self.resize(stacked_images, tile_size, max_num_tiles=1, resample=resample)
 
-            resized_images_grouped[shape] = stacked_images
+            resized_images_grouped[key] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
         grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
+        for key, stacked_images in grouped_images.items():
             # Fused rescale and normalize
             stacked_images = self.rescale_and_normalize(
                 stacked_images,
@@ -298,7 +298,7 @@ class PerceptionLMImageProcessor(TorchvisionBackend):
                 image_mean,
                 image_std,
             )
-            processed_images_grouped[shape] = stacked_images
+            processed_images_grouped[key] = stacked_images
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         processed_images = [p[None] if p.ndim == 3 else p for p in processed_images]  # add tiles dimension if needed
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
