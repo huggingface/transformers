@@ -77,8 +77,8 @@ class DiffusionGemmaVisionText2TextModelTester:
             "num_hidden_layers": 2,
             # model-specific text config values
             "layer_types": ["sliding_attention", "full_attention"],  # we want to test both types
-            "num_global_key_value_heads": 2,  # key introduced by the gemma4 family
-            "global_head_dim": 32 // 2,  # hidden_size // num_attention_heads
+            # full-attention layer overrides (head_dim is hidden_size // num_attention_heads)
+            "per_layer_config": {1: {"head_dim": 32 // 2, "num_key_value_heads": 2}},
             "top_k_experts": 2,  # key introduced by the gemma4 family
             "use_bidirectional_attention": "vision",  # Test if bidirectional image mask path works
         },
@@ -255,6 +255,43 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
     def test_disk_offload_safetensors(self):
         pass
 
+    def test_gradient_checkpointing_matches_no_checkpointing(self):
+        """
+        Gradient checkpointing relies on the encoder writing its KV cache outside the checkpointed layer calls and
+        on the decoder keeping the read-only cache (`_can_checkpoint_with_cache`). Both must reproduce the exact
+        same loss and gradients as the non-checkpointed forward, including encoder gradients through the cache.
+        """
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        # Checkpointing only engages in train mode, so determinism requires disabling dropout instead of eval()
+        config.text_config.attention_dropout = 0.0
+        config.vision_config.dropout = 0.0
+        config.vision_config.attention_dropout = 0.0
+        model = DiffusionGemmaForBlockDiffusion(config).to(torch_device)
+        inputs = self._prepare_for_class(inputs_dict, DiffusionGemmaForBlockDiffusion)
+
+        def loss_and_grads(checkpointing):
+            model.zero_grad(set_to_none=True)
+            if checkpointing:
+                model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+            else:
+                model.gradient_checkpointing_disable()
+            model.train()
+            loss = model(**inputs).logits.float().mean()
+            loss.backward()
+            return loss.detach(), {name: p.grad.clone() for name, p in model.named_parameters() if p.grad is not None}
+
+        loss_ref, grads_ref = loss_and_grads(checkpointing=False)
+        loss_checkpointed, grads_checkpointed = loss_and_grads(checkpointing=True)
+
+        # Snapshot/restore makes the recomputation bit-exact on CPU; accelerators can reorder accumulation in the
+        # backward, so relax the tolerance there.
+        rtol = atol = 0 if torch_device == "cpu" else 1e-5
+        torch.testing.assert_close(loss_checkpointed, loss_ref, rtol=rtol, atol=atol)
+        self.assertEqual(grads_checkpointed.keys(), grads_ref.keys())
+        self.assertTrue(any("encoder" in name for name in grads_checkpointed))
+        for name in grads_ref:
+            torch.testing.assert_close(grads_checkpointed[name], grads_ref[name], rtol=rtol, atol=atol)
+
     @unittest.skip(reason="Hard to specify `self.model_split_percents` due to tied weights. Skip for now.")
     def test_model_parallelism(self):
         pass
@@ -283,18 +320,19 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
         self.assertTrue(model.lm_head.weight is model.model.decoder.embed_tokens.weight)
         self.assertTrue(model.lm_head.weight is model.model.encoder.language_model.embed_tokens.weight)
 
-    def test_use_cache_raises_exception(self):
+    def test_use_cache_is_ignored(self):
         """
-        DiffusionGemma always use cache. Therefore, the common kwarg `use_cache` isn't used -- and we raise an
-        exception
+        DiffusionGemma's decoder never writes a cache, so the common kwarg `use_cache` is silently ignored instead
+        of raising. This keeps the model usable with gradient checkpointing, which forces `use_cache=False`.
         """
         config, model_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         model = DiffusionGemmaForBlockDiffusion(config=config).to(torch_device).eval()
 
-        with self.assertRaises(ValueError):
-            model(**model_inputs, use_cache=False)
-        with self.assertRaises(ValueError):
-            model(**model_inputs, use_cache=True)
+        # Either value is accepted and has no effect: no exception, and the output matches omitting the kwarg.
+        expected = model(**model_inputs).logits
+        for use_cache in (False, True):
+            logits = model(**model_inputs, use_cache=use_cache).logits
+            torch.testing.assert_close(logits, expected)
 
     def test_diffusion_decoder_mask_no_cache_raises_exception(self):
         """
@@ -394,6 +432,47 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
         self.assertEqual(mask_mapping["sliding_attention"].shape, expected_attention_mask_shape)
         self.assertEqual(mask_mapping["sliding_attention"].sum(), expected_non_zero)
         self.assertEqual(mask_mapping["sliding_attention"][0, 0, :, :left_padding_length].sum(), 0)
+
+    def test_diffusion_decoder_mask_dynamic_cache_int_padding_mask(self):
+        """
+        Same as `test_diffusion_decoder_mask_dynamic_cache_left_padding`, but the padding mask holds `1`/`0` integers,
+        the way a tokenizer returns it, instead of booleans. It must produce the same boolean mask.
+        """
+
+        prefill_length = 8
+        canvas_length = 4
+        concat_kv_length = prefill_length + canvas_length
+        batch_size = 2
+        left_padding_length = 2  # only applied on batch item 0
+        expected_non_zero = (
+            ((concat_kv_length - left_padding_length) * canvas_length)  # batch item 0
+            + (concat_kv_length * canvas_length)  # batch item 1
+        )
+        expected_attention_mask_shape = (batch_size, 1, canvas_length, concat_kv_length)
+
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = DiffusionGemmaForBlockDiffusion(config=config).to(torch_device).eval()
+
+        # Apply prefill (smaller than sliding window)
+        past_key_values = DynamicCache(config=config)
+        prefill_input_ids = torch.ones((batch_size, prefill_length), dtype=torch.int32, device=torch_device) * 50
+        past_key_values = model.model.encoder(prefill_input_ids, past_key_values=past_key_values).past_key_values
+
+        # Get the mask
+        decoder_attention_mask = torch.ones((batch_size, concat_kv_length), dtype=torch.long, device=torch_device)
+        decoder_attention_mask[0, :left_padding_length] = 0
+        dummy_canvas = torch.ones((batch_size, canvas_length), dtype=torch.int32, device=torch_device)
+        mask_mapping = model.model.decoder.create_diffusion_decoder_attention_mask(
+            config=config.text_config,
+            inputs_embeds=dummy_canvas.unsqueeze(-1),
+            past_key_values=past_key_values,
+            decoder_attention_mask=decoder_attention_mask,
+        )
+        for layer_pattern in ("full_attention", "sliding_attention"):
+            self.assertEqual(mask_mapping[layer_pattern].dtype, torch.bool)
+            self.assertEqual(mask_mapping[layer_pattern].shape, expected_attention_mask_shape)
+            self.assertEqual(mask_mapping[layer_pattern].sum(), expected_non_zero)
+            self.assertEqual(mask_mapping[layer_pattern][0, 0, :, :left_padding_length].sum(), 0)
 
     def test_diffusion_decoder_mask_dynamic_cache_beyond_sliding_window(self):
         """

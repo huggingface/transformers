@@ -265,6 +265,9 @@ IGNORE_NON_TESTED = (
         "Qwen2_5_VLTextModel",  # Building part of bigger (tested) model
         "MiniCPMV4_6Model",  # Building part of bigger (tested) model. Tested implicitly through MiniCPMV4_6ForConditionalGeneration.
         "MiniCPMV4_6ForConditionalGeneration",  # Tested in MiniCPMV4_6ModelTest via VLMModelTest; check_repo doesn't detect VLMModelTest.conditional_generation_class.
+        "Step3p7Model",  # `base_model_class = Step3p7Model if is_torch_available() else None`; check_repo's regex can't parse the conditional. Tested implicitly through Step3p7ForConditionalGeneration.
+        "Step3p7TextModel",  # Building part of bigger (tested) model
+        "Step3p7VisionModel",  # Building part of bigger (tested) model
         "InternVLVisionModel",  # Building part of bigger (tested) model
         "DeepseekOcr2TextModel",  # Building part of bigger (tested) model
         "DeepseekOcr2VisionModel",  # Building part of bigger (tested) model
@@ -301,6 +304,8 @@ IGNORE_NON_TESTED = (
         "DiffusionGemmaEncoderModel",  # TODO(joaogante)
         "DiffusionGemmaEncoderTextModel",  # TODO(joaogante)
         "Kimi_K25VisionModel",
+        "MuseGlimmerTextModel",  # Building part of bigger (tested) model. Tested implicitly through MuseGlimmerForConditionalGeneration.
+        "MuseGlimmerVisionModel",  # Building part of bigger (tested) model. Tested implicitly through MuseGlimmerForConditionalGeneration.
         "HunYuanVLTextModel",
         "HunYuanVLVisionTransformer",
         "InklingForCausalLM",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
@@ -313,6 +318,7 @@ IGNORE_NON_TESTED = (
 # trigger the common tests.
 TEST_FILES_WITH_NO_COMMON_TESTS = [
     "models/decision_transformer/test_modeling_decision_transformer.py",
+    "models/esmfold2/test_modeling_esmfold2.py",
     "models/camembert/test_modeling_camembert.py",
     "models/mbart/test_modeling_mbart.py",
     "models/mt5/test_modeling_mt5.py",
@@ -370,6 +376,7 @@ IGNORE_NON_AUTO_CONFIGURED = (
         "CLIPSegVisionModel",
         "CLIPSegTextModel",
         "EsmForProteinFolding",
+        "EsmFold2Model",
         "GPTSanJapaneseModel",
         "TimeSeriesTransformerForPrediction",
         "InformerForPrediction",
@@ -498,6 +505,8 @@ IGNORE_NON_AUTO_CONFIGURED = (
         "JanusVisionModel",  # Building part of bigger (tested) model
         "DeepseekOcr2TextModel",  # Building part of bigger (tested) model
         "DeepseekOcr2VisionModel",  # Building part of bigger (tested) model
+        "Step3p7TextModel",  # Building part of bigger (tested) model
+        "Step3p7VisionModel",  # Building part of bigger (tested) model
         "SLANetSLAHead",  # Building part of bigger (tested) model
         "SLANetBackbone",  # Building part of bigger (tested) model
         "SLANeXtSLAHead",  # Building part of bigger (tested) model
@@ -573,7 +582,6 @@ DOC_MODEL_NAMES_NOT_IN_AUTO = {
     "ul2",
     "phobert",
     "herbert",
-    "dit",
     "lasr",
     "mluke",
     "xlsr_wav2vec2",
@@ -590,7 +598,6 @@ DOC_MODEL_NAMES_NOT_IN_AUTO = {
     "bertweet",
     "nllb",
     "xlm-v",
-    "dialogpt",
     "flan-t5",
     "bert-japanese",
     "mms",
@@ -600,7 +607,6 @@ DOC_MODEL_NAMES_NOT_IN_AUTO = {
     "madlad-400",
     "granitevision",
     "falcon3",
-    "megatron_gpt2",
     "code_llama",
 }
 

@@ -557,16 +557,16 @@ class MMGroundingDinoFrozenBatchNorm2d(nn.Module):
     """
     BatchNorm2d where the batch statistics and the affine parameters are fixed.
 
-    Copy-paste from torchvision.misc.ops with added eps before rqsrt, without which any other models than
+    Copy-paste from torchvision.misc.ops with added eps before rsqrt, without which any other models than
     torchvision.models.resnet[18,34,50,101] produce nans.
     """
 
     def __init__(self, n):
         super().__init__()
-        self.register_buffer("weight", torch.ones(n))
-        self.register_buffer("bias", torch.zeros(n))
-        self.register_buffer("running_mean", torch.zeros(n))
-        self.register_buffer("running_var", torch.ones(n))
+        self.weight = nn.Buffer(torch.ones(n))
+        self.bias = nn.Buffer(torch.zeros(n))
+        self.running_mean = nn.Buffer(torch.zeros(n))
+        self.running_var = nn.Buffer(torch.ones(n))
 
     def _load_from_state_dict(
         self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
@@ -1746,7 +1746,7 @@ def generate_masks_with_special_tokens_and_transfer_map(input_ids: torch.LongTen
     indices = torch.arange(seq_len, device=device).unsqueeze(0).expand(batch_size, -1)
 
     # Previous special token: cummax of special token indices
-    prev_special = torch.where(special_mask, indices, torch.tensor(-1, device=device))
+    prev_special = torch.where(special_mask, indices, torch.full((), -1, device=device))
     prev_special = torch.cummax(prev_special, dim=1)[0]
 
     # Next special token: flip, cummin, flip back

@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import shutil
 import tempfile
 import unittest
 
@@ -32,42 +31,18 @@ from ...test_processing_common import ProcessorTesterMixin
 
 class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Qwen3ASRProcessor
-
-    @classmethod
-    @require_torch
-    def setUpClass(cls):
-        cls.checkpoint = "Qwen/Qwen3-ASR-0.6B-hf"
-        cls.tmpdirname = tempfile.mkdtemp()
-
-        processor = Qwen3ASRProcessor.from_pretrained(cls.checkpoint)
-        processor.save_pretrained(cls.tmpdirname)
-
-    @require_torch
-    def get_tokenizer(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
-
-    @require_torch
-    def get_feature_extractor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).feature_extractor
-
-    @require_torch
-    def get_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs)
-
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
+    tiny_model_id = "hf-internal-testing/tiny-processor-qwen3_asr"
 
     @require_torch
     def test_can_load_various_tokenizers(self):
-        processor = Qwen3ASRProcessor.from_pretrained(self.checkpoint)
-        tokenizer = AutoTokenizer.from_pretrained(self.checkpoint)
+        processor = Qwen3ASRProcessor.from_pretrained(self.tmpdirname)
+        tokenizer = AutoTokenizer.from_pretrained(self.tmpdirname)
         self.assertEqual(processor.tokenizer.__class__, tokenizer.__class__)
 
     @require_torch
     def test_save_load_pretrained_default(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.checkpoint)
-        processor = Qwen3ASRProcessor.from_pretrained(self.checkpoint)
+        tokenizer = AutoTokenizer.from_pretrained(self.tmpdirname)
+        processor = Qwen3ASRProcessor.from_pretrained(self.tmpdirname)
         feature_extractor = processor.feature_extractor
 
         processor = Qwen3ASRProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
@@ -83,7 +58,7 @@ class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_torch
     def test_chat_template(self):
-        processor = AutoProcessor.from_pretrained(self.checkpoint)
+        processor = AutoProcessor.from_pretrained(self.tmpdirname)
         expected_prompt = (
             "<|im_start|>system\n"
             "<|im_end|>\n"
@@ -107,7 +82,7 @@ class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_torch
     def test_apply_transcription_request_with_language(self):
-        processor = AutoProcessor.from_pretrained(self.checkpoint)
+        processor = AutoProcessor.from_pretrained(self.tmpdirname)
 
         audio_url = "https://huggingface.co/datasets/bezzam/audio_samples/resolve/main/librispeech_mr_quilter.wav"
         outputs = processor.apply_transcription_request(audio=audio_url, language="English")
@@ -115,9 +90,39 @@ class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         for key in ("input_ids", "attention_mask", "input_features", "input_features_mask"):
             self.assertIn(key, outputs)
 
+        # The language is forced by appending "language <NAME><asr_text>" after the generation prompt
+        decoded = processor.tokenizer.decode(outputs["input_ids"][0])
+        self.assertTrue(decoded.endswith("<|im_start|>assistant\nlanguage English<asr_text>"))
+
+    @require_torch
+    def test_apply_transcription_request_with_prompt(self):
+        processor = AutoProcessor.from_pretrained(self.tmpdirname)
+
+        audio_url = "https://huggingface.co/datasets/bezzam/audio_samples/resolve/main/librispeech_mr_quilter.wav"
+        context = "Vocabulary: Quilter, apostle, gospel."
+        outputs = processor.apply_transcription_request(audio=audio_url, prompt=context, language="English")
+
+        decoded = processor.tokenizer.decode(outputs["input_ids"][0])
+        # The context/hotwords prompt goes into the system turn
+        self.assertIn(f"<|im_start|>system\n{context}<|im_end|>", decoded)
+        self.assertTrue(decoded.endswith("<|im_start|>assistant\nlanguage English<asr_text>"))
+
+    @require_torch
+    def test_apply_transcription_request_mixed_batch(self):
+        """Mixed batch: forced-language samples get the prefill, auto-detect samples a bare generation prompt."""
+        processor = AutoProcessor.from_pretrained(self.tmpdirname)
+
+        audio_url = "https://huggingface.co/datasets/bezzam/audio_samples/resolve/main/librispeech_mr_quilter.wav"
+        outputs = processor.apply_transcription_request(audio=[audio_url, audio_url], language=[None, "zh"])
+
+        decoded_auto = processor.tokenizer.decode(outputs["input_ids"][0], skip_special_tokens=False)
+        decoded_forced = processor.tokenizer.decode(outputs["input_ids"][1])
+        self.assertTrue(decoded_auto.replace("<|endoftext|>", "").endswith("<|im_start|>assistant\n"))
+        self.assertTrue(decoded_forced.endswith("<|im_start|>assistant\nlanguage Chinese<asr_text>"))
+
     @require_torch
     def test_decode_formats(self):
-        processor = AutoProcessor.from_pretrained(self.checkpoint)
+        processor = AutoProcessor.from_pretrained(self.tmpdirname)
 
         raw_text = "language English<asr_text>Mr. Quilter is the apostle of the middle classes."
 
@@ -140,3 +145,42 @@ class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def test_apply_chat_template_assistant_mask(self):
         self.skipTest("Qwen3ASR processor requires audio; not compatible with text-only chat template tests.")
+
+    @require_torch
+    def test_output_labels(self):
+        import torch
+
+        processor = self.get_processor()
+        audio = self.prepare_audio_inputs(batch_size=1)[0]
+
+        conversation = [
+            [
+                {
+                    "role": "user",
+                    "content": [{"type": "audio", "audio": audio}],
+                },
+                {"role": "assistant", "content": [{"type": "text", "text": "language English<asr_text>Hello world."}]},
+            ],
+        ]
+        inputs = processor.apply_chat_template(
+            conversation,
+            tokenize=True,
+            return_dict=True,
+            processor_kwargs={"output_labels": True},
+        )
+
+        self.assertIn("labels", inputs)
+        self.assertNotIn("mm_token_type_ids", inputs)
+        labels = inputs["labels"]
+        input_ids = inputs["input_ids"]
+        self.assertEqual(labels.shape, input_ids.shape)
+
+        # audio token positions (including audio bos/eos) are masked
+        audio_positions = torch.isin(input_ids, torch.tensor(processor.audio_token_ids, dtype=input_ids.dtype))
+        self.assertTrue(audio_positions.any())
+        self.assertTrue((labels[audio_positions] == -100).all())
+
+        # non-audio positions match input_ids
+        kept_positions = ~audio_positions
+        self.assertTrue(kept_positions.any())
+        self.assertTrue((labels[kept_positions] == input_ids[kept_positions]).all())

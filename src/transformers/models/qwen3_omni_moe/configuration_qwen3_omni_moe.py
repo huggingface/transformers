@@ -558,7 +558,7 @@ class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig):
     @property
     def layer_types(self):
         """
-        All layer in code2wav should be sliding attention
+        All layers in code2wav should be sliding attention
         """
         return ["sliding_attention"] * self.num_hidden_layers
 
