@@ -47,7 +47,7 @@ from typing import Any
 from ..utils import logging
 from ..utils.import_utils import is_executorch_available, is_torch_available
 from .configs import ExecutorchConfig
-from .exporter_dynamo import DynamoExporter
+from .exporter_dynamo import DynamoExporter, varlen_attn_masked_sdpa
 from .utils import (
     apply_fx_node_fixes,
     apply_fx_program_fixes,
@@ -167,6 +167,7 @@ def _get_edge_compile_config() -> EdgeCompileConfig:
     """
     return EdgeCompileConfig(
         _core_aten_ops_exception_list=[
+            torch.ops.aten._embedding_bag_forward_only.default,
             torch.ops.aten._fft_c2c.default,
             torch.ops.aten._is_all_true.default,
             torch.ops.aten.bincount.default,
@@ -527,6 +528,19 @@ def _patch_broadcast_mask_expansion(_original):
         return _expanded
 
     return patch
+
+
+@register_patch("executorch", "torch.nn.attention.varlen.varlen_attn")
+def _patch_varlen_attn(original):
+    """The chunked vision/audio attention patch calls `varlen_attn`, whose CUDA flash op stays opaque
+    through edge lowering (its aux outputs trip the edge-dialect verifier). Swap it for the block-diagonal
+    masked SDPA — core-aten ops ExecuTorch can lower — returning just the output tensor (`varlen_attn`'s
+    contract, vs the underlying op's `(output, *aux)` tuple)."""
+
+    def varlen_attn(*args, **kwargs):
+        return varlen_attn_masked_sdpa(*args, **kwargs)
+
+    return varlen_attn
 
 
 @register_patch("executorch", "torch.nn.functional.scaled_dot_product_attention")
