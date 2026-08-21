@@ -67,6 +67,11 @@ class GlmOcrVisionConfig(Glm4vVisionConfig):
 @strict
 class GlmOcrTextConfig(Glm4vTextConfig):
     r"""
+    num_mtp_layers (`int`, *optional*, defaults to 1):
+        Number of Multi-Token Prediction (MTP) modules available to append after the base transformer model. When `0`,
+        the model behaves as a standard decoder. When `>0`, each extra module can predict one additional future token at inference
+        time (speculative decoding via `generate(..., use_mtp=True)`).
+
     Example:
 
     ```python
@@ -82,6 +87,10 @@ class GlmOcrTextConfig(Glm4vTextConfig):
     >>> configuration = model.config
     ```"""
 
+    attribute_map = {
+        "num_mtp_layers": "num_nextn_predict_layers",
+    }
+
     vocab_size: int = 59392
     hidden_size: int = 1024
     intermediate_size: int = 4096
@@ -89,6 +98,7 @@ class GlmOcrTextConfig(Glm4vTextConfig):
     num_attention_heads: int = 16
     num_key_value_heads: int = 8
     max_position_embeddings: int = 131072
+    num_mtp_layers: int = 1
 
 
 @auto_docstring(checkpoint="zai-org/GLM-OCR")
