@@ -1351,7 +1351,10 @@ class ExportedMultimodalGenerator(ExportedGenerator):
         for key, value in kwargs.items():
             if value is None or key in _TEXT_KWARGS or key in foreign:
                 continue
-            if (name := _grid_renamed(key)) in declared:
+            # `_declares`, not an exact name match: a *list-valued* input (ernie4_5_vl_moe's
+            # `temporal_slice_index`, the even/odd gather pair) is declared by its flattened leaves
+            # (`temporal_slice_index.0`, `.1`), and each runner flattens the pytree its own way.
+            if _declares(modality.runner, name := _grid_renamed(key), value):
                 inputs[name] = value
         # Only when nothing named the graph's feature input: the modality's kwarg is that tensor under
         # another name (`pixel_values_videos` for a video getter that declares `pixel_values`). A getter
@@ -1371,7 +1374,7 @@ class ExportedMultimodalGenerator(ExportedGenerator):
             name: value.to(self._device) if isinstance(value, torch.Tensor) else value
             for name, value in inputs.items()
         }
-        feed = {name: value for name, value in inputs.items() if name in declared}
+        feed = {name: value for name, value in inputs.items() if _declares(modality.runner, name, value)}
         if "input_ids" in declared:
             feed["input_ids"] = input_ids
         for name in declared - feed.keys():
