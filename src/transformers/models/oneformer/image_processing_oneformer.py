@@ -369,13 +369,13 @@ class OneFormerImageProcessor(TorchvisionBackend):
 
         processed_images_grouped = {}
 
-        for shape, stacked_images in grouped_images.items():
+        for key, stacked_images in grouped_images.items():
             if do_resize:
                 stacked_images = self.resize(image=stacked_images, size=size, resample=resample)
             stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
-            processed_images_grouped[shape] = stacked_images
+            processed_images_grouped[key] = stacked_images
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
 
         processed_segmentation_maps = None
@@ -384,12 +384,12 @@ class OneFormerImageProcessor(TorchvisionBackend):
                 segmentation_maps, disable_grouping=disable_grouping
             )
             processed_segmentation_maps_grouped = {}
-            for shape, stacked_segmentation_maps in grouped_segmentation_maps.items():
+            for key, stacked_segmentation_maps in grouped_segmentation_maps.items():
                 if do_resize:
                     stacked_segmentation_maps = self.resize(
                         stacked_segmentation_maps, size=size, resample=tvF.InterpolationMode.NEAREST_EXACT
                     )
-                processed_segmentation_maps_grouped[shape] = stacked_segmentation_maps
+                processed_segmentation_maps_grouped[key] = stacked_segmentation_maps
             processed_segmentation_maps = reorder_images(
                 processed_segmentation_maps_grouped, grouped_segmentation_maps_index
             )

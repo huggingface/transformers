@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from collections import defaultdict
 from collections.abc import Collection, Iterable
+from dataclasses import dataclass
 from math import ceil
-from typing import Optional, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 
@@ -862,105 +862,6 @@ def divide_to_patches(
     return patches
 
 
-def _group_images_by_shape(nested_images, *paired_inputs, is_nested: bool = False):
-    """
-    Helper function to flatten a single level of nested image and batch structures and group by shape.
-    Args:
-        nested_images (list):
-            A list of images or a single tensor
-        paired_inputs (Any, *optional*):
-            Zero or more lists that mirror the structure of `nested_images` (flat list, or list of lists when
-            `is_nested=True`). Each element is paired 1:1 with the corresponding image so it can be grouped by the
-            same shape key. These paired values are grouped alongside `nested_images` but are not stacked in the output, so
-            they do not need to be tensors.
-        is_nested (bool, *optional*, defaults to False):
-            Whether the images are nested.
-    Returns:
-        tuple[dict, ...]:
-            - A dictionary with shape as key and list of images with that shape as value
-            - A dictionary with shape as key and list of paired values with that shape as value
-            - A dictionary mapping original indices to (shape, index) tuples
-            - A dictionary mapping original indices to (shape, index) tuples for each paired input
-    """
-    grouped_images = defaultdict(list)
-    grouped_images_index = {}
-    paired_grouped_values = [defaultdict(list) for _ in paired_inputs]
-
-    # Normalize inputs to consistent nested structure
-    normalized_images = [nested_images] if not is_nested else nested_images
-    normalized_paired = []
-    for paired_input in paired_inputs:
-        normalized_paired.append([paired_input] if not is_nested else paired_input)
-
-    # Process each image and group by shape
-    for i, (sublist, *paired_sublists) in enumerate(zip(normalized_images, *normalized_paired)):
-        for j, (image, *paired_values) in enumerate(zip(sublist, *paired_sublists)):
-            key = (i, j) if is_nested else j
-            shape = image.shape[1:]
-
-            # Add to grouped structures
-            grouped_images[shape].append(image)
-            for paired_index, paired_value in enumerate(paired_values):
-                paired_grouped_values[paired_index][shape].append(paired_value)
-            grouped_images_index[key] = (shape, len(grouped_images[shape]) - 1)
-
-    # Store structure size for nested inputs to handle empty sublists during reconstruction
-    if is_nested:
-        grouped_images_index["_num_sublists"] = len(normalized_images)
-
-    return grouped_images, *paired_grouped_values, grouped_images_index
-
-
-def _reconstruct_nested_structure(indices, processed_images):
-    """Helper function to reconstruct a single level nested structure."""
-    # Get the number of sublists (handles empty sublists like in [[], [image]])
-    num_sublists = indices.pop("_num_sublists", None)
-
-    # Group indices by outer index
-    nested_indices = defaultdict(list)
-    for i, j in indices:
-        nested_indices[i].append(j)
-
-    # Determine the number of outer sublists
-    if num_sublists is not None:
-        max_outer_idx = num_sublists - 1
-    elif nested_indices:
-        max_outer_idx = max(nested_indices.keys())
-    else:
-        return []
-
-    # Create the result structure
-    result = []
-    for i in range(max_outer_idx + 1):
-        if i not in nested_indices:
-            result.append([])
-        else:
-            inner_max_idx = max(nested_indices[i])
-            inner_list = [None] * (inner_max_idx + 1)
-            for j in nested_indices[i]:
-                shape, idx = indices[(i, j)]
-                inner_list[j] = processed_images[shape][idx]
-            result.append(inner_list)
-
-    return result
-
-
-def _iterate_items(items, is_nested: bool):
-    """
-    Helper function to iterate over items yielding (key, item) pairs.
-
-    For nested structures, yields ((row_index, col_index), item).
-    For flat structures, yields (index, item).
-    """
-    if is_nested:
-        for i, row in enumerate(items):
-            for j, item in enumerate(row):
-                yield (i, j), item
-    else:
-        for i, item in enumerate(items):
-            yield i, item
-
-
 def _get_device_from_images(images, is_nested: bool) -> "torch.device":
     """
     Get the device from the first non-empty element in a (potentially nested) list of images.
@@ -976,6 +877,26 @@ def _get_device_from_images(images, is_nested: bool) -> "torch.device":
     return images[0].device
 
 
+@dataclass
+class GroupedImagesIndex:
+    """
+    Args:
+        positions (`dict`):
+            Maps the `(sublist_index, image_index)` position of every input image to the `(group_key, index_in_group)`
+            of its grouped image. Flat inputs count as a single sublist, so their positions are `(0, image_index)`.
+            Group keys are opaque and must only be used to access or update grouped dictionaries.
+        sublist_lengths (`list[int]`):
+            The length of every input sublist, which cannot be recovered from `positions` alone as empty sublists have
+            no position of their own.
+        is_nested (`bool`):
+            The structure of the input, so that [`reorder_images`] can restore the original nested structure.
+    """
+
+    positions: dict[tuple[int, int], tuple[Any, int]]
+    sublist_lengths: list[int]
+    is_nested: bool
+
+
 def group_images_by_shape(
     images: Union[list["torch.Tensor"], "torch.Tensor"],
     *paired_inputs,
@@ -983,11 +904,8 @@ def group_images_by_shape(
     is_nested: bool = False,
 ) -> tuple[dict, ...]:
     """
-    Groups images by shape.
-    Returns a dictionary with the shape or index as key and a list of images with that shape as value,
-    and a dictionary with the index of the image in the original list as key and the shape and index in the grouped list as value.
+    Groups images by shape so that they can be processed as a single batch.
 
-    The function supports both flat lists of tensors and nested structures.
     The input must be either all flat or all nested, not a mix of both.
 
     Args:
@@ -996,8 +914,9 @@ def group_images_by_shape(
         paired_inputs (Any, *optional*):
             Zero or more lists that mirror the structure of `images` (flat list, or list of lists when
             `is_nested=True`). Each element is paired 1:1 with the corresponding image so it can be grouped by the
-            same shape key. These paired values are grouped alongside `images` but are not stacked in the output, so
-            they do not need to be tensors.
+            same key. These paired values are grouped alongside `images` but are not stacked in the output, so
+            they do not need to be tensors. A paired input can also be `None`, in which case it is grouped as `None`
+            for every key so that callers can index it like the others.
         disable_grouping (bool):
             Whether to disable grouping. If None, will be set to True if the images are on CPU, and False otherwise.
             This choice is based on empirical observations, as detailed here: https://github.com/huggingface/transformers/pull/38157
@@ -1006,83 +925,100 @@ def group_images_by_shape(
 
     Returns:
         tuple[dict, ...]:
-            - A dictionary with shape or index as key and list/batch of images with that shape as value.
-              The key is the shape of the images if `disable_grouping` evaluates to True, and the index
-              of the image in the original list otherwise.
-            - Zero or more dictionaries (one per argument in `*paired_inputs`) grouped consistently with `images`; these carry
-              the corresponding per-item values and are not stacked
-            - A dictionary mapping original indices to (shape, index) tuples
+            - A dictionary mapping each group key to the batch of images with that shape. Grouping is disabled by
+              giving every image its own key, so that each one ends up in a batch of a single image.
+            - Zero or more dictionaries (one per argument in `*paired_inputs`) grouped consistently with `images`;
+              these carry the corresponding per-item values as lists and are not stacked, or `None` for every key
+              if the corresponding paired input is `None`.
+            - A [`GroupedImagesIndex`], to pass to [`reorder_images`] to restore the original order and structure.
     """
     # If disable grouping is not explicitly provided, we favor disabling it if the images are on CPU, and enabling it otherwise.
     if disable_grouping is None:
         device = _get_device_from_images(images, is_nested)
         disable_grouping = device.type == "cpu"
 
-    if disable_grouping:
-        grouped_images_index = {key: (key, 0) for key, _ in _iterate_items(images, is_nested)}
-        if is_nested:
-            grouped_images_index["_num_sublists"] = len(images)
-
-        return (
-            {key: img.unsqueeze(0) for key, img in _iterate_items(images, is_nested)},
-            *[
-                {key: item.unsqueeze(0) for key, item in _iterate_items(paired_list, is_nested)}
-                for paired_list in paired_inputs
-            ],
-            grouped_images_index,
-        )
-
     # A batched tensor is already a single group of images sharing the same shape, no need to unbind and re-stack it.
-    if isinstance(images, torch.Tensor) and not is_nested and len(images) > 0:
-        shape = images.shape[2:]
+    if not disable_grouping and not is_nested and isinstance(images, torch.Tensor) and len(images) > 0:
+        # Choice of key doesn't matter as there is a single group. We keep shape for consistency.
+        key = images.shape[-2:]
         return (
-            {shape: images},
-            *[{shape: list(paired_list)} for paired_list in paired_inputs],
-            {index: (shape, index) for index in range(len(images))},
+            {key: images},
+            *[{key: None if paired_input is None else list(paired_input)} for paired_input in paired_inputs],
+            GroupedImagesIndex(
+                positions={(0, index): (key, index) for index in range(len(images))},
+                sublist_lengths=[len(images)],
+                is_nested=is_nested,
+            ),
         )
 
-    # Handle single level nested structure
-    grouped_images, *paired_grouped_values, grouped_images_index = _group_images_by_shape(
-        images, *paired_inputs, is_nested=is_nested
-    )
+    # Normalize flat inputs to a single sublist so that both cases share one code path.
+    nested_images = images if is_nested else [images]
+    nested_paired_inputs = [
+        paired_input if is_nested or paired_input is None else [paired_input] for paired_input in paired_inputs
+    ]
 
-    # Stack images with the same shape. Groups holding a single image are unsqueezed instead, as stacking would copy
-    # the image for no reason.
+    # Group images and paired inputs
+    grouped_images = {}
+    paired_inputs_groups = [{} for _ in paired_inputs]
+    positions = {}
+    for sublist_index, sublist in enumerate(nested_images):
+        for image_index, image in enumerate(sublist):
+            position = (sublist_index, image_index)
+            key = position if disable_grouping else image.shape[-2:]
+            group = grouped_images.setdefault(key, [])
+            index_in_group = len(group)
+            positions[position] = (key, index_in_group)
+            group.append(image)
+            for group_paired, inputs in zip(paired_inputs_groups, nested_paired_inputs):
+                if inputs is None:
+                    group_paired[key] = None
+                else:
+                    group_paired.setdefault(key, []).append(inputs[sublist_index][image_index])
+
+    # Stack images sharing the same shape. Groups holding a single image are unsqueezed instead, as stacking would
+    # copy the tensor for no reason.
     grouped_images = {
-        shape: images_list[0].unsqueeze(0) if len(images_list) == 1 else torch.stack(images_list, dim=0)
-        for shape, images_list in grouped_images.items()
+        key: images_group[0].unsqueeze(0) if len(images_group) == 1 else torch.stack(images_group, dim=0)
+        for key, images_group in grouped_images.items()
     }
 
-    return grouped_images, *paired_grouped_values, grouped_images_index
+    return (
+        grouped_images,
+        *paired_inputs_groups,
+        GroupedImagesIndex(
+            positions=positions,
+            sublist_lengths=[len(sublist) for sublist in nested_images],
+            is_nested=is_nested,
+        ),
+    )
 
 
 def reorder_images(
-    processed_images: dict[tuple[int, int], "torch.Tensor"],
-    grouped_images_index: dict[int | tuple[int, int], tuple[tuple[int, int], int]],
-    is_nested: bool = False,
+    processed_images: dict,
+    grouped_images_index: GroupedImagesIndex,
 ) -> Union[list["torch.Tensor"], "torch.Tensor"]:
     """
     Reconstructs images in the original order, preserving the original structure (nested or not).
-    The input structure is either all flat or all nested.
 
     Args:
-        processed_images (dict[tuple[int, int], "torch.Tensor"]):
-            Dictionary mapping shapes to batched processed images.
-        grouped_images_index (dict[Union[int, tuple[int, int]], tuple[tuple[int, int], int]]):
-            Dictionary mapping original indices to (shape, index) tuples.
-        is_nested (bool, *optional*, defaults to False):
-            Whether the images are nested. Cannot be inferred from the input, as some processing functions outputs nested images.
-            even with non nested images, e.g. functions splitting images into patches. We thus can't deduce is_nested from the input.
-
+        processed_images (dict):
+            Dictionary mapping group keys to batched processed images.
+        grouped_images_index (`GroupedImagesIndex`):
+            The index returned by [`group_images_by_shape`] for these images. It carries the structure of the
+            original input.
 
     Returns:
         Union[list["torch.Tensor"], "torch.Tensor"]:
             Images in the original structure.
     """
-    if not is_nested:
-        return [
-            processed_images[grouped_images_index[i][0]][grouped_images_index[i][1]]
-            for i in range(len(grouped_images_index))
-        ]
+    # Positions are stored in the original order, so iterating over them rebuilds the flat sequence of images.
+    images = [processed_images[key][index] for key, index in grouped_images_index.positions.values()]
+    if not grouped_images_index.is_nested:
+        return images
 
-    return _reconstruct_nested_structure(grouped_images_index, processed_images)
+    nested_images = []
+    start = 0
+    for length in grouped_images_index.sublist_lengths:
+        nested_images.append(images[start : start + length])
+        start += length
+    return nested_images

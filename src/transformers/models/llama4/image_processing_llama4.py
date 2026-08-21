@@ -367,7 +367,7 @@ class Llama4ImageProcessor(TorchvisionBackend):
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         grouped_processed_images = {}
         grouped_aspect_ratios = {}
-        for shape, stacked_images in grouped_images.items():
+        for key, stacked_images in grouped_images.items():
             image_size = stacked_images.shape[-2:]
             target_size = get_best_fit(image_size, possible_resolutions, resize_to_max_canvas=resize_to_max_canvas)
             # If target_size requires upscaling, we might want to limit the upscaling to max_upscaling_size
@@ -403,8 +403,8 @@ class Llama4ImageProcessor(TorchvisionBackend):
             )
             # split into tiles
             processed_images = split_to_tiles(processed_images, ratio_h, ratio_w)
-            grouped_processed_images[shape] = processed_images
-            grouped_aspect_ratios[shape] = torch.tensor(
+            grouped_processed_images[key] = processed_images
+            grouped_aspect_ratios[key] = torch.tensor(
                 [[ratio_h, ratio_w]] * stacked_images.shape[0], device=images[0].device
             )
 
@@ -418,7 +418,7 @@ class Llama4ImageProcessor(TorchvisionBackend):
                 global_tiles = self.rescale_and_normalize(
                     global_tiles, do_rescale, rescale_factor, do_normalize, image_mean, image_std
                 )
-                grouped_processed_images[shape] = torch.cat([processed_images, global_tiles.unsqueeze(1)], dim=1)
+                grouped_processed_images[key] = torch.cat([processed_images, global_tiles.unsqueeze(1)], dim=1)
         processed_images = reorder_images(grouped_processed_images, grouped_images_index)
         aspect_ratios = reorder_images(grouped_aspect_ratios, grouped_images_index)
 

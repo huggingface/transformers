@@ -221,7 +221,7 @@ class Kosmos2_5ImageProcessor(TorchvisionBackend):
         # Group images by size for batched resizing
         processed_image_patches_grouped = {}
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
-        for shape, stacked_images in grouped_images.items():
+        for key, stacked_images in grouped_images.items():
             if do_normalize:
                 stacked_images = self.normalize(stacked_images, **kwargs)
 
@@ -237,8 +237,8 @@ class Kosmos2_5ImageProcessor(TorchvisionBackend):
             cols.extend([n_columns] * n_of_stacked_images)
             # create attention mask
             attention_masks.extend(list((patches.sum(axis=-1) != 0).to(dtype=torch.float32)))
-            processed_image_patches_grouped[shape] = list(patches)
-            for x in processed_image_patches_grouped[shape]:
+            processed_image_patches_grouped[key] = list(patches)
+            for x in processed_image_patches_grouped[key]:
                 current_index += 1
                 obj_idx_to_new_index_map[id(x)] = current_index
 

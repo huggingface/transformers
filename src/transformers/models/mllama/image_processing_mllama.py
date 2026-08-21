@@ -495,7 +495,7 @@ class MllamaImageProcessor(TorchvisionBackend):
         )
         split_images_grouped = {}
         aspect_ratio_grouped = {}
-        for shape, stacked_images in grouped_images.items():
+        for key, stacked_images in grouped_images.items():
             stacked_images, aspect_ratio = self.resize(
                 image=stacked_images, size=size, resample=resample, max_image_tiles=max_image_tiles
             )
@@ -505,7 +505,7 @@ class MllamaImageProcessor(TorchvisionBackend):
                 aspect_ratio=aspect_ratio,
             )
             num_tiles_height, num_tiles_width = aspect_ratio
-            aspect_ratio_grouped[shape] = [aspect_ratio] * len(stacked_images)
+            aspect_ratio_grouped[key] = [aspect_ratio] * len(stacked_images)
             # same aspect ratio for all images in the batch
             split_images = split_to_tiles(stacked_images, num_tiles_height, num_tiles_width)
 
@@ -513,10 +513,10 @@ class MllamaImageProcessor(TorchvisionBackend):
             split_images = self.rescale_and_normalize(
                 split_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
-            split_images_grouped[shape] = split_images
+            split_images_grouped[key] = split_images
 
-        split_images = reorder_images(split_images_grouped, grouped_images_index, is_nested=True)
-        aspect_ratios = reorder_images(aspect_ratio_grouped, grouped_images_index, is_nested=True)
+        split_images = reorder_images(split_images_grouped, grouped_images_index)
+        aspect_ratios = reorder_images(aspect_ratio_grouped, grouped_images_index)
 
         split_images, num_tiles = pad_batches_and_tiles(split_images, max_image_tiles)
 

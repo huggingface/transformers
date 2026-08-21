@@ -225,11 +225,11 @@ class Idefics2ImageProcessor(TorchvisionBackend):
             images, disable_grouping=disable_grouping, is_nested=True
         )
         split_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
+        for key, stacked_images in grouped_images.items():
             if do_image_splitting:
                 stacked_images = self.split_images(stacked_images)
-            split_images_grouped[shape] = stacked_images
-        split_images = reorder_images(split_images_grouped, grouped_images_index, is_nested=True)
+            split_images_grouped[key] = stacked_images
+        split_images = reorder_images(split_images_grouped, grouped_images_index)
         if do_image_splitting:
             for i, group_images in enumerate(split_images):
                 split_images[i] = [image for sublist in group_images for image in sublist]
@@ -238,22 +238,22 @@ class Idefics2ImageProcessor(TorchvisionBackend):
             split_images, disable_grouping=disable_grouping, is_nested=True
         )
         resized_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
+        for key, stacked_images in grouped_images.items():
             if do_resize:
                 stacked_images = self.resize(stacked_images, size, resample=resample)
-            resized_images_grouped[shape] = stacked_images
-        resized_images = reorder_images(resized_images_grouped, grouped_images_index, is_nested=True)
+            resized_images_grouped[key] = stacked_images
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
         grouped_images, grouped_images_index = group_images_by_shape(
             resized_images, disable_grouping=disable_grouping, is_nested=True
         )
         processed_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
+        for key, stacked_images in grouped_images.items():
             stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
-            processed_images_grouped[shape] = stacked_images
-        processed_images = reorder_images(processed_images_grouped, grouped_images_index, is_nested=True)
+            processed_images_grouped[key] = stacked_images
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
 
         if do_pad:
             max_num_images = max(len(images_) for images_ in processed_images)

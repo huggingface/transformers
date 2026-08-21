@@ -162,34 +162,34 @@ class PPOCRV5ServerDetImageProcessor(TorchvisionBackend):
         # Group images by their original spatial shape to enable batched resizing (optimization for efficiency)
         # [Key Change] Unlike the original implementation, we now track target shapes for each original shape group
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
-        # Store resized image batches mapped to their original shape keys
+        # Store resized image batches mapped to their group keys
         resized_images_grouped = {}
-        # [Key Change] Core addition: Mapping from original image shape to target resize shape
-        # This dict ensures consistent target shape handling across all subsequent operations (resize/processing)
-        target_shape_per_shape = {}
-        for shape, stacked_images in grouped_images.items():
+        # [Key Change] Core addition: the target resize shape of every group, spread back over its images below.
+        # This ensures consistent target shape handling across all subsequent operations (resize/processing)
+        target_shapes_grouped = {}
+        for key, stacked_images in grouped_images.items():
             if do_resize:
                 resize_size, target_shape = self.get_image_size(
                     stacked_images[0], limit_side_len, limit_type, max_side_limit
                 )
-                target_shape_per_shape[shape] = target_shape
+                target_shapes_grouped[key] = [target_shape] * len(stacked_images)
                 stacked_images = self.resize(image=stacked_images.float(), size=resize_size, resample=resample)
-            resized_images_grouped[shape] = stacked_images
+            resized_images_grouped[key] = stacked_images
 
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
         if do_resize:
-            target_sizes = [target_shape_per_shape[grouped_images_index[i][0]] for i in range(len(images))]
+            target_sizes = reorder_images(target_shapes_grouped, grouped_images_index)
 
         # Group images by size for further processing
         grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
+        for key, stacked_images in grouped_images.items():
             stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
             # BGR to RGB conversion
             stacked_images = stacked_images[:, [2, 1, 0], :, :]
-            processed_images_grouped[shape] = stacked_images
+            processed_images_grouped[key] = stacked_images
 
         pixel_values = reorder_images(processed_images_grouped, grouped_images_index)
 

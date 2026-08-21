@@ -393,11 +393,11 @@ class SmolVLMImageProcessor(TorchvisionBackend):
             images, is_nested=True, disable_grouping=disable_grouping
         )
         resized_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
+        for key, stacked_images in grouped_images.items():
             if do_resize:
                 stacked_images = self.resize(stacked_images, size, resample=resample)
-            resized_images_grouped[shape] = stacked_images
-        resized_images = reorder_images(resized_images_grouped, grouped_images_index, is_nested=True)
+            resized_images_grouped[key] = stacked_images
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
         grouped_images, grouped_images_index = group_images_by_shape(
             resized_images, is_nested=True, disable_grouping=disable_grouping
@@ -406,32 +406,32 @@ class SmolVLMImageProcessor(TorchvisionBackend):
         if do_image_splitting:
             rows_grouped = {}
             cols_grouped = {}
-            for shape, stacked_images in grouped_images.items():
+            for key, stacked_images in grouped_images.items():
                 stacked_images = self.resize_for_vision_encoder(
                     stacked_images, max_image_size["longest_edge"], resample=resample
                 )
                 stacked_images, rows, cols = self.split_images(
                     stacked_images, max_image_size=max_image_size, resample=resample
                 )
-                split_images_grouped[shape] = stacked_images
-                rows_grouped[shape] = rows
-                cols_grouped[shape] = cols
-            processed_images = reorder_images(split_images_grouped, grouped_images_index, is_nested=True)
-            rows = reorder_images(rows_grouped, grouped_images_index, is_nested=True)
-            cols = reorder_images(cols_grouped, grouped_images_index, is_nested=True)
+                split_images_grouped[key] = stacked_images
+                rows_grouped[key] = rows
+                cols_grouped[key] = cols
+            processed_images = reorder_images(split_images_grouped, grouped_images_index)
+            rows = reorder_images(rows_grouped, grouped_images_index)
+            cols = reorder_images(cols_grouped, grouped_images_index)
             # flattenened the doubly nested list to a nested list
             for i, group_images in enumerate(processed_images):
                 processed_images[i] = [image for sublist in group_images for image in sublist]
         else:
-            for shape, stacked_images in grouped_images.items():
+            for key, stacked_images in grouped_images.items():
                 # We square the images to max_image_size
                 stacked_images = self.resize(
                     image=stacked_images,
                     size=SizeDict(height=max_image_size["longest_edge"], width=max_image_size["longest_edge"]),
                     resample=resample,
                 )
-                split_images_grouped[shape] = stacked_images
-            processed_images = reorder_images(split_images_grouped, grouped_images_index, is_nested=True)
+                split_images_grouped[key] = stacked_images
+            processed_images = reorder_images(split_images_grouped, grouped_images_index)
             rows = [[0] * len(images) for images in processed_images]
             cols = [[0] * len(images) for images in processed_images]
         # Group images by size for further processing
@@ -440,13 +440,13 @@ class SmolVLMImageProcessor(TorchvisionBackend):
             processed_images, is_nested=True, disable_grouping=disable_grouping
         )
         processed_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
+        for key, stacked_images in grouped_images.items():
             # Fused rescale and normalize
             stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
-            processed_images_grouped[shape] = stacked_images
-        processed_images = reorder_images(processed_images_grouped, grouped_images_index, is_nested=True)
+            processed_images_grouped[key] = stacked_images
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         if do_pad:
             # Get max images per batch
             max_num_images = max(len(images_) for images_ in processed_images)
