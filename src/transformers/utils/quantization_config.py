@@ -53,6 +53,7 @@ class QuantizationMethod(str, Enum):
     COMPRESSED_TENSORS = "compressed-tensors"
     FBGEMM_FP8 = "fbgemm_fp8"
     TORCHAO = "torchao"
+    GGUF = "gguf"
     BITNET = "bitnet"
     SPQR = "spqr"
     FP8 = "fp8"
@@ -2062,7 +2063,6 @@ class GemmaQuantizationConfig(QuantizationConfigMixin):
         self.module_quant_configs = module_quant_configs
         self.modules_to_not_convert = modules_to_not_convert
 
-
 class NVFP4Config(QuantizationConfigMixin):
     """Configuration for on-the-fly NVFP4 weight quantization.
 
@@ -2079,4 +2079,21 @@ class NVFP4Config(QuantizationConfigMixin):
         if kwargs:
             logger.info(
                 f"Unused kwargs: {list(kwargs.keys())}. These kwargs are not used in {self.__class__.__name__}."
-            )
+            )    
+@dataclass
+class GgufConfig(QuantizationConfigMixin):
+    """Load a quantized GGUF checkpoint with its weights left in GGUF blocks.
+
+    Args:
+        gguf_file (`str`): path to the `.gguf` file holding the weights.
+        dequantize (`bool`, *optional*, defaults to `False`):
+            Unpack every weight at load time into a plain dense model instead. Always correct, but
+            gives up the memory saving; this is also the automatic fallback when no matmul kernel is
+            available for the file's quantization types.
+    """
+
+    def __init__(self, gguf_file: str, dequantize: bool = False, **kwargs):
+        self.quant_method = QuantizationMethod.GGUF
+        self.gguf_file = gguf_file
+        self.dequantize = dequantize
+

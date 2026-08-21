@@ -17,6 +17,7 @@ and simplicity/ease of use.
 """
 
 import copy
+import functools
 import inspect
 import os
 import re
@@ -932,6 +933,11 @@ def force_accelerate_hooks(child_module_names: str | list[str]) -> Callable:
         child_module_names = [child_module_names]
 
     def decorator(forward_func: Callable) -> Callable:
+        # `wraps` so the wrapper does not hide the signature it wraps: `inspect.signature` resolves through
+        # `__wrapped__`, and these forwards are introspected -- `kernels` validates a replacement layer
+        # against the host's parameter list, and without this reads `(self, *args, **kwargs)`, which no
+        # layer written against the real signature can match.
+        @functools.wraps(forward_func)
         def wrapped(self, *args, **kwargs):
             hooked_modules = []
             for child_module_name in child_module_names:
