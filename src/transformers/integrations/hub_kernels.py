@@ -810,6 +810,9 @@ def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, interna
         try:
             module = importlib.import_module(package)
             implementation = resolve_internal_import(module, full_path)
+            if implementation is None and internal_path is not None:
+                nested_module = importlib.import_module(f"{package}.{internal_path}")
+                implementation = getattr(nested_module, func_name, None)
         except Exception:
             implementation = torch_function
         finally:

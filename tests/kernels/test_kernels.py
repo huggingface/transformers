@@ -31,6 +31,7 @@ from transformers.integrations.hub_kernels import (
     is_kernel,
     lazy_load_kernel,
     load_and_register_attn_kernel,
+    use_kernel_func_from_hub_with_fallback,
 )
 from transformers.masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -46,6 +47,25 @@ from transformers.testing_utils import (
 )
 from transformers.utils.import_utils import is_kernels_available
 from transformers.utils.kernel_config import add_to_mapping_local
+
+
+class TestUseKernelFuncFromHubWithFallback(TestCasePlus):
+    def test_resolves_function_from_nested_optional_module(self):
+        torch_function = lambda: "torch"
+        nested_function = lambda: "nested"
+        nested_module = types.SimpleNamespace(chunk_gated_delta_rule=nested_function)
+        package_module = types.SimpleNamespace(ops=types.SimpleNamespace(gated_delta_rule=nested_module))
+
+        with (
+            patch("transformers.integrations.hub_kernels.importlib.import_module", side_effect=[package_module, nested_module]),
+            patch("transformers.integrations.hub_kernels.resolve_internal_import", return_value=None),
+            patch("transformers.integrations.hub_kernels.use_kernel_forward_from_hub", side_effect=lambda _: lambda fn: fn),
+        ):
+            wrapped = use_kernel_func_from_hub_with_fallback(
+                "chunk_gated_delta_rule", "fla", internal_path="ops.gated_delta_rule"
+            )(torch_function)
+
+        self.assertIs(wrapped, nested_function)
 
 
 if is_kernels_available():
