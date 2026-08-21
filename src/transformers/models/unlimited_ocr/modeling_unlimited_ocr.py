@@ -70,9 +70,10 @@ from .generation_unlimited_ocr import UnlimitedOcrGenerationMixin
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring
 @dataclass
 class UnlimitedOcrModelOutputWithPooling(BaseModelOutputWithPooling):
-    """
+    r"""
     local_last_hidden_state (`torch.FloatTensor` of shape `(total_local_patches, sequence_length, hidden_size)`, *optional*):
         Last hidden state from the vision encoder for local (cropped) patches.
     local_hidden_states (`torch.FloatTensor`, *optional*):
@@ -914,8 +915,9 @@ class UnlimitedOcrVisionEncoder(UnlimitedOcrPreTrainedModel):
         return BaseModelOutput(last_hidden_state=encoder_outputs.last_hidden_state)
 
 
+@auto_docstring(custom_intro="Vision model encoding images first with SAM followed by an additional (CLIP) model.")
 class UnlimitedOcrVisionModel(UnlimitedOcrPreTrainedModel):
-    """Vision model encoding images first with SAM followed by an additional (CLIP) model."""
+    """Vision pipeline: SAM ViT-B (with neck)"""
 
     def __init__(self, config: UnlimitedOcrVisionConfig):
         super().__init__(config)
@@ -1365,7 +1367,7 @@ class UnlimitedOcrDynamicReferenceSlidingWindowLayer(DynamicSlidingWindowLayer):
             return -1
         return self.prefill_length + self.sliding_window
 
-    def set_prefill_length(self, prefill_length: int) -> None:
+    def set_prefill_length(self, prefill_length: int) -> None:  # trf-ignore: TRF033
         """Declare how many leading tokens are prefill states, before they are cached."""
         if self.prefill_length is None:
             self.prefill_length = prefill_length
@@ -1553,7 +1555,7 @@ class UnlimitedOcrStaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
     def get_seq_length(self) -> int:
         return self.prefill_cumulative_length + super().get_seq_length()
 
-    def set_prefill_length(self, prefill_length: int) -> None:
+    def set_prefill_length(self, prefill_length: int) -> None:  # trf-ignore: TRF033
         """Declare how many leading tokens are prefill states, before they are cached."""
         if self.prefill_length is None:
             self.prefill_length = min(prefill_length, self.prefill_max_cache_len)
@@ -1776,12 +1778,8 @@ class UnlimitedOcrTextModel(UnlimitedOcrTextPreTrainedModel):
 
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
+                "reference_sliding_attention": create_reference_sliding_window_causal_mask(**mask_kwargs),
             }
-            # The reference sliding window layers are not always activated depending on the config
-            if "reference_sliding_attention" in self.config.layer_types:
-                causal_mask_mapping["reference_sliding_attention"] = create_reference_sliding_window_causal_mask(
-                    **mask_kwargs
-                )
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
@@ -1818,6 +1816,7 @@ class UnlimitedOcrModel(UnlimitedOcrPreTrainedModel):
 
         self.vision_tower = UnlimitedOcrVisionModel(config.vision_config)
         self.multi_modal_projector = nn.Linear(
+            # trf-ignore: TRF030
             config.vision_config.sam_config.downsample_channels[-1] + config.vision_config.encoder_config.hidden_size,
             config.text_config.hidden_size,
         )

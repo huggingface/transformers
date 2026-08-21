@@ -618,9 +618,8 @@ class UnlimitedOcrVisionEncoder(CLIPVisionModel):
         return BaseModelOutput(last_hidden_state=encoder_outputs.last_hidden_state)
 
 
+@auto_docstring(custom_intro="Vision model encoding images first with SAM followed by an additional (CLIP) model.")
 class UnlimitedOcrVisionModel(DeepseekOcr2VisionModel):
-    """Vision model encoding images first with SAM followed by an additional (CLIP) model."""
-
     def __init__(self, config: UnlimitedOcrVisionConfig):
         super().__init__(config)
         del self.query_768_resolution
@@ -752,7 +751,7 @@ class UnlimitedOcrDynamicReferenceSlidingWindowLayer(DynamicSlidingWindowLayer):
             return -1
         return self.prefill_length + self.sliding_window
 
-    def set_prefill_length(self, prefill_length: int) -> None:
+    def set_prefill_length(self, prefill_length: int) -> None:  # trf-ignore: TRF033
         """Declare how many leading tokens are prefill states, before they are cached."""
         if self.prefill_length is None:
             self.prefill_length = prefill_length
@@ -940,7 +939,7 @@ class UnlimitedOcrStaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
     def get_seq_length(self) -> int:
         return self.prefill_cumulative_length + super().get_seq_length()
 
-    def set_prefill_length(self, prefill_length: int) -> None:
+    def set_prefill_length(self, prefill_length: int) -> None:  # trf-ignore: TRF033
         """Declare how many leading tokens are prefill states, before they are cached."""
         if self.prefill_length is None:
             self.prefill_length = min(prefill_length, self.prefill_max_cache_len)
@@ -1083,12 +1082,8 @@ class UnlimitedOcrTextModel(DeepseekOcr2TextModel):
 
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
+                "reference_sliding_attention": create_reference_sliding_window_causal_mask(**mask_kwargs),
             }
-            # The reference sliding window layers are not always activated depending on the config
-            if "reference_sliding_attention" in self.config.layer_types:
-                causal_mask_mapping["reference_sliding_attention"] = create_reference_sliding_window_causal_mask(
-                    **mask_kwargs
-                )
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
@@ -1117,6 +1112,7 @@ class UnlimitedOcrModel(DeepseekOcr2Model):
     def __init__(self, config: UnlimitedOcrConfig):
         super().__init__(config)
         self.multi_modal_projector = nn.Linear(
+            # trf-ignore: TRF030
             config.vision_config.sam_config.downsample_channels[-1] + config.vision_config.encoder_config.hidden_size,
             config.text_config.hidden_size,
         )
