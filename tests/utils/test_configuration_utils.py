@@ -175,6 +175,23 @@ class ConfigTestUtils(unittest.TestCase):
         config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert-subfolder", subfolder="bert")
         self.assertIsNotNone(config)
 
+    def test_from_pretrained_missing_config_raises(self):
+        # A local directory without a config file must not silently fall back to the default config
+        # of the requested class — it has to raise, pointing at the missing config. Hub ids are out
+        # of scope: AutoConfig already fails on them with its own ValueError.
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            for config_class in (BertConfig, PreTrainedConfig):
+                with self.assertRaises(OSError) as ctx:
+                    config_class.from_pretrained(tmp_dir)
+                self.assertIn("config", str(ctx.exception).lower())
+
+    def test_get_config_dict_missing_config_returns_empty(self):
+        # get_config_dict stays non-raising for callers that probe for a config (e.g. backbone loading);
+        # the failure surfaces in from_pretrained instead.
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config_dict, _ = BertConfig.get_config_dict(tmp_dir)
+            self.assertEqual(config_dict, {})
+
     def test_cached_files_are_used_when_internet_is_down(self):
         # A mock response for an HTTP head request to emulate server down
         response_mock = mock.Mock()
