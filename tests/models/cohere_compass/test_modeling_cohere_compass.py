@@ -177,6 +177,7 @@ class CohereCompassModelTester(VLMModelTester):
         kwargs.setdefault("video_token_id", 8)
         kwargs.setdefault("image_size", 32)
         kwargs.setdefault("patch_size", 16)
+        kwargs.setdefault("num_position_embeddings", 64)
         kwargs.setdefault("num_image_tokens", 1)
         kwargs.setdefault("hidden_act", "silu")
         kwargs.setdefault("depth", 2)
