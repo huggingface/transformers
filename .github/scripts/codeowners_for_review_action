@@ -1,3 +1,11 @@
+# Who reviews what. Read by the `Assign PR Reviewers` workflow, and checked against this tree by
+# `utils/check_reviewers.py`. See the "Reviewer assignment" section of docs/source/en/pr_checks.md.
+#
+# Keep this file outside src/, tests/, docs/ and utils/. The PR CI security gate only lets a PR
+# from a non-collaborator touch those four directories, and that is the whole reason a fork cannot
+# rewrite reviewer routing. Moving this file into one of them — say next to check_reviewers.py in
+# utils/ — would silently hand that away, unless it is also named in the gate's `protected_paths`.
+
 # Top-level rules are matched only if nothing else matches
 * @Rocketknight1 @ArthurZucker # if no one is pinged based on the other rules, he will do the dispatch
 *.md @stevhliu

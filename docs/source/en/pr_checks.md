@@ -81,7 +81,7 @@ The repository consistency check is similar to `make check-repo`, except it stop
 
 ## Reviewer assignment
 
-When a pull request is marked ready for review, the `Assign PR Reviewers` workflow requests up to two reviewers, ranked by how many lines the pull request changes in the files they own. A draft pull request gets no reviewers until it leaves draft.
+When a pull request is marked ready for review, the `Assign PR Reviewers` workflow requests up to two reviewers, ranked by how many lines the pull request changes in the files they own. A draft pull request gets no reviewers until it leaves draft. The workflow itself lives in [huggingface/transformers-ci](https://github.com/huggingface/transformers-ci) and this repository calls it; what stays here is the ownership data it reads.
 
 Ownership is resolved per file, most specific first.
 
@@ -95,6 +95,8 @@ Ownership is resolved per file, most specific first.
 A new model needs no entry anywhere: adding its documentation page to `_toctree.yml`, which the documentation table of contents check already requires, places it in a modality, and the modality table covers it from there.
 
 A review can only be requested from a repository collaborator. The workflow requests each reviewer in a separate call and skips anyone it cannot ask, so an entry naming someone who has left costs one reviewer instead of all of them, and every skip is reported as a warning on the workflow run.
+
+A pull request cannot re-route its own review. `.github/scripts/codeowners_for_review_action` is read from the base branch, never from the pull request's head, and the PR CI security gate blocks a pull request that is not from a collaborator from touching anything outside `src/`, `tests/`, `docs/` and `utils/` — which is why that file lives where it does. The `# Reviewers:` tag is read from the head, since a new model arrives with it, so every login it names still goes through the collaborator check before anyone is asked.
 
 `make check-repository-consistency` runs `utils/check_reviewers.py`, which fails when a model reaches nobody but the catch-all, when a rule matches no file any more, or when the modality table disagrees with the table of contents. Paths outside `src/transformers/models` that have no owner are reported as a note; list them with:
 

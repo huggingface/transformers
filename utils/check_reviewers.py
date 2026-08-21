@@ -16,9 +16,9 @@ Check that every model — and every rule in the reviewer file — can still rea
 
 The `Assign PR Reviewers` workflow (`.github/workflows/assign-reviewers.yml`) resolves reviewers from
 `.github/scripts/codeowners_for_review_action`, using the shared resolver in
-`.github/scripts/codeowners_resolver.py`. Both failure modes it has had are silent: a rule whose
-pattern matches nothing looks fine forever, and a model nobody claims quietly falls to the `*`
-catch-all. This check makes both loud.
+`transformersci.reviewers` (huggingface/transformers-ci, installed with the `quality` extra). Both
+failure modes it has had are silent: a rule whose pattern matches nothing looks fine forever, and a
+model nobody claims quietly falls to the `*` catch-all. This check makes both loud.
 
 It reports:
   - a model directory that only the `*` catch-all claims;
@@ -40,7 +40,6 @@ python utils/check_reviewers.py --strict   # also fail on non-model paths with n
 """
 
 import argparse
-import importlib.util
 import re
 import subprocess
 import sys
@@ -53,7 +52,6 @@ CHECKER_CONFIG = {
     # Also reads docs/source/en/_toctree.yml (modalities) and model file headers (`# Reviewers:`).
     "cache_globs": [
         ".github/scripts/codeowners_for_review_action",
-        ".github/scripts/codeowners_resolver.py",
         "docs/source/en/_toctree.yml",
         "src/transformers/models/*/mod*.py",
     ],
@@ -62,7 +60,6 @@ CHECKER_CONFIG = {
 }
 
 REPO_ROOT = Path(__file__).parent.parent
-RESOLVER_PATH = REPO_ROOT / ".github" / "scripts" / "codeowners_resolver.py"
 
 # Paths that carry no code to review.
 IGNORED_NAMES = {"__pycache__", ".DS_Store", "py.typed"}
@@ -90,9 +87,15 @@ A rule with a pattern and no owner marks a path as deliberately unowned, e.g. `u
 
 
 def load_resolver():
-    spec = importlib.util.spec_from_file_location("codeowners_resolver", RESOLVER_PATH)
-    resolver = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(resolver)
+    # The resolver is shared with the reviewer-assignment workflow, which runs from
+    # huggingface/transformers-ci; only the codeowners file it reads lives in this repo.
+    try:
+        from transformersci.reviewers import resolver
+    except ImportError as e:
+        raise ImportError(
+            "The reviewer check needs the shared resolver from huggingface/transformers-ci. "
+            "Install it with `pip install -e '.[quality]'`."
+        ) from e
     return resolver
 
 

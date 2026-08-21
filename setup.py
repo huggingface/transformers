@@ -123,6 +123,9 @@ _deps = [
     "rjieba",
     "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
     "ruff==0.14.10",
+    # `utils/check_reviewers.py` shares its resolver with the reviewer-assignment workflow, which
+    # runs from huggingface/transformers-ci; only the codeowners file it reads lives in this repo.
+    "transformers-ci[reviewers] @ git+https://github.com/huggingface/transformers-ci@main",
     # When bumping `transformers-mlinter`, sync repo-local rule overrides from
     # `utils/rules.toml` back into the released package.
     "transformers-mlinter==0.1.4",
@@ -182,7 +185,16 @@ if PYTHON_MINOR_VERSION < 13:
 extras["video"] = deps_list("av")
 extras["timm"] = deps_list("timm")
 extras["quality"] = deps_list(
-    "datasets", "ruff", "GitPython", "urllib3", "libcst", "rich", "ty", "tomli", "transformers-mlinter"
+    "datasets",
+    "ruff",
+    "GitPython",
+    "urllib3",
+    "libcst",
+    "rich",
+    "ty",
+    "tomli",
+    "transformers-ci[reviewers]",
+    "transformers-mlinter",
 )
 extras["docs"] = deps_list("hf-doc-builder")
 extras["kernels"] = deps_list("kernels")

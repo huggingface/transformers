@@ -55,6 +55,7 @@ deps = {
     "rjieba": "rjieba",
     "rouge-score": "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
     "ruff": "ruff==0.14.10",
+    "transformers-ci[reviewers]": "transformers-ci[reviewers] @ git+https://github.com/huggingface/transformers-ci@main",
     "transformers-mlinter": "transformers-mlinter==0.1.4",
     "ty": "ty==0.0.20",
     "sacrebleu": "sacrebleu>=1.4.12,<2.0.0",
