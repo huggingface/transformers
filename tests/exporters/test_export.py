@@ -36,6 +36,7 @@ from transformers.exporters.utils import (
     module_dtype,
 )
 from transformers.testing_utils import (
+    is_torch_greater_or_equal,
     require_executorch,
     require_onnxruntime,
     require_onnxscript,
@@ -305,6 +306,54 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "MMGroundingDinoForObjectDetection": "Same `bbox_embed` shared-head `KeyError` as `GroundingDinoModel`.",
     },
 }
+
+# torch >= 2.13.0 introduced two regressions in dynamo ONNX export that affect models using
+# ``scalar - int_tensor`` or ``tensor * float_scalar`` patterns. All affected model classes are
+# skipped until the upstream fix lands.
+#   pytorch/pytorch#194381 — aten.sub type-promotion failure (step 2/3)
+#   pytorch/pytorch#194382 — aten.mul.Scalar missing ONNX decomposition (step 3/3)
+if is_torch_greater_or_equal("2.13"):
+    _r194381 = "torch >= 2.13 aten.sub type-promotion regression (pytorch/pytorch#194381)"
+    _r194382 = "torch >= 2.13 aten.mul.Scalar missing ONNX decomposition (pytorch/pytorch#194382)"
+    EXPORT_SKIPS.setdefault("onnx", {}).update(
+        {
+            "BigBirdModel": _r194381,
+            "BigBirdForPreTraining": _r194381,
+            "BigBirdForMaskedLM": _r194381,
+            "BigBirdForCausalLM": _r194381,
+            "ProphetNetModel": _r194381,
+            "ProphetNetForConditionalGeneration": _r194381,
+            "ProphetNetDecoder": _r194381,
+            "ProphetNetForCausalLM": _r194381,
+            "ProphetNetEncoder": _r194381,
+            "BrosModel": _r194382,
+            "BrosForTokenClassification": _r194382,
+            "BrosSpadeEEForTokenClassification": _r194382,
+            "BrosSpadeELForTokenClassification": _r194382,
+            "DeepseekOcr2Model": _r194382,
+            "DeepseekOcr2ForConditionalGeneration": _r194382,
+            "EfficientLoFTRModel": _r194382,
+            "EfficientLoFTRForKeypointMatching": _r194382,
+            "GotOcr2Model": _r194382,
+            "GotOcr2ForConditionalGeneration": _r194382,
+            "GroundingDinoModel": _r194382,
+            "GroundingDinoForObjectDetection": _r194382,
+            "MMGroundingDinoModel": _r194382,
+            "MMGroundingDinoForObjectDetection": _r194382,
+            "PPFormulaNetForConditionalGeneration": _r194382,
+            "SamModel": _r194382,
+            "SamVisionModel": _r194382,
+            "SamHQModel": _r194382,
+            "SamHQVisionModel": _r194382,
+            "SegGptModel": _r194382,
+            "SegGptForImageSegmentation": _r194382,
+            "SLANeXtForTableRecognition": _r194382,
+            "SplinterModel": _r194382,
+            "SplinterForQuestionAnswering": _r194382,
+            "SplinterForPreTraining": _r194382,
+            "Xcodec2Model": _r194382,
+        }
+    )
 
 
 # ──────────────────────────── ONNX optimization toggles ────────────────────────────
