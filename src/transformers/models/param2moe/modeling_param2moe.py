@@ -392,9 +392,9 @@ class Param2MoEDecoderLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
 
         self.self_attn = Param2MoEAttention(config=config, layer_idx=layer_idx)
-        # CODEPATH: bharatgenai/Param2-17B-A2.4B-Thinking sets first_k_dense_replace=1,
-        # so layer 0 is a dense Param2MoEMLP and all subsequent layers use the MoE block.
         self.mlp = (
+            # CODEPATH: bharatgenai/Param2-17B-A2.4B-Thinking sets first_k_dense_replace=1,
+            # so layer 0 is a dense Param2MoEMLP and all subsequent layers use the MoE block.
             Param2MoESparseMoeBlock(config) if layer_idx >= config.first_k_dense_replace else Param2MoEMLP(config)
         )
 
