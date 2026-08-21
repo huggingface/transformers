@@ -1,5 +1,4 @@
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
-# TODO: fix stale expected values for A10G (sm_86) in test_table_detection
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -548,6 +547,7 @@ class TableTransformerModelIntegrationTests(unittest.TestCase):
 
         expected_logits_data = Expectations({
             ("cuda", None): [[-6.7329, -16.9590, 6.7447], [-8.0038, -22.3071, 6.9288], [-7.2445, -20.9855, 7.3465]],
+            ("cuda", 8): [[-6.7667, -16.9915, 6.7737], [-8.0045, -22.2673, 6.9491], [-7.2834, -21.0317, 7.3784]],
             ("rocm", (9, 4)): [[-6.7668, -16.9917, 6.7738], [-8.0046, -22.2668, 6.9491], [-7.2834, -21.0321, 7.3785]],
         }).get_expectation()  # fmt: skip
 
@@ -556,6 +556,7 @@ class TableTransformerModelIntegrationTests(unittest.TestCase):
 
         expected_boxes_data = Expectations({
             ("cuda", None): [[0.4868, 0.1764, 0.6729], [0.6674, 0.4621, 0.3864], [0.4720, 0.1757, 0.6362]],
+            ("cuda", 8): [[0.4868, 0.1766, 0.6732], [0.6686, 0.4526, 0.3858], [0.4717, 0.1760, 0.6362]],
             ("rocm", (9, 4)): [[0.4868, 0.1766, 0.6732], [0.6686, 0.4526, 0.3859], [0.4717, 0.1760, 0.6362]],
         }).get_expectation()  # fmt: skip
 
