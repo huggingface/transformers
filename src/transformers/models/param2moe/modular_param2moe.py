@@ -13,33 +13,28 @@
 # limitations under the License.
 
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
-from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils import auto_docstring, logging
 from ...utils.output_capturing import OutputRecorder
-from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3NaiveMoe
+from ..deepseek_v3.modeling_deepseek_v3 import (
+    DeepseekV3Experts,
+    DeepseekV3MoE,
+    DeepseekV3TopkRouter,
+)
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
     LlamaPreTrainedModel,
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
 )
-from ..mixtral.modeling_mixtral import (
-    MixtralForCausalLM,
-    MixtralModel,
-    load_balancing_loss_func,
-)
+from ..mixtral.modeling_mixtral import MixtralForCausalLM, MixtralModel
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
-from ..qwen3.modeling_qwen3 import Qwen3Attention
+from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeAttention
 
 
 logger = logging.get_logger(__name__)
@@ -163,102 +158,6 @@ class Param2MoEConfig(PreTrainedConfig):
             )
 
 
-class Param2MoENaiveMoe(DeepseekV3NaiveMoe):
-    pass
-
-
-class Param2MoETopkRouter(nn.Module):
-    """
-    DeepseekV3-style grouped top-k router for Param2MoE.
-
-    Returns a 3-tuple ``(router_logits, router_scores, router_indices)`` so that
-    ``RouterParallel._prepare_output_fn`` can correctly intercept and remap
-    expert indices to local EP ranks during Expert Parallel inference.
-
-    ``self.num_experts`` is set explicitly so that ``RouterParallel`` can read it
-    via ``getattr(mod, "num_experts", None)`` without relying on config lookup.
-    """
-
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.n_routed_experts = config.n_routed_experts
-        self.num_experts = config.n_routed_experts  # required by RouterParallel for EP
-        self.top_k = config.num_experts_per_tok
-        self.n_group = config.n_group
-        self.topk_group = config.topk_group
-        self.norm_topk_prob = config.norm_topk_prob
-        self.routed_scaling_factor = config.routed_scaling_factor
-        self.weight = nn.Parameter(torch.empty((self.n_routed_experts, config.hidden_size)))
-        self.register_buffer("e_score_correction_bias", torch.zeros(self.n_routed_experts))
-
-    def forward(self, hidden_states):
-        hidden_states = hidden_states.view(-1, self.config.hidden_size)
-        # raw logits: [num_tokens, n_routed_experts], float32 for numerical stability
-        router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
-
-        # Grouped top-k routing (DeepseekV3-style with correction bias)
-        router_scores = router_logits.sigmoid()
-        router_logits_for_choice = router_scores + self.e_score_correction_bias
-        group_scores = (
-            router_logits_for_choice.view(-1, self.n_group, self.n_routed_experts // self.n_group)
-            .topk(2, dim=-1)[0]
-            .sum(dim=-1)
-        )
-        group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
-        group_mask = torch.zeros_like(group_scores)
-        group_mask.scatter_(1, group_idx, 1)
-        score_mask = (
-            group_mask.unsqueeze(-1)
-            .expand(-1, self.n_group, self.n_routed_experts // self.n_group)
-            .reshape(-1, self.n_routed_experts)
-        )
-        scores_for_choice = router_logits_for_choice.masked_fill(~score_mask.bool(), float("-inf"))
-        router_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
-        router_scores_topk = router_scores.gather(1, router_indices)
-        if self.norm_topk_prob:
-            denominator = router_scores_topk.sum(dim=-1, keepdim=True) + 1e-20
-            router_scores_topk = router_scores_topk / denominator
-        router_scores_topk = router_scores_topk * self.routed_scaling_factor
-
-        # 3-tuple required by RouterParallel._prepare_output_fn for EP dispatch
-        return router_logits, router_scores_topk, router_indices
-
-
-class Param2MoESparseMoeBlock(nn.Module):
-    """
-    Mixed expert module containing shared experts (DeepseekV3-style MoE block).
-
-    Uses ``Param2MoETopkRouter`` which returns ``(logits, scores, indices)``.
-    Under Expert Parallel, ``RouterParallel._prepare_output_fn`` intercepts the
-    gate output and masks non-local expert scores/indices before they reach
-    ``self.experts`` — the forward signature is identical for EP and non-EP paths.
-    """
-
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.experts = Param2MoENaiveMoe(config)
-        self.gate = Param2MoETopkRouter(config)
-        self.shared_experts = Param2MoEMLP(
-            config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
-        )
-
-    def forward(self, hidden_states):
-        residuals = hidden_states
-        orig_shape = hidden_states.shape
-        hidden_states_flat = hidden_states.view(-1, hidden_states.shape[-1])
-
-        # gate returns (router_logits, router_scores, router_indices).
-        # Under EP, RouterParallel remaps indices to local range before this
-        # unpacking — no special-casing needed here.
-        _, router_scores, router_indices = self.gate(hidden_states_flat)
-
-        hidden_states = self.experts(hidden_states_flat, router_indices, router_scores).view(*orig_shape)
-        hidden_states = hidden_states + self.shared_experts(residuals)
-        return hidden_states
-
-
 class Param2MoEMLP(Qwen2MoeMLP):
     pass
 
@@ -271,11 +170,20 @@ class Param2MoERotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 
-class Param2MoEAttention(Qwen3Attention):
-    def __init__(self, config: Param2MoEConfig, layer_idx: int):
-        super().__init__(config, layer_idx)
-        del self.layer_type
-        self.sliding_window = getattr(config, "sliding_window", None)
+class Param2MoEExperts(DeepseekV3Experts):
+    pass
+
+
+class Param2MoETopkRouter(DeepseekV3TopkRouter):
+    pass
+
+
+class Param2MoESparseMoeBlock(DeepseekV3MoE):
+    pass
+
+
+class Param2MoEAttention(Qwen3MoeAttention):
+    pass
 
 
 class Param2MoEDecoderLayer(LlamaDecoderLayer):
@@ -292,17 +200,6 @@ class Param2MoEDecoderLayer(LlamaDecoderLayer):
 
 
 class Param2MoEPreTrainedModel(LlamaPreTrainedModel):
-    config: Param2MoEConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["Param2MoEDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
-    _can_compile_fullgraph = True
-    _supports_attention_backend = True
-
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
 
     _can_record_outputs = {
@@ -315,7 +212,7 @@ class Param2MoEPreTrainedModel(LlamaPreTrainedModel):
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         std = self.config.initializer_range
-        if isinstance(module, Param2MoENaiveMoe):
+        if isinstance(module, Param2MoEExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=std)
             init.normal_(module.down_proj, mean=0.0, std=std)
         elif isinstance(module, Param2MoETopkRouter):
@@ -328,97 +225,7 @@ class Param2MoEModel(MixtralModel):
 
 
 class Param2MoEForCausalLM(MixtralForCausalLM):
-    def __init__(self, config):
-        super().__init__(config)
-        self.model = Param2MoEModel(config)
-        self.n_routed_experts = config.n_routed_experts
-
-    def forward(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        labels: torch.LongTensor | None = None,
-        use_cache: bool | None = None,
-        output_router_logits: bool | None = None,
-        logits_to_keep: int | torch.Tensor = 0,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> MoeCausalLMOutputWithPast:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-        output_router_logits (`bool`, *optional*):
-            Whether to return raw router logits from every MoE layer.
-            Required for computing the auxiliary load-balancing loss during training.
-            Defaults to `config.output_router_logits`.
-
-        Example:
-
-        ```python
-        >>> from transformers import AutoTokenizer, Param2MoEForCausalLM
-
-        >>> model = Param2MoEForCausalLM.from_pretrained("bharatgenai/Param2-17B-A2.4B-Thinking")
-        >>> tokenizer = AutoTokenizer.from_pretrained("bharatgenai/Param2-17B-A2.4B-Thinking")
-
-        >>> prompt = "Hey, are you conscious? Can you talk to me?"
-        >>> inputs = tokenizer(prompt, return_tensors="pt")
-
-        >>> # Generate
-        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
-        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
-        ```"""
-
-        output_router_logits = (
-            output_router_logits if output_router_logits is not None else self.config.output_router_logits
-        )
-
-        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
-        outputs: MoeModelOutputWithPast = self.model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            output_router_logits=output_router_logits,
-            **kwargs,
-        )
-
-        hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
-
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
-
-        aux_loss = None
-        if output_router_logits:
-            aux_loss = load_balancing_loss_func(
-                outputs.router_logits,
-                self.n_routed_experts,
-                self.num_experts_per_tok,
-                attention_mask,
-            )
-            if labels is not None:
-                loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
-
-        return MoeCausalLMOutputWithPast(
-            loss=loss,
-            aux_loss=aux_loss,
-            logits=logits,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            router_logits=outputs.router_logits,
-        )
+    pass
 
 
 __all__ = [

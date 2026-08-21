@@ -16,7 +16,7 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-07-17.*
+*This model was contributed to Hugging Face Transformers on 2026-08-21.*
 
 # Param2MoE
 
@@ -34,6 +34,16 @@ Tips:
 - **Custom code**: Pass `trust_remote_code=True` when loading with `AutoModelForCausalLM`.
 - **Decoding**: Set `skip_special_tokens=False` to preserve `<think>...</think>` reasoning tags in Thinking checkpoint outputs. Use `do_sample=False` for deterministic/evaluation runs.
 - **Safety**: The model has not undergone RLHF or safety alignment — fine-tune and evaluate before production use.
+
+## Architecture
+
+Param2MoE's modular implementation is composed almost entirely of existing building blocks, with only config-level differences:
+
+- **MoE block, router, and experts** are inherited unchanged from **DeepSeek-V3** (`DeepseekV3MoE`, `DeepseekV3TopkRouter`, `DeepseekV3Experts`). This gives Param2MoE the same sigmoid-scored, grouped top-k routing with an expert-bias correction term and shared experts added on top of the routed output. The only differences from DeepSeek-V3 are in the config values: Param2MoE routes to 6 of 64 experts per token (vs. DeepSeek-V3's 8 of 256) with `n_group=1` (i.e. no grouping restricts which experts can be chosen — DeepSeek-V3 uses `n_group=8`/`topk_group=4`), and uses 2 shared experts (vs. DeepSeek-V3's 1).
+- **Attention** is inherited unchanged from **Qwen3-MoE** (`Qwen3MoeAttention`), not from DeepSeek-V3. This means Param2MoE uses standard multi-head attention with per-head QK RMSNorm (`q_norm`/`k_norm`), rather than DeepSeek-V3's Multi-head Latent Attention (MLA) with its low-rank Q/KV projections. There is no `q_lora_rank`/`kv_lora_rank` in `Param2MoEConfig` because of this.
+- **Decoder layer, RMSNorm, rotary embedding, dense MLP, and causal-LM wrapper** follow the standard **Llama/Mixtral** pattern used across the MoE model family (`LlamaDecoderLayer`, `LlamaRMSNorm`, `LlamaRotaryEmbedding`, `MixtralForCausalLM`, `MixtralModel`), the same as Qwen3-MoE and DeepSeek-V3 itself.
+
+In short: Param2MoE = DeepSeek-V3's MoE/routing + Qwen3-MoE's attention, glued together with the shared Llama/Mixtral scaffolding, at a smaller scale (17B total / 2.4B active).
 
 ## Usage examples
 
