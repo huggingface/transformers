@@ -81,6 +81,7 @@ class KimiLinearConfig(PreTrainedConfig):
         "moe_renormalize": "norm_topk_prob",
         "num_expert_group": "n_group",
         "num_experts": "n_routed_experts",
+        "num_experts_per_token": "num_experts_per_tok",
         "num_mtp_layers": "num_nextn_predict_layers",
     }
 
@@ -91,7 +92,7 @@ class KimiLinearConfig(PreTrainedConfig):
     num_hidden_layers: int = 27
     num_attention_heads: int = 32
     num_key_value_heads: int | None = 32
-    n_shared_experts: int = 1  # TODO: should this be renamed to num_shared_experts?
+    n_shared_experts: int = 1
     n_routed_experts: int = 256
     routed_scaling_factor: float = 2.446
     kv_lora_rank: int = 512
@@ -99,7 +100,7 @@ class KimiLinearConfig(PreTrainedConfig):
     qk_rope_head_dim: int = 64
     v_head_dim: int | None = 128
     qk_nope_head_dim: int = 128
-    n_group: int = 8
+    n_group: int = 1
     topk_group: int | None = 1
     num_experts_per_tok: int | None = 8
     first_k_dense_replace: int | None = 1
@@ -132,6 +133,12 @@ class KimiLinearConfig(PreTrainedConfig):
     linear_conv_kernel_dim: int = 4
 
     def __post_init__(self, **kwargs):
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
+
+        self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
+        self.head_dim = self.qk_rope_head_dim
+        super().__post_init__(**kwargs)
         # Checkpoint stores linear attention attributes in a config sub-dict: if it's there, extract them
         linear_attn_config = kwargs.pop("linear_attn_config", {})
         self.linear_key_head_dim = linear_attn_config.get("head_dim", self.linear_key_head_dim)
@@ -142,7 +149,7 @@ class KimiLinearConfig(PreTrainedConfig):
         self.linear_num_value_heads = self.linear_num_key_heads
 
         # For layer types, the precedence is: explcit `layer_types` > checkpoint config > default
-        if self.layer_types is None:
+        if self.layer_types is not None:
             pass  # nothing to do here
         elif "full_attn_layers" in linear_attn_config and "kda_layers" in linear_attn_config:
             self.layer_types = [None] * self.num_hidden_layers
@@ -161,10 +168,9 @@ class KimiLinearConfig(PreTrainedConfig):
                 "full_attention" if i and i % 4 == 0 else "kda_attention" for i in range(self.num_hidden_layers)
             ]
 
-        # By default, only full attention layers use rotary embeddings
+        # KDA layers never use rotary embeddings; full-attention (MLA) layers only do when `mla_use_nope` is False
         if self.rope_parameters is None:
-            rope_scaling = kwargs.pop("rope_scaling", None)
             rope_theta = kwargs.pop("rope_theta", 10000.0)
-            full_attention_rope = {"rope_type": "?", "rope_scaling": rope_scaling, "rope_theta": rope_theta}
-            mla_rope = {} if kwargs.pop("mla_use_nope", True) else dict(full_attention_rope.items())
-            self.rope_parameters = {"full_attention": full_attention_rope, "kda_attention": mla_rope}
+            mla_use_nope = kwargs.pop("mla_use_nope", True)
+            mla_nope = {"rope_type": "default", "rope_theta": rope_theta}
+            self.rope_parameters = {"full_attention": None if mla_use_nope else mla_nope, "kda_attention": None}
