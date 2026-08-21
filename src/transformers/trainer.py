@@ -745,7 +745,16 @@ class Trainer:
                 )
             args["parallelism_config"] = self.args.parallelism_config
 
-        if getattr(self.model, "tp_size", None) is not None and self.model.tp_size > 1:
+        model_fsdp_size = getattr(self.model, "fsdp_size", None) or 1
+        if model_fsdp_size > 1:
+            # 2-D mesh: accelerate has to know about both dimensions or it will try to wrap the
+            # already-sharded model in DDP.
+            from accelerate import ParallelismConfig
+
+            args["parallelism_config"] = ParallelismConfig(
+                dp_shard_size=model_fsdp_size, tp_size=getattr(self.model, "tp_size", None) or 1
+            )
+        elif getattr(self.model, "tp_size", None) is not None and self.model.tp_size > 1:
             if self.args.parallelism_config is None:
                 if is_accelerate_available("1.12.0"):
                     if self.args.parallelism_config is None:
@@ -1779,6 +1788,7 @@ class Trainer:
                 self._track_num_input_tokens(inputs)
 
                 if do_sync_step:
+                    self._sync_replicated_grads(model)
                     grad_norm = None
                     if self.args.max_grad_norm > 0:
                         grad_norm = self._clip_grad_norm(model)
@@ -2535,17 +2545,105 @@ class Trainer:
         input_tokens = torch.as_tensor(input_tokens, device=self.args.device, dtype=torch.int64)
         self.state.num_input_tokens_seen += self.accelerator.gather(input_tokens).sum().item()
 
+    def _sync_replicated_grads(self, model):
+        """Average gradients of parameters that no parallelism sharded across the data-parallel dimension.
+
+        Under expert parallelism the expert weights live on the expert mesh only. When that is combined with
+        FSDP, they are therefore *replicated* along the data-parallel dimension, and nothing reduces their
+        gradients across it -- each replica keeps whatever its own microbatch produced and the copies drift
+        apart. FSDP2 only reduces what it shards, so this has to be done explicitly.
+        """
+        from torch.distributed.tensor import DTensor
+
+        mesh = getattr(model, "_device_mesh", None) or getattr(getattr(model, "module", None), "_device_mesh", None)
+        if mesh is None or mesh.ndim < 2 or "fsdp" not in (mesh.mesh_dim_names or ()):
+            return
+        dp_group = mesh["fsdp"].get_group()
+        dp_size = mesh["fsdp"].size()
+        if dp_size < 2:
+            return
+
+        for param in model.parameters():
+            if param.grad is None:
+                continue
+            grad = param.grad
+            if isinstance(grad, DTensor):
+                # Already reduced over `fsdp` if that dimension is part of the gradient's own mesh.
+                if "fsdp" in (grad.device_mesh.mesh_dim_names or ()):
+                    continue
+                grad = grad.to_local()
+            torch.distributed.all_reduce(grad, group=dp_group)
+            grad.div_(dp_size)
+
+    def _mixed_mesh_grad_norm(self, model, max_norm):
+        """Gradient norm (and clip) when parameters do not all live on the same device mesh.
+
+        Expert parallelism shards only the expert weights, and combining it with FSDP leaves the rest on a
+        different (2-D) mesh, so neither `_foreach_norm` nor `stack` can span the parameter set. Take each
+        gradient's local shard, discount the mesh dimensions it is replicated over so those ranks do not
+        each count it, and reduce once over the whole world.
+        """
+        from torch.distributed.tensor import DTensor
+
+        grads = [p.grad for p in model.parameters() if p.grad is not None]
+        if not grads:
+            return torch.zeros((), device=self.args.device)
+
+        world = torch.distributed.get_world_size() if torch.distributed.is_initialized() else 1
+        total_sq = torch.zeros((), device=grads[0].device, dtype=torch.float32)
+        for g in grads:
+            if isinstance(g, DTensor):
+                local = g.to_local()
+                # Ranks along a replicated mesh dimension all hold the same values.
+                replicas = 1
+                for dim, placement in enumerate(g.placements):
+                    if placement.is_replicate():
+                        replicas *= g.device_mesh.size(dim)
+                # Dimensions of the world this tensor's mesh does not span also hold copies.
+                replicas *= world // g.device_mesh.size()
+            else:
+                local, replicas = g, world  # a plain tensor is the same on every rank
+            total_sq += local.detach().float().pow(2).sum() / replicas
+
+        if world > 1:
+            torch.distributed.all_reduce(total_sq)
+        total_norm = total_sq.sqrt()
+
+        if max_norm != float("inf"):
+            clip = (max_norm / (total_norm + 1e-6)).clamp(max=1.0)
+            for g in grads:
+                (g.to_local() if isinstance(g, DTensor) else g).mul_(clip)
+        return total_norm
+
+    def _has_mixed_mesh_grads(self, model) -> bool:
+        """True when the gradients do not all share one device mesh, so whole-set ops cannot be used."""
+        from torch.distributed.tensor import DTensor
+
+        meshes = set()
+        for p in model.parameters():
+            if p.grad is None:
+                continue
+            meshes.add(p.grad.device_mesh if isinstance(p.grad, DTensor) else None)
+            if len(meshes) > 1:
+                return True
+        return False
+
     def _clip_grad_norm(self, model):
         """Clip gradients to max_grad_norm. Returns the pre-clip gradient norm."""
         if is_sagemaker_mp_enabled() and self.args.fp16:
             return self.optimizer.clip_master_grads(self.args.max_grad_norm)
+        if self._has_mixed_mesh_grads(model):
+            return self._mixed_mesh_grad_norm(model, self.args.max_grad_norm)
         return self.accelerator.clip_grad_norm_(model.parameters(), self.args.max_grad_norm)
 
     def _get_grad_norm(self, model, grad_norm=None):
         """Return the gradient norm as a Python float."""
         if grad_norm is None:
             # Compute norm without clipping (inf means no actual clipping happens)
-            grad_norm = self.accelerator.clip_grad_norm_(model.parameters(), float("inf"))
+            if self._has_mixed_mesh_grads(model):
+                grad_norm = self._mixed_mesh_grad_norm(model, float("inf"))
+            else:
+                grad_norm = self.accelerator.clip_grad_norm_(model.parameters(), float("inf"))
 
         if self.accelerator.distributed_type == DistributedType.DEEPSPEED:
             if hasattr(grad_norm, "item"):
