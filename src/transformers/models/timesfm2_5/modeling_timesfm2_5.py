@@ -106,8 +106,11 @@ class TimesFm2_5ResidualBlock(nn.Module):
         use_bias = use_bias if use_bias is not None else config.use_bias
 
     def forward(self, x):
-        # Align activations to block parameter dtype for mixed precision stability
-        x = x.to(self.input_layer.weight.dtype)
+        # Only cast inputs when the block weights are floating point. Under quantization
+        # (e.g. bitsandbytes 4/8-bit) `input_layer.weight.dtype` is an integer type, and
+        # casting the float inputs to it would silently truncate them (e.g. 0.73 -> 0).
+        if (target_dtype := self.input_layer.weight.dtype).is_floating_point:
+            x = x.to(target_dtype)
         hidden = self.input_layer(x)
         hidden = self.activation(hidden)
         output = self.output_layer(hidden)
