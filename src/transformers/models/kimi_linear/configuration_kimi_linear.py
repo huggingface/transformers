@@ -52,7 +52,7 @@ class KimiLinearConfig(PreTrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type: str = "kimi_linear"
+    model_type = "kimi_linear"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
@@ -114,17 +114,13 @@ class KimiLinearConfig(PreTrainedConfig):
     bos_token_id: int | None = 163584
     eos_token_id: int | list[int] | None = 163586
     pretraining_tp: int | None = 1
-    # pretraining_tp: int | None = 1
     tie_word_embeddings: bool = False
     rope_parameters: RopeParameters | dict | None = None
     rope_interleave: bool | None = True
     attention_bias: bool = False
     attention_dropout: float | int | None = 0.0
     num_mtp_layers: int = 0
-    num_shared_experts: int = 1
-    # rope_interleave: bool | None = True
-    # attention_bias: bool = False
-    # attention_dropout: float | int | None = 0.0
+    # attention_bias: bool = False  # TODO: can we drop? Always False in the model
     layer_types: list[str] | None = None
 
     head_dim: int = 72

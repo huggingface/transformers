@@ -13,7 +13,6 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...modeling_rope_utils import RopeParameters
 from ...models.deepseek_v3.configuration_deepseek_v3 import DeepseekV3Config
 from ...utils import auto_docstring
 
@@ -22,7 +21,7 @@ from ...utils import auto_docstring
 @strict
 class KimiLinearConfig(DeepseekV3Config):
 
-    model_type: str = "kimi_linear"
+    model_type = "kimi_linear"
     attribute_map = {
         "model_max_length": "max_position_embeddings",
         "moe_renormalize": "norm_topk_prob",
@@ -39,33 +38,18 @@ class KimiLinearConfig(DeepseekV3Config):
     num_hidden_layers: int = 27
     num_attention_heads: int = 32
     num_key_value_heads: int | None = 32
-    num_shared_experts: int = 1
-    n_routed_experts: int = 256
     routed_scaling_factor: float = 2.446
-    kv_lora_rank: int = 512
     q_lora_rank: int | None = None
-    qk_rope_head_dim: int = 64
-    v_head_dim: int | None = 128
-    qk_nope_head_dim: int = 128
     n_group: int = 1
     topk_group: int | None = 1
-    num_experts_per_tok: int | None = 8
     first_k_dense_replace: int | None = 1
     norm_topk_prob: bool = True
-    hidden_act: str = "silu"
     max_position_embeddings: int = 1048576
-    initializer_range: float = 0.02
     rms_norm_eps: float = 1e-5
-    use_cache: bool = True
     pad_token_id: int | None = 163839
     bos_token_id: int | None = 163584
     eos_token_id: int | list[int] | None = 163586
-    # pretraining_tp: int | None = 1
-    tie_word_embeddings: bool = False
-    rope_parameters: RopeParameters | dict | None = None
-    # rope_interleave: bool | None = True
-    # attention_bias: bool = False
-    # attention_dropout: float | int | None = 0.0
+    # attention_bias: bool = False  # TODO: can we drop? Always False in the model
     layer_types: list[str] | None = None
     num_mtp_layers: int = 0
 
