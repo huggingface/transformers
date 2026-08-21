@@ -80,9 +80,10 @@ class FineGrained:
     matmuls, with the recipe resolved off the weight/scale dtypes inside the kernel; the
     per-recipe quant helpers and the ``Epilogue``/``Quantization`` op-boundary classes ship
     in the same build. MoE blocks are COMPOSED from the matmuls rather than wrapped: the
-    experts forwards pass ``epilogue`` to the gate_up GEMM when the activation is fusable
-    (no bias, supported act_fn) and fall back to the unfused two-GEMM form otherwise. All
-    symbols are required — a build missing any raises at load with the full list.
+    experts forwards pass ``epilogue`` to both GEMMs — it carries the per-expert biases
+    always, and the fused GLU when the activation is one the kernels implement (an unsupported
+    act_fn still fuses its bias and runs only the activation in the host tail). All symbols
+    are required — a build missing any raises at load with the full list.
     """
 
     matmul: Callable
@@ -578,11 +579,11 @@ _FUSABLE_ACT_FNS = ("silu", "gelu", "relu")
 
 
 def _kernel_epilogue(kernel, module) -> object | None:
-    """The fused gate|up + GLU epilogue for the gate_up GEMM, when the kernel can apply it:
-    gated experts whose activation the epilogue implements and whose gate_up has NO bias (a
-    fused GLU leaves nowhere to add one — biased models take the unfused two-GEMM form)."""
+    """The fused gate|up + GLU epilogue for the gate_up GEMM, when the kernels implement the
+    activation. ``None`` leaves the activation to the host tail. A bias does NOT gate this —
+    it is a separate ``bias=`` operand on the GEMM (see ``_proj_bias``), fused either way."""
     act_name = getattr(module, "act_fn_name", None)
-    if not module.has_gate or module.has_bias or act_name not in _FUSABLE_ACT_FNS:
+    if not module.has_gate or act_name not in _FUSABLE_ACT_FNS:
         return None
     return kernel.Epilogue(
         gate=True,
@@ -590,6 +591,16 @@ def _kernel_epilogue(kernel, module) -> object | None:
         swiglu_alpha=module.swiglu_alpha,
         swiglu_limit=module.swiglu_limit,
     )
+
+
+def _proj_bias(module, proj: str) -> torch.Tensor | None:
+    """A projection's per-expert bias, or ``None``. The kernels add it to the accumulator: for
+    gate_up before the gated split (so an ungated GEMM emitting the raw ``2*I`` pre-activation
+    takes the same add at doubled width), for down before the routing-weight multiply — each
+    expert output is ``x @ W_d^T + b_d``. gate_up's is already in the kernels' interleaved row
+    order (``interleave_gate_up_after_loading`` moves weight, scale grid and bias together off
+    the same output-row axis)."""
+    return to_local(getattr(module, f"{proj}_bias")) if module.has_bias else None
 
 
 def _kernel_quantization(kernel, activation_format: str | None):
@@ -655,25 +666,18 @@ def _kernel_objects(kernel, module):
     )
 
 
-def _apply_unfused_gate_up(self, proj_out, up_bias_ids):
-    """The unfused gate_up tail (fused-epilogue models never reach this): optional
-    per-expert bias (rows indexed by ``up_bias_ids``; sentinel rows clamp to a valid
-    expert — the reduce skips them), then the gating/activation in torch."""
-    if self.has_bias:
-        up_bias = to_local(self.gate_up_proj_bias if self.has_gate else self.up_proj_bias)
-        proj_out = proj_out + up_bias[up_bias_ids.clamp(max=self.num_experts - 1)]
+def _apply_unfused_gate_up(self, proj_out):
+    """The gate_up tail for models whose activation the kernels do not implement: the
+    gating/activation in torch. The bias is NOT here — it rides the GEMM's epilogue, which
+    applies whether or not the GLU itself fused."""
     return self._apply_gate(proj_out) if self.has_gate else self.act_fn(proj_out)
 
 
 def _finish_down(self, kernel, proj_out, top_k_index, top_k_weights, out_dtype):
-    """The shared bookend after the down GEMM (rows in ROUTED order): optional down bias
-    (BEFORE the routing-weight multiply — each expert output is ``x @ W_d^T + b_d``), then
-    the kernels' routing-weighted top-k reduce (skips EP-sentinel rows, whose GEMM output
-    is uninitialized by contract)."""
-    if self.has_bias:
-        down_bias = to_local(self.down_proj_bias)
-        routed_ids = top_k_index.reshape(-1)
-        proj_out = proj_out + down_bias[routed_ids.clamp(max=self.num_experts - 1)]
+    """The shared bookend after the down GEMM (rows in ROUTED order): the kernels'
+    routing-weighted top-k reduce (skips EP-sentinel rows, whose GEMM output is uninitialized
+    by contract). The down bias is already in ``proj_out`` — it is a ``bias=`` operand on the
+    down GEMM, which puts it before the routing-weight multiply as required."""
     return kernel.weighted_reduce(proj_out, top_k_index, top_k_weights, self.num_experts).to(out_dtype)
 
 
@@ -711,6 +715,7 @@ def finegrained_batched_mm_experts_forward(
         expert_ids=expert_ids,
         gather_idx=gather_idx,
         epilogue=epilogue,
+        bias=_proj_bias(self, up_name),
         quantization=gate_up_quantization,
         b_global_scale=to_local(getattr(self, f"{up_name}_global_scale")) if self.has_global_scale else None,
     )  # fused+requant: (C, Cs); fused: (S, intermediate_dim) GLU intermediate; unfused: (S, 2*I) or (S, I)
@@ -720,8 +725,7 @@ def finegrained_batched_mm_experts_forward(
         proj_out, inter_scale = proj_out  # the fused requant's quantized intermediate
 
     if epilogue is None:
-        # batched rows are in ROUTED order, so the bias indexes by the flat routed ids
-        proj_out = _apply_unfused_gate_up(self, proj_out, expert_ids)
+        proj_out = _apply_unfused_gate_up(self, proj_out)
 
     proj_out = kernel.batched_matmul(
         proj_out,
@@ -729,6 +733,7 @@ def finegrained_batched_mm_experts_forward(
         inter_scale,  # fused requant handoff: pre-quantized intermediate scales (None = raw)
         _proj_scale(self, "down_proj"),
         expert_ids=expert_ids,
+        bias=_proj_bias(self, "down_proj"),
         quantization=None if inter_scale is not None else down_quantization,
         b_global_scale=to_local(self.down_proj_global_scale) if self.has_global_scale else None,
     )  # (S, hidden_dim), routed order
@@ -771,6 +776,7 @@ def finegrained_grouped_mm_experts_forward(
         expert_start=expert_start,
         gather_idx=gather_idx,
         epilogue=epilogue,
+        bias=_proj_bias(self, up_name),
         quantization=gate_up_quantization,
         b_global_scale=to_local(getattr(self, f"{up_name}_global_scale")) if self.has_global_scale else None,
     )  # fused+requant: (C, Cs); fused: (S, intermediate_dim) GLU intermediate; unfused: (S, 2*I)
@@ -780,9 +786,7 @@ def finegrained_grouped_mm_experts_forward(
         proj_out, inter_scale = proj_out  # the fused requant's quantized intermediate
 
     if epilogue is None:
-        # grouped gate_up rows are expert-SORTED; only biased unfused models pay the sort
-        up_bias_ids = torch.sort(top_k_index.reshape(-1)).values if self.has_bias else top_k_index.reshape(-1)
-        proj_out = _apply_unfused_gate_up(self, proj_out, up_bias_ids)
+        proj_out = _apply_unfused_gate_up(self, proj_out)
 
     proj_out = kernel.grouped_matmul(
         proj_out,
@@ -791,6 +795,7 @@ def finegrained_grouped_mm_experts_forward(
         _proj_scale(self, "down_proj"),
         expert_start=expert_start,
         scatter_idx=scatter_idx,  # scatter straight to routed rows — weighted_reduce's layout
+        bias=_proj_bias(self, "down_proj"),
         quantization=None if inter_scale is not None else down_quantization,
         b_global_scale=to_local(self.down_proj_global_scale) if self.has_global_scale else None,
     )  # (S, hidden_dim), ROUTED order after the scatter

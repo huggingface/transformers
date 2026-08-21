@@ -259,10 +259,28 @@ class FineGrainedExpertsMarshallingTest(unittest.TestCase):
         p1, p2, p3, p4 = _loaded(kernel)
         with p1, p2, p3, p4:
             out = fg.finegrained_batched_mm_experts_forward(m, hs, idx, wts)
-        # zero matmul outputs + bias: result = sum_k w_k * (gate(bias_up) @ ... ) — just assert
-        # the bias params were consumed (non-None) and output is finite
         self.assertTrue(torch.isfinite(out).all())
-        self.assertEqual(len(rec.calls["matmul_batched"]), 2)
+        up, down = rec.calls["matmul_batched"]
+        # both biases ride their GEMM's epilogue: the kernel adds gate_up's before the gated
+        # split and down's before the routing-weight multiply. Nothing is added host-side, so
+        # a biased model keeps the fused form instead of falling back to two GEMMs.
+        self.assertIs(up.kwargs["bias"], m.gate_up_proj_bias)
+        self.assertTrue(up.kwargs["epilogue"].gate)
+        self.assertIs(down.kwargs["bias"], m.down_proj_bias)
+
+    def test_unfusable_act_fn_still_fuses_the_bias(self):
+        kernel, rec = _fake_bundle()
+        m = self._experts(has_gate=True, has_bias=True)
+        m.act_fn_name = "quick_gelu"  # not in _FUSABLE_ACT_FNS
+        hs, idx, wts = self._route()
+        p1, p2, p3, p4 = _loaded(kernel)
+        with p1, p2, p3, p4:
+            fg.finegrained_batched_mm_experts_forward(m, hs, idx, wts)
+        up, _ = rec.calls["matmul_batched"]
+        # the GLU cannot fuse, but the ungated GEMM emitting the raw 2*I pre-activation takes
+        # the same bias add at doubled width — only the activation falls back to the host tail
+        self.assertIsNone(up.kwargs["epilogue"])
+        self.assertIs(up.kwargs["bias"], m.gate_up_proj_bias)
 
 
 @require_torch
