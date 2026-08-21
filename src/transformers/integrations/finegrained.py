@@ -638,14 +638,21 @@ def _proj_scale(module, proj: str) -> torch.Tensor:
     return swizzled if swizzled is not None else to_local(getattr(module, f"{proj}_scale_inv"))
 
 
-def _cached_kernel_objects(kernel, module):
-    """The module's static kernel-call objects, built once (per-call dataclass construction
-    is measurable at decode): ``(epilogue, gate_up_quantization, down_quantization)``."""
-    if not hasattr(module, "_cached_epilogue"):
-        module._cached_epilogue = _kernel_epilogue(kernel, module)
-        module._cached_gate_up_quantization = _gate_up_quantization(kernel, module, module._cached_epilogue)
-        module._cached_down_quantization = _kernel_quantization(kernel, module.activation_format)
-    return module._cached_epilogue, module._cached_gate_up_quantization, module._cached_down_quantization
+def _kernel_objects(kernel, module):
+    """The three per-call kernel objects: ``(epilogue, gate_up_quantization, down_quantization)``.
+
+    Built per call, not memoized on the module. Caching them measured ~1.4us per layer (~85us per
+    step on a 61-layer model) and only in EAGER decode — under cudagraphs the host path does not
+    run on replay, so it bought nothing in the mode this integration actually deploys in. Against
+    that: hidden mutable state on the module, and a cached gate_up quantization carrying an
+    ``output_recipe`` that silently mismatches any caller asking for the unfused form.
+    """
+    epilogue = _kernel_epilogue(kernel, module)
+    return (
+        epilogue,
+        _gate_up_quantization(kernel, module, epilogue),
+        _kernel_quantization(kernel, module.activation_format),
+    )
 
 
 def _apply_unfused_gate_up(self, proj_out, up_bias_ids):
@@ -694,7 +701,7 @@ def finegrained_batched_mm_experts_forward(
     expert_ids = top_k_index.reshape(-1)  # (S,)
 
     up_name = "gate_up_proj" if self.has_gate else "up_proj"
-    epilogue, gate_up_quantization, down_quantization = _cached_kernel_objects(kernel, self)
+    epilogue, gate_up_quantization, down_quantization = _kernel_objects(kernel, self)
 
     proj_out = kernel.batched_matmul(
         hidden_states,
@@ -754,7 +761,7 @@ def finegrained_grouped_mm_experts_forward(
     expert_start, gather_idx, scatter_idx = kernel.compute_grouped_scheduling(top_k_index, self.num_experts, num_top_k)
 
     up_name = "gate_up_proj" if self.has_gate else "up_proj"
-    epilogue, gate_up_quantization, down_quantization = _cached_kernel_objects(kernel, self)
+    epilogue, gate_up_quantization, down_quantization = _kernel_objects(kernel, self)
 
     proj_out = kernel.grouped_matmul(
         hidden_states,
