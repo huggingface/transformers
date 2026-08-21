@@ -415,7 +415,7 @@ class PI0ModelIntegrationTest(unittest.TestCase):
 
     @require_torch_large_gpu
     def test_train_pi0_base_libero(self):
-        model = PI0ForConditionalGeneration.from_pretrained("lerobot/pi0_base", torch_dtype=torch.float32).eval()
+        model = PI0ForConditionalGeneration.from_pretrained("lerobot/pi0_base", torch_dtype=torch.bfloat16).eval()
         processor = PI0Processor.from_pretrained("google/paligemma-3b-pt-224")
 
         small_data = load_dataset("RaushanTurganbay/libero-small-testing", split="train")
@@ -446,6 +446,7 @@ class PI0ModelIntegrationTest(unittest.TestCase):
                 learning_rate=1e-4,
                 logging_steps=1,
                 disable_tqdm=True,
+                bf16=True,
             )
             loss_callback = StoreLossCallback()
             trainer = Trainer(
