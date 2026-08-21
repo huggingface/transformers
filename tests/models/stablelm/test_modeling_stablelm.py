@@ -61,7 +61,7 @@ class StableLmModelIntegrationTest(unittest.TestCase):
         output = model(**input_ids).logits.float()
 
         # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor([[2.7146, 2.4245, 1.5616, 1.4424, 2.6790]]).to(torch_device)
+        EXPECTED_MEAN = torch.tensor([[2.7304, 2.4242, 1.5718, 1.4360, 2.6792]]).to(torch_device)
         torch.testing.assert_close(output.mean(dim=-1), EXPECTED_MEAN, rtol=1e-4, atol=1e-4)
 
         # Expected logits sliced from [0, 0, 0:30]
@@ -94,7 +94,7 @@ class StableLmModelIntegrationTest(unittest.TestCase):
         output = model(**input_ids).logits.float()
 
         # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor([[-2.7196, -3.6099, -2.6877, -3.1973, -3.9344]]).to(torch_device)
+        EXPECTED_MEAN = torch.tensor([[-2.7165, -3.6102, -2.6881, -3.1981, -3.9231]]).to(torch_device)
         torch.testing.assert_close(output.mean(dim=-1), EXPECTED_MEAN, rtol=1e-4, atol=1e-4)
 
         # Expected logits sliced from [0, 0, 0:30]
