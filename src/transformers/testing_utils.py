@@ -1230,51 +1230,99 @@ def get_cgroup_memory_limit_bytes() -> int | None:
     return None
 
 
+# Set by `patch_psutil_cpu_memory` to the pre-patch `psutil.virtual_memory`, so the guards below can still read
+# the machine's real RAM after conftest has capped what the rest of the session sees.
+_UNPATCHED_VIRTUAL_MEMORY = None
+
+
+def get_physical_cpu_ram_gib() -> float | None:
+    """
+    RAM physically present on this machine, in GiB, or `None` when psutil is unavailable.
+
+    Deliberately reads *past* the `patch_psutil_cpu_memory` cap: that cap is a `device_map="auto"` planning budget
+    (`CI_CPU_MEMORY_LIMIT_GB` per accelerator), not a statement about the machine. Note this is the wrong number
+    inside a pod, where it reports the whole node -- `get_cpu_ram_total_gib` is what combines it with the cgroup
+    limit to get an answer that holds in both places.
+    """
+    if not is_psutil_available():
+        return None
+
+    import psutil
+
+    virtual_memory = _UNPATCHED_VIRTUAL_MEMORY or psutil.virtual_memory
+    return virtual_memory().total / 1024**3
+
+
+def get_ci_cpu_memory_budget_gib() -> float | None:
+    """
+    CPU RAM budget this CI runner is entitled to, in GiB, or `None` outside CI.
+
+    `CI_CPU_MEMORY_LIMIT_GB` is a *per-accelerator* budget: a single-accelerator A10 runner gets 60 GiB, and a
+    runner with more accelerators gets proportionally more, because `device_map="auto"` can legitimately use more
+    CPU RAM for intermediate storage when more devices are present. So the budget is the variable times the
+    accelerator count -- reading the variable raw would report 60 GiB on a 2-accelerator runner that has 180.
+
+    This is the single source of truth for that arithmetic, shared with the `patch_psutil_cpu_memory` call in
+    `conftest.py`.
+    """
+    limit_per_device = os.environ.get("CI_CPU_MEMORY_LIMIT_GB")
+    if limit_per_device is None:
+        return None
+    try:
+        limit_per_device = float(limit_per_device)
+    except ValueError:
+        return None
+
+    num_accelerators = max(1, backend_device_count(torch_device)) if torch_device is not None else 1
+    return limit_per_device * num_accelerators
+
+
 def get_cpu_ram_total_gib() -> float:
     """
-    CPU RAM this process may actually use, in GiB. Returns 0 when it cannot be determined.
+    CPU RAM this process may actually use, in GiB.
 
-    Takes the smallest of three views, because each one is wrong on its own:
-    - the cgroup limit, which is what the OOM killer enforces in a container but is absent outside one;
-    - `psutil.virtual_memory().total`, which is the right answer on bare metal but reports the whole node inside a
-      pod -- unless `conftest.py` has capped it, see `patch_psutil_cpu_memory`;
-    - `CI_CPU_MEMORY_LIMIT_GB`, the explicit per-runner budget set in CI. Note that `conftest.py` deliberately
-      multiplies it by the accelerator count when patching psutil (a `device_map="auto"` planning budget, not a
-      pod limit), so read the raw variable here instead of the patched psutil value.
+    Prefers what can be *measured* -- the cgroup limit the OOM killer enforces, and the machine's physical RAM --
+    taking the smaller of the two, since each is wrong on its own: there is no cgroup limit outside a container,
+    and physical RAM reports the whole node inside a pod.
+
+    Falls back to the CI budget (`get_ci_cpu_memory_budget_gib`) only when neither can answer, because that budget
+    is an allocation policy rather than a measurement: it is deliberately `CI_CPU_MEMORY_LIMIT_GB` per accelerator,
+    so on a 2-accelerator runner it reads 120 GiB where the runner really has 180. Using it as a term in the `min`
+    would make every guard on such a runner over-skip.
+
+    Returns `inf` when nothing can answer at all -- no cgroup, no psutil, no CI budget. That is an ordinary local
+    setup rather than a broken one, so callers run their test instead of silently dropping coverage; a guard is
+    only useful where the limit is actually knowable.
     """
-    limits = []
+    measured = []
 
     cgroup_limit = get_cgroup_memory_limit_bytes()
     if cgroup_limit is not None:
-        limits.append(cgroup_limit / 1024**3)
+        measured.append(cgroup_limit / 1024**3)
 
-    if is_psutil_available():
-        import psutil
+    physical_ram = get_physical_cpu_ram_gib()
+    if physical_ram is not None:
+        measured.append(physical_ram)
 
-        limits.append(psutil.virtual_memory().total / 1024**3)
+    if measured:
+        return min(measured)
 
-    ci_limit = os.environ.get("CI_CPU_MEMORY_LIMIT_GB")
-    if ci_limit is not None:
-        try:
-            limits.append(float(ci_limit))
-        except ValueError:
-            pass
-
-    return min(limits) if limits else 0.0
+    ci_budget = get_ci_cpu_memory_budget_gib()
+    return ci_budget if ci_budget is not None else float("inf")
 
 
 def require_large_cpu_ram(test_case=None, *, memory: float = 80):
     """
     Decorator marking a test that requires a CPU RAM with more than `memory` GiB of memory.
 
-    Usable bare (`@require_large_cpu_ram`) or with a budget (`@require_large_cpu_ram(memory=48)`).
+    Usable bare (`@require_large_cpu_ram`) or with a budget (`@require_large_cpu_ram(memory=48)`). The default 80
+    is not an estimate of any particular model: it was picked as "more than the 60 GiB of our GPU runners", so a
+    bare use means "do not run this on a CI GPU runner". Pass `memory=` when the test has a real footprint.
     """
 
     def memory_decorator(tc):
-        # Without psutil we cannot tell, so run the test rather than silently dropping coverage.
-        if not is_psutil_available():
-            return tc
-
+        # `get_cpu_ram_total_gib` returns `inf` when it cannot measure anything (psutil missing and no cgroup), so
+        # an undetermined budget runs the test instead of silently dropping coverage.
         return unittest.skipUnless(
             get_cpu_ram_total_gib() > memory,
             f"test requires a machine with more than {memory} GiB of CPU RAM memory",
@@ -1319,7 +1367,8 @@ def get_accelerator_total_memory_gib() -> float:
     `get_device_properties(...).total_memory` -- so callers treat "we cannot tell" the same as "it does not fit",
     which is the safe direction: guessing too high OOM-kills the whole test process.
     """
-    # Same restriction as `require_torch_large_accelerator`: only cuda and xpu report `total_memory`.
+    # Same restriction as `require_torch_large_accelerator`: only cuda and xpu report `total_memory`. ROCm is
+    # covered by the cuda branch -- a HIP build of torch reports `torch_device == "cuda"`, see `IS_ROCM_SYSTEM`.
     if not is_torch_available() or torch_device not in ("cuda", "xpu"):
         return 0.0
 
@@ -3640,9 +3689,15 @@ def patch_psutil_cpu_memory(limit_bytes: int):
     leading to GPU OOM at runtime. Calling this function caps `total`, `available`, `used`, and `percent`
     so the entire test session sees a realistic per-runner memory budget.
     """
+    global _UNPATCHED_VIRTUAL_MEMORY
+
     import psutil
 
     _original_virtual_memory = psutil.virtual_memory
+    # Keep the honest reader reachable: the cap above is a `device_map="auto"` planning budget, but a guard that
+    # asks "will this OOM-kill the container?" needs the machine's real RAM. See `get_physical_cpu_ram_gib`.
+    if _UNPATCHED_VIRTUAL_MEMORY is None:
+        _UNPATCHED_VIRTUAL_MEMORY = _original_virtual_memory
 
     def _capped_virtual_memory():
         mem = _original_virtual_memory()
