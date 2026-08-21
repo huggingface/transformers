@@ -20,10 +20,12 @@ The `Assign PR Reviewers` workflow (`.github/workflows/assign-reviewers.yml`) re
 a rule whose pattern matches nothing looks fine forever, and a model nobody claims quietly falls to
 the `*` catch-all. This check makes both loud.
 
-The resolver is not a dependency of this package — it is installed by the CI job that runs the
-check. Without it the check reports what to install and passes, so a contributor is never blocked
-on a package unrelated to their change; in CI, where it is always installed, a missing resolver is
-an error.
+The resolver is not a dependency of this package. `utils/checkers.py` installs it from
+`utils/checkers-requirements.txt` on the first run in an environment, so normally it is simply there. If that
+did not happen — offline, or the install opted out — the check reports what to install and passes,
+so a contributor is never blocked on a package unrelated to their change. In CI a missing resolver
+is an error instead: a check that quietly passes because its own dependency vanished is the
+failure this file exists to prevent.
 
 It reports:
   - a model directory that only the `*` catch-all claims;
@@ -92,7 +94,7 @@ A rule with a pattern and no owner marks a path as deliberately unowned, e.g. `u
 """
 
 
-INSTALL_RESOLVER = "pip install -r utils/reviewers-requirements.txt"
+INSTALL_RESOLVER = "pip install -r utils/checkers-requirements.txt"
 
 
 def load_resolver():
@@ -101,7 +103,7 @@ def load_resolver():
     It lives in huggingface/transformers-ci, alongside the workflow that resolves reviewers for
     real, so the two cannot disagree. It is deliberately not in `setup.py`: that package has no
     release on PyPI, and a `git+` URL in the metadata is a direct reference, which PyPI refuses to
-    accept when this one is uploaded. It is pinned in `utils/reviewers-requirements.txt` instead.
+    accept when this one is uploaded. It is pinned in `utils/checkers-requirements.txt` instead, which `utils/checkers.py` installs for you.
     """
     try:
         from transformersci.reviewers import resolver

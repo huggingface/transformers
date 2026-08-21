@@ -131,8 +131,6 @@ jobs:
             - check_run_circleci
             - run: apt-get update && apt-get install -y make
             - run: uv pip install -e ".[quality]"
-            # Resolver for the reviewer check; see the file for why it is not in setup.py.
-            - run: uv pip install -r utils/reviewers-requirements.txt
             - run:
                 name: Show installed libraries and their versions
                 command: pip freeze | tee installed.txt

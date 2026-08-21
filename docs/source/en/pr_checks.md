@@ -98,11 +98,7 @@ A review can only be requested from a repository collaborator. The workflow requ
 
 A pull request cannot re-route its own review. `.github/scripts/codeowners_for_review_action` is read from the base branch, never from the pull request's head, and the PR CI security gate blocks a pull request that is not from a collaborator from touching anything outside `src/`, `tests/`, `docs/` and `utils/` — which is why that file lives where it does. The `# Reviewers:` tag is read from the head, since a new model arrives with it, so every login it names still goes through the collaborator check before anyone is asked.
 
-`make check-repository-consistency` runs `utils/check_reviewers.py`, which fails when a model reaches nobody but the catch-all, when a rule matches no file any more, or when the modality table disagrees with the table of contents. It shares its resolver with the assignment workflow, so the two cannot disagree; CI installs that resolver, and locally the check reports how to install it and passes without it:
-
-```bash
-pip install -r utils/reviewers-requirements.txt
-```
+`make check-repository-consistency` runs `utils/check_reviewers.py`, which fails when a model reaches nobody but the catch-all, when a rule matches no file any more, or when the modality table disagrees with the table of contents. It shares its resolver with the assignment workflow, so the two cannot disagree. That resolver is not a dependency of `transformers`; it is listed in `utils/checkers-requirements.txt`, which the checker runner installs on its first run in an environment. If the install cannot happen — offline, say — the check reports it and passes rather than blocking you.
  Paths outside `src/transformers/models` that have no owner are reported as a note; list them with:
 
 ```bash
