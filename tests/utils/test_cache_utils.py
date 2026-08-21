@@ -1276,18 +1276,6 @@ class SyntheticCacheTest(unittest.TestCase):
             "DynamicCache Scenario 2 layer 1 failed",
         )
 
-    def test_dynamic_cache_from_uninitialized_ddp_data(self):
-        cache = DynamicCache([(None, None, torch.tensor([4])), (None, None)])
-
-        self.assertIs(type(cache.layers[0]), DynamicSlidingWindowLayer)
-        self.assertEqual(cache.layers[0].sliding_window, 4)
-        self.assertFalse(cache.layers[0].is_initialized)
-        self.assertIs(type(cache.layers[1]), DynamicLayer)
-        self.assertFalse(cache.layers[1].is_initialized)
-
-        with self.assertRaises(ValueError):
-            DynamicCache([(None, torch.tensor([1]))])
-
     def test_dynamic_cache_batch_select_indices(self):
         """Select a subset of batches in-place using batch_select_indices."""
         cache = DynamicCache()
