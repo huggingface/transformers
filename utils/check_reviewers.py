@@ -65,6 +65,8 @@ CHECKER_CONFIG = {
     ],
     "check_args": [],
     "fix_args": None,
+    # Pulls the shared resolver from `utils/checkers-requirements.txt`; see `load_resolver`.
+    "needs_requirements": True,
 }
 
 REPO_ROOT = Path(__file__).parent.parent

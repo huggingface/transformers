@@ -1,8 +1,13 @@
 # Packages the checkers in this directory need, that must not go in `setup.py`.
 #
-# `utils/checkers.py` installs this file once per environment, so running any checker — or
-# `make check-repo` — pulls in whatever is listed here without anyone having to know about it.
-# Set TRANSFORMERS_SKIP_CHECKER_REQUIREMENTS=1 to turn that off.
+# `utils/checkers.py` installs this file once per environment, so running a checker that needs it
+# pulls in whatever is listed here without anyone having to know about it. Mark the checker with
+# `"needs_requirements": True` in its CHECKER_CONFIG, or nothing will be installed for it.
+#
+# That opt-in is not decoration. `make style` and `make fix-repo` run inside serge's normalize
+# sandbox — a read-only container with `--network none` — where pip cannot succeed and every
+# attempt burns its retry budget for nothing. Only checkers that actually need a package reach for
+# one. Set TRANSFORMERS_SKIP_CHECKER_REQUIREMENTS=1 to turn the install off entirely.
 #
 # Why not `setup.py`: these are not runtime dependencies of `transformers`, and some cannot be
 # expressed there at all. A `git+` URL is a PEP 508 direct reference, which PyPI rejects in

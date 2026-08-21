@@ -116,6 +116,7 @@ def _discover_checkers() -> tuple[dict, dict]:
     """
     checkers = {}
     cache_globs = {}
+    needs_requirements = set()
 
     for py_file in sorted(UTILS_DIR.glob("*.py")):
         if py_file.name == Path(__file__).name:
@@ -166,8 +167,11 @@ def _discover_checkers() -> tuple[dict, dict]:
         )
         if config["cache_globs"] is not None:
             cache_globs[name] = config["cache_globs"]
+        # Optional: this checker needs something from checkers-requirements.txt.
+        if config.get("needs_requirements"):
+            needs_requirements.add(name)
 
-    return checkers, cache_globs
+    return checkers, cache_globs, needs_requirements
 
 
 # Inline checkers have no separate script file; they use custom runner functions below.
@@ -215,7 +219,7 @@ _INLINE_CACHE_GLOBS = {
 }
 
 # Build the registries: discovered modules + inline custom runners.
-_discovered_checkers, _discovered_cache_globs = _discover_checkers()
+_discovered_checkers, _discovered_cache_globs, CHECKERS_NEEDING_REQUIREMENTS = _discover_checkers()
 
 CHECKERS = {**_discovered_checkers, **_INLINE_CHECKERS}
 CHECKER_CACHE_GLOBS = {**_discovered_cache_globs, **_INLINE_CACHE_GLOBS}
@@ -518,8 +522,14 @@ def run_checker(name, fix=False, line_callback=None):
     return _run_cmd(cmd, line_callback=line_callback)
 
 
-def ensure_requirements():
-    """Install `utils/checkers-requirements.txt` once per environment.
+def ensure_requirements(names):
+    """Install `utils/checkers-requirements.txt` if any of `names` declares it needs it.
+
+    Gated on the checkers actually about to run, because `pip` is the wrong thing to reach for
+    in most of the places these are invoked. `make style` runs under serge's normalize sandbox,
+    a read-only container with `--network none`, where an install cannot succeed and every
+    attempt costs pip's retry budget for nothing. A checker opts in with
+    ``"needs_requirements": True`` in its ``CHECKER_CONFIG``.
 
     What the checkers need is not what `transformers` needs, and some of it cannot go in
     `setup.py` at all — a `git+` URL there is a direct reference, which PyPI rejects when this
@@ -531,6 +541,8 @@ def ensure_requirements():
     fatal: running the checkers offline is normal, and a checker that needs one of these packages
     reports it itself.
     """
+    if not CHECKERS_NEEDING_REQUIREMENTS.intersection(names):
+        return
     if os.environ.get("TRANSFORMERS_SKIP_CHECKER_REQUIREMENTS") or not REQUIREMENTS_PATH.exists():
         return
 
@@ -589,8 +601,6 @@ def main():
     else:
         names = [n.strip() for n in raw.split(",") if n.strip()]
 
-    ensure_requirements()
-
     unknown = [n for n in names if n not in CHECKERS]
     if unknown:
         print(f"Unknown checkers: {', '.join(unknown)}")
@@ -608,6 +618,9 @@ def main():
                 f"Skipping {len(not_fixable)} check-only checker(s) in fix mode: {', '.join(not_fixable)}\n",
                 flush=True,
             )
+
+    # After the fix-mode filtering above, so this reflects what will actually run.
+    ensure_requirements(names)
 
     is_ci = os.environ.get("GITHUB_ACTIONS") == "true" or os.environ.get("CIRCLECI") == "true"
     is_tty = sys.stdout.isatty() and not is_ci
