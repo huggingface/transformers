@@ -289,6 +289,16 @@ if is_kernels_available():
                     ),
                 },
             },
+            "EsmFold2TriangleMultiplication": {
+                "cuda": {
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="biohub/esmfold2-trimul",
+                        layer_name="ESMFold2TriangleMultiplication",
+                        version=1,
+                        trust_remote_code=True,
+                    ),
+                },
+            },
             "SwiGLUMLP": {
                 "cuda": {
                     Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
