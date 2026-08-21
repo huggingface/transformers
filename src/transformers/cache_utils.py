@@ -1752,6 +1752,7 @@ class DynamicCache(Cache):
         offload_only_non_sliding (`bool`, *optional*, defaults to `False`):
             If `offloading` is `True`, this further decides if only the non-sliding layers will be offloaded (because
             usually the sliding layers are small in size, so there is no need to offload them, and skipping it is faster).
+
     Example:
 
     ```python
