@@ -940,7 +940,7 @@ def group_images_by_shape(
     # A batched tensor is already a single group of images sharing the same shape, no need to unbind and re-stack it.
     if not disable_grouping and not is_nested and isinstance(images, torch.Tensor) and len(images) > 0:
         # Choice of key doesn't matter as there is a single group. We keep shape for consistency.
-        key = images.shape[1:]
+        key = images.shape[-2:]
         return (
             {key: images},
             *[{key: None if paired_input is None else list(paired_input)} for paired_input in paired_inputs],
@@ -964,7 +964,7 @@ def group_images_by_shape(
     for sublist_index, sublist in enumerate(nested_images):
         for image_index, image in enumerate(sublist):
             position = (sublist_index, image_index)
-            key = position if disable_grouping else image.shape
+            key = position if disable_grouping else image.shape[-2:]
             group = grouped_images.setdefault(key, [])
             index_in_group = len(group)
             positions[position] = (key, index_in_group)
