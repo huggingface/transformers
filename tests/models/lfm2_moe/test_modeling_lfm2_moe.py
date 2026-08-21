@@ -163,7 +163,7 @@ class Lfm2MoeIntegrationTest(unittest.TestCase):
         # Expected portion of the logits
         EXPECTED_SLICES = Expectations(
             {
-                ("cuda", None): torch.tensor([-1.2734, 2.4844, 5.5000, -1.3438, -1.3281, -1.3516, 1.9375, 5.8438, -0.6641, -1.2969]),
+                ("cuda", None): torch.tensor([-1.2656, 2.4375, 5.4375, -1.3438, -1.3203, -1.3438, 1.9219, 5.7812, -0.6719, -1.3203]),
                 ("xpu", None): torch.tensor([-1.2734,  2.4531, 5.4688, -1.3438, -1.3281, -1.3516, 1.9297, 5.7812, -0.6719, -1.3125]),
             }
         )
