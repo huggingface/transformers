@@ -38,7 +38,7 @@ class Kimi_K25ImageProcessorKwargs(ImagesKwargs, total=False):
         The max limit to resize the image.
     patch_size (`int`, *optional*, defaults to 14):
         The spatial patch size of the vision encoder.
-    merge_kernel_size (`int`, *optional*, defaults to 2):
+    merge_size (`int`, *optional*, defaults to 2):
         The merge size of the vision encoder to llm encoder.
     """
 
