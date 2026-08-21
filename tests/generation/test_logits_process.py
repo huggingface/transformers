@@ -450,6 +450,11 @@ class LogitsProcessorTest(unittest.TestCase):
         out_again = top_h_warp(input_ids, dist3)
         assert not torch.all(out_again == dist3)
 
+        # check special case: keep at least min_tokens_to_keep, matching other sampling warpers
+        top_h_warp_safety_check = TopHLogitsWarper(top_h=0.3, min_tokens_to_keep=2)
+        filtered_logits = top_h_warp_safety_check(input_ids, dist1.clone())
+        self.assertListEqual(torch.isfinite(filtered_logits).to(torch.long).sum(dim=-1).tolist(), [2])
+
     def test_min_p_dist_warper(self):
         input_ids = None
         vocab_size = 10
