@@ -22,10 +22,13 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring
-from ...utils.generic import is_flash_attention_requested
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2Attention,
     Wav2Vec2EncoderLayer,
@@ -158,40 +161,25 @@ class SEWEncoder(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
+        **kwargs: Unpack[TransformersKwargs],
     ):
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
-
         if attention_mask is not None:
+            # make sure padded tokens output 0
             expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
-            if is_flash_attention_requested(self.config):
-                # make sure padded tokens output 0
-                hidden_states[~expand_attention_mask] = 0.0
-                # 2d mask is passed through the layers
-                attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
-            else:
-                # make sure padded tokens output 0
-                hidden_states[~expand_attention_mask] = 0.0
-                # Pool the attention mask to match the pooled hidden_states shape.
-                # max_pool1d avoids torch.arange(max_encoder_length) which bakes
-                # the sequence length as a constant during ONNX export.
-                attention_mask = (
-                    nn.functional.max_pool1d(
-                        attention_mask.float().unsqueeze(1),
-                        kernel_size=self.config.squeeze_factor,
-                        stride=self.config.squeeze_factor,
-                    )
-                    .squeeze(1)
-                    .long()
-                )
+            hidden_states[~expand_attention_mask] = 0.0
 
-                # extend attention_mask — keep {batch,1,1,seq} so the key-seq dimension
-                # stays symbolic during ONNX export (no square seq×seq materialization).
-                attention_mask = 1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)
-                attention_mask = attention_mask * torch.finfo(hidden_states.dtype).min
+            # Pool the attention mask to match the pooled hidden_states shape.
+            # max_pool1d avoids torch.arange(max_encoder_length) which bakes
+            # the sequence length as a constant during ONNX export.
+            attention_mask = (
+                nn.functional.max_pool1d(
+                    attention_mask.float().unsqueeze(1),
+                    kernel_size=self.config.squeeze_factor,
+                    stride=self.config.squeeze_factor,
+                )
+                .squeeze(1)
+                .long()
+            )
 
         n_input_timesteps = hidden_states.shape[1]
 
@@ -202,46 +190,29 @@ class SEWEncoder(nn.Module):
         hidden_states = pooled_hidden_states[..., :min_length] + position_embeddings[..., :min_length]
         hidden_states = hidden_states.transpose(1, 2)
 
+        attention_mask = create_bidirectional_mask(
+            config=self.config, inputs_embeds=hidden_states, attention_mask=attention_mask
+        )
+
         hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
         synced_gpus = is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)
 
         for layer in self.layers:
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = torch.rand([])
 
             skip_the_layer = self.training and dropout_probability < self.config.layerdrop
             if not skip_the_layer or synced_gpus:
                 # under fsdp or deepspeed zero3 all gpus must run in sync
-                layer_outputs = layer(
-                    hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
-                )
-                hidden_states = layer_outputs[0]
-
-            if skip_the_layer:
-                layer_outputs = (None, None)
-
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
+                hidden_states = layer(hidden_states, attention_mask=attention_mask, **kwargs)
 
         hidden_states = self.upsample(hidden_states)
         if hidden_states.shape[1] < n_input_timesteps:
             hidden_states = nn.functional.pad(hidden_states, (0, 0, 0, n_input_timesteps - hidden_states.shape[1]))
 
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
-        )
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 @auto_docstring
@@ -253,7 +224,11 @@ class SEWPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_flex_attn = False  # needs a proper look into the mask creation
+    _supports_flex_attn = True
+    _can_record_outputs = {
+        "hidden_states": SEWEncoderLayer,
+        "attentions": OutputRecorder(SEWAttention, index=1, layer_name="encoder"),
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -371,28 +346,21 @@ class SEWModel(SEWPreTrainedModel):
 
         return hidden_states
 
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
         input_values: torch.Tensor | None,
         attention_mask: torch.Tensor | None = None,
         mask_time_indices: torch.FloatTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutput:
         r"""
         mask_time_indices (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict
             masked extracted features in *config.proj_codevector_dim* space.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
         extract_features = self.feature_extractor(input_values)
         extract_features = extract_features.transpose(1, 2)
         extract_features = self.layer_norm(extract_features)
@@ -410,21 +378,12 @@ class SEWModel(SEWPreTrainedModel):
         encoder_outputs = self.encoder(
             hidden_states,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
-        hidden_states = encoder_outputs[0]
+        hidden_states = encoder_outputs.last_hidden_state
 
-        if not return_dict:
-            return (hidden_states,) + encoder_outputs[1:]
-
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-        )
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 class SEWForCTC(Wav2Vec2ForCTC):

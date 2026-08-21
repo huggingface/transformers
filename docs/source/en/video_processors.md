@@ -48,3 +48,44 @@ processor = AutoVideoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-0
 processor = torch.compile(processor)
 processed_video = processor(video, return_tensors="pt")
 ```
+
+## Frame sampling
+
+A video processor decodes a video and picks the frames the model actually sees. Set `do_sample_frames=True` to turn sampling on, then pick the frames in one of two ways.
+
+- `num_frames` asks for a fixed count spread uniformly across the video.
+- `fps` asks for a rate in frames per second.
+
+Pass a path or URL and the processor decodes the video for you with [torchcodec](https://meta-pytorch.org/torchcodec/stable/index.html), the default decoder. If torchcodec isn't available and you're on an older torchvision version, decoding falls back to torchvision.
+
+Add `return_metadata=True` to get back the sampled frame indices, original dimensions, duration, and fps.
+
+```python
+from transformers import AutoVideoProcessor
+
+processor = AutoVideoProcessor.from_pretrained("Qwen/Qwen3-VL-4B-Instruct")
+inputs = processor(videos=["video.mp4"], do_sample_frames=True, fps=1, return_metadata=True, return_tensors="pt")
+
+print(inputs.pixel_values_videos.shape, inputs.video_grid_thw)
+print(inputs["video_metadata"][0].total_num_frames)
+```
+
+Sampling defaults are per model, and a request for `num_frames` or `fps` is a starting point rather than a guarantee. Qwen3-VL samples at `fps=2` and clamps the result to between `min_frames=4` and `max_frames=768`, so a one-second clip still yields 4 frames and a long recording is capped well below its real frame count.
+
+Models with a `temporal_patch_size` add a second constraint where frames are grouped into patches of that many frames along the time axis, and the final frame is repeated until the count divides evenly.
+
+If you pass an already decoded video array and still want model-specific sampling, provide `video_metadata` as well. Without it, the sampler doesn't know the original duration or fps, and sampling by `fps` warns and assumes the video was recorded at 24 fps.
+
+```python
+import torch
+from transformers import AutoVideoProcessor
+from transformers.video_utils import VideoMetadata
+
+processor = AutoVideoProcessor.from_pretrained("Qwen/Qwen3-VL-4B-Instruct")
+video = torch.randint(0, 255, size=(100, 3, 1280, 1280))  # short video of 100 frames
+video_metadata = VideoMetadata(total_num_frames=100, fps=24, duration=4.1)
+
+inputs = processor(
+    videos=[video], video_metadata=[video_metadata], do_sample_frames=True, num_frames=16, return_tensors="pt"
+)
+```
