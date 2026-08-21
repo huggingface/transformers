@@ -441,6 +441,11 @@ def grouped_mm_experts_forward(
         selected_hidden_states_g, selected_weights, offsets, bias=selected_biases, is_transposed=self.is_transposed
     )  # (S, 2 * intermediate_dim) or  (S, intermediate_dim) depending on whether we have gating
 
+    # Mask the sentinel-tail rows the kernel left uninitialized, in forward AND backward: relying on
+    # the single post-mask lets NaN/Inf from the uninitialized rows transit through the activation and
+    # down-projection backward, where it can escape into finite gradients.
+    proj_out = proj_out.masked_fill(sentinel_mask, 0.0)
+
     # Apply gating or activation
     if self.has_gate:
         # for gated experts we apply the custom/default gating mechanism
@@ -457,6 +462,9 @@ def grouped_mm_experts_forward(
     proj_out = _grouped_linear(
         proj_out, selected_weights, offsets, bias=selected_biases, is_transposed=self.is_transposed
     )  # (S, hidden_dim)
+
+    # Same as above: zero the uninitialized sentinel-tail rows before anything consumes them.
+    proj_out = proj_out.masked_fill(sentinel_mask, 0.0)
 
     # Apply routing weights
     weighted_out = proj_out * sample_weights_g.unsqueeze(-1)  # (S, hidden_dim)
