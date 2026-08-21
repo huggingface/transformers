@@ -100,7 +100,7 @@ def get_gguf_kernel() -> "GgufKernel | bool":
         from ..hub_kernels import get_kernel
 
         module = get_kernel(
-            "marcsun13/gguf-quantization",
+            "marcsun13/ggml-quantization",
             # `kernels` requires the API version to be pinned, so a repo cannot change under a release
             version=1,
             # Waived only for repos under a publisher the Hub marks as trusted, which a personal repo
