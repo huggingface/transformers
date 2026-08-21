@@ -1606,6 +1606,10 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
         self.block_size = assistant_model.config.block_size
         self.mask_token_id = assistant_model.config.mask_token_id
         self.noise_ids_mask = torch.tensor([self.mask_token_id] * (self.block_size - 1))[None, ...]
+        self.model_kwargs_overrides = {
+            **self.model_kwargs_overrides,
+            "output_hidden_states_layers": self.target_layer_ids,
+        }
 
         # Prepare a cache for the assistant, and activate the past recording
         self.cache = DFlashCache(config=self.assistant_model.config)
