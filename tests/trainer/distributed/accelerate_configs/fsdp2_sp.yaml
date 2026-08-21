@@ -1,0 +1,7 @@
+distributed_type: FSDP
+fsdp_config:
+  fsdp_version: 2
+num_processes: 2
+parallelism_config:
+  parallelism_config_sp_size: 2
+  parallelism_config_sp_backend: accelerate
