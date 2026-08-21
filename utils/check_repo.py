@@ -366,6 +366,7 @@ IGNORE_NON_AUTO_CONFIGURED = (
         "BlipVisionModel",
         "BlipTextLMHeadModel",
         "BlipTextModel",
+        "NeoMMEForRetrieval",
         "BrosSpadeEEForTokenClassification",
         "BrosSpadeELForTokenClassification",
         "Swin2SRForImageSuperResolution",

@@ -31,6 +31,15 @@ def positive_int(value: int | None = None):
         raise ValueError(f"Value must be a positive integer, got {value}")
 
 
+@as_validated_field
+def positive_int_field(value: int | None = None):
+    """
+    Same as `positive_int` but functions as a dataclass field rather than type annotation metadata.
+    """
+    if value is not None and (not isinstance(value, int) or not value > 0):
+        raise ValueError(f"Value must be a positive integer, got {value}")
+
+
 def padding_validator(value: bool | str | PaddingStrategy | None = None):
     possible_names = ["longest", "max_length", "do_not_pad"]
     if value is None:
@@ -52,7 +61,16 @@ def truncation_validator(value: bool | str | TruncationStrategy | None = None):
 
 
 def image_size_validator(value: int | Sequence[int] | dict[str, int] | None = None):
-    possible_keys = ["height", "width", "longest_edge", "shortest_edge", "max_height", "max_width"]
+    possible_keys = [
+        "height",
+        "width",
+        "longest_edge",
+        "shortest_edge",
+        "max_height",
+        "max_width",
+        "min_pixels",
+        "max_pixels",
+    ]
     if value is None:
         pass
     elif isinstance(value, dict) and any(k not in possible_keys for k in value.keys()):

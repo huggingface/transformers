@@ -22,7 +22,9 @@ import httpx
 
 from transformers import AutoImageProcessor, ViTImageProcessor, ViTImageProcessorFast
 from transformers.image_processing_utils import get_size_dict
+from transformers.image_utils import SizeDict
 from transformers.testing_utils import TOKEN, TemporaryHubRepo, get_tests_dir, is_staging_test
+from transformers.utils.type_validators import image_size_validator
 
 
 sys.path.append(str(Path(__file__).parent.parent.parent / "utils"))
@@ -172,6 +174,12 @@ class ImageProcessorPushToHubTester(unittest.TestCase):
 
 
 class ImageProcessingUtilsTester(unittest.TestCase):
+    def test_image_size_validator(self):
+        image_size_validator({"min_pixels": 256, "max_pixels": 1024})
+
+        with self.assertRaises(ValueError):
+            image_size_validator({"min_pixels": 256, "unknown": 1024})
+
     def test_get_size_dict(self):
         # Test a dict with the wrong keys raises an error
         inputs = {"wrong_key": 224}
@@ -198,6 +206,12 @@ class ImageProcessingUtilsTester(unittest.TestCase):
         inputs = {"longest_edge": 224, "shortest_edge": 224}
         outputs = get_size_dict(inputs)
         self.assertEqual(outputs, {"longest_edge": 224, "shortest_edge": 224})
+
+        inputs = {"min_pixels": 256, "max_pixels": 1024}
+        outputs = get_size_dict(inputs)
+        self.assertEqual(outputs, inputs)
+        self.assertEqual(dict(SizeDict(**outputs)), inputs)
+        self.assertEqual(hash(SizeDict(**outputs)), hash(SizeDict(**inputs)))
 
         # Test a single int value which  represents (size, size)
         outputs = get_size_dict(224)
