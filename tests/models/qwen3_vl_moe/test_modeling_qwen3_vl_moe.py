@@ -442,8 +442,8 @@ class Qwen3VLMoeIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
 
         EXPECTED_DECODED_TEXT = [
-            "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a small wild cat native to the grasslands and montane regions",
-            "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a small wild cat native to the grasslands and montane regions"
+            "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a wild cat species native to the grasslands and steppes",
+            "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a wild cat species native to the grasslands and steppes"
         ]  # fmt: skip
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
@@ -577,7 +577,7 @@ class Qwen3VLMoeIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
 
         EXPECTED_DECODED_TEXT = [
-            "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a small wild cat species native to the grasslands and montane regions",
+            "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a small wild cat species native to the grasslands and montane",
             "user\nWhat kind of dog is this?\nassistant\nBased on the image provided, there is no dog present. The animals in the picture are two cats.\n\nHere are some observations about the cats in the"
         ]  # fmt: skip
         self.assertEqual(
