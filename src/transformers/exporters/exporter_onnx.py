@@ -415,10 +415,18 @@ def _patch_reshape(original):
     folds away a plain `aten.contiguous`. Cloning to contiguous first is semantically a no-op — a
     contiguous view holds the same data reshaped — and only copies when the view would otherwise fail
     (e.g. WavLM's gated relative-position attention does `permute(...).view(...)`).
+
+    The check must be `is_contiguous_or_false`, not `is_contiguous()`: deciding contiguity compares the
+    strides against the products of the sizes, and on a tensor sized by *unbacked* symbols (a NaViT
+    packer's data-dependent patch count) that question has no answer, so plain `is_contiguous()` raises
+    `GuardOnDataDependentSymNode` — the whole export failing on a check meant only to pick a fast path.
+    The guard-free form answers "not provably contiguous", which lands on the copy: always correct, and
+    the copy is what makes the view legal anyway.
     """
+    from torch._prims_common import is_contiguous_or_false
 
     def patch(input, *shape, **kwargs):
-        if isinstance(input, torch.Tensor) and not input.is_contiguous():
+        if isinstance(input, torch.Tensor) and not is_contiguous_or_false(input):
             input = input.clone(memory_format=torch.contiguous_format)
         return original(input, *shape, **kwargs)
 
