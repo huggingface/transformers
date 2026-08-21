@@ -163,34 +163,38 @@ class Qwen2VLImageProcessor(TorchvisionBackend):
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
-        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
-        resized_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
-            height, width = stacked_images.shape[-2:]
-            if do_resize:
-                resized_height, resized_width = smart_resize(
-                    height,
-                    width,
+        if do_resize:
+            target_sizes = [
+                smart_resize(
+                    image.shape[-2],
+                    image.shape[-1],
                     factor=patch_size * merge_size,
                     min_pixels=size.shortest_edge,
                     max_pixels=size.longest_edge,
                 )
-                stacked_images = self.resize(
-                    image=stacked_images,
-                    size=SizeDict(height=resized_height, width=resized_width),
-                    resample=resample,
-                )
-            resized_images_grouped[shape] = stacked_images
-        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
+                for image in images
+            ]
+        else:
+            target_sizes = [(image.shape[-2], image.shape[-1]) for image in images]
+        normalized_images = self.resize_normalize_batch(
+            images,
+            target_sizes,
+            resample,
+            do_rescale,
+            rescale_factor,
+            do_normalize,
+            image_mean,
+            image_std,
+            disable_grouping=disable_grouping,
+        )
 
-        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
+        grouped_images, grouped_images_index = group_images_by_shape(
+            normalized_images, disable_grouping=disable_grouping
+        )
         processed_images_grouped = {}
         processed_grids = {}
-        for shape, stacked_images in grouped_images.items():
-            resized_height, resized_width = stacked_images.shape[-2:]
-            patches = self.rescale_and_normalize(
-                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
-            )
+        for shape, patches in grouped_images.items():
+            resized_height, resized_width = patches.shape[-2:]
             batch_size, channel = patches.shape[:2]
             grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
             patches = patches.reshape(

@@ -23,13 +23,17 @@ from unittest.mock import MagicMock, patch
 
 import torch
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, KernelConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer, KernelConfig, ViTImageProcessor
+from transformers.image_processing_backends import _resize_normalize_kernel, _resize_normalize_ragged_kernel
+from transformers.image_utils import PILImageResampling, SizeDict
 from transformers.integrations.hub_kernels import (
     _HUB_KERNEL_MAPPING,
     _KERNEL_MODULE_MAPPING,
+    _PROCESSING_KERNEL_ADAPTERS,
     is_kernel,
     lazy_load_kernel,
     load_and_register_attn_kernel,
+    run_processing_kernel,
 )
 from transformers.masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -39,6 +43,7 @@ from transformers.testing_utils import (
     cleanup,
     require_kernels,
     require_torch_accelerator,
+    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -686,3 +691,257 @@ class TestKernelMappingDeviceFiltering(TestCasePlus):
 
         result_mapping = kernel_config.kernel_mapping
         self.assertIn("RMSNorm", result_mapping, "RMSNorm should be in mapping")
+
+
+class RecordingKernel:
+    """Stand-in for a loaded kernel module: records the call and returns a fixed output."""
+
+    def __init__(self, output=None):
+        self.output = output
+        self.calls = []
+
+    def resize_normalize(self, images, size, image_mean, image_std, **kwargs):
+        self.calls.append({"images": images, "size": size, "image_mean": image_mean, "image_std": image_std, **kwargs})
+        return self.output
+
+
+class TestProcessingKernels(TestCasePlus):
+    """Dispatch and gating of processing kernels. Runs on CPU, `kernels` is not needed."""
+
+    def setUp(self):
+        super().setUp()
+        self.images = [torch.randint(0, 255, (3, 40, 60), dtype=torch.uint8) for _ in range(2)]
+        self.kwargs = {
+            "do_resize": True,
+            "size": SizeDict(height=8, width=8),
+            "resample": PILImageResampling.BICUBIC,
+            "do_rescale": True,
+            "rescale_factor": 1 / 255,
+            "do_normalize": True,
+            "image_mean": [0.5, 0.5, 0.5],
+            "image_std": [0.5, 0.5, 0.5],
+        }
+
+    def run_adapter(self, output=None, images=None, **overrides):
+        kernel = RecordingKernel(output=output)
+        images = self.images if images is None else images
+        # The kernel is CUDA only; pretend CPU is its device so the adapter can be tested without a GPU.
+        with patch("transformers.image_processing_backends._KERNEL_DEVICE_TYPE", "cpu"):
+            result = _resize_normalize_kernel(kernel, images, **{**self.kwargs, **overrides})
+        return kernel, result
+
+    def test_registration_records_repo_and_adapter(self):
+        self.assertIs(_PROCESSING_KERNEL_ADAPTERS["resize_normalize"], _resize_normalize_kernel)
+        self.assertIs(_PROCESSING_KERNEL_ADAPTERS["resize_normalize_ragged"], _resize_normalize_ragged_kernel)
+        for name in ("resize_normalize", "resize_normalize_ragged"):
+            self.assertEqual(_HUB_KERNEL_MAPPING[name]["repo_id"], "Molbap/kernel_image_resize")
+            self.assertEqual(_HUB_KERNEL_MAPPING[name]["revision"], "v1.0.0")
+
+    def test_kernel_outside_kernels_community_is_not_trusted_by_default(self):
+        mapping = {}
+        with patch.dict(_HUB_KERNEL_MAPPING, {"private_op": {"repo_id": "someone/private-kernel", "version": 1}}):
+            self.assertIsNone(lazy_load_kernel("private_op", mapping))
+            # Not cached: the answer changes inside `allow_all_hub_kernels()`, so it must be asked again.
+            self.assertEqual(mapping, {})
+            sentinel = types.ModuleType("trusted_kernel_module")
+            with (
+                patch("transformers.integrations.hub_kernels.ALLOW_ALL_KERNELS", True),
+                patch("transformers.integrations.hub_kernels.is_kernels_available", return_value=True),
+                patch("transformers.integrations.hub_kernels.get_kernel", return_value=sentinel),
+            ):
+                self.assertIs(lazy_load_kernel("private_op", mapping), sentinel)
+
+    def test_ragged_adapter_translates_per_image_targets(self):
+        kernel = MagicMock()
+        kernel.resize_normalize_ragged_output.return_value = [torch.zeros(3, 8, 8), torch.zeros(3, 4, 4)]
+        with patch("transformers.image_processing_backends._KERNEL_DEVICE_TYPE", "cpu"):
+            result = _resize_normalize_ragged_kernel(
+                kernel,
+                self.images,
+                [(8, 8), (4, 4)],
+                **{key: self.kwargs[key] for key in self.kwargs if key != "size"},
+            )
+        self.assertEqual(len(result), 2)
+        arguments = kernel.resize_normalize_ragged_output.call_args[0]
+        self.assertEqual(arguments[1], [(8, 8), (4, 4)])
+        self.assertEqual(arguments[2], [0.5, 0.5, 0.5])
+        self.assertEqual(arguments[4], 1 / 255)
+        self.assertEqual(arguments[5], "bicubic")
+
+    def test_ragged_adapter_falls_back(self):
+        kernel = MagicMock()
+        with patch("transformers.image_processing_backends._KERNEL_DEVICE_TYPE", "cpu"):
+            # One target per image is required, and the images must be uint8 CHW on one device.
+            self.assertIsNone(_resize_normalize_ragged_kernel(kernel, self.images, [(8, 8)], **self.kwargs))
+            self.assertIsNone(
+                _resize_normalize_ragged_kernel(
+                    kernel, [image.float() for image in self.images], [(8, 8), (4, 4)], **self.kwargs
+                )
+            )
+        self.assertIsNone(_resize_normalize_ragged_kernel(kernel, self.images, [(8, 8), (4, 4)], **self.kwargs))
+        kernel.resize_normalize_ragged_output.assert_not_called()
+
+    def test_run_processing_kernel_calls_adapter(self):
+        sentinel = types.ModuleType("sentinel_kernel_module")
+        with (
+            patch.object(torch.cuda, "is_available", return_value=True),
+            patch.dict(
+                run_processing_kernel.__globals__,
+                {
+                    "_kernels_enabled": True,
+                    "_PROCESSING_KERNEL_ADAPTERS": {"dummy_op": lambda kernel, value: (kernel, value)},
+                    "lazy_load_kernel": lambda name: sentinel,
+                },
+            ),
+        ):
+            self.assertEqual(run_processing_kernel("dummy_op", 3), (sentinel, 3))
+
+    def test_run_processing_kernel_falls_back(self):
+        with patch.object(torch.cuda, "is_available", return_value=True):
+            # Unknown op, `USE_HUB_KERNELS=0`, and a kernel that cannot be loaded all keep the default path.
+            self.assertIsNone(run_processing_kernel("not_a_registered_op"))
+            with patch.dict(run_processing_kernel.__globals__, {"_kernels_enabled": False}):
+                self.assertIsNone(run_processing_kernel("resize_normalize", self.images, **self.kwargs))
+            with patch.dict(run_processing_kernel.__globals__, {"lazy_load_kernel": lambda name: None}):
+                self.assertIsNone(run_processing_kernel("resize_normalize", self.images, **self.kwargs))
+
+    def test_run_processing_kernel_needs_accelerator(self):
+        with patch.object(torch.cuda, "is_available", return_value=False):
+            with patch.dict(run_processing_kernel.__globals__, {"lazy_load_kernel": self.fail}):
+                self.assertIsNone(run_processing_kernel("resize_normalize", self.images, **self.kwargs))
+
+    def test_adapter_translates_square_resize(self):
+        kernel, result = self.run_adapter(output=torch.zeros(2, 3, 8, 8))
+        self.assertEqual(len(kernel.calls), 1)
+        call = kernel.calls[0]
+        self.assertEqual(call["size"], (8, 8))
+        self.assertIsNone(call["crop_size"])
+        self.assertEqual(call["resize_mode"], "square")
+        self.assertEqual(call["resample"], "bicubic")
+        self.assertEqual(call["rescale_factor"], 1 / 255)
+        self.assertEqual(call["image_mean"], [0.5, 0.5, 0.5])
+        # Same output shape as the default path: a list of images, stacked only when tensors are requested.
+        self.assertEqual([image.shape for image in result["pixel_values"]], [(3, 8, 8)] * 2)
+        _, stacked = self.run_adapter(output=torch.zeros(2, 3, 8, 8), return_tensors="pt")
+        self.assertEqual(stacked["pixel_values"].shape, (2, 3, 8, 8))
+
+    def test_adapter_translates_shortest_edge_resize_with_crop(self):
+        kernel, _ = self.run_adapter(
+            output=torch.zeros(2, 3, 6, 6),
+            size=SizeDict(shortest_edge=8),
+            do_center_crop=True,
+            crop_size=SizeDict(height=6, width=6),
+        )
+        call = kernel.calls[0]
+        self.assertEqual(call["size"], 8)
+        self.assertEqual(call["crop_size"], (6, 6))
+        self.assertEqual(call["resize_mode"], "shortest_edge")
+
+    def test_adapter_scalar_normalization_stats(self):
+        kernel, _ = self.run_adapter(output=torch.zeros(2, 3, 8, 8), image_mean=0.5, image_std=0.5)
+        self.assertEqual(kernel.calls[0]["image_mean"], [0.5, 0.5, 0.5])
+
+    def test_adapter_skips_rescale(self):
+        kernel, _ = self.run_adapter(output=torch.zeros(2, 3, 8, 8), do_rescale=False)
+        self.assertEqual(kernel.calls[0]["rescale_factor"], 1.0)
+
+    def test_adapter_falls_back_on_unsupported_arguments(self):
+        unsupported = {
+            "padding": {"do_pad": True, "pad_size": SizeDict(height=8, width=8)},
+            "no_resize": {"do_resize": False},
+            "no_normalize": {"do_normalize": False},
+            "lanczos": {"resample": PILImageResampling.LANCZOS},
+            "bounded_resize": {"size": SizeDict(max_height=8, max_width=8)},
+            "crop_without_size": {"do_center_crop": True, "crop_size": SizeDict()},
+            "crop_larger_than_resize": {"do_center_crop": True, "crop_size": SizeDict(height=12, width=12)},
+            "shortest_edge_below_crop": {
+                "size": SizeDict(shortest_edge=4),
+                "do_center_crop": True,
+                "crop_size": SizeDict(height=6, width=6),
+            },
+            "shortest_edge_without_crop": {"size": SizeDict(shortest_edge=8)},
+            "stats_per_channel_mismatch": {"image_mean": [0.5, 0.5], "image_std": [0.5, 0.5]},
+        }
+        for name, overrides in unsupported.items():
+            with self.subTest(name):
+                kernel, result = self.run_adapter(**overrides)
+                self.assertIsNone(result)
+                self.assertEqual(kernel.calls, [])
+
+    def test_adapter_falls_back_on_unsupported_images(self):
+        for name, images in {
+            "empty": [],
+            "float": [image.float() for image in self.images],
+            "batched": [image.unsqueeze(0) for image in self.images],
+            "mixed_channels": [self.images[0], self.images[1][:1]],
+            "nested": [[image] for image in self.images],
+        }.items():
+            with self.subTest(name):
+                kernel, result = self.run_adapter(images=images)
+                self.assertIsNone(result)
+                self.assertEqual(kernel.calls, [])
+
+    def test_adapter_falls_back_on_images_the_kernel_cannot_reach(self):
+        # Images stay on CPU unless the caller passes `device`, and the kernel runs where the images are.
+        kernel = RecordingKernel()
+        self.assertIsNone(_resize_normalize_kernel(kernel, self.images, **self.kwargs))
+        self.assertEqual(kernel.calls, [])
+
+    def test_resize_normalize_batch_matches_with_and_without_grouping(self):
+        processor = ViTImageProcessor()
+        images = [torch.randint(0, 255, (3, 40, 60), dtype=torch.uint8) for _ in range(2)] + [
+            torch.randint(0, 255, (3, 30, 30), dtype=torch.uint8)
+        ]
+        targets = [(8, 12), (8, 12), (6, 6)]
+        arguments = (targets, PILImageResampling.BICUBIC, True, 1 / 255, True, (0.5,) * 3, (0.5,) * 3)
+        grouped = processor.resize_normalize_batch(images, *arguments, disable_grouping=False)
+        ungrouped = processor.resize_normalize_batch(images, *arguments, disable_grouping=True)
+        self.assertEqual([tuple(image.shape) for image in grouped], [(3, 8, 12), (3, 8, 12), (3, 6, 6)])
+        for one, other in zip(grouped, ungrouped):
+            torch.testing.assert_close(one, other)
+
+    def test_use_kernels_is_a_runtime_flag(self):
+        processor = ViTImageProcessor(use_kernels=True)
+        self.assertNotIn("use_kernels", processor.to_dict())
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            processor.save_pretrained(tmp_dir)
+            self.assertFalse(ViTImageProcessor.from_pretrained(tmp_dir).use_kernels)
+            self.assertTrue(ViTImageProcessor.from_pretrained(tmp_dir, use_kernels=True).use_kernels)
+
+    def test_default_path_is_unchanged_when_the_kernel_cannot_run(self):
+        images = [torch.randint(0, 255, (3, 40, 60), dtype=torch.uint8)]
+        with patch.object(torch.cuda, "is_available", return_value=False):
+            with_kernels = ViTImageProcessor(use_kernels=True)(images, return_tensors="pt")
+            without_kernels = ViTImageProcessor(use_kernels=False)(images, return_tensors="pt")
+        torch.testing.assert_close(with_kernels["pixel_values"], without_kernels["pixel_values"])
+
+
+@require_kernels
+@require_torch_gpu
+@slow
+class TestResizeNormalizeKernel(TestCasePlus):
+    """Parity of the resize + normalize kernel against the torchvision path. Needs the kernel repo to be published."""
+
+    def test_matches_default_path(self):
+        if lazy_load_kernel("resize_normalize") is None:
+            self.skipTest("kernel repo of `resize_normalize` is not available")
+        images = [
+            torch.randint(0, 255, (3, height, width), dtype=torch.uint8, device=torch_device)
+            for height, width in [(480, 640), (300, 300), (1024, 768)]
+        ]
+        kernel_outputs = []
+
+        def recording_adapter(*args, **kwargs):
+            kernel_outputs.append(_resize_normalize_kernel(*args, **kwargs))
+            return kernel_outputs[-1]
+
+        with patch.dict(_PROCESSING_KERNEL_ADAPTERS, {"resize_normalize": recording_adapter}):
+            with_kernels = ViTImageProcessor(use_kernels=True)(images, return_tensors="pt")["pixel_values"]
+        # Without this the test would compare the default path against itself and pass on a silent fallback.
+        self.assertTrue(
+            kernel_outputs and kernel_outputs[0] is not None, "the adapter fell back, the kernel never ran"
+        )
+        without_kernels = ViTImageProcessor(use_kernels=False)(images, return_tensors="pt")["pixel_values"]
+        self.assertEqual(with_kernels.shape, without_kernels.shape)
+        # The kernel resizes in float where the default path resizes in uint8, so single pixels differ.
+        self.assertLess((with_kernels - without_kernels).abs().mean().item(), 0.02)
