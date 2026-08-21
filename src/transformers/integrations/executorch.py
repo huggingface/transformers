@@ -11,6 +11,7 @@
 # specific language governing permissions and limitations under the License.
 
 import logging
+from itertools import zip_longest
 
 import torch
 
@@ -1114,24 +1115,16 @@ def register_dynamic_cache_export_support():
 
 
 def _get_dynamic_cache_layout(cache: DynamicCache) -> list[list[int | bool | None]]:
-    layout = []
-    for layer_idx, layer in enumerate(cache.layers):
-        if type(layer) is DynamicLayer:
-            sliding_window = None
-        elif type(layer) is DynamicSlidingWindowLayer:
-            sliding_window = layer.sliding_window
-        else:
-            raise RuntimeError(
-                "ExecuTorch export supports only DynamicLayer and DynamicSlidingWindowLayer, "
-                f"but dynamic cache layer {layer_idx} has type {type(layer).__name__}."
-            )
-
-        layout.append([sliding_window, layer.keys is not None])
-    return layout
+    return [getattr(layer, "sliding_window", None) for layer in cache.layers]
 
 
 def _get_cache_dict(cache: DynamicCache):
     """Convert cache to dictionary format for pytree operations."""
+    if any(not isinstance(layer, (DynamicLayer, DynamicSlidingWindowLayer)) for layer in cache.layers):
+        raise RuntimeError(
+            "This pytree flattening function should be applied to DynamicCache containing only `DynamicLayer` and `DynamicSlidingWindowLayer`"
+        )
+
     if not is_torch_greater_or_equal_than_2_6:
         logging.warning("DynamicCache + torch.export is tested on torch 2.6.0+ and may not work on earlier versions.")
 
@@ -1162,13 +1155,9 @@ def _flatten_cache_dict_spec(cache_dict, layout, spec: torch.utils._pytree.TreeS
 def _unflatten_dynamic_cache(values, context: torch.utils._pytree.Context):
     dictionary_keys, layout = context
     dictionary = torch.utils._pytree._dict_unflatten(values, dictionary_keys)
-    key_states = iter(dictionary.get("key_cache", []))
-    value_states = iter(dictionary.get("value_cache", []))
-    ddp_cache_data = []
-    for sliding_window, is_populated in layout:
-        key_state = next(key_states) if is_populated else None
-        value_state = next(value_states) if is_populated else None
-        sliding_window_tensor = None if sliding_window is None else torch.tensor([sliding_window])
-        ddp_cache_data.append((key_state, value_state, sliding_window_tensor))
+    key_states = dictionary["key_cache"]
+    value_states = dictionary["value_cache"]
+    layout = [torch.tensor([sliding_window]) if sliding_window is not None else None for sliding_window in layout]
+    ddp_cache_data = zip_longest(key_states, value_states, layout)
 
-    return DynamicCache(ddp_cache_data) if ddp_cache_data else DynamicCache()
+    return DynamicCache(ddp_cache_data)
