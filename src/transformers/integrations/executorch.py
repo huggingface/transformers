@@ -1120,17 +1120,17 @@ def _get_cache_dict(cache: DynamicCache):
     return {
         "key_cache": [layer.keys for layer in cache.layers if layer.keys is not None],
         "value_cache": [layer.values for layer in cache.layers if layer.values is not None],
+        "sliding_window": [
+            getattr(layer, "_sliding_window_tensor", None) for layer in cache.layers if layer.keys is not None
+        ],
     }
 
 
 def _unflatten_dynamic_cache(values, context: torch.utils._pytree.Context):
     dictionary = torch.utils._pytree._dict_unflatten(values, context)
-    cache = DynamicCache()
     # Reconstruct layers from keys and values lists
     key_list = dictionary.get("key_cache", [])
     value_list = dictionary.get("value_cache", [])
-    for idx in range(max(len(key_list), len(value_list))):
-        key = key_list[idx] if idx < len(key_list) else None
-        value = value_list[idx] if idx < len(value_list) else None
-        cache.update(key, value, idx)
-    return cache
+    sliding_window_list = dictionary.get("sliding_window", [])
+    ddp_cache_data = zip(key_list, value_list, sliding_window_list)
+    return DynamicCache(ddp_cache_data) if ddp_cache_data else DynamicCache()
