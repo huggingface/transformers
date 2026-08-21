@@ -1,4 +1,5 @@
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
+# TODO: fix stale expected values for A10G (sm_86) in test_table_detection
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
