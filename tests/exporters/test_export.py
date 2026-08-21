@@ -428,11 +428,6 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "duplicated by the constant-dedup pass; `_unsafe_adjust_original_program` then deletes the "
             "shared target once and raises `KeyError` on the next copy while stripping delegated params."
         ),
-        "EfficientNetModel": (
-            "ExecuTorch export exceeds the 1000s test timeout under both static and dynamic shapes "
-            "(dynamic ~1400s); the depthwise-conv / SiLU stack lowers slowly."
-        ),
-        "EfficientNetForImageClassification": "Same `timeout` as `EfficientNetModel`.",
     },
     "executorch.generate": {},
     "executorch.dynamic": {
@@ -451,22 +446,18 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "MMGroundingDinoModel": "Same `timeout` failure as `Mask2FormerModel`.",
         "MMGroundingDinoForObjectDetection": "Same `timeout` failure as `Mask2FormerModel`.",
         "Sam2VisionModel": "Same `timeout` failure as `Mask2FormerModel`.",
-        "Swinv2Model": "Same `timeout` failure as `Mask2FormerModel`.",
-        "Swinv2ForImageClassification": "Same `timeout` failure as `Mask2FormerModel`.",
-        "Swinv2ForMaskedImageModeling": "Same `timeout` failure as `Mask2FormerModel`.",
-        "Swinv2Backbone": "Same `timeout` failure as `Mask2FormerModel`.",
-        "TimesformerModel": "Same `timeout` failure as `Mask2FormerModel`.",
-        "TimesformerForVideoClassification": "Same `timeout` failure as `Mask2FormerModel`.",
     },
     "executorch.static": {
         "Wav2Vec2BertModel": (
-            "ExecuTorch *runtime* execution of the Conformer encoder exceeds the 15-min test timeout "
-            "under static shapes (~1350s in the runtime, not lowering). Dynamic shapes stay under budget."
+            "Its conv feature extractor reshapes on the stacked floor-divisions its own stride chain "
+            "produces (`((((s//4)+1)//2)+1)//2 …`), which ExecuTorch's lowering cannot satisfy: "
+            "`RuntimeError: shape '[4*s99, 16, …]' is invalid`. Re-measured — this was recorded as a "
+            "timeout, but it fails outright, well inside the limit."
         ),
-        "Wav2Vec2BertForCTC": "Same Conformer-encoder runtime `timeout` as `Wav2Vec2BertModel`.",
-        "Wav2Vec2BertForSequenceClassification": "Same Conformer-encoder runtime `timeout` as `Wav2Vec2BertModel`.",
-        "Wav2Vec2BertForAudioFrameClassification": "Same Conformer-encoder runtime `timeout` as `Wav2Vec2BertModel`.",
-        "Wav2Vec2BertForXVector": "Same Conformer-encoder runtime `timeout` as `Wav2Vec2BertModel`.",
+        "Wav2Vec2BertForCTC": "Same conv-shape reshape failure as `Wav2Vec2BertModel`.",
+        "Wav2Vec2BertForSequenceClassification": "Same conv-shape reshape failure as `Wav2Vec2BertModel`.",
+        "Wav2Vec2BertForAudioFrameClassification": "Same conv-shape reshape failure as `Wav2Vec2BertModel`.",
+        "Wav2Vec2BertForXVector": "Same conv-shape reshape failure as `Wav2Vec2BertModel`.",
         "GroundingDinoModel": (
             "Static-shape export raises `KeyError: 'bbox_embed.1.layers.0.weight'`: the per-decoder-layer "
             "bbox-embed head is shared/tied, so the constant-dedup pass duplicates it and "
