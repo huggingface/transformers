@@ -417,9 +417,6 @@ def grouped_mm_experts_forward(
     # In-place clamp on `expert_ids_g` keeps the per-row bias gather in-bounds (bias added at
     # sentinel positions falls in rows the kernel skips, so harmless). Safe to mutate now —
     # nothing downstream needs the sentinel info from `expert_ids_g` itself.
-    # Without expert parallelism the router never emits an id >= num_experts, so the mask is all-False
-    # and the two `masked_fill_` below are pure memory traffic on tensors the size of the expert
-    # activations -- twice in the forward, twice more in the backward.
     sentinel_mask = None
     if self.is_expert_parallel:
         sentinel_mask = (expert_ids_g >= self.num_experts).unsqueeze(-1)
@@ -570,8 +567,6 @@ def use_experts_implementation(
             self.has_bias = has_bias
             self.is_transposed = is_transposed
             self.is_concatenated = is_concatenated
-            # Only expert parallelism makes the router emit ids >= num_experts; `MoeExpertsParallel`
-            # flips this on when it installs its forward.
             self.is_expert_parallel = False
 
         @wraps(original_forward)
