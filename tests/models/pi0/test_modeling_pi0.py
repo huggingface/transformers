@@ -448,6 +448,9 @@ class PI0ModelIntegrationTest(unittest.TestCase):
                 logging_steps=1,
                 disable_tqdm=True,
                 bf16=True,
+                # Adafactor uses a factored 2nd moment and no 1st moment, keeping optimizer state
+                # memory at ~0.3 GB vs ~12 GB for Adam (exp_avg + exp_avg_sq = 2× model weights).
+                # This is necessary to fit the ~3B-parameter pi0_base model on a 22 GiB GPU.
                 optim="adafactor",
             )
             loss_callback = StoreLossCallback()
