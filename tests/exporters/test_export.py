@@ -293,6 +293,17 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             'supported for `decoder_input_ids` of length 1", so a 2-token continuation-from-past cannot '
             "even run, let alone trace."
         ),
+        "MllamaForConditionalGeneration": (
+            "Its images reach the decoder through cross-attention, and the runtime has no route for "
+            "`pixel_values` / `aspect_ratio_ids` / `aspect_ratio_mask`: the decomposition finds no "
+            "modality getter, so nothing consumes them (`model_kwargs are not used`). The idefics recipe "
+            "fits — declare the `cross_attention_layers` as `cross_attention` in `layer_types`, and the "
+            "cache's cross slots make the captured prefill the writer the runtime keeps (verified: both "
+            "generate variants then pass). It is held back by the static path: that layer type maps to a "
+            "*dynamic* layer (cross K/V are image-length, so no static buffer can be pre-sized), which "
+            "costs mllama its static-cache compile tests. TODO: land it behind a static cross layer, or "
+            "once mllama's static cross slots are sized from the image geometry."
+        ),
         "GitForCausalLM": (
             "Its forward corrects for the image tokens only on a single-token step — `position_ids` "
             "offset by the past length, and an `attention_mask` widened by the cached image tokens, both "
@@ -300,12 +311,6 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "`seq_len == 1`. The merged capture traces at 2 tokens, so the graph bakes those branches "
             "*off* and every 1-token decode step then runs without them: the second step's scores drift "
             "~1e-2 from eager. The single-token capture, which keeps the branches, is unaffected."
-        ),
-        "MllamaForConditionalGeneration": (
-            "Cross-attention decode indexes `cross_attention_mask[:, :, arange(seq) + past_seen_tokens]`; "
-            "the multi-token merge grows the query axis but not the captured cross-attention mask, so the "
-            "index runs past it (out of bounds → CUDA device-side assert). Single-token generate is fine. "
-            "TODO: grow `cross_attention_mask` in `_merge_decode_calls`."
         ),
         "ReformerModelWithLMHead": (
             "Chunked local attention assumes a chunk-aligned query length; the merged multi-token query "

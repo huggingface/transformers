@@ -1364,7 +1364,13 @@ class MllamaModel(MllamaPreTrainedModel):
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             seq_len = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
             device = input_ids.device if input_ids is not None else inputs_embeds.device
+            # Clamped to the mask's own last row: the row `_update_model_kwargs_for_generation` appends
+            # per decode step is a copy of the last one, so clamping is what that growth would have given
+            # — and it keeps a caller that does not grow the mask itself (any loop other than this model's
+            # own `generate`) from indexing past it, which is an out-of-bounds gather, i.e. a device-side
+            # assert rather than an exception.
             current_pos = torch.arange(seq_len, device=device) + past_seen_tokens
+            current_pos = current_pos.clamp(max=cross_attention_mask.shape[2] - 1)
 
             cross_attention_mask = cross_attention_mask[:, :, current_pos]
             full_text_row_masked_out_mask = full_text_row_masked_out_mask[:, :, current_pos]
