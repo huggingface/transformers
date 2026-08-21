@@ -145,8 +145,6 @@ if is_accelerate_available():
 if TYPE_CHECKING:
     from kernels.layer.mode import Mode
 
-    from ._typing import DeviceMeshLike
-
 
 if is_sagemaker_mp_enabled():
     import smdistributed.modelparallel.torch as smp
@@ -184,7 +182,6 @@ class LoadStateDictConfig:
     dtype: torch.dtype | None = None
     dtype_plan: dict = field(default_factory=dict)
     hf_quantizer: HfQuantizer | None = None
-    device_mesh: "DeviceMeshLike | None" = None
     weights_only: bool = True
     weight_mapping: list[WeightConverter | WeightRenaming] | None = None
     disable_mmap: bool | None = None
@@ -4024,8 +4021,6 @@ class PreTrainedModel(
                 `DistributedConfig(tp_size=N)` for tensor parallelism, or
                 `DistributedConfig(fsdp_size=N)` for FSDP2. Requires `torchrun` and an initialized
                 process group when `tp_size > 1` or `fsdp_size > 1`. Mutually exclusive with `device_map`.
-            device_mesh (`torch.distributed.DeviceMesh`, *optional*):
-                A torch device mesh. If not provided would default to world size. Used only for tensor parallel for now.
                 If provided, it has to contain dimension named `"tp"` in case it's > 1 dimensional, this dimension will be used for tensor parallelism
             offload_folder (`str` or `os.PathLike`, *optional*):
                 If the `device_map` contains any value `"disk"`, the folder where we will offload weights.
@@ -4118,7 +4113,6 @@ class PreTrainedModel(
         generation_config = kwargs.pop("generation_config", None)
         gguf_file = kwargs.pop("gguf_file", None)
         distributed_config: DistributedConfig = kwargs.pop("distributed_config", None)
-        device_mesh = kwargs.pop("device_mesh", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         allow_all_kernels = kwargs.pop("allow_all_kernels", False)
         use_kernels = kwargs.pop("use_kernels", False)
@@ -4163,7 +4157,7 @@ class PreTrainedModel(
 
         if distributed_config is not None:
             distributed_config, device_map, device_mesh = cls.prepare_distribute_model(
-                distributed_config, device_mesh=device_mesh, device_map=device_map
+                distributed_config, device_map=device_map
             )
 
         if gguf_file is not None and not is_accelerate_available():
@@ -4320,7 +4314,8 @@ class PreTrainedModel(
         # Obtain the weight conversion mapping for this model if any are registered and apply to all submodels recursively
         weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)
 
-        model = cls.maybe_distribute_model(model, distributed_config, device_mesh)
+        if distributed_config is not None:
+            model = cls.maybe_distribute_model(model, distributed_config, device_mesh)
 
         # Prepare the full device map
         if device_map is not None:
@@ -4337,7 +4332,6 @@ class PreTrainedModel(
             dtype=dtype,
             dtype_plan=dtype_plan,
             hf_quantizer=hf_quantizer,
-            device_mesh=device_mesh,
             weights_only=weights_only,
             weight_mapping=weight_conversions,
             use_safetensors=use_safetensors,
@@ -4508,7 +4502,6 @@ class PreTrainedModel(
             model._move_missing_keys_from_meta_to_device(
                 loading_info.missing_and_mismatched(),
                 load_config.device_map,
-                load_config.device_mesh,
                 load_config.hf_quantizer,
             )
 
@@ -4725,7 +4718,6 @@ class PreTrainedModel(
         self,
         missing_keys: list[str],
         device_map: dict | None,
-        device_mesh: "DeviceMeshLike | None",
         hf_quantizer: HfQuantizer | None,
     ) -> None:
         """Move missing params/buffers off meta to their target device.
