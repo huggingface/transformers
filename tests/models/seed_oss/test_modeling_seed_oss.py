@@ -79,7 +79,7 @@ class SeedOssIntegrationTest(unittest.TestCase):
                     "How to make pasta?\nHow to make pasta?\nPasta is a popular dish that is enjoyed by people all over",
                     "Hi ByteDance-Seed team,\nI am trying to use the ByteDance-Seed dataset for my research. I have",
                 ],
-                ("cuda", None): [
+                (None, None): [
                     "How to make pasta?\nHow to make pasta?\nPasta is a popular dish that is enjoyed by people all over",
                     "Hi ByteDance-Seed team,\nI am trying to run the code on the <beginning of the code>seed",
                 ],
@@ -110,7 +110,7 @@ class SeedOssIntegrationTest(unittest.TestCase):
                     "How to make pasta?\nHow to make pasta?\nPasta is a popular dish that is enjoyed by people all over",
                     "Hi ByteDance-Seed team,\nI am trying to use the ByteDance-Seed dataset for my research. I have",
                 ],
-                ("cuda", None): [
+                (None, None): [
                     "How to make pasta?\nHow to make pasta?\nPasta is a popular dish that is enjoyed by people all over",
                     "Hi ByteDance-Seed team,\nI am trying to run the code on the <beginning of the code>seed",
                 ],
