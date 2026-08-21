@@ -64,7 +64,11 @@ from .utils import (
 )
 from .utils.chat_parsing import ResponseParser
 from .utils.chat_parsing import parse_response as _template_parse_response
-from .utils.chat_template_utils import render_jinja_template
+from .utils.chat_template_utils import (
+    encode_sanitized_chat,
+    render_jinja_template,
+    sanitize_content,
+)
 
 
 if TYPE_CHECKING:
@@ -2995,6 +2999,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         add_generation_prompt: bool = False,
         continue_final_message: bool | str = False,
         tokenize: bool = True,
+        sanitize_special_tokens: bool = False,
         padding: bool | str | PaddingStrategy = False,
         truncation: bool = False,
         max_length: int | None = None,
@@ -3038,6 +3043,17 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 (e.g. "reasoning_content"). Cannot be used at the same time as `add_generation_prompt`.
             tokenize (`bool`, defaults to `True`):
                 Whether to tokenize the output. If `False`, the output will be a string.
+            sanitize_special_tokens (`bool`, defaults to `False`):
+                Whether to isolate message content from the chat structure, so that special tokens in
+                user-supplied content (a typed `<|im_end|>`, say) cannot act as control tokens. Message
+                content is replaced by an opaque marker and encoded by the
+                tokenizer with `split_special_tokens=True`, while the special tokens the template itself
+                emits are unaffected. The text is preserved, not stripped or escaped. Requires
+                `tokenize=True`, since the guarantee is a property of the encoding rather than of the
+                rendered string, and cannot be combined with `return_assistant_tokens_mask`, which needs
+                character offsets into the rendered chat. Because content is encoded separately from the
+                template text around it, tokenization at those boundaries may differ from an unsanitized
+                call.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
                  Select a strategy to pad the returned sequences (according to the model's padding side and padding
                  index) among:
@@ -3104,6 +3120,20 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             if return_assistant_tokens_mask:
                 raise ValueError("continue_final_message is not compatible with return_assistant_tokens_mask.")
 
+        if sanitize_special_tokens:
+            if not tokenize:
+                raise ValueError(
+                    "`sanitize_special_tokens=True` requires `tokenize=True`: the guarantee comes from the "
+                    "tokenizer encoding message content with `split_special_tokens=True`, and cannot be "
+                    "expressed in string output."
+                )
+            if return_assistant_tokens_mask:
+                raise ValueError(
+                    "`sanitize_special_tokens=True` is not compatible with `return_assistant_tokens_mask`, "
+                    "which needs character offsets into the rendered chat."
+                )
+            conversations, safe_ids = sanitize_content(conversations, self)
+
         template_kwargs = {**self.special_tokens_map, **kwargs}  # kwargs overwrite special tokens if both are present
         rendered_chat, generation_indices = render_jinja_template(
             conversations=conversations,
@@ -3120,15 +3150,36 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             rendered_chat = rendered_chat[0]
 
         if tokenize:
-            out = self(
-                rendered_chat,
-                padding=padding,
-                truncation=truncation,
-                max_length=max_length,
-                add_special_tokens=False,
-                return_tensors=return_tensors,
-                **tokenizer_kwargs,
-            )
+            if sanitize_special_tokens:
+                # Content is already encoded as ordinary tokens; only the template text around it is left,
+                # and it keeps its own control tokens special.
+                input_ids = [
+                    encode_sanitized_chat(self, chat, safe_ids)
+                    for chat in (rendered_chat if is_batched else [rendered_chat])
+                ]
+                if truncation and max_length is not None:
+                    input_ids = [
+                        ids[:max_length] if self.truncation_side == "right" else ids[-max_length:] for ids in input_ids
+                    ]
+                out = self.pad(
+                    {"input_ids": input_ids},
+                    padding=padding,
+                    max_length=max_length,
+                    return_tensors=return_tensors,
+                    **tokenizer_kwargs,
+                )
+                if not is_batched and return_tensors is None:
+                    out = BatchEncoding({key: value[0] for key, value in out.items()})
+            else:
+                out = self(
+                    rendered_chat,
+                    padding=padding,
+                    truncation=truncation,
+                    max_length=max_length,
+                    add_special_tokens=False,
+                    return_tensors=return_tensors,
+                    **tokenizer_kwargs,
+                )
             if return_dict:
                 if return_assistant_tokens_mask:
                     assistant_masks = []
