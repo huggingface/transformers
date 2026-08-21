@@ -416,7 +416,8 @@ class PI0ModelIntegrationTest(unittest.TestCase):
     @require_torch_large_gpu
     def test_train_pi0_base_libero(self):
         # device_map prevents Trainer from wrapping the model in nn.DataParallel on multi-GPU machines,
-        # which would cause a dtype mismatch (float32 inputs vs bfloat16 weights).
+        # which would cause a dtype mismatch (float32 inputs vs bfloat16 weights). This test is not
+        # intended to test multi-GPU training, so running on a single device is correct here.
         model = PI0ForConditionalGeneration.from_pretrained(
             "lerobot/pi0_base", torch_dtype=torch.bfloat16, device_map={"": torch_device}
         ).eval()
