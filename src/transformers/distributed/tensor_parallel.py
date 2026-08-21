@@ -593,6 +593,8 @@ class MoeExpertsParallel(TensorParallelLayer):
 
     def install_forward(self, module, mesh, *, is_expert_parallel=False):
         """Install the transforms but pass `is_expert_parallel` in the forward call."""
+        # The experts forward needs this too: it is what decides whether router ids can carry sentinels.
+        module.is_expert_parallel = is_expert_parallel
         original_forward = module.forward
         output_source = (
             Partial()
