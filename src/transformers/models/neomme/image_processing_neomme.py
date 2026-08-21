@@ -40,9 +40,6 @@ class NeoMMEImageProcessorKwargs(ImagesKwargs, total=False):
         Side, in pixels, of one patch token. The image is padded to a whole multiple of it.
     max_side (`int`, *optional*):
         Longest-side cap in pixels. Unset means no longest-side resize.
-    size (`dict[str, int]`, *optional*):
-        Pixel-area resize bounds with `min_pixels` and `max_pixels` keys. Bounds apply before patch-grid padding.
-        Unset means no area-based resize.
     """
 
     patch_size: Annotated[int, positive_int()]
@@ -147,38 +144,38 @@ class NeoMMEImageProcessor(TorchvisionBackend):
         return super().preprocess(images, **kwargs)
 
     def _validate_preprocess_kwargs(self, **kwargs) -> tuple:
-        unsupported = sorted(
-            name
-            for name in ("crop_size", "do_center_crop", "do_pad", "pad_size", "image_seq_length")
-            if kwargs.get(name) not in (None, False)
-        )
-        if unsupported:
-            raise ValueError(f"NeoMMEImageProcessor does not implement these image kwargs: {unsupported}")
+        size = kwargs["size"]
+        if size is not None and set(dict(size)) != {"min_pixels", "max_pixels"}:
+            raise ValueError("size must contain exactly min_pixels and max_pixels.")
 
-        self._validate_size_settings(
-            kwargs.get("patch_size", self.patch_size),
-            kwargs.get("max_side", self.max_side),
-            kwargs.get("size", self.size),
-        )
-        if kwargs.get("size") is None:
+        if kwargs["size"] is None:
             # Generic resize validation requires `size`; NeoMME can resize from `max_side` alone.
             kwargs.pop("do_resize", None)
         return super()._validate_preprocess_kwargs(**kwargs)
 
-    @staticmethod
-    def _validate_size_settings(patch_size: int, max_side: int | None, size: SizeDict | None) -> None:
-        if not isinstance(patch_size, int) or isinstance(patch_size, bool) or patch_size <= 0:
-            raise ValueError(f"patch_size must be a positive integer, got {patch_size!r}.")
-        if size is not None and set(dict(size)) != {"min_pixels", "max_pixels"}:
-            raise ValueError("size must contain exactly min_pixels and max_pixels.")
+    def _resize_to_budget(
+        self,
+        image: "torch.Tensor",
+        max_side: int | None,
+        size: SizeDict | None,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+    ) -> "torch.Tensor":
+        height, width = image.shape[-2], image.shape[-1]
+        resized_height, resized_width = get_resize_output_size(height, width, max_side, size)
+        if (resized_height, resized_width) == (height, width):
+            return image
+        size = SizeDict(height=resized_height, width=resized_width)
+        return self.resize(image=image, size=size, resample=resample, antialias=True)
 
-        for name, value in (
-            ("max_side", max_side),
-            ("size.max_pixels", size.max_pixels if size is not None else None),
-            ("size.min_pixels", size.min_pixels if size is not None else None),
-        ):
-            if value is not None and (not isinstance(value, int) or isinstance(value, bool) or value <= 0):
-                raise ValueError(f"{name} must be a positive integer or None, got {value!r}.")
+    def _pad_to_patch_grid(self, image: "torch.Tensor", patch_size: int) -> tuple["torch.Tensor", int, int]:
+        height, width = image.shape[-2], image.shape[-1]
+        grid_height, grid_width = -(-height // patch_size), -(-width // patch_size)
+        pad_height = grid_height * patch_size - height
+        pad_width = grid_width * patch_size - width
+        if pad_height or pad_width:
+            image = tvF.pad(image, [0, 0, pad_width, pad_height], fill=0)
+        # image: (num_channels, grid_height * patch_size, grid_width * patch_size)
+        return image, grid_height, grid_width
 
     def _preprocess(
         self,
@@ -246,30 +243,6 @@ class NeoMMEImageProcessor(TorchvisionBackend):
             height, width = get_resize_output_size(height, width, max_side, size)
 
         return -(-height // patch_size) * (-(-width // patch_size))
-
-    def _resize_to_budget(
-        self,
-        image: "torch.Tensor",
-        max_side: int | None,
-        size: SizeDict | None,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
-    ) -> "torch.Tensor":
-        height, width = image.shape[-2], image.shape[-1]
-        resized_height, resized_width = get_resize_output_size(height, width, max_side, size)
-        if (resized_height, resized_width) == (height, width):
-            return image
-        size = SizeDict(height=resized_height, width=resized_width)
-        return self.resize(image=image, size=size, resample=resample, antialias=True)
-
-    def _pad_to_patch_grid(self, image: "torch.Tensor", patch_size: int) -> tuple["torch.Tensor", int, int]:
-        height, width = image.shape[-2], image.shape[-1]
-        grid_height, grid_width = -(-height // patch_size), -(-width // patch_size)
-        pad_height = grid_height * patch_size - height
-        pad_width = grid_width * patch_size - width
-        if pad_height or pad_width:
-            image = tvF.pad(image, [0, 0, pad_width, pad_height], fill=0)
-        # image: (num_channels, grid_height * patch_size, grid_width * patch_size)
-        return image, grid_height, grid_width
 
 
 __all__ = ["NeoMMEImageProcessor"]

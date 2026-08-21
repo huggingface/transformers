@@ -24,10 +24,8 @@ from ...image_utils import ImageInput, make_flat_list_of_images
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring
-from ...utils.import_utils import requires
 
 
-@requires(backends=("torch",))
 @auto_docstring
 class NeoMMEProcessor(ProcessorMixin):
     r"""
@@ -73,8 +71,8 @@ class NeoMMEProcessor(ProcessorMixin):
             if retrieval_task == "query" and text_batch is not None
             else []
         )
-
         batch = super().__call__(images=images, text=text, **kwargs)
+
         input_ids = batch["input_ids"]
         input_ids_list = input_ids.tolist() if hasattr(input_ids, "tolist") else input_ids
         attention_mask = batch.get("attention_mask")
@@ -109,21 +107,17 @@ class NeoMMEProcessor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: TextInput | list[TextInput] | None = None,
-        videos=None,
-        audio=None,
         **kwargs,
     ):
         images, text, videos, audio = super().prepare_inputs_layout(
             images=images,
             text=text,
-            videos=videos,
-            audio=audio,
             **kwargs,
         )
         if images is not None and text is None:
             images = make_flat_list_of_images(images)
             text = [self.tokenizer.document_token + self.image_token] * len(images)
-        return images, text, videos, audio
+        return images, text, None, None
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         grid_height, grid_width = image_inputs["image_grid_hw"][image_idx]
@@ -161,7 +155,10 @@ class NeoMMEProcessor(ProcessorMixin):
         return [name for name in super().model_input_names if name != "image_grid_hw"] + ["position_ids"]
 
     def _build_position_ids(self, input_ids, attention_mask, image_grid_hw):
-        """Build two-axis positions for batches containing document images."""
+        """
+        Build two-axis positions for batches containing document images. This method
+        is stored in `processor` since it requires knowledge about special MM tokens
+        """
         input_ids_list = input_ids.tolist() if hasattr(input_ids, "tolist") else input_ids
         attention_mask = attention_mask.tolist() if hasattr(attention_mask, "tolist") else attention_mask
         image_grid_hw = image_grid_hw.tolist() if hasattr(image_grid_hw, "tolist") else image_grid_hw

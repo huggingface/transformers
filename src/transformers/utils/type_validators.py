@@ -31,6 +31,15 @@ def positive_int(value: int | None = None):
         raise ValueError(f"Value must be a positive integer, got {value}")
 
 
+@as_validated_field
+def positive_int_field(value: int | None = None):
+    """
+    Same as `positive_int` but functions as a dataclass field rather than type annotation metadata.
+    """
+    if value is not None and (not isinstance(value, int) or not value > 0):
+        raise ValueError(f"Value must be a positive integer, got {value}")
+
+
 def padding_validator(value: bool | str | PaddingStrategy | None = None):
     possible_names = ["longest", "max_length", "do_not_pad"]
     if value is None:

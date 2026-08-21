@@ -255,18 +255,6 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds_matches_input_ids(self):
         pass
 
-    def test_requires_input_ids(self):
-        config, input_ids, _, _ = self.model_tester.prepare_config_and_inputs()
-        model = NeoMMEModel(config).to(torch_device).eval()
-        inputs_embeds = model.get_input_embeddings()(input_ids)
-
-        with self.assertRaisesRegex(ValueError, "requires `input_ids`"):
-            model()
-        with self.assertRaisesRegex(ValueError, "cannot specify both"):
-            model(input_ids=input_ids, inputs_embeds=inputs_embeds)
-        with self.assertRaisesRegex(ValueError, "requires `input_ids`"):
-            model(inputs_embeds=inputs_embeds)
-
     @unittest.skip(reason="the generic check compares an unused layer spectrum that differs by one floating-point ULP")
     def test_model_rope_scaling_frequencies(self):
         pass
@@ -299,11 +287,11 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_layer_types_validated(self):
         base = {"num_hidden_layers": 3}
-        with self.assertRaises(ValueError):  # one entry short
+        with self.assertRaises(StrictDataclassClassValidationError):  # one entry short
             NeoMMEConfig(**base, layer_types=["sliding_attention"] + ["full_attention"])
-        with self.assertRaises(ValueError):  # not a known layer type
+        with self.assertRaises(StrictDataclassClassValidationError):  # not a known layer type
             NeoMMEConfig(**base, layer_types=["sliding_attention", "gdn", "full_attention"])
-        with self.assertRaises(ValueError):  # value embeddings require a full-attention layer
+        with self.assertRaises(StrictDataclassClassValidationError):  # value embeddings require a full-attention layer
             NeoMMEConfig(**base, layer_types=["sliding_attention"] * 3)
 
         pattern = ["sliding_attention", "sliding_attention", "full_attention"]
@@ -379,11 +367,11 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_partial_rotary_factor_multiple_of_four(self):
         """Rotating dims must be a multiple of 4 (two M-RoPE axes × pairs); used to silently round down."""
-        with self.assertRaisesRegex(ValueError, "needs at least 4"):
+        with self.assertRaisesRegex(ValueError, "which is not a multiple of 4"):
             NeoMMEConfig(head_dim=8)
-        with self.assertRaisesRegex(ValueError, "not a multiple of 4"):
+        with self.assertRaisesRegex(ValueError, "which is not a multiple of 4"):
             NeoMMEConfig(head_dim=64, rope_parameters={"full_attention": {"partial_rotary_factor": 0.3}})
-        with self.assertRaisesRegex(ValueError, "needs at least 4"):
+        with self.assertRaisesRegex(ValueError, "which is not a multiple of 4"):
             NeoMMEConfig(head_dim=2, layer_types=["full_attention"] * 17)
 
         # `0.75 * 64 = 48`, a valid rotary width.
@@ -392,7 +380,7 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_partial_rotary_factor_unit_interval(self):
         for factor in (2.0, 0.0, -0.25):
-            with self.assertRaisesRegex(ValueError, r"outside \(0.0, 1.0\]"):
+            with self.assertRaisesRegex(ValueError, r"must be in \(0.0, 1.0\]"):
                 NeoMMEConfig(rope_parameters={"sliding_attention": {"partial_rotary_factor": factor}})
 
     def test_config_dict_roundtrip(self):

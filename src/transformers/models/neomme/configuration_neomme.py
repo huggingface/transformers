@@ -20,7 +20,7 @@ from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, logging
-from ...utils.type_validators import interval
+from ...utils.type_validators import positive_int_field
 
 
 logger = logging.get_logger(__name__)
@@ -60,7 +60,7 @@ class NeoMMEConfig(PreTrainedConfig):
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.output_gate": "colwise",
+        "layers.*.self_attn.gate_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
@@ -70,30 +70,27 @@ class NeoMMEConfig(PreTrainedConfig):
     default_theta = {"full_attention": 1_000_000.0, "sliding_attention": 10_000.0}
     default_partial_rotary_factor = {"full_attention": 0.25, "sliding_attention": 1.0}
 
-    vocab_size: int = interval(min=1)(default=131072)
-    embedding_rank: int = interval(min=1)(default=256)
-    hidden_size: int = interval(min=1)(default=1024)
-    intermediate_size: int = interval(min=1)(default=3584)
+    vocab_size: int = positive_int_field(default=131072)
+    embedding_rank: int = positive_int_field(default=256)
+    hidden_size: int = positive_int_field(default=1024)
+    intermediate_size: int = positive_int_field(default=3584)
     hidden_act: Literal["relu2"] = "relu2"
     mlp_bias: bool = False
-    num_hidden_layers: int = interval(min=1)(default=17)
-    num_attention_heads: int = interval(min=1)(default=16)
-    num_key_value_heads: int = interval(min=1)(default=4)
-    head_dim: int = interval(min=1)(default=64)
-    max_position_embeddings: int = interval(min=1)(default=16384)
+    num_hidden_layers: int = positive_int_field(default=17)
+    num_attention_heads: int = positive_int_field(default=16)
+    num_key_value_heads: int = positive_int_field(default=4)
+    head_dim: int = positive_int_field(default=64)
+    max_position_embeddings: int = positive_int_field(default=16384)
     norm_eps: float = 1e-6
     initializer_range: float = 0.02
     attention_dropout: float | int = 0.0
-
+    attention_bias: bool = False
     layer_types: list[str] | None = None
     rope_parameters: dict[Literal["full_attention", "sliding_attention"], dict] | None = None
     sliding_window: int | None = 256
-
     residual_multiplier: float | None = None
-
-    patch_size: int = interval(min=1)(default=32)
-    embedding_dim: int = interval(min=1)(default=128)
-
+    patch_size: int = positive_int_field(default=32)
+    embedding_dim: int = positive_int_field(default=128)
     pad_token_id: int | None = 0
     document_token_id: int | None = 5
     image_token_id: int | None = 6
@@ -108,20 +105,20 @@ class NeoMMEConfig(PreTrainedConfig):
         if self.residual_multiplier is None:
             self.residual_multiplier = (2 * self.num_hidden_layers) ** -0.5
 
-        self.validate_layer_types()
-
         super().__post_init__(**kwargs)
-        for layer_idx, layer_config in enumerate(self.per_layer_config):
-            self._check_sliding_window(layer_config.sliding_window, f"per_layer_config[{layer_idx}].sliding_window")
-        self.base_model_tp_plan.pop("embed_tokens", None)
-        self.base_model_tp_plan["embeddings.word_embeddings"] = "embedding_rowwise"
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
         if self.num_attention_heads % self.num_key_value_heads:
             raise ValueError("num_key_value_heads must divide num_attention_heads")
 
-        self._check_sliding_window(self._getattr_without_heterogeneous_validation("sliding_window"), "sliding_window")
+        for layer_idx, layer_config in enumerate(self.per_layer_config):
+            sliding_window = layer_config.sliding_window
+            if sliding_window is not None and (not isinstance(sliding_window, int) or sliding_window <= 0):
+                raise ValueError(
+                    f"sliding_window for layer={layer_idx} must be a positive integer or None, got {sliding_window!r}."
+                )
+
         if not math.isfinite(self.residual_multiplier) or self.residual_multiplier <= 0:
             raise ValueError("residual_multiplier must be finite and positive")
 
@@ -133,24 +130,16 @@ class NeoMMEConfig(PreTrainedConfig):
             layer_params = self.rope_parameters.setdefault(layer_type, {})
             layer_params.setdefault("rope_type", "default")
             layer_params.setdefault(
-                "rope_theta", rope_theta if rope_theta is not None else self.default_theta[layer_type]
+                "rope_theta", rope_theta if rope_theta is not None else self.default_theta.get(layer_type)
             )
-            layer_params.setdefault("partial_rotary_factor", self.default_partial_rotary_factor[layer_type])
+            layer_params.setdefault("partial_rotary_factor", self.default_partial_rotary_factor.get(layer_type))
 
         self.standardize_rope_params()
         self._validate_rotary_dims()
         return kwargs
 
-    def validate_layer_types(self) -> None:
-        """Validate `layer_types`."""
-        if len(self.layer_types) != self.num_hidden_layers:
-            raise ValueError(
-                f"layer_types has {len(self.layer_types)} entries but num_hidden_layers is "
-                f"{self.num_hidden_layers}; there must be exactly one entry per layer."
-            )
-        unknown = sorted(set(self.layer_types) - {"full_attention", "sliding_attention"})
-        if unknown:
-            raise ValueError(f"layer_types contains unknown values {unknown}; expected full/sliding_attention.")
+    def validate_layer_type(self) -> None:
+        super().validate_layer_type()
         if "full_attention" not in self.layer_types:
             raise ValueError("layer_types must contain at least one full_attention layer.")
 
@@ -169,18 +158,11 @@ class NeoMMEConfig(PreTrainedConfig):
             partial_rotary_factor = self.rope_parameters[layer_type].get("partial_rotary_factor", 1.0)
             rotary_dim = int(self.head_dim * partial_rotary_factor)
             if not 0.0 < partial_rotary_factor <= 1.0:
-                # Above 1.0 the rotary slice is wider than the head and the failure lands inside attention as
-                # a shape error; at or below 0.0 there is no rotation at all and positions vanish silently.
                 raise ValueError(
-                    f"rope_parameters[{layer_type!r}]['partial_rotary_factor']={partial_rotary_factor} is "
-                    "outside (0.0, 1.0]: it is the fraction of each head's dims that carries position."
+                    "`partial_rotary_factor` must be in (0.0, 1.0] but got "
+                    f"rope_parameters[{layer_type!r}]['partial_rotary_factor']={partial_rotary_factor}"
                 )
-            if rotary_dim < 4:
-                raise ValueError(
-                    f"rope_parameters[{layer_type!r}]['partial_rotary_factor']={partial_rotary_factor} rotates "
-                    f"{rotary_dim} of head_dim={self.head_dim} dims, but two-axis M-RoPE needs at least 4."
-                )
-            if rotary_dim % 4:
+            if rotary_dim < 4 or rotary_dim % 4:
                 raise ValueError(
                     f"rope_parameters[{layer_type!r}]['partial_rotary_factor']={partial_rotary_factor} rotates "
                     f"{rotary_dim} of head_dim={self.head_dim} dims, which is not a multiple of 4: the two "
@@ -193,13 +175,6 @@ class NeoMMEConfig(PreTrainedConfig):
     def patch_dim(self) -> int:
         """Width of one flattened image patch, `3 * patch_size ** 2`."""
         return 3 * self.patch_size**2
-
-    @staticmethod
-    def _check_sliding_window(sliding_window: int | None, name: str) -> None:
-        if sliding_window is not None and (
-            not isinstance(sliding_window, int) or isinstance(sliding_window, bool) or sliding_window <= 0
-        ):
-            raise ValueError(f"{name} must be a positive integer or None, got {sliding_window!r}.")
 
 
 __all__ = ["NeoMMEConfig"]
