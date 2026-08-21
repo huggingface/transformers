@@ -152,6 +152,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("gpt_neox_japanese", "GPTNeoXJapaneseTokenizer"),
         ("gptj", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("granite", "TokenizersBackend" if is_tokenizers_available() else None),
+        ("granite_speech5_ctc", "ParakeetTokenizer" if is_tokenizers_available() else None),
         ("granitemoe", "TokenizersBackend" if is_tokenizers_available() else None),
         ("granitemoehybrid", "TokenizersBackend" if is_tokenizers_available() else None),
         ("granitemoeshared", "TokenizersBackend" if is_tokenizers_available() else None),
