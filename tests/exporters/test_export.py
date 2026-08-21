@@ -312,7 +312,7 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
 # skipped until the upstream fix lands.
 #   pytorch/pytorch#194381 — aten.sub type-promotion failure (step 2/3)
 #   pytorch/pytorch#194382 — aten.mul.Scalar missing ONNX decomposition (step 3/3)
-if is_torch_greater_or_equal("2.13"):
+if is_torch_greater_or_equal("2.13") and not is_torch_greater_or_equal("2.14"):
     _r194381 = "torch >= 2.13 aten.sub type-promotion regression (pytorch/pytorch#194381)"
     _r194382 = "torch >= 2.13 aten.mul.Scalar missing ONNX decomposition (pytorch/pytorch#194382)"
     EXPORT_SKIPS.setdefault("onnx", {}).update(
