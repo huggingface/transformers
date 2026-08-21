@@ -172,7 +172,7 @@ class FuyuImageProcessor(TorchvisionBackend):
             if do_resize:
                 stacked_images = self.resize(image=stacked_images, size=size, resample=resample)
             resized_images_grouped[shape] = stacked_images
-        resized_images = reorder_images(resized_images_grouped, grouped_images_index, is_nested=True)
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
         image_sizes = [batch_image[0].shape[-2:] for batch_image in resized_images if batch_image]
         image_unpadded_heights = [[image_size[0]] for image_size in image_sizes]
@@ -202,7 +202,7 @@ class FuyuImageProcessor(TorchvisionBackend):
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
             processed_images_grouped[shape] = stacked_images
-        processed_images = reorder_images(processed_images_grouped, grouped_images_index, is_nested=True)
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
 
         images_tensor = torch.stack([torch.stack(batch) for batch in processed_images if batch])
         return BatchFeature(

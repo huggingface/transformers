@@ -222,7 +222,7 @@ class TvpImageProcessor(TorchvisionBackend):
 
             processed_images_grouped[shape] = stacked_frames
 
-        processed_images = reorder_images(processed_images_grouped, grouped_images_index, is_nested=True)
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         if return_tensors == "pt":
             processed_images = [torch.stack(images, dim=0) for images in processed_images]
             processed_images = torch.stack(processed_images, dim=0)

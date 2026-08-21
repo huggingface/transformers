@@ -85,7 +85,7 @@ class VideoMAEImageProcessor(TorchvisionBackend):
             if do_resize:
                 stacked_images = self.resize(stacked_images, size, resample)
             resized_images_grouped[shape] = stacked_images
-        resized_images = reorder_images(resized_images_grouped, grouped_images_index, is_nested=True)
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
         grouped_images, grouped_images_index = group_images_by_shape(
             resized_images, is_nested=True, disable_grouping=disable_grouping
@@ -98,7 +98,7 @@ class VideoMAEImageProcessor(TorchvisionBackend):
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
             processed_images_grouped[shape] = stacked_images
-        processed_images = reorder_images(processed_images_grouped, grouped_images_index, is_nested=True)
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
 
         # Stack frames per video: list[list[Tensor(C,H,W)]] → list[Tensor(num_frames,C,H,W)]
         pixel_values = [torch.stack(video_frames) for video_frames in processed_images]

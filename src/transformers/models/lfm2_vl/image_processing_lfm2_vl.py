@@ -537,12 +537,12 @@ class Lfm2VlImageProcessor(TorchvisionBackend):
 
             processed_images_grouped[shape] = stacked_images
 
-        processed_images = reorder_images(processed_images_grouped, grouped_images_index, is_nested=True)
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         data = {"pixel_values": torch.cat([torch.stack(images) for images in processed_images])}
 
         if do_pad:
-            processed_masks = reorder_images(processed_masks, grouped_images_index, is_nested=True)
-            processed_spatial_shapes = reorder_images(processed_spatial_shapes, grouped_images_index, is_nested=True)
+            processed_masks = reorder_images(processed_masks, grouped_images_index)
+            processed_spatial_shapes = reorder_images(processed_spatial_shapes, grouped_images_index)
             processed_masks = torch.cat([torch.stack(masks) for masks in processed_masks])
             processed_spatial_shapes = torch.cat(
                 [torch.tensor(spatial_shape) for spatial_shape in processed_spatial_shapes]

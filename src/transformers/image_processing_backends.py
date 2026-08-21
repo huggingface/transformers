@@ -195,9 +195,9 @@ class TorchvisionBackend(BaseImageProcessor):
                 stacked_masks[..., : image_size[0], : image_size[1]] = 1
                 processed_masks_grouped[shape] = stacked_masks
 
-        processed_images = reorder_images(processed_images_grouped, grouped_images_index, is_nested=is_nested)
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         if return_mask:
-            processed_masks = reorder_images(processed_masks_grouped, grouped_images_index, is_nested=is_nested)
+            processed_masks = reorder_images(processed_masks_grouped, grouped_images_index)
             return processed_images, processed_masks
 
         return processed_images

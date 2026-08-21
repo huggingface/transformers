@@ -515,8 +515,8 @@ class MllamaImageProcessor(TorchvisionBackend):
             )
             split_images_grouped[shape] = split_images
 
-        split_images = reorder_images(split_images_grouped, grouped_images_index, is_nested=True)
-        aspect_ratios = reorder_images(aspect_ratio_grouped, grouped_images_index, is_nested=True)
+        split_images = reorder_images(split_images_grouped, grouped_images_index)
+        aspect_ratios = reorder_images(aspect_ratio_grouped, grouped_images_index)
 
         split_images, num_tiles = pad_batches_and_tiles(split_images, max_image_tiles)
 

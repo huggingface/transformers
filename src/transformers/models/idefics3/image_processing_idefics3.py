@@ -408,7 +408,7 @@ class Idefics3ImageProcessor(TorchvisionBackend):
             if do_resize:
                 stacked_images = self.resize(stacked_images, size, resample=resample)
             resized_images_grouped[shape] = stacked_images
-        resized_images = reorder_images(resized_images_grouped, grouped_images_index, is_nested=True)
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
         grouped_images, grouped_images_index = group_images_by_shape(
             resized_images, is_nested=True, disable_grouping=disable_grouping
@@ -427,9 +427,9 @@ class Idefics3ImageProcessor(TorchvisionBackend):
                 split_images_grouped[shape] = stacked_images
                 rows_grouped[shape] = rows
                 cols_grouped[shape] = cols
-            processed_images = reorder_images(split_images_grouped, grouped_images_index, is_nested=True)
-            rows = reorder_images(rows_grouped, grouped_images_index, is_nested=True)
-            cols = reorder_images(cols_grouped, grouped_images_index, is_nested=True)
+            processed_images = reorder_images(split_images_grouped, grouped_images_index)
+            rows = reorder_images(rows_grouped, grouped_images_index)
+            cols = reorder_images(cols_grouped, grouped_images_index)
             # flattenened the doubly nested list to a nested list
             for i, group_images in enumerate(processed_images):
                 processed_images[i] = [image for sublist in group_images for image in sublist]
@@ -442,7 +442,7 @@ class Idefics3ImageProcessor(TorchvisionBackend):
                     resample=resample,
                 )
                 split_images_grouped[shape] = stacked_images
-            processed_images = reorder_images(split_images_grouped, grouped_images_index, is_nested=True)
+            processed_images = reorder_images(split_images_grouped, grouped_images_index)
             rows = [[0] * len(images) for images in processed_images]
             cols = [[0] * len(images) for images in processed_images]
         # Group images by size for further processing
@@ -457,7 +457,7 @@ class Idefics3ImageProcessor(TorchvisionBackend):
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
             processed_images_grouped[shape] = stacked_images
-        processed_images = reorder_images(processed_images_grouped, grouped_images_index, is_nested=True)
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         if do_pad:
             # Get max images per batch
             max_num_images = max(len(images_) for images_ in processed_images)
