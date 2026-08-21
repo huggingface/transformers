@@ -1570,11 +1570,14 @@ def convert_and_load_state_dict_in_model(
     # we cannot use it either to control the memory as we are under memory constraints, so we need to be sequential.
     # When doing on-the-fly quantization, we also use sync loading to avoid worker threads loading full-precision
     # tensors to GPU faster than the main thread can quantize them, which would cause a large memory spike.
+    # We also disable threading on MPS devices because concurrent Metal allocations and dtype conversions cause segfaults.
     has_on_the_fly_quantization = hf_quantizer is not None and not hf_quantizer.pre_quantized
+    has_mps_device = any((d == "mps" or getattr(d, "type", None) == "mps") for d in device_map.values())
     if (
         is_env_variable_true("HF_DEACTIVATE_ASYNC_LOAD")
         or "disk" in device_map.values()
         or has_on_the_fly_quantization
+        or has_mps_device
     ):
         thread_pool = None
     else:
