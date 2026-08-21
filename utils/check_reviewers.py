@@ -16,9 +16,14 @@ Check that every model — and every rule in the reviewer file — can still rea
 
 The `Assign PR Reviewers` workflow (`.github/workflows/assign-reviewers.yml`) resolves reviewers from
 `.github/scripts/codeowners_for_review_action`, using the shared resolver in
-`transformersci.reviewers` (huggingface/transformers-ci, installed with the `quality` extra). Both
-failure modes it has had are silent: a rule whose pattern matches nothing looks fine forever, and a
-model nobody claims quietly falls to the `*` catch-all. This check makes both loud.
+`transformersci.reviewers` (huggingface/transformers-ci). Both failure modes it has had are silent:
+a rule whose pattern matches nothing looks fine forever, and a model nobody claims quietly falls to
+the `*` catch-all. This check makes both loud.
+
+The resolver is not a dependency of this package — it is installed by the CI job that runs the
+check. Without it the check reports what to install and passes, so a contributor is never blocked
+on a package unrelated to their change; in CI, where it is always installed, a missing resolver is
+an error.
 
 It reports:
   - a model directory that only the `*` catch-all claims;
@@ -40,6 +45,7 @@ python utils/check_reviewers.py --strict   # also fail on non-model paths with n
 """
 
 import argparse
+import os
 import re
 import subprocess
 import sys
@@ -86,16 +92,21 @@ A rule with a pattern and no owner marks a path as deliberately unowned, e.g. `u
 """
 
 
+INSTALL_RESOLVER = "pip install -r utils/reviewers-requirements.txt"
+
+
 def load_resolver():
-    # The resolver is shared with the reviewer-assignment workflow, which runs from
-    # huggingface/transformers-ci; only the codeowners file it reads lives in this repo.
+    """The shared resolver, or `None` if it is not installed.
+
+    It lives in huggingface/transformers-ci, alongside the workflow that resolves reviewers for
+    real, so the two cannot disagree. It is deliberately not in `setup.py`: that package has no
+    release on PyPI, and a `git+` URL in the metadata is a direct reference, which PyPI refuses to
+    accept when this one is uploaded. It is pinned in `utils/reviewers-requirements.txt` instead.
+    """
     try:
         from transformersci.reviewers import resolver
-    except ImportError as e:
-        raise ImportError(
-            "The reviewer check needs the shared resolver from huggingface/transformers-ci. "
-            "Install it with `pip install -e '.[quality]'`."
-        ) from e
+    except ImportError:
+        return None
     return resolver
 
 
@@ -216,6 +227,15 @@ def uncovered_paths(resolver, codeowners_lines):
 
 def main(strict=False):
     resolver = load_resolver()
+    if resolver is None:
+        message = f"the shared resolver is not installed. Install it with:\n  {INSTALL_RESOLVER}"
+        if os.environ.get("CI"):
+            # CI installs it before running this, so missing here means that step broke -- and a
+            # check that quietly passes because its own dependency vanished is the exact failure
+            # mode this file exists to prevent.
+            raise ValueError(f"Cannot check reviewer assignment: {message}")
+        print(f"Skipping the reviewer check: {message}")
+        return
     codeowners_lines = (REPO_ROOT / resolver.CODEOWNERS_PATH).read_text(encoding="utf-8").splitlines(keepends=True)
     files = tracked_files()
 

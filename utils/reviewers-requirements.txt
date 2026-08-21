@@ -1,0 +1,13 @@
+# The resolver behind `utils/check_reviewers.py`, shared with the `Assign PR Reviewers` workflow
+# that runs from huggingface/transformers-ci — one implementation, so the check cannot disagree
+# with what actually assigns reviewers.
+#
+# Here rather than in setup.py because transformers-ci has no PyPI release, and a `git+` URL in
+# packaging metadata is a PEP 508 direct reference, which PyPI rejects when *this* package is
+# uploaded. A requirements file never becomes metadata, so releases are unaffected. Move this into
+# the `quality` extra as a pinned version once transformers-ci is published, the way
+# transformers-mlinter is.
+#
+# The check is skipped, not failed, when this is not installed — so running `make check-repo`
+# without it is fine. CI installs it and fails hard if it is missing.
+transformers-ci[reviewers] @ git+https://github.com/huggingface/transformers-ci@main
