@@ -449,6 +449,8 @@ IGNORE_NON_AUTO_CONFIGURED = (
         "RealmForOpenQA",
         "RealmScorer",
         "RealmReader",
+        # Weather forecasting is not an auto task, so only the base model is mapped.
+        "WeatherNext2ForWeatherForecasting",
         "Wav2Vec2ForCTC",
         "HubertForCTC",
         "SEWForCTC",
