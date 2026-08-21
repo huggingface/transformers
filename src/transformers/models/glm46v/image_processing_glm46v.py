@@ -101,27 +101,70 @@ class Glm46VImageProcessor(TorchvisionBackend):
     valid_kwargs = Glm46VImageProcessorKwargs
     model_input_names = ["pixel_values", "image_grid_thw"]
 
-    def __init__(self, **kwargs: Unpack[Glm46VImageProcessorKwargs]):
-        super().__init__(**kwargs)
-        if self.size is not None:
-            if not self.size.shortest_edge or not self.size.longest_edge:
-                raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
-
     @auto_docstring
     def preprocess(self, images: ImageInput, **kwargs: Unpack[Glm46VImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
-    def _standardize_kwargs(self, **kwargs) -> dict:
-        """
-        Update kwargs that need further processing before being validated
-        Can be overridden by subclasses to customize the processing of kwargs.
-        """
-        kwargs = super()._standardize_kwargs(**kwargs)
-        size = kwargs.get("size", self.size)
+    def resize(
+        self,
+        images: "torch.Tensor",
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        factor: int,
+        temporal_factor: int,
+        **kwargs,
+    ) -> "torch.Tensor":
+        """Resize dynamically based on input image aspect ratio."""
         if not size.shortest_edge or not size.longest_edge:
-            raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
+            raise ValueError(f"`size` dict must contain 'shortest_edge' and 'longest_edge' keys but got {size}.")
 
-        return kwargs
+        height, width = images.shape[-2:]
+        resized_height, resized_width = smart_resize(
+            height=height,
+            width=width,
+            num_frames=temporal_factor,
+            factor=factor,
+            temporal_factor=temporal_factor,
+            min_pixels=size.shortest_edge,
+            max_pixels=size.longest_edge,
+        )
+        return super().resize(
+            image=images,
+            size=SizeDict(height=resized_height, width=resized_width),
+            resample=resample,
+        )
+
+    def patchify(
+        self,
+        images: "torch.Tensor",
+        patch_size: int,
+        merge_size: int,
+        temporal_patch_size: int,
+    ) -> tuple["torch.Tensor", int, int]:
+        """Patchifies each image into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."""
+        batch_size, channel, resized_height, resized_width = images.shape
+        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
+        patches = images.reshape(
+            batch_size,
+            channel,
+            grid_h // merge_size,
+            merge_size,
+            patch_size,
+            grid_w // merge_size,
+            merge_size,
+            patch_size,
+        )
+        patches = patches.permute(0, 2, 5, 3, 6, 1, 4, 7)
+        flatten_patches = (
+            patches.unsqueeze(6)
+            .expand(-1, -1, -1, -1, -1, -1, temporal_patch_size, -1, -1)
+            .reshape(
+                batch_size,
+                grid_h * grid_w,
+                channel * temporal_patch_size * patch_size * patch_size,
+            )
+        )
+        return flatten_patches, grid_h, grid_w
 
     def _preprocess(
         self,
@@ -148,21 +191,13 @@ class Glm46VImageProcessor(TorchvisionBackend):
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
-            height, width = stacked_images.shape[-2:]
             if do_resize:
-                resized_height, resized_width = smart_resize(
-                    num_frames=temporal_patch_size,
-                    height=height,
-                    width=width,
-                    temporal_factor=temporal_patch_size,
-                    factor=patch_size * merge_size,
-                    min_pixels=size.shortest_edge,
-                    max_pixels=size.longest_edge,
-                )
                 stacked_images = self.resize(
-                    stacked_images,
-                    size=SizeDict(height=resized_height, width=resized_width),
+                    images=stacked_images,
+                    size=size,
                     resample=resample,
+                    factor=patch_size * merge_size,
+                    temporal_factor=temporal_patch_size,
                 )
             resized_images_grouped[shape] = stacked_images
 
@@ -173,59 +208,31 @@ class Glm46VImageProcessor(TorchvisionBackend):
         processed_grids = {}
 
         for shape, stacked_images in grouped_images.items():
-            resized_height, resized_width = stacked_images.shape[-2:]
-
-            patches = self.rescale_and_normalize(
+            stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
-            if patches.ndim == 4:  # (B, C, H, W)
-                patches = patches.unsqueeze(1)  # (B, T=1, C, H, W)
 
-            if patches.shape[1] % temporal_patch_size != 0:
-                repeats = patches[:, -1:].repeat(
-                    1, temporal_patch_size - (patches.shape[1] % temporal_patch_size), 1, 1, 1
-                )
-                patches = torch.cat([patches, repeats], dim=1)
-
-            batch_size, t_len, channel = patches.shape[:3]
-            grid_t = t_len // temporal_patch_size
-            grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
-
-            patches = patches.view(
-                batch_size,
-                grid_t,
-                temporal_patch_size,
-                channel,
-                grid_h // merge_size,
-                merge_size,
-                patch_size,
-                grid_w // merge_size,
-                merge_size,
-                patch_size,
-            )
-            # (B, grid_t, gh, gw, mh, mw, C, tp, ph, pw)
-            patches = patches.permute(0, 1, 4, 7, 5, 8, 3, 2, 6, 9)
-
-            flatten_patches = patches.reshape(
-                batch_size,
-                grid_t * grid_h * grid_w,
-                channel * temporal_patch_size * patch_size * patch_size,
+            patches, grid_h, grid_w = self.patchify(
+                stacked_images,
+                patch_size=patch_size,
+                merge_size=merge_size,
+                temporal_patch_size=temporal_patch_size,
             )
 
-            processed_images_grouped[shape] = flatten_patches
-            processed_grids[shape] = [[grid_t, grid_h, grid_w]] * batch_size
+            processed_images_grouped[shape] = patches
+            processed_grids[shape] = [[1, grid_h, grid_w]] * len(stacked_images)
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         processed_grids = reorder_images(processed_grids, grouped_images_index)
 
-        pixel_values = torch.cat(processed_images, dim=0)
+        pixel_values = processed_images[0] if len(processed_images) == 1 else torch.cat(processed_images, dim=0)
         image_grid_thw = torch.tensor(processed_grids)
 
         return BatchFeature(
             data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
         )
 
-    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:
         """
         A utility that returns number of image patches for a given image size.
 
@@ -239,6 +246,7 @@ class Glm46VImageProcessor(TorchvisionBackend):
         Returns:
             `int`: Number of image patches per image.
         """
+        images_kwargs = images_kwargs or {}
         patch_size = images_kwargs.get("patch_size", self.patch_size)
         merge_size = images_kwargs.get("merge_size", self.merge_size)
         size = images_kwargs.get("size", self.size)

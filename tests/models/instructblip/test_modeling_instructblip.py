@@ -483,7 +483,6 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, Gene
     additional_model_inputs = ["qformer_input_ids", "input_ids"]
 
     test_resize_embeddings = True
-    test_torch_exportable = False
     test_attention_outputs = False
     _is_composite = True
 
@@ -787,7 +786,9 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
     def test_inference_vicuna_7b(self):
         processor = InstructBlipProcessor.from_pretrained("Salesforce/instructblip-vicuna-7b")
         model = InstructBlipForConditionalGeneration.from_pretrained(
-            "Salesforce/instructblip-vicuna-7b", quantization_config=BitsAndBytesConfig(load_in_8bit=True)
+            "Salesforce/instructblip-vicuna-7b",
+            quantization_config=BitsAndBytesConfig(load_in_8bit=True),
+            attn_implementation="eager",
         )
 
         url = "https://raw.githubusercontent.com/salesforce/LAVIS/main/docs/_static/Confusing-Pictures.jpg"

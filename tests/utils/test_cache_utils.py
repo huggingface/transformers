@@ -14,14 +14,16 @@
 
 import copy
 import unittest
+from unittest.mock import patch
 
 import pytest
 from packaging import version
 from parameterized import parameterized
 
-from transformers import set_seed
+from transformers import logging, set_seed
 from transformers.generation.configuration_utils import ALL_CACHE_IMPLEMENTATIONS
 from transformers.testing_utils import (
+    CaptureLogger,
     CaptureStderr,
     backend_device_count,
     backend_torch_accelerator_module,
@@ -55,7 +57,16 @@ if is_torch_available():
         convert_and_export_with_cache,
         pipeline,
     )
-    from transformers.integrations.executorch import export_with_dynamic_cache
+    from transformers.cache_utils import (
+        DynamicIndexedLayer,
+        DynamicLayer,
+        DynamicSlidingWindowLayer,
+        LinearAttentionAndFullAttentionLayer,
+        LinearAttentionAndSlidingWindowAttentionLayer,
+        LinearAttentionLayer,
+        StaticLayer,
+    )
+    from transformers.integrations.executorch import export_with_dynamic_cache, register_dynamic_cache_export_support
 
 
 # FIXME: offloaded cache is skipped becase it needs `offload_only_non_sliding=False`
@@ -107,6 +118,76 @@ class CacheTest(unittest.TestCase):
         cached_keys, cached_values = mqa_static_cache.update(*_random_kvs(mqa_config), 0)
         self.assertTrue(cached_keys.shape == (1, 1, 10, 128))
         self.assertTrue(cached_values.shape == (1, 1, 10, 128))
+
+    def test_early_initialization_does_not_corrupt_linear_attention_layers(self):
+        """
+        Regression test: `early_initialization` initialized *every* layer through the attention `(num_heads, head_dim)`
+        key/value layout, but linear attention layers track their own statically-shaped conv/recurrent states. So it
+        pre-allocated their `conv_states` with the wrong shape (a spurious 0-length axis) and flagged them
+        initialized; the first real `update_conv_state` then hit `conv_states.copy_(...)` with mismatched shapes and
+        raised a `RuntimeError` (the customer-facing failure, observed e.g. on Neuron). Linear attention layers must
+        be left untouched so they lazily take the correct shape on their first update.
+        """
+        config = LlamaConfig(num_hidden_layers=2, num_attention_heads=4, num_key_value_heads=2, hidden_size=32)
+        config.layer_types = ["full_attention", "linear_attention"]
+        cache = StaticCache(config=config, max_cache_len=8)
+        self.assertIsInstance(cache.layers[0], StaticLayer)
+        linear_layer = cache.layers[1]
+        self.assertIsInstance(linear_layer, LinearAttentionLayer)
+        # Linear attention layers opt out of the key/value early-init path; attention layers opt in.
+        self.assertTrue(cache.layers[0].supports_early_init)
+        self.assertFalse(linear_layer.supports_early_init)
+
+        cache.early_initialization(batch_size=1, num_heads=2, head_dim=8, dtype=torch.float32, device=torch_device)
+        # The attention layer is initialized via the key/value layout, as expected.
+        self.assertTrue(cache.layers[0].is_initialized)
+
+        # Simulate the first forward updating the linear layer's conv state with its real (conv) shape. Before the
+        # fix, `early_initialization` had pre-allocated `conv_states` with the wrong key/value shape, so this raised
+        # `RuntimeError: ... must match ...`; with the fix the layer lazily takes the correct shape here instead.
+        conv_states = torch.zeros((1, 8, 4), dtype=torch.float32, device=torch_device)  # (batch, channels, kernel)
+        updated_conv_states = linear_layer.update_conv_state(conv_states)
+        self.assertEqual(updated_conv_states.shape, conv_states.shape)
+
+        # The cache-level `is_initialized` must also tolerate linear attention layers (which don't expose the flag);
+        # before the fix this raised `AttributeError`. It reflects the attention layer's state.
+        self.assertTrue(cache.is_initialized)
+
+    def test_max_cache_len_ignores_linear_attention_layers(self):
+        """`max_cache_len` must skip linear attention layers (which have no such attribute), else the static-cache
+        reuse check in `_prepare_static_cache` raises `AttributeError` on a hybrid model."""
+        config = LlamaConfig(num_hidden_layers=2, num_attention_heads=4, num_key_value_heads=2, hidden_size=32)
+        config.layer_types = ["full_attention", "linear_attention"]
+        cache = StaticCache(config=config, max_cache_len=8)
+        self.assertEqual(cache.get_max_length(), 8)
+
+    @require_torch_accelerator
+    def test_offloaded_cache_prefetches_across_linear_attention_layers(self):
+        """
+        Regression test for offloaded caches on hybrid (attention + linear-attention) models. Attention layers are
+        offloaded to CPU after their `update` and must be prefetched back before the next decoding step. The prefetch
+        has to skip the interleaved linear-attention layers (which never go through the offloading `update` path) and
+        target the next attention layer; otherwise the offloaded KV stays on CPU and the next `update` fails with a
+        cpu/accelerator device mismatch.
+        """
+        # Hybrid layout: an attention layer every 4 layers, linear-attention layers in between (as in e.g. Qwen3.5).
+        layers = [DynamicLayer() if layer_idx % 4 == 3 else LinearAttentionLayer() for layer_idx in range(8)]
+        attention_indices = [3, 7]
+        cache = Cache(layers=layers, offloading=True, offload_only_non_sliding=False)
+
+        def _kv(seq_len):
+            states = torch.rand(1, 4, seq_len, 16, device=torch_device)
+            return states, states.clone()
+
+        # Prefill: each attention layer is updated once, then offloaded to CPU.
+        for layer_idx in attention_indices:
+            cache.update(*_kv(5), layer_idx)
+
+        # Decode: updating the attention layers again used to raise a device mismatch, as their offloaded KV was
+        # never prefetched back to the accelerator.
+        for layer_idx in attention_indices:
+            keys, _ = cache.update(*_kv(1), layer_idx)
+            self.assertEqual(keys.device.type, torch.device(torch_device).type)
 
 
 def _skip_on_failed_cache_prerequisites(test, cache_implementation):
@@ -488,6 +569,79 @@ class CacheHardIntegrationTest(unittest.TestCase):
             model.generate(**inputs, max_new_tokens=2, cache_implementation="static")
         self.assertNotIn("cuda", cap.err.lower())
 
+    def test_static_cache_honors_max_cache_len(self):
+        """
+        `generation_config.max_cache_len` must size the auto-allocated `StaticCache` on the static path, so a cache
+        pinned to a worst-case length is reused across calls instead of reallocating (and recompiling). Without this,
+        the cache is sized to the current call's `max_length` only. Regression test for #46424.
+        """
+        # Llama has only full-attention layers, so the cache length is not capped by a sliding window.
+        model_repo = "hf-internal-testing/tiny-random-LlamaForCausalLM"
+        model = AutoModelForCausalLM.from_pretrained(model_repo).to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained(model_repo)
+        inputs = tokenizer(["The quick brown fox"], return_tensors="pt").to(torch_device)
+
+        max_new_tokens = 5
+        # Deliberately ask for a cache much larger than the natural `max_length - 1` for this call.
+        natural_max_cache_len = inputs.input_ids.shape[-1] + max_new_tokens - 1
+        requested_max_cache_len = natural_max_cache_len + 64
+
+        out = model.generate(
+            **inputs,
+            max_new_tokens=max_new_tokens,
+            do_sample=False,
+            cache_implementation="static",
+            max_cache_len=requested_max_cache_len,
+            return_dict_in_generate=True,
+        )
+        self.assertIsInstance(out.past_key_values, StaticCache)
+        self.assertEqual(out.past_key_values.get_max_length(), requested_max_cache_len)
+
+    def test_chunked_prefill_initializes_static_cache_eagerly(self):
+        """
+        With chunked prefill the prefill runs inside a compiled region, where the static cache's lazy initialization
+        cannot tag its tensors via `torch._dynamo.mark_static_address`, so a later call recompiles. `generate` must
+        therefore initialize the static cache eagerly, and only when it compiles the prefill (i.e. when
+        `prefill_chunk_size` is set). Regression test for #46421.
+        """
+        model_repo = "hf-internal-testing/tiny-random-LlamaForCausalLM"
+        model = AutoModelForCausalLM.from_pretrained(model_repo).to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained(model_repo)
+        inputs = tokenizer(["The quick brown fox jumps over the lazy dog"], return_tensors="pt").to(torch_device)
+        generation_kwargs = {"max_new_tokens": 3, "do_sample": False, "cache_implementation": "static"}
+
+        # Without chunked prefill, the static cache is left to lazily initialize on the (eager) prefill.
+        with patch.object(Cache, "early_initialization", autospec=True) as eager_init:
+            model.generate(**inputs, **generation_kwargs)
+        eager_init.assert_not_called()
+
+        # Drop the (now initialized) cache so the chunked-prefill call re-allocates and initializes a fresh one.
+        model._cache = None
+        # With chunked prefill, `generate` must initialize the static cache itself, before the prefill runs.
+        prefill_chunk_size = max(inputs.input_ids.shape[-1] // 2, 1)
+        with patch.object(Cache, "early_initialization", autospec=True, wraps=Cache.early_initialization) as init:
+            model.generate(**inputs, **generation_kwargs, prefill_chunk_size=prefill_chunk_size)
+        init.assert_called_once()
+
+        # Under TP, eager init is still used but the head count is sharded by `_tp_size` (one device per rank).
+        tc = model.config.get_text_config(decoder=True)
+        num_kv_heads = getattr(tc, "num_key_value_heads", None) or tc.num_attention_heads
+        model._cache = None
+        model._tp_size = num_kv_heads  # divides evenly -> 1 head per rank
+        with patch.object(Cache, "early_initialization", autospec=True) as tp_init:
+            model.generate(**inputs, **generation_kwargs, prefill_chunk_size=prefill_chunk_size)
+        tp_init.assert_called_once()
+        self.assertEqual(tp_init.call_args.kwargs["num_heads"], 1)
+        model._tp_size = None
+
+        # A multi-device `device_map` (single `model.device` can't cover all layers) skips eager init -> lazy.
+        model._cache = None
+        model.hf_device_map = {"a": 0, "b": 1}
+        with patch.object(Cache, "early_initialization", autospec=True) as md_init:
+            model.generate(**inputs, **generation_kwargs, prefill_chunk_size=prefill_chunk_size)
+        md_init.assert_not_called()
+        del model.hf_device_map
+
     @require_torch_multi_accelerator
     @slow
     def test_static_cache_multi_accelerator(self):
@@ -531,6 +685,50 @@ class CacheHardIntegrationTest(unittest.TestCase):
         )[0]["generated_token_ids"][-10:]
         EXPECTED_OUTPUT = [879, 175, 39, 141, 1000, 975, 951, 991, 683, 441]
         self.assertListEqual(out, EXPECTED_OUTPUT)
+
+
+@require_torch
+class DynamicCacheExportPytreeTest(unittest.TestCase):
+    @pytest.mark.torch_export_test
+    def test_export_preserves_sliding_cache_behavior(self):
+        # Update both layer types so export must preserve their different cache behavior.
+        class CacheUpdateModule(torch.nn.Module):
+            def forward(self, new_states, past_key_values):
+                past_key_values.update(new_states, new_states, layer_idx=0)
+                past_key_values.update(new_states, new_states, layer_idx=1)
+                return past_key_values
+
+        # Exceed the retained cache length so sliding and unbounded updates produce different outputs.
+        new_states = torch.arange(10.0).reshape(1, 1, 5, 2)
+        cache_config = LlamaConfig(
+            num_hidden_layers=2,
+            sliding_window=4,
+            layer_types=["sliding_attention", "full_attention"],
+        )
+
+        register_dynamic_cache_export_support()
+
+        exported_program = torch.export.export(
+            CacheUpdateModule(),
+            (),
+            {"new_states": new_states, "past_key_values": DynamicCache(config=cache_config)},
+            strict=False,
+        )
+        exported_cache = exported_program.module()(
+            new_states=new_states, past_key_values=DynamicCache(config=cache_config)
+        )
+        eager_cache = CacheUpdateModule()(new_states, DynamicCache(config=cache_config))
+
+        self.assertEqual(len(exported_cache.layers), 2)
+        self.assertIs(type(exported_cache.layers[0]), DynamicSlidingWindowLayer)
+        self.assertEqual(exported_cache.layers[0].sliding_window, 4)
+        self.assertEqual(exported_cache.layers[0].get_seq_length(), cache_config.sliding_window - 1)
+        torch.testing.assert_close(exported_cache.layers[0].keys, eager_cache.layers[0].keys)
+        torch.testing.assert_close(exported_cache.layers[0].values, eager_cache.layers[0].values)
+        self.assertIs(type(exported_cache.layers[1]), DynamicLayer)
+        self.assertEqual(exported_cache.layers[1].get_seq_length(), new_states.shape[-2])
+        torch.testing.assert_close(exported_cache.layers[1].keys, eager_cache.layers[1].keys)
+        torch.testing.assert_close(exported_cache.layers[1].values, eager_cache.layers[1].values)
 
 
 @require_torch
@@ -1233,3 +1431,223 @@ class SyntheticCacheTest(unittest.TestCase):
 
         self.assertEqual(cache.layers[0].keys[0, 0, :, 0].tolist(), [20.0, 30.0, 40.0])
         self.assertEqual(returned_1[0][0, 0, :, 0].tolist(), [10.0, 20.0, 30.0, 40.0])
+
+
+ALL_DYNAMIC_LAYERS = (
+    DynamicLayer,
+    DynamicSlidingWindowLayer,
+    LinearAttentionLayer,
+    LinearAttentionAndFullAttentionLayer,
+    LinearAttentionAndSlidingWindowAttentionLayer,
+    DynamicIndexedLayer,
+)
+
+
+class CacheCroppingTests(unittest.TestCase):
+    sliding_window = 12
+    seq_len = 45
+    conv_kernel_size = 4
+    attention_shape = (2, 32, 45, 32)
+    conv_state_shape = (2, 32, 45)
+    indexer_shape = (2, 45, 32)
+
+    def test_crop_with_past(self):
+        """Test that `crop` works correctly for all general layer classes, even with past recording activated"""
+        keys = torch.rand(*self.attention_shape)
+        values = torch.rand(*self.attention_shape)
+        conv_states = torch.rand(*self.conv_state_shape)
+        indexer_states = torch.rand(*self.indexer_shape)
+
+        layer_kwargs = {"sliding_window": self.sliding_window}
+        for layer_cls in ALL_DYNAMIC_LAYERS:
+            print(layer_cls)
+            layer = layer_cls(**layer_kwargs)
+            # Trigger the recall of states
+            if hasattr(layer, "activate_past_recording"):
+                layer.activate_past_recording()
+
+            # Update the attention part if any
+            if hasattr(layer, "update"):
+                layer.update(keys, values)
+            # Update the conv part if any
+            if hasattr(layer, "update_conv_state"):
+                layer.update_conv_state(conv_states=conv_states, conv_kernel_size=self.conv_kernel_size)
+            if hasattr(layer, "update_indexer"):
+                layer.update_indexer(indexer_states)
+
+            # Make sure we recall all states correctly even for sliding/linear attention
+            if hasattr(layer, "keys"):
+                self.assertEqual(layer.keys.shape[-2], self.seq_len)
+                self.assertEqual(layer.values.shape[-2], self.seq_len)
+            if hasattr(layer, "conv_states"):
+                self.assertEqual(layer.conv_states[0].shape[-1], self.seq_len)
+            if hasattr(layer, "indexer_keys"):
+                self.assertEqual(layer.indexer_keys.shape[-2], self.seq_len)
+
+            # Crop the layer
+            layer.crop(-3)
+
+            # Make sure we cropped correctly, and restricted length correctly
+            if hasattr(layer, "keys"):
+                # In this case, should be back to the smaller size of the sliding window
+                if hasattr(layer, "sliding_window"):
+                    self.assertEqual(layer.keys.shape[-2], self.sliding_window - 1)
+                    self.assertEqual(layer.values.shape[-2], self.sliding_window - 1)
+                    self.assertTrue((layer.keys == keys[..., -self.sliding_window + 1 - 3 : -3, :]).all())
+                    self.assertTrue((layer.values == values[..., -self.sliding_window + 1 - 3 : -3, :]).all())
+                else:
+                    self.assertEqual(layer.keys.shape[-2], self.seq_len - 3)
+                    self.assertEqual(layer.values.shape[-2], self.seq_len - 3)
+                    self.assertTrue((layer.keys == keys[..., :-3, :]).all())
+                    self.assertTrue((layer.values == values[..., :-3, :]).all())
+            # Should be back to the conv_kernel_size
+            if hasattr(layer, "conv_states"):
+                self.assertEqual(layer.conv_states[0].shape[-1], self.conv_kernel_size)
+                self.assertTrue((layer.conv_states[0] == conv_states[..., -self.conv_kernel_size - 3 : -3]).all())
+            if hasattr(layer, "indexer_keys"):
+                self.assertEqual(layer.indexer_keys.shape[-2], self.seq_len - 3)
+                self.assertTrue((layer.indexer_keys == indexer_states[..., :-3, :]).all())
+
+    def test_crop_with_zero_still_shrink_states(self):
+        """Test that `crop` shrinks state size if called with `0`"""
+        keys = torch.rand(*self.attention_shape)
+        values = torch.rand(*self.attention_shape)
+        conv_states = torch.rand(*self.conv_state_shape)
+        indexer_states = torch.rand(*self.indexer_shape)
+
+        layer_kwargs = {"sliding_window": self.sliding_window}
+        for layer_cls in ALL_DYNAMIC_LAYERS:
+            layer = layer_cls(**layer_kwargs)
+            # Trigger the recall of states
+            if hasattr(layer, "activate_past_recording"):
+                layer.activate_past_recording()
+
+            # Update the attention part if any
+            if hasattr(layer, "update"):
+                layer.update(keys, values)
+            # Update the conv part if any
+            if hasattr(layer, "update_conv_state"):
+                layer.update_conv_state(conv_states=conv_states, conv_kernel_size=self.conv_kernel_size)
+            if hasattr(layer, "update_indexer"):
+                layer.update_indexer(indexer_states)
+
+            # Make sure we recall all states correctly even for sliding/linear attention
+            if hasattr(layer, "keys"):
+                self.assertEqual(layer.keys.shape[-2], self.seq_len)
+                self.assertEqual(layer.values.shape[-2], self.seq_len)
+            if hasattr(layer, "conv_states"):
+                self.assertEqual(layer.conv_states[0].shape[-1], self.seq_len)
+            if hasattr(layer, "indexer_keys"):
+                self.assertEqual(layer.indexer_keys.shape[-2], self.seq_len)
+
+            # Should not crop the
+            layer.crop(0)
+
+            # Make sure we cropped correctly, and restricted length correctly
+            if hasattr(layer, "keys"):
+                # In this case, should be back to the smaller size of the sliding window
+                if hasattr(layer, "sliding_window"):
+                    self.assertEqual(layer.keys.shape[-2], self.sliding_window - 1)
+                    self.assertEqual(layer.values.shape[-2], self.sliding_window - 1)
+                    self.assertTrue((layer.keys == keys[..., -self.sliding_window + 1 :, :]).all())
+                    self.assertTrue((layer.values == values[..., -self.sliding_window + 1 :, :]).all())
+                else:
+                    self.assertEqual(layer.keys.shape[-2], self.seq_len)
+                    self.assertEqual(layer.values.shape[-2], self.seq_len)
+                    self.assertTrue((layer.keys == keys).all())
+                    self.assertTrue((layer.values == values).all())
+            # Should be back to the conv_kernel_size
+            if hasattr(layer, "conv_states"):
+                self.assertEqual(layer.conv_states[0].shape[-1], self.conv_kernel_size)
+                self.assertTrue((layer.conv_states[0] == conv_states[..., -self.conv_kernel_size :]).all())
+            if hasattr(layer, "indexer_keys"):
+                self.assertEqual(layer.indexer_keys.shape[-2], self.seq_len)
+                self.assertTrue((layer.indexer_keys == indexer_states).all())
+
+    def test_crop_outside_range(self):
+        """Test that `crop` is correct outside of the range"""
+        keys = torch.rand(*self.attention_shape)
+        values = torch.rand(*self.attention_shape)
+        conv_states = torch.rand(*self.conv_state_shape)
+        indexer_states = torch.rand(*self.indexer_shape)
+
+        layer_kwargs = {"sliding_window": self.sliding_window}
+        for layer_cls in ALL_DYNAMIC_LAYERS:
+            layer = layer_cls(**layer_kwargs)
+            # Trigger the recall of states
+            if hasattr(layer, "activate_past_recording"):
+                layer.activate_past_recording()
+
+            # Update the attention part if any
+            if hasattr(layer, "update"):
+                layer.update(keys, values)
+            # Update the conv part if any
+            if hasattr(layer, "update_conv_state"):
+                layer.update_conv_state(conv_states=conv_states, conv_kernel_size=self.conv_kernel_size)
+            if hasattr(layer, "update_indexer"):
+                layer.update_indexer(indexer_states)
+
+            # Make sure we recall all states correctly even for sliding/linear attention
+            if hasattr(layer, "keys"):
+                self.assertEqual(layer.keys.shape[-2], self.seq_len)
+                self.assertEqual(layer.values.shape[-2], self.seq_len)
+            if hasattr(layer, "conv_states"):
+                self.assertEqual(layer.conv_states[0].shape[-1], self.seq_len)
+            if hasattr(layer, "indexer_keys"):
+                self.assertEqual(layer.indexer_keys.shape[-2], self.seq_len)
+
+            # Crop more than what we have stored
+            layer.crop(-self.seq_len - 1)
+
+            # Make sure everything is empty
+            if hasattr(layer, "keys"):
+                self.assertEqual(layer.keys.numel(), 0)
+                self.assertEqual(layer.values.numel(), 0)
+            if hasattr(layer, "conv_states"):
+                self.assertEqual(layer.conv_states[0].numel(), 0)
+            if hasattr(layer, "indexer_keys"):
+                self.assertEqual(layer.indexer_keys.numel(), 0)
+
+    def test_bc_crop_with_positive_value(self):
+        """Test that `crop` is correct when used with positive value (BC behavior)"""
+        keys = torch.rand(*self.attention_shape)
+        values = torch.rand(*self.attention_shape)
+        indexer_states = torch.rand(*self.indexer_shape)
+
+        # All other classes will raise if we try to crop with positive value after reaching the max cache len (sliding window/conv kernel size)
+        for layer_cls in (DynamicLayer, DynamicIndexedLayer):
+            layer = layer_cls()
+
+            # Update the attention part if any
+            if hasattr(layer, "update"):
+                layer.update(keys, values)
+            if hasattr(layer, "update_indexer"):
+                layer.update_indexer(indexer_states)
+
+            # Make sure we recall all states correctly even for sliding/linear attention
+            if hasattr(layer, "keys"):
+                self.assertEqual(layer.keys.shape[-2], self.seq_len)
+                self.assertEqual(layer.values.shape[-2], self.seq_len)
+            if hasattr(layer, "indexer_keys"):
+                self.assertEqual(layer.indexer_keys.shape[-2], self.seq_len)
+
+            # Crop the layer
+            # Note that we need to patch `warning_once` if we want to capture the warning for every layer as otherwise it's thrown
+            # only once
+            logger = logging.get_logger("transformers.cache_utils")
+            with patch.object(logger, "warning_once", new=logger.warning):
+                with CaptureLogger(logger) as cl:
+                    layer.crop(self.seq_len - 3)
+
+            # Make sure we trigger deprecation
+            self.assertTrue("Calling `crop` with a positive value is deprecated and will be removed" in cl.out)
+
+            # Make sure we cropped correctly, and restricted length correctly
+            if hasattr(layer, "keys"):
+                self.assertEqual(layer.keys.shape[-2], self.seq_len - 3)
+                self.assertEqual(layer.values.shape[-2], self.seq_len - 3)
+                self.assertTrue((layer.keys == keys[..., :-3, :]).all())
+                self.assertTrue((layer.values == values[..., :-3, :]).all())
+            if hasattr(layer, "indexer_keys"):
+                self.assertEqual(layer.indexer_keys.shape[-2], self.seq_len - 3)
+                self.assertTrue((layer.indexer_keys == indexer_states[..., :-3, :]).all())

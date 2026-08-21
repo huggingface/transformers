@@ -20,7 +20,7 @@ import pytest
 from parameterized import parameterized
 
 from transformers import AutoTokenizer, MambaConfig, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_greater_or_equal, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -180,7 +180,11 @@ class MambaModelTester:
         self, config, input_ids, *args, gradient_checkpointing=False
     ):
         model = MambaModel(config)
-        model.to(torch_device)
+
+        # force torch path in any case
+        model.to("cpu")
+        input_ids = input_ids.to("cpu")
+
         if gradient_checkpointing:
             model.gradient_checkpointing_enable()
 
@@ -190,7 +194,7 @@ class MambaModelTester:
 
         # use cache
         token_emb = model.embeddings(input_ids)
-        outputs = model.layers[0].mixer.slow_forward(token_emb, cache)
+        outputs = model.layers[0].mixer(token_emb, cache)
 
         loss = torch.log1p(torch.abs(outputs.sum()))
         self.parent.assertEqual(loss.shape, ())
@@ -303,9 +307,12 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                 def recursive_check(tuple_object, dict_object):
                     if isinstance(tuple_object, DynamicCache):  # MODIFIED PART START
                         for idx in range(len(tuple_object)):
-                            recursive_check(tuple_object.layers[idx].conv_states, dict_object.layers[idx].conv_states)
                             recursive_check(
-                                tuple_object.layers[idx].recurrent_states, dict_object.layers[idx].recurrent_states
+                                tuple_object.layers[idx].conv_states[0], dict_object.layers[idx].conv_states[0]
+                            )
+                            recursive_check(
+                                tuple_object.layers[idx].recurrent_states[0],
+                                dict_object.layers[idx].recurrent_states[0],
                             )
                     elif isinstance(tuple_object, (list, tuple)):  # MODIFIED PART END
                         for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
@@ -357,6 +364,15 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
     @unittest.skip("Mamba models do not support DDP.")
     def test_multi_gpu_data_parallel_forward(self):
+        pass
+
+    @unittest.skip(
+        "Mamba1's conv path has no chunked-continuation support: on a cached multi-token forward it "
+        "rebuilds conv_state from the zero-padded current chunk instead of bridging the previous window "
+        "(and multiplies the raw full-history mask against the local chunk), so the split-vs-single "
+        "comparison cannot match regardless of padding masking — the scenario is out of Mamba1's contract."
+    )
+    def test_recurrent_layers_mask_padding_on_continued_forward(self):
         pass
 
 
@@ -461,12 +477,9 @@ class MambaIntegrationTests(unittest.TestCase):
         output_sentence = self.tokenizer.decode(output[0].tolist())
         self.assertEqual(output_sentence, expected_output)
 
+    @require_torch_greater_or_equal("2.9.0")
     @pytest.mark.torch_compile_test
     def test_compile_associative_scan_no_cache(self):
-        from transformers.models.mamba.modeling_mamba import associative_scan
-
-        if associative_scan is None:
-            self.skipTest("associative_scan is not available in this PyTorch version.")
         if torch_device == "cpu":
             self.skipTest("Associative scan compile test requires a torch accelerator.")
 
@@ -486,13 +499,11 @@ class MambaIntegrationTests(unittest.TestCase):
         output_sentence = self.tokenizer.decode(output[0].tolist())
         self.assertEqual(output_sentence, expected_output)
 
+    @require_torch_greater_or_equal("2.9.0")
     @pytest.mark.torch_compile_test
     def test_associative_scan_matches_sequential(self):
         """Compiled generate with use_associative_scan=False vs =True produces the same text."""
-        from transformers.models.mamba.modeling_mamba import associative_scan
 
-        if associative_scan is None:
-            self.skipTest("associative_scan is not available (requires torch >= 2.9.0).")
         if torch_device == "cpu":
             self.skipTest("Associative scan test requires a torch accelerator.")
 

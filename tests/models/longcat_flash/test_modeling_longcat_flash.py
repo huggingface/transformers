@@ -37,7 +37,7 @@ from ...test_modeling_common import ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers import AutoTokenizer, Cache, LongcatFlashForCausalLM, LongcatFlashModel
+    from transformers import AutoTokenizer, LongcatFlashForCausalLM, LongcatFlashModel
 
 
 class LongcatFlashModelTester(CausalLMModelTester):
@@ -220,19 +220,6 @@ class LongcatFlashModelTest(CausalLMModelTest, unittest.TestCase):
     @unittest.skip("LongcatFlash buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_to_base(self):
         pass
-
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        self.assertIsInstance(past_key_values, Cache)
-
-        k_embed_dim = config.qk_nope_head_dim + config.qk_rope_head_dim
-        v_embed_dim = config.v_head_dim
-
-        expected_key_shape = (batch_size, config.num_key_value_heads, seq_length, k_embed_dim)
-        expected_value_shape = (batch_size, config.num_key_value_heads, seq_length, v_embed_dim)
-
-        for layer_idx in range(config.num_hidden_layers):
-            self.assertEqual(past_key_values.layers[layer_idx].keys.shape, expected_key_shape)
-            self.assertEqual(past_key_values.layers[layer_idx].values.shape, expected_value_shape)
 
     @unittest.skip("LongcatFlash router uses weight.type() directly in forward which prevents offloading")
     def test_cpu_offload(self):

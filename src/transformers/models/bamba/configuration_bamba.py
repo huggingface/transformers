@@ -73,8 +73,6 @@ class BambaConfig(PreTrainedConfig):
     mamba_chunk_size: int | None = 256
     mamba_conv_bias: bool | None = True
     mamba_proj_bias: bool | None = False
-    time_step_min: float | None = 0.001
-    time_step_max: float | None = 0.1
     time_step_limit: list[float] | tuple[float, float] | None = (0.0, float("inf"))
     z_loss_coefficient: float | None = 0.0
     rope_parameters: RopeParameters | dict | None = None
@@ -98,7 +96,7 @@ class BambaConfig(PreTrainedConfig):
     @property
     def layers_block_type(self):
         return [
-            "attention" if (self.attn_layer_indices and i in self.attn_layer_indices) else "mamba"
+            "full_attention" if (self.attn_layer_indices and i in self.attn_layer_indices) else "linear_attention"
             for i in range(self.num_hidden_layers)
         ]
 

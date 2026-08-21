@@ -1252,6 +1252,7 @@ class xLSTMPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
+        super()._init_weights(module)
         if isinstance(module, nn.Embedding):
             small_init_method(self.config.hidden_size)(self.embeddings.weight)
         elif isinstance(module, nn.Linear):
@@ -1302,10 +1303,6 @@ class xLSTMPreTrainedModel(PreTrainedModel):
                 wang_init_method(dim=self.config.hidden_size, n_layers=self.config.num_hidden_layers)(module.weight)
             elif module.weight is not None:
                 small_init_method(self.config.hidden_size)(module.weight)
-        elif isinstance(module, xLSTMRMSNorm) or hasattr(module, "_layer_normalize"):
-            init.ones_(module.weight)
-            if hasattr(module, "bias") and module.bias is not None:
-                init.zeros_(module.bias)
 
 
 class xLSTMCache:
@@ -1323,7 +1320,7 @@ class xLSTMCache:
             The device on which the cache should be initialized. Should be the same as the layer.
 
     Attributes:
-        seqlen_offset: int
+        seqlen_offset: torch.Tensor
         dtype: torch.dtype
 
     Example:
@@ -1351,7 +1348,11 @@ class xLSTMCache:
         device: str | None = None,
         **kwargs,
     ):
-        self.seqlen_offset = 0
+        # Follows the static-cache convention (`StaticLayer.cumulative_length` in cache_utils.py):
+        # compile/export-friendly caches store the position counter as a tensor, not a Python int,
+        # so it stays a tensor leaf in the cache pytree across `+= shape[i]` operations rather
+        # than getting promoted to a SymInt during dynamic-shape tracing.
+        self.seqlen_offset = torch.tensor([0], dtype=int, device=device)
         self.dtype = dtype
         self.config = config
         self.rnn_state = {
@@ -1396,7 +1397,7 @@ class xLSTMOutput(ModelOutput):
 class xLSTMModel(xLSTMPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        # use embbeding_dim and num_blocks once here to make use of them
+        # use embedding_dim and num_blocks once here to make use of them
         self.embeddings = nn.Embedding(config.vocab_size, config.embedding_dim)
         self.blocks = nn.ModuleList([xLSTMBlock(config) for _ in range(config.num_blocks)])
         self.out_norm = xLSTMRMSNorm(config.hidden_size, eps=config.norm_eps)

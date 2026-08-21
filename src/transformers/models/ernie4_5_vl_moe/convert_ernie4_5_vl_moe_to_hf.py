@@ -273,7 +273,7 @@ def convert_tokenizer(original_tokenizer_path, save_dir):
 
     # Manipulate special tokens and add video token
     tokenizer_config = load_json(TMP_TOKENIZER_DIR, TOKENIZER_CONFIG_FILE)
-    # Doubled usage of extra and inherint special tokens
+    # Doubled usage of extra and inherit special tokens
     tokenizer_config["extra_special_tokens"].remove("<s>")
     tokenizer_config["extra_special_tokens"].remove("</s>")
     # SPM special added but we want to treat them as non-special

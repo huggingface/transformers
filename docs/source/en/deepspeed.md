@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -53,7 +53,7 @@ If you run into CUDA-related install errors, check the [DeepSpeed CUDA](./debugg
 
 ## Configure
 
-[`Trainer`] integrates DeepSpeed through the [TrainingArguments.deepspeed](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments.deepspeed) argument, which accepts a JSON config file. Alternatively, use an [Accelerate config file](./accelerate#accelerate-config-file) instead of [`TrainingArguments`].
+[`Trainer`] integrates DeepSpeed through the [`~TrainingArguments#deepspeed`] argument, which accepts a JSON config file. Alternatively, use an [Accelerate config file](./accelerate#accelerate-config-file) instead of [`TrainingArguments`].
 
 <hfoptions id="launch">
 <hfoption id="TrainingArguments">

@@ -150,7 +150,7 @@ class HiggsAudioV2TokenizerModelTest(ModelTesterMixin, unittest.TestCase):
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
-            expected_arg_names = ["input_values", "audio_codes", "bandwidth", "return_dict"]
+            expected_arg_names = ["input_values", "audio_codes", "bandwidth"]
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
     def test_batching_equivalence(self, atol=2e-4, rtol=2e-4):

@@ -69,7 +69,7 @@ class BlockManager:
         Still, the block can be freed if no un-initialized blocks are left. In that case, we remove its hash from the
         hash table.
     If the block is not shareable, we just use the block manager as a FIFO structure where blocks are either free or in
-    use. Sharability is determined by the type of cache allocator: blocks created for full attention layers are
+    use. Shareability is determined by the type of cache allocator: blocks created for full attention layers are
     shareable, while blocks created for sliding window attention layers are not.
     There is no structure to keep track of the blocks in use: if a block is neither un-initialized nor initialized,
     it is in use.
@@ -457,18 +457,18 @@ class SlidingAttentionCacheAllocator(CacheAllocator):
     """Cache manager for sliding window attention layers."""
 
     def __init__(
-        self, index: int, block_size: int, sliding_window: int, sentinel_index: int, trash_index: int
+        self, index: int, block_size: int, sliding_window: int, sentinel_index: int, write_trash_index: int
     ) -> None:
-        """Initializes the cache manager for a group of sliding window attention layers. ``sentinel_index`` and
-        ``trash_index`` are valid cache positions in the padding zone, used instead of -1 in read and write indices
-        respectively so that index_select/index_copy_ never receive negative values.
+        """Initializes the cache manager for a group of sliding window attention layers, with two special indices:
+        - ``sentinel_index`` marks the spot of a new token in the read indices
+        - ``write_trash_index`` is used by padding tokens to write their KV cache
         """
         self._index = index
         self.uses_block_sharing = False
         self.block_size = block_size
         self.sliding_window = sliding_window
         self.sentinel_index = sentinel_index
-        self.trash_index = trash_index
+        self.write_trash_index = write_trash_index
         self._max_blocks_per_request = ceil(self.sliding_window / self.block_size)
         self.block_table = {}
 
@@ -504,9 +504,10 @@ class SlidingAttentionCacheAllocator(CacheAllocator):
         block_table = self.block_table.get(request_id)
         if block_table is None:
             raise ValueError(f"No block table found for request {request_id}")
-        # Apply sliding window
-        start_index = 0 if past_length < self.sliding_window else past_length % self.sliding_window
+        # Apply sliding window: read the `cache_length` most recent tokens, which start at logical position
+        # `past_length - cache_length` and thus at that position's slot in the rolling buffer
         cache_length = min(past_length, self.sliding_window - 1)
+        start_index = (past_length - cache_length) % self.sliding_window
         # Compute the physical indices
         physical_indices = []
         for i in range(start_index, start_index + cache_length):
@@ -525,10 +526,11 @@ class SlidingAttentionCacheAllocator(CacheAllocator):
         block_table = self.block_table.get(request_id)
         if block_table is None:
             raise ValueError(f"No block table found for request {request_id}")
-        # Apply sliding window
-        start_index = past_length % self.sliding_window
+        # Apply sliding window: only the last `sliding_window` query tokens are written, the earlier ones go to the trash
+        # slot. The first kept token is at logical position `past_length + padding_length`, hence the start index
         cache_length = min(query_length, self.sliding_window)
         padding_length = query_length - cache_length
+        start_index = (past_length + padding_length) % self.sliding_window
         # Compute the physical indices
         physical_indices = []
         for i in range(start_index, start_index + cache_length):
@@ -538,7 +540,7 @@ class SlidingAttentionCacheAllocator(CacheAllocator):
             physical_index = block_table[block_idx] * self.block_size + block_offset
             physical_indices.append(physical_index)
         if padding_length > 0:
-            physical_indices = [self.trash_index] * padding_length + physical_indices
+            physical_indices = [self.write_trash_index] * padding_length + physical_indices
         return physical_indices
 
     # TODO: implement this

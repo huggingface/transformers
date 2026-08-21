@@ -18,7 +18,7 @@ r"""Utility to convert Gemma models from Orbax to HF Transformers checkpoint.
 python src/transformers/models/gemma4/convert_gemma4_weights.py \
     --variant='gemma-4-e2b' \
     --include_chat_template \
-    --include_response_schema \
+    --include_response_template \
     --tokenizer_path="$HOME/tokenizers/gemma4/gemma4_cleaned_262144.model" \
     --checkpoint_path="$HOME/gemma4/checkpoints/gemma_e2b_it_orbax" \
     --output_path="$HOME/gemma4/checkpoints/gemma_e2b_it_safetensors"
@@ -71,42 +71,34 @@ from transformers.utils.quantization_config import GemmaQuantizationConfig
 _CHAT_TEMPLATE = pathlib.Path(cached_file("gg-hf-gg/gemma-4-E4B-it", "chat_template.jinja")).read_text()
 _CHAT_TEMPLATE_LARGE = pathlib.Path(cached_file("gg-hf-gg/gemma-4-31B-it", "chat_template.jinja")).read_text()
 
-_RESPONSE_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "role": {"const": "assistant"},
+_RESPONSE_TEMPLATE = {
+    "defaults": {"role": "assistant"},
+    # The chat template only emits `<|turn>model\n` when the previous message wasn't a tool_call/
+    # tool_response. After a tool_response the prefix just ends with `<tool_response|>` and the
+    # model continues from there, so we accept either anchor and truncate past the latest one.
+    "start_anchor": ["<|turn>model\n", "<tool_response|>"],
+    "fields": {
         "thinking": {
-            "type": "string",
-        },
-        "content": {
-            "type": "string",
+            "open": "<|channel>thought\n",
+            "close": "<channel|>",
+            "content": "text",
         },
         "tool_calls": {
-            "x-regex-iterator": r"<\|tool_call>(.*?)<tool_call\|>",
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "type": {"const": "function"},
-                    "function": {
-                        "type": "object",
-                        "x-regex": r"call\:(?P<name>\w+)(?P<arguments>\{.*\})",
-                        "properties": {
-                            "name": {
-                                "type": "string",
-                            },
-                            "arguments": {
-                                "type": "object",
-                                "x-parser": "gemma4-tool-call",
-                                "additionalProperties": {},
-                            },
-                        },
-                    },
-                },
+            "open_pattern": r"<\|tool_call>call:(?P<name>\w+)",
+            "close": "<tool_call|>",
+            "repeats": True,
+            "content": "json",
+            "content_args": {
+                "unquoted_keys": True,
+                "string_delims": [['<|"|>', '<|"|>']],
             },
+            "transform": {"type": "function", "function": {"name": "{name}", "arguments": "{content}"}},
+        },
+        "content": {
+            "close": ["<turn|>", "<|tool_response>", "<eos>"],
+            "content": "text",
         },
     },
-    "x-regex": r"(\<\|channel\>thought\n(?P<thinking>.*?)\<channel\|\>)?(?P<tool_calls>\<\|tool_call\>.*\<tool_call\|\>)?(?P<content>(?:(?!\<turn\|\>)(?!\<\|tool_response\>).)+)?(?:\<turn\|\>|\<\|tool_response\>)?",
 }
 
 _DTYPES = {"float32", "bfloat16", "float16"}
@@ -389,10 +381,10 @@ _INCLUDE_CHAT_TEMPLATE = flags.DEFINE_bool(
     name="include_chat_template", default=False, help="If true, will save the default chat template with the tokenizer"
 )
 
-_INCLUDE_RESPONSE_SCHEMA = flags.DEFINE_bool(
-    name="include_response_schema",
+_INCLUDE_RESPONSE_TEMPLATE = flags.DEFINE_bool(
+    name="include_response_template",
     default=False,
-    help="If true, will save the default response schema with the tokenizer",
+    help="If true, will save the default response_template with the tokenizer",
 )
 
 _OUTPUT_PATH = flags.DEFINE_string(
@@ -1132,12 +1124,7 @@ def convert_transformer_weights(
             head_dim = weights.shape[-1]  # Last dimension is head_dim
         else:
             # Fall back to config-based determination
-            head_dim = (
-                config.global_head_dim
-                if config.layer_types[layer_idx] == "full_attention" and config.global_head_dim
-                else config.head_dim
-            )
-
+            head_dim = config.per_layer_config[layer_idx].head_dim
         # Note: In new format, weights are per-layer (not batched), so no enumerate loop needed
         matrix = weights
 
@@ -1165,7 +1152,7 @@ def convert_transformer_weights(
             converted_paths.append(f"{base_path}.self_attn.k_proj.weight")
             converted_weights.append(
                 matrix.transpose(1, 0, 2)
-                .reshape(config.hidden_size, config.num_global_key_value_heads * head_dim)
+                .reshape(config.hidden_size, config.per_layer_config[layer_idx].num_key_value_heads * head_dim)
                 .transpose()
             )
         elif path.endswith("attn/q_einsum"):
@@ -1226,12 +1213,7 @@ def convert_transformer_weights(
             layer_idx = _SLIDING_WINDOW_PATTERN * i + attention_type_index
             is_kv_shared_layer = layer_idx >= first_kv_shared_layer_idx >= 0
             base_path = f"layers.{layer_idx}"
-            head_dim = (
-                config.global_head_dim
-                if config.layer_types[layer_idx] == "full_attention" and config.global_head_dim
-                else config.head_dim
-            )
-
+            head_dim = config.per_layer_config[layer_idx].head_dim
             if param == "skip_scale":
                 converted_paths.append(f"{base_path}.layer_scalar")
                 converted_weights.append(matrix)
@@ -1259,7 +1241,7 @@ def convert_transformer_weights(
                 converted_paths.append(f"{base_path}.self_attn.k_proj.weight")
                 converted_weights.append(
                     matrix.transpose(1, 0, 2)
-                    .reshape(config.hidden_size, config.num_global_key_value_heads * head_dim)
+                    .reshape(config.hidden_size, config.per_layer_config[layer_idx].num_key_value_heads * head_dim)
                     .transpose()
                 )
             elif path.endswith("attn/q_einsum"):
@@ -2108,7 +2090,7 @@ def convert_quantized_transformer_weights(
         # No additional post-processing needed here.
         return zip(all_paths, all_weights)
 
-    head_dim = config.head_dim if config.layer_types[layer_idx] == "sliding_attention" else config.global_head_dim
+    head_dim = config.per_layer_config[layer_idx].head_dim
 
     # Map the quantized parameter suffix to the HF buffer name suffix.
     # The main routing loop may pass virtual param names with _input/_output
@@ -2233,7 +2215,7 @@ def convert_quantized_transformer_weights(
             if w.ndim == 3:
                 return (
                     w.transpose(1, 0, 2)
-                    .reshape(config.hidden_size, config.num_global_key_value_heads * head_dim)
+                    .reshape(config.hidden_size, config.per_layer_config[layer_idx].num_key_value_heads * head_dim)
                     .transpose()
                 )
             elif w.ndim == 2:
@@ -2564,7 +2546,7 @@ def main(*args):
 
     chat_template = _CHAT_TEMPLATE_LARGE if variant in _LARGE_MODEL_VARIANTS else _CHAT_TEMPLATE
     chat_template_kwargs = {"chat_template": chat_template} if _INCLUDE_CHAT_TEMPLATE.value else {}
-    response_schema_kwargs = {"response_schema": _RESPONSE_SCHEMA} if _INCLUDE_RESPONSE_SCHEMA.value else {}
+    response_template_kwargs = {"response_template": _RESPONSE_TEMPLATE} if _INCLUDE_RESPONSE_TEMPLATE.value else {}
 
     # Load the tokenizer from either a SentencePiece `.model` file (when the
     # path exists locally) or directly from a HF repo (e.g. `google/gemma-4-E2B-it`).
@@ -2599,13 +2581,13 @@ def main(*args):
                 "etd_token": "<tool|>",
             },
             **chat_template_kwargs,
-            **response_schema_kwargs,
+            **response_template_kwargs,
         )
     else:
         from transformers import AutoTokenizer
 
         tokenizer = AutoTokenizer.from_pretrained(
-            _TOKENIZER_PATH.value, **chat_template_kwargs, **response_schema_kwargs
+            _TOKENIZER_PATH.value, **chat_template_kwargs, **response_template_kwargs
         )
 
     # Update config multimodal token IDs from the tokenizer.

@@ -31,6 +31,7 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
     require_bitsandbytes,
     require_torch,
@@ -105,7 +106,6 @@ class LlavaNextForConditionalGenerationModelTest(VLMModelTest, unittest.TestCase
 
     model_tester_class = LlavaNextVisionText2TextModelTester
     skip_test_image_features_output_shape = True
-    test_torch_exportable = False
 
     @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing(self):
@@ -267,10 +267,17 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # verify generation
         output = model.generate(**inputs, max_new_tokens=50)
-        EXPECTED_DECODED_TEXT = "[INST]  \nWhat is shown in this image? [/INST] The image shows two deer, likely fawns, in a grassy area with trees in the background. The setting appears to be a forest or woodland, and the photo is taken during what seems to be either dawn or dusk, given"
+        # fmt: off
+        EXPECTED_DECODED_TEXT = Expectations(
+            {
+                (None, None): '[INST]  \nWhat is shown in this image? [/INST] The image shows two deer, likely fawns, in a grassy area with trees in the background. The setting appears to be a forest or woodland, and the photo is taken during what seems to be either dawn or dusk, given',
+                ("xpu", 5): '[INST]  \nWhat is shown in this image? [/INST] The image shows two deer, likely fawns, in a grassy area with trees in the background. The setting appears to be a forest or woodland, and the time of day seems to be either dawn or dusk, given the soft',
+            }
+        )
+        # fmt: on
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
+            EXPECTED_DECODED_TEXT.get_expectation(),
         )
 
     @slow

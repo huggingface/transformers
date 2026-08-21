@@ -41,7 +41,7 @@ rendered properly in your Markdown viewer.
     이는 `src`, `tests`, `.github` 폴더 중 하나에 코드가 업데이트된 경우에만 실행됩니다.
     (model card, notebook, 기타 등등을 추가한 경우 실행되지 않도록 하기 위해서입니다)
 
-   - [self-hosted runner](https://github.com/huggingface/transformers/tree/main/.github/workflows/self-scheduled.yml): `tests` 및 `examples`에서
+   - [self-hosted runner](https://github.com/huggingface/transformers/tree/main/.github/workflows/self-scheduled-caller.yml): `tests` 및 `examples`에서
    GPU를 이용한 일반 테스트, 느린 테스트를 실행합니다.
 
 

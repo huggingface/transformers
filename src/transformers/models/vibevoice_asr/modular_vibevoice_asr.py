@@ -135,6 +135,14 @@ class VibeVoiceAsrConfig(PreTrainedConfig):
     def max_position_embeddings(self) -> int:
         return math.ceil(self.acoustic_tokenizer_chunk_size / self.acoustic_tokenizer_encoder_config.hop_length)
 
+    @max_position_embeddings.setter
+    def max_position_embeddings(self, value: int):
+        if value <= 0:
+            raise ValueError(f"Attempted to set `max_position_embeddings` to {value}; you need a positive value!")
+
+        hop_length = self.acoustic_tokenizer_encoder_config.hop_length
+        self.acoustic_tokenizer_chunk_size = int(value) * hop_length
+
 
 class VibeVoiceAsrRMSNorm(Qwen2RMSNorm):
     pass
@@ -352,7 +360,7 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
 
             audio_token_mask = (input_ids == self.config.audio_token_id).unsqueeze(-1)
             inputs_embeds = inputs_embeds.masked_scatter(
-                audio_token_mask.to(inputs_embeds.device), audio_embeds.to(inputs_embeds.device)
+                audio_token_mask.to(inputs_embeds.device), audio_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             )
 
         outputs = self.language_model(

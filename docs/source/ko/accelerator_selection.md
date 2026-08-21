@@ -9,90 +9,77 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
 
-<!-- TODO: this was copied from the korean version of `gpu_selection.md`, and is not up to date with the english version of `accelerator_selection.md` -->
+# 가속기 선택
 
-# GPU 선택하기 [[gpu-selection]]
+분산 학습 중에 PyTorch가 어떤 가속기(CUDA, XPU, MPS, HPU 등)를 어떤 순서로 인식할지 제어할 수 있습니다. 더 빠른 장치를 우선적으로 사용하거나, 사용 가능한 하드웨어 중 일부만 학습에 사용하도록 제한할 수 있습니다. 이 방법은 [DistributedDataParallel](https://pytorch.org/docs/stable/generated/torch.nn.parallel.DistributedDataParallel.html)과 [DataParallel](https://pytorch.org/docs/stable/generated/torch.nn.DataParallel.html) 모두에서 작동하며, Accelerate나 [DeepSpeed 통합](./main_classes/deepspeed)이 필요하지 않습니다.
 
-분산 학습 과정에서 사용할 GPU의 개수와 순서를 정할 수 있습니다. 이 방법은 서로 다른 연산 성능을 가진 GPU가 있을 때 더 빠른 GPU를 우선적으로 사용하거나, 사용 가능한 GPU 중 일부만 선택하여 활용하고자 할 때 유용합니다. 이 선택 과정은 [DistributedDataParallel](https://pytorch.org/docs/stable/generated/torch.nn.parallel.DistributedDataParallel.html)과 [DataParallel](https://pytorch.org/docs/stable/generated/torch.nn.DataParallel.html)에서 모두 작동합니다. Accelerate나 [DeepSpeed 통합](./main_classes/deepspeed)은 필요하지 않습니다.
+## 가속기 순서
 
-이 가이드는 사용할 GPU의 개수를 선택하는 방법과 사용 순서를 설정하는 방법을 설명합니다.
+하드웨어별 환경 변수를 사용해 가속기를 선택하고 순서를 설정하세요. 실행할 때마다 명령줄에서 설정하거나 `~/.bashrc` 또는 다른 시작 설정 파일에 추가할 수 있습니다.
 
-## GPU 개수 지정 [[number-of-gpus]]
+> [!WARNING]
+> `export`로 환경 변수를 설정하는 방식은 피하세요. 환경 변수가 어떻게 설정되었는지 잊어버리면 잘못된 가속기에서 별도 알림 없이 학습하게 될 수 있습니다. 학습 실행 명령과 같은 명령줄에서 환경 변수를 설정하세요.
 
-예를 들어, GPU가 4개 있고 그중 처음 2개만 사용하려는 경우, 아래 명령어를 실행하세요.
+예를 들어, 네 개의 가속기 중 0번과 2번을 선택하려면 다음과 같이 실행하세요.
 
-<hfoptions id="select-gpu">
-<hfoption id="torchrun">
+<hfoptions id="accelerator-type">
+<hfoption id="CUDA">
 
-사용할 GPU 개수를 정하기 위해 `--nproc_per_node` 옵션을 사용하세요.
-
-```bash
-torchrun --nproc_per_node=2  trainer-program.py ...
-```
-
-</hfoption>
-<hfoption id="Accelerate">
-
-사용할 GPU 개수를 정하기 위해 `--num_processes` 옵션을 사용하세요.
-
-```bash
-accelerate launch --num_processes 2 trainer-program.py ...
-```
-
-</hfoption>
-<hfoption id="DeepSpeed">
-
-사용할 GPU 개수를 정하기 위해 `--num_gpus` 옵션을 사용하세요.
-
-```bash
-deepspeed --num_gpus 2 trainer-program.py ...
-```
-
-</hfoption>
-</hfoptions>
-
-### GPU 순서 [[order-of-gpus]]
-
-사용할 GPU와 그 순서를 지정하려면 `CUDA_VISIBLE_DEVICES` 환경 변수를 설정하세요. 가장 쉬운 방법은 `~/bashrc` 또는 다른 시작 설정 파일에서 해당 변수를 설정하는 것입니다. `CUDA_VISIBLE_DEVICES`는 사용할 GPU를 매핑하는 데 사용됩니다. 예를 들어, GPU가 4개 (0, 1, 2, 3) 있고 그중에서 0번과 2번 GPU만 사용하고 싶을 경우, 다음과 같이 설정할 수 있습니다:
-
-```bash
+```cli
 CUDA_VISIBLE_DEVICES=0,2 torchrun trainer-program.py ...
 ```
 
-오직 두 개의 물리적 GPU(0, 2)만 PyTorch에서 "보이는" 상태가 되며, 각각 `cuda:0`과 `cuda:1`로 매핑됩니다. 또한, GPU 사용 순서를 반대로 설정할 수도 있습니다. 이 경우, GPU 0이 `cuda:1`, GPU 2가 `cuda:0`으로 매핑됩니다."
+PyTorch는 0번과 2번 GPU만 인식하며, 이를 각각 `cuda:0`과 `cuda:1`로 매핑합니다. 순서를 반대로 바꾸려면(2번 GPU를 `cuda:0`으로, 0번 GPU를 `cuda:1`로 사용하려면) 다음과 같이 실행하세요.
 
-```bash
+```cli
 CUDA_VISIBLE_DEVICES=2,0 torchrun trainer-program.py ...
 ```
 
-`CUDA_VISIBLE_DEVICES` 환경 변수를 빈 값으로 설정하여 GPU가 없는 환경을 만들 수도 있습니다.
+GPU 없이 실행하려면 다음과 같이 실행하세요.
 
-```bash
+```cli
 CUDA_VISIBLE_DEVICES= python trainer-program.py ...
 ```
 
-> [!WARNING]
-> 다른 환경 변수와 마찬가지로, CUDA_VISIBLE_DEVICES를 커맨드 라인에 추가하는 대신 export하여 설정할 수도 있습니다. 그러나 이 방식은 환경 변수가 어떻게 설정되었는지를 잊어버릴 경우, 잘못된 GPU를 사용할 위험이 있기 때문에 권장하지 않습니다. 특정 학습 실행에 대해 동일한 커맨드 라인에서 환경 변수를 설정하는 것이 일반적인 방법입니다.
+`CUDA_DEVICE_ORDER`로 CUDA 장치의 순서를 제어할 수 있습니다.
 
-`CUDA_DEVICE_ORDER`는 GPU의 순서를 제어하는 데 사용할 수 있는 대체 환경 변수입니다. 이 변수를 사용하면 다음과 같은 방식으로 GPU 순서를 지정할 수 있습니다:
+- PCIe 버스 ID 순서로 정렬(`nvidia-smi`와 일치):
 
-1. NVIDIA 및 AMD GPU의 PCIe 버스 ID는 각각 [nvidia-smi](https://developer.nvidia.com/nvidia-system-management-interface)와 [rocm-smi](https://rocm.docs.amd.com/projects/rocm_smi_lib/en/latest/.doxygen/docBin/html/index.html)의 순서와 일치합니다.
+    ```cli
+    export CUDA_DEVICE_ORDER=PCI_BUS_ID
+    ```
 
-```bash
-export CUDA_DEVICE_ORDER=PCI_BUS_ID
+- 연산 능력(compute capability) 순서로 정렬(가장 빠른 장치부터):
+
+    ```cli
+    export CUDA_DEVICE_ORDER=FASTEST_FIRST
+    ```
+
+</hfoption>
+<hfoption id="Intel XPU">
+
+```cli
+ZE_AFFINITY_MASK=0,2 torchrun trainer-program.py ...
 ```
 
-2. GPU 연산 능력
+PyTorch는 0번과 2번 XPU만 인식하며, 이를 각각 `xpu:0`과 `xpu:1`로 매핑합니다. 순서를 반대로 바꾸려면(2번 XPU를 `xpu:0`으로, 0번 XPU를 `xpu:1`로 사용하려면) 다음과 같이 실행하세요.
 
-```bash
-export CUDA_DEVICE_ORDER=FASTEST_FIRST
+```cli
+ZE_AFFINITY_MASK=2,0 torchrun trainer-program.py ...
 ```
 
-The `CUDA_DEVICE_ORDER` is especially useful if your training setup consists of an older and newer GPU, where the older GPU appears first, but you cannot physically swap the cards to make the newer GPU appear first. In this case, set `CUDA_DEVICE_ORDER=FASTEST_FIRST` to always use the newer and faster GPU first (`nvidia-smi` or `rocm-smi` still reports the GPUs in their PCIe order). Or you could also set `export CUDA_VISIBLE_DEVICES=1,0`.
+Intel XPU의 순서는 다음과 같이 제어할 수 있습니다.
 
-`CUDA_DEVICE_ORDER`는 구형 GPU와 신형 GPU가 혼합된 환경에서 특히 유용합니다. 예를 들어, 구형 GPU가 먼저 표시되지만 물리적으로 교체할 수 없는 경우, `CUDA_DEVICE_ORDER=FASTEST_FIRST`를 설정하면 항상 신형 및 더 빠른 GPU를 우선적으로 사용(nvidia-smi 또는 rocm-smi는 PCIe 순서대로 GPU를 표시함)할 수 있습니다. 또는, `export CUDA_VISIBLE_DEVICES=1,0`을 설정하여 GPU 사용 순서를 직접 지정할 수도 있습니다.
+```cli
+export ZE_ENABLE_PCI_ID_DEVICE_ORDER=1
+```
+
+Intel XPU의 장치 열거와 정렬에 대한 자세한 내용은 [Level Zero](https://github.com/oneapi-src/level-zero/blob/master/README.md?plain=1#L87) 문서를 참고하세요.
+
+</hfoption>
+</hfoptions>
