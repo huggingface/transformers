@@ -96,7 +96,7 @@ class DeepseekV2Config(LlamaConfig):
         "num_experts": "n_routed_experts",
     }
 
-    vocab_size: int = 32000
+    vocab_size: int = 102400
     hidden_size: int = 4096
     intermediate_size: int = 11008
     num_hidden_layers: int = 32
