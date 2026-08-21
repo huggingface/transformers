@@ -149,6 +149,13 @@ class GgufHfQuantizer(HfQuantizer):
             return
         self.keep_packed = set(replace_with_gguf_modules(model, packable, self.kernel, self.dtype))
 
+    def _process_model_after_weight_loading(self, model, **kwargs):
+        """Graft ggml's fused layer kernels, which needs the weights already in place."""
+        from ..integrations.gguf.kernels import kernelize_ggml_layers
+
+        kernelize_ggml_layers(model)
+        return model
+
     def update_weight_conversions(self, weight_conversions):
         """Prepend this file's conversions: the GGUF -> transformers mapping, and the unpacking.
 
