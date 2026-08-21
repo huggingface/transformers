@@ -415,7 +415,11 @@ class PI0ModelIntegrationTest(unittest.TestCase):
 
     @require_torch_large_gpu
     def test_train_pi0_base_libero(self):
-        model = PI0ForConditionalGeneration.from_pretrained("lerobot/pi0_base", torch_dtype=torch.bfloat16).eval()
+        # device_map prevents Trainer from wrapping the model in nn.DataParallel on multi-GPU machines,
+        # which would cause a dtype mismatch (float32 inputs vs bfloat16 weights).
+        model = PI0ForConditionalGeneration.from_pretrained(
+            "lerobot/pi0_base", torch_dtype=torch.bfloat16, device_map={"": torch_device}
+        ).eval()
         processor = PI0Processor.from_pretrained("google/paligemma-3b-pt-224")
 
         small_data = load_dataset("RaushanTurganbay/libero-small-testing", split="train")
