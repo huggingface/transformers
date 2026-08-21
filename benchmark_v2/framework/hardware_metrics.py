@@ -1,7 +1,7 @@
 import logging
-import subprocess
 import sys
 import time
+from ctypes import byref, c_uint32
 from dataclasses import dataclass
 from enum import Enum
 from logging import Logger
@@ -20,7 +20,11 @@ if is_rocm_platform():
 import psutil
 import torch
 
-from transformers.utils import is_torch_accelerator_available
+from transformers.utils import is_torch_accelerator_available, is_torch_xpu_available
+
+
+if is_torch_xpu_available():
+    import pyzes
 
 
 _logger = logging.getLogger(__name__)
@@ -73,34 +77,62 @@ def get_amd_gpu_stats(device_handle) -> tuple[int, float]:
     return int(utilization), float(memory_used) / 1024**3  # Convert bytes to GB
 
 
-def get_intel_xpu_stats() -> tuple[int, float]:
-    """Returns the utilization and memory used of an Intel XPU"""
-    # xpu-smi outputs CSV format: Timestamp, DeviceId, GPU Memory Utilization (%), GPU Memory Used (MiB)
-    xpu_smi_output = subprocess.check_output(["xpu-smi", "dump", "-m", "5,18", "-n", "1"])
-    lines = xpu_smi_output.decode("utf-8").strip().split("\n")
+def _zes_enumerate(enumerate_fn, handle_type, *args):
+    """Calls a Level Zero Sysman enumeration function, which is always a (*args, count, handles) call."""
+    count = c_uint32(0)
+    enumerate_fn(*args, byref(count), None)
+    handles = (handle_type * count.value)()
+    enumerate_fn(*args, byref(count), handles)
+    return handles
 
-    # Parse all data lines (skip header) and collect stats from all cards
-    xpu_stats = []
-    for line in lines[1:]:
-        data_line = line.split(",")
-        if len(data_line) < 4:
-            continue
-        device_id = data_line[1].strip()
-        utilization_str = data_line[2].strip()
-        memory_used_str = data_line[3].strip()
-        if utilization_str != "N/A" and memory_used_str != "N/A":
-            utilization = int(float(utilization_str))
-            memory_used_mib = float(memory_used_str)
-            xpu_stats.append((device_id, utilization, memory_used_mib))
 
-    if not xpu_stats:
-        return 0, 0.0
+def get_intel_xpu_handles() -> tuple:
+    """Initializes Level Zero Sysman and returns the engine and memory handles of XPU 0."""
+    pyzes.zesInit(0)
+    driver = _zes_enumerate(pyzes.zesDriverGet, pyzes.zes_driver_handle_t)[0]
+    devices = _zes_enumerate(pyzes.zesDeviceGet, pyzes.zes_device_handle_t, driver)
+    # Sysman enumerates devices in a different order than torch, so XPU 0 is identified by its UUID instead of its
+    # index. The UUID of XPU 0 is given by torch as a list of bytes, and by Sysman in the `core.uuid.id` field of the
+    # device properties, which has to be requested by setting the `stype` field before the call.
+    device = None
+    expected_uuid = bytes(torch.xpu.get_device_properties(0).uuid.bytes)
+    for candidate in devices:
+        properties = pyzes.zes_device_properties_t()
+        properties.stype = pyzes.ZES_STRUCTURE_TYPE_DEVICE_PROPERTIES
+        pyzes.zesDeviceGetProperties(candidate, byref(properties))
+        if bytes(properties.core.uuid.id) == expected_uuid:
+            device = candidate
+            break
+    if device is None:
+        raise RuntimeError("Could not find the Level Zero Sysman device matching XPU 0.")
+    engines = _zes_enumerate(pyzes.zesDeviceEnumEngineGroups, pyzes.zes_engine_handle_t, device)
+    memories = _zes_enumerate(pyzes.zesDeviceEnumMemoryModules, pyzes.zes_mem_handle_t, device)
+    # Among all engine groups, we want the one aggregating all engines, which gives the overall utilization
+    for engine in engines:
+        properties = pyzes.zes_engine_properties_t()
+        pyzes.zesEngineGetProperties(engine, byref(properties))
+        if properties.type == pyzes.ZES_ENGINE_GROUP_ALL:
+            return engine, memories[0]
+    raise RuntimeError("Could not find a Level Zero Sysman engine group aggregating all engines.")
 
-    # Sort by utilization (descending) and pick the highest
-    xpu_stats.sort(key=lambda x: x[1], reverse=True)
-    device_id, utilization, memory_used_mib = xpu_stats[0]
-    memory_used_gb = memory_used_mib / 1024
-    return utilization, memory_used_gb
+
+def get_intel_xpu_stats(device_handle: tuple) -> tuple[int, float]:
+    """Get Intel XPU stats using the pyzes library."""
+    engine_handle, memory_handle = device_handle
+    # Engine activity is cumulative, so utilization is the ratio of the deltas between two reads
+    stats_before = pyzes.zes_engine_stats_t()
+    pyzes.zesEngineGetActivity(engine_handle, byref(stats_before))
+    time.sleep(0.01)
+    stats_after = pyzes.zes_engine_stats_t()
+    pyzes.zesEngineGetActivity(engine_handle, byref(stats_after))
+    active_time = stats_after.activeTime - stats_before.activeTime
+    elapsed_time = stats_after.timestamp - stats_before.timestamp
+    utilization = 100 * active_time / elapsed_time
+    # Memory state gives the free and total memory of the module, in bytes
+    memory_state = pyzes.zes_mem_state_t()
+    pyzes.zesMemoryGetState(memory_handle, byref(memory_state))
+    memory_used = memory_state.size - memory_state.free
+    return int(utilization), float(memory_used) / 1024**3  # Convert bytes to GB
 
 
 def get_nvidia_gpu_stats(device_handle) -> tuple[int, float]:
@@ -195,6 +227,8 @@ class GPUMonitor:
         elif gpu_type == "nvidia":
             pynvml.nvmlInit()
             device_handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+        elif gpu_type == "intel":
+            device_handle = get_intel_xpu_handles()
 
         # Signal ready
         try:
@@ -211,7 +245,7 @@ class GPUMonitor:
                 elif gpu_type == "nvidia":
                     utilization, memory_used = get_nvidia_gpu_stats(device_handle)
                 elif gpu_type == "intel":
-                    utilization, memory_used = get_intel_xpu_stats()
+                    utilization, memory_used = get_intel_xpu_stats(device_handle)
                 else:
                     break
 
