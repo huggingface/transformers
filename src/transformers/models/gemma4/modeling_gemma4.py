@@ -23,6 +23,7 @@ from collections import UserDict
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import cached_property
+from typing import Any
 
 import torch
 from torch import nn
@@ -51,7 +52,6 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
-    ModelOutput,
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
@@ -59,7 +59,7 @@ from ...utils import (
     torch_compilable_check,
 )
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.generic import ModelOutput, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto.modeling_auto import AutoModel
 from .configuration_gemma4 import Gemma4AudioConfig, Gemma4Config, Gemma4TextConfig, Gemma4VisionConfig
@@ -2603,6 +2603,20 @@ class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
             audio_hidden_states=outputs.audio_hidden_states,
             shared_kv_states=outputs.shared_kv_states,
         )
+
+    def _update_model_kwargs_for_generation(
+        self,
+        outputs: ModelOutput,
+        model_kwargs: dict[str, Any],
+        is_encoder_decoder: bool = False,
+        num_new_tokens: int = 1,
+    ) -> dict[str, Any]:
+        # Gemma4's `token_type_ids` are the multimodal ones, marking *image* spans (`== 1`) rather than
+        # PaliGemma's prefix, so the generic update — which repeats the last value, 0 for the text a prompt
+        # ends on — is already right here. Spelled out
+        # against `GenerationMixin` in the modular source, where a plain `super()` delegation would instead
+        # be read as "inherit PaliGemma's body".
+        return super()._update_model_kwargs_for_generation(outputs, model_kwargs, is_encoder_decoder, num_new_tokens)
 
     def get_per_layer_input_embeddings(self):
         return self.model.get_per_layer_input_embeddings()

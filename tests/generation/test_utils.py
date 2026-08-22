@@ -408,6 +408,60 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             self._check_generate_outputs(output_generate, model.config, use_cache=True)
 
     @pytest.mark.generate
+    def test_cached_decode_matches_cacheless(self):
+        """Greedy decoding with a cache must produce what recomputing the whole sequence produces.
+
+        The two tests above already run both configurations, but each only checks its own shapes — nothing
+        compares them, so a cache that quietly feeds its layers the wrong positions or a mask of the wrong
+        width still passes both. Driving each side through `generate` keeps the modality, encoder-decoder
+        and input-naming plumbing in the library rather than restating it here, which is what lets one
+        assertion cover text, VLM and encoder-decoder models alike; the cacheless run recomputes every step
+        from scratch, so it cannot share a cache bug with the run it is checking.
+
+        Models whose state *is* their cache (`_is_stateful`: mamba, rwkv, the recurrent hybrids) have no
+        cacheless equivalent to compare against and are skipped.
+        """
+        for model_class in self.all_generative_model_classes:
+            if model_class._is_stateful:
+                self.skipTest(reason=f"{model_class.__name__} keeps recurrent state, so decode has no cacheless form")
+            # Seeded so the two runs compare one fixed random model. Only the weights are pinned: the
+            # testers draw their inputs from a module-level `global_rng` this does not touch, so the input
+            # varies per process — deliberately, since the invariant has to hold for any input, and pinning
+            # the draw would have kept models whose behaviour depends on it (an audio placeholder count, a
+            # sequence longer than a sparse-attention top-k) from ever being exercised.
+            set_seed(42)
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            model = model_class(config).to(torch_device).eval()
+
+            cached, cacheless = (
+                self._greedy_generate(
+                    model=model,
+                    inputs_dict=inputs_dict,
+                    output_logits=True,
+                    output_scores=True,
+                    return_dict_in_generate=True,
+                    use_cache=use_cache,
+                )
+                for use_cache in (True, False)
+            )
+
+            # The raw logits are the real invariant, so they are checked first and reported per step.
+            for step, (with_cache, without_cache) in enumerate(zip(cached.logits, cacheless.logits)):
+                torch.testing.assert_close(with_cache, without_cache, rtol=1e-3, atol=1e-3, msg=f"step {step}")
+            # The ids follow, except where a step's top two are within rounding of each other: a tiny random
+            # model ties constantly, and an argmax tie flips on differences the check above is meant to
+            # allow. Tie-check the *scores*, not the logits — the ids are picked from the scores, and the
+            # processors in between move them (`_greedy_generate` sets `min_new_tokens`, so EOS is -inf and
+            # the real contest can be between two candidates the raw logits rank third and fourth).
+            prompt_length = cached.sequences.shape[1] - len(cached.scores)
+            for step, scores in enumerate(cached.scores):
+                top_two = scores.topk(2, dim=-1).values
+                if (top_two[:, 0] - top_two[:, 1]).min() <= 2e-3:
+                    break
+                position = prompt_length + step
+                self.assertListEqual(cached.sequences[:, position].tolist(), cacheless.sequences[:, position].tolist())
+
+    @pytest.mark.generate
     def test_sample_generate(self):
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()

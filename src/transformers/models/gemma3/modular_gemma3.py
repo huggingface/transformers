@@ -22,6 +22,7 @@ from huggingface_hub.dataclasses import strict
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
+from ...generation import GenerationMixin
 from ...masking_utils import (
     _preprocess_mask_arguments,
     blockwise_overlay,
@@ -40,7 +41,7 @@ from ...modeling_rope_utils import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import maybe_autocast
+from ...utils.generic import ModelOutput, maybe_autocast
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
     Gemma2Attention,
@@ -757,6 +758,22 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     # Fix: https://github.com/huggingface/transformers/issues/40564
     accepts_loss_kwargs = False
+
+    def _update_model_kwargs_for_generation(
+        self,
+        outputs: ModelOutput,
+        model_kwargs: dict[str, Any],
+        is_encoder_decoder: bool = False,
+        num_new_tokens: int = 1,
+    ) -> dict[str, Any]:
+        # Gemma3's `token_type_ids` are the multimodal ones, marking *image* spans (`== 1`, see
+        # `get_block_sequence_ids_for_mask`) rather than PaliGemma's prefix, so the generic update — which
+        # repeats the last value, 0 for the text a prompt ends on — is already right here. Spelled out
+        # against `GenerationMixin` in the modular source, where a plain `super()` delegation would instead
+        # be read as "inherit PaliGemma's body".
+        return GenerationMixin._update_model_kwargs_for_generation(
+            self, outputs, model_kwargs, is_encoder_decoder, num_new_tokens
+        )
 
     @can_return_tuple
     @auto_docstring

@@ -27,6 +27,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
+from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
@@ -40,7 +41,7 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import ModelOutput, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from ..gemma2.modeling_gemma2 import (
@@ -2320,6 +2321,22 @@ class Gemma3nModel(PaliGemmaModel):
 )
 class Gemma3nForConditionalGeneration(PaliGemmaForConditionalGeneration):
     accepts_loss_kwargs = False
+
+    def _update_model_kwargs_for_generation(
+        self,
+        outputs: ModelOutput,
+        model_kwargs: dict[str, Any],
+        is_encoder_decoder: bool = False,
+        num_new_tokens: int = 1,
+    ) -> dict[str, Any]:
+        # Gemma3n's `token_type_ids` are the multimodal ones, marking *image* spans (`== 1`) rather than
+        # PaliGemma's prefix, so the generic update — which repeats the last value, 0 for the text a prompt
+        # ends on — is already right here. Spelled out
+        # against `GenerationMixin` in the modular source, where a plain `super()` delegation would instead
+        # be read as "inherit PaliGemma's body".
+        return GenerationMixin._update_model_kwargs_for_generation(
+            self, outputs, model_kwargs, is_encoder_decoder, num_new_tokens
+        )
 
     def get_per_layer_input_embeddings(self):
         return self.model.get_per_layer_input_embeddings()
