@@ -209,6 +209,10 @@ class ViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.model_tester = ViTModelTester(self)
         self.config_tester = ConfigTester(self, config_class=ViTConfig, has_text_modality=False, hidden_size=32)
 
+    def test_dummy_failure_for_ci_verification(self):
+        # TODO: remove this test — added temporarily to verify check_new_failures pipeline on AMD
+        assert 1 == 2
+
     @unittest.skip(
         "Since `torch==2.3+cu121`, although this test passes, many subsequent tests have `CUDA error: misaligned address`."
         "If `nvidia-xxx-cu118` are also installed, no failure (even with `torch==2.3+cu121`)."
@@ -260,6 +264,11 @@ def prepare_img():
 @require_torch
 @require_vision
 class ViTModelIntegrationTest(unittest.TestCase):
+    @slow
+    def test_dummy_failure_for_pr_ci_amd_verification(self):
+        # TODO: remove this test — added temporarily to verify check_new_failures pipeline on AMD PR comment CI
+        assert 1 == 2
+
     @cached_property
     def default_image_processor(self):
         return ViTImageProcessorPil.from_pretrained("google/vit-base-patch16-224") if is_vision_available() else None
