@@ -43,14 +43,14 @@ class CohereCompassVideoProcessorInitKwargs(VideosKwargs, total=False):
         The temporal patch size of the vision encoder.
     merge_size (`int`, *optional*, defaults to 2):
         The merge size of the vision encoder to llm encoder.
-    max_pixels_per_frame (`int`, *optional*):
-        Caps the total pixel budget (`size["longest_edge"]`) at `max(num_frames, 32) * max_pixels_per_frame`
-        per video. Without a cap, videos that sample fewer than `max_frames` frames spend the whole budget on
-        those frames and keep near-native per-frame resolution, so a short clip can cost almost as many tokens
-        as a long video. Set this to `size["longest_edge"] // max_frames` to make token cost scale with clip
-        duration. Videos sampling `max_frames` or more frames are unaffected. The frame count is floored at 32
-        when applying the cap, so tiny synthetic clips (for example 2-frame memory-profiling probes) keep a
-        usable budget instead of collapsing to near-minimum resolution.
+    cap_pixels_per_frame (`bool`, *optional*):
+        Whether to cap each frame's pixel cost the way the reference implementation (qwen-vl-utils) does:
+        per-frame pixels are limited to `min(768 * factor**2, size["longest_edge"] / num_frames)` and floored
+        at `1.05 * size["shortest_edge"]`, so token cost scales with clip duration. Without the cap, videos
+        that sample few frames spend the whole `size["longest_edge"]` budget on those frames and keep
+        near-native per-frame resolution, so a short clip can cost almost as many tokens as a long video.
+        If unset, the current uncapped behavior is kept and a warning is emitted: the default will change to
+        `True` in v5.22, after which the argument will be removed.
     """
 
     patch_size: int
@@ -58,7 +58,7 @@ class CohereCompassVideoProcessorInitKwargs(VideosKwargs, total=False):
     merge_size: int
     min_frames: int
     max_frames: int
-    max_pixels_per_frame: int
+    cap_pixels_per_frame: bool
 
 
 def smart_resize(
@@ -120,7 +120,7 @@ class CohereCompassVideoProcessor(BaseVideoProcessor):
     model_input_names = ["pixel_values_videos", "video_grid_thw"]
     min_frames = 4
     max_frames = 768
-    max_pixels_per_frame = None
+    cap_pixels_per_frame = None
 
     def __init__(self, **kwargs: Unpack[CohereCompassVideoProcessorInitKwargs]):
         super().__init__(**kwargs)
@@ -181,7 +181,7 @@ class CohereCompassVideoProcessor(BaseVideoProcessor):
         resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         factor: int,
         temporal_factor: int,
-        max_pixels_per_frame: int | None = None,
+        cap_pixels_per_frame: bool | None = None,
         **kwargs,
     ) -> "torch.Tensor":
         """Resize dynamically based on input video aspect ratio."""
@@ -190,8 +190,13 @@ class CohereCompassVideoProcessor(BaseVideoProcessor):
 
         num_frames = videos.shape[1]
         max_pixels = size.longest_edge
-        if max_pixels_per_frame is not None:
-            max_pixels = min(max_pixels, max(num_frames, 32) * max_pixels_per_frame)
+        if cap_pixels_per_frame:
+            # Mirrors qwen-vl-utils vision_process.py: per-frame pixels are capped at 768 patches
+            # (VIDEO_FRAME_MAX_PIXELS) or the budget's even share per frame, whichever is smaller,
+            # and floored just above min_pixels so tiny clips keep a usable resolution.
+            frame_cap = 768 * factor * factor
+            pixels_per_frame = max(min(frame_cap, size.longest_edge // num_frames), int(size.shortest_edge * 1.05))
+            max_pixels = pixels_per_frame * num_frames
 
         height, width = videos.shape[-2:]
         resized_height, resized_width = smart_resize(
@@ -264,10 +269,20 @@ class CohereCompassVideoProcessor(BaseVideoProcessor):
         patch_size: int | None = None,
         temporal_patch_size: int | None = None,
         merge_size: int | None = None,
-        max_pixels_per_frame: int | None = None,
+        cap_pixels_per_frame: bool | None = None,
         return_tensors: str | TensorType | None = None,
         **kwargs,
     ):
+        if cap_pixels_per_frame is None:
+            logger.warning_once(
+                "Qwen3-VL video processing currently lets a video's sampled frames use the entire pixel "
+                "budget (`size['longest_edge']`), so a short clip can cost almost as many tokens as a long "
+                "video. The reference implementation (qwen-vl-utils) caps per-frame cost instead. In v5.22 "
+                "the capped behavior will become the default and `cap_pixels_per_frame` will be removed. "
+                "Pass `cap_pixels_per_frame=True` to adopt the reference behavior now, or `False` to keep "
+                "the current behavior and silence this warning."
+            )
+            cap_pixels_per_frame = False
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
         resized_videos_grouped = {}
 
@@ -281,7 +296,7 @@ class CohereCompassVideoProcessor(BaseVideoProcessor):
                     resample=resample,
                     factor=patch_size * merge_size,
                     temporal_factor=temporal_patch_size,
-                    max_pixels_per_frame=max_pixels_per_frame,
+                    cap_pixels_per_frame=cap_pixels_per_frame,
                 )
             resized_videos_grouped[shape] = stacked_videos
         resized_videos = reorder_videos(resized_videos_grouped, grouped_videos_index)
