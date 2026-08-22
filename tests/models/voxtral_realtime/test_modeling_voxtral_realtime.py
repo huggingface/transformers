@@ -260,9 +260,7 @@ class VoxtralRealtimeForConditionalGenerationModelTest(ALMModelTest, unittest.Te
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
-    @unittest.skip(
-        reason="VoxtralRealtime only supports static and offloaded_static cache implementations, not quantized cache"
-    )
+    @unittest.skip(reason="VoxtralRealtime uses sliding attention layers, which are not supported by `QuantizedCache`")
     def test_generate_with_quant_cache(self):
         pass
 
@@ -270,6 +268,21 @@ class VoxtralRealtimeForConditionalGenerationModelTest(ALMModelTest, unittest.Te
     @unittest.skip("Model needs special input preparation!")
     def test_model_rope_scaling_from_config(self, scaling_type):
         pass
+
+    @parameterized.expand([("dynamic",), ("static",)])
+    def test_generate_with_cache_implementation(self, cache_implementation):
+        """Any `cache_implementation` should match the default one, which already uses a `DynamicCache`."""
+        config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+        model = VoxtralRealtimeForConditionalGeneration(config).to(torch_device).eval()
+
+        generation_kwargs = {
+            "max_new_tokens": self.max_new_tokens,
+            "do_sample": False,
+            "use_cache": True,
+        }
+        expected = model.generate(**inputs_dict, **generation_kwargs)
+        output = model.generate(**inputs_dict, **generation_kwargs, cache_implementation=cache_implementation)
+        torch.testing.assert_close(output, expected)
 
 
 @require_torch
