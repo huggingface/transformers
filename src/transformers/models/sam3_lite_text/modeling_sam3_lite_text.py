@@ -53,7 +53,6 @@ from .configuration_sam3_lite_text import (
 if is_torchvision_available():
     import torchvision
 
-
 logger = logging.get_logger(__name__)
 
 

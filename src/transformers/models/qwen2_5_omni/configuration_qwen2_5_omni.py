@@ -56,6 +56,7 @@ class Qwen2_5OmniVisionEncoderConfig(PreTrainedConfig):
 
     model_type = "qwen2_5_omni_vision_encoder"
     base_config_key = "vision_config"
+    attribute_map = {"num_attention_heads": "num_heads"}
 
     depth: int = 32
     hidden_size: int = 3584
@@ -70,6 +71,8 @@ class Qwen2_5OmniVisionEncoderConfig(PreTrainedConfig):
     out_hidden_size: int = 3584
     fullatt_block_indexes: list[int] | tuple[int, ...] = (7, 15, 23, 31)
     initializer_range: float = 0.02
+    max_position_embeddings: int | None = None
+    rope_parameters: dict | None = None
 
 
 @auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
