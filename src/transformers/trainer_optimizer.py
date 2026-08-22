@@ -205,7 +205,20 @@ def _get_adamw_torch(ctx: OptimizerContext) -> tuple[Any, dict[str, Any]]:
     ctx.optimizer_kwargs.update(ctx.adam_kwargs)
     if ctx.args.optim == OptimizerNames.ADAMW_TORCH_FUSED:
         ctx.optimizer_kwargs.update({"fused": True})
+    # HACK(ep-2d): expert parallelism leaves only the expert weights as DTensor, so the fused and
+    # foreach kernels cannot span the parameter set. Step per parameter instead.
+    if _has_mixed_dtensor_params(ctx.model):
+        ctx.optimizer_kwargs.update({"fused": False, "foreach": False})
     return AdamW, ctx.optimizer_kwargs
+
+
+def _has_mixed_dtensor_params(model) -> bool:
+    from torch.distributed.tensor import DTensor
+
+    if model is None:
+        return False
+    ps = [p for p in model.parameters() if p.requires_grad]
+    return bool(ps) and any(isinstance(p, DTensor) for p in ps) and not all(isinstance(p, DTensor) for p in ps)
 
 
 def _get_adamw_torch_xla(ctx: OptimizerContext) -> tuple[Any, dict[str, Any]]:
