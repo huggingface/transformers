@@ -116,21 +116,16 @@ class LlamaTokenizer(TokenizersBackend):
         self._tokenizer = Tokenizer(
             BPE(vocab=self._vocab, merges=self._merges, fuse_unk=True, byte_fallback=True, dropout=None)
         )
+        pre_tokenizer = kwargs.pop("_pre_tokenizer", None)
+        decoder = kwargs.pop("_decoder", None)
         self._tokenizer.normalizer = None
-        self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(
+        self._tokenizer.pre_tokenizer = pre_tokenizer or pre_tokenizers.Metaspace(
             replacement="▁", prepend_scheme=_get_prepend_scheme(self.add_prefix_space, self), split=False
         )
-
-        sequence = [
-            decoders.Replace("▁", " "),
-            decoders.ByteFallback(),
-            decoders.Fuse(),
-        ]
-
-        if self.add_prefix_space:
-            sequence += [decoders.Strip(content=" ", left=1)]
-
-        self._tokenizer.decoder = decoders.Sequence(sequence)
+        self._tokenizer.decoder = decoder or decoders.Sequence(
+            [decoders.Replace("▁", " "), decoders.ByteFallback(), decoders.Fuse()]
+            + ([decoders.Strip(content=" ", left=1)] if self.add_prefix_space else [])
+        )
         self.use_default_system_prompt = use_default_system_prompt
         super().__init__(
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
@@ -141,6 +136,20 @@ class LlamaTokenizer(TokenizersBackend):
             add_prefix_space=add_prefix_space,
             **kwargs,
         )
+
+    @classmethod
+    def convert_to_native_format(cls, **kwargs):
+        import os
+
+        local_kwargs = super().convert_to_native_format(**kwargs)
+        fast_tokenizer_file = kwargs.get("tokenizer_file")
+        if fast_tokenizer_file and os.path.isfile(fast_tokenizer_file):
+            tok_from_file = Tokenizer.from_file(fast_tokenizer_file)
+            if tok_from_file.pre_tokenizer is not None:
+                local_kwargs["_pre_tokenizer"] = tok_from_file.pre_tokenizer
+            if tok_from_file.decoder is not None:
+                local_kwargs["_decoder"] = tok_from_file.decoder
+        return local_kwargs
 
 
 __all__ = ["LlamaTokenizer", "LlamaTokenizerFast"]
