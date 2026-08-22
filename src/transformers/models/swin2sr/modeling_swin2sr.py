@@ -764,8 +764,6 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
-        _, _, height, width = pixel_values.shape
-
         # some preprocessing: padding + normalization
         pixel_values = self.pad_and_normalize(pixel_values)
 
@@ -783,7 +781,7 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
         sequence_output = encoder_outputs[0]
         sequence_output = self.layernorm(sequence_output)
 
-        sequence_output = self.patch_unembed(sequence_output, (height, width))
+        sequence_output = self.patch_unembed(sequence_output, input_dimensions)
         sequence_output = self.conv_after_body(sequence_output) + embeddings
 
         if not return_dict:

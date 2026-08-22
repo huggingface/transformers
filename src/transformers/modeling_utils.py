@@ -2191,6 +2191,7 @@ class PreTrainedModel(
                 self.config._experts_implementation_internal = requested_implementation
 
         # Apply it to all submodels as well
+        handled_subconfigs = set()
         for submodule in self.modules():
             # We found a submodel (which is not self) with a different config (otherwise, it may be the same "actual model",
             # e.g. ForCausalLM has a Model inside, but no need to check it again)
@@ -2198,8 +2199,12 @@ class PreTrainedModel(
                 submodule is not self
                 and isinstance(submodule, PreTrainedModel)
                 and submodule.config.__class__ != self.config.__class__
-                and submodule._can_set_experts_implementation()  # avoids bugs when text_model has MoEs but encoder no
             ):
+                # Register it even if we skip it below, as we would otherwise try to set it in the dark afterwards
+                handled_subconfigs.add(id(submodule.config))
+                # Avoids bugs when text_model has MoEs but encoder no
+                if not submodule._can_set_experts_implementation():
+                    continue
                 # Set the experts on the submodule
                 sub_implementation = requested_implementation
                 if isinstance(experts_implementation, dict):
@@ -2213,6 +2218,18 @@ class PreTrainedModel(
                 # Check the module can use correctly, otherwise we raise an error if requested experts can't be set for submodule
                 sub_implementation = submodule.get_correct_experts_implementation(sub_implementation)
                 submodule.config._experts_implementation_internal = sub_implementation
+
+        # We need this as some models build their experts straight from a subconfig, without declaring the owning
+        # module as a `PreTrainedModel` -- the loop above never reaches those, and the experts forward keeps
+        # dispatching on the stale subconfig value
+        for subconfig_key in self.config.sub_configs:
+            subconfig = getattr(self.config, subconfig_key, None)
+            if subconfig is not None and id(subconfig) not in handled_subconfigs:
+                subconfig._experts_implementation_internal = (
+                    requested_implementation
+                    if not isinstance(experts_implementation, dict)
+                    else experts_implementation.get(subconfig_key, subconfig._experts_implementation)
+                )
 
     def enable_input_require_grads(self):
         """

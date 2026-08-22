@@ -1109,13 +1109,18 @@ class MllamaTextModel(MllamaPreTrainedModel):
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        causal_mask = create_causal_mask(
-            config=self.config,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
-        )
+        # `generate()` may pass a per-layer-type mask dict already built by `create_masks_for_generate`;
+        # only the self-attending layers take a causal mask, the cross-attention ones mask on the image.
+        if isinstance(attention_mask, dict):
+            causal_mask = attention_mask["full_attention"]
+        else:
+            causal_mask = create_causal_mask(
+                config=self.config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
+                position_ids=position_ids,
+            )
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         # decoder layers

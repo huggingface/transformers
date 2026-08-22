@@ -145,6 +145,17 @@ class MllamaTextConfig(PreTrainedConfig):
             self.cross_attention_layers = [3, 8, 13, 18, 23, 28, 33, 38]
         super().__post_init__(**kwargs)
 
+    @property
+    def layer_types(self) -> list[str]:
+        """One entry per decoder layer: the layers in `cross_attention_layers` attend to the image K/V,
+        cached once from the vision stream, instead of self-attending — so the cache builders give them a
+        `DynamicCrossAttentionLayer`. A property, so it never lands in a serialized config."""
+        cross_attention_layers = set(self.cross_attention_layers)
+        return [
+            "cross_attention" if index in cross_attention_layers else "full_attention"
+            for index in range(self.num_hidden_layers)
+        ]
+
 
 @auto_docstring(checkpoint="meta-llama/Llama-3.2-11B-Vision")
 @strict
