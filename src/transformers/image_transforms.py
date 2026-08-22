@@ -359,9 +359,12 @@ def resize(
     # To maintain backwards compatibility with the resizing done in previous image feature extractors, we use
     # the pillow library to resize the image and then convert back to numpy
     do_rescale = False
+    original_type = None
     if not isinstance(image, PIL.Image.Image):
+        original_type = image.dtype
         do_rescale = _rescale_for_pil_conversion(image)
         image = to_pil_image(image, do_rescale=do_rescale, input_data_format=input_data_format)
+
     height, width = size
     # PIL images are in the format (width, height)
     resized_image = image.resize((width, height), resample=resample, reducing_gap=reducing_gap)
@@ -378,6 +381,9 @@ def resize(
         # If an image was rescaled to be in the range [0, 255] before converting to a PIL image, then we need to
         # rescale it back to the original range.
         resized_image = rescale(resized_image, 1 / 255) if do_rescale else resized_image
+        # convert back to original type if original image was np.ndarray
+        if original_type is not None:
+            resized_image = resized_image.astype(original_type)
     return resized_image
 
 
