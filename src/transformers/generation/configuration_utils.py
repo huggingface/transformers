@@ -668,6 +668,12 @@ class GenerationConfig(PushToHubMixin):
             raise ValueError(f"`early_stopping` must be a boolean or 'never', but is {self.early_stopping}.")
         if self.max_new_tokens is not None and self.max_new_tokens <= 0:
             raise ValueError(f"`max_new_tokens` must be greater than 0, but is {self.max_new_tokens}.")
+        if self.min_length is not None and self.min_length < 0:
+            raise ValueError(f"`min_length` must be greater than or equal to 0, but is {self.min_length}.")
+        if self.min_new_tokens is not None and self.min_new_tokens < 0:
+            raise ValueError(f"`min_new_tokens` must be greater than or equal to 0, but is {self.min_new_tokens}.")
+        if self.temperature is not None and self.temperature < 0.0:
+            raise ValueError(f"`temperature` must be non-negative, but is {self.temperature}.")
         if self.assistant_ensemble_weight is not None and not (0.0 < self.assistant_ensemble_weight < 1.0):
             raise ValueError(
                 f"`assistant_ensemble_weight` must be in the open interval `(0.0, 1.0)`, "
