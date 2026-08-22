@@ -210,6 +210,9 @@ class EdgeTamVisionModel(Sam2VisionModel):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
+        # `original_sizes` is returned by the image processor for post-processing and is not a backbone input.
+        kwargs.pop("original_sizes", None)
+
         # Forward through backbone
         backbone_output = self.backbone(pixel_values, **kwargs)
         intermediate_hidden_states = backbone_output.last_hidden_state
