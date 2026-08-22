@@ -551,6 +551,30 @@ class PipelineUtilsTest(unittest.TestCase):
         self.assertEqual(outputs, [0, 1, 0, 1, 2])
 
     @require_torch
+    def test_pipeline_call_batch_size_validation(self):
+        from transformers.pipelines.base import Pipeline
+
+        class DummyPipeline(Pipeline):
+            def _sanitize_parameters(self, **kwargs):
+                return {}, {}, {}
+            def preprocess(self, input_):
+                return {"input": input_}
+            def _forward(self, model_inputs):
+                return model_inputs
+            def postprocess(self, model_outputs):
+                return model_outputs
+
+        pipe = DummyPipeline.__new__(DummyPipeline)
+        pipe._batch_size = None
+        pipe._num_workers = None
+        pipe._sanitize_parameters = lambda **kwargs: ({}, {}, {})
+
+        with self.assertRaises(ValueError):
+            pipe(["test"], batch_size=0)
+        with self.assertRaises(ValueError):
+            pipe(["test"], batch_size=-1)
+
+    @require_torch
     def test_pipeline_pack_iterator(self):
         from transformers.pipelines.pt_utils import PipelinePackIterator
 
