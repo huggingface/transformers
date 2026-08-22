@@ -366,7 +366,9 @@ def rotate_checkpoints(
     if save_total_limit is None or save_total_limit <= 0:
         return
 
-    checkpoints = sort_checkpoints(output_dir, checkpoint_prefix, use_mtime)
+    checkpoints = sort_checkpoints(
+        output_dir, checkpoint_prefix, use_mtime, best_model_checkpoint=best_model_checkpoint
+    )
     if len(checkpoints) <= save_total_limit:
         return
 
