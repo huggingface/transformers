@@ -3935,6 +3935,24 @@ class Trainer:
                 remove_dummy_checkpoint(self.args.should_save, output_dir, [WEIGHTS_NAME, SAFE_WEIGHTS_NAME])
                 self.model_wrapped.save_checkpoint(output_dir)
 
+        elif getattr(
+            self.accelerator.unwrap_model(self.model, keep_torch_compile=False), "_device_mesh", None
+        ) is not None and not _is_peft_model(self.model):
+            # The model was sharded at load time (`DistributedConfig`). Gathering its DTensor state
+            # dict is collective, so every rank must participate; only the main process writes.
+            # (PEFT models fall through to the adapter-only save below.)
+            from .distributed.tensor_parallel import gather_state_dict_for_save
+
+            unwrapped = self.accelerator.unwrap_model(self.model, keep_torch_compile=False)
+            state_dict = gather_state_dict_for_save(unwrapped.state_dict(), None, None, 0)
+            if self.args.should_save:
+                # `save_pretrained` ends with `barrier_after_gathered_checkpoint_save`.
+                self._save(output_dir, state_dict=state_dict)
+            else:
+                # Match the writer's end-of-save barrier so no rank runs ahead into the next
+                # step's collectives while the main process is still writing.
+                unwrapped.barrier_after_gathered_checkpoint_save(unwrapped.config.distributed_config)
+
         elif self.args.should_save:
             self._save(output_dir)
 
