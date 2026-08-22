@@ -22,7 +22,7 @@ from transformers import CsmProcessor
 from transformers.testing_utils import require_torch
 from transformers.utils import is_torch_available
 
-from ...test_processing_common import ProcessorTesterMixin
+from ...test_processing_common import MODALITY_CONFIG, ProcessorTesterMixin
 
 
 if is_torch_available():
@@ -43,10 +43,6 @@ class CsmProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         cls.pad_token_id = processor.tokenizer.pad_token_id
         cls.bos_token_id = processor.tokenizer.bos_token_id
 
-    @unittest.skip("CsmProcessor modifies the tokenizer inputs")
-    def test_tokenizer_defaults(self):
-        pass
-
     @staticmethod
     def prepare_processor_dict():
         return {"chat_template": "\n{%- for message in messages %}\n    {#-- Validate role is a stringified integer --#}\n    {%- if not message['role'] is string or not message['role'].isdigit() %}\n        {{- raise_exception(\"The role must be an integer or a stringified integer (e.g. '0') designating the speaker id\") }}\n    {%- endif %}\n\n    {#-- Validate content is a list --#}\n    {%- set content = message['content'] %}\n    {%- if content is not iterable or content is string %}\n        {{- raise_exception(\"The content must be a list\") }}\n    {%- endif %}\n\n    {#-- Collect content types --#}\n    {%- set content_types = content | map(attribute='type') | list %}\n    {%- set is_last = loop.last %}\n\n    {#-- Last message validation --#}\n    {%- if is_last %}\n        {%- if 'text' not in content_types %}\n            {{- raise_exception(\"The last message must include one item of type 'text'\") }}\n        {%- elif (content_types | select('equalto', 'text') | list | length > 1) or (content_types | select('equalto', 'audio') | list | length > 1) %}\n            {{- raise_exception(\"At most two items are allowed in the last message: one 'text' and one 'audio'\") }}\n        {%- endif %}\n\n    {#-- All other messages validation --#}\n    {%- else %}\n        {%- if content_types | select('equalto', 'text') | list | length != 1\n              or content_types | select('equalto', 'audio') | list | length != 1 %}\n            {{- raise_exception(\"Each message (except the last) must contain exactly one 'text' and one 'audio' item\") }}\n        {%- elif content_types | reject('in', ['text', 'audio']) | list | length > 0 %}\n            {{- raise_exception(\"Only 'text' and 'audio' types are allowed in content\") }}\n        {%- endif %}\n    {%- endif %}\n{%- endfor %}\n\n{%- for message in messages %}\n    {{- bos_token }}\n    {{- '[' + message['role'] + ']' }}\n    {{- message['content'][0]['text'] }}\n    {{- eos_token }}\n    {%- if message['content']|length > 1 %}\n        {{- '<|AUDIO|><|audio_eos|>' }}\n    {%- endif %}\n{%- endfor %}\n"}  # fmt: skip
@@ -62,7 +58,38 @@ class CsmProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor_dict = self.prepare_processor_dict()
         self.assertTrue(processor_loaded.chat_template == processor_dict.get("chat_template", None))
 
-    @require_torch
+    def test_subprocessor_defaults_3_audio(self):
+        # override - drop unused kwargs for `subprocessor`
+        parameterized_config = MODALITY_CONFIG["audio"]
+        attributes = self.processor_class.get_attributes()
+        component_key = self._get_subprocessor_name("audio", attributes)
+
+        subprocessor = self.get_component(component_key)
+        input_key = parameterized_config["input_kwarg"]  # images/videos/audio
+
+        # Get all other required components for processor
+        components = {}
+        for attribute in self.processor_class.get_attributes():
+            components[attribute] = self.get_component(attribute)
+
+        processor = self.processor_class(**components, **self.prepare_processor_dict())
+        modality_input = self._prepare_modality_input("audio")
+
+        # merge processor defaults when calling a subprocessor
+        kwargs = parameterized_config["call_time_kwargs"]
+        kwargs["return_tensors"] = "pt"
+
+        input_subproc = subprocessor(modality_input, **kwargs)
+        try:
+            input_processor = processor(**{input_key: modality_input, **kwargs})
+        except Exception:
+            input_processor = {}
+
+        # Verify outputs match
+        for key in input_subproc:
+            if input_processor and key in processor.model_input_names:
+                torch.testing.assert_close(input_subproc[key], input_processor[key])
+
     def _test_apply_chat_template(
         self,
         modality: str,
@@ -245,7 +272,6 @@ class CsmProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         torch.testing.assert_close(input_ids, expected_ids)
 
-    @require_torch
     @unittest.skip("CSM doesn't need assistant masks as an audio generation model")
     def test_apply_chat_template_assistant_mask(self):
         pass

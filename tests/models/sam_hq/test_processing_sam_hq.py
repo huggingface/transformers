@@ -35,7 +35,7 @@ if is_torch_available():
 class SamHQProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = SamHQProcessor
 
-    def prepare_image_inputs(self):
+    def prepare_image_inputs(self, **kwargs):
         """This function prepares a list of PIL images."""
         return prepare_image_inputs()
 

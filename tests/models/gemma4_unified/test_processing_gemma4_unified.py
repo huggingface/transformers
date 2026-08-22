@@ -86,6 +86,16 @@ class Gemma4UnifiedProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer.pad_token_id = tokenizer.eos_token_id
         return tokenizer
 
+    @property
+    def video_sampling_expectations(self):
+        return [
+            {"num_frames": 3, "fps": None, "expected_dim": 1, "output_length": 3},
+            {"num_frames": None, "fps": 18, "expected_dim": 1, "output_length": 2},
+            {"do_sample_frames": False, "fps": 2, "expected_dim": 1, "output_length": 11},
+            {"do_sample_frames": False, "expected_dim": 1, "output_length": 11},
+            {"expected_dim": 1, "output_length": 2},
+        ]
+
     # Copied from tests.models.llava.test_processing_llava.LlavaProcessorTest.test_get_num_vision_tokens
     def test_get_num_vision_tokens(self):
         "Tests general functionality of the helper used internally in vLLM"
@@ -144,7 +154,7 @@ class Gemma4UnifiedProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             text=[text_single_image, text_single_image], images=[[image], [image]], return_tensors="np"
         )
         self.assertListEqual(
-            out_batch_oneimage[self.images_input_name].tolist(), out_multiimages[self.images_input_name].tolist()
+            out_batch_oneimage[self.image_input_name].tolist(), out_multiimages[self.image_input_name].tolist()
         )
 
     def test_special_mm_token_truncation(self):
@@ -200,7 +210,3 @@ class Gemma4UnifiedProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         num_image_tokens_from_call = inputs.mm_token_type_ids.sum(-1).tolist()
         num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes)
         self.assertListEqual(num_image_tokens_from_call, num_image_tokens_from_helper["num_image_tokens"])
-
-    @unittest.skip("This test seems to be loading a different video, check for all models and fix")
-    def test_apply_chat_template_video_frame_sampling(self):
-        pass

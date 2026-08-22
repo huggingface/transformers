@@ -49,12 +49,8 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def prepare_processor_dict():
         return {"chat_template": "{% for message in messages %}{% if loop.index0 == 0 %}{{ bos_token }}{% endif %}{{ '<|start_header_id|>' + message['role'] + '<|end_header_id|>\n\n' }}{% if message['content'] is string %}{{ message['content'] }}{% else %}{% for content in message['content'] %}{% if content['type'] == 'image' %}{{ '<|image|>' }}{% elif content['type'] == 'text' %}{{ content['text'] }}{% endif %}{% endfor %}{% endif %}{{ '<|eot_id|>' }}{% endfor %}{% if add_generation_prompt %}{{ '<|start_header_id|>assistant<|end_header_id|>\n\n' }}{% endif %}"}  # fmt: skip
 
-    @unittest.skip("MllamaProcessor does not return tensors")
-    def test_image_processor_defaults(self):
-        pass
-
     @unittest.skip("MllamaProcessor modifies input text")
-    def test_tokenizer_defaults(self):
+    def test_subprocessor_defaults_0_text(self):
         pass
 
     # Override as Mllama needs images to be an explicitly nested batch
@@ -394,7 +390,7 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             max_length=76,
         )
 
-        self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
+        self.assertLessEqual(inputs[self.image_input_name][0][0].mean(), 0)
         self.assertTrue(
             len(inputs[self.text_input_name][0]) == len(inputs[self.text_input_name][1])
             and len(inputs[self.text_input_name][1]) < 76
@@ -425,6 +421,10 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 max_length=3,
             )
 
-    @unittest.skip("Mllama can't process inputs with no image ttogether with multimodal inputs")
+    @unittest.skip("Mllama can't process inputs with no image together with multimodal inputs")
     def test_processor_text_has_no_visual(self):
+        pass
+
+    @unittest.skip("Model doesn't use offsets as it uses cross-attn instead of early fusion")
+    def test_replacement_offsets(self):
         pass

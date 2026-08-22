@@ -66,6 +66,10 @@ _SHIELDGEMMA2_POLICIES: Mapping[str, str] = {
 class ShieldGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = ShieldGemma2Processor
 
+    image_text_kwargs_max_length = 740
+    image_text_kwargs_override_max_length = 750
+    image_unstructured_max_length = 742
+
     @classmethod
     def _setup_image_processor(cls):
         # Use 64×64 instead of the default 224×224 to avoid large tensors.
@@ -117,7 +121,7 @@ class ShieldGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         images = self.prepare_image_inputs()
         processed_inputs = processor(images=images, policies=policies)
         self.assertEqual(len(processed_inputs[self.text_input_name]), expected_batch_size)
-        self.assertEqual(len(processed_inputs[self.images_input_name]), expected_batch_size)
+        self.assertEqual(len(processed_inputs[self.image_input_name]), expected_batch_size)
 
     @parameterized.expand(
         [
@@ -145,7 +149,7 @@ class ShieldGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         images = self.prepare_image_inputs()
         processed_inputs = processor(images=images, custom_policies=custom_policies, policies=policies)
         self.assertEqual(len(processed_inputs[self.text_input_name]), expected_batch_size)
-        self.assertEqual(len(processed_inputs[self.images_input_name]), expected_batch_size)
+        self.assertEqual(len(processed_inputs[self.image_input_name]), expected_batch_size)
 
     def test_with_multiple_images(self):
         processor = self.get_processor()
@@ -156,7 +160,7 @@ class ShieldGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         images = self.prepare_image_inputs(batch_size=2)
         processed_inputs = processor(images=images)
         self.assertEqual(len(processed_inputs[self.text_input_name]), 6)
-        self.assertEqual(len(processed_inputs[self.images_input_name]), 6)
+        self.assertEqual(len(processed_inputs[self.image_input_name]), 6)
 
     # TODO(ryanmullins): Adapt this test for ShieldGemma 2
     @parameterized.expand([(1, "np"), (1, "pt"), (2, "np"), (2, "pt")])
@@ -164,43 +168,16 @@ class ShieldGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_apply_chat_template_image(self, batch_size: int, return_tensors: str):
         pass
 
-    # TODO(ryanmullins): Adapt this test for ShieldGemma 2
-    @unittest.skip("Parent test needs to be adapted for ShieldGemma 2.")
-    def test_unstructured_kwargs_batched(self):
-        pass
-
-    # TODO(ryanmullins): Adapt this test for ShieldGemma 2
-    @unittest.skip("Parent test needs to be adapted for ShieldGemma 2.")
-    def test_unstructured_kwargs(self):
-        pass
-
-    # TODO(ryanmullins): Adapt this test for ShieldGemma 2
-    @unittest.skip("Parent test needs to be adapted for ShieldGemma 2.")
-    def test_tokenizer_defaults_preserved_by_kwargs(self):
-        pass
-
-    # TODO(ryanmullins): Adapt this test for ShieldGemma 2
-    @unittest.skip("Parent test needs to be adapted for ShieldGemma 2.")
-    def test_structured_kwargs_nested_from_dict(self):
-        pass
-
-    # TODO(ryanmullins): Adapt this test for ShieldGemma 2
-    @unittest.skip("Parent test needs to be adapted for ShieldGemma 2.")
-    def test_structured_kwargs_nested(self):
-        pass
-
-    # TODO(ryanmullins): Adapt this test for ShieldGemma 2
-    @unittest.skip("Parent test needs to be adapted for ShieldGemma 2.")
-    def test_kwargs_overrides_default_tokenizer_kwargs(self):
-        pass
-
-    # TODO(ryanmullins): Adapt this test for ShieldGemma 2
-    @unittest.skip("Parent test needs to be adapted for ShieldGemma 2.")
-    def test_kwargs_overrides_default_image_processor_kwargs(self):
-        pass
-
     @unittest.skip("ShieldGemma requires images in input, and fails in text-only processing")
     def test_apply_chat_template_assistant_mask(self):
+        pass
+
+    @unittest.skip("model creates new samples on-the-fly and thus requires padding. Not worth testing")
+    def test_replacement_offsets(self):
+        pass
+
+    @unittest.skip("model creates new samples on-the-fly and thus requires padding. Not worth testing")
+    def test_subprocessor_defaults_1_image(self):
         pass
 
     def test_processor_text_has_no_visual(self):

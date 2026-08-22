@@ -65,11 +65,16 @@ class VoxtralRealtimeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_save_load_pretrained_additional_features(self):
         pass
 
-    @unittest.skip(
-        "VoxtralRealtimeProcessor encodes audio via a mistral-common transcription request (with padding), "
-        "so its features differ from those of the bare feature extractor"
-    )
-    def test_feature_extractor_defaults(self):
+    @unittest.skip("MistralTokenizer doesn't support `max_length` arg when loading a tokenizer")
+    def test_subprocessor_defaults_preserved_by_kwargs_2_audio(self):
+        pass
+
+    @unittest.skip("MistralTokenizer doesn't support `max_length` arg when loading a tokenizer")
+    def test_kwargs_overrides_default_subprocessor_kwargs_2_audio(self):
+        pass
+
+    @unittest.skip("Processor has custom code on top of a feature extractor")
+    def test_subprocessor_defaults_3_audio(self):
         pass
 
     def _dummy_audio(self, processor, seed: int = 0, duration_s: float = 1.0):

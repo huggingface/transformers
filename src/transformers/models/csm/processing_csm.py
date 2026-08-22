@@ -70,6 +70,8 @@ class CsmProcessorKwargs(ProcessingKwargs, total=False):
 @requires(backends=("torch",))
 @auto_docstring
 class CsmProcessor(ProcessorMixin):
+    valid_processor_kwargs = CsmProcessorKwargs
+
     def __init__(
         self,
         feature_extractor,

@@ -37,7 +37,7 @@ class Phi4MultimodalProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     checkpoint_path = "microsoft/Phi-4-multimodal-instruct"
     revision = "refs/pr/70"
     text_input_name = "input_ids"
-    images_input_name = "image_pixel_values"
+    image_input_name = "image_pixel_values"
     audio_input_name = "audio_input_features"
 
     # Max-length values used in image-text kwargs tests. Override as phi4 needs lots of tokens for images.
@@ -98,5 +98,5 @@ class Phi4MultimodalProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_tensors="pt",
         )
 
-        self.assertEqual(inputs_limited[self.images_input_name].shape[1], 5)
-        self.assertEqual(inputs_default[self.images_input_name].shape[1], 10)
+        self.assertEqual(inputs_limited[self.image_input_name].shape[1], 5)
+        self.assertEqual(inputs_default[self.image_input_name].shape[1], 10)

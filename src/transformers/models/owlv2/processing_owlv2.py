@@ -60,6 +60,8 @@ class Owlv2ProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class Owlv2Processor(ProcessorMixin):
+    valid_processor_kwargs = Owlv2ProcessorKwargs
+
     def __init__(self, image_processor, tokenizer, **kwargs):
         super().__init__(image_processor, tokenizer)
 

@@ -15,9 +15,13 @@
 import unittest
 
 from transformers import GotOcr2Processor
-from transformers.testing_utils import require_vision
+from transformers.testing_utils import is_torch_available, require_vision
 
-from ...test_processing_common import ProcessorTesterMixin
+from ...test_processing_common import MODALITY_CONFIG, ProcessorTesterMixin
+
+
+if is_torch_available():
+    import torch
 
 
 @require_vision
@@ -37,10 +41,6 @@ class GotOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # Instantiate directly to avoid loading the full 384×384 image processor from Hub.
         image_processor_class = cls._get_component_class_from_processor("image_processor")
         return image_processor_class()
-
-    @unittest.skip("GotOcr2Processor pop the image processor output 'num_patches'")
-    def test_image_processor_defaults(self):
-        pass
 
     def test_ocr_queries(self):
         processor = self.get_processor()
@@ -92,3 +92,39 @@ class GotOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertListEqual(
             inputs[self.text_input_name][1:].tolist(), inputs_nested[self.text_input_name][1:].tolist()
         )
+
+    def test_subprocessor_defaults_1_image(self):
+        # overriden - pop certina keys from `merged_kwargs` which are used only by processor
+        parameterized_config = MODALITY_CONFIG["image"]
+        subprocessor = self.get_component(parameterized_config["component_key"])
+
+        # Get all other required components for processor
+        components = {}
+        for attribute in self.processor_class.get_attributes():
+            components[attribute] = self.get_component(attribute)
+
+        processor = self.processor_class(**components, **self.prepare_processor_dict())
+        modality_input = self._prepare_modality_input("image")
+
+        # merge processor defaults when calling a subprocessor
+        kwargs = parameterized_config["call_time_kwargs"]
+        kwargs["return_tensors"] = "pt"
+        merged_kwargs = processor._merge_kwargs(
+            processor.valid_processor_kwargs,
+            tokenizer_init_kwargs=None,
+            **kwargs,
+        )
+        kwargs = merged_kwargs["images_kwargs"]
+        kwargs.pop("num_image_tokens")
+        kwargs.pop("multi_page")
+
+        input_subproc = subprocessor(modality_input, **kwargs)
+        try:
+            input_processor = processor(images=modality_input, **kwargs)
+        except Exception:
+            input_processor = {}
+
+        # Verify outputs match
+        for key in input_subproc:
+            if input_processor and key in processor.model_input_names:
+                torch.testing.assert_close(input_subproc[key], input_processor[key])

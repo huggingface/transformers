@@ -30,30 +30,11 @@ class PPFormulaNetProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_model_input_names(self):
         pass
 
+    def _skip_unless_modality_and_tokenizer_present(
+        self, modality: str, attributes: list, require_tokenizer: bool = True
+    ):
+        self.skipTest("PPFormulaNet does not need input_ids")
+
     @unittest.skip(reason="PPFormulaNet does not need input_ids")
     def test_processor_with_multiple_inputs(self):
-        pass
-
-    @unittest.skip(reason="PPFormulaNet does not need input_ids")
-    def test_structured_kwargs_nested(self):
-        pass
-
-    @unittest.skip(reason="PPFormulaNet does not need input_ids")
-    def test_structured_kwargs_nested_from_dict(self):
-        pass
-
-    @unittest.skip(reason="PPFormulaNet does not need input_ids")
-    def test_tokenizer_defaults_preserved_by_kwargs(self):
-        pass
-
-    @unittest.skip(reason="PPFormulaNet does not need input_ids")
-    def test_unstructured_kwargs(self):
-        pass
-
-    @unittest.skip(reason="PPFormulaNet does not need input_ids")
-    def test_unstructured_kwargs_batched(self):
-        pass
-
-    @unittest.skip(reason="PPFormulaNet does not need input_ids")
-    def test_kwargs_overrides_default_tokenizer_kwargs(self):
         pass

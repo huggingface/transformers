@@ -63,10 +63,6 @@ class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
         return tokenizer_class.from_pretrained(cls.tmpdirname)
 
-    @unittest.skip("GroundingDinoProcessor merges candidate labels text")
-    def test_tokenizer_defaults(self):
-        pass
-
     def prepare_text_inputs(self, batch_size: int | None = None, **kwargs):
         labels = ["a cat", "remote control"]
         labels_longer = ["a person", "a car", "a dog", "a cat"]
@@ -160,3 +156,7 @@ class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertListEqual(
             inputs[self.text_input_name][1:].tolist(), inputs_nested[self.text_input_name][1:].tolist()
         )
+
+    @unittest.skip("Processor changes input text by adding dots before anf after")
+    def test_subprocessor_defaults_0_text(self):
+        pass

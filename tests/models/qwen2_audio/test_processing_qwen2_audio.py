@@ -26,6 +26,8 @@ class Qwen2AudioProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     tiny_model_id = "hf-internal-testing/tiny-processor-qwen2_audio"
     model_id = "Qwen/Qwen2-Audio-7B-Instruct"
 
+    audio_unstructured_max_length = 201
+
     @classmethod
     def _setup_test_attributes(cls, processor):
         cls.audio_token = processor.audio_token

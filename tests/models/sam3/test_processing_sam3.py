@@ -47,7 +47,7 @@ class Sam3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_model_input_names(self):
         self.skipTest("Sam3Processor outputs extra keys (e.g. original_sizes) beyond model_input_names")
 
-    def test_tokenizer_defaults(self):
+    def test_subprocessor_defaults_0_text(self):
         self.skipTest("Sam3Processor always pads tokenizer output to max_length=32")
 
     def test_processor_text_has_no_visual(self):

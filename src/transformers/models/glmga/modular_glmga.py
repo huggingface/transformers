@@ -311,7 +311,7 @@ class GlmgaVideoProcessor(Glm46VVideoProcessor):
         if len(uniq) & 1:
             uniq.append(uniq[-1])
 
-        return np.array(uniq)
+        return torch.tensor(uniq, dtype=torch.int32)
 
     def _preprocess(
         self,

@@ -18,7 +18,6 @@ import tempfile
 import unittest
 
 import torch
-from parameterized import parameterized
 
 from transformers.models.colmodernvbert.processing_colmodernvbert import ColModernVBertProcessor
 from transformers.testing_utils import get_tests_dir, require_torch, require_vision
@@ -103,26 +102,11 @@ class ColModernVBertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     # The following tests override the parent tests because ColModernVBertProcessor can only take one of images or text as input at a time.
 
-    def test_tokenizer_defaults_preserved_by_kwargs(self):
-        if "image_processor" not in self.processor_class.get_attributes():
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        processor_components = self.prepare_components()
-        processor_components["tokenizer"] = self.get_component("tokenizer", max_length=117, padding="max_length")
+    @unittest.skip("Model doesn't take images+text as input")
+    def test_replacement_offsets(self):
+        pass
 
-        processor = self.processor_class(**processor_components)
-        self.skip_processor_without_typed_kwargs(processor)
-        input_str = self.prepare_text_inputs()
-        inputs = processor(text=input_str, return_tensors="pt")
-        self.assertEqual(inputs[self.text_input_name].shape[-1], 117)
-
-    def test_image_processor_defaults_preserved_by_image_kwargs(self):
-        """
-        We use do_rescale=True, rescale_factor=-1.0 to ensure that image_processor kwargs are preserved in the processor.
-        We then check that the mean of the pixel_values is less than or equal to 0 after processing.
-        Since the original pixel_values are in [0, 255], this is a good indicator that the rescale_factor is indeed applied.
-        """
-        if "image_processor" not in self.processor_class.get_attributes():
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+    def test_subprocessor_defaults_preserved_by_kwargs_0_image(self):
         processor_components = self.prepare_components()
         processor_components["image_processor"] = self.get_component(
             "image_processor", do_rescale=True, rescale_factor=-1.0
@@ -135,40 +119,31 @@ class ColModernVBertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_input = self.prepare_image_inputs()
 
         inputs = processor(images=image_input, return_tensors="pt")
-        self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
+        self.assertLessEqual(inputs[self.image_input_name][0][0].mean(), 0)
 
-    def test_kwargs_overrides_default_tokenizer_kwargs(self):
-        if "image_processor" not in self.processor_class.get_attributes():
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        processor_components = self.prepare_components()
-        processor_components["tokenizer"] = self.get_component("tokenizer", padding="longest")
-
-        processor = self.processor_class(**processor_components)
-        self.skip_processor_without_typed_kwargs(processor)
-        input_str = self.prepare_text_inputs()
-        inputs = processor(text=input_str, return_tensors="pt", max_length=112, padding="max_length")
-        self.assertEqual(inputs[self.text_input_name].shape[-1], 112)
-
-    def test_kwargs_overrides_default_image_processor_kwargs(self):
-        if "image_processor" not in self.processor_class.get_attributes():
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+    def test_kwargs_overrides_default_subprocessor_kwargs_0_image(self):
         processor_components = self.prepare_components()
         processor_components["image_processor"] = self.get_component(
             "image_processor", do_rescale=True, rescale_factor=1
         )
-        processor_components["tokenizer"] = self.get_component("tokenizer", max_length=117, padding="max_length")
+        processor_components["tokenizer"] = self.get_component("tokenizer", padding=None)
 
         processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
 
         image_input = self.prepare_image_inputs()
 
-        inputs = processor(images=image_input, do_rescale=True, rescale_factor=-1.0, return_tensors="pt")
-        self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
+        inputs = processor(
+            images=image_input,
+            do_rescale=True,
+            rescale_factor=-1.0,
+            max_length=117,
+            padding="max_length",
+            return_tensors="pt",
+        )
+        self.assertLessEqual(inputs[self.image_input_name][0][0].mean(), 0)
 
-    def test_unstructured_kwargs(self):
-        if "image_processor" not in self.processor_class.get_attributes():
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+    def test_unstructured_kwargs_0_image(self):
         processor_components = self.prepare_components()
         processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
@@ -185,9 +160,7 @@ class ColModernVBertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertEqual(inputs[self.text_input_name].shape[-1], 76)
 
-    def test_unstructured_kwargs_batched(self):
-        if "image_processor" not in self.processor_class.get_attributes():
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+    def test_unstructured_kwargs_batched_0_image(self):
         processor_components = self.prepare_components()
         processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
@@ -202,11 +175,9 @@ class ColModernVBertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             max_length=76,
         )
 
-        self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
+        self.assertLessEqual(inputs[self.image_input_name][0][0].mean(), 0)
 
     def test_doubly_passed_kwargs(self):
-        if "image_processor" not in self.processor_class.get_attributes():
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
@@ -220,9 +191,7 @@ class ColModernVBertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 return_tensors="pt",
             )
 
-    def test_structured_kwargs_nested(self):
-        if "image_processor" not in self.processor_class.get_attributes():
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+    def test_structured_kwargs_nested_0_image(self):
         processor_components = self.prepare_components()
         processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
@@ -233,17 +202,15 @@ class ColModernVBertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         all_kwargs = {
             "common_kwargs": {"return_tensors": "pt"},
             "images_kwargs": {"do_rescale": True, "rescale_factor": -1.0},
-            "text_kwargs": {"padding": "max_length", "max_length": 15, "truncation": True},
+            "text_kwargs": {"padding": "max_length", "max_length": 76},
         }
 
         inputs = processor(text=input_str, **all_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
-        self.assertEqual(inputs[self.text_input_name].shape[-1], 15)
+        self.assertEqual(inputs[self.text_input_name].shape[-1], 76)
 
-    def test_structured_kwargs_nested_from_dict(self):
-        if "image_processor" not in self.processor_class.get_attributes():
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+    def test_structured_kwargs_nested_from_dict_0_image(self):
         processor_components = self.prepare_components()
         processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
@@ -253,10 +220,11 @@ class ColModernVBertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         all_kwargs = {
             "common_kwargs": {"return_tensors": "pt"},
             "images_kwargs": {"do_rescale": True, "rescale_factor": -1.0},
+            "text_kwargs": {"padding": "max_length", "max_length": 76},
         }
 
         inputs = processor(images=image_input, **all_kwargs)
-        self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
+        self.assertLessEqual(inputs[self.image_input_name][0][0].mean(), 0)
 
     # Can process only text or images at a time
     def test_model_input_names(self):
@@ -265,10 +233,6 @@ class ColModernVBertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         inputs = processor(images=image_input)
         # When only images are provided, pixel_values must be present
         self.assertIn("pixel_values", inputs)
-
-    @unittest.skip(reason="ColModernVBert is meant to be used through `process_queries` or `process_images`.")
-    def test_tokenizer_defaults(self):
-        pass
 
     @unittest.skip("ColModernVBert can't process text+image inputs at the same time")
     def test_processor_text_has_no_visual(self):
@@ -286,39 +250,6 @@ class ColModernVBertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_flat_kwarg_applied_when_modality_dict_lacks_it(self):
         pass
 
-    @unittest.skip("ColModernVBert does not have a chat template")
+    @unittest.skip("ColModernVBert has no chat template, force-set to None at runtime")
     def test_chat_template_save_loading(self):
-        pass
-
-    @unittest.skip("ColModernVBert does not have a chat template")
-    def test_apply_chat_template_audio(self):
-        pass
-
-    @unittest.skip("ColModernVBert does not have a chat template")
-    def test_apply_chat_template_decoded_video(self):
-        pass
-
-    @unittest.skip("ColModernVBert does not have a chat template")
-    def test_apply_chat_template_video(self):
-        pass
-
-    @parameterized.expand([(1, "pt"), (2, "pt")])
-    @unittest.skip("ColModernVBert does not have a chat template")
-    def test_apply_chat_template_image(self, batch_size, return_tensors):
-        pass
-
-    @unittest.skip("ColModernVBert does not have a chat template")
-    def test_apply_chat_template_video_frame_sampling(self):
-        pass
-
-    @unittest.skip("ColModernVBert does not have a chat template")
-    def test_chat_template_audio_from_video(self):
-        pass
-
-    @unittest.skip("ColModernVBert does not have a chat template")
-    def test_chat_template_jinja_kwargs(self):
-        pass
-
-    @unittest.skip("ColModernVBert does not have a chat template")
-    def test_apply_chat_template_assistant_mask(self):
         pass

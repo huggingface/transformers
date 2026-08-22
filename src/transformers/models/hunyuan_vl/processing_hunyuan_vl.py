@@ -136,7 +136,7 @@ class HunYuanVLProcessor(ProcessorMixin):
                     ):
                         raise ValueError(
                             f"HunYuanVL image placeholders must be formatted as "
-                            f"{self.image_start_token}{self.image_token}{self.image_end_token}. "
+                            f"{self.image_start_token}{self.image_token}{self.image_end_token} but got {prompt}. "
                             "Please format prompts with the processor chat template or include the image start/end "
                             "tokens explicitly."
                         )

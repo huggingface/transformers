@@ -15,7 +15,7 @@
 import json
 import unittest
 
-from transformers.testing_utils import require_av, require_vision
+from transformers.testing_utils import require_torchcodec, require_vision
 from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
@@ -85,7 +85,7 @@ class Ovis2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
         self.assertEqual(expected_prompt, formatted_prompt)
 
-    @require_av
+    @require_torchcodec
     def test_chat_template_dict(self):
         processor = AutoProcessor.from_pretrained("thisisiron/Ovis2-1B-hf")
         messages = [

@@ -28,6 +28,7 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 @require_vision
 class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Gemma3Processor
+    model_id = "hf-internal-testing/tiny-gemma3"
 
     @classmethod
     def _setup_test_attributes(cls, processor):
@@ -43,19 +44,6 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "pan_and_scan_min_ratio_to_activate": 1.2,
         }
         return image_processor_class(**gemma3_image_processor_kwargs)
-
-    @classmethod
-    def _setup_tokenizer(cls):
-        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
-        extra_special_tokens = {
-            "image_token": "<image_soft_token>",
-            "boi_token": "<start_of_image>",
-            "eoi_token": "<end_of_image>",
-        }
-        tokenizer = tokenizer_class.from_pretrained(
-            SAMPLE_VOCAB, keep_accents=True, extra_special_tokens=extra_special_tokens
-        )
-        return tokenizer
 
     def test_get_num_vision_tokens(self):
         "Tests general functionality of the helper used internally in vLLM"
@@ -108,7 +96,7 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             text=[text_single_image, text_single_image], images=[[image], [image]], return_tensors="pt"
         )
         self.assertListEqual(
-            out_batch_oneimage[self.images_input_name].tolist(), out_multiimages[self.images_input_name].tolist()
+            out_batch_oneimage[self.image_input_name].tolist(), out_multiimages[self.image_input_name].tolist()
         )
 
     def test_pan_and_scan(self):
@@ -128,7 +116,7 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
 
         # base image + 4 crops
-        self.assertEqual(len(inputs[self.images_input_name]), 5)
+        self.assertEqual(len(inputs[self.image_input_name]), 5)
         baseline = processor(
             text=input_str,
             images=image_input,
