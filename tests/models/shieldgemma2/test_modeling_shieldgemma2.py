@@ -185,6 +185,10 @@ class ShieldGemma2ModelTest(VLMModelTest, unittest.TestCase):
     def test_problem_types(self):
         pass
 
+    @unittest.skip(reason="ShieldGemma2ForImageClassification does not compute a training loss")
+    def test_image_classification_loss_respects_num_items_in_batch(self):
+        pass
+
     @unittest.skip(reason="ShieldGemma2ForImageClassification does not have a num_labels-based classifier head")
     def test_can_load_ignoring_mismatched_shapes(self):
         pass
