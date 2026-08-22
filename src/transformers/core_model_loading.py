@@ -33,14 +33,12 @@ import torch
 from .distributed.sharding_utils import DtensorShardOperation, _dtensor_from_local_like
 from .distributed.utils import is_dtensor
 from .integrations.accelerate import get_device, offload_weight
-from .integrations.tensor_parallel import ALL_PARALLEL_STYLES
 from .utils import is_env_variable_true
 from .utils.loading_report import LoadStateDictInfo
 from .utils.logging import get_logger, tqdm
 
 
 if TYPE_CHECKING:
-    from .integrations.tensor_parallel import TensorParallelLayer
     from .modeling_utils import LoadStateDictConfig, PreTrainedModel
     from .quantizers import HfQuantizer
 
@@ -740,7 +738,7 @@ def process_source_pattern(source_pattern: str, target_pattern: str) -> str:
     """
     Process a source pattern for reverse mapping (when sources become targets).
     This is useful because usually if the original source (so now the target in reverse mode) had a `^` or `$`
-    to restrict to start/end of string, we should do the same in reverse mode. This is why this method in conditioned
+    to restrict to start/end of string, we should do the same in reverse mode. This is why this method is conditioned
     on the target pattern, we want to do it only for pairs (source, target) when the original source (so the current target
     in reverse mode) had it.
     """
@@ -906,17 +904,12 @@ class WeightTransform:
         source_pattern_that_matched = self.source_patterns[int(matching_group_name[1:])]
         # If we matched, we always replace with the first target pattern, in case we have several (one to many transform)
         replacement = self.target_patterns[0]
-        # Allow capturing groups in patterns, i.e. to add a prefix to all keys (e.g. timm_wrapper, sam3).
-        # Backreferences `\1..\9` in the target are substituted from the matched source pattern's
-        # inner capturing groups, indexed off the matched named group so they stay correct under the
-        # `(?P<g0>...)|(?P<g1>...)|...` alternation `compiled_sources` builds.
-        if re.search(r"\\\d", replacement):
-            group_start = self.compiled_sources.groupindex[matching_group_name]
-            replacement = re.sub(
-                r"\\(\d+)",
-                lambda m: match_object.group(group_start + int(m.group(1))),
-                replacement,
-            )
+        # Allow capturing groups in patterns, i.e. to add a prefix to all keys (e.g. timm_wrapper, sam3)
+        if r"\1" in replacement:
+            # The index of the internal group we need to replace is the index of the matched named group as it comes
+            # inside that matched named group
+            replaced_group_idx = self.compiled_sources.groupindex[matching_group_name] + 1
+            replacement = replacement.replace(r"\1", match_object.group(replaced_group_idx))
         renamed_key = key_to_match.replace(match_object.group(0), replacement, 1)
         if prefix_dot is not None:
             renamed_key = prefix_dot + renamed_key
@@ -1237,9 +1230,9 @@ def spawn_materialize(
 ) -> Future | Callable:
     """Materialize (and optionally shard) a tensor, asynchronously if a thread pool is provided.
 
-    When ``sharding_op`` is given the tensor is sharded (DTensor placement or legacy TP plan);
-    otherwise it is simply copied to *device*/*dtype*. Without a thread pool a deferred
-    callable is returned instead of a Future.
+    When ``sharding_op`` is given the tensor is sharded according to its DTensor placements;
+    otherwise it is simply copied to *device*/*dtype*. Without a thread pool a deferred callable
+    is returned instead of a Future.
     """
 
     def _job():
@@ -1324,7 +1317,6 @@ def set_param_for_module(
     target_name: str,
     param_value: torch.Tensor,
     loading_info: LoadStateDictInfo,
-    distributed_operation: TensorParallelLayer | None,
     hf_quantizer: HfQuantizer,
 ):
     module_path, _, param_name = target_name.rpartition(".")
@@ -1346,13 +1338,8 @@ def set_param_for_module(
         # Remove from missing keys (it's either mismatched, or all good)
         loading_info.missing_keys.discard(target_name)
 
-        # Determine expected shape: for TP/Dtensor, use sharded shape; otherwise, use full shape
-        if distributed_operation is not None:
-            expected_shape = torch.Size(distributed_operation.get_expected_sharded_shape(ref.shape))
-        elif is_dtensor(ref):
-            expected_shape = ref._local_tensor.shape
-        else:
-            expected_shape = ref.shape
+        # For DTensor parameters, compare against the local shard loaded on this rank.
+        expected_shape = ref._local_tensor.shape if is_dtensor(ref) else ref.shape
 
         if ref is not None and param_value.shape != expected_shape and hf_quantizer is None:
             loading_info.mismatched_keys.add((target_name, param_value.shape, expected_shape))
@@ -1360,12 +1347,12 @@ def set_param_for_module(
             if is_dtensor(ref):
                 local_param = param_value.detach() if isinstance(param_value, torch.nn.Parameter) else param_value
                 dtensor_param = _dtensor_from_local_like(local_param, ref)
-                param_value = torch.nn.Parameter(dtensor_param, requires_grad=ref.requires_grad)
+                param_value = torch.nn.Parameter(
+                    dtensor_param, requires_grad=ref.requires_grad and dtensor_param.is_floating_point()
+                )
             # super important otherwise _init_weight will re-init the param
             param_value._is_hf_initialized = True
             setattr(module_obj, param_name, param_value)
-            if distributed_operation is not None:
-                distributed_operation.update_module_attributes(module_obj)
 
 
 def offload_and_maybe_resave_param(
@@ -1400,14 +1387,17 @@ def rename_source_key(
     weight_converters: list[WeightConverter],
     base_model_prefix: str | None = None,
     meta_state_dict: dict | None = None,
+    reverse: bool = False,
 ) -> tuple[str, str | None]:
     """
     Rename a checkpoint key by first applying all `WeightRenaming`s, then at most one `WeightConverter`.
-
-    A renaming and a converter may act on the same key in that order: the renaming normalises the
-    key into the namespace the converter expects. The reverse holds on the save path (converter
-    first, then renaming). There is no need for a converter-then-rename order because converters
-    act only on specific leaf patterns; no subsequent renamings should ever target their output.
+    This means that the `WeightConverter` must specify the final name for the key, but some `WeightRenaming`s can act on other
+    parts of that key beforehand. If `reverse` is True, i.e. when reverting all the `WeightTransform`s, the opposite is performed
+    to be coherent and correctly respect the `scope_prefix` of all `WeightTransform`s: first try to match 1 `WeightConverter`, and only
+    then try to apply all `WeightRenaming`s. Indeed, in reverse mode, all reverse transforms should be applied in the opposite order to
+    be consistent.
+    Note that we proceed in this way because there is no need for a Converter-then-Rename order because Converters act only on specific
+    leaf patterns, so no subsequent Renamings should ever target their output.
 
     Args:
         source_key (`str`):
@@ -1420,23 +1410,35 @@ def rename_source_key(
             Base-model prefix to add or strip when both `base_model_prefix` and `meta_state_dict` are given.
         meta_state_dict (`dict`, *optional*):
             Meta state dict used to decide whether `base_model_prefix` should be added or stripped.
+        reverse (`bool`, *optional*):
+            This specifies if we are reverting all the `WeightTransform`s (saving back original format).
 
     Returns:
         `tuple[str, str | None]`: The renamed key and the matched converter's source pattern
         (or `None` if no converter matched).
     """
     renamed_key = source_key
-    # 1. apply all renamings in turns (if multiple match, it's the responsibility of the mappings to make sure they
-    # are coherent)
-    for renaming in weight_renamings:
-        renamed_key, _ = renaming.rename_source_key(renamed_key)
+    converter_source_pattern = None
+    # 1. If `reverse` is False: apply all renamings in turns (if multiple match, it's the responsibility of the mappings to make sure
+    # they are coherent).
+    # Else, first apply the `WeightConverter` if any
+    first_iterable = weight_renamings if not reverse else weight_converters
+    for transform in first_iterable:
+        renamed_key, source_pattern = transform.rename_source_key(renamed_key)
+        # Only break after match is we are using the `WeightConverter`s here, i.e. `reverse` is True
+        if reverse and source_pattern is not None:
+            converter_source_pattern = source_pattern
+            break
 
-    # 2. apply renaming through weight conversions on the key if we have any WeightConverter (here we stop after
-    # the first match, as we assume only 1 converter can match any source key)
-    source_pattern = None
-    for converter in weight_converters:
-        renamed_key, source_pattern = converter.rename_source_key(renamed_key)
-        if source_pattern is not None:
+    # 2. If `reverse` is False: apply renaming through weight conversions on the key if we have any WeightConverter (here we stop after
+    # the first match, as we assume only 1 converter can match any source key).
+    # Else, apply all the `WeightRenaming`s
+    second_iterable = weight_converters if not reverse else weight_renamings
+    for transform in second_iterable:
+        renamed_key, source_pattern = transform.rename_source_key(renamed_key)
+        # Only break after match is we are using the `WeightConverter`s here, i.e. `reverse` is False
+        if not reverse and source_pattern is not None:
+            converter_source_pattern = source_pattern
             break
 
     # 3. check if we need to add or remove base_model_prefix if necessary (only during loading, not saving)
@@ -1449,14 +1451,13 @@ def rename_source_key(
         elif meta_state_dict.get(f"{base_model_prefix}.{renamed_key}") is not None:
             renamed_key = f"{base_model_prefix}.{renamed_key}"
 
-    return renamed_key, source_pattern
+    return renamed_key, converter_source_pattern
 
 
 def convert_and_load_state_dict_in_model(
     model: PreTrainedModel,
     state_dict: dict[str, Any],
     load_config: LoadStateDictConfig,
-    tp_plan: dict[str, str] | None,
     disk_offload_index: dict | None = None,
 ):
     r"""
@@ -1546,11 +1547,9 @@ def convert_and_load_state_dict_in_model(
 
     """
     base_model_prefix = model.base_model_prefix
-    tp_plan = tp_plan or {}
     device_map = load_config.device_map or {"": "cpu"}
     hf_quantizer = load_config.hf_quantizer
     dtype = load_config.dtype
-    device_mesh = load_config.device_mesh
     disk_offload_folder = load_config.disk_offload_folder
     offload_buffers = load_config.offload_buffers
     dtype_plan = load_config.dtype_plan or {}
@@ -1585,10 +1584,6 @@ def convert_and_load_state_dict_in_model(
     converters = [entry for entry in weight_mapping if isinstance(entry, WeightConverter)]
     param_name_to_load: dict[str, WeightRenaming | WeightConverter] = {}
 
-    # build '(?P<g0>.*.*\\.block_sparse_moe\\..*)' and group to source {'g0': '*.block_sparse_moe.'}
-    # and target to source {'g0': '*.mlp.'}. This allows us to quickly find which pattern matched.
-    if tp_plan != {}:
-        tp_plan_alt, tp_plan_by_group_name, _ = build_glob_alternation(list(tp_plan.keys()))
     if dtype_plan != {}:
         dtype_policy_alt, dtype_policy_by_group_name, _ = build_glob_alternation(list(dtype_plan.keys()))
 
@@ -1663,23 +1658,13 @@ def convert_and_load_state_dict_in_model(
                 else None
             )
 
-            # 4. Handle TP/Dtensor sharding or device_map placement
+            # 4. Handle DTensor sharding or device_map placement
             param_device = get_device(device_map, renamed_key, valid_torch_device=True)
             sharding_op = None
             materialize_device = param_device
 
             if is_dtensor(empty_param):
                 sharding_op = DtensorShardOperation(empty_param)
-            elif device_mesh and tp_plan:
-                if matched_tp_pattern := tp_plan_alt.search(renamed_key):
-                    matched_tp_pattern = tp_plan_by_group_name[matched_tp_pattern.lastgroup]
-                    if getattr(mapping, "distributed_operation", None) is None:
-                        tp_layer = ALL_PARALLEL_STYLES[model.tp_plan[matched_tp_pattern]].__class__
-                        mapping.distributed_operation = tp_layer(
-                            device_mesh=device_mesh, rank=device_mesh.get_local_rank(), empty_param=empty_param.clone()
-                        )
-                    sharding_op = mapping.distributed_operation
-                    materialize_device = device_map[""]
 
             future_or_tensor = spawn_materialize(
                 thread_pool,
@@ -1722,7 +1707,6 @@ def convert_and_load_state_dict_in_model(
                             target_name,
                             param,
                             loading_info,
-                            mapping.distributed_operation,
                             hf_quantizer,
                         )
 
@@ -1772,41 +1756,33 @@ def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch
 
     # Important: we need to revert the order here, so that potential conversions from submodels are performed first
     weight_conversions = weight_conversions[::-1]
-
-    # Two-phase save: first reverse converters, then reverse renamings. Relies on the rule that
-    # WeightRenamings never operate on WeightConverter outputs (see WeightTransform docstring).
-    inverted_transforms = [transform.reverse_transform() for transform in weight_conversions]
-    inverted_converters = [transform for transform in inverted_transforms if isinstance(transform, WeightConverter)]
-    inverted_renamings = [transform for transform in inverted_transforms if not isinstance(transform, WeightConverter)]
-    pattern_to_converter = {
-        pattern: converter for converter in inverted_converters for pattern in converter.source_patterns
-    }
+    # Reverse all Transforms
+    reverse_weight_conversions = [conversion.reverse_transform() for conversion in weight_conversions]
+    renamings = [entry for entry in reverse_weight_conversions if isinstance(entry, WeightRenaming)]
+    converters = [entry for entry in reverse_weight_conversions if isinstance(entry, WeightConverter)]
+    pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
 
     conversion_mapping: dict[str, WeightTransform] = {}
     state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
     for original_key, tensor in state_dict:
-        # `converter_key`: key after phase-1 (converter namespace, used as layer_name by convert()).
-        # `checkpoint_key`: key after phase-2 (final saved name, layer_name for plain renamings).
-        converter_key, matched_pattern = rename_source_key(original_key, [], inverted_converters)
-        checkpoint_key, _ = rename_source_key(converter_key, inverted_renamings, [])
-
-        if matched_pattern is not None:
-            # Bucket under converter_key so all sibling inputs land in the same converter instance.
-            mapping = conversion_mapping.setdefault(converter_key, deepcopy(pattern_to_converter[matched_pattern]))
+        # Rename the key according to all renaming pattern and optional weight converter patterns
+        renamed_key, source_pattern = rename_source_key(original_key, renamings, converters, reverse=True)
+        if source_pattern is not None:
+            new_converter = deepcopy(pattern_to_converter[source_pattern])
+            # each target key gets its own converter instance
+            mapping = conversion_mapping.setdefault(renamed_key, new_converter)
         else:
-            mapping = conversion_mapping.setdefault(checkpoint_key, WeightRenaming(original_key, checkpoint_key))
-            matched_pattern = original_key
+            mapping = conversion_mapping.setdefault(renamed_key, WeightRenaming(original_key, renamed_key))
+            source_pattern = original_key
 
-        mapping.add_tensor(checkpoint_key, original_key, matched_pattern, tensor)
+        mapping.add_tensor(renamed_key, original_key, source_pattern, tensor)
 
     new_state_dict = {}
-    for layer_name, mapping in conversion_mapping.items():
-        realized = mapping.convert(layer_name, model=model, config=model.config)
-        for target_name, param in realized.items():
+    for first_param_name, reversed_converter in conversion_mapping.items():
+        # Apply the reverse converter
+        realized_value = reversed_converter.convert(first_param_name, model=model, config=model.config)
+        for target_name, param in realized_value.items():
             param = param[0] if isinstance(param, list) else param
-            if isinstance(mapping, WeightConverter):
-                # Bring converter outputs from converter namespace into checkpoint namespace.
-                target_name, _ = rename_source_key(target_name, inverted_renamings, [])
             new_state_dict[target_name] = param
 
     return new_state_dict

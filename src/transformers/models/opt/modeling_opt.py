@@ -143,7 +143,7 @@ class OPTAttention(nn.Module):
         """Input shape: Batch x Time x Channel"""
         bsz, tgt_len, _ = hidden_states.size()
 
-        # Scaling is susceptible to floating point arithmetics' inprecisions
+        # Scaling is susceptible to floating point arithmetics' imprecisions
         # which can lead to different results (this is dependent from model
         # to model, e.g. whisper is one such case). We therefore keep the
         # original order of scaling to follow the original implementation

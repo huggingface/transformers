@@ -96,7 +96,7 @@ class FakeRegNetVisslWrapper(nn.Module):
 
 class FakeRegNetParams(RegNetParams):
     """
-    Used to instantiace a RegNet model from classy vision with the same depth as the 10B one but with super small
+    Used to instantiate a RegNet model from classy vision with the same depth as the 10B one but with super small
     parameters, so we can trace it in memory.
     """
 

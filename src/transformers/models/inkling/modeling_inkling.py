@@ -31,7 +31,12 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernelized_func
+from ...integrations import (
+    use_experts_implementation,
+    use_kernel_forward_from_hub,
+    use_kernel_func_from_hub_with_fallback,
+    use_kernelized_func,
+)
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
@@ -425,14 +430,14 @@ def apply_mask_to_padding_states(hidden_states, attention_mask):
     Tunes out the hidden states for padding tokens, see https://github.com/state-spaces/mamba/issues/66
     """
     # NOTE: attention mask is a 2D boolean tensor
-    if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
+    if attention_mask is not None:
         dtype = hidden_states.dtype
         hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
 
     return hidden_states
 
 
-@use_kernel_forward_from_hub("causal_conv1d_update")
+@use_kernel_func_from_hub_with_fallback("causal_conv1d_update", "causal_conv1d")
 def causal_conv1d_update(
     hidden_states: torch.Tensor,
     conv_state: torch.Tensor,
@@ -452,7 +457,7 @@ def causal_conv1d_update(
     return out.to(hidden_states.dtype)
 
 
-@use_kernel_forward_from_hub("causal_conv1d_fn")
+@use_kernel_func_from_hub_with_fallback("causal_conv1d_fn", "causal_conv1d")
 def causal_conv1d_fn(
     hidden_states: torch.Tensor,
     weight: nn.Parameter,
@@ -801,8 +806,8 @@ class InklingAudioModelEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.embed_audio_tokens = nn.Embedding((config.num_codebooks * config.codebook_size), config.hidden_size)
-        self.register_buffer(
-            "audio_tokens_offsets", torch.arange(config.num_codebooks) * config.codebook_size, persistent=False
+        self.audio_tokens_offsets = nn.Buffer(
+            torch.arange(config.num_codebooks) * config.codebook_size, persistent=False
         )
 
     def forward(self, input_ids):
@@ -811,13 +816,19 @@ class InklingAudioModelEmbeddings(nn.Module):
         return inputs_embeds
 
 
+@auto_docstring
 class InklingAudioModel(InklingPreTrainedModel):
     def __init__(self, config: InklingAudioConfig):
         super().__init__(config)
         self.embed_audio_tokens = InklingAudioModelEmbeddings(config)
         self.norm = InklingRMSNorm(config.text_hidden_size, eps=1e-6)
 
-    def forward(self, audio_input_ids: torch.Tensor, **kwargs) -> torch.Tensor:
+    @auto_docstring
+    def forward(self, audio_input_ids: torch.Tensor, **kwargs) -> BaseModelOutputWithPooling:
+        r"""
+        audio_input_ids (`torch.Tensor` of shape `(num_audios, max_num_frames, n_mel_bins)`):
+            Mel-spectrogram frames of the input audios.
+        """
         hidden_states = self.embed_audio_tokens(audio_input_ids)
         hidden_states = self.norm(hidden_states)
         return BaseModelOutputWithPooling(
@@ -942,6 +953,7 @@ def plan_out_scales(
     return scales[idxs]
 
 
+@auto_docstring
 class InklingVisionModel(InklingPreTrainedModel):
     def __init__(self, config: InklingVisionConfig):
         super().__init__(config)
@@ -959,8 +971,8 @@ class InklingVisionModel(InklingPreTrainedModel):
                 (end_scale[0] // start_scale[0]) * (end_scale[1] // start_scale[1]) * (end_scale[2] // start_scale[2])
             )
             output_dim = config.text_hidden_size if i == config.num_hidden_layers - 1 else end_scale[3]
-            hw_fold = end_scale[1] // start_scale[1]
-            t_fold = end_scale[0] // start_scale[0]
+            hw_fold = int(end_scale[1] // start_scale[1])
+            t_fold = int(end_scale[0] // start_scale[0])
             self.encoder_layers.append(
                 InklingVisionEncoderLayer(
                     input_dim=start_scale[3] * shuffle_mult,
@@ -974,7 +986,8 @@ class InklingVisionModel(InklingPreTrainedModel):
         self.final_norm = InklingRMSNorm(config.text_hidden_size)
         self.post_init()
 
-    def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> torch.Tensor:
+    @auto_docstring
+    def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutputWithPooling:
         num_patches = pixel_values.shape[0]
         hidden_states = pixel_values
         for layer in self.encoder_layers:
