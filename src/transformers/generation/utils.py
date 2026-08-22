@@ -1894,8 +1894,9 @@ class GenerationMixin(ContinuousMixin):
         # For encoder-decoder models, BOTH self-attention and cross-attention caches need early init:
         # cross-attention K/V are computed from encoder hidden states on the first decode step, which
         # happens inside the compiled graph, so they suffer the same lazy-init-inside-capture problem.
-        # This also covers the chunked-prefill case (#46421), so the previous `elif prefill_chunk_size` block
-        # is folded in here. Skipped when the cache cannot be initialized on a single device.
+        # Note: chunked prefill previously had its own `elif prefill_chunk_size` block for the same reason
+        # (#46421); it is folded here since the fix applies equally to all compiled generate calls.
+        # Skipped when the cache cannot be initialized on a single device.
         init_shape = self._get_static_cache_init_shape()
         if init_shape is not None:
             num_heads, head_dim = init_shape
