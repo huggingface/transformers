@@ -57,13 +57,6 @@ class DistributedConfig:
         if self.fsdp_size is None:
             self.fsdp_size = 1
 
-        if self.tp_size > 1 and self.fsdp_size > 1:
-            raise ValueError(
-                "FSDP+TP is not supported yet. "
-                "Use DistributedConfig(fsdp_size=N) or DistributedConfig(tp_size=N), not both. "
-                "2D support will come soon."
-            )
-
     @classmethod
     def from_dict(cls, config_dict: dict, **kwargs) -> "DistributedConfig":
         merged = {**config_dict, **kwargs}

@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import os
+from datetime import timedelta
 from typing import TYPE_CHECKING, TypeGuard
 
 from ..utils import is_torch_available, is_torch_distributed_available, is_torch_greater_or_equal
@@ -89,8 +90,14 @@ def _ensure_torch_distributed(device_type: str | None = None):
             if device_type != "cpu":
                 getattr(torch, device_type).set_device(local_rank)
                 device_id = torch.device(device_type, local_rank)
+            # Sharded loading of a large checkpoint takes tens of minutes and ranks finish far
+            # apart, so the default 10-minute watchdog kills the first collective after load.
             torch.distributed.init_process_group(
-                backend=backend, rank=rank, world_size=world_size, device_id=device_id
+                backend=backend,
+                rank=rank,
+                world_size=world_size,
+                device_id=device_id,
+                timeout=timedelta(hours=2),
             )
         except Exception as e:
             raise OSError(
@@ -176,11 +183,17 @@ def initialize_fully_sharded_data_parallelism(distributed_config: DistributedCon
         device_map = torch.device(device_type)
 
     fsdp_size = distributed_config.fsdp_size
+    tp_size = distributed_config.tp_size or 1
 
+    # `fsdp` is the outer dimension so that the `tp` ranks of a group are contiguous, which is what
+    # the expert all-to-all and the TP collectives want.
     dims, names = [], []
     if fsdp_size > 1:
         dims.append(fsdp_size)
         names.append("fsdp")
+    if tp_size > 1:
+        dims.append(tp_size)
+        names.append("tp")
 
     # Build the N-dimensional device mesh
     mesh = torch.distributed.init_device_mesh(device_type, tuple(dims), mesh_dim_names=tuple(names))
