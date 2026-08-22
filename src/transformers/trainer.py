@@ -472,6 +472,9 @@ class Trainer:
             or self.is_fsdp_xla_enabled
             or self.is_fsdp_enabled
             or is_sagemaker_mp_enabled()
+            # Sharded at load time (`DistributedConfig`): the model manages its own placement, and
+            # `.to()` on FSDP2-managed (possibly CPU-offloaded) parameters raises in `_apply`.
+            or getattr(model, "_device_mesh", None) is not None
         ):
             self.place_model_on_device = False
         else:
