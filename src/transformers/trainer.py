@@ -2546,13 +2546,8 @@ class Trainer:
         self.state.num_input_tokens_seen += self.accelerator.gather(input_tokens).sum().item()
 
     def _sync_replicated_grads(self, model):
-        """Average gradients of parameters that no parallelism sharded across the data-parallel dimension.
-
-        Under expert parallelism the expert weights live on the expert mesh only. When that is combined with
-        FSDP, they are therefore *replicated* along the data-parallel dimension, and nothing reduces their
-        gradients across it -- each replica keeps whatever its own microbatch produced and the copies drift
-        apart. FSDP2 only reduces what it shards, so this has to be done explicitly.
-        """
+        """Average the gradients of parameters replicated along the data-parallel dimension (e.g. the
+        EP-sharded experts under a 2-D mesh) -- FSDP2 only reduces what it shards."""
         from torch.distributed.tensor import DTensor
 
         mesh = getattr(model, "_device_mesh", None) or getattr(getattr(model, "module", None), "_device_mesh", None)
@@ -2576,13 +2571,8 @@ class Trainer:
             grad.div_(dp_size)
 
     def _mixed_mesh_grad_norm(self, model, max_norm):
-        """Gradient norm (and clip) when parameters do not all live on the same device mesh.
-
-        Expert parallelism shards only the expert weights, and combining it with FSDP leaves the rest on a
-        different (2-D) mesh, so neither `_foreach_norm` nor `stack` can span the parameter set. Take each
-        gradient's local shard, discount the mesh dimensions it is replicated over so those ranks do not
-        each count it, and reduce once over the whole world.
-        """
+        """Gradient norm (and clip) when parameters live on different device meshes: sum each gradient's
+        local squared norm, discounting the mesh dimensions it is replicated over, reduce once."""
         from torch.distributed.tensor import DTensor
 
         grads = [p.grad for p in model.parameters() if p.grad is not None]
