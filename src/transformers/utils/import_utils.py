@@ -56,18 +56,24 @@ def _is_package_available(pkg_name: str, return_version: bool = False) -> tuple[
         try:
             # importlib.metadata works with the distribution package, which may be different from the import
             # name (e.g. `PIL` is the import name, but `pillow` is the distribution name)
-            distributions = PACKAGE_DISTRIBUTION_MAPPING[pkg_name]
-            # Per PEP 503, underscores and hyphens are equivalent in package names.
-            # Prefer the distribution that matches the (normalized) package name.
-            normalized_pkg_name = pkg_name.replace("_", "-")
-            if normalized_pkg_name in distributions:
-                distribution_name = normalized_pkg_name
-            elif pkg_name in distributions:
+            try:
+                distributions = PACKAGE_DISTRIBUTION_MAPPING[pkg_name]
+                # Per PEP 503, underscores and hyphens are equivalent in package names.
+                # Prefer the distribution that matches the (normalized) package name.
+                normalized_pkg_name = pkg_name.replace("_", "-")
+                if normalized_pkg_name in distributions:
+                    distribution_name = normalized_pkg_name
+                elif pkg_name in distributions:
+                    distribution_name = pkg_name
+                else:
+                    distribution_name = distributions[0]
+            except KeyError:
+                # `importlib.metadata.packages_distributions()` can miss an installed distribution whose dist-info
+                # carries no usable top-level record. The import name is then still the best guess at the
+                # distribution name, and is correct for the vast majority of packages.
                 distribution_name = pkg_name
-            else:
-                distribution_name = distributions[0]
             package_version = importlib.metadata.version(distribution_name)
-        except (importlib.metadata.PackageNotFoundError, KeyError):
+        except importlib.metadata.PackageNotFoundError:
             # If we cannot find the metadata (because of editable install for example), try to import directly.
             # Note that this branch will almost never be run, so we do not import packages for nothing here
             package = importlib.import_module(pkg_name)
