@@ -1234,7 +1234,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
             container_types = (list, tuple)
             if is_torch_available():
                 container_types = (*container_types, KeyDataset)
-            if isinstance(inputs, container_types):
+            if isinstance(inputs, container_types) and len(inputs) > 0:
                 if is_valid_message(inputs[0]):
                     inputs = Chat(inputs)
                 elif isinstance(inputs[0], (list, tuple)) and all(
@@ -1252,6 +1252,9 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
                 batch_size = 1
             else:
                 batch_size = self._batch_size
+
+        if batch_size <= 0:
+            raise ValueError(f"`batch_size` must be a positive integer, got {batch_size}")
 
         preprocess_params, forward_params, postprocess_params = self._sanitize_parameters(**kwargs)
 
