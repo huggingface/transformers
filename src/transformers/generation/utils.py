@@ -1886,33 +1886,42 @@ class GenerationMixin(ContinuousMixin):
             }
             cache = EncoderDecoderCache(cache, StaticCache(**cross_attention_cache_kwargs))
 
-        # Eagerly initialize the K/V buffers so that `mark_static_address` is applied before any
-        # `torch.compile` / CUDAGraph capture context. Without this, `lazy_initialization` runs inside graph
-        # capture (where `is_torchdynamo_compiling()` is True), causing `mark_static_address` to be skipped.
-        # CUDAGraphs then treats those tensors as pooled memory and can overwrite them between runs, raising:
-        #   "accessing tensor output of CUDAGraphs that has been overwritten by a subsequent run"
-        # For encoder-decoder models, BOTH self-attention and cross-attention caches need early init:
-        # cross-attention K/V are computed from encoder hidden states on the first decode step, which
-        # happens inside the compiled graph, so they suffer the same lazy-init-inside-capture problem.
-        # Note: chunked prefill previously had its own `elif prefill_chunk_size` block for the same reason
-        # (#46446); that block is removed and its logic absorbed here, since the fix applies equally to
-        # all compiled generate calls, not just chunked prefill.
-        # Skipped when the cache cannot be initialized on a single device.
-        init_shape = self._get_static_cache_init_shape()
-        if init_shape is not None:
-            num_heads, head_dim = init_shape
-            early_init_kwargs = dict(
-                batch_size=batch_size,
-                num_heads=num_heads,
-                head_dim=head_dim,
-                dtype=self.dtype,
-                device=self.device,
-            )
-            if self.config.is_encoder_decoder:
+        if self.config.is_encoder_decoder:
+            # Eagerly initialize the K/V buffers so that `mark_static_address` is applied before any
+            # `torch.compile` / CUDAGraph capture context. Without this, `lazy_initialization` runs inside
+            # graph capture (where `is_torchdynamo_compiling()` is True), causing `mark_static_address` to
+            # be skipped. CUDAGraphs then treats those tensors as pooled memory and can overwrite them
+            # between runs, raising:
+            #   "accessing tensor output of CUDAGraphs that has been overwritten by a subsequent run"
+            # BOTH self-attention and cross-attention caches need early init: cross-attention K/V are
+            # computed from encoder hidden states on the first decode step, which happens inside the
+            # compiled graph, so they suffer the same lazy-init-inside-capture problem.
+            # Skipped when the cache cannot be initialized on a single device.
+            init_shape = self._get_static_cache_init_shape()
+            if init_shape is not None:
+                num_heads, head_dim = init_shape
+                early_init_kwargs = dict(
+                    batch_size=batch_size,
+                    num_heads=num_heads,
+                    head_dim=head_dim,
+                    dtype=self.dtype,
+                    device=self.device,
+                )
                 cache.self_attention_cache.early_initialization(**early_init_kwargs)
                 cache.cross_attention_cache.early_initialization(**early_init_kwargs)
-            else:
-                cache.early_initialization(**early_init_kwargs)
+        elif prefill_chunk_size is not None:
+            # Chunked prefill compiles the prefill, so eagerly init the fresh cache to avoid a recompile
+            # next call (#46446). Skipped (-> lazy init) when it can't be initialized on a single device.
+            init_shape = self._get_static_cache_init_shape()
+            if init_shape is not None:
+                num_heads, head_dim = init_shape
+                cache.early_initialization(
+                    batch_size=batch_size,
+                    num_heads=num_heads,
+                    head_dim=head_dim,
+                    dtype=self.dtype,
+                    device=self.device,
+                )
 
         # Set the current length on the current model, to avoid recompilation later if we can
         self._previous_max_cache_length = effective_length
