@@ -19,6 +19,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, TypeAlias
 
+from transformers.integrations.heterogeneity.layer_idx_resolvers import LayerIdxResolver
+
 
 if TYPE_CHECKING:
     from torch import nn
@@ -48,9 +50,7 @@ class SkipDescriptor:
 @dataclass(frozen=True)
 class HeterogeneousModelingSpec:
     layer_cls: type[nn.Module]
-    # Layer-index argument or local variable name used by the model's layer construction path.
-    # Common names models use include `layer_idx`, `idx`, `layer_id`, `layer_number`, `i`, and `_`.
-    layer_idx_variable_name: str
+    layer_idx_resolver: LayerIdxResolver
     skip_descriptors: dict[str, SkipDescriptor] | None = None
 
 

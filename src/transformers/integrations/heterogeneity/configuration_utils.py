@@ -350,7 +350,7 @@ class HeterogeneousConfigMixin:
             ValueError: If some layers skip submodules and no model has been constructed from this config yet.
                 Whether a skip disables a layer's KV-cache update is defined by the architecture's
                 `HeterogeneousModelingSpec`, which `apply_generic_heterogeneous_modeling_if_applicable` resolves during
-                model construction.
+                model initialization.
         """
         if not self.is_heterogeneous:
             return ()
@@ -360,7 +360,7 @@ class HeterogeneousConfigMixin:
             if any(layer_config.skip for layer_config in self.per_layer_config):
                 raise ValueError(
                     "Some layers in this heterogeneous config skip submodules, and whether a skip disables a "
-                    "layer's KV-cache update is only resolved during model construction. Construct a model from "
+                    "layer's KV-cache update is only resolved during model initialization. Initialize a model from "
                     "this config first."
                 )
             return ()

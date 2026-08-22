@@ -33,7 +33,12 @@ if is_torch_available():
         tiny_llama_config,
     )
     from transformers import DynamicCache, LlamaConfig, LlamaForCausalLM, PreTrainedModel
-    from transformers.integrations.heterogeneity import HeterogeneousModelingSpec, SkipDescriptor
+    from transformers.integrations.heterogeneity import (
+        HeterogeneousModelingSpec,
+        LayerIdxFromArgument,
+        SkipDescriptor,
+    )
+    from transformers.integrations.heterogeneity.masking_utils import AttentionMasksByLayerIdx
     from transformers.modeling_layers import MtpModel
 
 
@@ -60,15 +65,10 @@ if is_torch_available():
             self.intermediate_size = config.intermediate_size
             self.self_attn = _ToyAttention()
 
-    class _StackLookupToyLayer(torch.nn.Module):
-        def __init__(self, config):
-            torch.nn.Module.__init__(self)
-            self.intermediate_size = config.intermediate_size
-
     def _toy_modeling_spec(layer_cls, attention_replacement_cls):
         return HeterogeneousModelingSpec(
             layer_cls=layer_cls,
-            layer_idx_variable_name="layer_idx",
+            layer_idx_resolver=LayerIdxFromArgument("layer_idx"),
             skip_descriptors={
                 "attention": SkipDescriptor(
                     replacements={"self_attn": attention_replacement_cls},
@@ -98,15 +98,22 @@ if is_torch_available():
                 self.inner_model = _NestedSameLayerToyModel(inner_config)
             self.layer = _ToyDecoderLayer(config, layer_idx=0)
 
-    class _LayerIdxStackLookupToyModel(_ToyPreTrainedModel):
+    class _MaskSelectingToyLayer(torch.nn.Module):
+        def __init__(self, config, layer_idx):
+            super().__init__()
+
+        def forward(self, hidden_states, attention_mask=None):
+            return attention_mask
+
+    class _MaskSelectingToyModel(_ToyPreTrainedModel):
         _heterogeneous_modeling_spec = HeterogeneousModelingSpec(
-            layer_cls=_StackLookupToyLayer,
-            layer_idx_variable_name="layer_idx",
+            layer_cls=_MaskSelectingToyLayer,
+            layer_idx_resolver=LayerIdxFromArgument("layer_idx"),
         )
 
         def __init__(self, config, layer_idx=0):
             super().__init__(config)
-            self.layer = _StackLookupToyLayer(config)
+            self.layer = _MaskSelectingToyLayer(config, layer_idx=layer_idx)
 
     class _CompositeToyModel(_ToyPreTrainedModel):
         _heterogeneous_modeling_spec = _toy_modeling_spec(_ToyDecoderLayer, _CompositeNoOpAttention)
@@ -155,7 +162,7 @@ class TestHeterogeneousModeling(unittest.TestCase):
         modeling_spec = fixture.spec_factory()
         modeling_spec = HeterogeneousModelingSpec(
             layer_cls=modeling_spec.layer_cls,
-            layer_idx_variable_name=modeling_spec.layer_idx_variable_name,
+            layer_idx_resolver=modeling_spec.layer_idx_resolver,
             skip_descriptors={},
         )
         with patch.object(fixture.pretrained_cls, "_heterogeneous_modeling_spec", modeling_spec, create=True):
@@ -187,11 +194,6 @@ class TestHeterogeneousModeling(unittest.TestCase):
         self.assertIsInstance(parent_layer.self_attn, _CompositeNoOpAttention)
         self.assertEqual(backbone_layer.intermediate_size, 64)
         self.assertIsInstance(backbone_layer.self_attn, _BackboneNoOpAttention)
-
-    def test_layer_index_can_be_resolved_from_stack(self):
-        model = _LayerIdxStackLookupToyModel(_toy_config(intermediate_size=64))
-
-        self.assertEqual(model.layer.intermediate_size, 64)
 
     def test_mtp_model_applies_per_layer_config_and_skips(self):
         config = tiny_llama_config(num_hidden_layers=2)
@@ -237,13 +239,29 @@ class TestHeterogeneousModeling(unittest.TestCase):
 
     @parameterized.expand(
         [
-            ("bool", True, TypeError, "model construction stack must be an integer"),
-            ("negative", -1, IndexError, "model construction stack is out of range"),
+            (
+                "bool",
+                True,
+                TypeError,
+                "Layer index `layer_idx` must be an integer.*LayerIdxFromArgument.*got True",
+            ),
+            (
+                "negative",
+                -1,
+                IndexError,
+                "Layer index `layer_idx` is out of range for a model with 4 layers.*LayerIdxFromArgument.*got -1",
+            ),
         ]
     )
-    def test_invalid_layer_index_from_stack_fails_clearly(self, _, layer_idx, error_type, message):
+    def test_invalid_resolved_layer_idx_fails_clearly(self, _, layer_idx, error_type, message):
         with self.assertRaisesRegex(error_type, message):
-            _LayerIdxStackLookupToyModel(_toy_config(intermediate_size=64), layer_idx)
+            _MaskSelectingToyModel(_toy_config(intermediate_size=64), layer_idx=layer_idx)
+
+    def test_layer_forward_selects_attention_mask_by_layer_idx(self):
+        model = _MaskSelectingToyModel(_toy_config(intermediate_size=64), layer_idx=2)
+        masks = AttentionMasksByLayerIdx({0: "layer-zero-mask", 2: "layer-two-mask"})
+
+        self.assertEqual(model.layer(torch.zeros(1), attention_mask=masks), "layer-two-mask")
 
     def test_sequential_heterogeneous_models_no_interference(self):
         """Two heterogeneous models built sequentially should each have correct per-layer weights."""

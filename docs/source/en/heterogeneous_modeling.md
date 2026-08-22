@@ -43,37 +43,36 @@ The built-in declarations live in
 
 ## How generic patching works
 
-When a model is constructed with a heterogeneous configuration and has a heterogeneous modeling spec, Transformers
-patches the construction of the architecture's layer class so that:
+When a model is initialized with a heterogeneous configuration and has a heterogeneous modeling spec, Transformers
+patches the initialization of the architecture's layer class so that:
 
 1. Each layer is built from its resolved layer configuration, `config.per_layer_config[layer_idx]`, so per-layer
    attribute overrides such as `intermediate_size` or `num_key_value_heads` apply naturally.
 2. Each skip type in the layer's `skip` applies a skip descriptor from the spec, replacing the layer members it lists
    with modules that turn them into a no-op.
 3. When a mask-affecting attribute (`sliding_window` or `attention_chunk_size`) varies across layers, the model builds
-   one attention mask per distinct value, and each affected layer's forward is patched to select the mask matching its
-   own value.
+   one attention mask per distinct value, assigns it to each matching layer index, and patches each affected layer's
+   forward to select the mask by its index.
 
 All of this is driven by a single declaration, the `HeterogeneousModelingSpec`.
 
 ## The heterogeneous modeling spec
 
-A spec names the layer class to patch and how to find each layer's index during construction:
+A spec names the layer class to patch and how to find each layer's index during initialization:
 
 ```py
-from transformers.integrations.heterogeneity import HeterogeneousModelingSpec
+from transformers.integrations.heterogeneity import HeterogeneousModelingSpec, LayerIdxFromArgument
 from transformers.models.llama.modeling_llama import LlamaDecoderLayer
 
 spec = HeterogeneousModelingSpec(
     layer_cls=LlamaDecoderLayer,
-    layer_idx_variable_name="layer_idx",
+    layer_idx_resolver=LayerIdxFromArgument("layer_idx"),
 )
 ```
 
 - `layer_cls` is the architecture's repeated layer class (typically its decoder layer) whose differences `per_layer_config` describes.
-- `layer_idx_variable_name` is the name of the layer-index argument of `layer_cls.__init__` (`layer_idx` in most
-  models). When the layer class does not accept the index as an argument, it is the name of the loop variable used to
-  construct the layers, which is resolved from the model construction call stack.
+- `layer_idx_resolver` explicitly declares where the layer index comes from. Use `LayerIdxFromArgument("layer_idx")`
+  when it is passed to `layer_cls.__init__`, as it is in most models.
 
 A spec without skip descriptors is enough as long as no layer has a skip. Supporting `skip` additionally
 requires a skip descriptor for each skip type, defining its effect on the layer.
@@ -87,7 +86,13 @@ the KV cache:
 ```py
 import torch
 
-from transformers.integrations.heterogeneity import HeterogeneousModelingSpec, ReturnEntry, SkipDescriptor, get_skip_replacement
+from transformers.integrations.heterogeneity import (
+    HeterogeneousModelingSpec,
+    LayerIdxFromArgument,
+    ReturnEntry,
+    SkipDescriptor,
+    get_skip_replacement,
+)
 from transformers.models.llama.modeling_llama import LlamaAttention, LlamaDecoderLayer, LlamaMLP, LlamaRMSNorm
 
 
@@ -97,7 +102,7 @@ def identity(hidden_states):
 
 spec = HeterogeneousModelingSpec(
     layer_cls=LlamaDecoderLayer,
-    layer_idx_variable_name="layer_idx",
+    layer_idx_resolver=LayerIdxFromArgument("layer_idx"),
     skip_descriptors={
         "attention": SkipDescriptor(
             replacements={

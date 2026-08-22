@@ -27,6 +27,7 @@ from .conversion_mapping import get_model_conversion_mapping
 from .core_model_loading import WeightRenaming, convert_and_load_state_dict_in_model
 from .integrations.heterogeneity import (
     HeterogeneousModelingSpec,
+    LayerIdxFromArgument,
     get_heterogeneous_modeling_spec,
     nest_skip_descriptor_paths,
 )
@@ -386,7 +387,7 @@ class MtpModel(PreTrainedModel):
         ):
             self._heterogeneous_modeling_spec = HeterogeneousModelingSpec(
                 layer_cls=MtpLayer,
-                layer_idx_variable_name="layer_idx",
+                layer_idx_resolver=LayerIdxFromArgument("layer_idx"),
                 skip_descriptors=nest_skip_descriptor_paths(
                     main_heterogeneous_modeling_spec.skip_descriptors, parent_path="mtp_block"
                 ),

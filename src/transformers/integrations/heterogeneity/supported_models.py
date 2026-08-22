@@ -19,6 +19,7 @@ from transformers.integrations.heterogeneity.heterogeneous_modeling_spec import 
     HeterogeneousModelingSpec,
     SkipDescriptor,
 )
+from transformers.integrations.heterogeneity.layer_idx_resolvers import LayerIdxFromArgument
 from transformers.integrations.heterogeneity.skip_utils import ReturnEntry, get_skip_replacement
 
 
@@ -46,7 +47,7 @@ def gpt_oss() -> HeterogeneousModelingSpec:
 
     return HeterogeneousModelingSpec(
         layer_cls=GptOssDecoderLayer,
-        layer_idx_variable_name="layer_idx",
+        layer_idx_resolver=LayerIdxFromArgument("layer_idx"),
         skip_descriptors={
             "attention": SkipDescriptor(
                 replacements={
@@ -86,7 +87,7 @@ def llama() -> HeterogeneousModelingSpec:
 
     return HeterogeneousModelingSpec(
         layer_cls=LlamaDecoderLayer,
-        layer_idx_variable_name="layer_idx",
+        layer_idx_resolver=LayerIdxFromArgument("layer_idx"),
         skip_descriptors={
             "attention": SkipDescriptor(
                 replacements={
@@ -126,7 +127,7 @@ def llama4() -> HeterogeneousModelingSpec:
 
     return HeterogeneousModelingSpec(
         layer_cls=Llama4TextDecoderLayer,
-        layer_idx_variable_name="layer_idx",
+        layer_idx_resolver=LayerIdxFromArgument("layer_idx"),
         skip_descriptors={
             "attention": SkipDescriptor(
                 replacements={
@@ -170,7 +171,7 @@ def nemotron_h() -> HeterogeneousModelingSpec:
 
     return HeterogeneousModelingSpec(
         layer_cls=NemotronHBlock,
-        layer_idx_variable_name="layer_idx",
+        layer_idx_resolver=LayerIdxFromArgument("layer_idx"),
         skip_descriptors={
             "mixer": SkipDescriptor(
                 replacements={

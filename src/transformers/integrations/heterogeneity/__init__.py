@@ -20,6 +20,7 @@ from .heterogeneous_modeling_spec import (
     get_heterogeneous_modeling_spec,
     nest_skip_descriptor_paths,
 )
+from .layer_idx_resolvers import LayerIdxFromArgument, LayerIdxFromModelInitStack, LayerIdxResolver
 from .modeling_utils import (
     apply_generic_heterogeneous_modeling_if_applicable,
     wrap_model_init_with_heterogeneous_context,
@@ -31,6 +32,9 @@ __all__ = [
     "AmbiguousGlobalPerLayerAttributeError",
     "HeterogeneousConfigMixin",
     "HeterogeneousModelingSpec",
+    "LayerIdxFromArgument",
+    "LayerIdxFromModelInitStack",
+    "LayerIdxResolver",
     "ReturnEntry",
     "SkipDescriptor",
     "apply_generic_heterogeneous_modeling_if_applicable",

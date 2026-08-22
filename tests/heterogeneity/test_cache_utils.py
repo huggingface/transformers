@@ -161,13 +161,13 @@ class TestHeterogeneousCache(unittest.TestCase):
         self.assertEqual(cache.get_representative_kv_layer_idx(range(config.num_hidden_layers)), 0)
         self.assertEqual(cache.get_seq_length(layer_idx=0), 1)
 
-    def test_static_cache_with_skips_requires_model_construction(self):
+    def test_static_cache_with_skips_requires_model_initialization(self):
         config = tiny_llama_config(
             num_hidden_layers=2,
             per_layer_config={0: {"skip": ["attention"]}},
         )
 
-        with self.assertRaisesRegex(ValueError, "Construct a model from this config first"):
+        with self.assertRaisesRegex(ValueError, "Initialize a model from this config first"):
             StaticCache(config=config, max_cache_len=1)
 
         with hetero_context("llama"):

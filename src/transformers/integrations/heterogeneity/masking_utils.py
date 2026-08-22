@@ -24,18 +24,18 @@ if TYPE_CHECKING:
     from transformers import PreTrainedConfig
 
 
-class AttentionMasksByAttributeValue(dict[Hashable, Any]):
-    """Attention masks selected by the value of a per-layer config attribute."""
+class AttentionMasksByLayerIdx(dict[int, Any]):
+    """Attention masks selected by layer index."""
 
 
-def create_attention_masks_by_attribute_value(
+def create_attention_masks_by_layer_idx(
     create_mask_fn: Callable,
     attribute_name: str,
     config: PreTrainedConfig,
     *args: Any,
     **kwargs: Any,
-) -> AttentionMasksByAttributeValue:
-    attention_masks = AttentionMasksByAttributeValue()
+) -> AttentionMasksByLayerIdx:
+    attention_masks = AttentionMasksByLayerIdx()
     attribute_value_to_layer_indices: dict[Hashable, list[int]] = defaultdict(list)
     for layer_idx in range(config.num_hidden_layers):
         layer_config = config.per_layer_config[layer_idx]
@@ -55,6 +55,8 @@ def create_attention_masks_by_attribute_value(
 
         layer_config = config.per_layer_config[layer_idx]
         kwargs["layer_idx"] = layer_idx
-        attention_masks[attribute_value] = create_mask_fn(layer_config, *args, **kwargs)
+        attention_mask = create_mask_fn(layer_config, *args, **kwargs)
+        for layer_idx in layer_indices:
+            attention_masks[layer_idx] = attention_mask
 
     return attention_masks

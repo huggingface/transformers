@@ -19,8 +19,8 @@ import torch.nn.functional as F
 from .cache_utils import Cache
 from .configuration_utils import PreTrainedConfig
 from .integrations.heterogeneity.masking_utils import (
-    AttentionMasksByAttributeValue,
-    create_attention_masks_by_attribute_value,
+    AttentionMasksByLayerIdx,
+    create_attention_masks_by_layer_idx,
 )
 from .utils import is_torch_xpu_available, logging
 from .utils.deprecation import deprecate_kwarg
@@ -1135,7 +1135,7 @@ def create_sliding_window_causal_mask(
     block_sequence_ids: torch.Tensor | None = None,
     layer_idx: int | None = None,
     allow_is_causal_skip: bool = True,
-) -> torch.Tensor | BlockMask | AttentionMasksByAttributeValue | None:
+) -> torch.Tensor | BlockMask | AttentionMasksByLayerIdx | None:
     """
     Create a sliding window causal mask based on the attention implementation used (stored in the config). This type
     of attention pattern was mostly democratized by Mistral. If `past_key_values` has a hybrid cache structure, this
@@ -1190,7 +1190,7 @@ def create_sliding_window_causal_mask(
         "allow_is_causal_skip": allow_is_causal_skip,
     }
     if layer_idx is None and config.is_heterogeneous and attribute_name in config.per_layer_attributes:
-        return create_attention_masks_by_attribute_value(
+        return create_attention_masks_by_layer_idx(
             _create_sliding_window_causal_mask,
             attribute_name,
             **mask_kwargs,
@@ -1407,7 +1407,7 @@ def create_chunked_causal_mask(
     and_mask_function: Callable | None = None,
     layer_idx: int | None = None,
     allow_is_causal_skip: bool = True,
-) -> torch.Tensor | BlockMask | AttentionMasksByAttributeValue | None:
+) -> torch.Tensor | BlockMask | AttentionMasksByLayerIdx | None:
     """
     Create a chunked attention causal mask based on the attention implementation used (stored in the config). This type
     of attention pattern was mostly democratized by Llama4. If `past_key_values` has a hybrid cache structure, this
@@ -1457,7 +1457,7 @@ def create_chunked_causal_mask(
         "allow_is_causal_skip": allow_is_causal_skip,
     }
     if layer_idx is None and config.is_heterogeneous and attribute_name in config.per_layer_attributes:
-        return create_attention_masks_by_attribute_value(
+        return create_attention_masks_by_layer_idx(
             _create_chunked_causal_mask,
             attribute_name,
             **mask_kwargs,

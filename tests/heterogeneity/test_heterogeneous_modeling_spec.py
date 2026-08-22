@@ -25,6 +25,7 @@ if is_torch_available():
 
     from transformers.integrations.heterogeneity import (
         HeterogeneousModelingSpec,
+        LayerIdxFromArgument,
         SkipDescriptor,
         get_heterogeneous_modeling_spec,
         nest_skip_descriptor_paths,
@@ -61,7 +62,10 @@ class TestHeterogeneousModelingSpec(unittest.TestCase):
         self.assertIsNone(nest_skip_descriptor_paths(None, parent_path="wrapper.block"))
 
     def test_get_heterogeneous_modeling_spec_uses_custom_model_spec(self):
-        spec = HeterogeneousModelingSpec(layer_cls=torch.nn.Linear, layer_idx_variable_name="layer_idx")
+        spec = HeterogeneousModelingSpec(
+            layer_cls=torch.nn.Linear,
+            layer_idx_resolver=LayerIdxFromArgument("layer_idx"),
+        )
 
         class CustomModel:
             pass
@@ -71,7 +75,10 @@ class TestHeterogeneousModelingSpec(unittest.TestCase):
         self.assertIs(get_heterogeneous_modeling_spec(CustomModel()), spec)
 
     def test_get_heterogeneous_modeling_spec_uses_supported_model_registry(self):
-        spec = HeterogeneousModelingSpec(layer_cls=torch.nn.Linear, layer_idx_variable_name="layer_idx")
+        spec = HeterogeneousModelingSpec(
+            layer_cls=torch.nn.Linear,
+            layer_idx_resolver=LayerIdxFromArgument("layer_idx"),
+        )
 
         class BuiltInConfig:
             model_type = "test_model"

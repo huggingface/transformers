@@ -25,7 +25,7 @@ if is_torch_available():
 
     from tests.heterogeneity.testing_utils import tiny_gpt_oss_config, tiny_llama4_config, tiny_llama_config
     from transformers import DynamicCache
-    from transformers.integrations.heterogeneity.masking_utils import AttentionMasksByAttributeValue
+    from transformers.integrations.heterogeneity.masking_utils import AttentionMasksByLayerIdx
     from transformers.masking_utils import (
         create_chunked_causal_mask,
         create_masks_for_generate,
@@ -41,10 +41,14 @@ class TestHeterogeneousMasking(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
-    def test_sliding_window_masks_are_keyed_by_attribute_value(self):
+    def test_sliding_window_masks_are_keyed_by_layer_idx(self):
         config = tiny_llama_config(
             sliding_window=None,
-            per_layer_config={0: {"sliding_window": 2}, 1: {"sliding_window": 2}, 2: {"sliding_window": 3}},
+            per_layer_config={
+                0: {"sliding_window": 2, "intermediate_size": 64},
+                1: {"sliding_window": 2, "intermediate_size": 96},
+                2: {"sliding_window": 3},
+            },
         )
         config._attn_implementation = "sdpa"
 
@@ -52,9 +56,9 @@ class TestHeterogeneousMasking(unittest.TestCase):
         cache = DynamicCache(config=config)
 
         mask = create_sliding_window_causal_mask(config, inputs_embeds, attention_mask=None, past_key_values=cache)
-        self.assertIsInstance(mask, AttentionMasksByAttributeValue)
+        self.assertIsInstance(mask, AttentionMasksByLayerIdx)
         expected_masks = {
-            2: torch.tensor(
+            0: torch.tensor(
                 [
                     [True, False, False, False],
                     [True, True, False, False],
@@ -62,7 +66,7 @@ class TestHeterogeneousMasking(unittest.TestCase):
                     [False, False, True, True],
                 ]
             ),
-            3: torch.tensor(
+            2: torch.tensor(
                 [
                     [True, False, False, False],
                     [True, True, False, False],
@@ -71,9 +75,10 @@ class TestHeterogeneousMasking(unittest.TestCase):
                 ]
             ),
         }
-        self.assertEqual(set(mask), set(expected_masks))
-        for sliding_window, expected_mask in expected_masks.items():
-            torch.testing.assert_close(mask[sliding_window], expected_mask[None, None])
+        self.assertEqual(set(mask), {0, 1, 2})
+        self.assertIs(mask[0], mask[1])
+        for layer_idx, expected_mask in expected_masks.items():
+            torch.testing.assert_close(mask[layer_idx], expected_mask[None, None])
 
     @parameterized.expand([("causal", True), ("bidirectional", False)])
     def test_sliding_window_mask_uses_updated_layer_with_matching_window(self, _name, is_causal):
@@ -99,9 +104,9 @@ class TestHeterogeneousMasking(unittest.TestCase):
             past_key_values=cache,
         )
 
-        self.assertEqual(mask[3].shape[-1], 3)
+        self.assertEqual(mask[0].shape[-1], 3)
 
-    def test_chunked_attention_masks_are_keyed_by_attribute_value(self):
+    def test_chunked_attention_masks_are_keyed_by_layer_idx(self):
         config = tiny_llama4_config(
             attention_chunk_size=3,
             per_layer_config={
@@ -115,9 +120,9 @@ class TestHeterogeneousMasking(unittest.TestCase):
         cache = DynamicCache(config=config)
 
         mask = create_chunked_causal_mask(config, inputs_embeds, attention_mask=None, past_key_values=cache)
-        self.assertIsInstance(mask, AttentionMasksByAttributeValue)
+        self.assertIsInstance(mask, AttentionMasksByLayerIdx)
         expected_masks = {
-            2: torch.tensor(
+            0: torch.tensor(
                 [
                     [True, False, False, False],
                     [True, True, False, False],
@@ -125,7 +130,7 @@ class TestHeterogeneousMasking(unittest.TestCase):
                     [False, False, True, True],
                 ]
             ),
-            3: torch.tensor(
+            1: torch.tensor(
                 [
                     [True, False, False, False],
                     [True, True, False, False],
@@ -134,11 +139,11 @@ class TestHeterogeneousMasking(unittest.TestCase):
                 ]
             ),
         }
-        self.assertEqual(set(mask), set(expected_masks))
-        for attention_chunk_size, expected_mask in expected_masks.items():
-            torch.testing.assert_close(mask[attention_chunk_size], expected_mask[None, None])
+        self.assertEqual(set(mask), {0, 1, 2, 3})
+        for layer_idx, expected_mask_idx in enumerate((0, 1, 0, 1)):
+            torch.testing.assert_close(mask[layer_idx], expected_masks[expected_mask_idx][None, None])
 
-    def test_masks_for_generate_keys_attribute_value_masks_by_pattern(self):
+    def test_masks_for_generate_keys_layer_idx_masks_by_pattern(self):
         config = tiny_gpt_oss_config(
             layer_types=["sliding_attention"] * 4,
             per_layer_config={0: {"sliding_window": 16}, 1: {"sliding_window": 8}},
@@ -153,9 +158,8 @@ class TestHeterogeneousMasking(unittest.TestCase):
             past_key_values=DynamicCache(config=config),
         )
 
-        # Model code selects a layer's mask from the result by pattern name, then the layer resolves the
-        # attribute-value masks by its own attribute value.
+        # Model code selects a layer's mask from the result by pattern name, then the layer resolves its own index.
         self.assertEqual(set(attention_masks), {"sliding_attention"})
         sliding_masks = attention_masks["sliding_attention"]
-        self.assertIsInstance(sliding_masks, AttentionMasksByAttributeValue)
-        self.assertEqual(set(sliding_masks.keys()), {32, 16, 8})
+        self.assertIsInstance(sliding_masks, AttentionMasksByLayerIdx)
+        self.assertEqual(set(sliding_masks), {0, 1, 2, 3})
