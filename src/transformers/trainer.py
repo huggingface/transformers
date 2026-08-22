@@ -3944,10 +3944,14 @@ class Trainer:
             from .distributed.tensor_parallel import gather_state_dict_for_save
 
             unwrapped = self.accelerator.unwrap_model(self.model, keep_torch_compile=False)
+            gather_start = time.time()
             state_dict = gather_state_dict_for_save(unwrapped.state_dict(), None, None, 0)
+            gather_s = time.time() - gather_start
             if self.args.should_save:
+                write_start = time.time()
                 # `save_pretrained` ends with `barrier_after_gathered_checkpoint_save`.
                 self._save(output_dir, state_dict=state_dict)
+                logger.info(f"Sharded-model save: gather {gather_s:.1f}s, write {time.time() - write_start:.1f}s")
             else:
                 # Match the writer's end-of-save barrier so no rank runs ahead into the next
                 # step's collectives while the main process is still writing.
