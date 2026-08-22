@@ -137,6 +137,37 @@ class RopeTest(unittest.TestCase):
             if same_rope_per_layer:
                 self.assertIn("mrope_sections", logs.output[1])
 
+    def test_odd_rotary_dim_warns(self):
+        # RoPE rotates dimensions in pairs. Full RoPE (the default -- no `partial_rotary_factor`, e.g. Llama,
+        # Qwen2, Mixtral) applies the rotation to the whole, un-sliced `head_dim`, so an odd `head_dim` has no
+        # valid pairing for its last component and fails deep in `apply_rotary_pos_emb` with a cryptic
+        # tensor-size mismatch. This should be surfaced as a clear warning at config-creation time instead.
+        with self.assertLogs("transformers.modeling_rope_utils", level="WARNING") as logs:
+            LlamaConfig(hidden_size=520, num_attention_heads=8, num_hidden_layers=1)  # head_dim = 65 (odd)
+        self.assertTrue(any("rotary embedding dimension is odd" in line for line in logs.output))
+
+        # An explicitly-set odd `head_dim` triggers the same check, regardless of hidden_size/num_attention_heads.
+        with self.assertLogs("transformers.modeling_rope_utils", level="WARNING") as logs:
+            config = LlamaConfig(hidden_size=512, num_attention_heads=8, num_hidden_layers=1)
+            config.head_dim = 65
+            config.validate_rope()
+        self.assertTrue(any("rotary embedding dimension is odd" in line for line in logs.output))
+
+        # A config whose head_dim is even should never warn.
+        config = LlamaConfig(hidden_size=512, num_attention_heads=8, num_hidden_layers=1)  # head_dim = 64 (even)
+        with self.assertNoLogs("transformers.modeling_rope_utils", level="WARNING"):
+            config.validate_rope()
+
+        # Genuinely partial RoPE (`partial_rotary_factor` < 1.0) must NOT warn, even if `head_dim *
+        # partial_rotary_factor` happens to be odd: `apply_rotary_pos_emb` for these models derives its rotary
+        # slice from the (rounded-up, even) cos/sin cache size rather than from this exact value, so it's not
+        # actually broken. This mirrors GLM-4(V) MoE's real-world default of `head_dim=42,
+        # partial_rotary_factor=0.5` (dim=21, odd, and it works fine) -- flagging it would be a false positive.
+        config = LlamaConfig(hidden_size=336, num_attention_heads=8, num_hidden_layers=1)  # head_dim = 42
+        config.rope_parameters["partial_rotary_factor"] = 0.5  # int(42 * 0.5) = 21 (odd)
+        with self.assertNoLogs("transformers.modeling_rope_utils", level="WARNING"):
+            config.validate_rope()
+
     @parameterized.expand(
         [
             (True, True),

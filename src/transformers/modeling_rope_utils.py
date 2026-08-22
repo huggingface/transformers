@@ -840,12 +840,62 @@ class RotaryEmbeddingConfigMixin:
             validation_fn = getattr(self, f"_validate_{rope_type}_rope_parameters", None)
             rope_parameters["rope_type"] = rope_type
 
+            self._validate_rotary_dim_is_even(rope_parameters)
+
             if validation_fn is not None:
                 validation_fn(rope_parameters, ignore_keys=self.ignore_keys_at_rope_validation)
             else:
                 logger.warning(
                     f"Missing validation function in 'RotaryEmbeddingConfigMixin' for 'rope_type'='{rope_type}'"
                 )
+
+    def _validate_rotary_dim_is_even(self, rope_parameters: dict):
+        """
+        RoPE pairs up consecutive dimensions and rotates each pair. For *full* RoPE (no partial rotary factor,
+        the common case -- Llama, Qwen2, Mixtral, etc.), an odd `head_dim` has no valid pairing for its last
+        component: the cos/sin cache ends up one dimension larger than `head_dim` (rounded up to the nearest
+        even number), and `apply_rotary_pos_emb` applies it to the full, un-sliced query/key tensors, so the
+        shapes never match and it fails deep in the forward pass with a cryptic tensor-size error instead of at
+        config creation time.
+
+        This intentionally only checks the full-rotation case (`partial_rotary_factor` unset or `>= 1.0`).
+        Genuinely partial-RoPE models (e.g. GLM-4(V) MoE, which default to `partial_rotary_factor=0.5`) compute
+        `apply_rotary_pos_emb`'s rotary slice from the cos/sin cache's own (rounded-up, even) size rather than
+        from `head_dim` directly, so an odd `head_dim * partial_rotary_factor` there is silently rounded up and
+        works fine -- flagging it would be a false positive.
+
+        This only runs when `hidden_size`/`num_attention_heads` (or an explicit `head_dim`) are actually present on
+        the config, so it's a no-op for configs that merely inherit this mixin without describing an attention head
+        shape (e.g. some composite/parent configs).
+
+        NOTE: this warns rather than raises. `PreTrainedConfig.to_diff_dict()` (used by `__repr__`,
+        `to_json_string()`, and therefore ordinary printing/logging/saving of a config) instantiates a bare
+        `self.__class__()` purely to diff field values against class defaults. If any registered config class
+        has broken bare defaults (one already does, independent of this check), raising here would make merely
+        *printing* an otherwise-valid config of that class crash -- a hard error is too heavy a hammer for what
+        `to_diff_dict()` needs to be a safe, side-effect-free operation.
+        """
+        partial_rotary_factor = rope_parameters.get("partial_rotary_factor") or 1.0
+        if partial_rotary_factor < 1.0:
+            return
+
+        head_dim = getattr(self, "head_dim", None)
+        if head_dim is None:
+            hidden_size = getattr(self, "hidden_size", None)
+            num_attention_heads = getattr(self, "num_attention_heads", None)
+            if not hidden_size or not num_attention_heads:
+                return
+            head_dim = hidden_size // num_attention_heads
+
+        rotary_dim = int(head_dim * partial_rotary_factor)
+        if rotary_dim % 2 != 0:
+            logger.warning(
+                f"The rotary embedding dimension is odd ({rotary_dim}, from head_dim={head_dim} and "
+                f"partial_rotary_factor={partial_rotary_factor}). RoPE rotates consecutive dimensions in pairs, so "
+                "an odd rotary dimension has no valid pairing for its last component and this will very likely "
+                "fail with a tensor-size mismatch during the forward pass. Adjust `hidden_size`/`num_attention_heads` "
+                "(or set `head_dim` explicitly) so that head_dim * partial_rotary_factor is even."
+            )
 
     def _validate_default_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
         required_keys = {"rope_type"}
