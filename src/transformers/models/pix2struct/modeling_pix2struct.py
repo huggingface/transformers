@@ -328,7 +328,7 @@ class Pix2StructPreTrainedModel(PreTrainedModel):
                 else self.config.hidden_size
             )
             key_value_proj_dim = (
-                self.config.text_config.d_kv if isinstance(self.config, Pix2StructConfig) else self.config.hidden_size
+                self.config.text_config.d_kv if isinstance(self.config, Pix2StructConfig) else self.config.d_kv
             )
             n_heads = (
                 self.config.text_config.num_heads
