@@ -709,10 +709,8 @@ class EpRouterParallel(TensorParallelLayer):
         num_local_experts = num_experts // ep_size
 
         router_logits, router_scores, router_indices, *extra_outputs = output
-        # The gradient reaching each rank's scores covers only the slots of its local experts (the
-        # non-local slots are zeroed by the mask below in backward). Sum the per-rank partial
-        # gradients BEFORE the mask so the gate weights and the hidden states upstream of the router
-        # receive the full gradient — each slot has exactly one owning rank, so the sum is exact.
+        # Each rank's score gradient covers only its local experts' slots; sum the per-rank partials
+        # before the mask (each slot has exactly one owning rank, so the sum is exact).
         process_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
         router_scores = _AllReduceBackward.apply(router_scores, process_group)
         non_local_mask = (router_indices // num_local_experts) != ep_rank
