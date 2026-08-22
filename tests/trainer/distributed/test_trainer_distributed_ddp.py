@@ -176,6 +176,35 @@ class TestTrainerDistributedDDP(DDPCommandsMixin, TestCasePlus):
         )
         execute_subprocess_async(cmd, env=self.get_env())
 
+    def test_batch_rebalance_no_double_sharding(self):
+        """Regression for BatchRebalanceSampler double-sharding under real DDP.
+
+        ``accelerator.prepare`` wraps the already rank-aware ``BatchRebalanceSampler`` in
+        accelerate's ``BatchSamplerShard``, which would re-shard on top of it and silently
+        drop most samples each epoch. The Trainer neutralises that wrapper. Unlike the
+        unit test, this exercises the full path end-to-end -- ``Trainer.get_train_dataloader``
+        -> ``accelerator.prepare(DataLoader(...))`` -> patch ``prepared_dataloader.batch_sampler``
+        -- under a real multi-process launch, and checks the structure-dependent detection as
+        well as exact global sample coverage."""
+        output_dir = self.get_auto_remove_tmp_dir()
+        script = os.path.join(SCRIPTS_DIR, "batch_rebalance_ddp.py")
+        num_processes = backend_device_count(torch_device)
+        cmd = self.get_accelerate_cmd(
+            script,
+            DDP_CONFIG_FILE,
+            script_args=["--output_dir", output_dir],
+            num_processes=num_processes,
+        )
+        execute_subprocess_async(cmd, env=self.get_env())
+
+        with open(os.path.join(output_dir, "result.json")) as f:
+            result = json.load(f)
+        self.assertTrue(
+            result["ok"],
+            msg="double-sharding regression checks failed:\n" + json.dumps(result, indent=2, sort_keys=True),
+        )
+        self.assertEqual(result["world_size"], num_processes)
+
     # -----------------------------------------------------------------------
     # torchrun vs accelerate env parity
     # -----------------------------------------------------------------------
