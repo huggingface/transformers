@@ -358,6 +358,7 @@ class BltCrossAttention(nn.Module):
         self.layer_idx = layer_idx
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.scaling = self.head_dim**-0.5
+        self.is_causal = False
 
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
@@ -365,7 +366,6 @@ class BltCrossAttention(nn.Module):
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
         self.q_norm = BltRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.k_norm = BltRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
-        self.is_causal = False
 
     def forward(
         self,

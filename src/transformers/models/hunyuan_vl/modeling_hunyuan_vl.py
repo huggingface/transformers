@@ -330,11 +330,11 @@ class HunYuanVLVisionAttention(nn.Module):
         self.head_dim = getattr(config, "head_dim", self.embed_dim // self.num_heads)
         self.scaling = self.head_dim**-0.5
         self.num_key_value_groups = 1
+        self.is_causal = False
         self.q_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=True)
         self.k_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=True)
         self.v_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=True)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.embed_dim, bias=True)
-        self.is_causal = False
 
     @deprecate_kwarg("hidden_state", new_name="hidden_states", version="v5.20")
     def forward(
