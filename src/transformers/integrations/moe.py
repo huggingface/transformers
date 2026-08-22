@@ -392,6 +392,8 @@ def dispatch_experts_forward(
     experts on what it receives, sends the results back, combines with the local routing
     weights, and all-gathers the finished slices. Routing arrives unmasked (global expert ids).
     """
+    import os
+
     import torch.distributed as dist
 
     class _AllToAll(torch.autograd.Function):
@@ -433,6 +435,13 @@ def dispatch_experts_forward(
     num_top_k = top_k_index.size(-1)
     num_local_experts = self.num_experts  # RouterParallel sets this to experts // ep_size
 
+    # HF_EP_TRUNK_DP=1: every EP rank already carries a *different* microbatch (the dense trunk is
+    # data-parallel), so there is nothing to slice, no replicated gradient to sum at the boundary,
+    # and no gather at the end — dispatch, compute, combine, return. The caller is responsible for
+    # averaging the ep-replicated (non-expert) parameter gradients across the EP group and scaling
+    # expert gradients by 1/ep_size after backward, mirroring data parallelism.
+    trunk_dp = os.environ.get("HF_EP_TRUNK_DP") == "1"
+
     # Each rank's backward through the dispatch subgraph produces d_hidden only at its own slice's
     # positions; sum across the group so every rank gets the complete expert-path gradient (the
     # residual path is replicated and flows outside this op).
@@ -450,15 +459,20 @@ def dispatch_experts_forward(
             _dist.all_reduce(grad, group=ctx.group)
             return grad, None
 
-    hidden_states = _SumGradAcrossEp.apply(hidden_states, ep_group)
-    top_k_weights = _SumGradAcrossEp.apply(top_k_weights, ep_group)
+    if trunk_dp:
+        my_tokens = hidden_states
+        my_index = top_k_index.reshape(-1)  # (s*K,) global expert ids
+        my_weights = top_k_weights.reshape(-1)
+    else:
+        hidden_states = _SumGradAcrossEp.apply(hidden_states, ep_group)
+        top_k_weights = _SumGradAcrossEp.apply(top_k_weights, ep_group)
 
-    # This rank's contiguous token slice (pad so every rank has the same slice length).
-    per_rank = (num_tokens + ep_size - 1) // ep_size
-    start, end = ep_rank * per_rank, min((ep_rank + 1) * per_rank, num_tokens)
-    my_tokens = hidden_states[start:end]
-    my_index = top_k_index[start:end].reshape(-1)  # (s*K,) global expert ids
-    my_weights = top_k_weights[start:end].reshape(-1)
+        # This rank's contiguous token slice (pad so every rank has the same slice length).
+        per_rank = (num_tokens + ep_size - 1) // ep_size
+        start, end = ep_rank * per_rank, min((ep_rank + 1) * per_rank, num_tokens)
+        my_tokens = hidden_states[start:end]
+        my_index = top_k_index[start:end].reshape(-1)  # (s*K,) global expert ids
+        my_weights = top_k_weights[start:end].reshape(-1)
 
     # Group the selected pairs by destination rank.
     owner = my_index // num_local_experts
@@ -500,6 +514,9 @@ def dispatch_experts_forward(
     combined[order] = back
     combined = combined * my_weights.unsqueeze(-1)
     my_out = combined.view(-1, num_top_k, hidden_dim).sum(dim=1)
+
+    if trunk_dp:
+        return my_out.to(hidden_states.dtype)
 
     # The dense trunk (and loss) is replicated across the EP group, so the all-gather backward sums
     # ep_size identical gradient contributions per slice; pre-scale the gradient (forward unchanged).
