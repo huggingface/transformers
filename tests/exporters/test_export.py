@@ -240,12 +240,6 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "decode step re-picks the prefill graph and trips its baked prompt-length guard. TODO: teach "
             "`cache_input`/`forward` the `state` kwarg, or port RWKV onto a `Cache` subclass."
         ),
-        "ProphetNetForConditionalGeneration": (
-            "N-gram decoding ties its stream positions to the cache length, which the decode capture bakes "
-            "(`1 + past_key_values[0].size(2) == 3`, the second-step cache the encoder-decoder capture "
-            "traces at) — so every later step trips the guard. The length cannot stay symbolic while the "
-            "ngram streams index relative to it. Export itself is covered by the non-generate variants."
-        ),
         "PerceptionLMForConditionalGeneration": (
             "Routes videos through a *second* `get_image_features` call (`pixel_values=pixel_values_videos`); "
             "the decomposition and runtime model one modality per getter, so the video kwarg has no route "
@@ -258,15 +252,6 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
     # the prompt and every decode step. Backend-agnostic. The single-token capture, which exports prefill
     # and decode as separate graphs with their own fixed query lengths, still runs.
     "generate.multi_token": {
-        "T5Gemma2ForConditionalGeneration": (
-            "Multi-modal *encoder-decoder*: its image features reach the decoder as encoder output, not "
-            "scattered into text embeddings, so the decomposition yields an `image_encoder` and a decode "
-            "graph but neither an `embed_tokens` nor an `encoder` runner — leaving the runtime nothing to "
-            "route `pixel_values` through (`model_kwargs are not used: ['pixel_values']`). Wiring a "
-            "modality graph's output in as `encoder_outputs` is a runtime capability that doesn't exist "
-            "yet. TODO: add it, then drop this skip."
-        ),
-        "PPFormulaNetForConditionalGeneration": "Same multi-modal encoder-decoder gap as `T5Gemma2ForConditionalGeneration`.",
         "Gemma3ForConditionalGeneration": (
             "Sliding-window cache **and** multi-modal. A multi-modal model exports no `prefill` graph, so its "
             "merged decode graph serves the prompt too — and a decode graph is traced mid-generation, with "
@@ -290,27 +275,20 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         ),
         "ProphetNetForCausalLM": (
             'The eager model itself refuses the merged capture: its forward asserts "`use_cache` is only '
-            'supported for `decoder_input_ids` of length 1", so a 2-token continuation-from-past cannot '
-            "even run, let alone trace."
-        ),
-        "MllamaForConditionalGeneration": (
-            "Its images reach the decoder through cross-attention, and the runtime has no route for "
-            "`pixel_values` / `aspect_ratio_ids` / `aspect_ratio_mask`: the decomposition finds no "
-            "modality getter, so nothing consumes them (`model_kwargs are not used`). The idefics recipe "
-            "fits — declare the `cross_attention_layers` as `cross_attention` in `layer_types`, and the "
-            "cache's cross slots make the captured prefill the writer the runtime keeps (verified: both "
-            "generate variants then pass). It is held back by the static path: that layer type maps to a "
-            "*dynamic* layer (cross K/V are image-length, so no static buffer can be pre-sized), which "
-            "costs mllama its static-cache compile tests. TODO: land it behind a static cross layer, or "
-            "once mllama's static cross slots are sized from the image geometry."
+            'supported for `decoder_input_ids` of length 1" (`modeling_prophetnet.py`), so a 2-token '
+            "continuation-from-past cannot even run, let alone trace. The assert is load-bearing, not "
+            "defensive: in that branch `position_ids` is a single `(1, 1)` tensor and both ngram masks are "
+            "`None`, so two new tokens would share a position embedding and not attend to each other. "
+            "Lifting it is a refactor of the ngram mask machinery, and would also unblock prompt-lookup and "
+            "assisted decoding, which hit this same assert today (measured) — so it is not export-only."
         ),
         "GitForCausalLM": (
-            "Its forward corrects for the image tokens only on a single-token step — `position_ids` "
-            "offset by the past length, and an `attention_mask` widened by the cached image tokens, both "
-            "gated on "
-            "`seq_len == 1`. The merged capture traces at 2 tokens, so the graph bakes those branches "
-            "*off* and every 1-token decode step then runs without them: the second step's scores drift "
-            "~1e-2 from eager. The single-token capture, which keeps the branches, is unaffected."
+            "GIT's *cached* decode is the wrong one, not the export: its forward offsets `position_ids` by "
+            "the cached image tokens on every single-token step, so decode reads drifting positions, and the "
+            "merged 2-token capture — which skips that branch — is the correct computation. Measured: the "
+            "single-token loop disagrees with a cacheless forward by 8e-3 to 1.1e-2 per step, and GIT's own "
+            "slow captioning test fails on this today. Lifted by the modeling fix in the cached-decode "
+            "parity work; drop this entry once that lands."
         ),
         "ReformerModelWithLMHead": (
             "Chunked local attention assumes a chunk-aligned query length; the merged multi-token query "
@@ -345,6 +323,19 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "length under static decode (prefill+1 token, seq=17 vs chunked axis of 16). The same "
             "computation stays symbolic under dynamic so ORT can't pre-validate it. The other "
             "three Reformer-local-attn ONNX variants pass."
+        ),
+    },
+    # ONNX, driving the exported graphs through `generate` only — they export and run standalone.
+    "onnx.generate.runtime": {
+        "ProphetNetForConditionalGeneration": (
+            "Exports and drives fine on dynamo and ExecuTorch; only the ONNX runtime can't feed it. The "
+            "prefill session declares the encoder state as `encoder_last_hidden_state` while the runtime's "
+            "feed carries no encoder entry under that name at all (`Required inputs "
+            "(['encoder_last_hidden_state']) are missing from input feed`), so generation dies on the first "
+            "call. Other encoder-decoders (bart) pass the same variant and dynamo names the same input "
+            "`encoder_outputs_last_hidden_state` and works, so this is prophetnet-specific IO naming on our "
+            "side, not a model limit. TODO: name the encoder input the way the runtime looks it up, then "
+            "drop this skip."
         ),
     },
     # ONNX, dynamic-shape only.
@@ -389,47 +380,46 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
     # `Same ... as` chain for the full description.
     "executorch": {
         "JetMoeModel": (
-            "MoE and mixture-of-attention route tokens with a data-dependent `inputs.split(expert_size)` "
-            "(per-expert token counts), which ExecuTorch's ahead-of-time memory planner can't size "
-            "(`GuardOnDataDependentSymNode`). A static rewrite exists (per-token weight gather) but "
-            "duplicates expert weights per token, so it's only viable for low-batch decode — not as the "
-            "eager default — and the framework's `@use_experts_implementation` is MLP-only, so it can't "
-            "host the mixture-of-attention experts. Exports fine on torch.export/ONNX (dynamic dim at runtime)."
+            "MoE and mixture-of-attention route tokens with a data-dependent `inputs.split(expert_size)`, "
+            "whose sizes come from the gate's `expert_size.tolist()` — unbacked scalars. What rejects them "
+            "is not the memory planner (`_fix_range_constraints` bounds unbacked dims, and the planner "
+            "copes) but EXIR's edge-dialect *arg validator* in `to_edge_transform_and_lower`, which needs a "
+            "concrete int for every `split_with_sizes_copy` size: `InternalError: Could not extract "
+            "specialized integer from data-dependent expression`. Note the failure CI actually reports is "
+            "`IndexError: tuple index out of range` at `modeling_jetmoe.py` — `_patch_unbacked_split` "
+            "intercepts the split first and hands back a 1-tuple that the per-expert loop then indexes. "
+            "The routing can't be precomputed outside the graph (it is recomputed per layer from that "
+            "layer's hidden states), and `@use_experts_implementation` can't host it: every "
+            "`ExpertsInterface` entry is fixed to an MLP signature over `gate_up_proj`/`down_proj`, while "
+            "`JetMoeMoA` straddles `map()`/`reduce()` with attention in between. A verified export-only "
+            "rewrite does exist — the rows are already sorted by expert, so a masked dense pass is the same "
+            "value at static shapes (measured 2.4e-7 against eager) — but it costs `num_experts`x the GEMM "
+            "FLOPs of the split. TODO: land that if JetMoe ever needs to deploy; it would also clear the "
+            "`_can_compile_fullgraph = False` this same `.tolist()` forces. Exports fine on "
+            "torch.export/ONNX (dynamic dim at runtime)."
         ),
         "JetMoeForCausalLM": "Same data-dependent MoE/MoA routing as `JetMoeModel`.",
         "JetMoeForSequenceClassification": "Same data-dependent MoE/MoA routing as `JetMoeModel`.",
-        "FastVlmForConditionalGeneration": (
-            "ExecuTorch lowering of the vision stack crashes the process (native segfault/OOM) — the "
-            "failure is uncatchable in-process, so the pytest worker dies rather than raising."
-        ),
-        "FastVlmModel": "Same native ExecuTorch crash as `FastVlmForConditionalGeneration`.",
-        "LlavaOnevisionForConditionalGeneration": "Same native ExecuTorch vision-stack crash as `FastVlmForConditionalGeneration`.",
-        "LlavaOnevisionModel": "Same native ExecuTorch crash as `LlavaOnevisionForConditionalGeneration`.",
-        "PaddleOCRVLForConditionalGeneration": "Same native ExecuTorch vision-stack crash as `FastVlmForConditionalGeneration`.",
-        "PaddleOCRVLModel": "Same native ExecuTorch crash as `PaddleOCRVLForConditionalGeneration`.",
         "Lfm2VlForConditionalGeneration": (
             "Its NaViT-style packer sizes the vision stack from the number of patches each image really "
-            "has, so those extents are unbacked, and ExecuTorch plans memory ahead of time — every "
-            "tensor needs a size or at least a bound, which an unbacked extent has neither of. The trace "
-            "stops in torch's own `slice` decomposition, on a question no reasoning can settle "
-            "(`_decomp/decompositions.py` in `slice_forward`). The other backends allocate while they "
-            "run, so they carry it: dynamo keeps the symbol and ONNX emits shape-dynamic ops. Lifting "
+            "has, so those extents are unbacked, and the trace stops inside torch's own `slice` "
+            "decomposition on a question no reasoning can settle: `GuardOnDataDependentSymNode: Could not "
+            "guard on data-dependent expression u88 < 0` at `_decomp/decompositions.py:782 in "
+            "slice_forward` — the normalization that asks whether the index is negative. This is a *trace* "
+            "failure, not a memory-planning one: it never reaches `to_edge`, and note that unbacked does "
+            "not mean unplannable here, since `_fix_range_constraints` bounds unbacked dims (which is why "
+            "qwen3_asr's `.nonzero()`-packed length exports fine). Measured independent of "
+            "`_patch_unbacked_split` — dropping that patch reproduces the identical guard. dynamo and ONNX "
+            "carry both models under dynamic shapes (measured), decomposing the slice differently. Lifting "
             "this needs the data dependence gone — the per-image geometry precomputed outside the graph, "
             "the way the grid VLMs feed `cu_seqlens` / `window_index` — not a change of backend."
         ),
         "Lfm2VlModel": "Same unbacked NaViT extents as `Lfm2VlForConditionalGeneration`.",
-        "MiniCPMV4_6ForConditionalGeneration": "Same unbacked NaViT extents as `Lfm2VlForConditionalGeneration`.",
+        "MiniCPMV4_6ForConditionalGeneration": (
+            "Same unbacked NaViT extents as `Lfm2VlForConditionalGeneration`, same `slice_forward` guard "
+            "(measured, at `u84 < 0`)."
+        ),
         "MiniCPMV4_6Model": "Same unbacked NaViT extents as `Lfm2VlForConditionalGeneration`.",
-        "Qwen3ASRForConditionalGeneration": (
-            "Audio encoder packs valid frames with a data-dependent `.nonzero()`; the unbacked "
-            "packed length can't be sized by ExecuTorch's ahead-of-time memory planner "
-            "(`GuardOnDataDependentSymNode`). Exports fine on torch.export/ONNX, which carry the "
-            "dynamic dim at runtime."
-        ),
-        "Qwen3ASRModel": "Same data-dependent audio-encoder `.nonzero()` as `Qwen3ASRForConditionalGeneration`.",
-        "Qwen3ASRForTokenClassification": (
-            "Same data-dependent audio-encoder `.nonzero()` as `Qwen3ASRForConditionalGeneration`."
-        ),
         "FlavaModel": (
             "The interleaved text/image/multimodal encoder streams make XNNPACK's disjoint-set partitioner "
             "emit partitions that form a dependency cycle once fused (`Invalid partition, found dependency "
@@ -459,6 +449,24 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "MMGroundingDinoModel": "Same `timeout` failure as `Mask2FormerModel`.",
         "MMGroundingDinoForObjectDetection": "Same `timeout` failure as `Mask2FormerModel`.",
         "Sam2VisionModel": "Same `timeout` failure as `Mask2FormerModel`.",
+        "Swin2SRModel": (
+            "ExecuTorch plans its arena ahead of time from per-dimension upper bounds, and the windowed "
+            "attention's compound `Mod`/`FloorDiv` extents (window padding plus the cyclic shift) leave "
+            "`ConstraintBasedSymShapeEvalPass` with no bound at all, so each such dim takes the cap floor of "
+            "1024 -- including the ones whose traced value is `window_size ** 2` = 4. The plan comes out at "
+            "466 GiB, dominated by the delegated `window_partition`/`window_reverse` and cosine-attention "
+            "buffers (the latter planned `(13312, 4, 1024, 1024)` against a real `(13312, 4, 4, 4)`), and "
+            "`load_program` dies allocating it -- that request being just *under* the runner's RAM, the OS "
+            "admits it and the worker is OOM-killed rather than raising. Only the ahead-of-time plan is too "
+            "big: `executorch.static` runs end to end, and torch.export and ONNX both pass under dynamic "
+            "shapes because they allocate from the real shapes at run time. Tightening our own caps only "
+            "makes the failure clean (arena 1.7 GiB, load then fails 0x21 on a single tensor). TODO: lift by "
+            "bounding a reshape's factor dims jointly in the planner, or by passing `dynamic_shapes` that "
+            "keep height/width static."
+        ),
+        "Swin2SRForImageSuperResolution": (
+            "Same 466 GiB windowed-attention arena as `Swin2SRModel` -- its upsampler head adds nothing to the plan."
+        ),
     },
     "executorch.static": {
         "Wav2Vec2BertModel": (
@@ -666,10 +674,15 @@ def _run_executorch_program(program_manager, inputs):
     from executorch.runtime import Runtime, Verification
 
     set_seed(1234)
-    leaves = torch.utils._pytree.tree_leaves(inputs)
-    # The runtime rejects non-contiguous inputs, so materialise tensor leaves. `int` covers `bool`.
-    tensors = [t.contiguous() for t in leaves if isinstance(t, torch.Tensor)]
-    scalars = (t for t in leaves if isinstance(t, (int, float)))
+    # Flatten the eager kwargs to the names the graph gives their leaves — a pytree joins by underscore
+    # (`encoder_outputs_last_hidden_state`), exactly as `ExecutorchModelRunner` feeds them. Scalars stay
+    # whole: a slot the trace kept as a plain `bool`/`int` takes the value, not a tensor.
+    feed = dict(inputs)
+    for name in [n for n, v in feed.items() if not isinstance(v, (torch.Tensor, int, float, type(None)))]:
+        value = feed.pop(name)
+        # `str(leaf)`: a leaf path is usually a dotted string, but an int-keyed container (granite4_vision
+        # feeds one) hands back the key itself.
+        feed.update({f"{name}_{str(leaf).replace('.', '_')}": t for leaf, t in get_leaf_tensors(value).items()})
 
     # Load — surfaces ExecuTorch resource limits (missing portable kernel / oversized arena).
     try:
@@ -680,34 +693,18 @@ def _run_executorch_program(program_manager, inputs):
             return None
         raise
 
-    # Each slot declares a shape *and* a dtype; match it to an eager tensor leaf carrying both, so the
-    # right tensor lands in the right slot (count alone isn't enough — a wrong-shape tensor crashes
-    # conv/copy kernels at execute, and a wrong dtype is refused outright when the method binds its
-    # inputs). Matching on shape alone picked an int64 grid for a float slot of the same shape on the
-    # grid VLMs. Under dynamic shapes the declared shape is an upper bound and won't match a leaf, so
-    # fall back to the next unused leaf of the declared dtype, then to the next unused leaf at all (leaf
-    # order tracks the program's input order). If a slot can't be filled — a derived symint, or no leaf
-    # left — reconstruction isn't possible; return None and rely on the load check rather than run with
-    # bogus inputs.
-    from torch.onnx import JitScalarType
-
-    args = []
-    for i in range(method.metadata.num_inputs()):
-        try:
-            meta = method.metadata.input_tensor_meta(i)
-            shape, dtype = tuple(meta.sizes()), JitScalarType(int(meta.dtype())).dtype()
-        except Exception:  # non-tensor slot
-            args.append(next(scalars, None))
-        else:
-            match = next(
-                (t for t in tensors if tuple(t.shape) == shape and t.dtype == dtype),
-                next((t for t in tensors if t.dtype == dtype), tensors[0] if tensors else None),
-            )
-            if match is not None:
-                tensors.remove(match)
-            args.append(match)
-        if args[-1] is None:
-            return None
+    # Bind by the names the `.pte` carries (`_signature_constant_methods`) rather than reconstructing
+    # positionally from the declared shapes: the program states what every slot is, so the right value
+    # lands in the right slot by construction. Matching leaves by shape and dtype could not do that —
+    # under dynamic shapes a declared shape is an upper bound that matches no leaf, and a non-tensor slot
+    # got whatever scalar came next, which the method refuses outright (`Input 3 was expected to have type
+    # None but was Bool`) and left the component silently unverified. A name the eager kwargs don't carry
+    # still means reconstruction isn't possible: return None and rely on the load check rather than run
+    # with bogus inputs.
+    input_names = tuple(program.load_method("input_names").execute(()))
+    if len(input_names) != method.metadata.num_inputs() or not set(input_names) <= set(feed):
+        return None
+    args = [feed[name].contiguous() if isinstance(feed[name], torch.Tensor) else feed[name] for name in input_names]
 
     try:
         outputs = method.execute(args)
@@ -955,34 +952,6 @@ class ExportTesterMixin:
         from transformers.exporters.utils import _MODALITY_SPECS
 
         model = components["decode"][0]
-        config = model.config
-        if (
-            multi_token_decode
-            and not _needs_static_cache(generation_config)
-            and getattr(config, "sliding_window", None) is not None
-        ):
-            # A growing sliding cache merged multi-token bakes the sliding layers' python `is_full` branch
-            # and a trace-time lower bound on the mask's kv axis (`attention_mask.size(1) >= prompt+2`),
-            # which the runtime's query=1 steps violate. Single-token decode over a growing sliding cache
-            # works (within the window), and static sliding caches work in every mode.
-            return
-
-        if (
-            backend == "executorch"
-            and dynamic
-            and not multi_token_decode
-            and not _needs_static_cache(generation_config)
-            and getattr(config, "sliding_window", None) is not None
-        ):
-            # A sliding model's *growing* cache, driven one token at a time, outgrows what the XNNPACK
-            # lowering will resize: the decode `.pte` refuses the feed at `set_inputs` with 0x10 ("can't
-            # resize a static tensor"). Measured scope — the same three models pass every other variant,
-            # so this is not the blanket "ET cache dynamism is bounded at the traced shapes" it was once
-            # gated as: a static cache is fine (fixed shapes), and so is the merged multi-token decode,
-            # whose query axis is dynamic by construction. Deployment guidance for ET remains a static
-            # cache. TODO: real upper-bound dynamism in the ET lowering, then ungate.
-            return
-
         if not dynamic and "embed_tokens" in components:
             # A multi-modal model embeds its text in a graph of its own, captured on the *prompt* — under
             # static shapes that graph is specialized to the prompt's length and cannot serve the 1-token
@@ -1335,7 +1304,13 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             can_split_prefill = "prefill" in exported and (dynamic or _needs_static_cache(generation_config))
             if (can_split_prefill or (dynamic and multi_token_decode)) and components.keys() <= exported.keys():
                 if not self._should_skip(
-                    model_class, generate=True, runtime=True, generation_config=generation_config
+                    model_class,
+                    generate=True,
+                    dynamic=dynamic,
+                    backend="dynamo",
+                    multi_token=multi_token_decode,
+                    generation_config=generation_config,
+                    runtime=True,
                 ):
                     self._assert_generate_matches_eager(
                         components, exported, "dynamo", generation_config, dynamic, multi_token_decode
@@ -1389,7 +1364,13 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             can_split_prefill = "prefill" in exported and (dynamic or _needs_static_cache(generation_config))
             if (can_split_prefill or (dynamic and multi_token_decode)) and components.keys() <= exported.keys():
                 if not self._should_skip(
-                    model_class, generate=True, runtime=True, generation_config=generation_config
+                    model_class,
+                    generate=True,
+                    dynamic=dynamic,
+                    backend="onnx",
+                    multi_token=multi_token_decode,
+                    generation_config=generation_config,
+                    runtime=True,
                 ):
                     self._assert_generate_matches_eager(
                         components, exported, "onnx", generation_config, dynamic, multi_token_decode
@@ -1448,7 +1429,13 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             can_split_prefill = "prefill" in exported and (dynamic or _needs_static_cache(generation_config))
             if (can_split_prefill or (dynamic and multi_token_decode)) and components.keys() <= exported.keys():
                 if not self._should_skip(
-                    model_class, generate=True, runtime=True, generation_config=generation_config
+                    model_class,
+                    generate=True,
+                    dynamic=dynamic,
+                    backend="executorch",
+                    multi_token=multi_token_decode,
+                    generation_config=generation_config,
+                    runtime=True,
                 ):
                     self._assert_generate_matches_eager(
                         components, exported, "executorch", generation_config, dynamic, multi_token_decode

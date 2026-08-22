@@ -44,7 +44,7 @@ from dataclasses import dataclass
 import torch
 from torch.utils._pytree import tree_flatten, tree_leaves, tree_unflatten
 
-from ..cache_utils import DynamicCache, EncoderDecoderCache, StaticCache
+from ..cache_utils import DynamicCache, EncoderDecoderCache, StaticCache, StaticLayer
 from ..generation import GenerationConfig, GenerationMixin
 from ..modeling_outputs import BaseModelOutput, CausalLMOutputWithPast
 
@@ -1153,10 +1153,15 @@ class ExportedGenerator(GenerationMixin):
                 if is_per_token and value.dim() in (2, 3) and value.shape[1] > text.shape[1]:
                     value = value[:, -text.shape[1] :]
                 feed[name] = value
+        # How wide the graph's key axis is: a fixed-size cache is allocated in full, so the mask has to be
+        # padded out to it, while a growing one is only as long as what it already holds plus this step's
+        # query. Growing vs fixed-size is the layer's *kind*, not what `get_max_length` reports — a
+        # `DynamicSlidingWindowLayer` grows and crops, yet reports its whole window (4096 on a gemma2 text
+        # config), padding the mask to a width the graph never declared (`set_inputs` then refuses it).
         cache_len = (
             past_key_values.get_max_length()
-            if past_key_values is not None and hasattr(past_key_values, "get_max_length")
-            else text.shape[1]
+            if any(isinstance(layer, StaticLayer) for layer in _self_attention_layers(past_key_values))
+            else _cache_length(past_key_values) + text.shape[1]
         )
         feed.update(self._mask_feed(runner, attention_mask, position_ids, cache_len))
         # A graph that names the decoder's mask separately gets the causal one here — `attention_mask` is

@@ -357,11 +357,20 @@ def _patch_unbacked_split(original):
     (the model's own `torch.cat(image_features, dim=0)`, and `ModalityEncoder.forward`), so handing back
     the tensor whole is the same value with nothing for the verifier to choke on. A consumer that really
     wanted the pieces indexes past the end of a 1-tuple, which fails loudly rather than quietly.
+
+    The test is for an *unbacked* size, not merely "not a Python int": `aten.split.Tensor`'s own
+    decomposition rewrites a constant chunk size into a size list whose last element is a backed-symbolic
+    expression of the split dim, then re-enters this same public `torch.split`. Short-circuiting there
+    hands the base tensor back from inside a view op's decomposition, which autograd rejects with "View
+    operation returned a tensor that is the same as the input base tensor" — that would fail every
+    `.split(int)` / `.chunk()` taken over a dynamic dim (qwen3_omni_moe chunks its audio conv that way).
     """
+    from torch.fx.experimental.symbolic_shapes import free_unbacked_symbols
 
     def patch(input, split_size_or_sections, dim=0):
-        if isinstance(split_size_or_sections, (list, tuple)) and not all(
-            isinstance(size, int) for size in split_size_or_sections
+        if isinstance(split_size_or_sections, (list, tuple)) and any(
+            isinstance(size, torch.SymInt) and bool(free_unbacked_symbols(size.node.expr))
+            for size in split_size_or_sections
         ):
             return (input,)
         return original(input, split_size_or_sections, dim)
