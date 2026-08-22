@@ -146,6 +146,10 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 tok_from_file = TokenizerFast.from_file(fast_tokenizer_file)
 
             local_kwargs["post_processor"] = tok_from_file.post_processor
+            if tok_from_file.pre_tokenizer is not None:
+                local_kwargs["pre_tokenizer"] = tok_from_file.pre_tokenizer
+            if tok_from_file.decoder is not None:
+                local_kwargs["decoder"] = tok_from_file.decoder
             local_kwargs["tokenizer_padding"] = tok_from_file.padding
             local_kwargs["tokenizer_truncation"] = tok_from_file.truncation
             # Preserve truncation and padding baked into tokenizer.json so that classes
