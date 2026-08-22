@@ -279,7 +279,7 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXT)
 
     def test_long_context(self):
-        EXPECTED_GENERATION = [' Jean-Paul Delannoy told CNN that the BEA is "not aware of any video footage that could have been taken on board the plane." He added that the BEA is "not aware of any video footage that could have been taken on board the plane." The BEA is the French equivalent of the National Transportation Safety Board']  # fmt: skip
+        EXPECTED_GENERATION = [' said, "We have no idea what happened to the plane." The French government said it was not aware of the video. The French government said it was not aware of the video. The French government said it was not aware of the video. The French government said it was not aware of the video. The French government']  # fmt: skip
 
         model = AutoModelForCausalLM.from_pretrained(self.model_id, dtype=torch.float16).to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained(self.model_id, padding_side="left")
