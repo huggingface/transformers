@@ -86,7 +86,9 @@ class Siglip2Tokenizer(GemmaTokenizer):
 @auto_docstring(checkpoint="google/siglip2-base-patch16-naflex")
 @strict
 class Siglip2TextConfig(SiglipTextConfig):
-    pass
+    bos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 1
+    pad_token_id: int | None = 0
 
 
 @auto_docstring(checkpoint="google/siglip2-base-patch16-naflex")

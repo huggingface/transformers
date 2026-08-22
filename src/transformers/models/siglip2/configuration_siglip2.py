@@ -59,11 +59,9 @@ class Siglip2TextConfig(PreTrainedConfig):
     hidden_act: str = "gelu_pytorch_tanh"
     layer_norm_eps: float = 1e-6
     attention_dropout: float | int = 0.0
-    # This differs from `CLIPTokenizer`'s default and from openai/siglip2
-    # See https://github.com/huggingface/transformers/pull/24773#issuecomment-1632287538
-    pad_token_id: int | None = 1
-    bos_token_id: int | None = 49406
-    eos_token_id: int | list[int] | None = 49407
+    pad_token_id: int | None = 0
+    bos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 1
     projection_size: int | None = None
 
     def __post_init__(self, **kwargs):

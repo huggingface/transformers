@@ -93,8 +93,9 @@ class Aimv2TextConfig(SiglipTextConfig):
     qkv_bias: bool = False
     mlp_bias: bool = False
     initializer_range: float = 0.02
-    bos_token_id = AttributeError()
-    pad_token_id = AttributeError()
+    bos_token_id: int | None = 49406
+    eos_token_id: int | list[int] | None = 49407
+    pad_token_id: int | None = 49407
     layer_norm_eps = AttributeError()
     projection_size = AttributeError()
 
