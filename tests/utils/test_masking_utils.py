@@ -14,6 +14,8 @@
 
 import unittest
 
+from parameterized import parameterized
+
 from transformers.testing_utils import (
     cleanup,
     is_torch_available,
@@ -26,7 +28,7 @@ if is_torch_available():
     import torch
     from torch.nn.attention.flex_attention import create_block_mask
 
-    from transformers import DynamicCache, LlamaConfig, Qwen3NextConfig
+    from transformers import DynamicCache, LlamaConfig, Qwen3NextConfig, StaticCache
     from transformers.cache_utils import DynamicSlidingWindowLayer
     from transformers.masking_utils import (
         create_bidirectional_mask,
@@ -34,6 +36,7 @@ if is_torch_available():
         create_chunked_causal_mask,
         create_masks_for_generate,
         create_recurrent_attention_mask,
+        create_sliding_window_causal_mask,
         find_packed_sequence_indices,
     )
 
@@ -181,6 +184,106 @@ class MaskTest(unittest.TestCase):
         )
         # cannot be skipped under compile, should result into a triu mask
         self.assertTrue(torch.equal(~torch.ones(*causal_mask.shape).triu(diagonal=1).bool(), causal_mask))
+
+    @parameterized.expand([("causal", True), ("bidirectional", False)])
+    def test_causal_mask_uses_populated_full_attention_layer(self, _name, is_causal):
+        config = LlamaConfig(
+            hidden_size=64,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=4,
+            layer_types=["full_attention", "full_attention"],
+            is_causal=is_causal,
+        )
+        config._attn_implementation = "eager"
+        cache = DynamicCache(config=config)
+        states = torch.randn(1, config.num_key_value_heads, 4, config.hidden_size // config.num_attention_heads)
+        cache.update(states, states, layer_idx=1)
+
+        mask = create_causal_mask(
+            config,
+            inputs_embeds=torch.randn(1, 1, config.hidden_size),
+            attention_mask=torch.ones(1, 5),
+            past_key_values=cache,
+            allow_is_causal_skip=False,
+        )
+
+        self.assertEqual(mask.shape[-1], 5)
+
+    def test_causal_mask_uses_static_cache_structural_representative_layer(self):
+        config = LlamaConfig(
+            hidden_size=64,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=4,
+            layer_types=["full_attention", "full_attention"],
+        )
+        config._attn_implementation = "eager"
+        cache = StaticCache(config=config, max_cache_len=8)
+        states = torch.randn(1, config.num_key_value_heads, 3, config.hidden_size // config.num_attention_heads)
+        cache.update(states, states, layer_idx=1)
+        mask_kwargs = {
+            "config": config,
+            "inputs_embeds": torch.randn(1, 1, config.hidden_size),
+            "attention_mask": None,
+            "past_key_values": cache,
+            "allow_is_causal_skip": False,
+        }
+
+        default_mask = create_causal_mask(**mask_kwargs)
+        first_layer_mask = create_causal_mask(**mask_kwargs, layer_idx=0)
+        populated_layer_mask = create_causal_mask(**mask_kwargs, layer_idx=1)
+
+        torch.testing.assert_close(default_mask, first_layer_mask)
+        self.assertFalse(torch.equal(default_mask, populated_layer_mask))
+
+    @parameterized.expand([("causal", True), ("bidirectional", False)])
+    def test_sliding_window_mask_uses_populated_layer(self, _name, is_causal):
+        config = LlamaConfig(
+            hidden_size=64,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=4,
+            sliding_window=3,
+            layer_types=["sliding_attention", "sliding_attention"],
+            is_causal=is_causal,
+        )
+        config._attn_implementation = "eager"
+        cache = DynamicCache(config=config)
+        states = torch.randn(1, config.num_key_value_heads, 4, config.hidden_size // config.num_attention_heads)
+        cache.update(states, states, layer_idx=1)
+
+        mask = create_sliding_window_causal_mask(
+            config,
+            inputs_embeds=torch.randn(1, 1, config.hidden_size),
+            attention_mask=torch.ones(1, 5),
+            past_key_values=cache,
+        )
+
+        self.assertEqual(mask.shape[-1], config.sliding_window)
+
+    def test_chunked_mask_uses_populated_layer(self):
+        config = LlamaConfig(
+            hidden_size=64,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=4,
+            attention_chunk_size=3,
+            layer_types=["chunked_attention", "chunked_attention"],
+        )
+        config._attn_implementation = "eager"
+        cache = DynamicCache(config=config)
+        states = torch.randn(1, config.num_key_value_heads, 4, config.hidden_size // config.num_attention_heads)
+        cache.update(states, states, layer_idx=1)
+
+        mask = create_chunked_causal_mask(
+            config,
+            inputs_embeds=torch.randn(1, 1, config.hidden_size),
+            attention_mask=torch.ones(1, 5),
+            past_key_values=cache,
+        )
+
+        self.assertEqual(mask.shape[-1], config.attention_chunk_size)
 
     def test_chunked_mask_with_left_padding_and_large_prefill(self):
         # Make sure we have an attention_chunk_size in the config
