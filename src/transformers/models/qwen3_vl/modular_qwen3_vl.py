@@ -27,28 +27,30 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
-from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
+from ...image_processing_utils import BatchFeature
+from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling, SizeDict
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_rope_utils import RopeParameters, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ProcessingKwargs, Unpack, VideosKwargs
-from ...utils import auto_docstring, can_return_tuple, logging
+from ...utils import TensorType, auto_docstring, can_return_tuple, is_torchvision_available, logging
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
     maybe_autocast,
     merge_with_config_defaults,
 )
 from ...utils.output_capturing import capture_outputs
-from ...video_utils import VideoMetadata
+from ...video_processing_utils import BaseVideoProcessor
+from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 from ...vision_utils import (
     get_vision_attention_seqlens,
     get_vision_interpolation_indices_and_weights,
     get_vision_position_ids,
 )
 from ..auto.modeling_auto import AutoModel
-from ..glm4v.video_processing_glm4v import Glm4vVideoProcessor
+from ..glm4v.video_processing_glm4v import Glm4vVideoProcessor, smart_resize
 from ..llama.modeling_llama import LlamaRotaryEmbedding
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VLCausalLMOutputWithPast,
@@ -72,6 +74,10 @@ from ..qwen3.modeling_qwen3 import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
+
+
+if is_torchvision_available():
+    from torchvision.transforms.v2 import functional as tvF
 
 
 logger = logging.get_logger(__name__)
@@ -1107,6 +1113,14 @@ class Qwen3VLVideoProcessorInitKwargs(VideosKwargs, total=False):
         The temporal patch size of the vision encoder.
     merge_size (`int`, *optional*, defaults to 2):
         The merge size of the vision encoder to llm encoder.
+    cap_pixels_per_frame (`bool`, *optional*):
+        Whether to cap each frame's pixel cost the way the reference implementation (qwen-vl-utils) does:
+        per-frame pixels are limited to `min(768 * factor**2, size["longest_edge"] / num_frames)` and floored
+        at `1.05 * size["shortest_edge"]`, so token cost scales with clip duration. Without the cap, videos
+        that sample few frames spend the whole `size["longest_edge"]` budget on those frames and keep
+        near-native per-frame resolution, so a short clip can cost almost as many tokens as a long video.
+        If unset, the current uncapped behavior is kept and a warning is emitted: the default will change to
+        `True` in v5.22, after which the argument will be removed.
     """
 
     patch_size: int
@@ -1114,6 +1128,7 @@ class Qwen3VLVideoProcessorInitKwargs(VideosKwargs, total=False):
     merge_size: int
     min_frames: int
     max_frames: int
+    cap_pixels_per_frame: bool
 
 
 class Qwen3VLVideoProcessor(Glm4vVideoProcessor):
@@ -1125,6 +1140,126 @@ class Qwen3VLVideoProcessor(Glm4vVideoProcessor):
     max_frames = 768
     max_duration = None
     num_frames = None
+    cap_pixels_per_frame = None
+
+    def resize(
+        self,
+        videos: "torch.Tensor",
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        factor: int,
+        temporal_factor: int,
+        cap_pixels_per_frame: bool | None = None,
+        **kwargs,
+    ) -> "torch.Tensor":
+        """Resize dynamically based on input video aspect ratio."""
+        if not size.shortest_edge or not size.longest_edge:
+            raise ValueError(f"`size` dict must contain 'shortest_edge' and 'longest_edge' keys but got {size}.")
+
+        num_frames = videos.shape[1]
+        max_pixels = size.longest_edge
+        if cap_pixels_per_frame:
+            # Mirrors qwen-vl-utils vision_process.py: per-frame pixels are capped at 768 patches
+            # (VIDEO_FRAME_MAX_PIXELS) or the budget's even share per frame, whichever is smaller,
+            # and floored just above min_pixels so tiny clips keep a usable resolution.
+            frame_cap = 768 * factor * factor
+            pixels_per_frame = max(min(frame_cap, size.longest_edge // num_frames), int(size.shortest_edge * 1.05))
+            max_pixels = pixels_per_frame * num_frames
+
+        height, width = videos.shape[-2:]
+        resized_height, resized_width = smart_resize(
+            height=height,
+            width=width,
+            num_frames=num_frames,
+            factor=factor,
+            temporal_factor=temporal_factor,
+            min_pixels=size.shortest_edge,
+            max_pixels=max_pixels,
+        )
+        return BaseVideoProcessor.resize(
+            self,
+            image=videos,
+            size=SizeDict(height=resized_height, width=resized_width),
+            resample=resample,
+        )
+
+    def _preprocess(
+        self,
+        videos: list["torch.Tensor"],
+        do_convert_rgb: bool = True,
+        do_resize: bool = True,
+        size: SizeDict | None = None,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None" = PILImageResampling.BICUBIC,
+        do_rescale: bool = True,
+        rescale_factor: float = 1 / 255.0,
+        do_normalize: bool = True,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        patch_size: int | None = None,
+        temporal_patch_size: int | None = None,
+        merge_size: int | None = None,
+        cap_pixels_per_frame: bool | None = None,
+        return_tensors: str | TensorType | None = None,
+        **kwargs,
+    ):
+        if cap_pixels_per_frame is None:
+            logger.warning_once(
+                "Qwen3-VL video processing currently lets a video's sampled frames use the entire pixel "
+                "budget (`size['longest_edge']`), so a short clip can cost almost as many tokens as a long "
+                "video. The reference implementation (qwen-vl-utils) caps per-frame cost instead. In v5.22 "
+                "the capped behavior will become the default and `cap_pixels_per_frame` will be removed. "
+                "Pass `cap_pixels_per_frame=True` to adopt the reference behavior now, or `False` to keep "
+                "the current behavior and silence this warning."
+            )
+            cap_pixels_per_frame = False
+        grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
+        resized_videos_grouped = {}
+
+        for shape, stacked_videos in grouped_videos.items():
+            if do_convert_rgb:
+                stacked_videos = self.convert_to_rgb(stacked_videos)
+            if do_resize:
+                stacked_videos = self.resize(
+                    videos=stacked_videos,
+                    size=size,
+                    resample=resample,
+                    factor=patch_size * merge_size,
+                    temporal_factor=temporal_patch_size,
+                    cap_pixels_per_frame=cap_pixels_per_frame,
+                )
+            resized_videos_grouped[shape] = stacked_videos
+        resized_videos = reorder_videos(resized_videos_grouped, grouped_videos_index)
+
+        # Group videos by size for further processing
+        # Needed in case do_resize is False, or resize returns videos with different sizes
+        grouped_videos, grouped_videos_index = group_videos_by_shape(resized_videos)
+        processed_videos_grouped = {}
+        processed_grids = {}
+        for shape, stacked_videos in grouped_videos.items():
+            # Fused rescale and normalize
+            stacked_videos = self.rescale_and_normalize(
+                stacked_videos, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            patches, grid_t, grid_h, grid_w = self.patchify(
+                stacked_videos,
+                patch_size=patch_size,
+                merge_size=merge_size,
+                temporal_patch_size=temporal_patch_size,
+            )
+
+            processed_videos_grouped[shape] = patches
+            processed_grids[shape] = [[grid_t, grid_h, grid_w]] * len(stacked_videos)
+
+        processed_videos = reorder_videos(processed_videos_grouped, grouped_videos_index)
+        processed_grids = reorder_videos(processed_grids, grouped_videos_index)
+        pixel_values_videos = torch.cat(processed_videos, dim=0)
+        video_grid_thw = torch.tensor(processed_grids)
+        data = {
+            "pixel_values_videos": pixel_values_videos,
+            "video_grid_thw": video_grid_thw,
+        }
+
+        return BatchFeature(data=data, tensor_type=return_tensors)
 
     def sample_frames(
         self,
