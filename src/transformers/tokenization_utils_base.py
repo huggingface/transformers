@@ -272,10 +272,14 @@ class BatchEncoding(UserDict, Generic[_V]):
         """
         if isinstance(item, str):
             return self.data[item]
-        elif self._encodings is not None:
-            return self._encodings[item]
         elif isinstance(item, slice):
             return {key: self.data[key][item] for key in self.data}
+        elif isinstance(item, int):
+            if self._encodings is not None:
+                return self._encodings[item]
+            raise KeyError(
+                "Integer indexing is only supported for tokenizers with a Rust/Fast backend returning Encoding."
+            )
         else:
             raise KeyError(
                 "Invalid key. Only three types of key are available: "

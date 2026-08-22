@@ -394,3 +394,12 @@ class TokenizerUtilsTest(unittest.TestCase):
                     raise ValueError("real error")
                 except import_protobuf_decode_error():
                     pass
+
+    def test_batch_encoding_slice_indexing(self):
+        batch = BatchEncoding(
+            data={"input_ids": [[1, 2], [3, 4], [5, 6]], "attention_mask": [[1, 1], [1, 1], [1, 1]]}
+        )
+        sliced = batch[0:2]
+        self.assertEqual(sliced["input_ids"], [[1, 2], [3, 4]])
+        self.assertEqual(sliced["attention_mask"], [[1, 1], [1, 1]])
+
