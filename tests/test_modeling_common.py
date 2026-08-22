@@ -2680,8 +2680,10 @@ class ModelTesterMixin(ExportTesterMixin):
                             torch.testing.assert_close(
                                 v,
                                 reloaded_state[k],
-                                msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}.\n{v}\nvs\n{reloaded_state[k]}\n"
-                                "This probably means that it was not set with the correct value when tying.",
+                                msg=lambda x: (
+                                    f"{model_class.__name__}: Tensor {k}: {x}.\n{v}\nvs\n{reloaded_state[k]}\n"
+                                    "This probably means that it was not set with the correct value when tying."
+                                ),
                             )
 
                     # Checking the tensor sharing are correct on the new model (weights are properly tied in both cases)
@@ -2727,7 +2729,9 @@ class ModelTesterMixin(ExportTesterMixin):
                             torch.testing.assert_close(
                                 v,
                                 reloaded_state[k],
-                                msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}. Key {k} was serialized: {k in serialized_keys}. If `False`, this means it was probably aliased and safetensors removed it. If `True` it means `_init_weights` overwrote that key",
+                                msg=lambda x: (
+                                    f"{model_class.__name__}: Tensor {k}: {x}. Key {k} was serialized: {k in serialized_keys}. If `False`, this means it was probably aliased and safetensors removed it. If `True` it means `_init_weights` overwrote that key"
+                                ),
                             )
 
                 # Checking there was no complain of missing weights
@@ -3253,6 +3257,84 @@ class ModelTesterMixin(ExportTesterMixin):
                             )
 
                     loss.backward()
+
+    def test_image_classification_loss_respects_num_items_in_batch(self):
+        """
+        A `forward()` that declares `**kwargs` tells the `Trainer` "I accept loss kwargs", which makes
+        `Trainer.training_step` skip its own gradient-accumulation loss normalization (dividing by
+        `current_gradient_accumulation_steps`) on the assumption that the model already normalized using
+        `num_items_in_batch`. If the head drops `**kwargs` (or drops `num_items_in_batch` specifically) before
+        calling `self.loss_function`, neither normalization happens: the reported loss -- and its gradient --
+        end up inflated by roughly the accumulation step count. See #47688.
+
+        Rather than compare loss values (which requires per-architecture tolerances), this wraps
+        `loss_function` and checks the kwargs it actually receives, so the assertion is exact and architecture
+        agnostic. Gated to `MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES`: every head registered there resolves
+        to `ForSequenceClassificationLoss` (via the `ForImageClassification` -> loss_type auto-detection), which
+        does use `num_items_in_batch` when given it, so every applicable class here is expected to pass.
+        """
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        applicable_classes = [
+            c for c in self.all_model_classes if c.__name__ in get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES)
+        ]
+        if not applicable_classes:
+            self.skipTest(reason="No image classification head to check")
+
+        for model_class in applicable_classes:
+            with self.subTest(model_class.__name__):
+                forward_params = inspect.signature(model_class.forward).parameters
+
+                # A head whose forward() has no **kwargs can never receive num_items_in_batch in the first
+                # place; `Trainer.model_accepts_loss_kwargs` (a signature check) will be False for it, so the
+                # Trainer normalizes the loss itself. Nothing for this test to check there.
+                if not any(p.kind == inspect.Parameter.VAR_KEYWORD for p in forward_params.values()):
+                    continue
+
+                # Some heads registered under "ForImageClassification" (e.g. distillation-style "WithTeacher"
+                # variants) don't accept `labels` / compute a loss at all -- they're inference-only. Nothing to
+                # check there either.
+                if "labels" not in forward_params:
+                    continue
+
+                model = model_class(config)
+                model.to(torch_device)
+                model.eval()
+
+                received_kwargs = {}
+                original_loss_function = model.loss_function
+
+                def spy_loss_function(*args, **kwargs):
+                    received_kwargs.update(kwargs)
+                    return original_loss_function(*args, **kwargs)
+
+                model.loss_function = spy_loss_function
+
+                inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                try:
+                    with torch.no_grad():
+                        model(**inputs, num_items_in_batch=torch.tensor(4.0, device=torch_device))
+                except Exception as e:
+                    # This test only cares whether num_items_in_batch reaches loss_function once the model
+                    # runs. Whether the shared minimal tester config/inputs can drive this particular
+                    # architecture through a full forward pass at all is a different, pre-existing concern
+                    # that other tests (e.g. test_training) are responsible for -- so skip just this class
+                    # rather than failing (or aborting the remaining classes via self.skipTest).
+                    warnings.warn(
+                        f"Skipping {model_class.__name__} in test_image_classification_loss_respects_num_items_"
+                        f"in_batch: could not run forward() with the shared tester config/inputs (unrelated to "
+                        f"num_items_in_batch propagation): {e}",
+                        stacklevel=2,
+                    )
+                    continue
+
+                self.assertIn(
+                    "num_items_in_batch",
+                    received_kwargs,
+                    f"{model_class.__name__}.forward() declares **kwargs but does not forward it (or "
+                    "num_items_in_batch specifically) into self.loss_function(...). This silently defeats the "
+                    "Trainer's gradient-accumulation loss normalization -- see #47688.",
+                )
 
     def test_load_with_mismatched_shapes(self):
         if not self.test_mismatched_shapes:

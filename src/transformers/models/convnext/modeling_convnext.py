@@ -325,7 +325,7 @@ class ConvNextForImageClassification(ConvNextPreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(labels=labels, pooled_logits=logits, config=self.config)
+            loss = self.loss_function(labels=labels, pooled_logits=logits, config=self.config, **kwargs)
 
         return ImageClassifierOutputWithNoAttention(
             loss=loss,

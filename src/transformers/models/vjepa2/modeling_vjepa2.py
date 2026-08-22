@@ -1042,7 +1042,7 @@ class VJEPA2ForVideoClassification(VJEPA2PreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(pooled_logits=logits, labels=labels, config=self.config)
+            loss = self.loss_function(pooled_logits=logits, labels=labels, config=self.config, **kwargs)
 
         return ImageClassifierOutput(
             loss=loss,
