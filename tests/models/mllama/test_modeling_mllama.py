@@ -291,6 +291,42 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    def test_vision_and_cross_attention_are_not_causal(self):
+        # sdpa_attention defaults getattr(module, "is_causal", True). Vision and cross-attn
+        # must opt out so they are not treated as decoder self-attention (#48172).
+        from transformers.models.mllama.configuration_mllama import MllamaVisionConfig
+        from transformers.models.mllama.modeling_mllama import (
+            MllamaTextCrossAttention,
+            MllamaTextSelfAttention,
+            MllamaVisionAttention,
+        )
+
+        vision_config = MllamaVisionConfig(
+            hidden_size=16,
+            attention_heads=4,
+            num_hidden_layers=1,
+            num_global_layers=1,
+            intermediate_size=32,
+            vision_output_dim=32,
+            image_size=16,
+            patch_size=2,
+            intermediate_layers_indices=[0],
+        )
+        text_config = MllamaTextConfig(
+            hidden_size=32,
+            num_attention_heads=4,
+            num_key_value_heads=4,
+            num_hidden_layers=2,
+            intermediate_size=37,
+            cross_attention_layers=[1],
+        )
+        vision_attn = MllamaVisionAttention(vision_config)
+        cross_attn = MllamaTextCrossAttention(text_config, layer_idx=1)
+        self_attn = MllamaTextSelfAttention(text_config, layer_idx=0)
+        self.assertIs(vision_attn.is_causal, False)
+        self.assertIs(cross_attn.is_causal, False)
+        self.assertIs(self_attn.is_causal, True)
+
     def test_resize_embeddings_results_in_successful_loss(self):
         # resizing embeddings should result in successful loss computation
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
