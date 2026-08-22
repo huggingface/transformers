@@ -339,9 +339,7 @@ class Qwen3VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
 
     def _expected_capped_seq_len(self, num_frames, frame_size, size):
         frame_cap = 768 * 32 * 32
-        pixels_per_frame = max(
-            min(frame_cap, size["longest_edge"] // num_frames), int(size["shortest_edge"] * 1.05)
-        )
+        pixels_per_frame = max(min(frame_cap, size["longest_edge"] // num_frames), int(size["shortest_edge"] * 1.05))
         expected_height, expected_width = smart_resize(
             num_frames,
             frame_size,
@@ -358,9 +356,7 @@ class Qwen3VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
         size = {"longest_edge": 768 * 32 * 32 * 100, "shortest_edge": 32 * 32}
         for video_processing_class in self.video_processor_list:
             uncapped = self._process_frames(video_processing_class, 4, size, frame_size=1024)
-            capped = self._process_frames(
-                video_processing_class, 4, size, frame_size=1024, cap_pixels_per_frame=True
-            )
+            capped = self._process_frames(video_processing_class, 4, size, frame_size=1024, cap_pixels_per_frame=True)
             self.assertEqual(capped.shape[0], self._expected_capped_seq_len(4, 1024, size))
             self.assertLess(capped.shape[0], uncapped.shape[0])
 
@@ -369,9 +365,7 @@ class Qwen3VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
         # of collapsing toward min_pixels.
         size = {"longest_edge": 768 * 32 * 32 * 100, "shortest_edge": 32 * 32}
         for video_processing_class in self.video_processor_list:
-            capped = self._process_frames(
-                video_processing_class, 2, size, frame_size=1024, cap_pixels_per_frame=True
-            )
+            capped = self._process_frames(video_processing_class, 2, size, frame_size=1024, cap_pixels_per_frame=True)
             self.assertEqual(capped.shape[0], self._expected_capped_seq_len(2, 1024, size))
 
     def test_cap_pixels_per_frame_noop_when_not_binding(self):

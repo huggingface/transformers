@@ -1163,9 +1163,7 @@ class Qwen3VLVideoProcessor(Glm4vVideoProcessor):
             # (VIDEO_FRAME_MAX_PIXELS) or the budget's even share per frame, whichever is smaller,
             # and floored just above min_pixels so tiny clips keep a usable resolution.
             frame_cap = 768 * factor * factor
-            pixels_per_frame = max(
-                min(frame_cap, size.longest_edge // num_frames), int(size.shortest_edge * 1.05)
-            )
+            pixels_per_frame = max(min(frame_cap, size.longest_edge // num_frames), int(size.shortest_edge * 1.05))
             max_pixels = pixels_per_frame * num_frames
 
         height, width = videos.shape[-2:]
