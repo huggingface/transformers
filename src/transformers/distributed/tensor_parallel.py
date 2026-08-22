@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import contextlib
+import os
 import re
 
 from ..utils import logging
@@ -604,6 +605,23 @@ class MoeExpertsParallel(TensorParallelLayer):
         )
 
         def tp_forward(*args, **kwargs):
+            if os.environ.get("HF_EP_DISPATCH") == "1":
+                from ..integrations.moe import dispatch_experts_forward
+
+                hidden_states, top_k_index, top_k_weights, *rest = args
+                if isinstance(hidden_states, DTensor):
+                    hidden_states = hidden_states.to_local()
+                ep_mesh = mesh if mesh.ndim == 1 else mesh["tp"]
+                with self.context_around_forward(module, mesh):
+                    return dispatch_experts_forward(
+                        module,
+                        hidden_states,
+                        top_k_index,
+                        top_k_weights,
+                        ep_mesh.get_group(),
+                        ep_mesh.get_local_rank(),
+                        ep_mesh.size(),
+                    )
             args, kwargs = self.transform_inputs_pre_forward(
                 module, args, kwargs, mesh, is_expert_parallel=is_expert_parallel
             )
@@ -683,6 +701,10 @@ class EpRouterParallel(TensorParallelLayer):
     """
 
     def transform_output_post_forward(self, module, output, mesh):
+        if os.environ.get("HF_EP_DISPATCH") == "1":
+            # Token-dispatch prototype: keep global expert ids and scores; the experts forward
+            # routes tokens to their owners with an all-to-all instead of masking.
+            return output
         ep_rank, ep_size = mesh.get_local_rank(), mesh.size()
         num_experts = getattr(module, "num_experts", None)
         if num_experts is None:
