@@ -258,6 +258,17 @@ class GenerationConfigTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 GenerationConfig(assistant_ensemble_weight=invalid).validate()
 
+    def test_validate_negative_bounds(self):
+        """`min_length`, `min_new_tokens` and `temperature` must be non-negative."""
+        GenerationConfig(min_length=0, min_new_tokens=0, temperature=0.0).validate()
+        with self.assertRaises(ValueError):
+            GenerationConfig(min_length=-1).validate()
+        with self.assertRaises(ValueError):
+            GenerationConfig(min_new_tokens=-1).validate()
+        with self.assertRaises(ValueError):
+            GenerationConfig(temperature=-0.5).validate()
+
+
     def test_assistant_ensemble_weight_default_and_round_trip(self):
         """Default is `None`; values round-trip through `to_dict`/`from_dict`."""
         self.assertIsNone(GenerationConfig().assistant_ensemble_weight)
