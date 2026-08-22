@@ -17,7 +17,7 @@ import importlib
 import unittest
 from unittest.mock import patch
 
-from transformers.testing_utils import cleanup, is_torch_available, require_torch, torch_device
+from transformers.testing_utils import is_torch_available, require_torch
 
 
 if is_torch_available():
@@ -34,12 +34,6 @@ if is_torch_available():
 
 @require_torch
 class TestHeterogeneousModelingSpec(unittest.TestCase):
-    def setUp(self):
-        cleanup(torch_device, gc_collect=True)
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
-
     def test_nest_skip_descriptor_paths_returns_nested_copies(self):
         skip_descriptors = {
             "mixer": SkipDescriptor(

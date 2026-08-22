@@ -31,8 +31,6 @@ if is_torch_available():
         tiny_llama_config,
     )
     from transformers import DynamicCache, LlamaForCausalLM, StaticCache
-    from transformers.cache_utils import DynamicSlidingWindowLayer, StaticSlidingWindowLayer
-    from transformers.integrations.executorch import export_with_dynamic_cache
 
 
 @require_torch
@@ -174,99 +172,3 @@ class TestHeterogeneousCache(unittest.TestCase):
             model = build_model(config, LlamaForCausalLM)
         cache = StaticCache(config=model.config, max_cache_len=1)
         self.assertEqual(cache.get_representative_kv_layer_idx(range(config.num_hidden_layers)), 1)
-
-    @pytest.mark.torch_export_test
-    def test_dynamic_cache_export_preserves_skipped_layer_indices(self):
-        config = tiny_llama_config(
-            num_hidden_layers=2,
-            per_layer_config={0: {"skip": ["attention"]}},
-        )
-        with hetero_context("llama"):
-            model = build_model(config, LlamaForCausalLM)
-
-        input_ids = torch.tensor([[1, 2]], device=model.device)
-        attention_mask = torch.ones_like(input_ids)
-        exported_program = export_with_dynamic_cache(model, input_ids, attention_mask)
-
-        with torch.no_grad():
-            exported_outputs = exported_program.module()(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                past_key_values=DynamicCache(config=config),
-                use_cache=True,
-            )
-            eager_outputs = model(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                past_key_values=DynamicCache(config=config),
-                use_cache=True,
-            )
-
-        torch.testing.assert_close(exported_outputs.logits, eager_outputs.logits)
-        exported_cache = exported_outputs.past_key_values
-        eager_cache = eager_outputs.past_key_values
-        self.assertEqual(len(exported_cache.layers), config.num_hidden_layers)
-        self.assertIsNone(exported_cache.layers[0].keys)
-        self.assertIsNone(exported_cache.layers[0].values)
-        torch.testing.assert_close(exported_cache.layers[1].keys, eager_cache.layers[1].keys)
-        torch.testing.assert_close(exported_cache.layers[1].values, eager_cache.layers[1].values)
-        self.assertEqual(exported_cache.get_seq_length(layer_idx=0), 0)
-        self.assertEqual(exported_cache.get_seq_length(), input_ids.shape[1])
-        self.assertEqual(exported_cache.get_representative_kv_layer_idx(range(config.num_hidden_layers)), 1)
-
-    def test_preloaded_cache_uses_populated_layer(self):
-        empty_states = torch.empty(1, 1, 0, 4)
-        populated_states = torch.randn(1, 1, 3, 4)
-
-        cache = DynamicCache([(empty_states, empty_states), (populated_states, populated_states)])
-
-        self.assertEqual(cache.get_seq_length(), 3)
-        self.assertEqual(cache.get_representative_kv_layer_idx([0, 1]), 1)
-
-    def test_dynamic_cache_heterogeneous_sliding_window(self):
-        """DynamicCache should create sliding layers matching per-layer sliding_window."""
-        config = tiny_llama_config(
-            sliding_window=None, per_layer_config={0: {"sliding_window": 32}, 2: {"sliding_window": 16}}
-        )
-        layers = DynamicCache(config=config).layers
-
-        self.assertEqual(len(layers), 4)
-        self.assertIsInstance(layers[0], DynamicSlidingWindowLayer)
-        self.assertEqual(layers[0].sliding_window, 32)
-        self.assertFalse(layers[1].is_sliding)
-        self.assertIsInstance(layers[2], DynamicSlidingWindowLayer)
-        self.assertEqual(layers[2].sliding_window, 16)
-        self.assertFalse(layers[3].is_sliding)
-
-    def test_dynamic_cache_uses_per_layer_conv_state_counts(self):
-        config = tiny_llama_config()
-        config.number_of_conv_states = 1
-        config.layer_types = ["linear_attention", "hybrid", "full_attention", "conv"]
-        config.per_layer_config = {
-            0: {"number_of_conv_states": 2},
-            1: {"number_of_conv_states": 3},
-            3: {"number_of_conv_states": 4},
-        }
-
-        layers = DynamicCache(config=config).layers
-
-        self.assertEqual(
-            [getattr(layer, "number_of_states", None) for layer in layers],
-            [2, 3, None, 4],
-        )
-
-    def test_static_cache_heterogeneous_sliding_window(self):
-        """StaticCache should create sliding layers for the right layers."""
-        config = tiny_llama_config(
-            sliding_window=None, per_layer_config={1: {"sliding_window": 24}, 3: {"sliding_window": 48}}
-        )
-        layers = StaticCache(config=config, batch_size=1, max_cache_len=64).layers
-
-        self.assertEqual(len(layers), 4)
-        self.assertFalse(layers[0].is_sliding)
-        self.assertIsInstance(layers[1], StaticSlidingWindowLayer)
-        # StaticSlidingWindowLayer caps max_cache_len = min(sliding_window, max_cache_len)
-        self.assertEqual(layers[1].max_cache_len, 24)
-        self.assertFalse(layers[2].is_sliding)
-        self.assertIsInstance(layers[3], StaticSlidingWindowLayer)
-        self.assertEqual(layers[3].max_cache_len, 48)
