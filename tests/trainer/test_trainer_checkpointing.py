@@ -2249,3 +2249,25 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
 
             commits = list_repo_commits(repo_id=trainer.hub_model_id, revision=branch, token=self._token)
             self.assertEqual(commits[0].commit_id, push_commit.oid)
+
+    def test_rotate_checkpoints_preserves_best_model(self):
+        from transformers.trainer_utils import rotate_checkpoints
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            for step in (5, 10, 15, 20):
+                os.makedirs(os.path.join(tmp_dir, f"checkpoint-{step}"))
+
+            best_cp = os.path.join(tmp_dir, "checkpoint-5")
+            rotate_checkpoints(
+                output_dir=tmp_dir,
+                save_total_limit=2,
+                best_model_checkpoint=best_cp,
+            )
+
+            remaining = set(os.listdir(tmp_dir))
+            # Best model (checkpoint-5) and latest (checkpoint-20) must be preserved
+            self.assertIn("checkpoint-5", remaining)
+            self.assertIn("checkpoint-20", remaining)
+            self.assertNotIn("checkpoint-10", remaining)
+            self.assertNotIn("checkpoint-15", remaining)
+
