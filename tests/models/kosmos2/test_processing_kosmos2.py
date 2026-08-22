@@ -398,5 +398,5 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self._check_modality_outputs(inputs, modality)
         self.assertTrue(
             len(inputs[self.text_input_name][0]) == len(inputs[self.text_input_name][1])
-            and len(inputs[self.text_input_name][1]) < max_length
+            and len(inputs[self.text_input_name][1]) == 76
         )

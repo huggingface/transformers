@@ -54,6 +54,10 @@ class ColPaliProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_processor_with_multiple_inputs(self):
         pass
 
+    @unittest.skip("Processor adds query tokens and BOS to text")
+    def test_subprocessor_defaults_0_text(self):
+        pass
+
     def test_get_num_vision_tokens(self):
         "Tests general functionality of the helper used internally in vLLM"
 

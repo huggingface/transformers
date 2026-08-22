@@ -679,7 +679,7 @@ class ProcessorTesterMixin:
         attributes = self.processor_class.get_attributes()
         component_key = self._get_subprocessor_name(modality, attributes)
 
-        if component_key not in self.processor_class.get_attributes():
+        if component_key not in attributes:
             self.skipTest(f"{component_key} attribute not present in {self.processor_class}")
 
         subprocessor = self.get_component(component_key)

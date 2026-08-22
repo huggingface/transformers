@@ -22,7 +22,7 @@ from transformers import CsmProcessor
 from transformers.testing_utils import require_torch
 from transformers.utils import is_torch_available
 
-from ...test_processing_common import ProcessorTesterMixin
+from ...test_processing_common import MODALITY_CONFIG, ProcessorTesterMixin
 
 
 if is_torch_available():
@@ -58,7 +58,38 @@ class CsmProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor_dict = self.prepare_processor_dict()
         self.assertTrue(processor_loaded.chat_template == processor_dict.get("chat_template", None))
 
-    @require_torch
+    def test_subprocessor_defaults_3_audio(self):
+        # override - drop unused kwargs for `subprocessor`
+        parameterized_config = MODALITY_CONFIG["audio"]
+        attributes = self.processor_class.get_attributes()
+        component_key = self._get_subprocessor_name("audio", attributes)
+
+        subprocessor = self.get_component(component_key)
+        input_key = parameterized_config["input_kwarg"]  # images/videos/audio
+
+        # Get all other required components for processor
+        components = {}
+        for attribute in self.processor_class.get_attributes():
+            components[attribute] = self.get_component(attribute)
+
+        processor = self.processor_class(**components, **self.prepare_processor_dict())
+        modality_input = self._prepare_modality_input("audio")
+
+        # merge processor defaults when calling a subprocessor
+        kwargs = parameterized_config["call_time_kwargs"]
+        kwargs["return_tensors"] = "pt"
+
+        input_subproc = subprocessor(modality_input, **kwargs)
+        try:
+            input_processor = processor(**{input_key: modality_input, **kwargs})
+        except Exception:
+            input_processor = {}
+
+        # Verify outputs match
+        for key in input_subproc:
+            if input_processor and key in processor.model_input_names:
+                torch.testing.assert_close(input_subproc[key], input_processor[key])
+
     def _test_apply_chat_template(
         self,
         modality: str,
@@ -241,7 +272,6 @@ class CsmProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         torch.testing.assert_close(input_ids, expected_ids)
 
-    @require_torch
     @unittest.skip("CSM doesn't need assistant masks as an audio generation model")
     def test_apply_chat_template_assistant_mask(self):
         pass

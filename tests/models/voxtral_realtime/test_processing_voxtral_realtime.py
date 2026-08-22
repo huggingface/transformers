@@ -73,6 +73,10 @@ class VoxtralRealtimeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_kwargs_overrides_default_subprocessor_kwargs_2_audio(self):
         pass
 
+    @unittest.skip("Processor has custom code on top of a feature extractor")
+    def test_subprocessor_defaults_3_audio(self):
+        pass
+
     def _dummy_audio(self, processor, seed: int = 0, duration_s: float = 1.0):
         sampling_rate = processor.feature_extractor.sampling_rate
         rng = np.random.default_rng(seed)

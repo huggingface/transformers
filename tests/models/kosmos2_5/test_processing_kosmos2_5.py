@@ -47,6 +47,10 @@ class Kosmos2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     # Tiny processor created with make_tiny_processor.py from "microsoft/kosmos-2.5"
     tiny_model_id = "hf-internal-testing/tiny-processor-kosmos2_5"
 
+    @staticmethod
+    def prepare_processor_dict():
+        return {"num_image_tokens": 5}
+
     @unittest.skip("Kosmos2_5Processor removes 'rows' and 'cols' from the output")
     def test_subprocessor_defaults_1_image(self):
         pass
