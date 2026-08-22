@@ -111,11 +111,24 @@ def resolve_internal_import(module: ModuleType | None, chained_path: str) -> Cal
     if not module:
         return None
 
-    if final_module := getattr(module, chained_path.split(".")[-1], None):
+    parts = chained_path.split(".")
+    
+    if final_module := getattr(module, parts[-1], None):
         return final_module
 
+    if len(parts) > 1:
+        module_name = module.__name__
+        try:
+            import importlib
+            submodule_name = f"{module_name}.{'.'.join(parts[:-1])}"
+            submodule = importlib.import_module(submodule_name)
+            if final_module := getattr(submodule, parts[-1], None):
+                return final_module
+        except Exception:
+            pass
+
     final_module = module
-    for path in chained_path.split("."):
+    for path in parts:
         final_module = getattr(final_module, path, None)
         if not final_module:
             return None
