@@ -25,6 +25,7 @@ from contextlib import contextmanager
 import pytest
 from parameterized import parameterized
 
+from transformers import logging
 from transformers import (
     AutoTokenizer,
     Gemma4Config,
@@ -59,6 +60,8 @@ if is_torch_available():
     )
     from transformers.models.gemma4.modeling_gemma4 import create_masks_for_vision_model
 
+
+logger = logging.get_logger(__name__)
 
 GEMMA4_RANDOM_MOE_FA2_SKIP_REASON = (
     "Randomly initialized Gemma4 MoE routers are too sensitive to tiny eager/FA2 input differences"
@@ -121,4 +124,5 @@ class Gemma4IntegrationTest(unittest.TestCase):
                 ],
             }
         )
+        logger.warning(f"[{self.id()}] output_text={output_text}")
         self.assertEqual(output_text, EXPECTED_COMPLETIONS.get_expectation())
