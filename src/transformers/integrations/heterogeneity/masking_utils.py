@@ -17,6 +17,8 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Callable, Hashable
+from functools import wraps
+from inspect import signature
 from typing import TYPE_CHECKING, Any
 
 
@@ -26,6 +28,32 @@ if TYPE_CHECKING:
 
 class AttentionMasksByLayerIdx(dict[int, Any]):
     """Attention masks selected by layer index."""
+
+
+def support_per_layer_mask_creation(attribute_name: str) -> Callable:
+    """Decorate a mask factory to return layer-indexed masks when a config attribute varies by layer."""
+
+    def decorator(create_mask_fn: Callable) -> Callable:
+        create_mask_signature = signature(create_mask_fn)
+
+        @wraps(create_mask_fn)
+        def wrapped(*args: Any, **kwargs: Any) -> Any:
+            mask_kwargs = dict(create_mask_signature.bind(*args, **kwargs).arguments)
+            config = mask_kwargs["config"]
+            layer_idx = mask_kwargs.get("layer_idx")
+
+            if layer_idx is None and config.is_heterogeneous and attribute_name in config.per_layer_attributes:
+                return create_attention_masks_by_layer_idx(
+                    create_mask_fn,
+                    attribute_name,
+                    **mask_kwargs,
+                )
+
+            return create_mask_fn(**mask_kwargs)
+
+        return wrapped
+
+    return decorator
 
 
 def create_attention_masks_by_layer_idx(
