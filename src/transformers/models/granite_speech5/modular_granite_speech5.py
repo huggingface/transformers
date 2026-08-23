@@ -401,12 +401,9 @@ class GraniteSpeech5Encoder(ParakeetEncoder):
         >>> print(encoder_outputs.last_hidden_state.shape)
         ```
         """
-        # the padding mask is boolean from here on (the feature extractor emits it as an integer mask)
-        if attention_mask is not None:
-            attention_mask = attention_mask.bool()
-
         hidden_states = self.input_linear(input_features.to(self.input_linear.weight.dtype))
         if attention_mask is not None:
+            attention_mask = attention_mask.bool()
             hidden_states = hidden_states.masked_fill(~attention_mask.unsqueeze(-1), 0.0)
 
         for layer_idx, layer in enumerate(self.layers):
