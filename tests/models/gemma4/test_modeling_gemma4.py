@@ -1027,15 +1027,10 @@ class Gemma4IntegrationTest(unittest.TestCase):
         out = model.generate(**inputs, max_new_tokens=16, do_sample=False, cache_implementation="static")
         output_text = tokenizer.batch_decode(out[:, input_size:])
 
-        # NOTE: this test appears flaky across different A10G runner instances — each runner produces
-        # a consistent result within itself, but two valid outputs have been observed:
-        #   "That sounds lovely! ..."  and  "That sounds like a very pleasant place! ..."
-        # The value below gives identical results across several commits of this test's history
-        # on the runner used to update it. Monitor for failures in the coming days.
         EXPECTED_COMPLETIONS = Expectations(
             {
                 ("cuda", 8): [
-                    "That sounds like a very pleasant place! It seems like you're really enjoying",
+                    "That sounds lovely! It seems like you're really enjoying the place you'",
                     "Here are a few ways you could use or expand upon that list, depending on",
                 ],
                 ("xpu", 5): [
@@ -1044,7 +1039,16 @@ class Gemma4IntegrationTest(unittest.TestCase):
                 ],
             }
         )
-        self.assertEqual(output_text, EXPECTED_COMPLETIONS.get_expectation())
+        expected = EXPECTED_COMPLETIONS.get_expectation()
+        # NOTE: this test is flaky across different A10G runner instances — each runner produces a
+        # consistent result within itself, but the eager attention implementation has been observed
+        # to produce a different first output on some runners:
+        #   "That sounds like a very pleasant place! It seems like you're really enjoying"
+        # The value below was observed consistently across several commits of this test's history
+        # on the runner used here. Should be monitored over the next few days.
+        if torch_device.startswith("cuda") and attn_implementation == "eager":
+            expected[0] = "That sounds like a very pleasant place! It seems like you're really enjoying"
+        self.assertEqual(output_text, expected)
 
     @pytest.mark.torch_export_test
     def test_export_text_only(self):
