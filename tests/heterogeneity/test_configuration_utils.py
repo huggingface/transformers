@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import contextlib
 import tempfile
 import unittest
 
@@ -367,20 +366,27 @@ class TestHeterogeneousConfig(unittest.TestCase):
                 "global_sw_global_acs",
                 {"sliding_window": 4096, "attention_chunk_size": 2048},
                 {0: {"intermediate_size": 64}},
-                True,
             ),
-            ("global_sw_per_layer_acs", {"sliding_window": 4096}, {0: {"attention_chunk_size": 2048}}, True),
+            ("global_sw_per_layer_acs", {"sliding_window": 4096}, {0: {"attention_chunk_size": 2048}}),
             (
                 "per_layer_sw_per_layer_acs_same_layer",
                 {},
                 {0: {"sliding_window": 4096, "attention_chunk_size": 2048}},
-                True,
             ),
+        ],
+    )
+    def test_validation_sliding_window_and_attention_chunk_size_conflict_raises(
+        self, _name, overrides, per_layer_config
+    ):
+        with self.assertRaises(ValueError):
+            tiny_llama_config(per_layer_config=per_layer_config, **overrides)
+
+    @parameterized.expand(
+        [
             (
                 "per_layer_sw_per_layer_acs_different_layers",
                 {"sliding_window": None, "attention_chunk_size": None},
                 {0: {"sliding_window": 4096}, 1: {"attention_chunk_size": 2048}},
-                False,
             ),
             (
                 "global_conflict_resolved_by_per_layer_override",
@@ -391,16 +397,15 @@ class TestHeterogeneousConfig(unittest.TestCase):
                     2: {"attention_chunk_size": None},
                     3: {"attention_chunk_size": None},
                 },
-                False,
             ),
         ],
     )
-    def test_validation_sliding_window_and_attention_chunk_size(
-        self, _name, overrides, per_layer_config, should_raise
+    def test_validation_sliding_window_and_attention_chunk_size_accepts_non_conflicting_layers(
+        self, _name, overrides, per_layer_config
     ):
-        ctx = self.assertRaises(ValueError) if should_raise else contextlib.nullcontext()
-        with ctx:
-            tiny_llama_config(per_layer_config=per_layer_config, **overrides)
+        config = tiny_llama_config(per_layer_config=per_layer_config, **overrides)
+
+        self.assertTrue(config.is_heterogeneous)
 
     def test_all_layers_overridden_no_global_default(self):
         """Custom attribute on every layer without a global default should be accessible per layer."""

@@ -15,6 +15,7 @@
 
 import tempfile
 import unittest
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import NamedTuple
 
@@ -62,7 +63,7 @@ if is_torch_available():
 
         name: str
         model_key: str  # key into MODEL_FIXTURES
-        config_factory: callable
+        config_factory: Callable
         model_cls: type
         per_layer_config: dict
         expected_disabled_kv_layer_indices: tuple[int, ...] = ()
