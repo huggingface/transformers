@@ -14,7 +14,9 @@
 
 import inspect
 import unittest
+from unittest.mock import patch
 
+import numpy as np
 from parameterized import parameterized
 
 from transformers import InternVLProcessor
@@ -84,6 +86,19 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertTrue("num_image_patches" in output)
         self.assertEqual(len(output["num_image_patches"]), 3)
+
+    @require_torch
+    def test_image_patch_offsets_do_not_pass_torch_tensor_to_numpy(self):
+        processor = self.get_processor()
+
+        original_cumsum = np.cumsum
+
+        def check_input(values):
+            self.assertIsInstance(values, list)
+            return original_cumsum(values)
+
+        with patch("transformers.models.internvl.processing_internvl.np.cumsum", side_effect=check_input):
+            processor(text=processor.image_token, images=[np.zeros((20, 20, 3), dtype=np.uint8)], return_tensors="pt")
 
     @require_av
     @require_torch
