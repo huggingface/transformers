@@ -77,16 +77,17 @@ class GraniteSpeech5EncoderConfig(PreTrainedConfig):
 
     model_type = "granite_speech5_encoder"
 
-    num_mel_bins: int = 80
-    num_hidden_layers: int = 16
+    vocab_size: int = 16384
     hidden_size: int = 1024
     intermediate_size: int = 4096
+    num_hidden_layers: int = 16
     num_attention_heads: int = 8
+    num_key_value_heads: int | None = None
+    num_mel_bins: int = 80
     head_dim: int | None = None
     hidden_act: str = "silu"
-    vocab_size: int = 16384
-    context_size: int = 128
     max_position_embeddings: int = 512
+    context_size: int = 128
     conv_kernel_size: int = 7
     conv_expansion_factor: int = 2
     subsample_layers: list[int] | None = None
@@ -99,6 +100,8 @@ class GraniteSpeech5EncoderConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
         if self.head_dim is None:
             self.head_dim = self.hidden_size // self.num_attention_heads
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
         if self.subsample_layers is None:
             self.subsample_layers = [0, 1]
         if self.context_size <= 0 or self.context_size > self.max_position_embeddings:
@@ -154,12 +157,12 @@ class GraniteSpeech5EncoderModelOutput(ParakeetEncoderModelOutput): ...
 class GraniteSpeech5EncoderAttention(nn.Module):
     """Block-wise self-attention with Shaw's relative positional embeddings."""
 
-    def __init__(self, config: GraniteSpeech5EncoderConfig, layer_idx: int | None = None):
+    def __init__(self, config: GraniteSpeech5EncoderConfig, layer_idx: int):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        self.num_key_value_groups = 1  # multi-head attention, required by `eager_attention_forward`
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = False
@@ -167,9 +170,7 @@ class GraniteSpeech5EncoderAttention(nn.Module):
         self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
-        self.o_proj = nn.Linear(
-            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
-        )
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=True)
         self.rel_pos_emb = nn.Embedding(2 * config.max_position_embeddings + 1, config.head_dim)
 
     def forward(
@@ -308,7 +309,7 @@ class GraniteSpeech5PreTrainedModel(ParakeetPreTrainedModel):
     config: GraniteSpeech5CTCConfig
     _no_split_modules = ["GraniteSpeech5EncoderBlock", "GraniteSpeech5EncoderSubsamplingBlock"]
 
-    # the block-wise attention bias is not supported by flash attention
+    # float attention bias is not supported by flash attention
     _supports_flash_attn = False
     _can_compile_fullgraph = False
 

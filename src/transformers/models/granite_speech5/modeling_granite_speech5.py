@@ -98,12 +98,12 @@ def eager_attention_forward(
 class GraniteSpeech5EncoderAttention(nn.Module):
     """Block-wise self-attention with Shaw's relative positional embeddings."""
 
-    def __init__(self, config: GraniteSpeech5EncoderConfig, layer_idx: int | None = None):
+    def __init__(self, config: GraniteSpeech5EncoderConfig, layer_idx: int):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        self.num_key_value_groups = 1  # multi-head attention, required by `eager_attention_forward`
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = False
@@ -111,9 +111,7 @@ class GraniteSpeech5EncoderAttention(nn.Module):
         self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
-        self.o_proj = nn.Linear(
-            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
-        )
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=True)
         self.rel_pos_emb = nn.Embedding(2 * config.max_position_embeddings + 1, config.head_dim)
 
     def forward(
@@ -311,7 +309,7 @@ class GraniteSpeech5PreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
 
-    # the block-wise attention bias is not supported by flash attention
+    # float attention bias is not supported by flash attention
     _supports_flash_attn = False
     _can_compile_fullgraph = False
     _supports_attention_backend = True
