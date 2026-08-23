@@ -33,6 +33,7 @@ from transformers import (
     TokenSpan,
     is_tokenizers_available,
 )
+from transformers.models.bert.tokenization_bert_legacy import BertTokenizerLegacy
 from transformers.models.gpt2.tokenization_gpt2 import GPT2Tokenizer
 from transformers.testing_utils import (
     CaptureStderr,
@@ -83,6 +84,42 @@ class TokenizerUtilsTest(unittest.TestCase):
         self.assertEqual(encoded.word_to_tokens(0), TokenSpan(start=1, end=2))
         self.assertEqual(encoded.word_to_tokens(1), None)
         self.assertEqual(encoded.word_to_tokens(2), TokenSpan(start=2, end=3))
+
+    def _make_legacy_tokenizer(self, vocab):
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            vocab_file = os.path.join(tmpdirname, "vocab.txt")
+            with open(vocab_file, "w", encoding="utf-8") as f:
+                f.write("\n".join(vocab))
+            return BertTokenizerLegacy(vocab_file=vocab_file, do_lower_case=False)
+
+    def test_batch_pretokenized_documents_of_two_words_are_not_pairs(self):
+        tokenizer = self._make_legacy_tokenizer(["[PAD]", "[UNK]", "[CLS]", "[SEP]", "[MASK]", "want", "hello", "x"])
+
+        encoded = tokenizer([["want", "hello"], ["want", "hello", "x"]], is_split_into_words=True)
+        self.assertEqual(encoded["input_ids"][0], tokenizer(["want", "hello"], is_split_into_words=True)["input_ids"])
+        self.assertEqual(
+            encoded["input_ids"][1], tokenizer(["want", "hello", "x"], is_split_into_words=True)["input_ids"]
+        )
+        sep_token_id = tokenizer.convert_tokens_to_ids(tokenizer.sep_token)
+        self.assertEqual(encoded["input_ids"][0].count(sep_token_id), 1)
+
+    def test_batch_pretokenized_tuples_are_still_pairs(self):
+        tokenizer = self._make_legacy_tokenizer(["[PAD]", "[UNK]", "[CLS]", "[SEP]", "[MASK]", "want", "hello", "x"])
+
+        # Mirrors the batch shape fed by TokenizerUtilsCommonTest.test_pretokenized_inputs: tuples of word
+        # lists are sequence pairs under is_split_into_words, while lists stay single pretokenized documents
+        encoded = tokenizer([(("want", "hello"), ("x",)), ["want", "hello"]], is_split_into_words=True)
+        self.assertEqual(encoded["input_ids"][0], tokenizer("want hello", "x")["input_ids"])
+        self.assertEqual(encoded["input_ids"][1], tokenizer(["want", "hello"], is_split_into_words=True)["input_ids"])
+
+    def test_batch_pair_detection_without_split_into_words(self):
+        tokenizer = self._make_legacy_tokenizer(
+            ["[PAD]", "[UNK]", "[CLS]", "[SEP]", "[MASK]", "want", "hello", "x", "world"]
+        )
+
+        encoded = tokenizer([["hello", "world"], ["want", "x"]])
+        self.assertEqual(encoded["input_ids"][0], tokenizer("hello", "world")["input_ids"])
+        self.assertEqual(encoded["input_ids"][1], tokenizer("want", "x")["input_ids"])
 
     def test_batch_encoding_with_labels(self):
         batch = BatchEncoding({"inputs": [[1, 2, 3], [4, 5, 6]], "labels": [0, 1]})
