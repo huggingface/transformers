@@ -116,6 +116,17 @@ class MiniMaxM2Config(PreTrainedConfig):
     router_jitter_noise: float = 0.0
     rope_parameters: RopeParameters | dict | None = None
 
+    def convert_rope_params_to_dict(self, **kwargs):
+        # Released MiniMax-M2 checkpoints express partial RoPE through a legacy
+        # `rotary_dim` field (e.g. 64 of head_dim 128) instead of
+        # `partial_rotary_factor`; their original remote-code config derived the
+        # factor in `__init__`. Without this mapping the model silently rotates
+        # the full head dimension with the wrong frequency ladder.
+        rotary_dim = kwargs.get("rotary_dim", getattr(self, "rotary_dim", None))
+        if rotary_dim is not None:
+            kwargs.setdefault("partial_rotary_factor", rotary_dim / self.head_dim)
+        return super().convert_rope_params_to_dict(**kwargs)
+
 
 class MiniMaxM2TopKRouter(MixtralTopKRouter):
     def forward(self, hidden_states, e_score_correction_bias):
