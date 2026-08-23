@@ -4426,7 +4426,9 @@ class PreTrainedModel(
                 list(pool.map(_warm, checkpoint_files[local_rank::local_world]))
             if torch.distributed.is_available() and torch.distributed.is_initialized():
                 torch.distributed.barrier()
-            logger.warning_once(f"Prefetched {len(checkpoint_files)} checkpoint shards in {time.time() - prefetch_start:.0f}s")
+            logger.warning_once(
+                f"Prefetched {len(checkpoint_files)} checkpoint shards in {time.time() - prefetch_start:.0f}s"
+            )
 
         if logger.level >= logging.WARNING:
             verify_tp_plan(expected_keys, getattr(model, "_tp_plan", None))
