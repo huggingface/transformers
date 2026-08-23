@@ -1027,10 +1027,15 @@ class Gemma4IntegrationTest(unittest.TestCase):
         out = model.generate(**inputs, max_new_tokens=16, do_sample=False, cache_implementation="static")
         output_text = tokenizer.batch_decode(out[:, input_size:])
 
+        # NOTE: this test appears flaky across different A10G runner instances — each runner produces
+        # a consistent result within itself, but two valid outputs have been observed:
+        #   "That sounds lovely! ..."  and  "That sounds like a very pleasant place! ..."
+        # The value below gives identical results across several commits of this test's history
+        # on the runner used to update it. Monitor for failures in the coming days.
         EXPECTED_COMPLETIONS = Expectations(
             {
                 ("cuda", 8): [
-                    "That sounds lovely! It seems like you're really enjoying the place you'",
+                    "That sounds like a very pleasant place! It seems like you're really enjoying",
                     "Here are a few ways you could use or expand upon that list, depending on",
                 ],
                 ("xpu", 5): [
