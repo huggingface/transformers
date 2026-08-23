@@ -90,13 +90,12 @@ def _ensure_torch_distributed(device_type: str | None = None):
             if device_type != "cpu":
                 getattr(torch, device_type).set_device(local_rank)
                 device_id = torch.device(device_type, local_rank)
-            # Sharded loading of a large checkpoint takes tens of minutes and ranks finish far
-            # apart, so the default 10-minute watchdog kills the first collective after load.
             torch.distributed.init_process_group(
                 backend=backend,
                 rank=rank,
                 world_size=world_size,
                 device_id=device_id,
+                # Sharded loading takes tens of minutes with high rank skew; the default 10-minute watchdog is too short
                 timeout=timedelta(hours=2),
             )
         except Exception as e:
