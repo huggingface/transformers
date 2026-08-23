@@ -229,11 +229,6 @@ class MergeModulelist(ConversionOps):
             # (such as the MoEs' gate_proj/up_proj merging), we are wasting quite some memory
             tensors = input_dict.pop(source_pattern)
             target_pattern = self.get_target_pattern(input_size, source_pattern, target_patterns)
-            if not isinstance(tensors, torch.Tensor) and len(tensors) == 0:
-                # Uneven FSDP sharding can leave this rank an empty shard of the stacked
-                # parameter: it owns none of the pieces, so there is nothing to merge (the
-                # pre-sharded empty local tensor installed at init is already correct).
-                continue
             # DecompressExperts pre-allocates a stacked tensor to avoid holding N individual
             # decompressed tensors simultaneously.  Pass it through to skip the redundant copy
             # that torch.stack would otherwise make.
@@ -964,6 +959,13 @@ class WeightTransform:
                 tensors = [tensor for tensor in tensors if tensor is not None]
             # Add them to the new dictionary
             collected_tensors[key] = tensors
+
+        if any(len(tensors) == 0 for tensors in collected_tensors.values()):
+            # Every piece of this parameter was dropped by the sharding operation: this rank owns
+            # none of it (uneven FSDP sharding can assign a rank an EMPTY shard, e.g. 2 experts
+            # chunked over fsdp=4). The pre-sharded empty local tensor installed at init is already
+            # correct, and running the conversion ops on empty lists would raise.
+            raise SkipParameters()
 
         return collected_tensors
 
