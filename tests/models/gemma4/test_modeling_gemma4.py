@@ -138,7 +138,7 @@ class Gemma4IntegrationTest(unittest.TestCase):
             f"t.setUp()\n"
             f"t._test_generation_beyond_sliding_window('{attn_implementation}')\n"
         )
-        for i in range(10):
+        for i in range(50):
             result = subprocess.run(
                 [sys.executable, "-c", script],
                 capture_output=True,
