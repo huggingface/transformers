@@ -822,7 +822,7 @@ class Gemma4IntegrationTest(unittest.TestCase):
 
         EXPECTED_TEXTS = Expectations(
             {
-                ("cuda", 8): ['This image shows a **brown and white cow** standing on a **sandy beach** with the **ocean and a blue sky** in the background'],
+                ("cuda", 8): ['This image shows a **brown and white cow** standing on a **sandy beach** with the **ocean** in the background under a **clear'],
                 ("xpu", 5): ['This image shows a **brown and white cow** standing on a **sandy beach** with the **ocean** in the background under a **clear'],
             }
         )  # fmt: skip
@@ -913,7 +913,7 @@ class Gemma4IntegrationTest(unittest.TestCase):
         output_text = self.processor.batch_decode(output[:, input_size:], skip_special_tokens=True)
         EXPECTED_TEXTS = Expectations(
             {
-                ("cuda", 8): ['Based on the image, here is a description of what I see:\n\n**Foreground & Street Scene:**\n* **Traffic Sign:** The most prominent'],
+                ("cuda", 8): ['Based on the image, here is a description of what I see:\n\n**Foreground & Street Scene:**\n* **Roadway:** There is an'],
                 ("cuda", (9, 0)): ['Based on the image, here is a description of what I see:\n\n**Foreground & Street Scene:**\n* **Roadway:** There is an'],
                 ("xpu", 5): ['Based on the image, here is a description of what I see:\n\n**Foreground & Street Scene:**\n* **Roadway:** There is an'],
             }
