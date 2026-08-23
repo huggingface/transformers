@@ -32,11 +32,10 @@ if is_torchaudio_available():
 @requires(backends=("torch", "torchaudio"))
 class GraniteSpeech5FeatureExtractor(SequenceFeatureExtractor):
     r"""
-    Feature extractor for Granite Speech 5.0. It computes log-mel spectrograms (floored at
-    `logmel_floor_db` below the per-sample maximum), concatenates delta features along the mel dimension and
-    stacks consecutive frames in pairs, so the emitted features have `4 * num_mel_bins` channels at a
-    `2 * hop_length` sample period. The delta concatenation and the frame stacking are fixed properties of
-    this architecture's front-end (see `delta_expansion` and `frame_stacking`).
+    Constructs a Granite Speech 5.0 feature extractor.
+
+    This feature extractor inherits from [`~feature_extraction_sequence_utils.SequenceFeatureExtractor`] which contains
+    most of the main methods. Users should refer to this superclass for more information regarding those methods.
 
     Args:
         num_mel_bins (`int`, *optional*, defaults to 80):

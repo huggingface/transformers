@@ -369,6 +369,7 @@ class GraniteSpeech5Encoder(GraniteSpeech5PreTrainedModel):
         self.input_linear = nn.Linear(config.num_mel_bins * 4, config.hidden_size, bias=True)
         self.layers = nn.ModuleList(
             [
+                # CODEPATH: subsampling blocks
                 GraniteSpeech5EncoderSubsamplingBlock(config, layer_idx)
                 if layer_idx in config.subsample_layers
                 else GraniteSpeech5EncoderBlock(config, layer_idx)
@@ -430,9 +431,11 @@ class GraniteSpeech5Encoder(GraniteSpeech5PreTrainedModel):
                 **kwargs,
             )
 
+            # CODEPATH: the padding mask is halved after each subsampling block
             if layer_idx in self.config.subsample_layers and attention_mask is not None:
                 attention_mask = downsample_attention_mask(attention_mask)
 
+            # CODEPATH: self-conditioned CTC: feed the mid-layer CTC posteriors back into the hidden statess
             if layer_idx + 1 == self.config.num_hidden_layers // 2:
                 mid_logits = self.out(hidden_states)
                 mid_injection = self.out_mid(nn.functional.softmax(mid_logits, dim=-1))

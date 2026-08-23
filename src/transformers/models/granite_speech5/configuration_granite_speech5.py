@@ -28,11 +28,11 @@ from ...utils import auto_docstring
 @strict
 class GraniteSpeech5EncoderConfig(PreTrainedConfig):
     r"""
-    context_size (`int`, *optional*, defaults to 128):
-        Context size for block-wise conformer attention.
     max_position_embeddings (`int`, *optional*, defaults to 512):
         Maximum relative position index of Shaw's relative positional encoding; the embedding table holds
         `2 * max_position_embeddings + 1` entries.
+    context_size (`int`, *optional*, defaults to 128):
+        Context size for block-wise conformer attention.
     conv_kernel_size (`int`, *optional*, defaults to 7):
         Kernel size of the depthwise convolution in the conformer convolution module.
     conv_expansion_factor (`int`, *optional*, defaults to 2):

@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-08-20.*
+*This model was contributed to Hugging Face Transformers on 2026-08-23.*
 
 # GraniteSpeech5
 
@@ -70,6 +70,9 @@ outputs = model.generate(**inputs)
 print(processor.batch_decode(outputs, skip_special_tokens=True))
 # ['mister quilter is the apostle of the middle classes and we are glad to welcome his gospel', ...]
 ```
+
+</hfoption>
+</hfoptions>
 
 ## GraniteSpeech5CTCConfig
 

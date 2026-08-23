@@ -179,6 +179,7 @@ def convert_and_write_model(input_path: str, output_path: str, run_sanity_check:
     tokenizer = ParakeetTokenizer(
         tokenizer_file=cached_file(input_path, "tokenizer.json"),
         pad_token="<|blank|>",
+        padding=True,
     )
     feature_extractor = convert_feature_extractor(original_config)
     processor = GraniteSpeech5Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)

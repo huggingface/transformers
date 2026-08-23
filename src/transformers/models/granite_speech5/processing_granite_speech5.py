@@ -22,18 +22,10 @@ logger = logging.get_logger(__name__)
 
 
 class GraniteSpeech5ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "audio_kwargs": {
-            "sampling_rate": 16000,
-            "padding": "longest",
-            "return_attention_mask": True,
-        },
-        "text_kwargs": {
-            "padding": True,
-            "padding_side": "right",
-            "add_special_tokens": False,
-        },
-    }
+    # the defaults this model needs are shipped with the checkpoint rather than hardcoded here: the audio
+    # ones are the feature extractor's own signature defaults, and the tokenizer's `padding` comes from
+    # `tokenizer_config.json` (`ProcessorMixin._merge_kwargs` reads the tokenizer's init kwargs)
+    _defaults = {}
 
 
 @auto_docstring
@@ -64,14 +56,16 @@ class GraniteSpeech5Processor(ProcessorMixin):
             **kwargs,
         )
 
+        expected_sampling_rate = self.feature_extractor.sampling_rate
         if sampling_rate is None:
             logger.warning_once(
-                f"You've provided audio without specifying the sampling rate. It will be assumed to be {output_kwargs['audio_kwargs']['sampling_rate']}, which can result in silent errors."
+                f"You've provided audio without specifying the sampling rate. It will be assumed to be {expected_sampling_rate}, which can result in silent errors."
             )
-        elif sampling_rate != output_kwargs["audio_kwargs"]["sampling_rate"]:
+        elif sampling_rate != expected_sampling_rate:
             raise ValueError(
-                f"The sampling rate of the audio ({sampling_rate}) does not match the sampling rate of the processor ({output_kwargs['audio_kwargs']['sampling_rate']}). Please provide resampled the audio to the expected sampling rate."
+                f"The sampling rate of the audio ({sampling_rate}) does not match the sampling rate of the processor ({expected_sampling_rate}). Please provide resampled the audio to the expected sampling rate."
             )
+        output_kwargs["audio_kwargs"]["sampling_rate"] = expected_sampling_rate
 
         model_inputs = super().__call__(audio=audio, text=text, **output_kwargs)
         if text is not None:

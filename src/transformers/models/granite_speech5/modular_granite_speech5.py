@@ -19,12 +19,10 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
-from ...audio_utils import AudioInput
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import ProcessorMixin, Unpack
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
@@ -47,11 +45,11 @@ logger = logging.get_logger(__name__)
 @strict
 class GraniteSpeech5EncoderConfig(PreTrainedConfig):
     r"""
-    context_size (`int`, *optional*, defaults to 128):
-        Context size for block-wise conformer attention.
     max_position_embeddings (`int`, *optional*, defaults to 512):
         Maximum relative position index of Shaw's relative positional encoding; the embedding table holds
         `2 * max_position_embeddings + 1` entries.
+    context_size (`int`, *optional*, defaults to 128):
+        Context size for block-wise conformer attention.
     conv_kernel_size (`int`, *optional*, defaults to 7):
         Kernel size of the depthwise convolution in the conformer convolution module.
     conv_expansion_factor (`int`, *optional*, defaults to 2):
@@ -350,6 +348,7 @@ class GraniteSpeech5Encoder(ParakeetEncoder):
         self.input_linear = nn.Linear(config.num_mel_bins * 4, config.hidden_size, bias=True)
         self.layers = nn.ModuleList(
             [
+                # CODEPATH: subsampling blocks
                 GraniteSpeech5EncoderSubsamplingBlock(config, layer_idx)
                 if layer_idx in config.subsample_layers
                 else GraniteSpeech5EncoderBlock(config, layer_idx)
@@ -418,9 +417,11 @@ class GraniteSpeech5Encoder(ParakeetEncoder):
                 **kwargs,
             )
 
+            # CODEPATH: the padding mask is halved after each subsampling block
             if layer_idx in self.config.subsample_layers and attention_mask is not None:
                 attention_mask = downsample_attention_mask(attention_mask)
 
+            # CODEPATH: self-conditioned CTC: feed the mid-layer CTC posteriors back into the hidden statess
             if layer_idx + 1 == self.config.num_hidden_layers // 2:
                 mid_logits = self.out(hidden_states)
                 mid_injection = self.out_mid(nn.functional.softmax(mid_logits, dim=-1))
