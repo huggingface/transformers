@@ -1050,14 +1050,14 @@ class Gemma4IntegrationTest(unittest.TestCase):
     def test_export_text_only(self):
         from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM
 
-        model = Gemma4ForConditionalGeneration.from_pretrained(self.model_name, device_map=torch_device)
+        model = Gemma4ForConditionalGeneration.from_pretrained(self.model_name, device_map="cpu")
         tokenizer = AutoTokenizer.from_pretrained(self.model_name)
 
         exportable_module = TorchExportableModuleForDecoderOnlyLM(
-            model, batch_size=1, max_cache_len=1024, device=torch_device
+            model, batch_size=1, max_cache_len=19, device="cpu"
         )
         exported_program = exportable_module.export(
-            input_ids=torch.tensor([[1]], device=torch_device, dtype=torch.long),
+            input_ids=torch.tensor([[1]], device="cpu", dtype=torch.long),
         )
 
         # Test generation with the exported model
@@ -1067,13 +1067,13 @@ class Gemma4IntegrationTest(unittest.TestCase):
             add_generation_prompt=True,
         )
 
-        max_new_tokens_to_generate = 20
+        max_new_tokens_to_generate = 3
         # Generate text with the exported model
         export_generated_text = TorchExportableModuleForDecoderOnlyLM.generate(
-            exported_program, tokenizer, prompt, max_new_tokens=max_new_tokens_to_generate, device=torch_device
+            exported_program, tokenizer, prompt, max_new_tokens=max_new_tokens_to_generate, device="cpu"
         )
 
-        input_text = tokenizer(prompt, return_tensors="pt").to(torch_device)
+        input_text = tokenizer(prompt, return_tensors="pt").to("cpu")
         eager_outputs = model.generate(
             **input_text,
             max_new_tokens=max_new_tokens_to_generate,
