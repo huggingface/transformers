@@ -1040,12 +1040,8 @@ class Gemma4IntegrationTest(unittest.TestCase):
             }
         )
         expected = EXPECTED_COMPLETIONS.get_expectation()
-        # NOTE: this test is flaky across different A10G runner instances — each runner produces a
-        # consistent result within itself, but the eager attention implementation has been observed
-        # to produce a different first output on some runners:
-        #   "That sounds like a very pleasant place! It seems like you're really enjoying"
-        # The value below was observed consistently across several commits of this test's history
-        # on the runner used here. Should be monitored over the next few days.
+        # NOTE: flaky since torch 2.13 + CUDA 13.0 — two valid greedy outputs exist depending on
+        # the physical runner. See PR #48233 for full investigation.
         if torch_device.startswith("cuda") and attn_implementation == "eager":
             expected[0] = "That sounds like a very pleasant place! It seems like you're really enjoying"
         self.assertEqual(output_text, expected)
