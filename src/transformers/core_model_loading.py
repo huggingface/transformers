@@ -960,6 +960,13 @@ class WeightTransform:
             # Add them to the new dictionary
             collected_tensors[key] = tensors
 
+        if any(len(tensors) == 0 for tensors in collected_tensors.values()):
+            # Every piece of this parameter was dropped by the sharding operation: this rank owns
+            # none of it (uneven FSDP sharding can assign a rank an EMPTY shard, e.g. 2 experts
+            # chunked over fsdp=4). The pre-sharded empty local tensor installed at init is already
+            # correct, and running the conversion ops on empty lists would raise.
+            raise SkipParameters()
+
         return collected_tensors
 
     def was_used(self) -> bool:
