@@ -1900,13 +1900,13 @@ class GenerationMixin(ContinuousMixin):
             init_shape = self._get_static_cache_init_shape()
             if init_shape is not None:
                 num_heads, head_dim = init_shape
-                early_init_kwargs = dict(
-                    batch_size=batch_size,
-                    num_heads=num_heads,
-                    head_dim=head_dim,
-                    dtype=self.dtype,
-                    device=self.device,
-                )
+                early_init_kwargs = {
+                    "batch_size": batch_size,
+                    "num_heads": num_heads,
+                    "head_dim": head_dim,
+                    "dtype": self.dtype,
+                    "device": self.device,
+                }
                 cache.self_attention_cache.early_initialization(**early_init_kwargs)
                 cache.cross_attention_cache.early_initialization(**early_init_kwargs)
         elif prefill_chunk_size is not None:
