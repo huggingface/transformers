@@ -39,6 +39,8 @@ class TestSkipReplacement(unittest.TestCase):
         inputs = torch.randn(2, 4, 64)
 
         torch.testing.assert_close(module(inputs), inputs * 2)
+        torch.testing.assert_close(module(input=inputs), inputs * 2)
+
 
     def test_get_skip_replacement_returns_tuple_with_placeholder(self):
         replacement_factory = get_skip_replacement(
@@ -56,6 +58,16 @@ class TestSkipReplacement(unittest.TestCase):
     def test_get_skip_replacement_raises_for_unknown_return_argument(self):
         with self.assertRaisesRegex(ValueError, "return entry arg names.*missing"):
             get_skip_replacement(torch.nn.Linear, ReturnEntry(arg_name="missing", transform=lambda x: x))
+
+    def test_get_skip_replacement_raises_for_missing_return_argument(self):
+        replacement_factory = get_skip_replacement(
+            torch.nn.Linear, ReturnEntry(arg_name="input", transform=lambda x: x)
+        )
+
+        with self.assertRaisesRegex(
+            TypeError, "In the skip replacement for Linear, required argument 'input' was not provided"
+        ):
+            replacement_factory()()
 
     def test_get_skip_replacement_adds_context_to_transform_error(self):
         def fail_transform(_):
