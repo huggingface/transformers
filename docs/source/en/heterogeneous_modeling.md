@@ -51,8 +51,8 @@ patches the initialization of the architecture's layer class so that:
 2. Each skip type in the layer's `skip` applies a skip descriptor from the spec, replacing the layer members it lists
    with modules that turn them into a no-op.
 3. When a mask-affecting attribute (`sliding_window` or `attention_chunk_size`) varies across layers, the model builds
-   one attention mask per distinct value, assigns it to each matching layer index, and patches each affected layer's
-   forward to select the mask by its index.
+   one attention mask per distinct value and packages the masks in a container keyed by layer index. The appropriate
+   mask is selected automatically before each layer's forward call.
 
 All of this is driven by a single declaration, the `HeterogeneousModelingSpec`.
 
@@ -208,8 +208,8 @@ model.model.layers[1].mlp.experts.down_proj.shape
 # torch.Size([128, 32, 2880])
 
 # Layer 0 uses the global sliding window; layer 2 uses its override. Internally,
-# the sliding layers receive their attention masks as a dict keyed by window size,
-# {16: <mask>, 8: <mask>}, and each layer's forward selects its own entry.
+# attention masks are keyed by layer index, and layers with the same mask-relevant
+# configuration may share the same mask object.
 model.model.layers[0].self_attn.sliding_window
 # 16
 
