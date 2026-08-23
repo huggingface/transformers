@@ -129,8 +129,8 @@ Instantiate a pipeline and specify model to use for text generation. The model i
 ```py
 from transformers import pipeline
 
-pipeline = pipeline(task="text-generation", model="Qwen/Qwen2.5-1.5B")
-pipeline("the secret to baking a really good cake is ")
+pipe = pipeline(task="text-generation", model="Qwen/Qwen2.5-1.5B")
+pipe("the secret to baking a really good cake is ")
 [{'generated_text': 'the secret to baking a really good cake is 1) to use the right ingredients and 2) to follow the recipe exactly. the recipe for the cake is as follows: 1 cup of sugar, 1 cup of flour, 1 cup of milk, 1 cup of butter, 1 cup of eggs, 1 cup of chocolate chips. if you want to make 2 cakes, how much sugar do you need? To make 2 cakes, you will need 2 cups of sugar.'}]
 ```
 
@@ -164,8 +164,8 @@ Expand the examples below to see how `Pipeline` works for different modalities a
 ```py
 from transformers import pipeline
 
-pipeline = pipeline(task="automatic-speech-recognition", model="openai/whisper-large-v3")
-pipeline("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac")
+pipe = pipeline(task="automatic-speech-recognition", model="openai/whisper-large-v3")
+pipe("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac")
 {'text': ' I have a dream that one day this nation will rise up and live out the true meaning of its creed.'}
 ```
 
@@ -181,8 +181,8 @@ pipeline("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac
 ```py
 from transformers import pipeline
 
-pipeline = pipeline(task="image-classification", model="facebook/dinov2-small-imagenet1k-1-layer")
-pipeline("https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png")
+pipe = pipeline(task="image-classification", model="facebook/dinov2-small-imagenet1k-1-layer")
+pipe("https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png")
 [{'label': 'macaw', 'score': 0.997848391532898},
  {'label': 'sulphur-crested cockatoo, Kakatoe galerita, Cacatua galerita',
   'score': 0.0016551691805943847},
