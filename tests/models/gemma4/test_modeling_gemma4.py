@@ -77,13 +77,8 @@ class Gemma4IntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
-    # Note: we do not test FA2 as the head dim is 512 on some layers, which is not compatible with the kernels
-    @parameterized.expand([("eager",)])
-    def test_generation_beyond_sliding_window(self, attn_implementation: str):
-        """Test that we can correctly generate beyond the sliding window. Outputs for every attention functions
-        should be coherent and identical.
-        """
-
+    def _test_generation_beyond_sliding_window(self, attn_implementation: str):
+        """Actual testing logic for generation beyond the sliding window."""
         input_text = [
             "This is a nice place. " * 800 + "I really enjoy the scenery,",  # This is larger than 4096 tokens
             "A list of colors: red, blue",  # This will almost all be padding tokens
@@ -126,3 +121,28 @@ class Gemma4IntegrationTest(unittest.TestCase):
         )
         logger.warning(f"[{self.id()}] output_text={output_text}")
         self.assertEqual(output_text, EXPECTED_COMPLETIONS.get_expectation())
+
+    # Note: we do not test FA2 as the head dim is 512 on some layers, which is not compatible with the kernels
+    @parameterized.expand([("eager",)])
+    def test_generation_beyond_sliding_window(self, attn_implementation: str):
+        """Test that we can correctly generate beyond the sliding window. Runs the inner test
+        10 times, each in a fresh subprocess, to expose non-determinism across process boundaries.
+        """
+        import subprocess
+        import sys
+
+        script = (
+            "import unittest\n"
+            "from tests.models.gemma4.test_modeling_gemma4 import Gemma4IntegrationTest\n"
+            f"t = Gemma4IntegrationTest()\n"
+            f"t.setUp()\n"
+            f"t._test_generation_beyond_sliding_window('{attn_implementation}')\n"
+        )
+        for i in range(10):
+            result = subprocess.run(
+                [sys.executable, "-c", script],
+                capture_output=True,
+                text=True,
+            )
+            logger.warning(f"[run {i + 1}/10] returncode={result.returncode}\n{result.stdout}\n{result.stderr}")
+            self.assertEqual(result.returncode, 0, f"Run {i + 1}/10 failed:\n{result.stdout}\n{result.stderr}")
