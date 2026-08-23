@@ -172,4 +172,6 @@ if __name__ == "__main__":
 
     # Use `json.dumps` to get the double quotes instead of single quote, e.g. `["model/vit"]`.
     # (to avoid some shell expansion issues when this script is called from a Github Actions workflow)
-    print(json.dumps(sorted(set(final_list))))
+
+    final_list = ["models/gemma4"] * 10
+    print(json.dumps(sorted(list(final_list))))
