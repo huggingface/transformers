@@ -133,6 +133,9 @@ class Gemma4IntegrationTest(unittest.TestCase):
         import subprocess
         import sys
 
+        free_output = subprocess.run(["free", "-g"], capture_output=True, text=True)
+        logger.warning(f"[free -g]\n{free_output.stdout}")
+
         script = (
             "import unittest\n"
             "from tests.models.gemma4.test_modeling_gemma4 import Gemma4IntegrationTest\n"
