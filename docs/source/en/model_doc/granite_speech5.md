@@ -33,8 +33,27 @@ This model was contributed by [Eustache Le Bihan](https://huggingface.co/eustlb)
 
 ## Usage
 
+### `GraniteSpeech5ForCTC` usage
+
+<hfoptions id="usage">
+<hfoption id="Pipeline">
+
+```python
+from transformers import pipeline
+
+
+pipe = pipeline("automatic-speech-recognition", model="ibm-granite/granite-speech-5.0-470m-turboctc")
+out = pipe("https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3")
+print(out)
+# {'text': 'yesterday it was 35 degrees in barcelona but today the temperature will go down to -20 degrees'}
+```
+
+</hfoption>
+<hfoption id="AutoModel">
+
 ```python
 from datasets import Audio, load_dataset
+
 from transformers import AutoModelForCTC, AutoProcessor
 
 model_id = "ibm-granite/granite-speech-5.0-470m-turboctc"
@@ -43,12 +62,13 @@ model = AutoModelForCTC.from_pretrained(model_id, device_map="auto")
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
-speech_samples = [el["array"] for el in ds["audio"][:5]]
+speech_samples = [el['array'] for el in ds["audio"][:5]]
 
 inputs = processor(speech_samples, sampling_rate=processor.feature_extractor.sampling_rate)
 inputs.to(model.device, dtype=model.dtype)
 outputs = model.generate(**inputs)
 print(processor.batch_decode(outputs, skip_special_tokens=True))
+# ['mister quilter is the apostle of the middle classes and we are glad to welcome his gospel', ...]
 ```
 
 ## GraniteSpeech5CTCConfig
