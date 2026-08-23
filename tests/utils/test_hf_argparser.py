@@ -107,6 +107,11 @@ class ListExample:
 
 
 @dataclass
+class DictExample:
+    values: dict[str, object] = field(default_factory=dict)
+
+
+@dataclass
 class RequiredExample:
     required_list: list[int] = field()
     required_str: str = field()
@@ -292,6 +297,12 @@ class HfArgumentParserTest(unittest.TestCase):
 
         args = parser.parse_args("--foo-int 1 --bar-int 2 3 --foo-str a b c --foo-float 0.1 0.7".split())
         self.assertEqual(args, Namespace(foo_int=[1], bar_int=[2, 3], foo_str=["a", "b", "c"], foo_float=[0.1, 0.7]))
+
+    def test_05_with_dict(self):
+        parser = HfArgumentParser(DictExample)
+
+        args = parser.parse_args(["--values", '{"enable_thinking": false, "temperature": 0.2}'])
+        self.assertEqual(args.values, {"enable_thinking": False, "temperature": 0.2})
 
     def test_06_with_optional(self):
         expected = argparse.ArgumentParser()
