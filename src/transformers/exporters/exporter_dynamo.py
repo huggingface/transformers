@@ -52,7 +52,14 @@ from ..utils import logging
 from ..utils.import_utils import is_detectron2_available, is_torch_available, torch_compilable_check
 from .base import HfExporter
 from .configs import DynamoConfig
-from .utils import apply_patches, patch_attributes, prepare_for_export, register_patch
+from .utils import (
+    EXPORT_METADATA_KEY,
+    apply_patches,
+    build_export_metadata,
+    patch_attributes,
+    prepare_for_export,
+    register_patch,
+)
 
 
 if is_torch_available():
@@ -125,6 +132,21 @@ class DynamoExporter(HfExporter):
                 prefer_deferred_runtime_asserts_over_guards=config.prefer_deferred_runtime_asserts_over_guards,
             )
 
+        # What the graph is, recorded on the program itself: `graph_module.meta` survives `.module()`, so a
+        # `DynamoModelRunner` reads the trace's own account of itself the way the ONNX and ExecuTorch runners
+        # read theirs, and every backend gets it here — `self.required_packages` is the subclass's, so the
+        # versions name whichever exporter is running.
+        #
+        # Unlike those two it does NOT survive serialization: `torch.export.save` keeps a whitelist of meta
+        # keys (a loaded program has only `treespec_namedtuple_fields`), where ONNX carries the payload in
+        # `metadata_props` and ExecuTorch in a constant method — both inside the file. Nothing here saves, so
+        # the in-memory program is the whole lifetime today; a caller who saves one and reloads it gets a
+        # runner with no metadata, and `kv_geometry` / `mask_dict_ranks` / `input_shapes` / `cache_input` are
+        # exactly the facts that go missing. `torch.export.save(..., extra_files=...)` round-trips and is
+        # where this belongs once the save path is ours to own.
+        exported_program.graph_module.meta[EXPORT_METADATA_KEY] = build_export_metadata(
+            model, sample_inputs, exported_program, self.required_packages
+        )
         return exported_program
 
 

@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import copy
 import functools
+import json
 import operator
 from collections.abc import MutableMapping, Sequence
 from contextlib import contextmanager
@@ -53,13 +54,13 @@ from ..utils.import_utils import is_onnxscript_available, is_torch_available
 from .configs import OnnxConfig
 from .exporter_dynamo import DynamoExporter
 from .utils import (
+    EXPORT_METADATA_KEY,
     _resolve_dotted_path,
     apply_fx_node_fixes,
     apply_patches,
+    build_export_metadata,
     duplicate_leaf_tensors,
     get_leaf_tensors,
-    module_device,
-    patch_attributes,
     register_fx_node_fix,
     register_patch,
 )
@@ -118,25 +119,7 @@ class OnnxExporter(DynamoExporter):
         elif type(config) is not OnnxConfig:
             raise TypeError(f"Expected config to be an OnnxConfig or dict, got {type(config)}")
 
-        # The SSM mixers' associative scan is only ONNX-exportable in its `pointwise` combine mode (cuda /
-        # xpu): the `generic` mode a cpu tensor selects lowers through `vmap`, which `run_decompositions`
-        # cannot take apart ("tensor may have escaped from inside a function being vmapped"), and it pins
-        # the scan's step axis anyway. Keep a cpu export on the sequential scan, through the mixers' own
-        # switch — the way `patch_model_config` turns off `use_mamba_kernels`.
-        mixer_patches = (
-            [
-                (module, "use_associative_scan", lambda _original: False)
-                for module in model.modules()
-                if hasattr(module, "use_associative_scan")
-            ]
-            if (device := module_device(model)) is not None and device.type not in ("cuda", "xpu")
-            else []
-        )
-        with (
-            patch_model_outputs(model) as (inputs_names, outputs_names),
-            apply_patches("onnx"),
-            patch_attributes(mixer_patches),
-        ):
+        with apply_patches("onnx"), patch_model_outputs(model) as (inputs_names, outputs_names):
             exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
             inputs_names, outputs_names = disambiguate_io_names(inputs_names, outputs_names)
             apply_fx_node_fixes("onnx", exported_program.graph_module)
@@ -155,6 +138,12 @@ class OnnxExporter(DynamoExporter):
             )
 
         apply_onnx_ir_fixes(onnx_program)
+        # What the graph means, alongside what it declares: an ORT session reports names, shapes and types,
+        # but nothing about precision or mask layout, so the runner would have to infer them
+        # (`build_export_metadata`). `metadata_props` survives saving and comes back through
+        # `session.get_modelmeta().custom_metadata_map`.
+        metadata = build_export_metadata(model, sample_inputs, exported_program, self.required_packages)
+        onnx_program.model.metadata_props[EXPORT_METADATA_KEY] = json.dumps(metadata)
         return onnx_program
 
 
@@ -180,8 +169,13 @@ def patch_model_outputs(model):
         # otherwise contribute leaf names the graph never took as inputs — shifting every later name onto
         # the wrong tensor (a recurrent model's `attention_mask` came out named
         # `cache_params.layers.0.conv_states.0`). Repeated traces then compounded it by appending again.
-        inputs_names[:] = get_leaf_tensors(kwargs).keys()
-        outputs = get_leaf_tensors(duplicate_leaf_tensors(original_forward(*args, **kwargs)))
+        inputs = get_leaf_tensors(kwargs)
+        inputs_names[:] = inputs.keys()
+        # The inputs count as already-seen identities: an output handed straight back is the graph's own
+        # placeholder value, which would collapse the pair onto one name (see `duplicate_leaf_tensors`).
+        outputs = get_leaf_tensors(
+            duplicate_leaf_tensors(original_forward(*args, **kwargs), seen={id(tensor) for tensor in inputs.values()})
+        )
         outputs_names[:] = outputs.keys()
         return outputs
 
@@ -202,12 +196,11 @@ def disambiguate_io_names(inputs_names: list[str], outputs_names: list[str]) -> 
     definition of name (output)"). Consumers strip the `output.` prefix the same way they do for the
     input/output collision above.
     """
-    for name in set(inputs_names).intersection(set(outputs_names)):
-        inputs_names[inputs_names.index(name)] = f"input.{name}"
-        outputs_names[outputs_names.index(name)] = f"output.{name}"
-    if "output" in outputs_names:
-        outputs_names[outputs_names.index("output")] = "output.output"
-    return inputs_names, outputs_names
+    collisions = set(inputs_names).intersection(outputs_names)
+    return (
+        [f"input.{name}" if name in collisions else name for name in inputs_names],
+        [f"output.{name}" if name in collisions or name == "output" else name for name in outputs_names],
+    )
 
 
 # ── Stage 1: Torch patches ─────────────────────────────────────────────────────
@@ -216,6 +209,28 @@ def disambiguate_io_names(inputs_names: list[str], outputs_names: list[str]) -> 
 # `"torch.Tensor.unsqueeze"`). Installation and restoration go through `apply_patches`.
 #
 # To add a new patch: define a `_patch_*` factory and decorate it.
+
+
+@register_patch(
+    "onnx",
+    "transformers.models.falcon_mamba.modeling_falcon_mamba.mamba_selective_scan",
+    "transformers.models.jamba.modeling_jamba.mamba_selective_scan",
+    "transformers.models.mamba.modeling_mamba.mamba_selective_scan",
+    "transformers.models.zamba.modeling_zamba.mamba_selective_scan",
+)
+def _patch_mamba_selective_scan(original):
+    """Keep an SSM scan sequential unless its `pointwise` combine mode is available. Only that mode (cuda /
+    xpu) is ONNX-exportable: the `generic` mode a cpu tensor selects lowers through `vmap`, which
+    `run_decompositions` cannot take apart ("tensor may have escaped from inside a function being
+    vmapped"), and it pins the scan's step axis anyway. Read off the tensor that selects the mode, so the
+    decision is per call rather than per export."""
+
+    def patch(hidden_states, *args, **kwargs):
+        if hidden_states.device.type not in ("cuda", "xpu"):
+            kwargs["use_associative_scan"] = False
+        return original(hidden_states, *args, **kwargs)
+
+    return patch
 
 
 @register_patch("onnx", "torch.where")

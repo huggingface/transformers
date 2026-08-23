@@ -37,16 +37,36 @@ nothing is introspected from the graphs. Two public pieces:
 from __future__ import annotations
 
 import copy
+import functools
+import json
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import Any
 
 import torch
 from torch.utils._pytree import tree_flatten, tree_leaves, tree_unflatten
 
 from ..cache_utils import DynamicCache, EncoderDecoderCache, StaticCache, StaticLayer
 from ..generation import GenerationConfig, GenerationMixin
+from ..masking_utils import create_masks_for_generate
+from ..modeling_multimodal_utils import get_mrope_index, uses_mrope
 from ..modeling_outputs import BaseModelOutput, CausalLMOutputWithPast
+from ..utils import logging
+from .utils import (
+    _MODALITY_SPECS,
+    EXPORT_METADATA_KEY,
+    _find_config_attr,
+    anyres_patch_counts,
+    cast_leaf_tensors,
+    flatten_anyres_patches,
+    get_leaf_tensors,
+    materialize_cache_layers,
+    precompute_export_inputs,
+)
+
+
+logger = logging.get_logger(__name__)
 
 
 class ModelRunner(ABC):
@@ -64,31 +84,112 @@ class ModelRunner(ABC):
     runner, so nobody has to pass them in.
     """
 
-    # Shape per declared input, `None` for a symbolic axis, when the backend's handle reports them. The
-    # generic form of "what does this graph take": the generation layer derives what it needs from it (which
-    # rank the mask was traced with, say) without the runner having to know what the inputs mean.
-    input_shapes: dict[str, tuple[int | None, ...]] = {}
-
-    # `{attention type: rank}` when the graph took a *dict* of masks instead (mixed full/sliding attention),
-    # which a model builds inside its forward — so the runtime has to hand one in. Exactly one of the two is
-    # set, and the graph is the only thing that can say which.
-    mask_dict_ranks: dict[str, int] | None = None
-
-    input_names: tuple[str, ...] = ()
+    # What the exporter recorded about this graph (`build_export_metadata`): the trace's own account of
+    # itself, and what every accessor below reads. `{}` for an artifact written without it, or for a dynamo
+    # module, which *is* the program — those runners assign the fields they can answer themselves.
+    export_metadata: dict[str, Any] = {}
     device: torch.device | str = "cpu"
-    dtype: torch.dtype = torch.float32
 
-    @property
+    @functools.cached_property
+    def mask_dict_ranks(self) -> dict[str, int] | None:
+        """`{attention type: rank}` when the graph took a *dict* of masks instead of one (mixed full/sliding
+        attention), which a model builds inside its forward — so the runtime has to hand one in.
+
+        Recorded at export. A backend whose handle can still recover it for an artifact written before that
+        overrides this — and they do not all read the same place: dynamo takes the dict as one kwarg and keeps
+        the per-type keys in its pytree child spec, while ONNX and ExecuTorch flatten it to one input per
+        type."""
+        return _recorded_mask_ranks(self.export_metadata)
+
+    @functools.cached_property
+    def input_names(self) -> tuple[str, ...]:
+        """What this graph takes, in the flat order it takes them, as recorded at export.
+
+        A runner whose handle names them itself assigns `self.input_names` instead, which seeds this: ONNX
+        exposes a mutated input under the name `generate` uses rather than the `input.`-prefixed one its
+        session declares, and a dynamo module is the program, so its own input spec is the record."""
+        return tuple(self.export_metadata.get("input_names", ()))
+
+    @functools.cached_property
+    def input_shapes(self) -> dict[str, tuple[int | None, ...]]:
+        """Shape per input, `None` per symbolic axis — the shapes the *trace* saw, as recorded.
+
+        A runner assigns `self.input_shapes` instead when what its handle *declares* is the load-bearing
+        fact: ONNX sizes a not-yet-created cache entry from the declared shape, and only the session says
+        which axes it left symbolic."""
+        return {name: tuple(shape) for name, shape in self.export_metadata.get("shapes", {}).items()}
+
+    @functools.cached_property
+    def dtype(self) -> torch.dtype:
+        """Precision the graph computes at, as recorded at export.
+
+        The generation layer sizes the cache it feeds from this, and a half-precision export (a grouped-mm
+        MoE, a varlen-attention VLM) takes half-precision cache leaves — hand it the fp32 default and the
+        feed is refused when the artifact binds its inputs. An artifact carrying no metadata cannot say, so
+        it says so rather than sniffing whichever of its tensors happens to be floating point. A runner whose
+        handle knows better assigns `self.dtype` instead, which seeds this."""
+        if dtype := _recorded_dtype(self.export_metadata):
+            return dtype
+        logger.warning_once(
+            f"This artifact carries no `{EXPORT_METADATA_KEY}`, so the precision it was exported at is "
+            f"unknown; assuming {torch.float32}. Re-export it to record the precision."
+        )
+        return torch.float32
+
+    @functools.cached_property
     def cache_input(self) -> str | None:
         """The kwarg this graph takes its cache under — `"cache_params"` for a recurrent model (fixed-size
         conv / recurrent state), `"past_key_values"` otherwise, `None` for a graph with no cache.
 
-        Matched across each backend's naming of the same thing: dynamo takes the whole pytree under the bare
-        name, ONNX flattens it to `input.<kwarg>.<path>` inputs, ExecuTorch to `<kwarg>_<leaf index>`."""
+        Read off the recorded kwargs when the artifact carries metadata — the one traced as a cache
+        container, whatever it is called. Otherwise matched across each backend's naming of the same thing:
+        dynamo takes the whole pytree under the bare name, ONNX flattens it to `input.<kwarg>.<path>`
+        inputs, ExecuTorch to `<kwarg>_<leaf index>`.
+
+        Cached: the metadata and the declared names are both fixed once the runner is built, and the
+        generation loop asks for this on every step."""
+        recorded = _recorded_kwargs(self.export_metadata)
+        if recorded:
+            return next((name for name, spec in recorded.items() if spec.get("container") == "cache"), None)
         for kwarg in ("cache_params", "past_key_values"):
             if any(name.removeprefix("input.").startswith(kwarg) for name in self.input_names):
                 return kwarg
         return None
+
+    @functools.cached_property
+    def text_input(self) -> str:
+        """The graph's text input: `"decoder_input_ids"` (encoder-decoder decode), `"inputs_embeds"`
+        (multi-modal decode) or `"input_ids"`."""
+        return next((n for n in ("decoder_input_ids", "inputs_embeds") if n in self.input_names), "input_ids")
+
+    @functools.cached_property
+    def mask_inputs(self) -> tuple[str, ...]:
+        """The graph's attention-mask input name(s) — several for mixed full/sliding attention."""
+        return tuple(
+            n
+            for n in self.input_names
+            if n == "attention_mask" or n.startswith(("attention_mask.", "attention_mask_"))
+        )
+
+    @functools.cached_property
+    def decoder_mask_input(self) -> str | None:
+        """`"decoder_attention_mask"` when the graph declares one. An encoder-decoder splits the two masks:
+        `attention_mask` covers the *encoder's* sequence (what cross-attention reads) while this one covers
+        the decoder's own — so the causal mask belongs here, and `generate` does not hand it over (the eager
+        model builds it inside the forward the graph starts after)."""
+        return "decoder_attention_mask" if "decoder_attention_mask" in self.input_names else None
+
+    @functools.cached_property
+    def mask_rank(self) -> int | None:
+        """The rank the graph's `attention_mask` was traced with, `None` when it takes none.
+
+        `generate` upgrades a 2D padding mask to the 4D causal mask for any compileable cache, assuming the
+        model's forward wants one — but an exported graph starts *after* whatever mask building its model
+        does, so only the trace can say which it took. An alibi model (bloom) reads the 2D padding mask
+        directly and compares its width to the cache length, so a 4D mask fails a guard rather than
+        mismatching a shape."""
+        shape = self.input_shapes.get("attention_mask")
+        return len(shape) if shape is not None else None
 
     @abstractmethod
     def __call__(self, **kwargs) -> dict[str, torch.Tensor]:
@@ -279,87 +380,6 @@ def _mark_existing_states(past_key_values) -> None:
                     marks[key] = True
 
 
-def _traced_input_shapes(module) -> dict[str, tuple[int | None, ...]]:
-    """`{input name: shape}` from the traced graph's placeholders, `None` per symbolic axis."""
-    return {
-        node.name: tuple(int(dim) if isinstance(dim, int) else None for dim in node.meta["val"].shape)
-        for node in getattr(getattr(module, "graph", None), "nodes", [])
-        if node.op == "placeholder" and hasattr(node.meta.get("val"), "shape")
-    }
-
-
-def _traced_mask_dict_ranks(module) -> dict[str, int] | None:
-    """`{attention type: rank}` when the graph took a *dict* of masks, else `None`.
-
-    Not derivable from the input shapes: the graph takes one `attention_mask` kwarg and the per-type keys live
-    in its pytree child spec, so this reads the spec. A mixed-attention model builds that dict inside its
-    forward, which the graph starts after, so the runtime has to hand one in — and the ranks differ per type
-    (a full-attention entry is the 4D causal mask, a linear-attention one the 2D padding mask).
-    """
-    kwargs_spec = module._in_spec.child(1)
-    names = list(kwargs_spec.context or [])
-    if "attention_mask" not in names:
-        return None
-    keys = getattr(kwargs_spec.children_specs[names.index("attention_mask")], "context", None)
-    if not (isinstance(keys, list) and keys):
-        return None
-    ranks = [
-        len(node.meta["val"].shape)
-        for node in getattr(getattr(module, "graph", None), "nodes", [])
-        if node.op == "placeholder"
-        and node.name.startswith("attention_mask")
-        and hasattr(node.meta.get("val"), "shape")
-    ]
-    return dict(zip(keys, ranks)) if len(ranks) == len(keys) else dict.fromkeys(keys, 4)
-
-
-def _traced_cache_leaf_shapes(module) -> dict[int, tuple[int | None, ...]]:
-    """`{leaf index: shape}` for the graph's cache inputs, keyed by the index in the placeholder's own name.
-
-    Keyed, not positional: a cache tensor the trace folded into a constant (a static sliding layer's
-    `_sliding_window_tensor`) has no placeholder at all, so counting placeholders in order would shift
-    every leaf after it — and the pytree context refers to leaves by index."""
-    shapes = {}
-    for node in getattr(getattr(module, "graph", None), "nodes", []):
-        if node.op != "placeholder" or not node.name.startswith("past_key_values"):
-            continue
-        index = node.name.rsplit("_", 1)[-1]
-        value = node.meta.get("val")
-        if index.isdigit() and hasattr(value, "shape"):
-            shapes[int(index)] = tuple(int(dim) if isinstance(dim, int) else None for dim in value.shape)
-    return shapes
-
-
-def _traced_kv_geometry(module) -> dict[int, tuple[int, int, int]]:
-    """`{layer index: (num_kv_heads, key_head_dim, value_head_dim)}` from the traced cache.
-
-    The serialized context records which leaf *each* layer's `keys` / `values` occupy, so the shapes are
-    matched by name. Matching by position instead cannot work: a hybrid model's recurrent states are rank-4
-    too, so any rank-based pairing shifts the geometry of every attention layer after the first
-    linear-attention one.
-    """
-    shapes = _traced_cache_leaf_shapes(module)
-    kwargs_spec = module._in_spec.child(1)
-    names = list(kwargs_spec.context or [])
-    cache_name = next((name for name in ("past_key_values", "cache_params") if name in names), None)
-    if cache_name is None:
-        return {}
-    context = kwargs_spec.children_specs[names.index(cache_name)].context
-    state = context.get("s", {}) if isinstance(context, dict) else {}
-    geometry = {}
-    for index, layer in enumerate(state.get("layers", []) or []):
-        entries = layer.get("s", {}) if isinstance(layer, dict) else {}
-        keys, values = entries.get("keys"), entries.get("values")
-        if not (isinstance(keys, dict) and keys.get("_t") == "tensor" and isinstance(values, dict)):
-            continue
-        key_shape, value_shape = shapes.get(keys["i"]), shapes.get(values["i"])
-        if key_shape is None or value_shape is None:
-            continue
-        if len(key_shape) == 4 and None not in (key_shape[1], key_shape[3], value_shape[3]):
-            geometry[index] = (key_shape[1], key_shape[3], value_shape[3])
-    return geometry
-
-
 class DynamoModelRunner(ModelRunner):
     """`ModelRunner` backed by a `torch.export` unlifted module (`ExportedProgram.module()`) — the
     runnable, like ORT's session. Kwargs pass straight through (the KV-cache stays a `Cache` pytree the
@@ -367,20 +387,20 @@ class DynamoModelRunner(ModelRunner):
 
     def __init__(self, module):
         self._module = module
-        # The module requires the exact kwarg set it was traced with (including baked scalars like
-        # `max_seqlen` that aren't graph placeholders) — its input pytree spec carries those kwarg names.
+        # `graph_module.meta` survives `.module()`, so the exporter's account of the trace rides along here
+        # exactly as it does inside an artifact — precision, cache layout, traced shapes and all.
+        self.export_metadata = getattr(module, "meta", {}).get(EXPORT_METADATA_KEY, {})
+        self.kv_geometry = _recorded_kv_geometry(self.export_metadata)
+        # The one thing the metadata cannot give: this module rejects any kwarg set but the one it was traced
+        # with, *including* baked scalars (`max_seqlen`) that never became graph placeholders — so the
+        # recorded graph inputs are too few, and its own pytree spec is the contract.
         self.input_names = tuple(module._in_spec.child(1).context)
-        self.kv_geometry = _traced_kv_geometry(module)
-        self.input_shapes = _traced_input_shapes(module)
-        self.mask_dict_ranks = _traced_mask_dict_ranks(module)
         # Outputs land wherever the exported weights live.
         weight = next(self._module.parameters(), None)
         if weight is not None:
             self.device, self.dtype = weight.device, weight.dtype
 
     def __call__(self, **kwargs) -> dict[str, torch.Tensor]:
-        from .utils import get_leaf_tensors
-
         # The module rejects kwargs it wasn't traced with — e.g. a prefill graph whose capture predates the
         # cache (models that create it inside the first forward); its cache still rides out on the outputs.
         if "past_key_values" not in self.input_names:
@@ -410,23 +430,25 @@ def _ort_to_torch_dtype(ort_type: str | None) -> torch.dtype | None:
     return dtype if isinstance(dtype, torch.dtype) else None
 
 
-def _session_kv_geometry(shapes: dict[str, tuple]) -> dict[int, tuple[int, int, int]]:
-    """`{layer index: (num_kv_heads, key_head_dim, value_head_dim)}` from an ORT session's input shapes.
+def _baked_export_metadata(program) -> str | None:
+    """The export metadata baked into a `.pte`, or `None` for a program exported without one."""
+    try:
+        return program.load_method(EXPORT_METADATA_KEY).execute(())[0]
+    except Exception:
+        return None
 
-    The ONNX graph names its cache inputs by dotted path, so this is a lookup by name — no leaf indices to
-    keep in step, unlike the dynamo side."""
-    geometry = {}
-    for name, shape in shapes.items():
-        match = re.fullmatch(r"input\.(?:past_key_values|cache_params)\.layers\.(\d+)\.keys", name)
-        if match is None or len(shape) != 4:
-            continue
-        values = shapes.get(name.removesuffix("keys") + "values")
-        if values is None or len(values) != 4:
-            continue
-        heads, key_dim, value_dim = shape[1], shape[3], values[3]
-        if all(isinstance(dim, int) for dim in (heads, key_dim, value_dim)):
-            geometry[int(match.group(1))] = (heads, key_dim, value_dim)
-    return geometry
+
+def _recorded_kv_geometry(metadata: dict) -> dict[int, tuple[int, int, int]]:
+    """`{layer index: (num_kv_heads, key_head_dim, value_head_dim)}` from the recorded cache layout, or `{}`.
+
+    A layer whose state is not keys-and-values (a recurrent layer's conv / SSM buffers) has no geometry and
+    is absent, which is what the caller checks."""
+    layers = (metadata.get("cache") or {}).get("layers") or []
+    return {
+        index: (layer["heads"], layer["key_dim"], layer["value_dim"])
+        for index, layer in enumerate(layers)
+        if {"heads", "key_dim", "value_dim"} <= layer.keys()
+    }
 
 
 class OnnxModelRunner(ModelRunner):
@@ -438,55 +460,41 @@ class OnnxModelRunner(ModelRunner):
     def __init__(self, session):
         self._session = session
         self._output_names = [o.name for o in session.get_outputs()]
-
-        # The exporter prefixes *mutated* inputs with `input.` — the cache leaves always, but also any plain
-        # kwarg the graph writes to (a merged multi-token decode mutates its `attention_mask`). The cache
-        # keeps the prefix (its dotted leaf paths are this runner's own convention), while a mutated plain
-        # kwarg is exposed bare so the generation layer sees the name `generate` uses; `_session_name` maps
-        # back when feeding.
-        def exposed(name):
-            if name.startswith(("input.past_key_values", "input.cache_params")):
-                return name
-            return name.removeprefix("input.")
-
-        self._session_names = {exposed(i.name): i.name for i in session.get_inputs()}
-        self.input_names = tuple(self._session_names)
-        # `{declared cache input: its leaf path in the cache}`, e.g.
-        # `input.cache_params.layers.0.conv_states.0` -> `["layers", "0", "conv_states", "0"]`. Keyed by
-        # path rather than by position: a recurrent layer's states are `None` until a step produces them,
-        # so the cache's tensor leaves are a *subset* of what the graph declares and in a different order.
-        self._cache_paths = {
-            n: n.removeprefix("input.").split(".")[1:] for n in self.input_names if n.startswith("input.")
-        }
-        shapes = {exposed(i.name): tuple(i.shape) for i in session.get_inputs()}
-        # ORT rejects a feed whose dtype differs from the declared one, and the masks the runtime builds are
-        # not always the type the graph was traced with (a bool padding mask vs a float causal one).
-        self._input_dtypes = {exposed(i.name): _ort_to_torch_dtype(i.type) for i in session.get_inputs()}
-        self.input_shapes = shapes
-        self.kv_geometry = _session_kv_geometry(shapes)
-        # Same contract as the dynamo runner's: the rank the single `attention_mask` input was traced with,
-        # so the generation loop feeds the mask kind this graph took rather than assuming 4D.
-        self.mask_dict_ranks = _mask_dict_ranks_from_shapes(shapes)
-        # Where the loop's tensors live / at what precision: the session's execution provider and the
-        # graph's float (logits) output type. ORT still hands back host numpy, so `__call__` bridges —
-        # feeds to CPU, outputs back to this device.
-        self.device = "cuda" if any("CUDA" in p for p in session.get_providers()) else "cpu"
-        # Precision from the first floating-point output, whatever it is called: a runner serves whichever
-        # task its graph was exported for (`logits`, `last_hidden_state`, a classifier score), so it must not
-        # go looking for one output by name. Integer-only outputs are skipped — they say nothing about the
-        # graph's compute precision.
-        self.dtype = next(
-            (
-                dtype
-                for output in session.get_outputs()
-                if (dtype := _ort_to_torch_dtype(output.type)) is not None and dtype.is_floating_point
-            ),
-            torch.float32,
+        self.export_metadata = _read_export_metadata(
+            session.get_modelmeta().custom_metadata_map.get(EXPORT_METADATA_KEY)
         )
+        # ORT hands back host numpy, so `__call__` bridges: feeds to CPU, outputs back to this device.
+        self.device = "cuda" if any("CUDA" in p for p in session.get_providers()) else "cpu"
+        self.kv_geometry = _recorded_kv_geometry(self.export_metadata)
+
+        # The graph names its *mutated* inputs with an `input.` prefix — the cache leaves always, and any
+        # plain kwarg the graph writes to (a merged multi-token decode mutates its `attention_mask`).
+        # Stripping it back off is what recovers the kwarg-space name (`disambiguate_io_names` only ever
+        # prefixes, so the transformation inverts), and walking the session's own inputs means one a graph
+        # pass dropped as unused is simply absent rather than something to look up.
+        self._session_names, self._input_dtypes, self.input_shapes, self._cache_paths = {}, {}, {}, {}
+        for spec in session.get_inputs():
+            # The whole dotted name, not just its first segment: a graph handed a *dict* of masks declares
+            # one input per entry (`attention_mask.full_attention`, `attention_mask.linear_attention`), and
+            # both would otherwise collapse onto `attention_mask` and lose the session name behind it.
+            kwarg_name = spec.name.removeprefix("input.")
+            kwarg, _, path = kwarg_name.partition(".")
+            in_cache = kwarg == self.cache_input
+            exposed = spec.name if in_cache else kwarg_name
+            if in_cache:
+                # Keyed by path, not position: a recurrent layer's states are `None` until a step produces
+                # them, so the cache's tensor leaves are a *subset* of what the graph declares.
+                self._cache_paths[exposed] = path.split(".") if path else []
+            self._session_names[exposed] = spec.name
+            # ORT rejects a feed whose dtype differs from the declared one, and the masks the runtime builds
+            # are not always the type the graph was traced with (a bool padding mask vs a float causal one).
+            self._input_dtypes[exposed] = _ort_to_torch_dtype(spec.type)
+            # The *declared* shape, which is not the traced one: it sizes a cache entry the model has not
+            # created yet, and only this says which axes ORT left symbolic.
+            self.input_shapes[exposed] = tuple(spec.shape)
+        self.input_names = tuple(self._session_names)
 
     def __call__(self, **kwargs) -> dict[str, torch.Tensor]:
-        from .utils import get_leaf_tensors
-
         cache = kwargs.pop(self.cache_input, None) if self.cache_input else None
         if cache is not None:
             batch = next((t.shape[0] for t in kwargs.values() if isinstance(t, torch.Tensor) and t.dim() > 0), 1)
@@ -521,22 +529,13 @@ class OnnxModelRunner(ModelRunner):
         }
 
 
-def _baked_kv_geometry(program) -> dict[int, tuple[int, int, int]]:
-    """The per-layer KV geometry the exporter baked into a `.pte`, or `{}` for a program without one."""
-    try:
-        flat = list(program.load_method("kv_geometry").execute(()))
-    except Exception:
-        return {}
-    return {flat[i]: tuple(flat[i + 1 : i + 4]) for i in range(0, len(flat) - 3, 4)}
-
-
 class ExecutorchModelRunner(ModelRunner):
     """`ModelRunner` backed by a loaded ExecuTorch runtime program
     (`Runtime.get().load_program(...)`). Unlike ONNX, a `.pte` carries no `input.`/`output.` convention:
     inputs are **positional** (in the source graph's flat order) and `execute` returns the lowering's
     mutated-input copies first, the model's own outputs last. A loaded method's metadata carries only counts
     and tensor shapes, so the exporter bakes the input names and the user-output count into the `.pte`
-    itself as constant methods (`_signature_constant_methods`) — the program is self-describing, exactly
+    itself as one metadata constant method (`build_export_metadata`) — the program is self-describing, exactly
     like an ONNX session or a `torch.export` module, and this runner needs nothing else. Cache inputs are
     the `past_key_values*` ones, each named by its flat leaf index; the model's outputs are
     `[logits, *cache_updates]`, in cache-input order.
@@ -550,39 +549,20 @@ class ExecutorchModelRunner(ModelRunner):
 
     def __init__(self, program):
         self._method = program.load_method("forward")
-        self.input_names = tuple(program.load_method("input_names").execute(()))
-        self._output_names = tuple(program.load_method("output_names").execute(()))
-        num_user_outputs = program.load_method("num_user_outputs").execute(())[0]
+        # A `.pte` binds inputs positionally and reports only counts and shapes, so everything about what it
+        # takes and returns comes from the metadata the exporter baked in.
+        self.export_metadata = _read_export_metadata(_baked_export_metadata(program))
+        self._output_names = tuple(self.export_metadata.get("output_names", ()))
+        # The model's own outputs are the LAST that many: the lowering emits its mutated-input copies first.
+        num_user_outputs = self.export_metadata.get("num_user_outputs", self._method.metadata.num_outputs())
         total_outputs = self._method.metadata.num_outputs()
         self._user_output_indices = range(total_outputs - num_user_outputs, total_outputs)
         self._cache_names = [n for n in self.input_names if n.startswith(self.cache_input or "\0")]
-        # Baked by the exporter (`_signature_constant_methods`): a `.pte` keeps shapes but nothing saying
-        # which leaf is a layer's keys, so the geometry rides along as `layer, heads, key_dim, value_dim`.
-        self.kv_geometry = _baked_kv_geometry(program)
-        self.input_shapes = {
-            name: tuple(self._method.metadata.input_tensor_meta(index).sizes())
-            for index, name in enumerate(self.input_names)
-        }
+        self.kv_geometry = _recorded_kv_geometry(self.export_metadata)
         # Same contract as the other runners': a graph that took a *dict* of masks declares one input per
         # attention type, so the generation loop has the ranks to build it rather than assuming a single mask.
-        self.mask_dict_ranks = _mask_dict_ranks_from_shapes(self.input_shapes)
-        # Precision the program was lowered at, read off its first floating-point input. A `.pte` says
-        # nothing else about what the model was built in, and the generation layer sizes the cache it feeds
-        # from `dtype` — a half-precision export (a grouped-mm MoE, a varlen-attention VLM) declares
-        # bf16 cache leaves, and handing it the base class's fp32 default is rejected outright when the
-        # method binds its inputs (`set_inputs ... error 0x12`). Integer inputs (ids, masks) say nothing
-        # about compute precision, so they are skipped.
-        from torch.onnx import JitScalarType
-
-        declared_dtypes = (
-            JitScalarType(int(self._method.metadata.input_tensor_meta(index).dtype())).dtype()
-            for index in range(len(self.input_names))
-        )
-        self.dtype = next((dtype for dtype in declared_dtypes if dtype.is_floating_point), torch.float32)
 
     def __call__(self, **kwargs) -> dict[str, torch.Tensor]:
-        from .utils import get_leaf_tensors
-
         cache = kwargs.pop(self.cache_input, None) if self.cache_input else None
         if cache is not None:
             # Cache inputs are named by flat leaf index (`<kwarg>_<N>`) — index rather than zip,
@@ -644,7 +624,7 @@ def _pack_anyres_features(config, features, image_sizes, outputs) -> torch.Tenso
     Mirrors `pack_image_features`, calling the modeling's own grid/unpad helpers so the geometry lives in one
     place — the split optimum-intel uses, and the reason the graph is dynamic in image count and resolution."""
     from ..models.llava_next.modeling_llava_next import get_anyres_image_grid_shape, unpad_image
-    from .utils import _find_config_attr, anyres_patch_counts
+    from .utils import _find_config_attr
 
     newline = next((t for name, t in outputs.items() if name.endswith("image_newline")), None)
     pinpoints = _find_config_attr(config, "image_grid_pinpoints")
@@ -691,7 +671,7 @@ class _ExportedEncoder:
             # The merge keys its primary entry by the embed graph's own output name; this graph declares it
             # under its text input, the way the decode feed maps it.
             primary, *extra = merged
-            kwargs[_text_input(self._runner)] = merged[primary]
+            kwargs[self._runner.text_input] = merged[primary]
             kwargs.update({name: merged[name] for name in extra})
         feed = {k: v for k, v in kwargs.items() if k in set(self._runner.input_names)}
         return BaseModelOutput(last_hidden_state=next(iter(self._runner(**feed).values())))
@@ -707,17 +687,45 @@ class _ExportedEncoder:
 # for (classification, embeddings, …), not only generation.
 
 
-def _mask_dict_ranks_from_shapes(shapes: dict[str, tuple]) -> dict[str, int] | None:
-    """`{attention type: rank}` for a graph that declares one mask input per type (mixed full/sliding
-    attention), read off its declared input names — each backend spells the dict's leaves its own way
-    (`attention_mask.full_attention` for ONNX, `attention_mask_full_attention` for ExecuTorch)."""
-    ranks = {
-        name.removeprefix(prefix): len(shape)
-        for name, shape in shapes.items()
-        for prefix in ("attention_mask.", "attention_mask_")
-        if name.startswith(prefix)
-    }
-    return ranks or None
+def _read_export_metadata(payload: str | None) -> dict:
+    """The metadata the exporter wrote into the artifact (`build_export_metadata`), or `{}`.
+
+    Empty for anything exported before the signature existed, or by another tool — every caller falls back
+    to reading the fact off the declared tensors, which is what all of them used to do."""
+    if not payload:
+        return {}
+    try:
+        signature = json.loads(payload)
+    except json.JSONDecodeError:
+        logger.warning_once(f"Ignoring an unreadable `{EXPORT_METADATA_KEY}`; falling back to inference.")
+        return {}
+    return signature if isinstance(signature, dict) else {}
+
+
+def _recorded_kwargs(metadata: dict) -> dict[str, dict]:
+    """The kwargs the graph was traced with, under the names the model's forward uses — before each backend
+    mangled them into its own input names."""
+    kwargs = metadata.get("kwargs")
+    return kwargs if isinstance(kwargs, dict) else {}
+
+
+def _recorded_mask_ranks(metadata: dict) -> dict[str, int | None] | None:
+    """`{attention type: rank}` when the graph was traced with a *dict* of masks, else `None`.
+
+    A single plain mask is recorded as one tensor rather than a mapping, and the generation layer keys on
+    the dict form only — so that case stays `None`, as does an artifact with no signature.
+
+    Every entry the trace declared is kept, with rank `None` for one it held no mask in (a linear-attention
+    slot the model never built a mask for). Dropping those would feed the graph a *shorter* dict than it
+    was traced with: `None` is a pytree leaf, so the slot counts toward the input spec either way."""
+    leaves = _recorded_kwargs(metadata).get("attention_mask", {}).get("leaves")
+    return {name: leaf.get("rank") for name, leaf in leaves.items()} if leaves else None
+
+
+def _recorded_dtype(metadata: dict) -> torch.dtype | None:
+    """The precision the graph was exported at, as recorded — not sniffed off whichever tensor is float."""
+    dtype = getattr(torch, metadata.get("dtype") or "", None)
+    return dtype if isinstance(dtype, torch.dtype) else None
 
 
 def _mask_type(name: str) -> str:
@@ -738,42 +746,6 @@ def _declares(runner, name: str, value) -> bool:
     return not isinstance(value, torch.Tensor) and any(
         declared.removeprefix("input.").startswith((f"{name}.", f"{name}_")) for declared in runner.input_names
     )
-
-
-def _mask_rank(runner) -> int | None:
-    """Rank the graph's single `attention_mask` input was traced with, or `None` if it takes no mask.
-
-    `generate` upgrades a 2D padding mask to the 4D causal mask for any compileable cache, assuming the
-    model's forward wants one — but an exported graph starts *after* whatever mask building its model does,
-    so only the trace can say which it took. An alibi model (bloom) reads the 2D padding mask directly and
-    compares its width to the cache length, so a 4D mask fails a guard rather than mismatching a shape.
-    """
-    shape = runner.input_shapes.get("attention_mask")
-    return len(shape) if shape is not None else None
-
-
-def _text_input(runner) -> str:
-    """The graph's text input: `"decoder_input_ids"` (encoder-decoder decode), `"inputs_embeds"`
-    (multi-modal decode) or `"input_ids"`."""
-    for name in ("decoder_input_ids", "inputs_embeds"):
-        if name in runner.input_names:
-            return name
-    return "input_ids"
-
-
-def _mask_inputs(runner) -> tuple[str, ...]:
-    """The graph's attention-mask input name(s) — several for mixed full/sliding attention."""
-    return tuple(
-        n for n in runner.input_names if n == "attention_mask" or n.startswith(("attention_mask.", "attention_mask_"))
-    )
-
-
-def _decoder_mask_input(runner) -> str | None:
-    """`"decoder_attention_mask"` when the graph declares one. An encoder-decoder splits the two masks:
-    `attention_mask` covers the *encoder's* sequence (what cross-attention reads) while this one covers
-    the decoder's own — so the causal mask belongs here, not in `attention_mask`, and `generate` does
-    not hand it over (the eager model builds it inside the forward the graph starts after)."""
-    return "decoder_attention_mask" if "decoder_attention_mask" in runner.input_names else None
 
 
 class ExportedGenerator(GenerationMixin):
@@ -847,15 +819,13 @@ class ExportedGenerator(GenerationMixin):
         `OnnxModelRunner(onnxruntime.InferenceSession(path))`,
         `DynamoModelRunner(torch.export.load(path).module())`) and pass a config from
         `AutoConfig.from_pretrained(...)`."""
-        from .utils import _MODALITY_SPECS
-
         if generation_config is None:
             generation_config = GenerationConfig.from_model_config(config)
         # The scatter path applies when a graph takes embeddings where a plain model's takes token ids: the
         # decode graph (decoder-only VLMs) or the encoder graph (a multi-modal encoder-decoder like
         # florence2, whose decode then reads the merged features through `encoder_outputs`). Otherwise it
         # runs as a plain generator even when an embed graph was exported.
-        takes_embeds = _text_input(runners["decode"]) == "inputs_embeds" or (
+        takes_embeds = runners["decode"].text_input == "inputs_embeds" or (
             "encoder" in runners and "inputs_embeds" in runners["encoder"].input_names
         )
         if "embed_tokens" not in runners or not takes_embeds:
@@ -959,8 +929,6 @@ class ExportedGenerator(GenerationMixin):
         construction. The one addition is materialization: `torch.export` bakes real tensors into the
         graph's input spec, so the lazily-uninitialized layers `generate` hands back have to be filled in
         (`materialize_cache_layers`, the helper the capture uses too)."""
-        from .utils import materialize_cache_layers
-
         super()._prepare_cache_for_generation(
             generation_config, model_kwargs, generation_mode, batch_size, max_cache_length
         )
@@ -1026,9 +994,7 @@ class ExportedGenerator(GenerationMixin):
         mask — the 4D one then fails an internal guard rather than a shape check. The trace is the authority
         (`_mask_rank`), so defer to it and only fall back to the generic builder otherwise.
         """
-        from ..masking_utils import create_masks_for_generate
-
-        if _mask_rank(self._decode_runner) == 2 and attention_mask is not None:
+        if self._decode_runner.mask_rank == 2 and attention_mask is not None:
             return attention_mask
         return create_masks_for_generate(
             config=config, inputs_embeds=inputs_embeds, attention_mask=attention_mask, **kwargs
@@ -1049,8 +1015,13 @@ class ExportedGenerator(GenerationMixin):
                 layer_type: padding_mask if rank == 2 else None for layer_type, rank in mask_ranks.items()
             }
         if isinstance(attention_mask, dict):
+            # A slot the trace took as `None` stays `None`: it is a leaf of the graph's input spec like any
+            # other, and filling it with a causal mask feeds a tensor where the graph declares nothing.
+            traced_without_mask = {name for name, rank in (mask_ranks or {}).items() if rank is None}
             attention_mask = {
-                layer_type: mask if mask is not None else self._causal_mask(position_ids, cache_len)
+                layer_type: mask
+                if mask is not None or layer_type in traced_without_mask
+                else self._causal_mask(position_ids, cache_len)
                 for layer_type, mask in attention_mask.items()
             }
             # Mixed full/sliding models: ONNX declares one input per attention type
@@ -1058,7 +1029,7 @@ class ExportedGenerator(GenerationMixin):
             # `attention_mask` pytree kwarg.
             # ONNX flattens the dict into one input per type. Feed exactly the names it declares: keying
             # off our own layer types instead offers ones the graph never took and omits ones it needs.
-            if declared := [name for name in _mask_inputs(runner) if name != "attention_mask"]:
+            if declared := [name for name in runner.mask_inputs if name != "attention_mask"]:
                 fallback = None
                 feed = {}
                 for name in declared:
@@ -1071,10 +1042,10 @@ class ExportedGenerator(GenerationMixin):
             return {"attention_mask": attention_mask}
         # A graph may take no explicit mask — e.g. a prefill graph builds the causal mask internally from
         # positions on an empty, unpadded cache. Nothing to feed then.
-        if not _mask_inputs(runner):
+        if not runner.mask_inputs:
             return {}
         if attention_mask is None:
-            return {_mask_inputs(runner)[0]: self._causal_mask(position_ids, cache_len)}
+            return {runner.mask_inputs[0]: self._causal_mask(position_ids, cache_len)}
         # A graph traced on the 2D padding mask was traced against a *cache-width* mask: `generate` pads the
         # mask out to a static cache's length, and the model compares the two (bloom's alibi). The runtime's
         # mask tracks the real sequence instead, so pad the tail back — zeros, i.e. the unfilled cache slots
@@ -1083,11 +1054,11 @@ class ExportedGenerator(GenerationMixin):
         # *encoder* sequence and its width is tied to the encoder output's, not to the decoder cache — and it
         # stays under that name whether or not the graph also takes a `decoder_attention_mask`, so the config
         # is what settles it rather than the presence of the decoder mask input.
-        pads_to_cache = _mask_rank(runner) == 2 and not self.config.is_encoder_decoder
+        pads_to_cache = runner.mask_rank == 2 and not self.config.is_encoder_decoder
         if pads_to_cache and attention_mask.dim() == 2:
             if (padding_length := cache_len - attention_mask.shape[-1]) > 0:
                 attention_mask = torch.nn.functional.pad(attention_mask, (0, padding_length))
-        return {_mask_inputs(runner)[0]: attention_mask}
+        return {runner.mask_inputs[0]: attention_mask}
 
     def _causal_mask(self, position_ids, cache_len):
         """Full causal mask `[batch, 1, query, cache_len]` from the positions (per batch row) — what the
@@ -1104,7 +1075,7 @@ class ExportedGenerator(GenerationMixin):
         The seam a multi-modal runtime replaces: there the ids go through an embedding graph first and each
         modality's features are scattered into the result (`ExportedMultimodalGenerator`).
         """
-        return {_text_input(runner): text_ids}
+        return {runner.text_input: text_ids}
 
     def forward(
         self,
@@ -1134,7 +1105,7 @@ class ExportedGenerator(GenerationMixin):
             runner = self._prefill_runner if _cache_length(past_key_values) == 0 else self._decode_runner
         text_ids = decoder_input_ids if decoder_input_ids is not None else input_ids
         feed = self._text_feed(runner, text_ids, kwargs, image_sizes)
-        text = feed[_text_input(runner)]
+        text = feed[runner.text_input]
         if position_ids is not None and "position_ids" in runner.input_names:
             feed["position_ids"] = position_ids
         if encoder_outputs is not None and any(n.startswith("encoder_outputs") for n in runner.input_names):
@@ -1167,12 +1138,12 @@ class ExportedGenerator(GenerationMixin):
         # A graph that names the decoder's mask separately gets the causal one here — `attention_mask` is
         # the *encoder's* on those models. `generate` supplies neither this nor decoder positions (the
         # eager forward derives both inside), so count the positions off the cache.
-        if _decoder_mask_input(runner) is not None and _decoder_mask_input(runner) not in feed:
+        if runner.decoder_mask_input is not None and runner.decoder_mask_input not in feed:
             decoded = _cache_length(past_key_values)
             decoder_positions = (
                 torch.arange(text.shape[1], device=self._device).unsqueeze(0).expand(text.shape[0], -1) + decoded
             )
-            feed[_decoder_mask_input(runner)] = self._causal_mask(decoder_positions, cache_len)
+            feed[runner.decoder_mask_input] = self._causal_mask(decoder_positions, cache_len)
         # Under the name this graph declares, and only if it declares one: a model whose `generate` hands
         # back a cache the exported graph does not take (xlstm) would otherwise be fed an input it never had.
         if past_key_values is not None and runner.cache_input is not None:
@@ -1243,12 +1214,12 @@ class ExportedMultimodalGenerator(ExportedGenerator):
         """
         # A decode graph that takes token ids directly (an encoder-decoder's, reading the merged features
         # through `encoder_outputs`) gets them as-is — the merge already happened at the encoder.
-        if _text_input(runner) != "inputs_embeds":
+        if runner.text_input != "inputs_embeds":
             return super()._text_feed(runner, text_ids, kwargs, image_sizes)
         merge_kwargs = kwargs if image_sizes is None else {**kwargs, "image_sizes": image_sizes}
         embedded = self._merge_modalities(text_ids, merge_kwargs)
         primary, *extra = embedded
-        feed = {_text_input(runner): embedded[primary]}
+        feed = {runner.text_input: embedded[primary]}
         feed.update({name: embedded[name] for name in extra if name in runner.input_names})
         return feed
 
@@ -1266,8 +1237,6 @@ class ExportedMultimodalGenerator(ExportedGenerator):
         internally; the export moved them out of the graph, so they're injected here from `self.config`
         alone (`precompute_export_inputs`), after renaming generate's grid kwarg (`image_grid_thw` /
         `video_grid_thw`) to the graph's `grid_thw` input."""
-
-        from .utils import _find_config_attr, flatten_anyres_patches
 
         extras: dict = {}
 
@@ -1348,8 +1317,6 @@ class ExportedMultimodalGenerator(ExportedGenerator):
         this modality's own key onto its graph's feature input, the way `_grid_renamed` routes the grid, and
         drop the keys that belong to another modality.
         """
-        from .utils import _find_config_attr, cast_leaf_tensors, precompute_export_inputs
-
         declared = set(modality.runner.input_names)
         feature_input = modality.runner.input_names[0]
         present = next(
@@ -1407,8 +1374,6 @@ class ExportedMultimodalGenerator(ExportedGenerator):
         from `modeling_rope_utils.get_mrope_index` — the very call the model's own override makes — and the
         decode step advances the text row by the cached rope-delta. Models that don't declare M-RoPE (plain
         decoders, VLMs with 1D text positions like Llava) keep the standard positions."""
-        from ..modeling_multimodal_utils import get_mrope_index, uses_mrope
-
         text_positions = super()._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
         # Both signals, not just `uses_mrope`: a text config carries `mrope_section` while only the outer
         # multimodal config declares the `mrope_layout` that says how to lay the spans out (minicpmv4_6 has

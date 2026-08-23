@@ -38,6 +38,7 @@ edge deployment. The export pipeline runs:
 
 from __future__ import annotations
 
+import json
 import math
 import operator
 import re
@@ -49,12 +50,12 @@ from ..utils.import_utils import is_executorch_available, is_torch_available
 from .configs import ExecutorchConfig
 from .exporter_dynamo import DynamoExporter, varlen_attn_masked_sdpa
 from .utils import (
+    EXPORT_METADATA_KEY,
     apply_fx_node_fixes,
     apply_fx_program_fixes,
     apply_patches,
-    get_leaf_tensors,
+    build_export_metadata,
     module_dtype,
-    patch_attributes,
     register_fx_node_fix,
     register_fx_program_fix,
     register_patch,
@@ -143,20 +144,9 @@ class ExecutorchExporter(DynamoExporter):
 
         model, sample_inputs, partitioner = prepare_for_backend(model, sample_inputs)
 
-        # The SSM mixers' associative scan (their export path) has no ExecuTorch lowering and the runtime
-        # has no loop primitive to run it as — flip the mixers' own `use_associative_scan` switch (they
-        # snapshot the config knob at init) to keep them on the sequential scan, the way
-        # `patch_model_config` turns off `use_mamba_kernels`. The sequential path unrolls, pinning the
-        # traced step length — why the multi-token decode variants are skipped on this backend.
-        mixer_patches = [
-            (module, "use_associative_scan", lambda _original: False)
-            for module in model.modules()
-            if hasattr(module, "use_associative_scan")
-        ]
         with (
             apply_patches("executorch"),
             apply_patches(f"executorch.{config.backend}"),
-            patch_attributes(mixer_patches),
         ):
             exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
             apply_fx_program_fixes("executorch", exported_program)
@@ -165,66 +155,22 @@ class ExecutorchExporter(DynamoExporter):
                 exported_program,
                 partitioner=partitioner,
                 compile_config=_get_edge_compile_config(),
-                constant_methods=_signature_constant_methods(exported_program),
+                # A `.pte` binds its inputs positionally and reports only counts and shapes, so what
+                # the graph *is* rides along as one constant method — the same schema the ONNX exporter
+                # writes into `metadata_props` (`build_export_metadata`).
+                constant_methods={
+                    EXPORT_METADATA_KEY: [
+                        json.dumps(
+                            build_export_metadata(model, sample_inputs, exported_program, self.required_packages)
+                        )
+                    ]
+                },
             )
             executorch_programs_manager: ExecutorchProgramManager = edge_program_manager.to_executorch(
                 config=_get_backend_config(config)
             )
 
         return executorch_programs_manager
-
-
-def _traced_output_names(exported_program: ExportedProgram) -> list[str]:
-    """The model's own output leaf names, in output order, read off the program's output pytree.
-
-    The exported call spec holds the output structure the trace returned; unflattening placeholders through
-    it and walking them with `get_leaf_tensors` yields exactly the `{name: tensor}` keys the dynamo runner
-    computes on the real outputs at run time — so the `.pte` can carry them for a runner that only ever sees
-    positional tensors."""
-    spec = exported_program.call_spec.out_spec
-    placeholders = [torch.empty(0) for _ in range(spec.num_leaves)]
-    return list(get_leaf_tensors(torch.utils._pytree.tree_unflatten(placeholders, spec)))
-
-
-def _signature_constant_methods(exported_program: ExportedProgram) -> dict[str, list]:
-    """Baked-in methods that make the ``.pte`` self-describing, so a runner needs nothing but the loaded
-    program (`ExecutorchModelRunner`).
-
-    A ``.pte`` otherwise keeps only positional inputs, and a loaded method's metadata carries just counts
-    and tensor shapes — no names, and no way to tell the model's own outputs from the mutated-input copies
-    ExecuTorch emits. Those facts live in the source graph signature (or, for the output names, in its
-    output pytree), so they ride along as constant methods (the mechanism llama.pte uses for
-    ``get_vocab_size`` & co.): ``input_names`` in flat input order, ``num_user_outputs`` — the model's own
-    outputs are the LAST that many (lowering emits the mutated-input copies first, and adds its own, so only
-    the count survives from here; the runner turns it into positions using the loaded method's output count)
-    — and ``output_names`` for those outputs, so the runner names them rather than guessing what the graph
-    computed.
-    """
-    signature = exported_program.graph_signature
-    constant_methods = {
-        "input_names": [name for name in signature.user_inputs if isinstance(name, str)],
-        "num_user_outputs": [sum(spec.kind.name == "USER_OUTPUT" for spec in signature.output_specs)],
-        "output_names": _traced_output_names(exported_program),
-    }
-    # The cache's per-layer geometry travels too. A `.pte`'s metadata gives shapes but nothing that says
-    # which leaf is a layer's keys, and the pytree context the other backends read is not in the program —
-    # so bake what the trace knew, flattened as `layer, heads, key_dim, value_dim` runs.
-    if geometry := _traced_kv_geometry(exported_program):
-        constant_methods["kv_geometry"] = [
-            value for layer, dims in sorted(geometry.items()) for value in (layer, *dims)
-        ]
-    return constant_methods
-
-
-def _traced_kv_geometry(exported_program: ExportedProgram) -> dict[int, tuple[int, int, int]]:
-    """`{layer index: (num_kv_heads, key_head_dim, value_head_dim)}` of the cache this program was traced
-    with, read off its input spec the same way the dynamo runner does."""
-    from .runtime_utils import _traced_kv_geometry as read_geometry
-
-    try:
-        return read_geometry(exported_program.module())
-    except Exception:  # a program without a cache input has no geometry to describe
-        return {}
 
 
 def _get_edge_compile_config() -> EdgeCompileConfig:
@@ -343,6 +289,26 @@ _BACKEND_PREPARE = {
 # `topk(k>dim)`, non-divisible `avg_pool2d`, `dropout`, in-place `view`, GQA-shaped
 # SDPA …). Each `_patch_*(original)` factory is registered via
 # `@register_patch("executorch", "dotted.path")` and installed through `apply_patches`.
+
+
+@register_patch(
+    "executorch",
+    "transformers.models.falcon_mamba.modeling_falcon_mamba.mamba_selective_scan",
+    "transformers.models.jamba.modeling_jamba.mamba_selective_scan",
+    "transformers.models.mamba.modeling_mamba.mamba_selective_scan",
+    "transformers.models.zamba.modeling_zamba.mamba_selective_scan",
+)
+def _patch_mamba_selective_scan(original):
+    """Keep the SSM scan sequential: the associative scan has no ExecuTorch lowering, and the runtime has no
+    loop primitive to run it as. Forced at the scan's own call site rather than through a mixer's
+    `use_associative_scan` attribute — every family passes it here as a keyword, whereas the attribute is a
+    per-instance copy of the config knob and would take the live model to reach. The sequential path
+    unrolls, pinning the traced step length — why the multi-token decode variants are skipped here."""
+
+    def patch(*args, **kwargs):
+        return original(*args, **{**kwargs, "use_associative_scan": False})
+
+    return patch
 
 
 @register_patch("executorch", "torch.split", "torch.Tensor.split")
