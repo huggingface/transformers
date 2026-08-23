@@ -229,6 +229,11 @@ class MergeModulelist(ConversionOps):
             # (such as the MoEs' gate_proj/up_proj merging), we are wasting quite some memory
             tensors = input_dict.pop(source_pattern)
             target_pattern = self.get_target_pattern(input_size, source_pattern, target_patterns)
+            if not isinstance(tensors, torch.Tensor) and len(tensors) == 0:
+                # Uneven FSDP sharding can leave this rank an empty shard of the stacked
+                # parameter: it owns none of the pieces, so there is nothing to merge (the
+                # pre-sharded empty local tensor installed at init is already correct).
+                continue
             # DecompressExperts pre-allocates a stacked tensor to avoid holding N individual
             # decompressed tensors simultaneously.  Pass it through to skip the redundant copy
             # that torch.stack would otherwise make.
