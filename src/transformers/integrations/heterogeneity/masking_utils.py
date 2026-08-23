@@ -34,11 +34,12 @@ def support_per_layer_mask_creation(attribute_name: str) -> Callable:
     """Decorate a mask factory to return layer-indexed masks when a config attribute varies by layer."""
 
     def decorator(create_mask_fn: Callable) -> Callable:
-        create_mask_signature = signature(create_mask_fn)
+        parameter_names = tuple(signature(create_mask_fn).parameters)
 
         @wraps(create_mask_fn)
         def wrapped(*args: Any, **kwargs: Any) -> Any:
-            mask_kwargs = dict(create_mask_signature.bind(*args, **kwargs).arguments)
+            mask_kwargs = dict(zip(parameter_names, args))
+            mask_kwargs.update(kwargs)
             config = mask_kwargs["config"]
             layer_idx = mask_kwargs.get("layer_idx")
 
@@ -49,7 +50,7 @@ def support_per_layer_mask_creation(attribute_name: str) -> Callable:
                     **mask_kwargs,
                 )
 
-            return create_mask_fn(**mask_kwargs)
+            return create_mask_fn(*args, **kwargs)
 
         return wrapped
 
@@ -83,8 +84,8 @@ def create_attention_masks_by_layer_idx(
 
         layer_config = config.per_layer_config[layer_idx]
         kwargs["layer_idx"] = layer_idx
-        attention_mask = create_mask_fn(layer_config, *args, **kwargs)
+        layer_attention_mask = create_mask_fn(layer_config, *args, **kwargs)
         for layer_idx in layer_indices:
-            attention_masks[layer_idx] = attention_mask
+            attention_masks[layer_idx] = layer_attention_mask
 
     return attention_masks
