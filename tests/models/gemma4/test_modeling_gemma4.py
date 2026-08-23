@@ -79,6 +79,8 @@ class Gemma4IntegrationTest(unittest.TestCase):
 
     def _test_generation_beyond_sliding_window(self, attn_implementation: str):
         """Actual testing logic for generation beyond the sliding window."""
+        torch.use_deterministic_algorithms(True)
+
         input_text = [
             "This is a nice place. " * 800 + "I really enjoy the scenery,",  # This is larger than 4096 tokens
             "A list of colors: red, blue",  # This will almost all be padding tokens
