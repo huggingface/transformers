@@ -11,6 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+# Reviewers: @Rocketknight1
 """PyTorch WeatherNext 2 model.
 
 The model is an encode-process-decode graph network:
@@ -44,15 +46,11 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    logging,
 )
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..clip.modeling_clip import CLIPMLP
 from .configuration_weathernext2 import WeatherNext2Config
-
-
-logger = logging.get_logger(__name__)
 
 
 class WeatherNext2FiLM(nn.Module):

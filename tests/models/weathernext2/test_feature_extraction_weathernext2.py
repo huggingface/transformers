@@ -214,6 +214,23 @@ class WeatherNext2FeatureExtractionTest(FeatureExtractionSavingTestMixin, unitte
             atol=1e-8,
         )
 
+    def test_postprocess_requires_state_for_residual_targets(self):
+        tester = self.feat_extract_tester
+        extractor = self.feature_extraction_class(**self.feat_extract_dict)
+        channels = sum(levels for _, _, levels in extractor.target_channel_layout)
+        prediction = np.zeros((tester.batch_size, channels, tester.grid_latitudes, tester.grid_longitudes), np.float32)
+
+        with self.assertRaisesRegex(ValueError, "state.*residual targets"):
+            extractor.postprocess(prediction)
+
+    def test_postprocess_rejects_the_wrong_shape(self):
+        tester = self.feat_extract_tester
+        extractor = self.feature_extraction_class(**self.feat_extract_dict)
+        prediction = np.zeros((tester.batch_size, 1, tester.grid_latitudes, tester.grid_longitudes), np.float32)
+
+        with self.assertRaisesRegex(ValueError, "prediction.*shape"):
+            extractor.postprocess(prediction, tester.prepare_state())
+
     def test_postprocess_restores_the_sea_surface_temperature_mask(self):
         tester = self.feat_extract_tester
         extractor = self.feature_extraction_class(**self.feat_extract_dict)

@@ -339,7 +339,8 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
             prediction (`array` of shape `(batch, channels, latitudes, longitudes)`):
                 [`WeatherNext2ForecastOutput.prediction`].
             state (`Mapping[str, array]`, *optional*):
-                The same state that was passed to `__call__`.
+                The same state that was passed to `__call__`. Required when an input variable is
+                also a forecast target because those targets are decoded as residuals.
 
         Returns:
             `dict[str, array]`: physical values keyed by variable, shaped `[batch, (levels,) lat, lon]`, as
@@ -347,6 +348,21 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
         """
         as_numpy = not isinstance(prediction, torch.Tensor)
         prediction = torch.as_tensor(prediction, dtype=torch.float32).detach()
+        expected_shape = (
+            sum(levels for _, _, levels in self.target_channel_layout),
+            self.grid_latitudes,
+            self.grid_longitudes,
+        )
+        if prediction.ndim != 4 or tuple(prediction.shape[1:]) != expected_shape:
+            raise ValueError(
+                f"`prediction` has shape {tuple(prediction.shape)}, expected "
+                f"(batch_size, {expected_shape[0]}, {expected_shape[1]}, {expected_shape[2]})."
+            )
+        residual_targets = set(self.target_variables).intersection(self.input_variables) - set(self.static_variables)
+        if state is None and residual_targets:
+            raise ValueError(
+                "`state` is required to decode residual targets: " + ", ".join(sorted(residual_targets)) + "."
+            )
         outputs: dict[str, Any] = {}
         offset = 0
         for variable, _, levels in self.target_channel_layout:

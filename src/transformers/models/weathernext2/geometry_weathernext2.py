@@ -37,11 +37,6 @@ from scipy.sparse.csgraph import reverse_cuthill_mckee
 from scipy.spatial import cKDTree
 from scipy.spatial.transform import Rotation
 
-from ...utils import logging
-
-
-logger = logging.get_logger(__name__)
-
 
 def lat_lon_deg_to_spherical(lat: np.ndarray, lon: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """(lat, lon) in degrees -> (phi=azimuth, theta=polar) in radians."""

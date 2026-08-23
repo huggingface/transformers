@@ -175,8 +175,14 @@ class WeatherNext2ModelTester:
 @require_torch
 class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (WeatherNext2Model, WeatherNext2ForWeatherForecasting) if is_torch_available() else ()
+    additional_model_inputs = ["global_features", "noise"]
 
     test_resize_embeddings = False
+    # The persistent geometry tensors live on the base model rather than on independently
+    # dispatchable submodules, so Accelerate cannot split them across CPU/disk and an accelerator.
+    test_cpu_offload = False
+    test_disk_offload_bin = False
+    test_disk_offload_safetensors = False
 
     def setUp(self):
         self.model_tester = WeatherNext2ModelTester(self)
@@ -373,7 +379,11 @@ class WeatherNext2GeometryTest(unittest.TestCase):
         self.assertFalse(reaches[num_nodes:].any(), "the padding past the last mesh node is attended to")
 
     def test_attention_backends_agree(self):
-        """`eager`, `sdpa` and `flex_attention` must all produce the same forecast."""
+        """`eager` and `sdpa` must produce the same forecast.
+
+        The tiny checkpoint has head dimension 8, while flex attention requires at least 16. The
+        shared flex-attention test exercises that backend after increasing the test head dimension.
+        """
         config = self.model.config
         inputs = {
             "grid_features": floats_tensor(
@@ -383,7 +393,7 @@ class WeatherNext2GeometryTest(unittest.TestCase):
             "noise": floats_tensor([2, config.noise_channels]).to(torch_device),
         }
         reference = None
-        for implementation in ("eager", "sdpa", "flex_attention"):
+        for implementation in ("eager", "sdpa"):
             model = WeatherNext2ForWeatherForecasting.from_pretrained(
                 TINY_CHECKPOINT, attn_implementation=implementation
             )
