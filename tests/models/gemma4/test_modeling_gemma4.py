@@ -30,7 +30,6 @@ from transformers import (
 from transformers.testing_utils import (
     Expectations,
     cleanup,
-    get_device_properties,
     require_deterministic_for_xpu,
     require_torch,
     require_torch_accelerator,
@@ -1040,13 +1039,7 @@ class Gemma4IntegrationTest(unittest.TestCase):
                 ],
             }
         )
-        expected = EXPECTED_COMPLETIONS.get_expectation()
-        # NOTE: torch 2.13 + CUDA 13.0 produces a different greedy output than torch 2.11 + CUDA 12.6;
-        # also observed to be flaky across CI runs. We need to monitor if CI is still flaky in the next
-        # few days. See PR #48233 for full investigation.
-        if get_device_properties()[0] == "cuda" and attn_implementation == "eager":
-            expected[0] = "That sounds like a very pleasant place! It seems like you're really enjoying"
-        self.assertEqual(output_text, expected)
+        self.assertEqual(output_text, EXPECTED_COMPLETIONS.get_expectation())
 
     @pytest.mark.torch_export_test
     def test_export_text_only(self):
