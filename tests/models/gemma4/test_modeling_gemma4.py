@@ -1050,6 +1050,9 @@ class Gemma4IntegrationTest(unittest.TestCase):
     def test_export_text_only(self):
         from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM
 
+        # Run on CPU: the full E2B model (~4 GiB bfloat16) + torch.export tracing overhead
+        # (~4 GiB) exceeds the 22.3 GiB GPU memory available in CI. CPU avoids the OOM.
+        # max_cache_len=19 covers the prompt (~16 tokens) + 3 new tokens with a small buffer.
         model = Gemma4ForConditionalGeneration.from_pretrained(self.model_name, device_map="cpu")
         tokenizer = AutoTokenizer.from_pretrained(self.model_name)
 
