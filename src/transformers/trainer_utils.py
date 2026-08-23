@@ -111,15 +111,16 @@ def validate_quantization_for_training(model):
     Args:
         model: The model to validate.
     """
-    _is_quantized_and_base_model = getattr(model, "is_quantized", False) and not getattr(
-        model, "_hf_peft_config_loaded", False
-    )
+    _is_quantized_and_base_model = getattr(
+        model, "is_quantized", False
+    ) and not getattr(model, "_hf_peft_config_loaded", False)
     _quantization_method_supports_training = (
-        getattr(model, "hf_quantizer", None) is not None and model.hf_quantizer.is_trainable
+        getattr(model, "hf_quantizer", None) is not None
+        and model.hf_quantizer.is_trainable
     )
-    _is_model_quantized_and_qat_trainable = getattr(model, "hf_quantizer", None) is not None and getattr(
-        model.hf_quantizer, "is_qat_trainable", False
-    )
+    _is_model_quantized_and_qat_trainable = getattr(
+        model, "hf_quantizer", None
+    ) is not None and getattr(model.hf_quantizer, "is_qat_trainable", False)
 
     # Filter out quantized + compiled models
     if _is_quantized_and_base_model and hasattr(model, "_orig_mod"):
@@ -128,7 +129,11 @@ def validate_quantization_for_training(model):
         )
 
     # At this stage the model is already loaded
-    if _is_quantized_and_base_model and not _is_peft_model(model) and not _is_model_quantized_and_qat_trainable:
+    if (
+        _is_quantized_and_base_model
+        and not _is_peft_model(model)
+        and not _is_model_quantized_and_qat_trainable
+    ):
         raise ValueError(
             "You cannot perform fine-tuning on purely quantized models. Please attach trainable adapters on top of"
             " the quantized model to correctly perform fine-tuning. Please see: https://huggingface.co/docs/transformers/peft"
@@ -272,11 +277,15 @@ def get_last_checkpoint(folder):
     checkpoints = [
         path
         for path in content
-        if _re_checkpoint.search(path) is not None and os.path.isdir(os.path.join(folder, path))
+        if _re_checkpoint.search(path) is not None
+        and os.path.isdir(os.path.join(folder, path))
     ]
     if len(checkpoints) == 0:
         return
-    return os.path.join(folder, max(checkpoints, key=lambda x: int(_re_checkpoint.search(x).groups()[0])))
+    return os.path.join(
+        folder,
+        max(checkpoints, key=lambda x: int(_re_checkpoint.search(x).groups()[0])),
+    )
 
 
 def sort_checkpoints(
@@ -302,7 +311,11 @@ def sort_checkpoints(
     Returns:
         `list[str]`: Sorted list of checkpoint directory paths (oldest first).
     """
-    glob_checkpoints = [str(x) for x in Path(output_dir).glob(f"{checkpoint_prefix}-*") if os.path.isdir(x)]
+    glob_checkpoints = [
+        str(x)
+        for x in Path(output_dir).glob(f"{checkpoint_prefix}-*")
+        if os.path.isdir(x)
+    ]
 
     ordering_and_checkpoint_path = []
     for path in glob_checkpoints:
@@ -311,7 +324,9 @@ def sort_checkpoints(
         else:
             regex_match = re.match(f".*{checkpoint_prefix}-([0-9]+)", path)
             if regex_match is not None and regex_match.groups() is not None:
-                ordering_and_checkpoint_path.append((int(regex_match.groups()[0]), path))
+                ordering_and_checkpoint_path.append(
+                    (int(regex_match.groups()[0]), path)
+                )
 
     checkpoints_sorted = sorted(ordering_and_checkpoint_path)
 
@@ -320,9 +335,14 @@ def sort_checkpoints(
     if use_mtime and len(checkpoints_sorted) > 1:
         mtime_diff = checkpoints_sorted[-1][0] - checkpoints_sorted[0][0]
         if mtime_diff < 1.0:
-            logger.warning_once("mtime may not be reliable on this filesystem, falling back to numerical ordering")
+            logger.warning_once(
+                "mtime may not be reliable on this filesystem, falling back to numerical ordering"
+            )
             return sort_checkpoints(
-                output_dir, checkpoint_prefix, use_mtime=False, best_model_checkpoint=best_model_checkpoint
+                output_dir,
+                checkpoint_prefix,
+                use_mtime=False,
+                best_model_checkpoint=best_model_checkpoint,
             )
 
     checkpoints_sorted = [path for _, path in checkpoints_sorted]
@@ -331,9 +351,16 @@ def sort_checkpoints(
     # while keeping the most recent checkpoint at the end for resuming training.
     if best_model_checkpoint is not None:
         best_model_checkpoint = str(Path(best_model_checkpoint))
-        if best_model_checkpoint in checkpoints_sorted and checkpoints_sorted[-1] != best_model_checkpoint:
+        if (
+            best_model_checkpoint in checkpoints_sorted
+            and checkpoints_sorted[-1] != best_model_checkpoint
+        ):
             most_recent = checkpoints_sorted[-1]
-            checkpoints_sorted = [c for c in checkpoints_sorted if c not in {best_model_checkpoint, most_recent}]
+            checkpoints_sorted = [
+                c
+                for c in checkpoints_sorted
+                if c not in {best_model_checkpoint, most_recent}
+            ]
             checkpoints_sorted += [best_model_checkpoint, most_recent]
 
     return checkpoints_sorted
@@ -367,7 +394,10 @@ def rotate_checkpoints(
         return
 
     checkpoints = sort_checkpoints(
-        output_dir, checkpoint_prefix, use_mtime, best_model_checkpoint=best_model_checkpoint
+        output_dir,
+        checkpoint_prefix,
+        use_mtime,
+        best_model_checkpoint=best_model_checkpoint,
     )
     if len(checkpoints) <= save_total_limit:
         return
@@ -445,7 +475,9 @@ def default_compute_objective(metrics: dict[str, float]) -> float:
     loss = metrics.pop("eval_loss", None)
     _ = metrics.pop("epoch", None)
     # Remove speed metrics
-    speed_metrics = [m for m in metrics if m.endswith("_runtime") or m.endswith("_per_second")]
+    speed_metrics = [
+        m for m in metrics if m.endswith("_runtime") or m.endswith("_per_second")
+    ]
     for sm in speed_metrics:
         _ = metrics.pop(sm, None)
     return loss if len(metrics) == 0 else sum(metrics.values())
@@ -460,7 +492,9 @@ def default_hp_space_optuna(trial) -> dict[str, float]:
         "learning_rate": trial.suggest_float("learning_rate", 1e-6, 1e-4, log=True),
         "num_train_epochs": trial.suggest_int("num_train_epochs", 1, 5),
         "seed": trial.suggest_int("seed", 1, 40),
-        "per_device_train_batch_size": trial.suggest_categorical("per_device_train_batch_size", [4, 8, 16, 32, 64]),
+        "per_device_train_batch_size": trial.suggest_categorical(
+            "per_device_train_batch_size", [4, 8, 16, 32, 64]
+        ),
     }
 
 
@@ -636,7 +670,11 @@ class TrainerMemoryTracker:
 
         import psutil
 
-        if is_torch_cuda_available() or is_torch_mlu_available() or is_torch_musa_available():
+        if (
+            is_torch_cuda_available()
+            or is_torch_mlu_available()
+            or is_torch_musa_available()
+        ):
             import torch
 
             self.torch = torch
@@ -828,7 +866,9 @@ class TrainerMemoryTracker:
                 "alloc": (self.gpu_mem_used_now - self.gpu_mem_used_at_start),
             }
             if self.gpu_mem_used_peak is not None:
-                self.gpu[self.cur_stage]["peaked"] = max(0, self.gpu_mem_used_peak - self.gpu_mem_used_now)
+                self.gpu[self.cur_stage]["peaked"] = max(
+                    0, self.gpu_mem_used_peak - self.gpu_mem_used_now
+                )
             else:
                 self.gpu[self.cur_stage]["peaked"] = "Not available"
 
@@ -863,7 +903,11 @@ class TrainerMemoryTracker:
             for t in ["alloc", "peaked"]:
                 if stage in self.cpu and t in self.cpu[stage]:
                     metrics[f"{stage}_mem_cpu_{t}_delta"] = self.cpu[stage][t]
-                if self.torch is not None and stage in self.gpu and t in self.gpu[stage]:
+                if (
+                    self.torch is not None
+                    and stage in self.gpu
+                    and t in self.gpu[stage]
+                ):
                     metrics[f"{stage}_mem_gpu_{t}_delta"] = self.gpu[stage][t]
             # if we need additional debug info, enable the following
             # for t in ["begin", "end"]:
@@ -922,7 +966,11 @@ def denumpify_detensorize(metrics):
         return type(metrics)({k: denumpify_detensorize(v) for k, v in metrics.items()})
     elif isinstance(metrics, np.generic):
         return metrics.item()
-    elif is_torch_available() and isinstance(metrics, torch.Tensor) and metrics.numel() == 1:
+    elif (
+        is_torch_available()
+        and isinstance(metrics, torch.Tensor)
+        and metrics.numel() == 1
+    ):
         return metrics.item()
     return metrics
 
@@ -938,7 +986,9 @@ def number_of_arguments(func):
 
 
 def find_executable_batch_size(
-    function: Callable | None = None, starting_batch_size: int = 128, auto_find_batch_size: bool = False
+    function: Callable | None = None,
+    starting_batch_size: int = 128,
+    auto_find_batch_size: bool = False,
 ):
     """
     Args:
@@ -961,9 +1011,13 @@ def find_executable_batch_size(
 
     if auto_find_batch_size:
         requires_backends(find_executable_batch_size, "accelerate")
-        from accelerate.utils import find_executable_batch_size as accelerate_find_executable_batch_size
+        from accelerate.utils import (
+            find_executable_batch_size as accelerate_find_executable_batch_size,
+        )
 
-        return accelerate_find_executable_batch_size(function=function, starting_batch_size=starting_batch_size)
+        return accelerate_find_executable_batch_size(
+            function=function, starting_batch_size=starting_batch_size
+        )
 
     return functools.partial(function, batch_size=starting_batch_size)
 
@@ -1002,7 +1056,9 @@ class RemoveColumnsCollator:
         if not self.message_logged and self.logger and self.model_name:
             ignored_columns = list(set(feature.keys()) - set(self.signature_columns))
             if len(ignored_columns) > 0:
-                dset_description = "" if self.description is None else f"in the {self.description} set"
+                dset_description = (
+                    "" if self.description is None else f"in the {self.description} set"
+                )
                 self.logger.info(
                     f"The following columns {dset_description} don't have a corresponding argument in "
                     f"`{self.model_name}.forward` and have been ignored: {', '.join(ignored_columns)}."
@@ -1017,7 +1073,9 @@ class RemoveColumnsCollator:
         return self.data_collator(features)
 
 
-def check_target_module_exists(optim_target_modules, key: str, return_is_regex: bool = False):
+def check_target_module_exists(
+    optim_target_modules, key: str, return_is_regex: bool = False
+):
     """A helper method to check if the passed module's key name matches any of the target modules in the optim_target_modules.
 
     Args:
@@ -1041,12 +1099,17 @@ def check_target_module_exists(optim_target_modules, key: str, return_is_regex: 
     if isinstance(optim_target_modules, str):
         target_module_found = bool(re.fullmatch(optim_target_modules, key))
         is_regex = optim_target_modules != key
-    elif key in optim_target_modules:  # from here, target_module_found must be a list of str
+    elif (
+        key in optim_target_modules
+    ):  # from here, target_module_found must be a list of str
         # this module is specified directly in target_modules
         target_module_found = True
     elif any(target_key in key for target_key in optim_target_modules):
         target_module_found = True
-    elif any(bool(re.fullmatch(optim_target_module, key)) for optim_target_module in optim_target_modules):
+    elif any(
+        bool(re.fullmatch(optim_target_module, key))
+        for optim_target_module in optim_target_modules
+    ):
         target_module_found = True
         is_regex = True
 
@@ -1088,7 +1151,9 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
 
     if not index_present and not safe_index_present:
         filenames = (WEIGHTS_INDEX_NAME, SAFE_WEIGHTS_INDEX_NAME)
-        raise ValueError(f"Can't find a checkpoint index ({' or '.join(filenames)}) in {folder}.")
+        raise ValueError(
+            f"Can't find a checkpoint index ({' or '.join(filenames)}) in {folder}."
+        )
 
     load_safe = safe_index_present and (prefer_safe or not index_present)
     load_index = safe_index_file if load_safe else index_file
@@ -1155,7 +1220,11 @@ def compare_trainer_and_checkpoint_args(training_args, trainer_state):
         arg_value = getattr(training_args, arg_attr, None)
         state_value = getattr(trainer_state, state_attr, None)
 
-        if arg_value is not None and state_value is not None and arg_value != state_value:
+        if (
+            arg_value is not None
+            and state_value is not None
+            and arg_value != state_value
+        ):
             warning_str += f"\n\t{arg_attr}: {arg_value} (from args) != {state_value} (from trainer_state.json)"
             has_warning = True
 
@@ -1187,22 +1256,32 @@ def align_special_tokens(model, processing_class):
         tokenizer: PreTrainedTokenizerBase = processing_class.tokenizer
     else:
         tokenizer = processing_class
-    model_has_generation_config = hasattr(model, "generation_config") and model.generation_config is not None
+    model_has_generation_config = (
+        hasattr(model, "generation_config") and model.generation_config is not None
+    )
     updated_tokens = {}
 
     # 1 - Align EOS token. EOS is more complex than the others, as `generation_config` may hold more than one EOS
     # token.
-    tokenizer_has_new_eos = tokenizer.eos_token_id != getattr(model.config, "eos_token_id", None)
+    tokenizer_has_new_eos = tokenizer.eos_token_id != getattr(
+        model.config, "eos_token_id", None
+    )
     if model_has_generation_config:
         # `generation_config.eos_token_id` is None: direct comparison
         if model.generation_config.eos_token_id is None:
-            tokenizer_has_new_eos |= tokenizer.eos_token_id != model.generation_config.eos_token_id
+            tokenizer_has_new_eos |= (
+                tokenizer.eos_token_id != model.generation_config.eos_token_id
+            )
         else:
             # `generation_config.eos_token_id` is an `int`: convert it to list (and continue below)
             if isinstance(model.generation_config.eos_token_id, int):
-                model.generation_config.eos_token_id = [model.generation_config.eos_token_id]
+                model.generation_config.eos_token_id = [
+                    model.generation_config.eos_token_id
+                ]
             # `generation_config.eos_token_id` is a `list`: check if the tokenizer's EOS token is in the list
-            tokenizer_has_new_eos |= tokenizer.eos_token_id not in model.generation_config.eos_token_id
+            tokenizer_has_new_eos |= (
+                tokenizer.eos_token_id not in model.generation_config.eos_token_id
+            )
 
     if tokenizer_has_new_eos:
         updated_tokens["eos_token_id"] = tokenizer.eos_token_id
@@ -1213,12 +1292,18 @@ def align_special_tokens(model, processing_class):
             all_eos_tokens = [tokenizer.eos_token_id]
             if model.generation_config.eos_token_id is not None:
                 all_eos_tokens += list(model.generation_config.eos_token_id)
-            model.generation_config.eos_token_id = [token for token in all_eos_tokens if token is not None]
+            model.generation_config.eos_token_id = [
+                token for token in all_eos_tokens if token is not None
+            ]
 
     # 2 - Align BOS
-    tokenizer_has_new_bos = tokenizer.bos_token_id != getattr(model.config, "bos_token_id", None)
+    tokenizer_has_new_bos = tokenizer.bos_token_id != getattr(
+        model.config, "bos_token_id", None
+    )
     if model_has_generation_config:
-        tokenizer_has_new_bos |= tokenizer.bos_token_id != model.generation_config.bos_token_id
+        tokenizer_has_new_bos |= (
+            tokenizer.bos_token_id != model.generation_config.bos_token_id
+        )
 
     if tokenizer_has_new_bos:
         updated_tokens["bos_token_id"] = tokenizer.bos_token_id
@@ -1227,9 +1312,13 @@ def align_special_tokens(model, processing_class):
             model.generation_config.bos_token_id = tokenizer.bos_token_id
 
     # 3 - Align PAD
-    tokenizer_has_new_pad = tokenizer.pad_token_id != getattr(model.config, "pad_token_id", None)
+    tokenizer_has_new_pad = tokenizer.pad_token_id != getattr(
+        model.config, "pad_token_id", None
+    )
     if model_has_generation_config:
-        tokenizer_has_new_pad |= tokenizer.pad_token_id != model.generation_config.pad_token_id
+        tokenizer_has_new_pad |= (
+            tokenizer.pad_token_id != model.generation_config.pad_token_id
+        )
 
     if tokenizer_has_new_pad:
         updated_tokens["pad_token_id"] = tokenizer.pad_token_id
