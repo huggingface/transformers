@@ -78,6 +78,8 @@ if is_torch_available():
         GPT2LMHeadModel,
         GPT2Tokenizer,
         ImageGPTForCausalImageModeling,
+        LlamaConfig,
+        LlamaForCausalLM,
         SpeechEncoderDecoderModel,
     )
     from transformers.cache_utils import (
@@ -3949,6 +3951,68 @@ class GenerationIntegrationTests(unittest.TestCase):
             max_new_tokens=7,
         )
         self.assertTrue(out.shape[-1] <= (input_length + 7))
+
+    def test_assisted_decoding_sliding_window_matches_greedy_search(self):
+        # The prompt is longer than the sliding window, so the sliding window cache fills up during prefill and the
+        # assistant drafts several tokens between two crops: assisted decoding must not attend beyond-window states
+        config = LlamaConfig(
+            vocab_size=64,
+            hidden_size=16,
+            intermediate_size=32,
+            num_hidden_layers=4,
+            num_attention_heads=2,
+            num_key_value_heads=2,
+            head_dim=8,
+            max_position_embeddings=512,
+            sliding_window=6,
+        )
+        set_seed(1)
+        model = LlamaForCausalLM(config).eval()
+        input_ids = torch.randint(1, 60, (1, 12))
+        attention_mask = torch.ones_like(input_ids)
+
+        reference = model.generate(
+            do_sample=False, max_new_tokens=8, input_ids=input_ids, attention_mask=attention_mask
+        )
+        assisted = model.generate(
+            do_sample=False,
+            max_new_tokens=8,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            assistant_model=model,
+            num_assistant_tokens=5,
+            assistant_confidence_threshold=0.0,
+        )
+        self.assertTrue(torch.equal(reference, assisted))
+
+    def test_assisted_decoding_sliding_window_multi_token_draft(self):
+        # A low draft-confidence gate lets the assistant draft several tokens in one burst, so the sliding window
+        # cache is updated several times between two crops. Eager attention materializes the mask advertised by
+        # `get_mask_sizes`, so returning more states than that from `update` must hard-crash here rather than pass.
+        config = LlamaConfig(
+            vocab_size=64,
+            hidden_size=16,
+            intermediate_size=32,
+            num_hidden_layers=4,
+            num_attention_heads=2,
+            num_key_value_heads=2,
+            head_dim=8,
+            max_position_embeddings=512,
+            sliding_window=6,
+        )
+        set_seed(1)
+        model = LlamaForCausalLM._from_config(config, attn_implementation="eager").eval()
+        # The caller-level `assistant_confidence_threshold` is overridden by the assistant's own generation config
+        model.generation_config.assistant_confidence_threshold = 0.0
+        input_ids = torch.randint(1, 60, (1, 12))
+        _ = model.generate(
+            do_sample=False,
+            max_new_tokens=8,
+            input_ids=input_ids,
+            attention_mask=torch.ones_like(input_ids),
+            assistant_model=model,
+            num_assistant_tokens=12,
+        )
 
     @require_torch_multi_accelerator
     def test_mtp_use_correct_device_when_drafting(self):
