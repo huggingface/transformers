@@ -37,7 +37,6 @@ from ...tokenization_utils_base import (
 from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import add_end_docstrings, is_torch_tensor, logging
 
-
 logger = logging.get_logger(__name__)
 
 EntitySpan = tuple[int, int]
@@ -47,7 +46,10 @@ EntityInput = list[Entity]
 
 SPIECE_UNDERLINE = "▁"
 
-VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model", "entity_vocab_file": "entity_vocab.json"}
+VOCAB_FILES_NAMES = {
+    "vocab_file": "sentencepiece.bpe.model",
+    "entity_vocab_file": "entity_vocab.json",
+}
 
 
 ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
@@ -237,7 +239,11 @@ class MLukeTokenizer(TokenizersBackend):
         **kwargs,
     ) -> None:
         # Mask token behave like a normal word, i.e. include the space before it
-        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
+        mask_token = (
+            AddedToken(mask_token, lstrip=True, rstrip=False)
+            if isinstance(mask_token, str)
+            else mask_token
+        )
 
         # we add 2 special tokens for downstream tasks
         entity_token_1 = (
@@ -283,8 +289,12 @@ class MLukeTokenizer(TokenizersBackend):
                 normalizers.Replace("''", '"'),
             ]
         )
-        self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always")
-        self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always")
+        self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(
+            replacement="▁", prepend_scheme="always"
+        )
+        self._tokenizer.decoder = decoders.Metaspace(
+            replacement="▁", prepend_scheme="always"
+        )
 
         # Original fairseq vocab and spm vocab must be "aligned":
         # Vocab    |    0    |    1    |   2    |    3    |  4  |  5  |  6  |   7   |   8   |  9
@@ -299,7 +309,9 @@ class MLukeTokenizer(TokenizersBackend):
         self.fairseq_offset = 1
 
         self.fairseq_tokens_to_ids["<mask>"] = self._vocab_size + self.fairseq_offset
-        self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
+        self.fairseq_ids_to_tokens = {
+            v: k for k, v in self.fairseq_tokens_to_ids.items()
+        }
 
         # Load entity vocab
         if entity_vocab is not None:
@@ -316,7 +328,12 @@ class MLukeTokenizer(TokenizersBackend):
                 entity_mask2_token: 3,
             }
 
-        for entity_special_token in [entity_unk_token, entity_pad_token, entity_mask_token, entity_mask2_token]:
+        for entity_special_token in [
+            entity_unk_token,
+            entity_pad_token,
+            entity_mask_token,
+            entity_mask2_token,
+        ]:
             if entity_special_token not in self.entity_vocab:
                 raise ValueError(
                     f"Specified entity special token ``{entity_special_token}`` is not found in entity_vocab."
@@ -348,7 +365,9 @@ class MLukeTokenizer(TokenizersBackend):
             tokens = kwargs.pop(key, None)
             if isinstance(tokens, (list, tuple)):
                 for token in tokens:
-                    extra_tokens.append(AddedToken(**token) if isinstance(token, dict) else token)
+                    extra_tokens.append(
+                        AddedToken(**token) if isinstance(token, dict) else token
+                    )
 
         # Ensure MLuke entity tokens are present exactly once.
         seen = {str(token) for token in extra_tokens}
@@ -359,9 +378,22 @@ class MLukeTokenizer(TokenizersBackend):
                 seen.add(token_str)
 
         # Also register entity masking/padding tokens so they survive save/load cycles.
-        for token in (entity_unk_token, entity_pad_token, entity_mask_token, entity_mask2_token):
+        for token in (
+            entity_unk_token,
+            entity_pad_token,
+            entity_mask_token,
+            entity_mask2_token,
+        ):
             if token not in seen:
-                extra_tokens.append(AddedToken(token, lstrip=False, rstrip=False, normalized=False, special=True))
+                extra_tokens.append(
+                    AddedToken(
+                        token,
+                        lstrip=False,
+                        rstrip=False,
+                        normalized=False,
+                        special=True,
+                    )
+                )
                 seen.add(token)
 
         kwargs["extra_special_tokens"] = extra_tokens
@@ -383,7 +415,9 @@ class MLukeTokenizer(TokenizersBackend):
             entity_pad_token=entity_pad_token,
             entity_mask_token=entity_mask_token,
             entity_mask2_token=entity_mask2_token,
-            entity_vocab=entity_vocab if entity_vocab_file is None else None,  # Only store if passed as data
+            entity_vocab=(
+                entity_vocab if entity_vocab_file is None else None
+            ),  # Only store if passed as data
             **kwargs,
         )
 
@@ -404,7 +438,9 @@ class MLukeTokenizer(TokenizersBackend):
         self.fairseq_tokens_to_ids["<mask>"] = self._vocab_size + self.fairseq_offset
         self.entity_token_1_id = self.convert_tokens_to_ids(self.entity_token_1)
         self.entity_token_2_id = self.convert_tokens_to_ids(self.entity_token_2)
-        self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
+        self.fairseq_ids_to_tokens = {
+            v: k for k, v in self.fairseq_tokens_to_ids.items()
+        }
 
         # Configure post processor for XLM-R/MLuke format:
         # single: <s> X </s>
@@ -438,7 +474,11 @@ class MLukeTokenizer(TokenizersBackend):
         token_id = self._tokenizer.token_to_id(token)
 
         # Need to return unknown token if not found (token_to_id returns None)
-        return token_id + self.fairseq_offset if token_id is not None else self.unk_token_id
+        return (
+            token_id + self.fairseq_offset
+            if token_id is not None
+            else self.unk_token_id
+        )
 
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
@@ -466,7 +506,9 @@ class MLukeTokenizer(TokenizersBackend):
         """
         return 4 if pair else 2
 
-    @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
+    @add_end_docstrings(
+        ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING
+    )
     def __call__(
         self,
         text: TextInput | list[TextInput],
@@ -495,8 +537,15 @@ class MLukeTokenizer(TokenizersBackend):
         **kwargs,
     ) -> BatchEncoding:
         # Check for seq2seq parameters that are not supported with entity-aware encoding
-        if kwargs.get("text_target") is not None or kwargs.get("text_pair_target") is not None:
-            if entity_spans is not None or entities is not None or self.task is not None:
+        if (
+            kwargs.get("text_target") is not None
+            or kwargs.get("text_pair_target") is not None
+        ):
+            if (
+                entity_spans is not None
+                or entities is not None
+                or self.task is not None
+            ):
                 raise NotImplementedError(
                     "text_target and text_pair_target are not supported when using entity-aware encoding. "
                     "Please use the tokenizer without entities for seq2seq tasks."
@@ -569,41 +618,55 @@ class MLukeTokenizer(TokenizersBackend):
             len(text) == 0 or isinstance(text[0], (str, list, tuple))
         )
         if not (is_valid_single_text or is_valid_batch_text):
-            raise ValueError("text input must be of type `str` (single example) or `list[str]` (batch).")
+            raise ValueError(
+                "text input must be of type `str` (single example) or `list[str]` (batch)."
+            )
 
         is_valid_single_text_pair = isinstance(text_pair, str)
         is_valid_batch_text_pair = isinstance(text_pair, (list, tuple)) and (
             len(text_pair) == 0 or isinstance(text_pair[0], str)
         )
-        if not (text_pair is None or is_valid_single_text_pair or is_valid_batch_text_pair):
-            raise ValueError("text_pair input must be of type `str` (single example) or `list[str]` (batch).")
+        if not (
+            text_pair is None or is_valid_single_text_pair or is_valid_batch_text_pair
+        ):
+            raise ValueError(
+                "text_pair input must be of type `str` (single example) or `list[str]` (batch)."
+            )
 
         is_batched = bool(isinstance(text, (list, tuple)))
 
         # Get proper padding and truncation strategies
-        padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
-            padding=padding,
-            truncation=truncation,
-            max_length=max_length,
-            pad_to_multiple_of=pad_to_multiple_of,
-            verbose=verbose,
-            **kwargs,
+        padding_strategy, truncation_strategy, max_length, kwargs = (
+            self._get_padding_truncation_strategies(
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
+                pad_to_multiple_of=pad_to_multiple_of,
+                verbose=verbose,
+                **kwargs,
+            )
         )
 
         if is_batched:
-            batch_text_or_text_pairs = list(zip(text, text_pair)) if text_pair is not None else text
+            batch_text_or_text_pairs = (
+                list(zip(text, text_pair)) if text_pair is not None else text
+            )
             if entities is None:
                 batch_entities_or_entities_pairs = None
             else:
                 batch_entities_or_entities_pairs = (
-                    list(zip(entities, entities_pair)) if entities_pair is not None else entities
+                    list(zip(entities, entities_pair))
+                    if entities_pair is not None
+                    else entities
                 )
 
             if entity_spans is None:
                 batch_entity_spans_or_entity_spans_pairs = None
             else:
                 batch_entity_spans_or_entity_spans_pairs = (
-                    list(zip(entity_spans, entity_spans_pair)) if entity_spans_pair is not None else entity_spans
+                    list(zip(entity_spans, entity_spans_pair))
+                    if entity_spans_pair is not None
+                    else entity_spans
                 )
 
             return self._batch_encode_plus(
@@ -723,7 +786,9 @@ class MLukeTokenizer(TokenizersBackend):
             )
 
         if is_split_into_words:
-            raise NotImplementedError("is_split_into_words is not supported in this tokenizer.")
+            raise NotImplementedError(
+                "is_split_into_words is not supported in this tokenizer."
+            )
 
         (
             first_ids,
@@ -771,10 +836,12 @@ class MLukeTokenizer(TokenizersBackend):
     def _batch_encode_plus(
         self,
         batch_text_or_text_pairs: list[TextInput] | list[TextInputPair],
-        batch_entity_spans_or_entity_spans_pairs: list[EntitySpanInput]
-        | list[tuple[EntitySpanInput, EntitySpanInput]]
-        | None = None,
-        batch_entities_or_entities_pairs: list[EntityInput] | list[tuple[EntityInput, EntityInput]] | None = None,
+        batch_entity_spans_or_entity_spans_pairs: (
+            list[EntitySpanInput] | list[tuple[EntitySpanInput, EntitySpanInput]] | None
+        ) = None,
+        batch_entities_or_entities_pairs: (
+            list[EntityInput] | list[tuple[EntityInput, EntityInput]] | None
+        ) = None,
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
@@ -799,7 +866,9 @@ class MLukeTokenizer(TokenizersBackend):
             and batch_entities_or_entities_pairs is None
             and self.task is None
         ):
-            if batch_text_or_text_pairs and isinstance(batch_text_or_text_pairs[0], (tuple, list)):
+            if batch_text_or_text_pairs and isinstance(
+                batch_text_or_text_pairs[0], (tuple, list)
+            ):
                 texts, text_pairs = zip(*batch_text_or_text_pairs)
                 texts = list(texts)
                 text_pairs = list(text_pairs)
@@ -837,7 +906,9 @@ class MLukeTokenizer(TokenizersBackend):
             )
 
         if is_split_into_words:
-            raise NotImplementedError("is_split_into_words is not supported in this tokenizer.")
+            raise NotImplementedError(
+                "is_split_into_words is not supported in this tokenizer."
+            )
 
         # input_ids is a list of tuples (one for each example in the batch)
         input_ids = []
@@ -860,13 +931,18 @@ class MLukeTokenizer(TokenizersBackend):
 
             entity_spans, entity_spans_pair = None, None
             if batch_entity_spans_or_entity_spans_pairs is not None:
-                entity_spans_or_entity_spans_pairs = batch_entity_spans_or_entity_spans_pairs[index]
+                entity_spans_or_entity_spans_pairs = (
+                    batch_entity_spans_or_entity_spans_pairs[index]
+                )
                 if len(entity_spans_or_entity_spans_pairs) > 0 and isinstance(
                     entity_spans_or_entity_spans_pairs[0], list
                 ):
                     entity_spans, entity_spans_pair = entity_spans_or_entity_spans_pairs
                 else:
-                    entity_spans, entity_spans_pair = entity_spans_or_entity_spans_pairs, None
+                    entity_spans, entity_spans_pair = (
+                        entity_spans_or_entity_spans_pairs,
+                        None,
+                    )
 
             (
                 first_ids,
@@ -886,7 +962,9 @@ class MLukeTokenizer(TokenizersBackend):
             )
             input_ids.append((first_ids, second_ids))
             entity_ids.append((first_entity_ids, second_entity_ids))
-            entity_token_spans.append((first_entity_token_spans, second_entity_token_spans))
+            entity_token_spans.append(
+                (first_entity_token_spans, second_entity_token_spans)
+            )
 
         batch_outputs = self._batch_prepare_for_model(
             input_ids,
@@ -911,7 +989,9 @@ class MLukeTokenizer(TokenizersBackend):
 
         return BatchEncoding(batch_outputs)
 
-    def _check_entity_input_format(self, entities: EntityInput | None, entity_spans: EntitySpanInput | None):
+    def _check_entity_input_format(
+        self, entities: EntityInput | None, entity_spans: EntitySpanInput | None
+    ):
         if not isinstance(entity_spans, list):
             raise TypeError("entity_spans should be given as a list")
         elif len(entity_spans) > 0 and not isinstance(entity_spans[0], tuple):
@@ -921,13 +1001,19 @@ class MLukeTokenizer(TokenizersBackend):
 
         if entities is not None:
             if not isinstance(entities, list):
-                raise ValueError("If you specify entities, they should be given as a list")
+                raise ValueError(
+                    "If you specify entities, they should be given as a list"
+                )
 
             if len(entities) > 0 and not isinstance(entities[0], str):
-                raise ValueError("If you specify entities, they should be given as a list of entity names")
+                raise ValueError(
+                    "If you specify entities, they should be given as a list of entity names"
+                )
 
             if len(entities) != len(entity_spans):
-                raise ValueError("If you specify entities, entities and entity_spans must be the same length")
+                raise ValueError(
+                    "If you specify entities, entities and entity_spans must be the same length"
+                )
 
     def _create_input_sequence(
         self,
@@ -970,7 +1056,8 @@ class MLukeTokenizer(TokenizersBackend):
             input_ids += get_input_ids(text[cur:])
 
             entity_token_spans = [
-                (char_pos2token_pos[char_start], char_pos2token_pos[char_end]) for char_start, char_end in entity_spans
+                (char_pos2token_pos[char_start], char_pos2token_pos[char_end])
+                for char_start, char_end in entity_spans
             ]
 
             return input_ids, entity_token_spans
@@ -985,11 +1072,16 @@ class MLukeTokenizer(TokenizersBackend):
             else:
                 self._check_entity_input_format(entities, entity_spans)
 
-                first_ids, first_entity_token_spans = get_input_ids_and_entity_token_spans(text, entity_spans)
+                first_ids, first_entity_token_spans = (
+                    get_input_ids_and_entity_token_spans(text, entity_spans)
+                )
                 if entities is None:
                     first_entity_ids = [self.entity_mask_token_id] * len(entity_spans)
                 else:
-                    first_entity_ids = [self.entity_vocab.get(entity, self.entity_unk_token_id) for entity in entities]
+                    first_entity_ids = [
+                        self.entity_vocab.get(entity, self.entity_unk_token_id)
+                        for entity in entities
+                    ]
 
             if text_pair is not None:
                 if entity_spans_pair is None:
@@ -997,32 +1089,47 @@ class MLukeTokenizer(TokenizersBackend):
                 else:
                     self._check_entity_input_format(entities_pair, entity_spans_pair)
 
-                    second_ids, second_entity_token_spans = get_input_ids_and_entity_token_spans(
-                        text_pair, entity_spans_pair
+                    second_ids, second_entity_token_spans = (
+                        get_input_ids_and_entity_token_spans(
+                            text_pair, entity_spans_pair
+                        )
                     )
                     if entities_pair is None:
-                        second_entity_ids = [self.entity_mask_token_id] * len(entity_spans_pair)
+                        second_entity_ids = [self.entity_mask_token_id] * len(
+                            entity_spans_pair
+                        )
                     else:
                         second_entity_ids = [
-                            self.entity_vocab.get(entity, self.entity_unk_token_id) for entity in entities_pair
+                            self.entity_vocab.get(entity, self.entity_unk_token_id)
+                            for entity in entities_pair
                         ]
 
         elif self.task == "entity_classification":
-            if not (isinstance(entity_spans, list) and len(entity_spans) == 1 and isinstance(entity_spans[0], tuple)):
+            if not (
+                isinstance(entity_spans, list)
+                and len(entity_spans) == 1
+                and isinstance(entity_spans[0], tuple)
+            ):
                 raise ValueError(
                     "Entity spans should be a list containing a single tuple "
                     "containing the start and end character indices of an entity"
                 )
             first_entity_ids = [self.entity_mask_token_id]
-            first_ids, first_entity_token_spans = get_input_ids_and_entity_token_spans(text, entity_spans)
+            first_ids, first_entity_token_spans = get_input_ids_and_entity_token_spans(
+                text, entity_spans
+            )
 
             # add special tokens to input ids
             entity_token_start, entity_token_end = first_entity_token_spans[0]
             first_ids = (
-                first_ids[:entity_token_end] + [self.entity_token_1_id] + first_ids[entity_token_end:]
+                first_ids[:entity_token_end]
+                + [self.entity_token_1_id]
+                + first_ids[entity_token_end:]
             )
             first_ids = (
-                first_ids[:entity_token_start] + [self.entity_token_1_id] + first_ids[entity_token_start:]
+                first_ids[:entity_token_start]
+                + [self.entity_token_1_id]
+                + first_ids[entity_token_start:]
             )
             first_entity_token_spans = [(entity_token_start, entity_token_end + 2)]
 
@@ -1040,7 +1147,9 @@ class MLukeTokenizer(TokenizersBackend):
 
             head_span, tail_span = entity_spans
             first_entity_ids = [self.entity_mask_token_id, self.entity_mask2_token_id]
-            first_ids, first_entity_token_spans = get_input_ids_and_entity_token_spans(text, entity_spans)
+            first_ids, first_entity_token_spans = get_input_ids_and_entity_token_spans(
+                text, entity_spans
+            )
 
             head_token_span, tail_token_span = first_entity_token_spans
             token_span_with_special_token_ids = [
@@ -1048,25 +1157,54 @@ class MLukeTokenizer(TokenizersBackend):
                 (tail_token_span, self.entity_token_2_id),
             ]
             if head_token_span[0] < tail_token_span[0]:
-                first_entity_token_spans[0] = (head_token_span[0], head_token_span[1] + 2)
-                first_entity_token_spans[1] = (tail_token_span[0] + 2, tail_token_span[1] + 4)
+                first_entity_token_spans[0] = (
+                    head_token_span[0],
+                    head_token_span[1] + 2,
+                )
+                first_entity_token_spans[1] = (
+                    tail_token_span[0] + 2,
+                    tail_token_span[1] + 4,
+                )
                 token_span_with_special_token_ids.reverse()
             else:
-                first_entity_token_spans[0] = (head_token_span[0] + 2, head_token_span[1] + 4)
-                first_entity_token_spans[1] = (tail_token_span[0], tail_token_span[1] + 2)
+                first_entity_token_spans[0] = (
+                    head_token_span[0] + 2,
+                    head_token_span[1] + 4,
+                )
+                first_entity_token_spans[1] = (
+                    tail_token_span[0],
+                    tail_token_span[1] + 2,
+                )
 
-            for (entity_token_start, entity_token_end), special_token_id in token_span_with_special_token_ids:
-                first_ids = first_ids[:entity_token_end] + [special_token_id] + first_ids[entity_token_end:]
-                first_ids = first_ids[:entity_token_start] + [special_token_id] + first_ids[entity_token_start:]
+            for (
+                entity_token_start,
+                entity_token_end,
+            ), special_token_id in token_span_with_special_token_ids:
+                first_ids = (
+                    first_ids[:entity_token_end]
+                    + [special_token_id]
+                    + first_ids[entity_token_end:]
+                )
+                first_ids = (
+                    first_ids[:entity_token_start]
+                    + [special_token_id]
+                    + first_ids[entity_token_start:]
+                )
 
         elif self.task == "entity_span_classification":
-            if not (isinstance(entity_spans, list) and len(entity_spans) > 0 and isinstance(entity_spans[0], tuple)):
+            if not (
+                isinstance(entity_spans, list)
+                and len(entity_spans) > 0
+                and isinstance(entity_spans[0], tuple)
+            ):
                 raise ValueError(
                     "Entity spans should be provided as a list of tuples, "
                     "each tuple containing the start and end character indices of an entity"
                 )
 
-            first_ids, first_entity_token_spans = get_input_ids_and_entity_token_spans(text, entity_spans)
+            first_ids, first_entity_token_spans = get_input_ids_and_entity_token_spans(
+                text, entity_spans
+            )
             first_entity_ids = [self.entity_mask_token_id] * len(entity_spans)
 
         else:
@@ -1081,12 +1219,16 @@ class MLukeTokenizer(TokenizersBackend):
             second_entity_token_spans,
         )
 
-    @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
+    @add_end_docstrings(
+        ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING
+    )
     def _batch_prepare_for_model(
         self,
         batch_ids_pairs: list[tuple[list[int], None]],
         batch_entity_ids_pairs: list[tuple[list[int] | None, list[int] | None]],
-        batch_entity_token_spans_pairs: list[tuple[list[tuple[int, int]] | None, list[tuple[int, int]] | None]],
+        batch_entity_token_spans_pairs: list[
+            tuple[list[tuple[int, int]] | None, list[tuple[int, int]] | None]
+        ],
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
@@ -1122,7 +1264,9 @@ class MLukeTokenizer(TokenizersBackend):
         ):
             first_ids, second_ids = input_ids
             first_entity_ids, second_entity_ids = entity_ids
-            first_entity_token_spans, second_entity_token_spans = entity_token_span_pairs
+            first_entity_token_spans, second_entity_token_spans = (
+                entity_token_span_pairs
+            )
             outputs = self.prepare_for_model(
                 first_ids,
                 second_ids,
@@ -1166,7 +1310,9 @@ class MLukeTokenizer(TokenizersBackend):
 
         return batch_outputs
 
-    @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
+    @add_end_docstrings(
+        ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING
+    )
     def prepare_for_model(
         self,
         ids: list[int],
@@ -1220,13 +1366,15 @@ class MLukeTokenizer(TokenizersBackend):
         """
 
         # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
-        padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
-            padding=padding,
-            truncation=truncation,
-            max_length=max_length,
-            pad_to_multiple_of=pad_to_multiple_of,
-            verbose=verbose,
-            **kwargs,
+        padding_strategy, truncation_strategy, max_length, kwargs = (
+            self._get_padding_truncation_strategies(
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
+                pad_to_multiple_of=pad_to_multiple_of,
+                verbose=verbose,
+                **kwargs,
+            )
         )
 
         # Compute lengths
@@ -1260,11 +1408,19 @@ class MLukeTokenizer(TokenizersBackend):
         encoded_inputs = {}
 
         # Compute the total size of the returned word encodings
-        total_len = len_ids + len_pair_ids + (self.num_special_tokens_to_add(pair=pair) if add_special_tokens else 0)
+        total_len = (
+            len_ids
+            + len_pair_ids
+            + (self.num_special_tokens_to_add(pair=pair) if add_special_tokens else 0)
+        )
 
         # Truncation: Handle max sequence length and max_entity_length
         overflowing_tokens = []
-        if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE and max_length and total_len > max_length:
+        if (
+            truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE
+            and max_length
+            and total_len > max_length
+        ):
             # truncate words up to max_length
             ids, pair_ids, overflowing_tokens = self.truncate_sequences(
                 ids,
@@ -1296,7 +1452,9 @@ class MLukeTokenizer(TokenizersBackend):
             encoded_inputs["token_type_ids"] = token_type_ids
         if return_special_tokens_mask:
             if add_special_tokens:
-                encoded_inputs["special_tokens_mask"] = self.get_special_tokens_mask(ids, pair_ids)
+                encoded_inputs["special_tokens_mask"] = self.get_special_tokens_mask(
+                    ids, pair_ids
+                )
             else:
                 encoded_inputs["special_tokens_mask"] = [0] * len(sequence)
 
@@ -1307,8 +1465,14 @@ class MLukeTokenizer(TokenizersBackend):
         if entity_ids is not None:
             total_entity_len = 0
             num_invalid_entities = 0
-            valid_entity_ids = [ent_id for ent_id, span in zip(entity_ids, entity_token_spans) if span[1] <= len(ids)]
-            valid_entity_token_spans = [span for span in entity_token_spans if span[1] <= len(ids)]
+            valid_entity_ids = [
+                ent_id
+                for ent_id, span in zip(entity_ids, entity_token_spans)
+                if span[1] <= len(ids)
+            ]
+            valid_entity_token_spans = [
+                span for span in entity_token_spans if span[1] <= len(ids)
+            ]
 
             total_entity_len += len(valid_entity_ids)
             num_invalid_entities += len(entity_ids) - len(valid_entity_ids)
@@ -1320,9 +1484,13 @@ class MLukeTokenizer(TokenizersBackend):
                     for ent_id, span in zip(pair_entity_ids, pair_entity_token_spans)
                     if span[1] <= len(pair_ids)
                 ]
-                valid_pair_entity_token_spans = [span for span in pair_entity_token_spans if span[1] <= len(pair_ids)]
+                valid_pair_entity_token_spans = [
+                    span for span in pair_entity_token_spans if span[1] <= len(pair_ids)
+                ]
                 total_entity_len += len(valid_pair_entity_ids)
-                num_invalid_entities += len(pair_entity_ids) - len(valid_pair_entity_ids)
+                num_invalid_entities += len(pair_entity_ids) - len(
+                    valid_pair_entity_ids
+                )
 
             if num_invalid_entities != 0:
                 logger.warning(
@@ -1330,24 +1498,39 @@ class MLukeTokenizer(TokenizersBackend):
                     " truncation of input tokens"
                 )
 
-            if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE and total_entity_len > max_entity_length:
+            if (
+                truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE
+                and total_entity_len > max_entity_length
+            ):
                 # truncate entities up to max_entity_length
-                valid_entity_ids, valid_pair_entity_ids, overflowing_entities = self.truncate_sequences(
-                    valid_entity_ids,
-                    pair_ids=valid_pair_entity_ids,
-                    num_tokens_to_remove=total_entity_len - max_entity_length,
-                    truncation_strategy=truncation_strategy,
-                    stride=stride,
+                valid_entity_ids, valid_pair_entity_ids, overflowing_entities = (
+                    self.truncate_sequences(
+                        valid_entity_ids,
+                        pair_ids=valid_pair_entity_ids,
+                        num_tokens_to_remove=total_entity_len - max_entity_length,
+                        truncation_strategy=truncation_strategy,
+                        stride=stride,
+                    )
                 )
-                valid_entity_token_spans = valid_entity_token_spans[: len(valid_entity_ids)]
+                valid_entity_token_spans = valid_entity_token_spans[
+                    : len(valid_entity_ids)
+                ]
                 if valid_pair_entity_token_spans is not None:
-                    valid_pair_entity_token_spans = valid_pair_entity_token_spans[: len(valid_pair_entity_ids)]
+                    valid_pair_entity_token_spans = valid_pair_entity_token_spans[
+                        : len(valid_pair_entity_ids)
+                    ]
 
             if return_overflowing_tokens:
                 encoded_inputs["overflowing_entities"] = overflowing_entities
-                encoded_inputs["num_truncated_entities"] = total_entity_len - max_entity_length
+                encoded_inputs["num_truncated_entities"] = (
+                    total_entity_len - max_entity_length
+                )
 
-            final_entity_ids = valid_entity_ids + valid_pair_entity_ids if valid_pair_entity_ids else valid_entity_ids
+            final_entity_ids = (
+                valid_entity_ids + valid_pair_entity_ids
+                if valid_pair_entity_ids
+                else valid_entity_ids
+            )
             encoded_inputs["entity_ids"] = list(final_entity_ids)
             entity_position_ids = []
             entity_start_positions = []
@@ -1360,7 +1543,9 @@ class MLukeTokenizer(TokenizersBackend):
                     for start, end in token_spans:
                         start += offset
                         end += offset
-                        position_ids = list(range(start, end))[: self.max_mention_length]
+                        position_ids = list(range(start, end))[
+                            : self.max_mention_length
+                        ]
                         position_ids += [-1] * (self.max_mention_length - end + start)
                         entity_position_ids.append(position_ids)
                         entity_start_positions.append(start)
@@ -1372,10 +1557,14 @@ class MLukeTokenizer(TokenizersBackend):
                 encoded_inputs["entity_end_positions"] = entity_end_positions
 
             if return_token_type_ids:
-                encoded_inputs["entity_token_type_ids"] = [0] * len(encoded_inputs["entity_ids"])
+                encoded_inputs["entity_token_type_ids"] = [0] * len(
+                    encoded_inputs["entity_ids"]
+                )
 
         # Check lengths
-        self._eventual_warn_about_too_long_sequence(encoded_inputs["input_ids"], max_length, verbose)
+        self._eventual_warn_about_too_long_sequence(
+            encoded_inputs["input_ids"], max_length, verbose
+        )
 
         # Padding
         if padding_strategy != PaddingStrategy.DO_NOT_PAD or return_attention_mask:
@@ -1393,18 +1582,22 @@ class MLukeTokenizer(TokenizersBackend):
             encoded_inputs["length"] = len(encoded_inputs["input_ids"])
 
         batch_outputs = BatchEncoding(
-            encoded_inputs, tensor_type=return_tensors, prepend_batch_axis=prepend_batch_axis
+            encoded_inputs,
+            tensor_type=return_tensors,
+            prepend_batch_axis=prepend_batch_axis,
         )
 
         return batch_outputs
 
     def pad(
         self,
-        encoded_inputs: BatchEncoding
-        | list[BatchEncoding]
-        | dict[str, EncodedInput]
-        | dict[str, list[EncodedInput]]
-        | list[dict[str, EncodedInput]],
+        encoded_inputs: (
+            BatchEncoding
+            | list[BatchEncoding]
+            | dict[str, EncodedInput]
+            | dict[str, list[EncodedInput]]
+            | list[dict[str, EncodedInput]]
+        ),
         padding: bool | str | PaddingStrategy = True,
         max_length: int | None = None,
         max_entity_length: int | None = None,
@@ -1463,9 +1656,14 @@ class MLukeTokenizer(TokenizersBackend):
         """
         # If we have a list of dicts, let's convert it in a dict of lists
         # We do this to allow using this method as a collate_fn function in PyTorch Dataloader
-        if isinstance(encoded_inputs, (list, tuple)) and isinstance(encoded_inputs[0], Mapping):
+        if isinstance(encoded_inputs, (list, tuple)) and isinstance(
+            encoded_inputs[0], Mapping
+        ):
             # Call .keys() explicitly for compatibility with TensorDict and other Mapping subclasses
-            encoded_inputs = {key: [example[key] for example in encoded_inputs] for key in encoded_inputs[0].keys()}
+            encoded_inputs = {
+                key: [example[key] for example in encoded_inputs]
+                for key in encoded_inputs[0].keys()
+            }
 
         # The model's main input name, usually `input_ids`, has be passed for padding
         if self.model_input_names[0] not in encoded_inputs:
@@ -1531,12 +1729,16 @@ class MLukeTokenizer(TokenizersBackend):
 
         batch_size = len(required_input)
         if any(len(v) != batch_size for v in encoded_inputs.values()):
-            raise ValueError("Some items in the output dictionary have a different batch size than others.")
+            raise ValueError(
+                "Some items in the output dictionary have a different batch size than others."
+            )
 
         if padding_strategy == PaddingStrategy.LONGEST:
             max_length = max(len(inputs) for inputs in required_input)
             max_entity_length = (
-                max(len(inputs) for inputs in encoded_inputs["entity_ids"]) if "entity_ids" in encoded_inputs else 0
+                max(len(inputs) for inputs in encoded_inputs["entity_ids"])
+                if "entity_ids" in encoded_inputs
+                else 0
             )
             padding_strategy = PaddingStrategy.MAX_LENGTH
 
@@ -1611,7 +1813,11 @@ class MLukeTokenizer(TokenizersBackend):
             if entities_provided:
                 max_entity_length = len(encoded_inputs["entity_ids"])
 
-        if max_length is not None and pad_to_multiple_of is not None and (max_length % pad_to_multiple_of != 0):
+        if (
+            max_length is not None
+            and pad_to_multiple_of is not None
+            and (max_length % pad_to_multiple_of != 0)
+        ):
             max_length = ((max_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
 
         if (
@@ -1620,91 +1826,130 @@ class MLukeTokenizer(TokenizersBackend):
             and pad_to_multiple_of is not None
             and (max_entity_length % pad_to_multiple_of != 0)
         ):
-            max_entity_length = ((max_entity_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
+            max_entity_length = (
+                (max_entity_length // pad_to_multiple_of) + 1
+            ) * pad_to_multiple_of
 
         needs_to_be_padded = padding_strategy != PaddingStrategy.DO_NOT_PAD and (
             len(encoded_inputs["input_ids"]) != max_length
-            or (entities_provided and len(encoded_inputs["entity_ids"]) != max_entity_length)
+            or (
+                entities_provided
+                and len(encoded_inputs["entity_ids"]) != max_entity_length
+            )
         )
 
         # Initialize attention mask if not present.
         if return_attention_mask and "attention_mask" not in encoded_inputs:
             encoded_inputs["attention_mask"] = [1] * len(encoded_inputs["input_ids"])
-        if entities_provided and return_attention_mask and "entity_attention_mask" not in encoded_inputs:
-            encoded_inputs["entity_attention_mask"] = [1] * len(encoded_inputs["entity_ids"])
+        if (
+            entities_provided
+            and return_attention_mask
+            and "entity_attention_mask" not in encoded_inputs
+        ):
+            encoded_inputs["entity_attention_mask"] = [1] * len(
+                encoded_inputs["entity_ids"]
+            )
 
         if needs_to_be_padded:
             difference = max_length - len(encoded_inputs["input_ids"])
-            padding_side = padding_side if padding_side is not None else self.padding_side
+            padding_side = (
+                padding_side if padding_side is not None else self.padding_side
+            )
             if entities_provided:
-                entity_difference = max_entity_length - len(encoded_inputs["entity_ids"])
+                entity_difference = max_entity_length - len(
+                    encoded_inputs["entity_ids"]
+                )
             if padding_side == "right":
                 if return_attention_mask:
-                    encoded_inputs["attention_mask"] = encoded_inputs["attention_mask"] + [0] * difference
+                    encoded_inputs["attention_mask"] = (
+                        encoded_inputs["attention_mask"] + [0] * difference
+                    )
                     if entities_provided:
                         encoded_inputs["entity_attention_mask"] = (
-                            encoded_inputs["entity_attention_mask"] + [0] * entity_difference
+                            encoded_inputs["entity_attention_mask"]
+                            + [0] * entity_difference
                         )
                 if "token_type_ids" in encoded_inputs:
-                    encoded_inputs["token_type_ids"] = encoded_inputs["token_type_ids"] + [0] * difference
+                    encoded_inputs["token_type_ids"] = (
+                        encoded_inputs["token_type_ids"] + [0] * difference
+                    )
                     if entities_provided:
                         encoded_inputs["entity_token_type_ids"] = (
-                            encoded_inputs["entity_token_type_ids"] + [0] * entity_difference
+                            encoded_inputs["entity_token_type_ids"]
+                            + [0] * entity_difference
                         )
                 if "special_tokens_mask" in encoded_inputs:
-                    encoded_inputs["special_tokens_mask"] = encoded_inputs["special_tokens_mask"] + [1] * difference
-                encoded_inputs["input_ids"] = encoded_inputs["input_ids"] + [self.pad_token_id] * difference
+                    encoded_inputs["special_tokens_mask"] = (
+                        encoded_inputs["special_tokens_mask"] + [1] * difference
+                    )
+                encoded_inputs["input_ids"] = (
+                    encoded_inputs["input_ids"] + [self.pad_token_id] * difference
+                )
                 if entities_provided:
                     encoded_inputs["entity_ids"] = (
-                        encoded_inputs["entity_ids"] + [self.entity_pad_token_id] * entity_difference
+                        encoded_inputs["entity_ids"]
+                        + [self.entity_pad_token_id] * entity_difference
                     )
                     encoded_inputs["entity_position_ids"] = (
-                        encoded_inputs["entity_position_ids"] + [[-1] * self.max_mention_length] * entity_difference
+                        encoded_inputs["entity_position_ids"]
+                        + [[-1] * self.max_mention_length] * entity_difference
                     )
                     if self.task == "entity_span_classification":
                         encoded_inputs["entity_start_positions"] = (
-                            encoded_inputs["entity_start_positions"] + [0] * entity_difference
+                            encoded_inputs["entity_start_positions"]
+                            + [0] * entity_difference
                         )
                         encoded_inputs["entity_end_positions"] = (
-                            encoded_inputs["entity_end_positions"] + [0] * entity_difference
+                            encoded_inputs["entity_end_positions"]
+                            + [0] * entity_difference
                         )
 
             elif padding_side == "left":
                 if return_attention_mask:
-                    encoded_inputs["attention_mask"] = [0] * difference + encoded_inputs["attention_mask"]
+                    encoded_inputs["attention_mask"] = [
+                        0
+                    ] * difference + encoded_inputs["attention_mask"]
                     if entities_provided:
-                        encoded_inputs["entity_attention_mask"] = [0] * entity_difference + encoded_inputs[
-                            "entity_attention_mask"
-                        ]
+                        encoded_inputs["entity_attention_mask"] = [
+                            0
+                        ] * entity_difference + encoded_inputs["entity_attention_mask"]
                 if "token_type_ids" in encoded_inputs:
-                    encoded_inputs["token_type_ids"] = [0] * difference + encoded_inputs["token_type_ids"]
+                    encoded_inputs["token_type_ids"] = [
+                        0
+                    ] * difference + encoded_inputs["token_type_ids"]
                     if entities_provided:
-                        encoded_inputs["entity_token_type_ids"] = [0] * entity_difference + encoded_inputs[
-                            "entity_token_type_ids"
-                        ]
+                        encoded_inputs["entity_token_type_ids"] = [
+                            0
+                        ] * entity_difference + encoded_inputs["entity_token_type_ids"]
                 if "special_tokens_mask" in encoded_inputs:
-                    encoded_inputs["special_tokens_mask"] = [1] * difference + encoded_inputs["special_tokens_mask"]
-                encoded_inputs["input_ids"] = [self.pad_token_id] * difference + encoded_inputs["input_ids"]
+                    encoded_inputs["special_tokens_mask"] = [
+                        1
+                    ] * difference + encoded_inputs["special_tokens_mask"]
+                encoded_inputs["input_ids"] = [
+                    self.pad_token_id
+                ] * difference + encoded_inputs["input_ids"]
                 if entities_provided:
-                    encoded_inputs["entity_ids"] = [self.entity_pad_token_id] * entity_difference + encoded_inputs[
-                        "entity_ids"
-                    ]
+                    encoded_inputs["entity_ids"] = [
+                        self.entity_pad_token_id
+                    ] * entity_difference + encoded_inputs["entity_ids"]
                     encoded_inputs["entity_position_ids"] = [
                         [-1] * self.max_mention_length
                     ] * entity_difference + encoded_inputs["entity_position_ids"]
                     if self.task == "entity_span_classification":
-                        encoded_inputs["entity_start_positions"] = [0] * entity_difference + encoded_inputs[
-                            "entity_start_positions"
-                        ]
-                        encoded_inputs["entity_end_positions"] = [0] * entity_difference + encoded_inputs[
-                            "entity_end_positions"
-                        ]
+                        encoded_inputs["entity_start_positions"] = [
+                            0
+                        ] * entity_difference + encoded_inputs["entity_start_positions"]
+                        encoded_inputs["entity_end_positions"] = [
+                            0
+                        ] * entity_difference + encoded_inputs["entity_end_positions"]
             else:
                 raise ValueError("Invalid padding strategy:" + str(padding_side))
 
         return encoded_inputs
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str]:
+    def save_vocabulary(
+        self, save_directory: str, filename_prefix: str | None = None
+    ) -> tuple[str]:
         """
         Save only the entity vocabulary file. The tokenizer.json is saved by the parent TokenizersBackend.
         """
@@ -1713,11 +1958,18 @@ class MLukeTokenizer(TokenizersBackend):
             return ()
 
         entity_vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["entity_vocab_file"]
+            save_directory,
+            (filename_prefix + "-" if filename_prefix else "")
+            + VOCAB_FILES_NAMES["entity_vocab_file"],
         )
 
         with open(entity_vocab_file, "w", encoding="utf-8") as f:
-            f.write(json.dumps(self.entity_vocab, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
+            f.write(
+                json.dumps(
+                    self.entity_vocab, indent=2, sort_keys=True, ensure_ascii=False
+                )
+                + "\n"
+            )
 
         return (entity_vocab_file,)
 
@@ -1748,7 +2000,10 @@ class MLukeTokenizer(TokenizersBackend):
         return cls + token_ids_0 + sep + sep + token_ids_1 + sep
 
     def get_special_tokens_mask(
-        self, token_ids_0: list[int], token_ids_1: list[int] | None = None, already_has_special_tokens: bool = False
+        self,
+        token_ids_0: list[int],
+        token_ids_1: list[int] | None = None,
+        already_has_special_tokens: bool = False,
     ) -> list[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
@@ -1768,7 +2023,9 @@ class MLukeTokenizer(TokenizersBackend):
 
         if already_has_special_tokens:
             return super().get_special_tokens_mask(
-                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
+                token_ids_0=token_ids_0,
+                token_ids_1=token_ids_1,
+                already_has_special_tokens=True,
             )
 
         if token_ids_1 is None:
