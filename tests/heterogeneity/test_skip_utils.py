@@ -41,7 +41,6 @@ class TestSkipReplacement(unittest.TestCase):
         torch.testing.assert_close(module(inputs), inputs * 2)
         torch.testing.assert_close(module(input=inputs), inputs * 2)
 
-
     def test_get_skip_replacement_returns_tuple_with_placeholder(self):
         replacement_factory = get_skip_replacement(
             torch.nn.Linear,

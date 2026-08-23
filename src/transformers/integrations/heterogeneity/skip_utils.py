@@ -52,6 +52,7 @@ class _ResolvedReturnEntry(ReturnEntry):
             return self.default
         raise TypeError(f"missing a required argument: '{self.arg_name}'")
 
+
 def _resolve_return_entries(
     cls: type[nn.Module], return_entries: tuple[ReturnEntry | None, ...] | None
 ) -> tuple[_ResolvedReturnEntry | None, ...] | None:
