@@ -1056,9 +1056,7 @@ class Gemma4IntegrationTest(unittest.TestCase):
         model = Gemma4ForConditionalGeneration.from_pretrained(self.model_name, device_map="cpu")
         tokenizer = AutoTokenizer.from_pretrained(self.model_name)
 
-        exportable_module = TorchExportableModuleForDecoderOnlyLM(
-            model, batch_size=1, max_cache_len=19, device="cpu"
-        )
+        exportable_module = TorchExportableModuleForDecoderOnlyLM(model, batch_size=1, max_cache_len=19, device="cpu")
         exported_program = exportable_module.export(
             input_ids=torch.tensor([[1]], device="cpu", dtype=torch.long),
         )
