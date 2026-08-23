@@ -311,7 +311,8 @@ class GraniteSpeech5PreTrainedModel(PreTrainedModel):
 
     # float attention bias is not supported by flash attention
     _supports_flash_attn = False
-    _can_compile_fullgraph = False
+
+    _can_compile_fullgraph = True
     _supports_attention_backend = True
 
     _can_record_outputs = {

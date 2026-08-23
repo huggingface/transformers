@@ -309,7 +309,6 @@ class GraniteSpeech5PreTrainedModel(ParakeetPreTrainedModel):
 
     # float attention bias is not supported by flash attention
     _supports_flash_attn = False
-    _can_compile_fullgraph = False
 
     _can_record_outputs = {
         "hidden_states": GraniteSpeech5EncoderBlock,
