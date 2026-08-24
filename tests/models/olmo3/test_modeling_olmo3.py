@@ -147,6 +147,7 @@ class Olmo3InternalIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 ("cuda", None): """Simply put, the theory of relativity states that 1) the laws of physics are the same for all observers, and 2) the speed of light is the same for all observers. The first part of the theory is called the principle of relativity, and the second part is called the principle of the constancy of the speed of light. The theory of rel""",
+                ("xpu", 5): """Simply put, the theory of relativity states that 1) the laws of physics are the same for all observers, and 2) the speed of light is the same for all observers. The first part of the theory is called the principle of relativity, and the second part is called the principle of the constancy of the speed of light. The theory of rel""",
             }
         )  # fmt: skip
         prompt = "Simply put, the theory of relativity states that "

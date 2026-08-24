@@ -19,6 +19,7 @@ import pytest
 
 from transformers import AutoTokenizer, is_torch_available, set_seed
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
     is_flaky,
     require_flash_attn,
@@ -140,15 +141,33 @@ class Qwen2MoeIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             out = model(input_ids).logits.float().cpu()
         # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor([[-4.2106, -3.6411, -4.9111, -4.2840, -4.9950, -3.4438, -3.5262, -4.1624]])
+        expectations = Expectations(
+            {
+                (None, None): [[-4.2106, -3.6411, -4.9111, -4.2840, -4.9950, -3.4438, -3.5262, -4.1624]],
+                ("xpu", 5): [[-4.1428, -3.5989, -4.9235, -4.3388, -4.9564, -3.4844, -3.4501, -4.1148]],
+            }
+        )
+        EXPECTED_MEAN = torch.tensor(expectations.get_expectation())
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, rtol=1e-2, atol=1e-2)
         # slicing logits[0, 0, 0:10]
-        EXPECTED_SLICE = torch.tensor([2.3008, -0.6777, -0.1287, -1.4043, -1.7393, -1.7627, -2.0547, -2.4414, -3.0332, -2.1406])  # fmt: skip
+        expectations = Expectations(
+            {
+                (None, None): [2.3008, -0.6777, -0.1287, -1.4043, -1.7393, -1.7627, -2.0547, -2.4414, -3.0332, -2.1406],
+                ("xpu", 5): [2.5410, 0.0646, 0.4038, -0.9292, -1.4971, -1.4424, -1.2637, -1.5107, -2.5371, -1.5518],
+            }
+        )
+        EXPECTED_SLICE = torch.tensor(expectations.get_expectation())  # fmt: skip
         torch.testing.assert_close(out[0, 0, :10], EXPECTED_SLICE, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_model_a2_7b_generation(self):
-        EXPECTED_TEXT_COMPLETION = """To be or not to be, that is the question. This is the question that has been asked by many people over the"""
+        expectations = Expectations(
+            {
+                (None, None): """To be or not to be, that is the question. This is the question that has been asked by many people over the""",
+                ("xpu", 5): """To be or not to be, that is the question. The answer is to be. But what is the question? The""",
+            }
+        )
+        EXPECTED_TEXT_COMPLETION = expectations.get_expectation()
         prompt = "To be or not to"
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen1.5-MoE-A2.7B", use_fast=False)
         model = self.get_model()
@@ -206,7 +225,13 @@ class Qwen2MoeIntegrationTest(unittest.TestCase):
 
         cleanup(torch_device, gc_collect=True)
 
-        EXPECTED_TEXT_COMPLETION = """To be or not to be, that is the question. This is the question that has been asked by many people over the"""
+        expectations = Expectations(
+            {
+                (None, None): """To be or not to be, that is the question. This is the question that has been asked by many people over the""",
+                ("xpu", 5): """To be or not to be, that is the question. The answer is to be. But what is the question? The""",
+            }
+        )
+        EXPECTED_TEXT_COMPLETION = expectations.get_expectation()
         prompt = "To be or not to"
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen1.5-MoE-A2.7B", use_fast=False)
 
@@ -219,9 +244,13 @@ class Qwen2MoeIntegrationTest(unittest.TestCase):
 
     @slow
     def test_speculative_generation(self):
-        EXPECTED_TEXT_COMPLETION = (
-            "To be or not to be, that is the question: Whether 'tis nobler in the mind to suffer The sl"
+        expectations = Expectations(
+            {
+                (None, None): "To be or not to be, that is the question: Whether 'tis nobler in the mind to suffer The sl",
+                ("xpu", 5): "To be or not to be, that is the question. Whether 'tis nobler in the mind to suffer the sl",
+            }
         )
+        EXPECTED_TEXT_COMPLETION = expectations.get_expectation()
         prompt = "To be or not to"
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen1.5-MoE-A2.7B", use_fast=False)
         model = Qwen2MoeForCausalLM.from_pretrained("Qwen/Qwen1.5-MoE-A2.7B", device_map="auto", dtype=torch.float16)
