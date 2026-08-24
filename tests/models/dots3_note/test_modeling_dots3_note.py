@@ -218,6 +218,10 @@ class Dots3NoteTextModelTest(CausalLMModelTest, unittest.TestCase):
     def test_past_key_values_format(self):
         pass
 
+    @unittest.skip(reason="MLA's asymmetric query/key and value head dimensions are unsupported by SDPA Flash.")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
     @unittest.skip(reason="The model-specific DSA/SWA cache cannot be reconstructed by torch.nn.DataParallel.")
     def test_multi_gpu_data_parallel_forward(self):
         pass
