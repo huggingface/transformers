@@ -15,13 +15,13 @@ from transformers import (
     PreTrainedConfig,
     pipeline,
 )
-from transformers.modeling_outputs import BaseModelOutput
 from transformers.generation.candidate_generator import (
     AssistantToTargetTranslator,
     AssistantVocabTranslatorCache,
     DFlashTokenCandidateGenerator,
     UniversalSpeculativeDecodingGenerator,
 )
+from transformers.modeling_outputs import BaseModelOutput
 from transformers.testing_utils import require_torch, torch_device
 
 
