@@ -196,7 +196,7 @@ def _grouped_mm_fallback(input: torch.Tensor, weight: torch.Tensor, offs: torch.
     for i, end in enumerate(offs.tolist()):
         if start == end:
             continue
-        torch.mm(input[start:end].to(weight[i].dtype), weight[i], out=output[start:end].to(weight[i].dtype))
+        torch.mm(input[start:end], weight[i], out=output[start:end])
         start = end
 
     return output
@@ -235,14 +235,8 @@ def _grouped_mm_fallback_backward(ctx, grad_output):
     for i, end in enumerate(ctx.offs.tolist()):
         if start == end:
             continue
-        torch.mm(
-            grad_output[start:end].to(weight[i].dtype), weight[i].T, out=grad_input[start:end].to(weight[i].dtype)
-        )
-        torch.mm(
-            input[start:end].T.to(grad_weight[i].dtype),
-            grad_output[start:end].to(grad_weight[i].dtype),
-            out=grad_weight[i],
-        )
+        torch.mm(grad_output[start:end], weight[i].T, out=grad_input[start:end])
+        torch.mm(input[start:end].T, grad_output[start:end], out=grad_weight[i])
         start = end
 
     return grad_input, grad_weight, None
@@ -339,7 +333,7 @@ def _grouped_mm(
         elif hasattr(torch, "_grouped_mm"):
             return torch._grouped_mm(input.to(weight.dtype), weight, offs=offs)
 
-    return torch.ops.transformers.grouped_mm_fallback(input, weight, offs=offs)
+    return torch.ops.transformers.grouped_mm_fallback(input.to(weight.dtype), weight, offs=offs)
 
 
 def _grouped_linear(
