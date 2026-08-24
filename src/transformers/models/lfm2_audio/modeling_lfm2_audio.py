@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import math
 from dataclasses import dataclass
 
@@ -33,7 +34,7 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ..auto import AutoModel
-from .configuration_lfm2_audio import Lfm2AudioConfig, Lfm2AudioDepthConfig
+from .configuration_lfm2_audio import Lfm2AudioConfig, Lfm2AudioDepthConfig, Lfm2Config
 
 
 @auto_docstring(custom_intro="Base class for LFM2-Audio backbone outputs.")
@@ -143,6 +144,113 @@ class Lfm2AudioSharedEmbedding(nn.Module):
         return self.to_logits(self.embedding_norm(hidden_states))
 
 
+class Lfm2AudioCodebookEmbedding(nn.Module):
+    """Average embeddings from the eight generated audio codebooks."""
+
+    def __init__(self, hidden_size: int = 512, codebooks: int = 8, vocab_size: int = 2048):
+        super().__init__()
+        self.emb = nn.Embedding(codebooks * vocab_size, hidden_size)
+        self.codebooks = codebooks
+        self.vocab_size = vocab_size
+
+    def forward(self, audio_codes: torch.LongTensor) -> torch.FloatTensor:
+        offsets = torch.arange(self.codebooks, device=audio_codes.device) * self.vocab_size
+        offset_codes = audio_codes + offsets[None, :, None]
+        return self.emb(offset_codes).mean(dim=1)
+
+
+class Lfm2AudioInverseShortTimeFourierTransform(nn.Module):
+    """Inverse STFT with same padding for the bundled LFM audio detokenizer."""
+
+    def __init__(self, n_fft: int = 1280, hop_length: int = 320, win_length: int = 1280):
+        super().__init__()
+        self.n_fft = n_fft
+        self.hop_length = hop_length
+        self.win_length = win_length
+        self.register_buffer("window", torch.hann_window(win_length))
+
+    def forward(self, spectrogram: torch.Tensor) -> torch.FloatTensor:
+        if spectrogram.ndim != 3:
+            raise ValueError("`spectrogram` must have shape `(batch_size, frequency_bins, frames)`.")
+
+        num_frames = spectrogram.shape[-1]
+        padding = (self.win_length - self.hop_length) // 2
+        inverse = torch.fft.irfft(spectrogram, self.n_fft, dim=1, norm="backward")
+        inverse = inverse * self.window[None, :, None]
+
+        output_size = (num_frames - 1) * self.hop_length + self.win_length
+        waveform = F.fold(
+            inverse,
+            output_size=(1, output_size),
+            kernel_size=(1, self.win_length),
+            stride=(1, self.hop_length),
+        )[:, 0, 0, padding:-padding]
+
+        squared_window = self.window.square().expand(1, num_frames, -1).transpose(1, 2)
+        window_envelope = F.fold(
+            squared_window,
+            output_size=(1, output_size),
+            kernel_size=(1, self.win_length),
+            stride=(1, self.hop_length),
+        )[:, 0, 0, padding:-padding]
+        if not torch.all(window_envelope > 1e-11):
+            raise ValueError("The inverse STFT window envelope contains zeros.")
+        return waveform / window_envelope
+
+
+@auto_docstring(custom_intro="LFM2-based audio detokenizer bundled with LFM2.5-Audio checkpoints.")
+class Lfm2AudioDetokenizer(PreTrainedModel):
+    """Decode LFM2-Audio codebooks with the detokenizer bundled in LFM2.5-Audio checkpoints."""
+
+    config_class = Lfm2Config
+    main_input_name = "audio_codes"
+
+    def __init__(self, config: Lfm2Config):
+        config = copy.deepcopy(config)
+        # The released detokenizer predates the canonical LFM2 layer name. Its explicit sliding-window mask below
+        # preserves the original behavior while the native LFM2 layer uses its supported attention implementation.
+        config.layer_types = [
+            "full_attention" if layer_type == "sliding_attention" else layer_type for layer_type in config.layer_types
+        ]
+        super().__init__(config)
+        self.emb = Lfm2AudioCodebookEmbedding(hidden_size=config.hidden_size)
+        self.lfm = AutoModel.from_config(config)
+        self.lin = nn.Linear(config.hidden_size, config.output_size)
+        self.istft = Lfm2AudioInverseShortTimeFourierTransform()
+        self.sliding_window_size = getattr(config, "sliding_window", 30)
+        self.post_init()
+
+    @auto_docstring
+    def forward(self, audio_codes: torch.LongTensor) -> torch.FloatTensor:
+        r"""
+        audio_codes (`torch.LongTensor` of shape `(batch_size, 8, audio_timesteps)`):
+            Generated audio codebooks with values in the range `[0, 2047]`.
+        """
+        if audio_codes.ndim != 3 or audio_codes.shape[1] != self.emb.codebooks:
+            raise ValueError("`audio_codes` must have shape `(batch_size, 8, audio_timesteps)`.")
+        if torch.any((audio_codes < 0) | (audio_codes >= self.emb.vocab_size)):
+            raise ValueError("Audio codes must be in the range [0, 2047].")
+
+        hidden_states = self.emb(audio_codes)
+        hidden_states = F.interpolate(
+            hidden_states.transpose(1, 2), size=6 * hidden_states.shape[1], mode="nearest-exact"
+        ).transpose(1, 2)
+
+        positions = torch.arange(hidden_states.shape[1], device=hidden_states.device)
+        relative_positions = positions - positions[:, None]
+        attention_mask = ((relative_positions <= 0) & (relative_positions > -self.sliding_window_size))[None, None]
+        hidden_states = self.lfm(
+            inputs_embeds=hidden_states,
+            attention_mask=attention_mask,
+            use_cache=False,
+            return_dict=True,
+        ).last_hidden_state
+
+        spectrogram = self.lin(hidden_states).transpose(1, 2).contiguous()
+        log_magnitude, phase = torch.chunk(spectrogram, 2, dim=1)
+        return self.istft(torch.polar(log_magnitude.exp(), phase))
+
+
 class Lfm2AudioDepthMLP(nn.Module):
     def __init__(self, config: Lfm2AudioDepthConfig):
         super().__init__()
@@ -241,14 +349,15 @@ class Lfm2AudioDepthAttention(nn.Module):
     def get_frequencies(self, device: torch.device) -> torch.Tensor:
         # Initialize lazily because `from_pretrained` may construct the module on the meta device. Keep this complex
         # tensor outside module buffers so a later bfloat16 cast cannot discard its imaginary component.
-        if self.frequencies is None:
+        if self.frequencies is None or self.frequencies.device != device:
             frequencies = 1.0 / (
-                self.rope_theta ** (torch.arange(0, self.head_dim, 2, dtype=torch.float32) / self.head_dim)
+                self.rope_theta
+                ** (torch.arange(0, self.head_dim, 2, dtype=torch.float32, device=device) / self.head_dim)
             )
-            positions = torch.arange(64, dtype=torch.float32)
-            self.frequencies = torch.polar(torch.ones((64, self.head_dim // 2)), positions[:, None] * frequencies)
-        if self.frequencies.device != device:
-            self.frequencies = self.frequencies.to(device)
+            positions = torch.arange(64, dtype=torch.float32, device=device)
+            self.frequencies = torch.polar(
+                torch.ones((64, self.head_dim // 2), device=device), positions[:, None] * frequencies
+            )
         return self.frequencies
 
     def forward(
@@ -343,7 +452,16 @@ class Lfm2AudioModel(Lfm2AudioPreTrainedModel):
         depth_config = config.depth_config
         self._tied_weights_keys = {}
         self.lfm = AutoModel.from_config(text_config)
+        # CODEPATH: The released Liquid Audio loader casts the LFM2 rotary buffers together with the model. Preserve
+        # that checkpoint behavior when an explicit model dtype is requested so greedy audio codes remain identical.
+        if config.dtype is not None:
+            # CODEPATH: Native saved checkpoints may deserialize dtype as a string; raw Hub configs use torch.dtype.
+            model_dtype = getattr(torch, config.dtype) if isinstance(config.dtype, str) else config.dtype
+            self.lfm.rotary_emb.to(dtype=model_dtype)
         self.conformer = AutoModel.from_config(encoder_config)
+        # The released FastConformer uses its eager relative-position attention path. Matching it avoids small
+        # backend-dependent differences that can be amplified by autoregressive audio sampling.
+        self.conformer.set_attn_implementation("eager")
         self.audio_adapter_norm = nn.LayerNorm(encoder_config.hidden_size)
         self.audio_adapter_linear_1 = nn.Linear(encoder_config.hidden_size, text_config.hidden_size)
         self.audio_adapter_linear_2 = nn.Linear(text_config.hidden_size, text_config.hidden_size)
@@ -409,6 +527,20 @@ class Lfm2AudioModel(Lfm2AudioPreTrainedModel):
         """
         encoder_parameter = next(self.conformer.parameters())
         input_features = input_features.to(device=encoder_parameter.device, dtype=encoder_parameter.dtype)
+        # NeMo constructs these frequencies with exp(arange * -log(base) / dim). The algebraically equivalent power
+        # form differs by a few bf16 ULPs and can change sampled audio codes, so reproduce the checkpoint formula.
+        position_encoder = self.conformer.encode_positions
+        legacy_inv_freq = torch.exp(
+            torch.arange(
+                0,
+                self.config.encoder_config.hidden_size,
+                2,
+                dtype=torch.float32,
+                device=encoder_parameter.device,
+            )
+            * -(math.log(10_000.0) / self.config.encoder_config.hidden_size)
+        )
+        position_encoder.inv_freq.copy_(legacy_inv_freq)
         if input_features_attention_mask is not None:
             input_features_attention_mask = input_features_attention_mask.to(encoder_parameter.device)
         encoder_outputs = self.conformer(
@@ -763,11 +895,14 @@ class Lfm2AudioForConditionalGeneration(Lfm2AudioPreTrainedModel, GenerationMixi
         generated_text = []
         generated_audio = []
         generated_modalities = []
+        generation_attention_mask = attention_mask
+        if generation_attention_mask is not None and bool(generation_attention_mask.bool().all()):
+            generation_attention_mask = None
 
         for _ in range(max_new_tokens):
             outputs = self.model.lfm(
                 inputs_embeds=current_input,
-                attention_mask=attention_mask if past_key_values is None else None,
+                attention_mask=generation_attention_mask if past_key_values is None else None,
                 past_key_values=past_key_values,
                 use_cache=True,
                 return_dict=True,
@@ -782,10 +917,13 @@ class Lfm2AudioForConditionalGeneration(Lfm2AudioPreTrainedModel, GenerationMixi
             if current_modality == TEXT_MODALITY:
                 text_logits = F.linear(hidden_state, self.get_output_embeddings().weight)
                 next_token = self._sample(text_logits, temperature=text_temperature, top_k=text_top_k)
+                token_id = int(next_token.item())
+                # CODEPATH: LiquidAI/LFM2.5-Audio-1.5B treats interleaved EOS as a non-yielded stream terminator.
+                if generation_mode == "interleaved" and token_id == self.config.eos_token_id:
+                    break
                 generated_text.append(next_token)
                 generated_modalities.append(TEXT_MODALITY)
 
-                token_id = int(next_token.item())
                 # CODEPATH: LiquidAI/LFM2.5-Audio-1.5B uses token 7 (`<|im_end|>`) to finish a response.
                 if token_id == self.config.eos_token_id:
                     break
@@ -835,6 +973,7 @@ class Lfm2AudioForConditionalGeneration(Lfm2AudioPreTrainedModel, GenerationMixi
 
 __all__ = [
     "Lfm2AudioConditionalGenerationOutput",
+    "Lfm2AudioDetokenizer",
     "Lfm2AudioForConditionalGeneration",
     "Lfm2AudioGenerateOutput",
     "Lfm2AudioModel",

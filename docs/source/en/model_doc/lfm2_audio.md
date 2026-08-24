@@ -30,9 +30,11 @@ The model contains four main components:
 3. an LFM2 backbone that processes text, input-audio, and output-audio positions in one timeline, and
 4. a six-layer depth transformer that predicts eight Mimi codebook tokens for each generated audio frame.
 
-The implementation reuses the native Transformers [`ParakeetEncoderModel`] for the FastConformer and [`MimiModel`]
-for optional waveform decoding. It does not depend on the Moshi model implementation or duplicate either model in an
-LFM2-Audio-specific folder. Mimi is loaded lazily only when [`Lfm2AudioProcessor.decode_audio`] is called.
+The implementation reuses the native Transformers [`ParakeetEncoderModel`] for the FastConformer. It does not depend
+on Moshi or duplicate its source code in an LFM2-Audio-specific folder. For waveform decoding,
+`LiquidAI/LFM2.5-Audio-1.5B` includes a compact LFM detokenizer that is loaded lazily by
+[`Lfm2AudioProcessor.decode_audio`]. A native Transformers [`MimiModel`] remains available as a fallback for older
+checkpoints.
 
 ## Usage
 
@@ -67,7 +69,7 @@ transcript = processor.tokenizer.decode(output.sequences[0], skip_special_tokens
 
 ### Text-to-speech
 
-Generated audio is represented by eight Mimi codebooks. Decode those codes with the native Transformers Mimi model.
+Generated audio is represented by eight codebooks. Decode those codes with the detokenizer bundled in the checkpoint.
 
 ```python
 inputs = processor.apply_text_to_speech_request(
@@ -118,6 +120,11 @@ text and audio spans.
 [[autodoc]] Lfm2AudioModel
     - forward
     - get_audio_features
+
+## Lfm2AudioDetokenizer
+
+[[autodoc]] Lfm2AudioDetokenizer
+    - forward
 
 ## Lfm2AudioForConditionalGeneration
 

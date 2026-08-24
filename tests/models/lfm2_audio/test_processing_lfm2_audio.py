@@ -16,11 +16,18 @@
 import tempfile
 import unittest
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import numpy as np
 from tokenizers import Tokenizer, models, pre_tokenizers
 
-from transformers import AutoProcessor, Lfm2AudioProcessor, ParakeetFeatureExtractor, PreTrainedTokenizerFast
+from transformers import (
+    AutoProcessor,
+    Lfm2AudioDetokenizer,
+    Lfm2AudioProcessor,
+    ParakeetFeatureExtractor,
+    PreTrainedTokenizerFast,
+)
 from transformers.testing_utils import require_librosa, require_torch
 
 
@@ -102,6 +109,30 @@ class Lfm2AudioProcessorTest(unittest.TestCase):
         audio = self.processor.decode_audio(audio_codes, audio_codec=codec)
 
         self.assertEqual(codec.audio_codes.shape, (1, 8, 2))
+        self.assertEqual(audio.shape, (1, 32))
+
+    def test_decode_audio_prefers_bundled_detokenizer(self):
+        import torch
+
+        class DummyDetokenizer(torch.nn.Module):
+            def forward(self, audio_codes):
+                self.audio_codes = audio_codes
+                return torch.zeros((audio_codes.shape[0], 32))
+
+        audio_codes = torch.randint(0, 2048, (8, 2))
+        audio_codes = torch.cat([audio_codes, torch.full((8, 1), 2048)], dim=-1)
+        decoder = DummyDetokenizer()
+        self.processor.decoder_model_id = "dummy/model"
+
+        with patch.object(Lfm2AudioDetokenizer, "from_pretrained", return_value=decoder) as from_pretrained:
+            audio = self.processor.decode_audio(audio_codes)
+
+        from_pretrained.assert_called_once_with(
+            "dummy/model",
+            subfolder="audio_detokenizer",
+            dtype=torch.float32,
+        )
+        self.assertEqual(decoder.audio_codes.shape, (1, 8, 2))
         self.assertEqual(audio.shape, (1, 32))
 
 

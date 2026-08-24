@@ -91,8 +91,11 @@ class Lfm2AudioProcessor(ProcessorMixin):
             Jinja template used to turn structured conversations into model prompts.
         audio_token (`str`, *optional*, defaults to `"<|reserved_123|>"`):
             Placeholder token replaced with FastConformer features.
+        decoder_model_id (`str`, *optional*):
+            Checkpoint containing the LFM audio detokenizer. When omitted, [`~Lfm2AudioProcessor.from_pretrained`]
+            uses the processor checkpoint itself and looks in its `audio_detokenizer` subfolder.
         audio_codec_model_id (`str`, *optional*, defaults to `"kyutai/mimi"`):
-            Mimi checkpoint used lazily by [`~Lfm2AudioProcessor.decode_audio`].
+            Mimi checkpoint used lazily as a fallback by [`~Lfm2AudioProcessor.decode_audio`].
     """
 
     valid_processor_kwargs = ProcessingKwargs
@@ -103,21 +106,41 @@ class Lfm2AudioProcessor(ProcessorMixin):
         tokenizer,
         chat_template=None,
         audio_token=DEFAULT_AUDIO_TOKEN,
+        decoder_model_id=None,
+        decoder_subfolder="audio_detokenizer",
         audio_codec_model_id="kyutai/mimi",
     ):
         r"""
         audio_token (`str`, *optional*, defaults to `"<|reserved_123|>"`):
             Placeholder token replaced with FastConformer features.
+        decoder_model_id (`str`, *optional*):
+            Checkpoint containing the LFM audio detokenizer.
+        decoder_subfolder (`str`, *optional*, defaults to `"audio_detokenizer"`):
+            Subfolder containing the detokenizer configuration and weights.
         audio_codec_model_id (`str`, *optional*, defaults to `"kyutai/mimi"`):
-            Mimi checkpoint used lazily by [`~Lfm2AudioProcessor.decode_audio`].
+            Mimi checkpoint used lazily when an LFM detokenizer is unavailable.
         """
         if chat_template is None or audio_token not in chat_template:
             chat_template = DEFAULT_CHAT_TEMPLATE.replace(DEFAULT_AUDIO_TOKEN, audio_token)
         self.audio_token = audio_token
         self.audio_token_id = tokenizer.convert_tokens_to_ids(audio_token)
+        self.decoder_model_id = None if decoder_model_id is None else str(decoder_model_id)
+        self.decoder_subfolder = decoder_subfolder
         self.audio_codec_model_id = audio_codec_model_id
+        self._detokenizer = None
+        self._detokenizer_unavailable = False
         self._audio_codec = None
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
+        decoder_model_id = kwargs.pop("decoder_model_id", None)
+        processor = super().from_pretrained(pretrained_model_name_or_path, **kwargs)
+        if decoder_model_id is not None:
+            processor.decoder_model_id = str(decoder_model_id)
+        elif processor.decoder_model_id is None:
+            processor.decoder_model_id = str(pretrained_model_name_or_path)
+        return processor
 
     @classmethod
     def _get_arguments_from_pretrained(cls, pretrained_model_name_or_path, processor_dict=None, **kwargs):
@@ -289,7 +312,7 @@ class Lfm2AudioProcessor(ProcessorMixin):
         audio_codec: MimiModel | None = None,
         device: str | torch.device | None = None,
     ) -> torch.FloatTensor:
-        """Decode generated codebooks with Transformers' native Mimi implementation."""
+        """Decode generated codebooks with the bundled LFM detokenizer or a native Mimi model."""
         if audio_codes.ndim == 2:
             audio_codes = audio_codes.unsqueeze(0)
         if audio_codes.ndim != 3:
@@ -301,12 +324,30 @@ class Lfm2AudioProcessor(ProcessorMixin):
         if torch.any((audio_codes < 0) | (audio_codes >= 2048)):
             raise ValueError("Mimi audio tokens must be in the range [0, 2047].")
 
+        if device is None:
+            device = audio_codes.device
+
+        if audio_codec is None and self.decoder_model_id is not None:
+            if self._detokenizer is None and not self._detokenizer_unavailable:
+                from .modeling_lfm2_audio import Lfm2AudioDetokenizer
+
+                try:
+                    self._detokenizer = Lfm2AudioDetokenizer.from_pretrained(
+                        self.decoder_model_id,
+                        subfolder=self.decoder_subfolder,
+                        dtype=torch.float32,
+                    ).eval()
+                except OSError:
+                    self._detokenizer_unavailable = True
+            if self._detokenizer is not None:
+                detokenizer = self._detokenizer.to(device)
+                with torch.no_grad():
+                    return detokenizer(audio_codes.to(device))
+
         if audio_codec is None:
             if self._audio_codec is None:
                 self._audio_codec = MimiModel.from_pretrained(self.audio_codec_model_id).eval()
             audio_codec = self._audio_codec
-        if device is None:
-            device = audio_codes.device
         audio_codec = audio_codec.to(device)
         with torch.no_grad():
             decoded = audio_codec.decode(audio_codes.to(device), return_dict=True).audio_values
