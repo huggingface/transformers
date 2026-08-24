@@ -36,6 +36,7 @@ Example:
 """
 
 import argparse
+import copy
 import json
 import re
 
@@ -90,16 +91,12 @@ def convert_key(key, mapping):
 def convert_state_dict(state_dict):
     """Rename every key from the original namespace onto the native `GraniteSpeech5ForCTC` layout.
 
-    The original checkpoint stores bfloat16 weights next to float32 batch-norm running stats; the original
-    remote-code model was loaded through `from_pretrained` under a float32 default dtype, so everything is
-    upcast to float32 (the dtype the model was evaluated in) for a homogeneous native checkpoint.
+    Dtypes are preserved as the original stores them, i.e. bfloat16 weights next to float32 batch-norm
+    running stats: bfloat16 is the precision the model was trained and evaluated in (the original's
+    `transcribe()` runs its forward under bfloat16 autocast), so upcasting would only double the
+    checkpoint and make float32 the default `from_pretrained` dtype.
     """
-    converted = {}
-    for key, value in state_dict.items():
-        if value.is_floating_point():
-            value = value.to(torch.float32)
-        converted[convert_key(key, ORIGINAL_TO_HF_WEIGHT_MAPPING)] = value
-    return converted
+    return {convert_key(key, ORIGINAL_TO_HF_WEIGHT_MAPPING): value for key, value in state_dict.items()}
 
 
 def check_frontend_is_supported(original_config: dict):
@@ -174,7 +171,7 @@ def convert_and_write_model(input_path: str, output_path: str, run_sanity_check:
         raise ValueError(f"Unexpected conversion mismatch: missing={missing_keys}, unexpected={unexpected_keys}")
     model.tie_weights()
     # materialize the (non-persistent, hence still on the meta device) relative distances buffer
-    model.encoder.register_buffer("attention_dists", model.encoder.compute_attention_dists(), persistent=False)
+    model.encoder.attention_dists = torch.nn.Buffer(model.encoder.compute_attention_dists(), persistent=False)
 
     tokenizer = ParakeetTokenizer(
         tokenizer_file=cached_file(input_path, "tokenizer.json"),
@@ -185,7 +182,9 @@ def convert_and_write_model(input_path: str, output_path: str, run_sanity_check:
     processor = GraniteSpeech5Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
     if run_sanity_check:
-        run_sanity_checks(model, processor)
+        # the checkpoint mixes bfloat16 weights with float32 batch-norm stats, which batch-norm rejects;
+        # `from_pretrained` casts every float tensor to the load dtype, so sanity-check that dtype directly
+        run_sanity_checks(copy.deepcopy(model).to(torch.bfloat16), processor)
 
     model.save_pretrained(output_path)
     processor.save_pretrained(output_path)

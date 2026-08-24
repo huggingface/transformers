@@ -144,9 +144,8 @@ class GraniteSpeech5EncoderAttention(nn.Module):
         position_bias = position_bias.view(
             self.context_size, flattened_batch_size, self.config.num_attention_heads, self.context_size
         )
-        position_bias = position_bias.permute(
-            1, 2, 0, 3
-        ).contiguous()  # the fused attention kernels want a contiguous bias
+        position_bias = position_bias.permute(1, 2, 0, 3)
+        position_bias = position_bias.contiguous()  # the fused attention kernels want a contiguous bias
         if attention_mask is not None:
             # mask padded key columns so no query attends to a padded frame
             key_mask = attention_mask.reshape(flattened_batch_size, self.context_size)
@@ -326,6 +325,8 @@ class GraniteSpeech5PreTrainedModel(PreTrainedModel):
         "hidden_states": GraniteSpeech5EncoderBlock,
     }
 
+    _keep_in_fp32_modules_strict = ["conv.norm"]
+
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
@@ -367,13 +368,12 @@ def downsample_attention_mask(attention_mask: torch.Tensor) -> torch.Tensor:
 class GraniteSpeech5Encoder(GraniteSpeech5PreTrainedModel):
     config: GraniteSpeech5EncoderConfig
     base_model_prefix = "encoder"
-    attention_dists: torch.Tensor
 
     def __init__(self, config: GraniteSpeech5EncoderConfig):
         super().__init__(config)
         self.gradient_checkpointing = False
 
-        self.register_buffer("attention_dists", self.compute_attention_dists(), persistent=False)
+        self.attention_dists = nn.Buffer(self.compute_attention_dists(), persistent=False)
         # see [`feature_extraction_granite_speech5.GraniteSpeech5FeatureExtractor`]
         # mel frames are delta-expanded (×2), then stacked in pairs (×2)
         self.input_linear = nn.Linear(config.num_mel_bins * 4, config.hidden_size, bias=True)

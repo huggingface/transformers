@@ -310,6 +310,8 @@ class GraniteSpeech5PreTrainedModel(ParakeetPreTrainedModel):
     # float attention bias is not supported by flash attention
     _supports_flash_attn = False
 
+    _keep_in_fp32_modules_strict = ["conv.norm"]
+
     _can_record_outputs = {
         "hidden_states": GraniteSpeech5EncoderBlock,
     }
@@ -337,13 +339,12 @@ class GraniteSpeech5PreTrainedModel(ParakeetPreTrainedModel):
 class GraniteSpeech5Encoder(ParakeetEncoder):
     config: GraniteSpeech5EncoderConfig
     base_model_prefix = "encoder"
-    attention_dists: torch.Tensor
 
     def __init__(self, config: GraniteSpeech5EncoderConfig):
         GraniteSpeech5PreTrainedModel.__init__(self, config)
         self.gradient_checkpointing = False
 
-        self.register_buffer("attention_dists", self.compute_attention_dists(), persistent=False)
+        self.attention_dists = nn.Buffer(self.compute_attention_dists(), persistent=False)
         # see [`feature_extraction_granite_speech5.GraniteSpeech5FeatureExtractor`]
         # mel frames are delta-expanded (×2), then stacked in pairs (×2)
         self.input_linear = nn.Linear(config.num_mel_bins * 4, config.hidden_size, bias=True)
