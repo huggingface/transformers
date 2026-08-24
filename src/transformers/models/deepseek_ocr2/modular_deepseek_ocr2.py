@@ -870,9 +870,8 @@ class DeepseekOcr2VisionEncoder(Qwen2Model, DeepseekOcr2PreTrainedModel):
         return BaseModelOutputWithPast(last_hidden_state=hidden_states)
 
 
+@auto_docstring(custom_intro="Vision pipeline: SAM ViT-B (with neck)")
 class DeepseekOcr2VisionModel(DeepseekOcr2PreTrainedModel):
-    """Vision pipeline: SAM ViT-B (with neck)"""
-
     def __init__(self, config: DeepseekOcr2VisionConfig):
         super().__init__(config)
         self.sam_encoder = DeepseekOcr2SamVisionEncoder(config.sam_config)

@@ -14,6 +14,7 @@
 import math
 import re
 from collections.abc import Callable
+from dataclasses import dataclass
 
 import torch
 from huggingface_hub.dataclasses import strict
@@ -481,6 +482,12 @@ class UnlimitedOcrModelOutputWithPooling(DeepseekOcr2ModelOutputWithPooling):
     pass
 
 
+@auto_docstring(
+    custom_intro="""
+    Base class for UnlimitedOcr outputs, with hidden states and attentions.
+    """
+)
+@dataclass
 class UnlimitedOcrModelOutputWithPast(DeepseekOcr2ModelOutputWithPast):
     pass
 
@@ -1111,6 +1118,11 @@ class UnlimitedOcrTextModel(DeepseekOcr2TextModel):
         )
 
 
+@auto_docstring(
+    custom_intro="""
+    The UnlimitedOcr model which consists of a vision backbone and a language model.
+    """
+)
 class UnlimitedOcrModel(DeepseekOcr2Model):
     _keys_to_ignore_on_load_unexpected = {"lm_head"}  # unused and untied weight in original checkpoint
 

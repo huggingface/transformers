@@ -89,7 +89,7 @@ class UnlimitedOcrModelOutputWithPooling(BaseModelOutputWithPooling):
 
 @auto_docstring(
     custom_intro="""
-    Base class for Llava outputs, with hidden states and attentions.
+    Base class for UnlimitedOcr outputs, with hidden states and attentions.
     """
 )
 @dataclass
@@ -917,8 +917,6 @@ class UnlimitedOcrVisionEncoder(UnlimitedOcrPreTrainedModel):
 
 @auto_docstring(custom_intro="Vision model encoding images first with SAM followed by an additional (CLIP) model.")
 class UnlimitedOcrVisionModel(UnlimitedOcrPreTrainedModel):
-    """Vision pipeline: SAM ViT-B (with neck)"""
-
     def __init__(self, config: UnlimitedOcrVisionConfig):
         super().__init__(config)
         self.sam_encoder = UnlimitedOcrSamVisionEncoder(config.sam_config)
@@ -1809,7 +1807,7 @@ class UnlimitedOcrTextModel(UnlimitedOcrTextPreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    The Llava-Next model which consists of a vision backbone and a language model without language modeling head.
+    The UnlimitedOcr model which consists of a vision backbone and a language model.
     """
 )
 class UnlimitedOcrModel(UnlimitedOcrPreTrainedModel):
