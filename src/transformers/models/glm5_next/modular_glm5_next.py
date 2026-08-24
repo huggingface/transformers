@@ -2026,8 +2026,8 @@ class Glm5NextImageProcessorPil(GlmgaImageProcessorPil):
                     resample=resample,
                     factor=patch_size * merge_size,
                     temporal_factor=temporal_patch_size,
-                    min_pixels=min_image_tokens,
-                    max_pixels=max_image_tokens,
+                    min_image_tokens=min_image_tokens,
+                    max_image_tokens=max_image_tokens,
                 )
 
             # Rescale and normalize
@@ -2142,11 +2142,10 @@ class Glm5NextVideoProcessor(GlmgaVideoProcessor):
         total_frames = metadata.total_num_frames
         max_frame_idx = total_frames - 1
         duration = metadata.duration or round(max_frame_idx / metadata.fps) + 1
-        duration = duration if self.max_duration <= 0 else min(duration, self.max_duration)
-        target_fps = fps if fps is None else self.fps
-
         # Used later to cap frames, important to base on the original and not capped duration
         max_seconds = int(duration)
+        duration = duration if self.max_duration <= 0 else min(duration, self.max_duration)
+        target_fps = fps if fps is not None else self.fps
 
         extract_t = int(duration * target_fps)
         extract_t = min(extract_t, self.max_frames)

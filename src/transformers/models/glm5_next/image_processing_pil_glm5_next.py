@@ -254,8 +254,8 @@ class Glm5NextImageProcessorPil(PilBackend):
                     resample=resample,
                     factor=patch_size * merge_size,
                     temporal_factor=temporal_patch_size,
-                    min_pixels=min_image_tokens,
-                    max_pixels=max_image_tokens,
+                    min_image_tokens=min_image_tokens,
+                    max_image_tokens=max_image_tokens,
                 )
 
             # Rescale and normalize
