@@ -454,8 +454,8 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
                     scores = torch.relu(scores).sum(dim=-1) / math.sqrt(self.index_head_dim)
 
                     selected_block_indices = scores.topk(min(self.block_topk, num_complete_blocks), dim=0).indices
+                    # Remap the indices of the blocks to the indices of individual tokens
                     selected_tokens = block_token_indices.index_select(0, selected_block_indices).flatten()
-                    selected_tokens = selected_tokens[: self.token_budget]
                 else:
                     selected_tokens = torch.tensor([], device=hidden_states.device)
                 tail = local_visible_indices[num_complete_blocks * self.compress_ratio :]
