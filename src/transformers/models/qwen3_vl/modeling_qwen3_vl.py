@@ -407,7 +407,7 @@ class Qwen3VLTextRotaryEmbedding(nn.Module):
         inv_freq_3d[:hw_dim] = torch.cat([inv_freq[:-t_dim][0::2], inv_freq[:-t_dim][1::2]])
         inv_freq_3d[-t_dim:] = inv_freq[-t_dim:]
 
-        return inv_freq_3d, attention_factor
+        return inv_freq_3d.to(device), attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)

@@ -21,7 +21,7 @@ from torch import nn
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
-from ...modeling_rope_utils import dynamic_rope_update
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
@@ -45,23 +45,13 @@ def position_ids_in_meshgrid(patch_embeds_list, max_width):
     return torch.cat(positions)
 
 
-class PixtralRotaryEmbedding(nn.Module):
-    """
-    The key with pixtral embedding is just that you have a frequency for each pixel positions.
-    If you have height x width pixels (or embedding pixels), then the frequency used for ROPE
-    is given by indexing the pre_computed frequency on the width and height.
-
-    What you output is of dimension (batch, height * width, dim) with dim the embed dim.
-
-    This simply means that for each image hidden state, you are going to add
-    a corresponding positional embedding, based on its index in the grid.
-    """
-
+# Adapted from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl.Qwen2_5_VLVisionRotaryEmbedding
+class PixtralVisionRotaryEmbedding(nn.Module):
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: PixtralVisionConfig, device=None):
         super().__init__()
-
         self.config = config
+
         self.rope_type = self.config.rope_parameters["rope_type"]
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
@@ -69,8 +59,8 @@ class PixtralRotaryEmbedding(nn.Module):
                 f"{self.__class__.__name__} does not support non-default RoPE, but got `rope_type={self.rope_type}`"
             )
 
-        inv_freq, attention_scaling = rope_init_fn(self.config, device)
-        self.attention_scaling = attention_scaling
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
         self.max_patches_per_side = config.image_size // config.patch_size
@@ -416,7 +406,7 @@ class PixtralVisionModel(PixtralPreTrainedModel):
         self.patch_size = config.patch_size
         self.ln_pre = PixtralRMSNorm(config.hidden_size, eps=1e-5)
         self.transformer = PixtralTransformer(config)
-        self.patch_positional_embedding = PixtralRotaryEmbedding(config)
+        self.patch_positional_embedding = PixtralVisionRotaryEmbedding(config)
 
         self.post_init()
 

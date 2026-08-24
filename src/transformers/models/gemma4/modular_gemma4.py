@@ -71,7 +71,7 @@ from ..gemma3n.modeling_gemma3n import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
-from ..llama.modeling_llama import LlamaRotaryEmbedding
+from ..sam3.modeling_sam3 import Sam3ViTRotaryEmbedding
 from ..mixtral.modeling_mixtral import MixtralExperts
 from ..moonshine_streaming.modeling_moonshine_streaming import sliding_window_mask_function
 from .configuration_gemma4 import Gemma4AudioConfig, Gemma4Config, Gemma4TextConfig, Gemma4VisionConfig
@@ -776,45 +776,14 @@ def apply_multidimensional_rope(
     return torch.cat(y_parts, dim=-1)
 
 
-class Gemma4VisionRotaryEmbedding(LlamaRotaryEmbedding):
+class Gemma4VisionRotaryEmbedding(Sam3ViTRotaryEmbedding):
+    def __init__(config: Gemma4VisionConfig, device=None):
+        super().__init__(config, device)
+
     def compute_default_rope_parameters(
         config: Gemma4VisionConfig, device=None, **kwargs
     ) -> tuple[torch.Tensor, float]:
-        """
-        Computes the inverse frequencies according to the original RoPE implementation
-        Args:
-            config ([`~transformers.PreTrainedConfig`]):
-                The model configuration.
-        Returns:
-            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
-            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
-        """
-        base = config.rope_parameters["rope_theta"]
-        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-
-        # The reference implementation computes RoPE frequencies INDEPENDENTLY
-        # for each spatial dimension using the partitioned head_dim (head_dim // ndim),
-        # so both x and y dimensions get identical frequency ranges.
-        # This is different from splitting the global inv_freq between dimensions.
-        spatial_dim = dim // 2
-
-        attention_factor = 1.0  # Unused in this type of RoPE
-        inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
-        return inv_freq.to(device), attention_factor
-
-    def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, ...].float()
-        position_ids_expanded = position_ids.permute(1, 2, 0).float()  # shape (positions, 2, 1)
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = position_ids_expanded @ inv_freq_expanded
-            cos = freqs.cos() * self.attention_scaling
-            sin = freqs.sin() * self.attention_scaling
-        cos = self.recomposition_to_2d(cos).to(dtype=x.dtype)
-        sin = self.recomposition_to_2d(sin).to(dtype=x.dtype)
-
-        return cos, sin
+        return super().compute_default_rope_parameters(config, device, **kwargs)
 
     def recomposition_to_2d(self, freq):
         # in contrast to pixtral, interleave grids as H-H-W-W
