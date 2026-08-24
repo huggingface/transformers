@@ -209,8 +209,7 @@ class Lfm2AudioDetokenizer(PreTrainedModel):
         # The released detokenizer predates the canonical LFM2 layer name. Its explicit sliding-window mask below
         # preserves the original behavior while the native LFM2 layer uses its supported attention implementation.
         config.layer_types = [
-            "full_attention" if layer_type == "sliding_attention" else layer_type
-            for layer_type in config.layer_types
+            "full_attention" if layer_type == "sliding_attention" else layer_type for layer_type in config.layer_types
         ]
         super().__init__(config)
         self.emb = Lfm2AudioCodebookEmbedding(hidden_size=config.hidden_size)
@@ -238,9 +237,7 @@ class Lfm2AudioDetokenizer(PreTrainedModel):
 
         positions = torch.arange(hidden_states.shape[1], device=hidden_states.device)
         relative_positions = positions - positions[:, None]
-        attention_mask = (
-            (relative_positions <= 0) & (relative_positions > -self.sliding_window_size)
-        )[None, None]
+        attention_mask = ((relative_positions <= 0) & (relative_positions > -self.sliding_window_size))[None, None]
         hidden_states = self.lfm(
             inputs_embeds=hidden_states,
             attention_mask=attention_mask,

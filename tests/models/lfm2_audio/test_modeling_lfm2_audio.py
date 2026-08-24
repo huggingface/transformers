@@ -206,26 +206,6 @@ class Lfm2AudioModelTest(unittest.TestCase):
 
         torch.testing.assert_close(full_output, torch.cat(cached_output, dim=1), atol=1e-5, rtol=1e-5)
 
-    def test_audio_detokenizer(self):
-        config = Lfm2Config(
-            vocab_size=32,
-            hidden_size=32,
-            intermediate_size=64,
-            num_hidden_layers=1,
-            num_attention_heads=4,
-            num_key_value_heads=2,
-            layer_types=["full_attention"],
-            max_position_embeddings=64,
-            output_size=1282,
-        )
-        model = Lfm2AudioDetokenizer(config).to(torch_device).eval()
-        audio_codes = ids_tensor([1, 8, 2], 2048).to(torch_device)
-
-        waveform = model(audio_codes)
-
-        self.assertEqual(waveform.shape, (1, 3840))
-        self.assertTrue(waveform.isfinite().all())
-
     def test_sequential_generation_switches_to_audio(self):
         config = self.model_tester.get_config()
         model = Lfm2AudioForConditionalGeneration(config).to(torch_device).eval()
@@ -255,6 +235,32 @@ class Lfm2AudioModelTest(unittest.TestCase):
         self.assertEqual(output.sequences.shape, (1, 0))
         self.assertEqual(output.audio_codes.shape, (1, config.codebooks, 0))
         self.assertEqual(output.modalities.shape, (1, 0))
+
+
+@require_torch
+class Lfm2AudioDetokenizerTest(unittest.TestCase):
+    all_model_classes = (Lfm2AudioDetokenizer,)
+
+    def test_forward(self):
+        config = Lfm2Config(
+            vocab_size=32,
+            hidden_size=32,
+            intermediate_size=64,
+            num_hidden_layers=1,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            layer_types=["full_attention"],
+            max_position_embeddings=64,
+            output_size=1282,
+        )
+        audio_codes = ids_tensor([1, 8, 2], 2048).to(torch_device)
+
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device).eval()
+            waveform = model(audio_codes)
+
+            self.assertEqual(waveform.shape, (1, 3840))
+            self.assertTrue(waveform.isfinite().all())
 
 
 if __name__ == "__main__":
