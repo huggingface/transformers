@@ -546,6 +546,38 @@ jobs:
             --output-dir ./vllm-ci-reports \
             --plugin vllm
 
+      - name: Show new failing tests
+        if: always()
+        run: |
+          python3 - <<'EOF'
+          import glob, json, os, sys
+
+          files = glob.glob("vllm-ci-reports/new_failing_tests_*.json")
+          files = [f for f in files if "with_trace" not in f]
+          if not files:
+              print("No new_failing_tests_*.json found — report may have failed to generate.")
+              sys.exit(0)
+
+          with open(files[0]) as f:
+              data = json.load(f)
+
+          total = data.get("total_new_failing", 0)
+          prev_url = data.get("previous_run_url") or "(none)"
+          print(f"Previous run : {prev_url}")
+          print(f"New failures : {total}")
+          print()
+
+          jobs = data.get("jobs", {})
+          if not jobs:
+              print("No new failing tests.")
+          else:
+              for job_name, tests in jobs.items():
+                  print(f"  [{job_name}]  ({len(tests)} new)")
+                  for t in tests:
+                      print(f"    - {t}")
+                  print()
+          EOF
+
       - name: Upload failure reports
         if: always()
         uses: actions/upload-artifact@v4
