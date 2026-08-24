@@ -303,7 +303,7 @@ def get_uniform_frame_indices(total_num_frames: int, num_frames: int | None = No
     return indices
 
 
-def default_sample_indices_fn(metadata: VideoMetadata, num_frames=None, fps=None, **kwargs) -> list[int]:
+def default_sample_indices_fn(metadata: VideoMetadata, num_frames=None, fps=None, **kwargs) -> np.ndarray:
     """
     A default sampling function that replicates the logic used in get_uniform_frame_indices,
     while optionally handling `fps` if `num_frames` is not provided.
@@ -358,7 +358,7 @@ def read_video_opencv(
             If not provided, simple uniform sampling with fps is performed.
             Example:
             def sample_indices_fn(metadata, **kwargs):
-                return np.linspace(0, metadata.total_num_frames - 1, num_frames, dtype=int).tolist()
+                return np.linspace(0, metadata.total_num_frames - 1, num_frames, dtype=int)
 
     Returns:
         tuple[`np.ndarray`, `VideoMetadata`]: A tuple containing:
@@ -420,7 +420,7 @@ def read_video_decord(
             If not provided, simple uniform sampling with fps is performed.
             Example:
             def sample_indices_fn(metadata, **kwargs):
-                return np.linspace(0, metadata.total_num_frames - 1, num_frames, dtype=int).tolist()
+                return np.linspace(0, metadata.total_num_frames - 1, num_frames, dtype=int)
 
     Returns:
         tuple[`np.array`, `VideoMetadata`]: A tuple containing:
@@ -472,7 +472,7 @@ def read_video_pyav(
             If not provided, simple uniform sampling with fps is performed.
             Example:
             def sample_indices_fn(metadata, **kwargs):
-                return np.linspace(0, metadata.total_num_frames - 1, num_frames, dtype=int).tolist()
+                return np.linspace(0, metadata.total_num_frames - 1, num_frames, dtype=int)
 
     Returns:
         tuple[`np.array`, `VideoMetadata`]: A tuple containing:
@@ -548,7 +548,7 @@ def read_video_torchvision(
             If not provided, simple uniform sampling with fps is performed.
             Example:
             def sample_indices_fn(metadata, **kwargs):
-                return np.linspace(0, metadata.total_num_frames - 1, num_frames, dtype=int).tolist()
+                return np.linspace(0, metadata.total_num_frames - 1, num_frames, dtype=int)
 
     Returns:
         tuple[`torch.Tensor`, `VideoMetadata`]: A tuple containing:
@@ -608,7 +608,7 @@ def read_video_torchcodec(
             If not provided, simple uniform sampling with fps is performed.
             Example:
             def sample_indices_fn(metadata, **kwargs):
-                return np.linspace(0, metadata.total_num_frames - 1, num_frames, dtype=int).tolist()
+                return np.linspace(0, metadata.total_num_frames - 1, num_frames, dtype=int)
 
     Returns:
         Tuple[`torch.Tensor`, `VideoMetadata`]: A tuple containing:
@@ -685,7 +685,7 @@ def load_video(
 
             Example:
             def sample_indices_fn(metadata, **kwargs):
-                return np.linspace(0, metadata.total_num_frames - 1, num_frames, dtype=int).tolist()
+                return np.linspace(0, metadata.total_num_frames - 1, num_frames, dtype=int)
 
     Returns:
         tuple[`np.ndarray`, Dict]: A tuple containing:
