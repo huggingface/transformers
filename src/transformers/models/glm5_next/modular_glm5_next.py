@@ -1479,6 +1479,7 @@ class Glm5NextModel(Exaone4_5_Model, Glm5NextPreTrainedModel):
                 input_ids == self.config.video_end_token_id
             ).cumsum(-1)
 
+        # Core difference to other VLMs as img token == vid token so we differentiate by start/end spans instead
         special_image_mask = special_mm_mask & ~in_video_span
         special_video_mask = special_mm_mask & in_video_span
 
