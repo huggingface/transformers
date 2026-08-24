@@ -212,6 +212,6 @@ The presence of `per_layer_config` does not by itself mean that an architecture 
 Architectures can consume the resolved layer configurations directly, or opt into generic patching through a
 heterogeneous modeling spec.
 
-See [Architecture support](./heterogeneous_modeling#architecture-support) for how built-in and custom models opt into
-generic patching. The [heterogeneous modeling guide](./heterogeneous_modeling) also explains which submodules a `skip`
+See [Architecture support](./generic_heterogeneous_modeling#architecture-support) for how built-in and custom models opt into
+generic patching. The [generic heterogeneous modeling guide](./generic_heterogeneous_modeling) also explains which submodules a `skip`
 attribute can name and how to write a spec for a new architecture.

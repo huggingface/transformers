@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 
-# Heterogeneous modeling
+# Generic heterogeneous modeling
 
 [Heterogeneous configurations](./heterogeneous_configurations) record per-layer differences — attribute values that
 differ from the global configuration, or submodules that are skipped entirely — in the model configuration.
