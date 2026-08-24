@@ -588,7 +588,6 @@ class GPT2Model(GPT2PreTrainedModel):
             position_ids=position_ids,
         )
 
-        encoder_attention_mask = None
         if encoder_hidden_states is not None:
             encoder_attention_mask = create_bidirectional_mask(
                 config=self.config,
