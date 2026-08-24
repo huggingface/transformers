@@ -1776,6 +1776,112 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming(source_patterns=r"layers\.(\d+)\.transformer_block\.", target_patterns=r"layers.\1.mtp_block."),
     ]
 
+
+    mapping["unlimited-ocr"] = [
+        WeightRenaming(
+            source_patterns=r"(^|model\.)vision_model\.",
+            target_patterns=r"\1vision_model.vision_encoder.",
+        ),
+        WeightRenaming(
+            source_patterns=r"(^|model\.)sam_model\.",
+            target_patterns=r"\1vision_model.sam_encoder.",
+        ),
+        WeightRenaming(
+            source_patterns=r"sam_encoder\.blocks\.",
+            target_patterns="sam_encoder.layers.",
+        ),
+        WeightRenaming(
+            source_patterns=r"sam_encoder\.layers\.(\d+)\.norm1\.",
+            target_patterns=r"sam_encoder.layers.\1.layer_norm1.",
+        ),
+        WeightRenaming(
+            source_patterns=r"sam_encoder\.layers\.(\d+)\.norm2\.",
+            target_patterns=r"sam_encoder.layers.\1.layer_norm2.",
+        ),
+        WeightRenaming(
+            source_patterns=r"sam_encoder\.patch_embed\.proj\.",
+            target_patterns="sam_encoder.patch_embed.projection.",
+        ),
+        WeightRenaming(
+            source_patterns=r"sam_encoder\.neck\.0\.",
+            target_patterns="sam_encoder.neck.conv1.",
+        ),
+        WeightRenaming(
+            source_patterns=r"sam_encoder\.neck\.1\.",
+            target_patterns="sam_encoder.neck.layer_norm1.",
+        ),
+        WeightRenaming(
+            source_patterns=r"sam_encoder\.neck\.2\.",
+            target_patterns="sam_encoder.neck.conv2.",
+        ),
+        WeightRenaming(
+            source_patterns=r"sam_encoder\.neck\.3\.",
+            target_patterns="sam_encoder.neck.layer_norm2.",
+        ),
+        WeightRenaming(
+            source_patterns=r"sam_encoder\.net_2\.",
+            target_patterns="sam_encoder.proj.conv1.",
+        ),
+        WeightRenaming(
+            source_patterns=r"sam_encoder\.net_3\.",
+            target_patterns="sam_encoder.proj.conv2.",
+        ),
+        WeightRenaming(
+            source_patterns=r"(^|model\.)projector\.",
+            target_patterns=r"\1multi_modal_projector.",
+        ),
+        # Hub `projector.layers` is a plain Linear; in-tree uses nn.Linear directly.
+        WeightRenaming(
+            source_patterns=r"multi_modal_projector\.layers\.",
+            target_patterns="multi_modal_projector.",
+        ),
+        WeightRenaming(
+            source_patterns=r"(^|model\.)embed_tokens\.",
+            target_patterns=r"\1language_model.embed_tokens.",
+        ),
+        WeightRenaming(
+            source_patterns=r"(^|model\.)layers\.",
+            target_patterns=r"\1language_model.layers.",
+        ),
+        WeightRenaming(
+            source_patterns=r"(^|model\.)norm\.",
+            target_patterns=r"\1language_model.norm.",
+        ),
+        # Pack per-expert Linear weights into DeepseekV2-style 3D expert tensors.
+        WeightConverter(
+            source_patterns=[
+                "mlp.experts.*.gate_proj.weight",
+                "mlp.experts.*.up_proj.weight",
+            ],
+            target_patterns="mlp.experts.gate_up_proj",
+            operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+        ),
+        WeightConverter(
+            source_patterns="mlp.experts.*.down_proj.weight",
+            target_patterns="mlp.experts.down_proj",
+            operations=[MergeModulelist(dim=0)],
+        ),
+        # CLIP-L tower: hub fused qkv → CLIPAttention q/k/v.
+        WeightConverter(
+            source_patterns="self_attn.qkv_proj.weight",
+            target_patterns=[
+                "self_attn.q_proj.weight",
+                "self_attn.k_proj.weight",
+                "self_attn.v_proj.weight",
+            ],
+            operations=[Chunk(dim=0)],
+        ),
+        WeightConverter(
+            source_patterns="self_attn.qkv_proj.bias",
+            target_patterns=[
+                "self_attn.q_proj.bias",
+                "self_attn.k_proj.bias",
+                "self_attn.v_proj.bias",
+            ],
+            operations=[Chunk(dim=0)],
+        ),
+    ]
+
     for model_type, base_pattern in _MODEL_TO_CONVERSION_PATTERN.items():
         if model_type in mapping:
             continue
