@@ -20,8 +20,8 @@
       title: Customizing models
     - local: heterogeneous_configurations
       title: Heterogeneous configurations
-    - local: heterogeneous_modeling
-      title: Heterogeneous modeling
+    - local: generic_heterogeneous_modeling
+      title: Generic heterogeneous modeling
     - local: how_to_hack_models
       title: Customizing model components
     - local: monkey_patching
