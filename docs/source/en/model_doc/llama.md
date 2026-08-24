@@ -31,6 +31,8 @@ You can find all the original Llama checkpoints under the [Huggy Llama](https://
 
 > [!TIP]
 > Click on the Llama models in the right sidebar for more examples of how to apply Llama to different language tasks.
+>
+> Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Refer to [Loading kernels](../kernel_doc/loading_kernels) to learn more.
 
 The example below demonstrates how to generate text with [`Pipeline`] or the [`AutoModel`], and from the command line.
 
