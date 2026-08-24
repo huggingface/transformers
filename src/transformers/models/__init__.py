@@ -145,6 +145,8 @@ if TYPE_CHECKING:
     from .ernie4_5_moe import *
     from .ernie4_5_vl_moe import *
     from .esm import *
+    from .esmc import *
+    from .esmfold2 import *
     from .eurobert import *
     from .evolla import *
     from .exaone4 import *
@@ -447,6 +449,7 @@ if TYPE_CHECKING:
     from .squeezebert import *
     from .stablelm import *
     from .starcoder2 import *
+    from .step3p7 import *
     from .superglue import *
     from .superpoint import *
     from .swiftformer import *

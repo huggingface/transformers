@@ -32,7 +32,6 @@ from typing import TYPE_CHECKING, Any, Union
 from ..distributed.utils import _is_torch_distributed_initialized
 from ..dynamic_module_utils import custom_object_save
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
-from ..generation import GenerationConfig
 from ..image_processing_utils import BaseImageProcessor
 from ..models.auto import AutoConfig, AutoTokenizer
 from ..processing_utils import ProcessorMixin
@@ -882,25 +881,27 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
                 self.model, kwargs.pop("assistant_model", None), kwargs.pop("assistant_tokenizer", None)
             )
             self.prefix = self.model.config.prefix if hasattr(self.model.config, "prefix") else None
-            # each pipeline with text generation capabilities should define its own default generation in a
-            # `_default_generation_config` class attribute
-            default_pipeline_generation_config = getattr(self, "_default_generation_config", GenerationConfig())
+            # Priority order: kwargs > user_generation_config > model.generation_config > default_pipeline_generation_config
+            default_pipeline_generation_config = getattr(self, "_default_generation_config", None)
+            user_generation_config = kwargs.pop("generation_config", None)
             if hasattr(self.model, "_prepare_generation_config"):
-                # Uses `generate`'s logic to enforce the following priority of arguments:
-                # 1. user-defined config options in `**kwargs`
-                # 2. model's generation config values
-                # 3. pipeline's default generation config values
-                # NOTE: _prepare_generation_config creates a deep copy of the generation config before updating it,
-                # and returns all kwargs that were not used to update the generation config
+                base_config = user_generation_config or copy.deepcopy(self.model.generation_config)
+                if default_pipeline_generation_config is not None:
+                    base_config.update(
+                        **default_pipeline_generation_config.to_dict(),
+                        defaults_only=True,
+                        allow_custom_entries=True,
+                    )
                 prepared_generation_config, kwargs = self.model._prepare_generation_config(
-                    generation_config=default_pipeline_generation_config, **kwargs
+                    generation_config=base_config, **kwargs
                 )
                 self.generation_config = prepared_generation_config
                 # if the `max_new_tokens` is set to the pipeline default, but `max_length` is set to a non-default
                 # value: let's honor `max_length`. E.g. we want Whisper's default `max_length=448` take precedence
                 # over over the pipeline's length default.
                 if (
-                    default_pipeline_generation_config.max_new_tokens is not None  # there's a pipeline default
+                    default_pipeline_generation_config is not None
+                    and default_pipeline_generation_config.max_new_tokens is not None  # there's a pipeline default
                     and self.generation_config.max_new_tokens == default_pipeline_generation_config.max_new_tokens
                     and self.generation_config.max_length is not None
                     and self.generation_config.max_length != 20  # global default

@@ -85,7 +85,7 @@ from ..siglip2.modeling_siglip2 import (
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="nvidia/Cosmos3-Edge-Reasoner")
+@auto_docstring(checkpoint="nvidia/Cosmos3-Edge")
 @strict
 class Cosmos3EdgeTextConfig(LlamaConfig):
     model_type = "cosmos3_edge_text"
@@ -144,7 +144,7 @@ class Cosmos3EdgeTextConfig(LlamaConfig):
             )
 
 
-@auto_docstring(checkpoint="nvidia/Cosmos3-Edge-Reasoner")
+@auto_docstring(checkpoint="nvidia/Cosmos3-Edge")
 @strict
 class Cosmos3EdgeVisionConfig(Siglip2VisionConfig):
     r"""
@@ -161,7 +161,7 @@ class Cosmos3EdgeVisionConfig(Siglip2VisionConfig):
     spatial_merge_size: int = 2
 
 
-@auto_docstring(checkpoint="nvidia/Cosmos3-Edge-Reasoner")
+@auto_docstring(checkpoint="nvidia/Cosmos3-Edge")
 @strict
 class Cosmos3EdgeConfig(PreTrainedConfig):
     r"""
@@ -563,9 +563,8 @@ class Cosmos3EdgeTextModel(LlamaModel, Cosmos3EdgePreTrainedModel):
         return BaseModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=past_key_values)
 
 
+@auto_docstring(custom_intro="Packed variable-resolution SigLIP2 vision tower used by Cosmos3 Edge.")
 class Cosmos3EdgeVisionModel(Cosmos3EdgePreTrainedModel):
-    """Packed variable-resolution SigLIP2 vision tower used by Cosmos3 Edge."""
-
     config_class = Cosmos3EdgeVisionConfig
     main_input_name = "pixel_values"
     input_modalities = ("image", "video")
@@ -735,6 +734,7 @@ class Cosmos3EdgeModel(Qwen2VLModel, Cosmos3EdgePreTrainedModel):
         )
 
 
+@auto_docstring
 class Cosmos3EdgeForConditionalGeneration(Qwen2VLForConditionalGeneration, Cosmos3EdgePreTrainedModel):
     config_class = Cosmos3EdgeConfig
     _tied_weights_keys = {}

@@ -861,7 +861,7 @@ class ProcessorMixin(PushToHubMixin):
                     - `"text"` (`str`): the original placeholder token string that was matched
                     - `"replacement"` (`str`): the string it was replaced with
         """
-        # Early exit if no special tokens found, nothing to replace
+        # Early exit if no special tokens found, nothing to replace or if text is not a list
         if not self.all_special_multimodal_tokens:
             return text, []
 
