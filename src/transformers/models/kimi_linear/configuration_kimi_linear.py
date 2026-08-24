@@ -35,6 +35,11 @@ class KimiLinearConfig(PreTrainedConfig):
         Dimension of each key head in linear attention layers. Defaults to 128.
     linear_conv_kernel_dim (`int`, *optional*, defaults to 4):
         Kernel size for the short convolution applied to queries, keys, and values in linear attention layers.
+
+    mlp_layer_types (`list[str]`, *optional*):
+        List of layer types for the MLP or MoE layers. Defaults to None.
+    n_group (`int`, *optional*, defaults to 8):
+        Number of groups for routed experts.
     """
 
     model_type = "kimi_linear"
@@ -65,9 +70,8 @@ class KimiLinearConfig(PreTrainedConfig):
         "model_max_length": "max_position_embeddings",
         "moe_renormalize": "norm_topk_prob",
         "num_expert_group": "n_group",
-        "num_experts": "n_routed_experts",
+        "num_local_experts": "n_routed_experts",
         "num_experts_per_token": "num_experts_per_tok",
-        "num_mtp_layers": "num_nextn_predict_layers",
     }
 
     vocab_size: int = 163840
@@ -101,7 +105,6 @@ class KimiLinearConfig(PreTrainedConfig):
     tie_word_embeddings: bool = False
     attention_bias: bool = False
     attention_dropout: float | int | None = 0.0
-    num_mtp_layers: int = 0
     mlp_layer_types: list[str] | None = None
     layer_types: list[str] | None = None
 
@@ -144,8 +147,9 @@ class KimiLinearConfig(PreTrainedConfig):
         # Same for MLP layer types, which indicate MLP or MoE
         if self.mlp_layer_types is None:
             first_k_dense_replace = kwargs.pop("first_k_dense_replace", 1)
-            mlp_layer_types = ["mlp" if i < first_k_dense_replace else "moe" for i in range(self.num_hidden_layers)]
-            self.mlp_layer_types = mlp_layer_types
+            self.mlp_layer_types = [
+                "sparse" if i < first_k_dense_replace else "dense" for i in range(self.num_hidden_layers)
+            ]
 
 
 __all__ = ["KimiLinearConfig"]

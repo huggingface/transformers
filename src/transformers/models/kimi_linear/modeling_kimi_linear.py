@@ -575,7 +575,7 @@ def torch_recurrent_kda(
 
 
 @use_kernelized_func([torch_recurrent_kda, torch_chunk_kda, causal_conv1d_fn, causal_conv1d_update])
-class KimiLinearDeltaAttention(nn.Module):
+class KimiLinearDeltaAttention(nn.Module):  # TODO: can we try to inherit from qwen ? or something?
     # Annotations to make ty happy
     chunk_kda: Callable[..., tuple[torch.Tensor, torch.Tensor | None]]
     recurrent_kda: Callable[..., tuple[torch.Tensor, torch.Tensor | None]]
@@ -587,10 +587,10 @@ class KimiLinearDeltaAttention(nn.Module):
 
         # Attention attributes
         self.hidden_size = config.hidden_size
-        self.num_k_heads = config.linear_attn_key_heads
-        self.head_k_dim = config.linear_attn_key_head_dim
-        self.num_v_heads = config.linear_attn_value_heads
-        self.head_v_dim = config.linear_attn_value_head_dim
+        self.num_k_heads = config.linear_num_key_heads
+        self.head_k_dim = config.linear_key_head_dim
+        self.num_v_heads = config.linear_num_value_heads
+        self.head_v_dim = config.linear_value_head_dim
         self.conv_kernel_size = config.linear_conv_kernel_dim
 
         # QVK modules (3 projections and 1 packed convolution)
@@ -607,7 +607,7 @@ class KimiLinearDeltaAttention(nn.Module):
             out_channels=conv_size,
             bias=False,
             kernel_size=self.conv_kernel_size,
-            groups=self.conv_dim,
+            groups=conv_size,
             padding=self.conv_kernel_size - 1,
         )
 
@@ -619,15 +619,10 @@ class KimiLinearDeltaAttention(nn.Module):
         A_log_init = torch.empty(self.num_v_heads, 1, dtype=torch.float32).uniform_(1, 16)  # need actual values to log
         self.A_log = torch.nn.Parameter(A_log_init.log())
         self.dt_bias = nn.Parameter(torch.empty(self.num_v_heads, self.head_v_dim, dtype=torch.float32))
-        self.forget_gate_lower_bound = config.forget_gate_lower_bound
 
         # Output normalization and projection
-        self.use_full_rank_output_gate = config.use_full_rank_output_gate
-        if self.use_full_rank_output_gate:
-            self.output_gate = nn.Linear(self.hidden_size, self.projection_v_size, bias=False)
-        else:
-            self.output_gate_down = nn.Linear(self.hidden_size, self.head_v_dim, bias=False)
-            self.output_gate_up = nn.Linear(self.head_v_dim, self.projection_v_size, bias=False)
+        self.output_gate_down = nn.Linear(self.hidden_size, self.head_v_dim, bias=False)
+        self.output_gate_up = nn.Linear(self.head_v_dim, self.projection_v_size, bias=False)
 
         self.o_norm = KimiLinearRMSNormGated(self.head_v_dim, eps=config.rms_norm_eps, activation="sigmoid")
         self.o_proj = nn.Linear(self.projection_v_size, self.hidden_size, bias=False)
@@ -697,11 +692,7 @@ class KimiLinearDeltaAttention(nn.Module):
         gate = self.forget_gate_up(self.forget_gate_down(hidden_states))
         gate = gate.reshape(value_shape)
         log_decay_scale = self.A_log.exp()
-        # If a lower bound is provided for the gate, the way to compute the log_decay is different
-        if self.forget_gate_lower_bound is not None:
-            gate = self.forget_gate_lower_bound * (log_decay_scale * (gate + self.dt_bias)).sigmoid()
-        else:
-            gate = -log_decay_scale * F.softplus(gate.float() + self.dt_bias)
+        gate = -log_decay_scale * F.softplus(gate.float() + self.dt_bias)
 
         beta = self.beta_proj(hidden_states).float().sigmoid()
 
@@ -737,10 +728,7 @@ class KimiLinearDeltaAttention(nn.Module):
             past_key_values.update_recurrent_state(last_recurrent_state, self.layer_idx)
 
         # Apply normalization to the attention output
-        if self.use_full_rank_output_gate:
-            output_gate = self.output_gate(hidden_states)
-        else:
-            output_gate = self.output_gate_down(self.output_gate_up(hidden_states))
+        output_gate = self.output_gate_down(self.output_gate_up(hidden_states))
         output_gate = output_gate.reshape(value_shape)
         normed_attn_out = self.o_norm(core_attn_out, output_gate)
 
@@ -821,7 +809,7 @@ class KimiLinearDecoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        if self.layer_type == "full_attention":
+        if config.layer_types[layer_idx] == "full_attention":
             self.self_attn = KimiLinearAttention(config=config, layer_idx=layer_idx)
         else:
             self.self_attn = KimiLinearDeltaAttention(config=config, layer_idx=layer_idx)
