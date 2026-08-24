@@ -52,7 +52,7 @@ class Kosmos2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         return {"num_image_tokens": 5}
 
     @unittest.skip("Kosmos2_5Processor removes 'rows' and 'cols' from the output")
-    def test_subprocessor_defaults_1_image(self):
+    def test_subprocessor_defaults_1_images(self):
         pass
 
     def test_image_procesor_load_save_reload(self):

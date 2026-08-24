@@ -75,7 +75,7 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor_class = cls._get_component_class_from_processor("image_processor")
         return image_processor_class(do_center_crop=False)
 
-    @parameterized.expand(["text", "image"])
+    @parameterized.expand(["text", "images"])
     @unittest.skip("Kosmos2Processor adds special tokens to the text")
     def test_subprocessor_defaults(self, modality):
         pass
@@ -375,7 +375,7 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertListEqual(outputs.image_embeds_position_mask.numpy().tolist()[-1], EXPECTED_IMG_POS_MASK_BATCH[-1])
 
     # Rewrite as Kosmos-2 supports custom padding only when image is None.
-    def test_unstructured_kwargs_batched_0_image(self, modality="image"):
+    def test_unstructured_kwargs_batched_0_images(self, modality="image"):
         attributes = self.processor_class.get_attributes()
         self._skip_unless_modality_and_tokenizer_present(modality, attributes)
         processor = self.get_processor()

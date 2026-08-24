@@ -106,7 +106,7 @@ class ColModernVBertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_replacement_offsets(self):
         pass
 
-    def test_subprocessor_defaults_preserved_by_kwargs_0_image(self):
+    def test_subprocessor_defaults_preserved_by_kwargs_0_images(self):
         processor_components = self.prepare_components()
         processor_components["image_processor"] = self.get_component(
             "image_processor", do_rescale=True, rescale_factor=-1.0
@@ -121,7 +121,7 @@ class ColModernVBertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         inputs = processor(images=image_input, return_tensors="pt")
         self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
 
-    def test_kwargs_overrides_default_subprocessor_kwargs_0_image(self):
+    def test_kwargs_overrides_default_subprocessor_kwargs_0_images(self):
         processor_components = self.prepare_components()
         processor_components["image_processor"] = self.get_component(
             "image_processor", do_rescale=True, rescale_factor=1
@@ -143,7 +143,7 @@ class ColModernVBertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
 
-    def test_unstructured_kwargs_0_image(self):
+    def test_unstructured_kwargs_0_images(self):
         processor_components = self.prepare_components()
         processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
@@ -160,7 +160,7 @@ class ColModernVBertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertEqual(inputs[self.text_input_name].shape[-1], 76)
 
-    def test_unstructured_kwargs_batched_0_image(self):
+    def test_unstructured_kwargs_batched_0_images(self):
         processor_components = self.prepare_components()
         processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
@@ -191,7 +191,7 @@ class ColModernVBertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 return_tensors="pt",
             )
 
-    def test_structured_kwargs_nested_0_image(self):
+    def test_structured_kwargs_nested_0_images(self):
         processor_components = self.prepare_components()
         processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
@@ -210,7 +210,7 @@ class ColModernVBertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertEqual(inputs[self.text_input_name].shape[-1], 76)
 
-    def test_structured_kwargs_nested_from_dict_0_image(self):
+    def test_structured_kwargs_nested_from_dict_0_images(self):
         processor_components = self.prepare_components()
         processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
