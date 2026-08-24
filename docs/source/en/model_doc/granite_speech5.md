@@ -64,7 +64,10 @@ ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="v
 ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
 speech_samples = [el['array'] for el in ds["audio"][:5]]
 
-inputs = processor(speech_samples, sampling_rate=processor.feature_extractor.sampling_rate)
+# `device` computes the log-mel front-end on the model's accelerator, saving a host-to-device copy
+inputs = processor(
+    speech_samples, sampling_rate=processor.feature_extractor.sampling_rate, device=model.device
+)
 inputs.to(model.device, dtype=model.dtype)
 outputs = model.generate(**inputs)
 print(processor.batch_decode(outputs, skip_special_tokens=True))
