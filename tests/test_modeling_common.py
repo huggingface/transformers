@@ -91,6 +91,7 @@ from transformers.testing_utils import (
     get_device_properties,
     hub_retry,
     is_flaky,
+    preserve_module_forwards,
     require_accelerate,
     require_bitsandbytes,
     require_deepspeed,
@@ -5792,8 +5793,10 @@ class ModelTesterMixin(ExportTesterMixin):
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
 
-            # Using kernels should not raise a `ValueError`
-            model.use_kernels = True
+            # `kernelize` mutates module-level singletons, so restore them to keep later tests kernel-free
+            with preserve_module_forwards(model):
+                # Using kernels should not raise a `ValueError`
+                model.use_kernels = True
 
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
     def test_model_rope_scaling_from_config(self, scaling_type):
