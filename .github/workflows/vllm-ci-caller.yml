@@ -511,3 +511,45 @@ jobs:
           pytest -v -s tests/models/multimodal/processing/ \
             --ignore tests/models/multimodal/processing/test_tensor_schema.py \
             --num-shards=4 --shard-id=$SHARD_ID
+
+  # Runs after all test jobs (even on failure) and produces structured JSON
+  # reports of failing tests, new failures vs the previous main-branch run,
+  # and a breakdown by error category. Reports are uploaded as an artifact.
+  vllm-ci-report:
+    name: "Generate vLLM CI failure report"
+    runs-on:
+      group: aws-m8i-8xl-cache
+    container:
+      image: huggingface/transformers-torch-light
+    if: always()
+    needs: [vllm, vllm-test-init, vllm-test-transformers, vllm-multimodal-processing]
+    # Override workflow-level permissions to add actions:read (needed to fetch job logs).
+    permissions:
+      actions: read
+      contents: read
+
+    steps:
+      - name: Checkout Transformers
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          repository: huggingface/transformers
+          persist-credentials: false
+          path: transformers
+
+      - name: Generate failure report
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 transformers/analyze_vllm_ci.py \
+            --run-id "${{ github.run_id }}" \
+            --repo "${{ github.repository }}" \
+            --output-dir ./vllm-ci-reports \
+            --plugin vllm
+
+      - name: Upload failure reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vllm-ci-failure-reports
+          path: vllm-ci-reports/
+          if-no-files-found: warn
