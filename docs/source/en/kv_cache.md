@@ -262,6 +262,45 @@ for prompt in user_prompts:
     messages.append({"role": "assistant", "content": completion})
 ```
 
+## Crop a cache
+
+Use [`~Cache.crop`] to roll back tokens from a cache, such as when a candidate continuation is rejected during iterative generation. Pass the number of tokens to remove as a negative integer.
+
+```py
+# Remove the last three tokens from the cache.
+past_key_values.crop(-3)
+```
+
+Sliding-window and linear-attention layers discard past states as they go, so there's nothing to roll back to by default. Call [`~Cache.activate_past_recording`] before the forward pass to make them hold onto those states. Without it, `crop` raises a `RuntimeError` once a sliding-window layer fills its window, and immediately for linear-attention layers.
+
+```py
+# Enable this before the forward pass if you need to roll back tokens.
+past_key_values.activate_past_recording()
+```
+
+`crop(0)` does not clear the cache. It removes no tokens from the cached sequence and is a no-op for full-attention layers. For sliding-window and linear-attention layers, it can discard cached information that the next model call will not use. This reduces memory use without rolling back tokens.
+
+```
+                    cached positions
+                    ┌───┬───┬───┬───┬───┬───┐
+before crop(-3)     │ 0 │ 1 │ 2 │ 3 │ 4 │ 5 │
+                    └───┴───┴───┴───┴───┴───┘
+                                ╰─────┬─────╯
+                                 rolled back
+
+after crop(-3)
+                    ┌───┬───┬───┐
+full attention      │ 0 │ 1 │ 2 │    keeps the whole prefix
+                    └───┴───┴───┘
+                            ┌───┐
+sliding_window=2            │ 2 │    keeps sliding_window - 1
+                            └───┘
+```
+
+Both layers now report a sequence length of 3, and generation resumes from position 3.
+
+Passing `0` removes no tokens from the sequence. It's a no-op for full-attention layers, but for sliding-window and linear-attention layers it still discards recorded states the next forward pass won't read, which frees memory without rolling anything back.
+
 ## Prefill a cache (prefix caching)
 
 In some situations, you may want to fill a [`Cache`] with kv pairs for a certain prefix prompt and reuse it to generate different sequences.
