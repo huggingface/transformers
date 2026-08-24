@@ -76,6 +76,17 @@ class Lfm2AudioProcessorTest(unittest.TestCase):
         self.assertEqual(int((outputs.input_ids == self.processor.audio_token_id).sum()), expected_tokens)
         self.assertTrue((outputs.modality_ids == 2).all())
 
+    def test_audio_placeholder_expansion_at_subsampling_boundary(self):
+        # 12,800 samples produce 80 reported frames plus the terminal centered-STFT frame. Liquid Audio includes
+        # that terminal frame, so FastConformer's 8x subsampling requires 11 placeholders rather than 10.
+        audio = np.zeros(12_800, dtype=np.float32)
+        outputs = self.processor(text=[self.processor.audio_token], audio=[audio])
+
+        self.assertEqual(outputs.input_features.shape[1], 81)
+        self.assertEqual(int(outputs.input_features_attention_mask.sum()), 81)
+        self.assertEqual(int((outputs.input_ids == self.processor.audio_token_id).sum()), 11)
+        self.assertEqual(int((outputs.modality_ids == 2).sum()), 11)
+
     def test_text_to_speech_template(self):
         outputs = self.processor.apply_text_to_speech_request("hello")
         prompt = self.processor.tokenizer.decode(outputs.input_ids[0], skip_special_tokens=False)

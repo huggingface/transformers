@@ -202,8 +202,16 @@ class Lfm2AudioProcessor(ProcessorMixin):
         kwargs["return_attention_mask"] = True
         audio_inputs = self.feature_extractor(audio, **kwargs)
         feature_attention_mask = audio_inputs.pop("attention_mask")
+        feature_lengths = feature_attention_mask.sum(-1)
+        # Liquid Audio's inference path uses the complete centered-STFT output, including the terminal frame that
+        # the NeMo frontend zeroes beyond its reported length. That extra frame matters whenever the reported length
+        # is divisible by FastConformer's 8x subsampling factor: omitting it removes one audio placeholder and can
+        # make ASR generation collapse to empty text.
+        feature_lengths = (feature_lengths + 1).clamp_max(feature_attention_mask.shape[-1])
+        frame_indices = torch.arange(feature_attention_mask.shape[-1], device=feature_attention_mask.device)
+        feature_attention_mask = frame_indices[None] < feature_lengths[:, None]
         audio_inputs["input_features_attention_mask"] = feature_attention_mask
-        audio_inputs["num_audio_tokens"] = (feature_attention_mask.sum(-1) + 7) // 8
+        audio_inputs["num_audio_tokens"] = (feature_lengths + 7) // 8
         replacements = [self.replace_audio_token(audio_inputs, idx) for idx in range(len(audio))]
         return audio_inputs, replacements
 
