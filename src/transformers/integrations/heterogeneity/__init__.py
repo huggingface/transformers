@@ -23,7 +23,7 @@ from .heterogeneous_modeling_spec import (
 from .layer_idx_resolvers import LayerIdxFromArgument, LayerIdxFromModelInitStack, LayerIdxResolver
 from .modeling_utils import (
     apply_generic_heterogeneous_modeling_if_applicable,
-    wrap_model_init_with_heterogeneous_context,
+    support_generic_heterogeneous_modeling,
 )
 from .skip_utils import ReturnEntry, get_skip_replacement
 
@@ -41,5 +41,5 @@ __all__ = [
     "get_heterogeneous_modeling_spec",
     "get_skip_replacement",
     "nest_skip_descriptor_paths",
-    "wrap_model_init_with_heterogeneous_context",
+    "support_generic_heterogeneous_modeling",
 ]

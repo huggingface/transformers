@@ -45,11 +45,11 @@ class _LayerInitContext:
     skip_descriptors: dict[str, SkipDescriptor]
 
 
-_layer_init_context: contextvars.ContextVar[tuple[_LayerInitContext, ...]] = contextvars.ContextVar(
-    "_layer_init_context", default=()
+_layer_init_contexts: contextvars.ContextVar[tuple[_LayerInitContext, ...]] = contextvars.ContextVar(
+    "_layer_init_contexts", default=()
 )
-_model_init_stack: contextvars.ContextVar[tuple[PreTrainedModel, ...]] = contextvars.ContextVar(
-    "_model_init_stack", default=()
+_model_init_contexts: contextvars.ContextVar[tuple[PreTrainedModel, ...]] = contextvars.ContextVar(
+    "_model_init_contexts", default=()
 )
 _layer_patching_lock = threading.Lock()
 
@@ -91,30 +91,37 @@ def apply_generic_heterogeneous_modeling_if_applicable(model: PreTrainedModel) -
         layer_idx_resolver=heterogeneous_modeling_spec.layer_idx_resolver,
         skip_descriptors=skip_descriptors,
     )
-    _layer_init_context.set((*_layer_init_context.get(), context))
+    _layer_init_contexts.set((*_layer_init_contexts.get(), context))
     _patch_layer_init(heterogeneous_modeling_spec.layer_cls)
 
 
-def wrap_model_init_with_heterogeneous_context(orig_init: Callable[..., None]) -> Callable[..., None]:
-    if getattr(orig_init, "_wrapped_with_heterogeneous_context", False):
+def support_generic_heterogeneous_modeling(orig_init: Callable[..., None]) -> Callable[..., None]:
+    """Create the model-initialization scope required by ``apply_generic_heterogeneous_modeling_if_applicable``.
+
+    That function runs inside ``PreTrainedModel.__init__`` and registers temporary state that is used later, when the
+    model subclass creates its layers. This wrapper keeps that state available across the model's ``super().__init__()``
+    chain and restores the previous state when initialization finishes. Nested models receive their own nested scope.
+    If generic heterogeneous modeling is not applied, the wrapper does not change model initialization.
+    """
+    if getattr(orig_init, "_scoped_for_heterogeneous_modeling", False):
         return orig_init
 
     @wraps(orig_init)
-    def _patched_init(self, *args, **kwargs):
-        model_init_stack = _model_init_stack.get()
-        if any(model is self for model in model_init_stack):
+    def _scoped_init(self, *args, **kwargs):
+        model_init_contexts = _model_init_contexts.get()
+        if any(model is self for model in model_init_contexts):
             return orig_init(self, *args, **kwargs)
 
-        model_init_stack_token = _model_init_stack.set((*model_init_stack, self))
-        layer_init_context_token = _layer_init_context.set(_layer_init_context.get())
+        model_init_contexts_token = _model_init_contexts.set((*model_init_contexts, self))
+        layer_init_contexts_token = _layer_init_contexts.set(_layer_init_contexts.get())
         try:
             return orig_init(self, *args, **kwargs)
         finally:
-            _layer_init_context.reset(layer_init_context_token)
-            _model_init_stack.reset(model_init_stack_token)
+            _layer_init_contexts.reset(layer_init_contexts_token)
+            _model_init_contexts.reset(model_init_contexts_token)
 
-    _patched_init._wrapped_with_heterogeneous_context = True
-    return _patched_init
+    _scoped_init._scoped_for_heterogeneous_modeling = True
+    return _scoped_init
 
 
 def _patch_layer_init(layer_cls: type[nn.Module]) -> None:
@@ -133,7 +140,7 @@ def _patch_layer_init(layer_cls: type[nn.Module]) -> None:
             context = next(
                 (
                     context
-                    for context in reversed(_layer_init_context.get())
+                    for context in reversed(_layer_init_contexts.get())
                     if context.layer_cls is layer_cls and context.model.config is config
                 ),
                 None,
