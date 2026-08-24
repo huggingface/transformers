@@ -20,6 +20,7 @@ import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_func_from_hub_with_fallback, use_kernelized_func
@@ -30,6 +31,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...models.deepseek_v3.configuration_deepseek_v3 import DeepseekV3Config
 from ...models.deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Attention,
+    DeepseekV3DecoderLayer,
     DeepseekV3Experts,
     DeepseekV3ForCausalLM,
     DeepseekV3MLP,
@@ -87,6 +89,9 @@ class KimiLinearConfig(DeepseekV3Config):
     linear_num_key_heads: int = 32
     linear_conv_kernel_dim: int = 4
 
+    # del rope_parameters TODO
+    # del rope_interleave
+
     def __post_init__(self, **kwargs):
         super().__post_init__(**kwargs)
         # Checkpoint stores linear attention attributes in a config sub-dict: if it's there, extract them
@@ -115,9 +120,6 @@ class KimiLinearConfig(DeepseekV3Config):
             self.layer_types = [
                 "full_attention" if i and i % 4 == 0 else "kda_attention" for i in range(self.num_hidden_layers)
             ]
-
-        # Attention layers never use bias, this is kept to inherit from DSV3
-        self.attention_bias: bool = False
 
 class KimiLinearRMSNorm(LlamaRMSNorm):
     pass

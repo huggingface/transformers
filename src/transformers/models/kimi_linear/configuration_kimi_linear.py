@@ -17,6 +17,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -120,7 +122,6 @@ class KimiLinearConfig(PreTrainedConfig):
     attention_bias: bool = False
     attention_dropout: float | int | None = 0.0
     num_mtp_layers: int = 0
-    # attention_bias: bool = False  # TODO: can we drop? Always False in the model
     layer_types: list[str] | None = None
 
     head_dim: int = 72
@@ -150,9 +151,7 @@ class KimiLinearConfig(PreTrainedConfig):
         elif "full_attn_layers" in linear_attn_config and "kda_layers" in linear_attn_config:
             self.layer_types = [None] * self.num_hidden_layers
             for layer in linear_attn_config["full_attn_layers"]:
-                self.layer_types[layer - 1] = (
-                    "full_attention"  # for some reason, types are 1-indexed in the checkpoint
-                )
+                self.layer_types[layer - 1] = "full_attention"  # types are 1-indexed in the checkpoint
             for layer in linear_attn_config["kda_layers"]:
                 self.layer_types[layer - 1] = "kda_attention"
             if None in self.layer_types:
@@ -163,10 +162,3 @@ class KimiLinearConfig(PreTrainedConfig):
             self.layer_types = [
                 "full_attention" if i and i % 4 == 0 else "kda_attention" for i in range(self.num_hidden_layers)
             ]
-
-        # KDA layers never use rotary embeddings; full-attention (MLA) layers only do when `mla_use_nope` is False
-        if self.rope_parameters is None:
-            rope_theta = kwargs.pop("rope_theta", 10000.0)
-            mla_use_nope = kwargs.pop("mla_use_nope", True)
-            mla_nope = {"rope_type": "default", "rope_theta": rope_theta}
-            self.rope_parameters = {"full_attention": None if mla_use_nope else mla_nope, "kda_attention": None}
