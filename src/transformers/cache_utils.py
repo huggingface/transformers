@@ -1899,7 +1899,10 @@ class StaticCache(Cache):
         config = config.get_text_config(decoder=True)
         layer_types, per_layer_kwargs = _get_layer_types_and_kwargs(config)
         disabled_kv_layer_indices = config.get_disabled_kv_layer_indices()
-        # Dispatch the layer types
+
+        # Heterogeneous modeling can skip attention in selected layers. Keep their cache entries so cache indices stay
+        # aligned with model layers, but give KV-cache layers zero capacity to avoid allocating storage that will never
+        # be updated. This requires constructing each layer separately instead of using one max length for every layer.
         layers = []
         for layer_idx, (layer_type, layer_kwargs) in enumerate(zip(layer_types, per_layer_kwargs)):
             layer_cls = STATIC_LAYER_TYPE_MAPPING[layer_type]
@@ -1908,8 +1911,8 @@ class StaticCache(Cache):
             else:
                 layer_kwargs["max_cache_len"] = max_cache_len
             layers.append(layer_cls(**layer_kwargs))
-        super().__init__(layers=layers, offloading=offloading, offload_only_non_sliding=offload_only_non_sliding)
 
+        super().__init__(layers=layers, offloading=offloading, offload_only_non_sliding=offload_only_non_sliding)
         self._disabled_kv_layer_indices = disabled_kv_layer_indices
 
     def get_representative_kv_layer_idx(self, layer_indices: Iterable[int]) -> int | None:
