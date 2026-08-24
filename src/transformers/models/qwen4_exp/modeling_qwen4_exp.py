@@ -1149,41 +1149,26 @@ class Qwen4ExpTextPLELayer(nn.Module):
 
     def _short_conv(self, hidden_states: torch.Tensor, past_key_values: Cache | None) -> torch.Tensor:
         seq_len = hidden_states.shape[1]
-        use_precomputed_states = past_key_values is not None and past_key_values.has_previous_state(
-            self.layer_idx, state_idx=1
-        )
         hidden_states = hidden_states.transpose(1, 2)
-        if use_precomputed_states and seq_len == 1 and not past_key_values.layers[self.layer_idx].record_past:
-            conv_state = past_key_values.layers[self.layer_idx].conv_states[1]
-            # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
-            hidden_states = causal_conv1d_update(
-                hidden_states,
-                conv_state,
-                self.conv1d.weight.squeeze(1),
-                self.conv1d.bias,
-                self.activation,
-            )
-        else:
-            if past_key_values is not None:
-                hidden_states = past_key_values.update_conv_state(
-                    hidden_states, self.layer_idx, state_idx=1, conv_kernel_size=self.short_conv_state_len
-                )
 
-            hidden_states = causal_conv1d_fn(
-                hidden_states,
-                self.conv1d.weight.squeeze(1),
-                self.conv1d.bias,
-                activation=self.activation,
+        conv_input = hidden_states
+        if past_key_values is not None:
+            conv_input = past_key_values.update_conv_state(
+                hidden_states, self.layer_idx, state_idx=1, conv_kernel_size=self.short_conv_state_len
             )
 
-            # Drop the additional previous states
-            if past_key_values is not None:
-                hidden_states = hidden_states[:, :, -seq_len:]
+        conv_input = F.pad(conv_input, (self.short_conv_state_len, 0))
+        conv_input = conv_input[..., -(self.short_conv_state_len + seq_len) :]
+        # We cannot use the usual functions/kernels here for the short conv as the conv1d has dilation
+        hidden_states = F.silu(self.conv1d(conv_input))
+
+        # Drop the additional previous states
+        if past_key_values is not None:
+            hidden_states = hidden_states[:, :, -seq_len:]
 
         hidden_states = hidden_states.transpose(1, 2)
         return hidden_states
 
-    @force_accelerate_hooks("conv1d")
     def forward(
         self,
         hidden_states: torch.Tensor,
