@@ -654,14 +654,14 @@ class KimiLinearDeltaAttention(nn.Module):  # TODO: can we try to inherit from q
         # Apply convolutions and update conv_states cache. conv_states are used as left-side padding for convolution:
         # we apply convolution to groups of N tokens, so we need to keep N-1 tokens around for the next forward pass,
         # so that token T can see the token T-1, T-2, ..., T-N+1.
-        mixed_qkv = torch.cat((q_states, k_states, v_states), dim=-1)
+        mixed_qkv = torch.cat((q_states, k_states, v_states), dim=-1).transpose(1, 2)
         use_precomputed_states = past_key_values is not None and past_key_values.has_previous_state(self.layer_idx)
 
         if use_precomputed_states and seq_len == 1 and not past_key_values.layers[self.layer_idx].record_past:
             conv_state = past_key_values.layers[self.layer_idx].conv_states[0]
             # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
             mixed_qkv = causal_conv1d_update(
-                mixed_qkv, conv_state, self.conv1d.weight.squeeze(1), self.conv1d.bias, self.activation
+                mixed_qkv, conv_state, self.conv1d.weight.squeeze(1), self.conv1d.bias, activation="silu"
             )
         else:
             if past_key_values is not None:
@@ -669,7 +669,7 @@ class KimiLinearDeltaAttention(nn.Module):  # TODO: can we try to inherit from q
                     mixed_qkv, self.layer_idx, conv_kernel_size=self.conv_kernel_size
                 )
             mixed_qkv = causal_conv1d_fn(
-                mixed_qkv, self.conv1d.weight.squeeze(1), self.conv1d.bias, activation=self.activation, **kwargs
+                mixed_qkv, self.conv1d.weight.squeeze(1), self.conv1d.bias, activation="silu", **kwargs
             )
             # Drop the additional previous states
             if past_key_values is not None:
@@ -704,11 +704,11 @@ class KimiLinearDeltaAttention(nn.Module):  # TODO: can we try to inherit from q
 
         # Apply the KDA delta rule, here in the non-chunked mode (for decoding with a cache)
         if use_precomputed_states and seq_len == 1:
-            kda_fn = self.recurrent_kda
+            kda_fn = torch_recurrent_kda
             kwargs = {}
         # Otherwise (prefill or no cache) use the "chunked" mode, which is more efficient for longer input sequences
         else:
-            kda_fn = self.chunk_kda
+            kda_fn = torch_chunk_kda
             kwargs = {"cu_seqlens": kwargs.get("cu_seq_lens_q")}
 
         core_attn_out, last_recurrent_state = kda_fn(
@@ -931,7 +931,9 @@ class KimiLinearModel(KimiLinearPreTrainedModel):
 
         if position_ids is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids: torch.LongTensor = (
+                torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            )
             position_ids = position_ids.unsqueeze(0)
 
         if not isinstance(causal_mask_mapping := attention_mask, dict):
@@ -950,12 +952,10 @@ class KimiLinearModel(KimiLinearPreTrainedModel):
             }
 
         hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states = decoder_layer(
                 hidden_states,
-                position_embeddings=position_embeddings,
                 attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_ids=position_ids,
                 past_key_values=past_key_values,
