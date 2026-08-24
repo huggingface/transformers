@@ -618,3 +618,31 @@ class MLukeTokenizerIntegrationTests(unittest.TestCase):
         self.assertEqual(encoding["entity_position_ids"].shape, (1, 16, tokenizer.max_mention_length))
         self.assertEqual(encoding["entity_start_positions"].shape, (1, 16))
         self.assertEqual(encoding["entity_end_positions"].shape, (1, 16))
+
+    @slow
+    def test_entity_token_ordering_regression(self):
+        # Regression test for issue #48225
+        tokenizer = MLukeTokenizer.from_pretrained("studio-ousia/mluke-base", task="entity_pair_classification")
+        
+        # Manually add a special token to shift the ordering in extra_special_tokens
+        tokenizer.add_special_tokens({"additional_special_tokens": ["<extra>"]})
+        
+        text = "Apple and Google are companies."
+        entity_spans = [(0, 5), (10, 16)]
+        
+        encoding = tokenizer(text, entity_spans=entity_spans)
+        
+        # Get the IDs for <ent> and <ent2>
+        ent_id = tokenizer.convert_tokens_to_ids("<ent>")
+        ent2_id = tokenizer.convert_tokens_to_ids("<ent2>")
+        
+        # Verify that the input_ids contain the correct entity markers
+        input_ids = encoding["input_ids"]
+        
+        # The markers should be present twice for each entity (start and end)
+        self.assertEqual(input_ids.count(ent_id), 2)
+        self.assertEqual(input_ids.count(ent2_id), 2)
+        
+        # Verify that <s> (ID 0) is not used as an entity marker
+        self.assertNotEqual(ent_id, tokenizer.bos_token_id)
+        self.assertNotEqual(ent2_id, tokenizer.bos_token_id)
