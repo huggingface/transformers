@@ -1086,7 +1086,7 @@ class ProcessorTesterMixin:
         max_length = getattr(self, f"{modality}_unstructured_max_length")
         modality_kwargs_key = f"{modality}_kwargs"
         modality_kwargs = MODALITY_CONFIG[modality]["init_time_kwargs"]
-        if modality == "video":
+        if modality == "videos":
             modality_kwargs["do_sample_frames"] = False
         all_kwargs = {
             "common_kwargs": {"return_tensors": "pt"},

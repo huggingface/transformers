@@ -375,19 +375,19 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertListEqual(outputs.image_embeds_position_mask.numpy().tolist()[-1], EXPECTED_IMG_POS_MASK_BATCH[-1])
 
     # Rewrite as Kosmos-2 supports custom padding only when image is None.
-    def test_unstructured_kwargs_batched_0_images(self, modality="image"):
+    def test_unstructured_kwargs_batched_0_images(self):
         attributes = self.processor_class.get_attributes()
-        self._skip_unless_modality_and_tokenizer_present(modality, attributes)
+        self._skip_unless_modality_and_tokenizer_present("images", attributes)
         processor = self.get_processor()
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = self.prepare_text_inputs(batch_size=2, modalities=modality)
-        modal_input = self._prepare_modality_input(modality, batch_size=2)
-        max_length = getattr(self, f"{modality}_unstructured_max_length")
-        init_time_kwargs = MODALITY_CONFIG[modality]["init_time_kwargs"]
+        input_str = self.prepare_text_inputs(batch_size=2, modalities="image")
+        modal_input = self._prepare_modality_input("images", batch_size=2)
+        max_length = getattr(self, "images_unstructured_max_length")
+        init_time_kwargs = MODALITY_CONFIG["images"]["init_time_kwargs"]
         inputs = self._call_processor(
             processor,
-            modality,
+            "images",
             input_str,
             modal_input,
             return_tensors="pt",
@@ -395,7 +395,7 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             max_length=max_length,
             **init_time_kwargs,
         )
-        self._check_modality_outputs(inputs, modality)
+        self._check_modality_outputs(inputs, "images")
         self.assertTrue(
             len(inputs[self.text_input_name][0]) == len(inputs[self.text_input_name][1])
             and len(inputs[self.text_input_name][1]) == 76

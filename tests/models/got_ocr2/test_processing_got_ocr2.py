@@ -95,7 +95,7 @@ class GotOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def test_subprocessor_defaults_1_images(self):
         # overriden - pop certina keys from `merged_kwargs` which are used only by processor
-        parameterized_config = MODALITY_CONFIG["image"]
+        parameterized_config = MODALITY_CONFIG["images"]
         subprocessor = self.get_component(parameterized_config["component_key"])
 
         # Get all other required components for processor
@@ -104,7 +104,7 @@ class GotOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             components[attribute] = self.get_component(attribute)
 
         processor = self.processor_class(**components, **self.prepare_processor_dict())
-        modality_input = self._prepare_modality_input("image")
+        modality_input = self._prepare_modality_input("images")
 
         # merge processor defaults when calling a subprocessor
         kwargs = parameterized_config["call_time_kwargs"]
