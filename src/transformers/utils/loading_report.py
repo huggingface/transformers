@@ -222,7 +222,7 @@ class LoadStateDictInfo:
         if len(rows) == 0:
             return None
 
-        headers = ["Key", "Status"]
+        headers = ["Key", "Status"]  # NOTE: if we could also show the shape, it would be more readable
         if term_w > 200:
             headers += ["Details"]
         else:

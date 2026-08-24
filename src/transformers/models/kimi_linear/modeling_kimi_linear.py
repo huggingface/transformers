@@ -728,7 +728,7 @@ class KimiLinearDeltaAttention(nn.Module):  # TODO: can we try to inherit from q
             past_key_values.update_recurrent_state(last_recurrent_state, self.layer_idx)
 
         # Apply normalization to the attention output
-        output_gate = self.output_gate_down(self.output_gate_up(hidden_states))
+        output_gate = self.output_gate_up(self.output_gate_down(hidden_states))
         output_gate = output_gate.reshape(value_shape)
         normed_attn_out = self.o_norm(core_attn_out, output_gate)
 

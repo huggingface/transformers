@@ -27,6 +27,7 @@ from .core_model_loading import (
     MergeModulelist,
     PermuteForRope,
     PrefixChange,
+    Reshape,
     Transpose,
     WeightConverter,
     WeightRenaming,
@@ -1755,6 +1756,54 @@ def _build_checkpoint_conversion_mapping():
     mapping["axk1"] = mapping["qwen2_moe"].copy()
     mapping["axk1"] += [
         WeightRenaming("post_mlp_layernorm", "mlp.post_mlp_layernorm"),
+    ]
+
+    mapping["kimi_linear"] = [
+        # Weight renamings for linear attention layers
+        WeightRenaming(source_patterns="self_attn.f_a_proj", target_patterns="self_attn.forget_gate_down"),
+        WeightRenaming(source_patterns="self_attn.f_b_proj", target_patterns="self_attn.forget_gate_up"),
+        WeightRenaming(source_patterns="self_attn.b_proj", target_patterns="self_attn.beta_proj"),
+        WeightRenaming(source_patterns="self_attn.g_a_proj", target_patterns="self_attn.output_gate_down"),
+        WeightRenaming(source_patterns="self_attn.g_b_proj", target_patterns="self_attn.output_gate_up"),
+        # Some linear attention parameters need a different view to be runtime compatible with the model
+        WeightConverter(
+            source_patterns="self_attn.A_log",
+            target_patterns="self_attn.A_log",
+            operations=[Reshape(initial_shape=(1, 1, -1, 1), final_shape=(-1, 1))],
+        ),
+        WeightConverter(
+            source_patterns="self_attn.dt_bias",
+            target_patterns="self_attn.dt_bias",
+            operations=[Reshape(initial_shape=(-1,), final_shape=("linear_num_key_heads", -1))],
+        ),
+        # Conv weights are stacked before runtime
+        WeightConverter(
+            source_patterns=[
+                "self_attn.q_conv1d.weight",
+                "self_attn.k_conv1d.weight",
+                "self_attn.v_conv1d.weight",
+            ],
+            target_patterns="self_attn.conv1d.weight",
+            operations=[Concatenate(dim=0)],
+        ),
+
+        # Rename MoEs so they have the same prefix as the MLPs
+        WeightRenaming(source_patterns=r"\.block_sparse_moe\.", target_patterns=r"\.mlp\."),
+        # Concatenate w1 (gate) and w3 (up) weights into a single weight and merge across experts
+        WeightConverter(
+            source_patterns=[
+                "mlp.experts.*.w1.weight",
+                "mlp.experts.*.w3.weight",
+            ],
+            target_patterns="mlp.experts.gate_up_proj",
+            operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+        ),
+        # Merge w2 (down) weights across experts
+        WeightConverter(
+            source_patterns="mlp.experts.*.w2.weight",
+            target_patterns="mlp.experts.down_proj",
+            operations=[MergeModulelist(dim=0)],
+        ),
     ]
 
     mapping["MtpModel"] = [

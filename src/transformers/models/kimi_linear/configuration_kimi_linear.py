@@ -148,7 +148,7 @@ class KimiLinearConfig(PreTrainedConfig):
         if self.mlp_layer_types is None:
             first_k_dense_replace = kwargs.pop("first_k_dense_replace", 1)
             self.mlp_layer_types = [
-                "sparse" if i < first_k_dense_replace else "dense" for i in range(self.num_hidden_layers)
+                "dense" if i < first_k_dense_replace else "sparse" for i in range(self.num_hidden_layers)
             ]
 
 
