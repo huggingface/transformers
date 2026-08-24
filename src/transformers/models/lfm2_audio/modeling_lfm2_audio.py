@@ -221,7 +221,7 @@ class Lfm2AudioDetokenizer(PreTrainedModel):
         self.post_init()
 
     @auto_docstring
-    def forward(self, audio_codes: torch.LongTensor) -> torch.FloatTensor:
+    def forward(self, audio_codes: torch.LongTensor, **kwargs: Unpack[TransformersKwargs]) -> torch.FloatTensor:
         r"""
         audio_codes (`torch.LongTensor` of shape `(batch_size, 8, audio_timesteps)`):
             Generated audio codebooks with values in the range `[0, 2047]`.
