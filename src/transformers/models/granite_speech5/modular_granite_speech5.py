@@ -28,6 +28,7 @@ from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from ..llama.modeling_llama import eager_attention_forward
+from ..moonshine_streaming.modeling_moonshine_streaming import MoonshineStreamingEncoderAttention
 from ..parakeet.configuration_parakeet import ParakeetCTCConfig
 from ..parakeet.modeling_parakeet import (
     ParakeetEncoder,
@@ -152,19 +153,11 @@ class GraniteSpeech5CTCConfig(ParakeetCTCConfig):
 class GraniteSpeech5EncoderModelOutput(ParakeetEncoderModelOutput): ...
 
 
-class GraniteSpeech5EncoderAttention(nn.Module):
+class GraniteSpeech5EncoderAttention(MoonshineStreamingEncoderAttention):
     """Block-wise self-attention with Shaw's relative positional embeddings."""
 
     def __init__(self, config: GraniteSpeech5EncoderConfig, layer_idx: int):
-        super().__init__()
-        self.config = config
-        self.layer_idx = layer_idx
-        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
-        self.scaling = self.head_dim**-0.5
-        self.attention_dropout = config.attention_dropout
-        self.is_causal = False
-
+        super().__init__(config, layer_idx)
         self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
