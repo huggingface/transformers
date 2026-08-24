@@ -335,7 +335,7 @@ def default_sample_indices_fn(metadata: VideoMetadata, num_frames=None, fps=None
                 f"When loading the video with num_frames={num_frames}, the requested number of frames "
                 f"exceeds total_num_frames={total_num_frames}. Please set num_frames or fps to a smaller value."
             )
-        indices = np.arange(0, total_num_frames, total_num_frames / num_frames, dtype=int)
+        indices = np.arange(num_frames, dtype=int) * total_num_frames // num_frames
     else:
         indices = np.arange(0, total_num_frames, dtype=int)
     return indices
