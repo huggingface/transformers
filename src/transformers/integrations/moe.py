@@ -235,8 +235,14 @@ def _grouped_mm_fallback_backward(ctx, grad_output):
     for i, end in enumerate(ctx.offs.tolist()):
         if start == end:
             continue
-        torch.mm(grad_output[start:end].to(weight[i].dtype), weight[i].T, out=grad_input[start:end].to(weight[i].dtype))
-        torch.mm(input[start:end].T.to(grad_weight[i].dtype), grad_output[start:end].to(grad_weight[i].dtype), out=grad_weight[i])
+        torch.mm(
+            grad_output[start:end].to(weight[i].dtype), weight[i].T, out=grad_input[start:end].to(weight[i].dtype)
+        )
+        torch.mm(
+            input[start:end].T.to(grad_weight[i].dtype),
+            grad_output[start:end].to(grad_weight[i].dtype),
+            out=grad_weight[i],
+        )
         start = end
 
     return grad_input, grad_weight, None
