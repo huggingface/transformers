@@ -11,16 +11,41 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from huggingface_hub.dataclasses import strict
 
+
+from collections.abc import Callable
+
+import torch
+import torch.nn.functional as F
+from einops import rearrange
+from huggingface_hub.dataclasses import strict
+from torch import nn
+
+from ...activations import ACT2FN
+from ...cache_utils import Cache
+from ...generation import GenerationMixin
+from ...integrations import use_kernel_func_from_hub_with_fallback
+from ...masking_utils import create_causal_mask
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_outputs import BaseModelOutputWithPast
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...models.deepseek_v3.configuration_deepseek_v3 import DeepseekV3Config
-from ...utils import auto_docstring
+from ...models.deepseek_v3.modeling_deepseek_v3 import (
+    DeepseekV3Experts,
+    DeepseekV3ForCausalLM,
+    DeepseekV3MLP,
+    DeepseekV3MoE,
+    DeepseekV3TopkRouter,
+)
+from ...models.llama.modeling_llama import LlamaRMSNorm, eager_attention_forward  # used in modeling
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring
+from ...utils.generic import OutputRecorder, check_model_inputs
 
 
 @auto_docstring(checkpoint="moonshotai/Kimi-Linear-48B-A3B-Base")
 @strict
 class KimiLinearConfig(DeepseekV3Config):
-
     model_type = "kimi_linear"
     attribute_map = {
         "model_max_length": "max_position_embeddings",
@@ -75,7 +100,7 @@ class KimiLinearConfig(DeepseekV3Config):
         elif "full_attn_layers" in linear_attn_config and "kda_layers" in linear_attn_config:
             self.layer_types = [None] * self.num_hidden_layers
             for layer in linear_attn_config["full_attn_layers"]:
-                self.layer_types[layer - 1] = "full_attention"  # for some reason, types are 1-indexed in the checkpoint
+                self.layer_types[layer - 1] = "full_attention"  # types are 1-indexed in the checkpoint
             for layer in linear_attn_config["kda_layers"]:
                 self.layer_types[layer - 1] = "kda_attention"
             if None in self.layer_types:
@@ -93,3 +118,26 @@ class KimiLinearConfig(DeepseekV3Config):
             mla_use_nope = kwargs.pop("mla_use_nope", True)
             mla_nope = {"rope_type": "default", "rope_theta": rope_theta}
             self.rope_parameters = {"full_attention": None if mla_use_nope else mla_nope, "kda_attention": None}
+
+
+class KimiLinearRMSNorm(LlamaRMSNorm):
+    pass
+
+
+class KimiLinearExperts(DeepseekV3Experts):
+    pass
+
+
+class KimiLinearMLP(DeepseekV3MLP):
+    pass
+
+
+
+class KimiLinearTopkRouter(DeepseekV3TopkRouter):
+    pass
+
+
+class KimiLinearSparseMoeBlock(DeepseekV3MoE):
+    pass
+
+
