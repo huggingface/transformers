@@ -301,7 +301,10 @@ class TestDFlashTokenCandidateGenerator(unittest.TestCase):
         self.assertEqual(candidate_ids.shape, (1, input_ids.shape[-1] + assistant_config.block_size - 1))
         self.assertEqual(candidate_logits.shape, (1, assistant_config.block_size - 1, main_config.vocab_size))
         expected_context_hidden_states = torch.cat(
-            [full_outputs.hidden_states[i + 1][:, : input_ids.shape[-1] - 1] for i in assistant_config.target_layer_ids],
+            [
+                full_outputs.hidden_states[i + 1][:, : input_ids.shape[-1] - 1]
+                for i in assistant_config.target_layer_ids
+            ],
             dim=-1,
         )
         torch.testing.assert_close(assistant_model.context_hidden_states, expected_context_hidden_states)
