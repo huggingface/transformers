@@ -328,13 +328,17 @@ class RTDetrImageProcessor(TorchvisionBackend):
 
     def pad(
         self,
-        images: torch.Tensor,
+        image: torch.Tensor,
         padded_size: tuple[int, int],
-        annotations: list[dict[str, Any]] | None = None,
+        annotation: dict[str, Any] | list[dict[str, Any]] | None = None,
         update_bboxes: bool = True,
         fill: int = 0,
-    ) -> tuple["torch.Tensor", "torch.Tensor", list[dict[str, Any]] | None]:
-        original_size = images.shape[-2:]
+    ) -> tuple["torch.Tensor", "torch.Tensor", dict[str, Any] | list[dict[str, Any]] | None]:
+        """
+        Pad an image, or a batch of stacked images, to `padded_size`. If a single annotation is passed, a single
+        annotation is returned. If a list of annotations is passed, a list is returned.
+        """
+        original_size = image.shape[-2:]
         padding_bottom = padded_size[0] - original_size[0]
         padding_right = padded_size[1] - original_size[1]
         if padding_bottom < 0 or padding_right < 0:
@@ -344,20 +348,23 @@ class RTDetrImageProcessor(TorchvisionBackend):
             )
         if original_size != padded_size:
             padding = [0, 0, padding_right, padding_bottom]
-            images = tvF.pad(images, padding, fill=fill)
-            if annotations is not None:
+            image = tvF.pad(image, padding, fill=fill)
+            if annotation is not None:
+                is_single_annotation = isinstance(annotation, dict)
+                annotations = [annotation] if is_single_annotation else annotation
                 annotations = [
                     self._update_annotation_for_padded_image(
-                        annotation, original_size, padded_size, padding, update_bboxes
+                        single_annotation, original_size, padded_size, padding, update_bboxes
                     )
-                    for annotation in annotations
+                    for single_annotation in annotations
                 ]
+                annotation = annotations[0] if is_single_annotation else annotations
 
-        # Make a pixel mask for each image, where 1 indicates a valid pixel and 0 indicates padding.
-        pixel_mask = torch.zeros((images.shape[0], *padded_size), dtype=torch.int64, device=images.device)
-        pixel_mask[:, : original_size[0], : original_size[1]] = 1
+        # Make a pixel mask for the image(s), where 1 indicates a valid pixel and 0 indicates padding.
+        pixel_mask = torch.zeros((*image.shape[:-3], *padded_size), dtype=torch.int64, device=image.device)
+        pixel_mask[..., : original_size[0], : original_size[1]] = 1
 
-        return images, pixel_mask, annotations
+        return image, pixel_mask, annotation
 
     @auto_docstring
     def preprocess(
@@ -484,7 +491,7 @@ class RTDetrImageProcessor(TorchvisionBackend):
                 grouped_images[key], grouped_masks[key], grouped_annotations[key] = self.pad(
                     stacked_images,
                     padded_size,
-                    annotations=grouped_annotations[key],
+                    annotation=grouped_annotations[key],
                     update_bboxes=do_convert_annotations,
                 )
 

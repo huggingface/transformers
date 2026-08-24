@@ -189,7 +189,7 @@ class RfDetrImageProcessor(DetrImageProcessor):
                 grouped_images[key], grouped_masks[key], grouped_annotations[key] = self.pad(
                     stacked_images,
                     padded_size,
-                    annotations=grouped_annotations[key],
+                    annotation=grouped_annotations[key],
                     update_bboxes=do_convert_annotations,
                 )
 
