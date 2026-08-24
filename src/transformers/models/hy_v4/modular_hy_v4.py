@@ -167,6 +167,9 @@ class HYV4Config(PreTrainedConfig):
     rope_parameters: RopeParameters | dict | None = None
 
     def __post_init__(self, **kwargs):
+        # MLA expands the latent to one key/value per query head, so keys are never grouped.
+        self.num_key_value_heads = self.num_attention_heads
+
         self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
         # RoPE applies only to the rope slice, so `head_dim` points at it.
         self.head_dim = self.qk_rope_head_dim

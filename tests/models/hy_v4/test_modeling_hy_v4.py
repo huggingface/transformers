@@ -106,6 +106,17 @@ class HYV4ModelTest(CausalLMModelTest, unittest.TestCase):
         self.assertEqual(state_dict["layers.0.hc_attn_layer.hc_fn"].dtype, torch.float32)
         self.assertEqual(state_dict["hc_head.hc_head_fn"].dtype, torch.float32)
 
+    def test_grouped_kv_head_count_is_normalized_for_mla(self):
+        config = HYV4Config(num_attention_heads=8, num_key_value_heads=1)
+        self.assertEqual(config.num_key_value_heads, 8)
+
+        config = self.model_tester.get_config()
+        model = HYV4Model(config).eval()
+        self.assertEqual(model.layers[0].self_attn.num_key_value_groups, 1)
+        with torch.no_grad():
+            output = model(input_ids=torch.randint(0, config.vocab_size, (1, 3)), use_cache=False)
+        self.assertEqual(output.last_hidden_state.shape, (1, 3, config.hidden_size))
+
     def test_sink_parameter_layout(self):
         config = self.model_tester.get_config()
         attention = HYV4Model(config).eval().layers[0].self_attn
