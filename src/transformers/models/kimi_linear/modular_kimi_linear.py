@@ -31,6 +31,7 @@ from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...models.deepseek_v3.configuration_deepseek_v3 import DeepseekV3Config
 from ...models.deepseek_v3.modeling_deepseek_v3 import (
+    DeepseekV3Attention,
     DeepseekV3Experts,
     DeepseekV3ForCausalLM,
     DeepseekV3MLP,
@@ -74,7 +75,6 @@ class KimiLinearConfig(DeepseekV3Config):
     pad_token_id: int | None = 163839
     bos_token_id: int | None = 163584
     eos_token_id: int | list[int] | None = 163586
-    # attention_bias: bool = False  # TODO: can we drop? Always False in the model
     layer_types: list[str] | None = None
     num_mtp_layers: int = 0
 
@@ -112,13 +112,8 @@ class KimiLinearConfig(DeepseekV3Config):
                 "full_attention" if i and i % 4 == 0 else "kda_attention" for i in range(self.num_hidden_layers)
             ]
 
-        # KDA layers never use rotary embeddings; full-attention (MLA) layers only do when `mla_use_nope` is False
-        if self.rope_parameters is None:
-            rope_theta = kwargs.pop("rope_theta", 10000.0)
-            mla_use_nope = kwargs.pop("mla_use_nope", True)
-            mla_nope = {"rope_type": "default", "rope_theta": rope_theta}
-            self.rope_parameters = {"full_attention": None if mla_use_nope else mla_nope, "kda_attention": None}
-
+        # Attention layers never use bias, this is kept to inherit from DSV3
+        self.attention_bias: bool = False
 
 class KimiLinearRMSNorm(LlamaRMSNorm):
     pass
@@ -130,6 +125,65 @@ class KimiLinearExperts(DeepseekV3Experts):
 
 class KimiLinearMLP(DeepseekV3MLP):
     pass
+
+
+
+class KimiLinearAttention(DeepseekV3Attention):
+    """Multi-headed Latent Attention (MLA) from Deepseek V2 with NoPE, but the part of the keys where RoPE is applied is
+    still shared."""
+
+    def __init__(self, config: KimiLinearConfig, layer_idx: int):
+        config.attention_bias = False
+        super().__init__(config, layer_idx)
+        self.scaling = self.qk_head_dim ** (-0.5)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None,
+        past_key_values: Cache | None = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
+        batch_size, seq_length = hidden_states.shape[:-1]
+        query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
+
+        if self.q_lora_rank is None:
+            q_states = self.q_proj(hidden_states)
+        else:
+            q_states = self.q_b_proj(self.q_a_layernorm(self.q_a_proj(hidden_states)))
+        query_states = q_states.view(query_shape).transpose(1, 2)
+
+        compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
+        kv_nope, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
+        kv_nope = self.kv_a_layernorm(kv_nope)
+        # Both latents are viewed as single-head, 4D tensors so all cache layers handle them correctly
+        kv_nope = kv_nope.view(batch_size, 1, seq_length, self.kv_lora_rank)
+        k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
+
+        # Cache read / write is performed while latent KV is still compressed
+        if past_key_values is not None:
+            kv_nope, k_rot = past_key_values.update(kv_nope, k_rot, self.layer_idx)
+
+        key_states, value_states = self.expand_kv(kv_nope, k_rot)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
 
 
 

@@ -154,102 +154,108 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-# Closest parent: DeepseekV3Attention. NEEDS ADJUSTMENT (small): q_proj/kv_a_proj_with_mqa/kv_a_layernorm/
-# kv_b_proj/o_proj, the flash-attn v_head_dim padding trick, and the eager_attention_forward call are all
-# identical. Only difference: DeepseekV3Attention.forward requires `position_embeddings` and always applies
-# rope; this needs it to become optional and skip rope when `None` (Kimi's NoPE full-attention layers).
-class KimiLinearMLAAttention(nn.Module):
-    """
-    Multi-Latent Attention adapted from deepseek-v3
-    """
+class KimiLinearAttention(nn.Module):
+    """Multi-headed Latent Attention (MLA) from Deepseek V2 with NoPE, but the part of the keys where RoPE is applied is
+    still shared."""
 
     def __init__(self, config: KimiLinearConfig, layer_idx: int):
-        nn.Module.__init__(self)
+        super().__init__()
+        config.attention_bias = False
         self.config = config
         self.layer_idx = layer_idx
+        self.attention_dropout = config.attention_dropout
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
-        self.num_key_value_heads = config.num_key_value_heads
-        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
 
-        self.rope_theta = config.rope_theta
-        self.attention_dropout = getattr(config, "attention_dropout", 0.0)
+        self.q_lora_rank = config.q_lora_rank
+        self.qk_rope_head_dim = config.qk_rope_head_dim
+        self.kv_lora_rank = config.kv_lora_rank
+        self.v_head_dim = config.v_head_dim
+        self.qk_nope_head_dim = config.qk_nope_head_dim
+        self.qk_head_dim = config.qk_nope_head_dim + config.qk_rope_head_dim
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
 
-        try:
-            self.q_lora_rank = config.q_lora_rank
-            self.qk_rope_head_dim = config.qk_rope_head_dim
-            self.kv_lora_rank = config.kv_lora_rank
-            self.v_head_dim = config.v_head_dim
-            self.qk_nope_head_dim = config.qk_nope_head_dim
-            self.q_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
-            self.use_nope = config.mla_use_nope
-            self.scaling = self.q_head_dim ** (-0.5)
-        except Exception as e:
-            raise ValueError(f"Kimi MLA config is not found or not properly formatted: {e}")
+        self.is_causal = True
 
-        assert self.q_lora_rank is None
-        self.q_proj = nn.Linear(
-            self.hidden_size,
-            self.num_heads * self.q_head_dim,
-            bias=False,
-        )
+        if self.q_lora_rank is None:
+            self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
+        else:
+            self.q_a_proj = nn.Linear(self.hidden_size, self.q_lora_rank, bias=config.attention_bias)
+            self.q_a_layernorm = KimiLinearRMSNorm(self.q_lora_rank)
+            self.q_b_proj = nn.Linear(self.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
+
         self.kv_a_proj_with_mqa = nn.Linear(
             self.hidden_size,
-            self.kv_lora_rank + self.qk_rope_head_dim,
-            bias=False,
+            config.kv_lora_rank + config.qk_rope_head_dim,
+            bias=config.attention_bias,
         )
-        self.kv_a_layernorm = KimiLinearRMSNorm(self.kv_lora_rank)
+        self.kv_a_layernorm = KimiLinearRMSNorm(config.kv_lora_rank)
         self.kv_b_proj = nn.Linear(
-            self.kv_lora_rank,
-            self.num_heads * (self.q_head_dim - self.qk_rope_head_dim + self.v_head_dim),
+            config.kv_lora_rank,
+            self.num_heads * (self.qk_nope_head_dim + self.v_head_dim),
             bias=False,
         )
+
         self.o_proj = nn.Linear(
             self.num_heads * self.v_head_dim,
             self.hidden_size,
-            bias=False,
+            bias=config.attention_bias,
         )
-        self.is_causal = True
-        assert self.use_nope
+        self.scaling = self.qk_head_dim ** (-0.5)
+
+    def expand_kv(self, kv_nope: torch.Tensor, k_rot: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """Expands the compressed latents into key and value states. Args:
+            - kv_nope: key + value without positional encoding, shape [batch_size, 1, seqlen, self.kv_lora_rank]
+            - k_rot: shared key with positional encoding, shape [batch_size, 1, seqlen, self.qk_rope_head_dim]
+        Returns the key and value states, two tensors of shape [batch, num_heads, seq, (k or v)_head_dim].
+        """
+        batch_size, _, seq_length, _ = kv_nope.shape
+        key_shape = (batch_size, seq_length, -1, self.qk_nope_head_dim + self.v_head_dim)
+
+        kv_nope = self.kv_b_proj(kv_nope).view(key_shape).transpose(1, 2)
+        k_nope, value_states = torch.split(kv_nope, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
+        k_rot = k_rot.expand(-1, k_nope.shape[1], -1, -1)  # does not affect the underlying storage
+
+        # Concatenate k_nope and k_rot in a new tensor
+        key_states = kv_nope.new_empty(*kv_nope.shape[:-1], self.qk_nope_head_dim + self.qk_rope_head_dim)
+        key_states[..., : self.qk_nope_head_dim].copy_(k_nope)
+        key_states[..., self.qk_nope_head_dim :].copy_(k_rot)
+        return key_states, value_states
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
-        **kwargs,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         batch_size, seq_length = hidden_states.shape[:-1]
-        query_shape = (batch_size, seq_length, -1, self.q_head_dim)
-        key_shape = (batch_size, seq_length, -1, self.qk_nope_head_dim + self.v_head_dim)
+        query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
 
-        q_states = self.q_proj(hidden_states)
-        q_states = q_states.view(query_shape).transpose(1, 2)
-        q_pass, q_rot = torch.split(q_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
+        if self.q_lora_rank is None:
+            q_states = self.q_proj(hidden_states)
+        else:
+            q_states = self.q_b_proj(self.q_a_layernorm(self.q_a_proj(hidden_states)))
+        query_states = q_states.view(query_shape).transpose(1, 2)
 
         compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
-        k_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
-
-        k_pass = self.kv_b_proj(self.kv_a_layernorm(k_pass)).view(key_shape).transpose(1, 2)
-        k_pass, value_states = torch.split(k_pass, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
-
+        kv_nope, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
+        kv_nope = self.kv_a_layernorm(kv_nope)
+        # Both latents are viewed as single-head, 4D tensors so all cache layers handle them correctly
+        kv_nope = kv_nope.view(batch_size, 1, seq_length, self.kv_lora_rank)
         k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
-        k_rot = k_rot.expand(*k_pass.shape[:-1], -1)
 
-        query_states = torch.cat((q_pass, q_rot), dim=-1)
-        key_states = torch.cat((k_pass, k_rot), dim=-1)
-
+        # Cache read / write is performed while latent KV is still compressed
         if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+            kv_nope, k_rot = past_key_values.update(kv_nope, k_rot, self.layer_idx)
 
-        if self.config._attn_implementation == "flash_attention_2" and self.q_head_dim != self.v_head_dim:
-            value_states = F.pad(value_states, [0, self.q_head_dim - self.v_head_dim])
+        key_states, value_states = self.expand_kv(kv_nope, k_rot)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
-        attn_output, _ = attention_interface(
+        attn_output, attn_weights = attention_interface(
             self,
             query_states,
             key_states,
@@ -260,12 +266,9 @@ class KimiLinearMLAAttention(nn.Module):
             **kwargs,
         )
 
-        if self.config._attn_implementation == "flash_attention_2" and self.q_head_dim != self.v_head_dim:
-            attn_output = attn_output[:, :, :, : self.v_head_dim]
-
         attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
         attn_output = self.o_proj(attn_output)
-        return attn_output
+        return attn_output, attn_weights
 
 
 # Closest parent: Qwen3NextGatedDeltaNet. NEEDS ADJUSTMENT: the conv1d / chunked-delta-rule recurrence /
