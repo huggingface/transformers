@@ -1887,6 +1887,7 @@ class GenerationMixin(ContinuousMixin):
             cache = EncoderDecoderCache(cache, StaticCache(**cross_attention_cache_kwargs))
 
         if self.config.is_encoder_decoder:
+            assert isinstance(cache, EncoderDecoderCache)  # always true: assigned above when is_encoder_decoder
             # Eagerly initialize the K/V buffers so that `mark_static_address` is applied before any
             # `torch.compile` / CUDAGraph capture context. Without this, `lazy_initialization` runs inside
             # graph capture (where `is_torchdynamo_compiling()` is True), causing `mark_static_address` to
