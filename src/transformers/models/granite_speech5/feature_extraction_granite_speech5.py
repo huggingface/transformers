@@ -92,11 +92,6 @@ class GraniteSpeech5FeatureExtractor(SequenceFeatureExtractor):
             n_mels=num_mel_bins,
         )
 
-    def get_num_encoder_frames(self, num_raw_samples: int) -> int:
-        """Number of stacked encoder frames produced for a raw waveform of `num_raw_samples` samples."""
-        mel_frames = num_raw_samples // self.hop_length
-        return -(-mel_frames // self.frame_stacking)
-
     def __call__(
         self,
         raw_speech: "np.ndarray | list[float] | list[np.ndarray] | list[list[float]]",
@@ -136,10 +131,8 @@ class GraniteSpeech5FeatureExtractor(SequenceFeatureExtractor):
 
         data = {"input_features": input_features}
         if return_attention_mask:
-            encoder_frame_counts = torch.tensor(
-                [self.get_num_encoder_frames(length) for length in audio_lengths],
-                device=input_features.device,
-            )
+            mel_frames = torch.tensor(audio_lengths, device=input_features.device) // self.hop_length
+            encoder_frame_counts = -(-mel_frames // self.frame_stacking)
             max_enc_frames = input_features.shape[1]
             attention_mask = (
                 torch.arange(max_enc_frames, device=input_features.device)[None, :] < encoder_frame_counts[:, None]
