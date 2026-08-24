@@ -277,7 +277,7 @@ class Qwen3VLVisionBlock(Qwen2_5_VLVisionBlock):
 
 class Qwen3VLTextRotaryEmbedding(Ernie4_5_VLMoeTextRotaryEmbedding):
     def __init__(self, config, device=None):
-        super().__init__()
+        nn.Module.__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
         self.config = config
@@ -289,7 +289,7 @@ class Qwen3VLTextRotaryEmbedding(Ernie4_5_VLMoeTextRotaryEmbedding):
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
+        self.original_inv_freq = nn.Buffer(inv_freq, persistent=False)
 
         self.mrope_section = config.rope_parameters.get("mrope_section", [24, 20, 20])
 

@@ -151,12 +151,10 @@ class Qwen3VLVisionRotaryEmbedding(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, ...].float()
-        position_ids_expanded = position_ids.transpose(0, 1)[..., None].float()  # (positions, 2, 1)
-
+        # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = position_ids_expanded @ inv_freq_expanded
+        with maybe_autocast(device_type=device_type, enabled=False):
+            freqs = position_ids[..., None].float() * self.inv_freq
             cos = freqs.cos() * self.attention_scaling
             sin = freqs.sin() * self.attention_scaling
 
@@ -166,7 +164,7 @@ class Qwen3VLVisionRotaryEmbedding(nn.Module):
 
     def recomposition_to_2d(self, freq):
         # take each grid's (N, D), the full frequency range
-        freq_h, freq_w = freq[0], freq[1]
+        freq_h, freq_w = freq[:, 0], freq[:, 1]
         freq_hw = torch.cat([freq_h, freq_w], dim=-1)
         return torch.cat([freq_hw, freq_hw], dim=-1)
 
@@ -369,15 +367,13 @@ class Qwen3VLTextRotaryEmbedding(nn.Module):
         self.rope_type = self.config.rope_parameters["rope_type"]
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
-            raise ValueError(f"Ernie 4.5 VL requires the `default` rope type, but found {self.rope_type} instead.")
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
+        self.original_inv_freq = nn.Buffer(inv_freq, persistent=False)
 
         self.mrope_section = config.rope_parameters.get("mrope_section", [24, 20, 20])
-        if self.rope_type != "default":
-            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
     @staticmethod
     @deprecate_kwarg("device", version="5.18")
@@ -411,7 +407,7 @@ class Qwen3VLTextRotaryEmbedding(nn.Module):
         inv_freq_3d[:hw_dim] = torch.cat([inv_freq[:-t_dim][0::2], inv_freq[:-t_dim][1::2]])
         inv_freq_3d[-t_dim:] = inv_freq[-t_dim:]
 
-        return inv_freq_3d.to(device), attention_factor
+        return inv_freq_3d, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
