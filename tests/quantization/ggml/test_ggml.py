@@ -27,6 +27,7 @@ from transformers import (
 from transformers.testing_utils import (
     require_gguf,
     require_torch_accelerator,
+    require_torch_accelerator_memory,
     slow,
     torch_device,
 )
@@ -386,6 +387,8 @@ class GgufModelTests(unittest.TestCase):
         EXPECTED_TEXT = "Hello.jsoup\n\nI am a beginner"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
+    # GGUF weights are dequantized on load, so this is ~21B parameters in float16 (~39 GiB).
+    @require_torch_accelerator_memory(memory=48)
     def test_gpt_oss_q5_k_m(self):
         tokenizer = AutoTokenizer.from_pretrained(self.gpt_oss_model_id, gguf_file=self.gpt_oss_gguf_file)
         model = AutoModelForCausalLM.from_pretrained(
