@@ -33,11 +33,7 @@ if is_torchaudio_available():
 class GraniteSpeech5FeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a Granite Speech 5.0 feature extractor.
-
-    This feature extractor inherits from [`~feature_extraction_sequence_utils.SequenceFeatureExtractor`] which contains
-    most of the main methods. Users should refer to this superclass for more information regarding those methods.
-
-    Args:
+      Args:
         num_mel_bins (`int`, *optional*, defaults to 80):
             Number of mel filter banks.
         sampling_rate (`int`, *optional*, defaults to 16000):
@@ -58,9 +54,8 @@ class GraniteSpeech5FeatureExtractor(SequenceFeatureExtractor):
 
     model_input_names = ["input_features", "attention_mask"]
 
-    # fixed for this architecture, and mirrored by [`GraniteSpeech5Subsampling`], which sizes the encoder's
-    # input projection from them: every mel frame is concatenated with its delta, and pairs of consecutive
-    # frames are stacked
+    # hardcoded in modeling for this architecture (see [`GraniteSpeech5Subsampling`]):
+    # every mel frame is concatenated with its delta, and pairs of consecutive frames are stacked
     delta_expansion = 2
     frame_stacking = 2
 
@@ -165,7 +160,8 @@ class GraniteSpeech5FeatureExtractor(SequenceFeatureExtractor):
 
         mono_clips = []
         for clip in clips:
-            clip = torch.as_tensor(np.asarray(clip) if not isinstance(clip, torch.Tensor) else clip)
+            if not isinstance(clip, torch.Tensor):
+                clip = torch.from_numpy(np.require(clip, requirements=["W"]))
             if clip.ndim > 1:
                 logger.warning(
                     f"Only mono-channel audio is supported for input to {self.__class__.__name__}. "

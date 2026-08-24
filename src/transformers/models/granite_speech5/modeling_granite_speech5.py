@@ -367,6 +367,8 @@ class GraniteSpeech5Encoder(GraniteSpeech5PreTrainedModel):
         self.gradient_checkpointing = False
 
         self.register_buffer("attention_dists", self.compute_attention_dists(), persistent=False)
+        # see [`feature_extraction_granite_speech5.GraniteSpeech5FeatureExtractor`]
+        # mel frames are delta-expanded (×2), then stacked in pairs (×2)
         self.input_linear = nn.Linear(config.num_mel_bins * 4, config.hidden_size, bias=True)
         self.layers = nn.ModuleList(
             [
