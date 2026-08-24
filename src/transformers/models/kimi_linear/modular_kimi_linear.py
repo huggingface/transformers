@@ -17,14 +17,12 @@ from collections.abc import Callable
 
 import torch
 import torch.nn.functional as F
-from einops import rearrange
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
-from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_func_from_hub_with_fallback
+from ...integrations import use_kernel_func_from_hub_with_fallback, use_kernelized_func
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast
@@ -39,9 +37,15 @@ from ...models.deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3TopkRouter,
 )
 from ...models.llama.modeling_llama import LlamaRMSNorm, eager_attention_forward  # used in modeling
+from ...models.qwen3_next.modeling_qwen3_next import (
+    Qwen3NextRMSNormGated,
+    causal_conv1d_fn,
+    causal_conv1d_update,
+)
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import OutputRecorder, check_model_inputs
+from ..bamba.modeling_bamba import apply_mask_to_padding_states
 
 
 @auto_docstring(checkpoint="moonshotai/Kimi-Linear-48B-A3B-Base")
@@ -118,6 +122,8 @@ class KimiLinearConfig(DeepseekV3Config):
 class KimiLinearRMSNorm(LlamaRMSNorm):
     pass
 
+class KimiLinearRMSNormGated(Qwen3NextRMSNormGated):
+    pass
 
 class KimiLinearExperts(DeepseekV3Experts):
     pass
@@ -408,7 +414,10 @@ def torch_recurrent_kda(
     return core_attn_out, last_recurrent_state
 
 
-class KimiK3DeltaAttention(nn.Module):
+@use_kernelized_func(
+    [torch_recurrent_kda, torch_chunk_kda, causal_conv1d_fn, causal_conv1d_update]
+)
+class KimiLinearDeltaAttention(nn.Module):
     # Annotations to make ty happy
     chunk_kda: Callable[..., tuple[torch.Tensor, torch.Tensor | None]]
     recurrent_kda: Callable[..., tuple[torch.Tensor, torch.Tensor | None]]
@@ -588,7 +597,67 @@ class KimiLinearTopkRouter(DeepseekV3TopkRouter):
     pass
 
 
-class KimiLinearSparseMoeBlock(DeepseekV3MoE):
+class KimiLinearMoE(DeepseekV3MoE):
     pass
+
+class KimiLinearDecoderLayer(DeepseekV3DecoderLayer):
+
+    def __init__(self, config: KimiLinearConfig, layer_idx: int):
+        nn.Module.__init__(self)
+        self.hidden_size = config.hidden_size
+
+        if self.layer_type == "full_attention":
+            self.self_attn = KimiLinearAttention(config=config, layer_idx=layer_idx)
+        else:
+            self.self_attn = KimiLinearDeltaAttention(config=config, layer_idx=layer_idx)
+
+        if layer_idx >= config.first_k_dense_replace:
+            self.mlp = KimiLinearMoE(config)
+        else:
+            self.mlp = KimiLinearMLP(config)
+
+        self.input_layernorm = KimiLinearRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = KimiLinearRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+class KimiLinearPreTrainedModel(PreTrainedModel):
+    config: KimiLinearConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["KimiLinearDecoderLayer"]
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _can_record_outputs = {
+        "router_logits": OutputRecorder(KimiLinearTopkRouter, index=0),
+        "hidden_states": KimiLinearDecoderLayer,
+        "attentions": KimiLinearAttention,
+    }
+    _is_stateful = True
+    _can_compile_fullgraph = True  # TODO: check
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, KimiLinearDeltaAttention):
+            init.ones_(module.dt_bias)
+            # Lower bound kept away from 0 so log(A) never becomes -inf
+            init.copy_(
+                module.A_log, torch.empty(module.num_v_heads, device=module.A_log.device).uniform_(0.01, 16).log_(),
+            )
+        # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
+        elif isinstance(module, KimiLinearRMSNorm):
+            init.zeros_(module.weight)
+        elif isinstance(module, KimiLinearExperts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, KimiLinearMoE):
+            init.normal_(module.gate.weight, mean=0.0, std=self.config.initializer_range)
+
+        # TODO: check what we keep in this
+        # elif isinstance(module, nn.Embedding):
+        #     module.weight.data.normal_(mean=0.0, std=std)
+        #     if module.padding_idx is not None:
+        #         module.weight.data[module.padding_idx].zero_()
+
 
 
