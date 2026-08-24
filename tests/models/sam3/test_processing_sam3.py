@@ -62,7 +62,7 @@ class Sam3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # Regression test for https://github.com/huggingface/transformers/issues/45059:
         # None entries should get pad label (-10), real entries should get positive label (1).
         processor = self.get_processor()
-        images = self.prepare_image_inputs(batch_size=2)
+        images = self.prepare_images_inputs(batch_size=2)
         inputs = processor(
             images=images,
             text=["cat", None],
@@ -79,7 +79,7 @@ class Sam3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def test_input_boxes_default_labels_all_real(self):
         processor = self.get_processor()
-        images = self.prepare_image_inputs(batch_size=2)
+        images = self.prepare_images_inputs(batch_size=2)
         inputs = processor(
             images=images,
             text=["cat", "dog"],
@@ -91,7 +91,7 @@ class Sam3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def test_no_input_boxes_omits_labels(self):
         processor = self.get_processor()
-        images = self.prepare_image_inputs(batch_size=1)
+        images = self.prepare_images_inputs(batch_size=1)
         inputs = processor(
             images=images,
             text=["cat"],
@@ -102,7 +102,7 @@ class Sam3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def test_user_provided_labels_preserved(self):
         processor = self.get_processor()
-        images = self.prepare_image_inputs(batch_size=2)
+        images = self.prepare_images_inputs(batch_size=2)
         inputs = processor(
             images=images,
             text=["cat", "dog"],

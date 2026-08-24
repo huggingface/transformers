@@ -34,7 +34,7 @@ class PPChart2TableProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def test_ocr_queries(self):
         processor = self.get_processor()
-        image_input = self.prepare_image_inputs()
+        image_input = self.prepare_images_inputs()
         conversation = [{"role": "user", "content": []}]
         inputs = processor.apply_chat_template(
             conversation,
@@ -54,7 +54,7 @@ class PPChart2TableProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = self.prepare_text_inputs(batch_size=2, modalities="image")
-        image_input = self.prepare_image_inputs(batch_size=2)
+        image_input = self.prepare_images_inputs(batch_size=2)
         inputs = processor(
             text=input_str,
             images=image_input,
@@ -62,10 +62,10 @@ class PPChart2TableProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             do_rescale=True,
             rescale_factor=-1.0,
             padding="longest",
-            max_length=self.image_unstructured_max_length,
+            max_length=self.images_unstructured_max_length,
         )
 
-        self.assertLessEqual(inputs[self.image_input_name][0][0].mean(), 0)
+        self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
 
     @unittest.skip(
         reason="PPChart2Table relies on a heavily predetermined input format; chat template usage is not intended as expected"

@@ -53,7 +53,7 @@ class SamProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         processor = SamProcessor(image_processor=image_processor)
 
-        image_input = self.prepare_image_inputs()
+        image_input = self.prepare_images_inputs()
 
         input_feat_extract = image_processor(image_input, return_tensors="pt")
         input_processor = processor(images=image_input, return_tensors="pt")
@@ -77,7 +77,7 @@ class SamProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         processor = SamProcessor(image_processor=image_processor)
 
-        image_input = self.prepare_image_inputs()
+        image_input = self.prepare_images_inputs()
         mask_input = self.prepare_mask_inputs()
 
         input_feat_extract = image_processor(images=image_input, segmentation_maps=mask_input, return_tensors="pt")

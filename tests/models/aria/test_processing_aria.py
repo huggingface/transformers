@@ -272,7 +272,7 @@ And who is that?<|im_end|>
             return_tensors="pt",
             processor_kwargs={"max_image_size": 980},
         )
-        self.assertListEqual(list(out_dict[self.image_input_name].shape), [1, 3, 980, 980])
+        self.assertListEqual(list(out_dict[self.images_input_name].shape), [1, 3, 980, 980])
 
     def test_special_mm_token_truncation(self):
         """Tests that special vision tokens do not get truncated when `truncation=True` is set."""
@@ -280,7 +280,7 @@ And who is that?<|im_end|>
         processor = self.get_processor()
 
         input_str = self.prepare_text_inputs(batch_size=2, modalities="image")
-        image_input = self.prepare_image_inputs(batch_size=2)
+        image_input = self.prepare_images_inputs(batch_size=2)
 
         _ = processor(
             text=input_str,

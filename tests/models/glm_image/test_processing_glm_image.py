@@ -39,7 +39,7 @@ class GlmImageProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def _setup_test_attributes(cls, processor):
         cls.image_token = processor.image_token
 
-    def prepare_image_inputs(self, batch_size: int | None = None, nested: bool = False):
+    def prepare_images_inputs(self, batch_size: int | None = None, nested: bool = False):
         """Override to create images with valid aspect ratio (< 4) for GLM-Image."""
         # GLM-Image requires aspect ratio < 4, so use near-square images
         image_inputs = [Image.fromarray(np.random.randint(0, 255, (256, 256, 3), dtype=np.uint8))]
@@ -53,7 +53,7 @@ class GlmImageProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.get_processor()
 
         text = self.prepare_text_inputs(modalities=["image"])
-        image_input = self.prepare_image_inputs()
+        image_input = self.prepare_images_inputs()
         inputs_dict = {"text": text, "images": image_input}
         inputs = processor(**inputs_dict, return_tensors="pt")
 
@@ -66,8 +66,8 @@ class GlmImageProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @parameterized.expand(
         [
             ("text",),
-            ("image",),
-            ("video",),
+            ("images",),
+            ("videos",),
             ("audio",),
         ]
     )

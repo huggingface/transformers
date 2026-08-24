@@ -60,8 +60,8 @@ class Glm46VProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.get_processor()
 
         text = self.prepare_text_inputs(modalities=["image", "video"])
-        image_input = self.prepare_image_inputs()
-        video_inputs = self.prepare_video_inputs()
+        image_input = self.prepare_images_inputs()
+        video_inputs = self.prepare_videos_inputs()
         inputs_dict = {"text": text, "images": image_input, "videos": video_inputs}
         inputs = processor(**inputs_dict, return_tensors="pt", do_sample_frames=False)
 

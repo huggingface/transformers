@@ -58,7 +58,7 @@ class Cosmos3EdgeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             {"expected_dim": 0, "output_length": 176},
         ]
 
-    def prepare_image_inputs(self, batch_size: int | None = None, nested: bool = False):
+    def prepare_images_inputs(self, batch_size: int | None = None, nested: bool = False):
         """Create small 64x96 inputs aligned to patch_size * merge_size (32).
 
         The fixed size keeps the processor tests lightweight and valid for patch
@@ -71,7 +71,7 @@ class Cosmos3EdgeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return [[image] for _ in range(batch_size)]
         return [image] * batch_size
 
-    def prepare_video_inputs(self, batch_size: int | None = None):
+    def prepare_videos_inputs(self, batch_size: int | None = None):
         """Create four 64x96 frames aligned to patch_size * merge_size (32).
 
         The fixed shape keeps frame-wise packing tests lightweight and valid; it

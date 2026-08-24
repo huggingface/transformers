@@ -29,9 +29,9 @@ class GotOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = GotOcr2Processor
     # `num_image_tokens` is controlled via kwargs, tho overriding each testcase is overkill
     # just use higher `max_length` in tests
-    image_unstructured_max_length = 300
-    image_text_kwargs_max_length = 300
-    image_text_kwargs_override_max_length = 300
+    images_unstructured_max_length = 300
+    images_text_kwargs_max_length = 300
+    images_text_kwargs_override_max_length = 300
 
     # Tiny processor created with make_tiny_processor.py from "stepfun-ai/GOT-OCR-2.0-hf"
     tiny_model_id = "hf-internal-testing/tiny-processor-got_ocr2"
@@ -44,7 +44,7 @@ class GotOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def test_ocr_queries(self):
         processor = self.get_processor()
-        image_input = self.prepare_image_inputs()
+        image_input = self.prepare_images_inputs()
         inputs = processor(image_input, return_tensors="pt")
         self.assertEqual(inputs["input_ids"].shape, (1, 324))
         self.assertEqual(inputs["pixel_values"].shape, (1, 3, 384, 384))
@@ -74,7 +74,7 @@ class GotOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.get_processor()
 
         text = self.prepare_text_inputs(batch_size=3, modalities="image")
-        image_inputs = self.prepare_image_inputs(batch_size=3)
+        image_inputs = self.prepare_images_inputs(batch_size=3)
         processing_kwargs = {"return_tensors": "pt", "padding": True, "multi_page": True}
 
         # Call with nested list of vision inputs

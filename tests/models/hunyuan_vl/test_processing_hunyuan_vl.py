@@ -57,8 +57,11 @@ class HunYuanVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             modalities = [modalities]
 
         special_token_to_add = ""
-        if modalities is not None and "image" in modalities:
-            special_token_to_add += f"{self.image_start_token}{self.image_token}{self.image_end_token}"
+        if modalities is not None:
+            for modality in modalities:
+                # we hae non-uniform naming conventions for image/videos
+                if modality in ["images", "image"]:
+                    special_token_to_add += f"{self.image_start_token}{self.image_token}{self.image_end_token}"
 
         if batch_size is None:
             return f"lower newer {special_token_to_add}"

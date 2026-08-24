@@ -27,7 +27,7 @@ from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 @require_vision
 class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = SmolVLMProcessor
-    video_input_name = "pixel_values"
+    videos_input_name = "pixel_values"
     # Tiny processor created with make_tiny_processor.py from "HuggingFaceTB/SmolVLM2-256M-Video-Instruct"
     tiny_model_id = "hf-internal-testing/tiny-processor-smolvlm"
 
@@ -93,14 +93,14 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         ]
 
     # Override as SmolVLM needs images/video to be an explicitly nested batch
-    def prepare_image_inputs(self, batch_size: int | None = None):
+    def prepare_images_inputs(self, batch_size: int | None = None):
         """This function prepares a list of PIL images for testing"""
-        images = super().prepare_image_inputs(batch_size)
+        images = super().prepare_images_inputs(batch_size)
         if isinstance(images, (list, tuple)):
             images = [[image] for image in images]
         return images
 
-    def prepare_video_inputs(self, batch_size: int | None = None):
+    def prepare_videos_inputs(self, batch_size: int | None = None):
         """This function prepares a list of numpy videos."""
         # 2 frames instead of 8: with 8 frames the expanded video token sequence exceeds the max_length
         # used in truncation tests, truncation cuts through video tokens, and _check_special_mm_tokens
@@ -397,7 +397,7 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = self.prepare_text_inputs(batch_size=2, modalities="image")
-        image_input = self.prepare_image_inputs(batch_size=2)
+        image_input = self.prepare_images_inputs(batch_size=2)
         inputs = processor(
             text=input_str,
             images=image_input,
@@ -423,7 +423,7 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = self.prepare_text_inputs(batch_size=2, modalities="video")
-        video_input = self.prepare_video_inputs(batch_size=2)
+        video_input = self.prepare_videos_inputs(batch_size=2)
         inputs = processor(
             text=input_str,
             videos=video_input,
@@ -434,7 +434,7 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             max_length=172,
         )
 
-        self.assertLessEqual(inputs[self.video_input_name][0].mean(), 0)
+        self.assertLessEqual(inputs[self.videos_input_name][0].mean(), 0)
         self.assertEqual(len(inputs["input_ids"][0]), 172)
 
     @require_torch
@@ -518,7 +518,7 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.get_processor()
 
         input_str = self.prepare_text_inputs(batch_size=2, modalities="image")
-        image_input = self.prepare_image_inputs(batch_size=2)
+        image_input = self.prepare_images_inputs(batch_size=2)
         _ = processor(
             text=input_str,
             images=image_input,

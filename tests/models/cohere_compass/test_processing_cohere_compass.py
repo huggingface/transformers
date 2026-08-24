@@ -30,9 +30,9 @@ from ...test_processing_common import ProcessorTesterMixin
 @require_vision
 class CohereCompassProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = CohereCompassProcessor
-    video_unstructured_max_length = 870
-    video_text_kwargs_max_length = 870
-    video_text_kwargs_override_max_length = 870
+    videos_unstructured_max_length = 870
+    videos_text_kwargs_max_length = 870
+    videos_text_kwargs_override_max_length = 870
     model_id = "CohereLabs/North-Micro-Vision-Instruct"
 
     @classmethod
@@ -68,13 +68,13 @@ class CohereCompassProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         return Image.fromarray(np.full((height, width, 3), 127, dtype=np.uint8))
 
-    def prepare_image_inputs(self, batch_size=None, nested=False):
+    def prepare_images_inputs(self, batch_size=None, nested=False):
         if batch_size is None:
             return self._image(64, 64)
         images = [self._image(64, 64) for _ in range(batch_size)]
         return [[image] for image in images] if nested else images
 
-    def prepare_video_inputs(self, batch_size=None):
+    def prepare_videos_inputs(self, batch_size=None):
         video = np.random.randint(255, size=(8, 3, 64, 64), dtype=np.uint8)
         return video if batch_size is None else [video] * batch_size
 

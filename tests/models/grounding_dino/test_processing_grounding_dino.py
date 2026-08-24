@@ -135,7 +135,7 @@ class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.get_processor()
 
         text = self.prepare_text_inputs(batch_size=3, modalities="image")
-        image_inputs = self.prepare_image_inputs(batch_size=3)
+        image_inputs = self.prepare_images_inputs(batch_size=3)
         processing_kwargs = {"return_tensors": "pt", "padding": True}
 
         # Call with nested list of vision inputs

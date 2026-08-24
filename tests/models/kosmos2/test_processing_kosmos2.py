@@ -53,9 +53,9 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 @require_vision
 class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Kosmos2Processor
-    image_text_kwargs_max_length = 72
-    image_text_kwargs_override_max_length = 72
-    image_unstructured_max_length = 72
+    images_text_kwargs_max_length = 72
+    images_text_kwargs_override_max_length = 72
+    images_unstructured_max_length = 72
 
     @classmethod
     def _setup_tokenizer(cls):

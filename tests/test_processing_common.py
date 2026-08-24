@@ -76,24 +76,18 @@ for modality, urls in MODALITY_INPUT_DATA.items():
 MODALITY_CONFIG = {
     "text": {
         "component_key": "tokenizer",
-        "input_kwarg": "text",
-        "prepare_fn": "prepare_text_inputs",
         "call_time_kwargs": {},
         "init_time_kwargs": {},
     },
-    "image": {
+    "images": {
         "component_key": "image_processor",
-        "input_kwarg": "images",
-        "prepare_fn": "prepare_image_inputs",
         "call_time_kwargs": {},
         "init_time_kwargs": {"do_rescale": True, "rescale_factor": -1.0},
     },
-    "video": {
+    "videos": {
         "component_key": "video_processor",
-        "input_kwarg": "videos",
-        "prepare_fn": "prepare_video_inputs",
         # `do_sample_frames=False` is required by video processors so that
-        # frame sampling doesn't change the number of resulting tokens.
+        # frame sampling doesn't change the number of resulting tokens or raise errors
         "call_time_kwargs": {"do_sample_frames": False},
         "init_time_kwargs": {"do_rescale": True, "rescale_factor": -1.0},
     },
@@ -101,15 +95,13 @@ MODALITY_CONFIG = {
         # Either a raw feature_extractor or an audio_processor attribute
         # is acceptable, whichever one the processor exposes.
         "component_key": None,
-        "input_kwarg": "audio",
-        "prepare_fn": "prepare_audio_inputs",
         "call_time_kwargs": {},
         "init_time_kwargs": {},
     },
 }
 
 
-def prepare_image_inputs():
+def prepare_images_inputs():
     """This function prepares a list of PIL images"""
     image_inputs = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)]
     image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
@@ -142,15 +134,15 @@ class ProcessorTesterMixin:
     # memory-sensitive tests. Must be a real Hub repo with all components loadable via from_pretrained.
     tiny_model_id = None
     text_input_name = "input_ids"
-    image_input_name = "pixel_values"
-    video_input_name = "pixel_values_videos"
+    images_input_name = "pixel_values"
+    videos_input_name = "pixel_values_videos"
     audio_input_name_values = "input_values"  # raw/normalized audio
     audio_input_name = "input_features"  # computed features, e.g. Mel spectrogram, STFT
 
     # Max-length values used in image-text kwargs tests. Override in subclasses if needed.
-    image_text_kwargs_max_length = 117
-    image_text_kwargs_override_max_length = 112
-    image_unstructured_max_length = 76
+    images_text_kwargs_max_length = 117
+    images_text_kwargs_override_max_length = 112
+    images_unstructured_max_length = 76
 
     # Max-length values used in audio-text kwargs tests. Override in subclasses if needed.
     audio_text_kwargs_max_length = 300
@@ -158,9 +150,9 @@ class ProcessorTesterMixin:
     audio_unstructured_max_length = 76
 
     # Max-length values used in video-text kwargs tests. Override in subclasses if needed.
-    video_text_kwargs_max_length = 167
-    video_text_kwargs_override_max_length = 162
-    video_unstructured_max_length = 176
+    videos_text_kwargs_max_length = 167
+    videos_text_kwargs_override_max_length = 162
+    videos_unstructured_max_length = 176
 
     # Max-length value used in chat template tests. Override in subclasses if needed.
     chat_template_max_length = 100  # max_length in test_apply_chat_template_*
@@ -467,6 +459,11 @@ class ProcessorTesterMixin:
         special_token_to_add = ""
         if modalities is not None:
             for modality in modalities:
+                # we hae non-uniform naming conventions for image/videos
+                if modality == "images":
+                    modality = "image"
+                elif modality == "videos":
+                    modality = "video"
                 special_token_to_add += getattr(self, f"{modality}_token", "")
 
         if batch_size is None:
@@ -482,18 +479,18 @@ class ProcessorTesterMixin:
         ] * (batch_size - 2)
 
     @require_vision
-    def prepare_image_inputs(self, batch_size: int | None = None, nested: bool = False):
+    def prepare_images_inputs(self, batch_size: int | None = None, nested: bool = False):
         """This function prepares a list of PIL images for testing"""
         if batch_size is None:
-            return prepare_image_inputs()[0]
+            return prepare_images_inputs()[0]
         if batch_size < 1:
             raise ValueError("batch_size must be greater than 0")
         if nested:
-            return [prepare_image_inputs()] * batch_size
-        return prepare_image_inputs() * batch_size
+            return [prepare_images_inputs()] * batch_size
+        return prepare_images_inputs() * batch_size
 
     @require_vision
-    def prepare_video_inputs(self, batch_size: int | None = None):
+    def prepare_videos_inputs(self, batch_size: int | None = None):
         """This function prepares a list of numpy videos."""
         video_input = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)] * 8
         video_input = np.array(video_input)
@@ -510,6 +507,7 @@ class ProcessorTesterMixin:
         return raw_speech * batch_size
 
     # Video sampling inputs and expected sampled frame length. Override for models with custom sampling
+    # All tests use the same pre-loaded tiny video thus the expectations should be deterministic
     @property
     def video_sampling_expectations(self):
         return [
@@ -645,8 +643,8 @@ class ProcessorTesterMixin:
         processor = self.get_processor()
 
         text = self.prepare_text_inputs(modalities=["image", "video", "audio"])
-        image_input = self.prepare_image_inputs()
-        video_inputs = self.prepare_video_inputs()
+        image_input = self.prepare_images_inputs()
+        video_inputs = self.prepare_videos_inputs()
         audio_inputs = self.prepare_audio_inputs()
         inputs_dict = {"text": text, "images": image_input, "videos": video_inputs, "audio": audio_inputs}
 
@@ -664,8 +662,8 @@ class ProcessorTesterMixin:
     @parameterized.expand(
         [
             ("text",),
-            ("image",),
-            ("video",),
+            ("images",),
+            ("videos",),
             ("audio",),
         ]
     )
@@ -683,7 +681,6 @@ class ProcessorTesterMixin:
             self.skipTest(f"{component_key} attribute not present in {self.processor_class}")
 
         subprocessor = self.get_component(component_key)
-        input_key = parameterized_config["input_kwarg"]  # images/videos/audio
 
         # Get all other required components for processor
         components = {}
@@ -701,11 +698,11 @@ class ProcessorTesterMixin:
             tokenizer_init_kwargs=processor.tokenizer.init_kwargs if hasattr(processor, "tokenizer") else {},
             **kwargs,
         )
-        kwargs = merged_kwargs[f"{input_key}_kwargs"]
+        kwargs = merged_kwargs[f"{modality}_kwargs"]
 
         input_subproc = subprocessor(modality_input, **kwargs)
         try:
-            input_processor = processor(**{input_key: modality_input, **kwargs})
+            input_processor = processor(**{modality: modality_input, **kwargs})
         except Exception:
             input_processor = {}
 
@@ -753,8 +750,8 @@ class ProcessorTesterMixin:
         # Map attributes to input parameter names, prepare methods, and output key names
         attr_to_input_param = {
             "tokenizer": ("text", "prepare_text_inputs", "text_input_name"),
-            "image_processor": ("images", "prepare_image_inputs", "image_input_name"),
-            "video_processor": ("videos", "prepare_video_inputs", "video_input_name"),
+            "image_processor": ("images", "prepare_images_inputs", "images_input_name"),
+            "video_processor": ("videos", "prepare_videos_inputs", "videos_input_name"),
             "feature_extractor": ("audio", "prepare_audio_inputs", "audio_input_name"),
             "audio_processor": ("audio", "prepare_audio_inputs", "audio_input_name"),
         }
@@ -815,8 +812,8 @@ class ProcessorTesterMixin:
         # Prepare inputs and filter by input signature. Make sure to use a high batch size, we'll set some
         # samples to text-only later
         text = self.prepare_text_inputs(batch_size=3, modalities=["image", "video"])
-        image_inputs = self.prepare_image_inputs(batch_size=3)
-        video_inputs = self.prepare_video_inputs(batch_size=3)
+        image_inputs = self.prepare_images_inputs(batch_size=3)
+        video_inputs = self.prepare_videos_inputs(batch_size=3)
         inputs_dict = {"text": text, "images": image_inputs, "videos": video_inputs}
         inputs_dict = {k: v for k, v in inputs_dict.items() if k in input_args}
 
@@ -935,20 +932,19 @@ class ProcessorTesterMixin:
         return component_key
 
     def _prepare_modality_input(self, modality: str, batch_size: int | None = None):
-        config = MODALITY_CONFIG[modality]
-        prepare_fn = getattr(self, config["prepare_fn"])
+        prepare_fn = getattr(self, f"prepare_{modality}_inputs")
         return prepare_fn(batch_size=batch_size) if batch_size is not None else prepare_fn()
 
     def _call_processor(self, processor, modality, text, modal_input, **kwargs):
         config = MODALITY_CONFIG[modality]
         call_kwargs = dict(config["call_time_kwargs"])
         call_kwargs.update(kwargs)
-        return processor(text=text, **{config["input_kwarg"]: modal_input}, **call_kwargs)
+        return processor(text=text, **{modality: modal_input}, **call_kwargs)
 
     def _check_modality_outputs(self, inputs: dict, modality: str):
         # skip audio as there is no single kwarg that works same way in all audio processors
         input_key = getattr(self, f"{modality}_input_name")
-        if modality in ["image", "video"]:
+        if modality in ["images", "videos"]:
             self.assertLessEqual(inputs[input_key][0][0].mean(), 0)
 
     def _test_modality_processor_defaults_preserved_by_modality_kwargs(self, modality):
@@ -1065,7 +1061,7 @@ class ProcessorTesterMixin:
 
         input_str = [self.prepare_text_inputs(modalities=modality)]
         modal_input = self._prepare_modality_input(modality)
-        modality_kwargs_key = f"{MODALITY_CONFIG[modality]['input_kwarg']}_kwargs"
+        modality_kwargs_key = f"{modality}_kwargs"
         init_time_kwargs = MODALITY_CONFIG[modality]["init_time_kwargs"]
         with self.assertRaises(ValueError):
             self._call_processor(
@@ -1088,7 +1084,7 @@ class ProcessorTesterMixin:
         input_str = self.prepare_text_inputs(modalities=modality)
         modal_input = self._prepare_modality_input(modality)
         max_length = getattr(self, f"{modality}_unstructured_max_length")
-        modality_kwargs_key = f"{MODALITY_CONFIG[modality]['input_kwarg']}_kwargs"
+        modality_kwargs_key = f"{modality}_kwargs"
         modality_kwargs = MODALITY_CONFIG[modality]["init_time_kwargs"]
         if modality == "video":
             modality_kwargs["do_sample_frames"] = False
@@ -1098,7 +1094,7 @@ class ProcessorTesterMixin:
             "text_kwargs": {"padding": "max_length", "max_length": max_length},
         }
 
-        inputs = processor(text=input_str, **{MODALITY_CONFIG[modality]["input_kwarg"]: modal_input}, **all_kwargs)
+        inputs = processor(text=input_str, **{modality: modal_input}, **all_kwargs)
         if not from_dict:
             # The non-"from_dict" variant historically re-checked typed kwargs
             # support a second time after the call; kept for parity.
@@ -1108,10 +1104,6 @@ class ProcessorTesterMixin:
         self.assertEqual(inputs[self.text_input_name].shape[-1], max_length)
 
     def _test_overlapping_text_modality_kwargs_handling(self, modality):
-        """Shared body for the "an overlapping kwarg like `padding` raises
-        when passed both flat and nested" checks. Image/video raise via a
-        top-level `padding="max_length"` clashing with a nested
-        `text_kwargs={"padding": "do_not_pad"}`."""
         attributes = self.processor_class.get_attributes()
         self._skip_unless_modality_and_tokenizer_present(modality, attributes)
 
@@ -1137,36 +1129,36 @@ class ProcessorTesterMixin:
     # delegate into the shared, modality-parameterized helper above.
     # ------------------------------------------------------------------
 
-    @parameterized.expand(["image", "video", "audio"])
+    @parameterized.expand(["images", "videos", "audio"])
     def test_subprocessor_defaults_preserved_by_kwargs(self, modality):
         self._test_modality_processor_defaults_preserved_by_modality_kwargs(modality)
 
-    @parameterized.expand(["image", "video", "audio"])
+    @parameterized.expand(["images", "videos", "audio"])
     def test_kwargs_overrides_default_subprocessor_kwargs(self, modality):
         self._test_kwargs_overrides_default_modality_processor_kwargs(modality)
 
-    @parameterized.expand(["image", "video", "audio"])
+    @parameterized.expand(["images", "videos", "audio"])
     def test_unstructured_kwargs(self, modality):
         self._test_unstructured_kwargs(modality)
 
-    @parameterized.expand(["image", "video", "audio"])
+    @parameterized.expand(["images", "videos", "audio"])
     def test_unstructured_kwargs_batched(self, modality):
         self._test_unstructured_kwargs_batched(modality)
 
     # skip audio - no single shared arg that behaves same way - can't test
-    @parameterized.expand(["image", "video"])
+    @parameterized.expand(["images", "videos"])
     def test_doubly_passed_kwargs(self, modality):
         self._test_doubly_passed_kwargs(modality)
 
-    @parameterized.expand(["image", "video", "audio"])
+    @parameterized.expand(["images", "videos", "audio"])
     def test_structured_kwargs_nested(self, modality):
         self._test_structured_kwargs_nested(modality, from_dict=False)
 
-    @parameterized.expand(["image", "video", "audio"])
+    @parameterized.expand(["images", "videos", "audio"])
     def test_structured_kwargs_nested_from_dict(self, modality):
         self._test_structured_kwargs_nested(modality, from_dict=True)
 
-    @parameterized.expand(["image", "video", "audio"])
+    @parameterized.expand(["images", "videos", "audio"])
     def test_overlapping_text_image_kwargs_handling(self, modality):
         self._test_overlapping_text_modality_kwargs_handling(modality)
 
@@ -1180,8 +1172,8 @@ class ProcessorTesterMixin:
         text = self.prepare_text_inputs(modalities=["image", "video", "audio"])
         inputs_dict = {
             "text": text,
-            "images": self.prepare_image_inputs(),
-            "videos": self.prepare_video_inputs(),
+            "images": self.prepare_images_inputs(),
+            "videos": self.prepare_videos_inputs(),
             "audio": self.prepare_audio_inputs(),
         }
         call_signature = inspect.signature(processor.__call__)
@@ -1407,23 +1399,23 @@ class ProcessorTesterMixin:
     @require_torchcodec
     @parameterized.expand([(1, "pt")])
     def test_apply_chat_template_decoded_video(self, batch_size: int, return_tensors: str):
-        dummy_preloaded_video = np.array(self.prepare_video_inputs())
+        dummy_preloaded_video = np.array(self.prepare_videos_inputs())
         input_data = [dummy_preloaded_video]
         self._test_apply_chat_template(
-            "video", batch_size, return_tensors, "video_input_name", "video_processor", input_data
+            "video", batch_size, return_tensors, "videos_input_name", "video_processor", input_data
         )
 
     @require_torchcodec
     @parameterized.expand([(1, "pt"), (2, "pt")])  # video processor supports only torchvision
     def test_apply_chat_template_video(self, batch_size: int, return_tensors: str):
         self._test_apply_chat_template(
-            "video", batch_size, return_tensors, "video_input_name", "video_processor", MODALITY_INPUT_DATA["videos"]
+            "video", batch_size, return_tensors, "videos_input_name", "video_processor", MODALITY_INPUT_DATA["videos"]
         )
 
     @parameterized.expand([(1, "pt"), (2, "pt")])  # fast image processors supports only torchvision
     def test_apply_chat_template_image(self, batch_size: int, return_tensors: str):
         self._test_apply_chat_template(
-            "image", batch_size, return_tensors, "image_input_name", "image_processor", MODALITY_INPUT_DATA["images"]
+            "image", batch_size, return_tensors, "images_input_name", "image_processor", MODALITY_INPUT_DATA["images"]
         )
 
     def test_apply_chat_template_video_frame_sampling(self):
@@ -1452,7 +1444,6 @@ class ProcessorTesterMixin:
             ]
         ]
 
-        # FIXME: instead of clone make it a property or instance attr
         for processor_kwargs in self.video_sampling_expectations:
             exp_output_length = processor_kwargs.pop("output_length")
             expected_dim = processor_kwargs.pop("expected_dim")
@@ -1465,8 +1456,8 @@ class ProcessorTesterMixin:
                 return_tensors="pt",
                 processor_kwargs=processor_kwargs,
             )
-            self.assertTrue(self.video_input_name in out_dict_with_video)
-            self.assertEqual(out_dict_with_video[self.video_input_name].shape[expected_dim], exp_output_length)
+            self.assertTrue(self.videos_input_name in out_dict_with_video)
+            self.assertEqual(out_dict_with_video[self.videos_input_name].shape[expected_dim], exp_output_length)
 
         messages[0][0]["content"][0] = {
             "type": "video",
@@ -1488,7 +1479,7 @@ class ProcessorTesterMixin:
             return_tensors="pt",
             processor_kwargs={"do_sample_frames": False},
         )
-        self.assertTrue(self.video_input_name in out_dict_with_video)
+        self.assertTrue(self.videos_input_name in out_dict_with_video)
 
         # When the inputs are frame URLs/paths we expect that those are already
         # sampled and will raise an error is asked to sample again.
@@ -1559,13 +1550,13 @@ class ProcessorTesterMixin:
             load_audio_from_video=True,
         )
         self.assertTrue(self.audio_input_name in out_dict)
-        self.assertTrue(self.video_input_name in out_dict)
+        self.assertTrue(self.videos_input_name in out_dict)
 
         # should always have input_ids and attention_mask
         self.assertEqual(len(out_dict["input_ids"]), 1)  # batch-size=1
         self.assertEqual(len(out_dict["attention_mask"]), 1)  # batch-size=1
         self.assertEqual(len(out_dict[self.audio_input_name]), 1)  # 1 audio in the conversation
-        self.assertEqual(len(out_dict[self.video_input_name]), 1)  # 1 video in the conversation
+        self.assertEqual(len(out_dict[self.videos_input_name]), 1)  # 1 video in the conversation
 
     def test_chat_template_jinja_kwargs(self):
         """Tests that users can pass any kwargs and they will be used in jinja templates."""
@@ -1757,7 +1748,10 @@ class ProcessorTesterMixin:
         return child_method is not base_method
 
     def test_replacement_offsets(self):
-        "Tests that the returned replacement offsets show correct text and spans for multimodal tokens"
+        """
+        Tests that the returned replacement offsets show correct text and spans for multimodal tokens
+        It is used mainly in vllm currently, and will be used for adding offsets in assistant mask
+        """
 
         # Tiny model IDs have small vocab and squash all tokens to `UNK` Test becomes pointless
         # if we are comparing unk to unk token, the differences are lost
@@ -1768,8 +1762,8 @@ class ProcessorTesterMixin:
 
         attr_to_input_param = {
             "tokenizer": ("text", "prepare_text_inputs", "text_input_name"),
-            "image_processor": ("images", "prepare_image_inputs", "image_input_name"),
-            "video_processor": ("videos", "prepare_video_inputs", "video_input_name"),
+            "image_processor": ("images", "prepare_images_inputs", "images_input_name"),
+            "video_processor": ("videos", "prepare_videos_inputs", "videos_input_name"),
             "feature_extractor": ("audio", "prepare_audio_inputs", "audio_input_name"),
             "audio_processor": ("audio", "prepare_audio_inputs", "audio_input_name"),
         }

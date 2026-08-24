@@ -66,9 +66,9 @@ _SHIELDGEMMA2_POLICIES: Mapping[str, str] = {
 class ShieldGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = ShieldGemma2Processor
 
-    image_text_kwargs_max_length = 740
-    image_text_kwargs_override_max_length = 750
-    image_unstructured_max_length = 742
+    images_text_kwargs_max_length = 740
+    images_text_kwargs_override_max_length = 750
+    images_unstructured_max_length = 742
 
     @classmethod
     def _setup_image_processor(cls):
@@ -118,10 +118,10 @@ class ShieldGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")
 
-        images = self.prepare_image_inputs()
+        images = self.prepare_images_inputs()
         processed_inputs = processor(images=images, policies=policies)
         self.assertEqual(len(processed_inputs[self.text_input_name]), expected_batch_size)
-        self.assertEqual(len(processed_inputs[self.image_input_name]), expected_batch_size)
+        self.assertEqual(len(processed_inputs[self.images_input_name]), expected_batch_size)
 
     @parameterized.expand(
         [
@@ -146,10 +146,10 @@ class ShieldGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "specialized_advice": "Test policy related to specialized advice.",
         }
 
-        images = self.prepare_image_inputs()
+        images = self.prepare_images_inputs()
         processed_inputs = processor(images=images, custom_policies=custom_policies, policies=policies)
         self.assertEqual(len(processed_inputs[self.text_input_name]), expected_batch_size)
-        self.assertEqual(len(processed_inputs[self.image_input_name]), expected_batch_size)
+        self.assertEqual(len(processed_inputs[self.images_input_name]), expected_batch_size)
 
     def test_with_multiple_images(self):
         processor = self.get_processor()
@@ -157,10 +157,10 @@ class ShieldGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")
 
-        images = self.prepare_image_inputs(batch_size=2)
+        images = self.prepare_images_inputs(batch_size=2)
         processed_inputs = processor(images=images)
         self.assertEqual(len(processed_inputs[self.text_input_name]), 6)
-        self.assertEqual(len(processed_inputs[self.image_input_name]), 6)
+        self.assertEqual(len(processed_inputs[self.images_input_name]), 6)
 
     # TODO(ryanmullins): Adapt this test for ShieldGemma 2
     @parameterized.expand([(1, "np"), (1, "pt"), (2, "np"), (2, "pt")])
@@ -185,7 +185,7 @@ class ShieldGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.get_processor()
 
         text = self.prepare_text_inputs(batch_size=3, modalities="image")
-        image_inputs = self.prepare_image_inputs(batch_size=3)
+        image_inputs = self.prepare_images_inputs(batch_size=3)
         processing_kwargs = {"return_tensors": "pt", "padding": True, "multi_page": True}
 
         # Call with nested list of vision inputs

@@ -32,9 +32,9 @@ class Qwen3VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     # Use tiny repos to avoid loading the full 151k-vocab tokenizer (~327 MB)
     # Tiny processor created with make_tiny_processor.py from "Qwen/Qwen3-VL-235B-A22B-Instruct"
     tiny_model_id = "hf-internal-testing/tiny-processor-qwen3_vl"
-    video_unstructured_max_length = 870
-    video_text_kwargs_max_length = 870
-    video_text_kwargs_override_max_length = 870
+    videos_unstructured_max_length = 870
+    videos_text_kwargs_max_length = 870
+    videos_text_kwargs_override_max_length = 870
 
     @classmethod
     def _setup_test_attributes(cls, processor):
@@ -67,8 +67,8 @@ class Qwen3VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.get_processor()
 
         text = self.prepare_text_inputs(modalities=["image", "video"])
-        image_input = self.prepare_image_inputs()
-        video_inputs = self.prepare_video_inputs()
+        image_input = self.prepare_images_inputs()
+        video_inputs = self.prepare_videos_inputs()
         inputs_dict = {"text": text, "images": image_input, "videos": video_inputs}
         inputs = processor(**inputs_dict, return_tensors="pt", do_sample_frames=False)
 
@@ -79,11 +79,11 @@ class Qwen3VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = self.prepare_text_inputs()
-        image_input = self.prepare_image_inputs()
+        image_input = self.prepare_images_inputs()
         inputs = processor(text=input_str, images=image_input, max_pixels=56 * 56 * 4, return_tensors="pt")
-        self.assertEqual(inputs[self.image_input_name].shape[0], 612)
+        self.assertEqual(inputs[self.images_input_name].shape[0], 612)
         inputs = processor(text=input_str, images=image_input, return_tensors="pt")
-        self.assertEqual(inputs[self.image_input_name].shape[0], 100)
+        self.assertEqual(inputs[self.images_input_name].shape[0], 100)
 
     @unittest.skip("qwen3_vl can't sample frames from image frames directly, user can use `qwen-vl-utils`")
     def test_apply_chat_template_video_1(self):

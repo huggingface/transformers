@@ -45,7 +45,7 @@ class LightOnOcrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.get_processor()
         self.image_token = processor.image_token
 
-    def prepare_image_inputs(self, batch_size=None):
+    def prepare_images_inputs(self, batch_size=None):
         """Prepare small dummy image inputs."""
         image = Image.new("RGB", (112, 112), color="red")
         if batch_size is None:
@@ -73,7 +73,7 @@ class LightOnOcrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_processor_with_image_and_text(self):
         """Test processor with both image and text inputs."""
         processor = self.get_processor()
-        image = self.prepare_image_inputs()
+        image = self.prepare_images_inputs()
         text = f"{self.image_token} Extract text from this image."
 
         inputs = processor(images=image, text=text, return_tensors="pt")
@@ -91,7 +91,7 @@ class LightOnOcrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_processor_image_token_expansion(self):
         """Test that image token is properly expanded based on image size."""
         processor = self.get_processor()
-        image = self.prepare_image_inputs()
+        image = self.prepare_images_inputs()
         text = f"{self.image_token} Describe this image."
 
         inputs = processor(images=image, text=text, return_tensors="pt")
@@ -107,7 +107,7 @@ class LightOnOcrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_processor_batch_processing(self):
         """Test processor with batch of inputs."""
         processor = self.get_processor()
-        images = self.prepare_image_inputs(batch_size=2)
+        images = self.prepare_images_inputs(batch_size=2)
         texts = [f"{self.image_token} Extract text." for _ in range(2)]
 
         inputs = processor(images=images, text=texts, return_tensors="pt", padding=True)
@@ -155,7 +155,7 @@ class LightOnOcrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_processor_return_types(self):
         """Test different return types (pt, np, list)."""
         processor = self.get_processor()
-        image = self.prepare_image_inputs()
+        image = self.prepare_images_inputs()
         text_with_image = f"{self.image_token} Test image."
         text_only = "Test without image."
 

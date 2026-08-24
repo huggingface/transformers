@@ -46,7 +46,7 @@ class LlavaNextVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "vision_feature_select_strategy": "default",
         }
 
-    def prepare_video_inputs(self, batch_size=None):
+    def prepare_videos_inputs(self, batch_size=None):
         """Use tiny frames to keep test_processor_text_has_no_visual memory-efficient."""
         video_input = [np.random.randint(255, size=(3, 8, 8), dtype=np.uint8)] * 2
         video_input = np.array(video_input)

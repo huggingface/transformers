@@ -52,7 +52,7 @@ class ColModernVBertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @require_vision
     def test_process_images(self):
         # Processor configuration
-        image_input = self.prepare_image_inputs()
+        image_input = self.prepare_images_inputs()
         image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer", max_length=112, padding="max_length")
 
@@ -116,10 +116,10 @@ class ColModernVBertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
 
-        image_input = self.prepare_image_inputs()
+        image_input = self.prepare_images_inputs()
 
         inputs = processor(images=image_input, return_tensors="pt")
-        self.assertLessEqual(inputs[self.image_input_name][0][0].mean(), 0)
+        self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
 
     def test_kwargs_overrides_default_subprocessor_kwargs_0_image(self):
         processor_components = self.prepare_components()
@@ -131,7 +131,7 @@ class ColModernVBertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
 
-        image_input = self.prepare_image_inputs()
+        image_input = self.prepare_images_inputs()
 
         inputs = processor(
             images=image_input,
@@ -141,7 +141,7 @@ class ColModernVBertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             padding="max_length",
             return_tensors="pt",
         )
-        self.assertLessEqual(inputs[self.image_input_name][0][0].mean(), 0)
+        self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
 
     def test_unstructured_kwargs_0_image(self):
         processor_components = self.prepare_components()
@@ -165,7 +165,7 @@ class ColModernVBertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
 
-        image_input = self.prepare_image_inputs(batch_size=2)
+        image_input = self.prepare_images_inputs(batch_size=2)
         inputs = processor(
             images=image_input,
             return_tensors="pt",
@@ -175,14 +175,14 @@ class ColModernVBertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             max_length=76,
         )
 
-        self.assertLessEqual(inputs[self.image_input_name][0][0].mean(), 0)
+        self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
 
     def test_doubly_passed_kwargs(self):
         processor_components = self.prepare_components()
         processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
 
-        image_input = self.prepare_image_inputs()
+        image_input = self.prepare_images_inputs()
         with self.assertRaises(ValueError):
             _ = processor(
                 images=image_input,
@@ -214,7 +214,7 @@ class ColModernVBertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor_components = self.prepare_components()
         processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
-        image_input = self.prepare_image_inputs()
+        image_input = self.prepare_images_inputs()
 
         # Define the kwargs for each modality
         all_kwargs = {
@@ -224,12 +224,12 @@ class ColModernVBertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         }
 
         inputs = processor(images=image_input, **all_kwargs)
-        self.assertLessEqual(inputs[self.image_input_name][0][0].mean(), 0)
+        self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
 
     # Can process only text or images at a time
     def test_model_input_names(self):
         processor = self.get_processor()
-        image_input = self.prepare_image_inputs()
+        image_input = self.prepare_images_inputs()
         inputs = processor(images=image_input)
         # When only images are provided, pixel_values must be present
         self.assertIn("pixel_values", inputs)

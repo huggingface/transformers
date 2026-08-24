@@ -39,12 +39,12 @@ class MiniCPMV4_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     # Tiny processor created with make_tiny_processor.py from "openbmb/MiniCPM-V-4_6"
     tiny_model_id = "hf-internal-testing/tiny-processor-minicpmv4_6"
 
-    video_text_kwargs_max_length = 600
-    video_text_kwargs_override_max_length = 550
-    video_unstructured_max_length = 600
+    videos_text_kwargs_max_length = 600
+    videos_text_kwargs_override_max_length = 550
+    videos_unstructured_max_length = 600
     # Default 76 is too small: MiniCPM expands <image> to ~70 tokens, then with surrounding text tokens
     # we exceed 76, truncation cuts through image tokens, and _check_special_mm_tokens raises a mismatch error.
-    image_unstructured_max_length = 100
+    images_unstructured_max_length = 100
 
     @classmethod
     def _setup_image_processor(cls):
@@ -78,7 +78,7 @@ class MiniCPMV4_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         """Test that the processor correctly handles image inputs."""
         processor = self.get_processor()
         text = self.prepare_text_inputs(modalities=["image"])
-        image_input = self.prepare_image_inputs()
+        image_input = self.prepare_images_inputs()
         inputs = processor(text=text, images=image_input, return_tensors="pt")
 
         self.assertIn("pixel_values", inputs)
@@ -92,7 +92,7 @@ class MiniCPMV4_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         """Test that the processor correctly handles video inputs."""
         processor = self.get_processor()
         text = self.prepare_text_inputs(modalities=["video"])
-        video_input = self.prepare_video_inputs()
+        video_input = self.prepare_videos_inputs()
         inputs = processor(text=text, videos=video_input, do_sample_frames=False, return_tensors="pt")
 
         self.assertIn("pixel_values_videos", inputs)
@@ -160,7 +160,7 @@ class MiniCPMV4_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         """Test that use_image_id is correctly routed through _merge_kwargs."""
         processor = self.get_processor()
         text = f"{self.image_token}Describe."
-        image_input = self.prepare_image_inputs()
+        image_input = self.prepare_images_inputs()
 
         inputs_with_id = processor(text=text, images=image_input, use_image_id=True, return_tensors="pt")
         inputs_without_id = processor(text=text, images=image_input, use_image_id=False, return_tensors="pt")

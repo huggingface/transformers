@@ -33,9 +33,9 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 @require_vision
 class Gemma4ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Gemma4Processor
-    video_unstructured_max_length = 570
-    video_text_kwargs_max_length = 570
-    video_text_kwargs_override_max_length = 570
+    videos_unstructured_max_length = 570
+    videos_text_kwargs_max_length = 570
+    videos_text_kwargs_override_max_length = 570
 
     @classmethod
     def _setup_test_attributes(cls, processor):
@@ -121,9 +121,9 @@ class Gemma4ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         }  # fmt: skip
 
     # Override as Gemma4 needs images to be an explicitly nested batch
-    def prepare_image_inputs(self, batch_size: int | None = None):
+    def prepare_images_inputs(self, batch_size: int | None = None):
         """This function prepares a list of PIL images for testing"""
-        images = super().prepare_image_inputs(batch_size)
+        images = super().prepare_images_inputs(batch_size)
         if isinstance(images, (list, tuple)):
             images = [[image] for image in images]
         return images
@@ -143,7 +143,7 @@ class Gemma4ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         text_multi_images = f"{processor.image_token}{processor.image_token}Dummy text!"
         text_single_image = f"{processor.image_token}Dummy text!"
 
-        image = self.prepare_image_inputs()
+        image = self.prepare_images_inputs()
 
         # We can't be sure what is users intention: if user wants one image per text OR two images for first text and no image for second text
         with self.assertRaises(ValueError):
@@ -155,7 +155,7 @@ class Gemma4ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             text=[text_single_image, text_single_image], images=[[image], [image]], return_tensors="np"
         )
         self.assertListEqual(
-            out_batch_oneimage[self.image_input_name].tolist(), out_multiimages[self.image_input_name].tolist()
+            out_batch_oneimage[self.images_input_name].tolist(), out_multiimages[self.images_input_name].tolist()
         )
 
     def test_special_mm_token_truncation(self):
@@ -164,7 +164,7 @@ class Gemma4ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.get_processor()
 
         input_str = self.prepare_text_inputs(batch_size=2, modalities="image")
-        image_input = self.prepare_image_inputs(batch_size=2)
+        image_input = self.prepare_images_inputs(batch_size=2)
         _ = processor(
             text=input_str,
             images=image_input,

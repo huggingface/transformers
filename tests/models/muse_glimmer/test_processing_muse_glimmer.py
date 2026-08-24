@@ -70,7 +70,7 @@ class MuseGlimmerProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def test_image_boundary_tokens(self):
         processor = self.get_processor()
-        images = self.prepare_image_inputs(batch_size=2)
+        images = self.prepare_images_inputs(batch_size=2)
         text = f"{processor.image_token}lower{processor.image_token}upper"
 
         inputs = processor(text=text, images=images)

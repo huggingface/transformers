@@ -117,8 +117,8 @@ class OwlViTProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_processor_case2(self):
         processor = self.get_processor()
 
-        image_input = self.prepare_image_inputs()
-        query_input = self.prepare_image_inputs()
+        image_input = self.prepare_images_inputs()
+        query_input = self.prepare_images_inputs()
 
         inputs = processor(images=image_input, query_images=query_input)
 

@@ -93,9 +93,9 @@ class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         return {"chat_template": chat_template}
 
     # Override as Lfm2VL needs images/video to be an explicitly nested batch
-    def prepare_image_inputs(self, batch_size=None):
+    def prepare_images_inputs(self, batch_size=None):
         """This function prepares a list of PIL images for testing"""
-        images = super().prepare_image_inputs(batch_size)
+        images = super().prepare_images_inputs(batch_size)
         if isinstance(images, (list, tuple)):
             images = [[image] for image in images]
         return images

@@ -65,7 +65,7 @@ class MgpstrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.get_processor()
 
         input_str = "test"
-        image_input = self.prepare_image_inputs()
+        image_input = self.prepare_images_inputs()
 
         inputs = processor(text=input_str, images=image_input)
 

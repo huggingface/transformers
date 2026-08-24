@@ -65,7 +65,6 @@ class CsmProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         component_key = self._get_subprocessor_name("audio", attributes)
 
         subprocessor = self.get_component(component_key)
-        input_key = parameterized_config["input_kwarg"]  # images/videos/audio
 
         # Get all other required components for processor
         components = {}
@@ -81,7 +80,7 @@ class CsmProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         input_subproc = subprocessor(modality_input, **kwargs)
         try:
-            input_processor = processor(**{input_key: modality_input, **kwargs})
+            input_processor = processor(audio=modality_input, **kwargs)
         except Exception:
             input_processor = {}
 

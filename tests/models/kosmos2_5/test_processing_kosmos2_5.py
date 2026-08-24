@@ -43,7 +43,7 @@ if is_vision_available():
 @require_vision
 class Kosmos2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Kosmos2_5Processor
-    image_input_name = "flattened_patches"
+    images_input_name = "flattened_patches"
     # Tiny processor created with make_tiny_processor.py from "microsoft/kosmos-2.5"
     tiny_model_id = "hf-internal-testing/tiny-processor-kosmos2_5"
 
@@ -77,7 +77,7 @@ class Kosmos2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = Kosmos2_5Processor(tokenizer=tokenizer, image_processor=image_processor)
 
         input_str = "This is a test"
-        image_input = self.prepare_image_inputs()
+        image_input = self.prepare_images_inputs()
 
         # both image and text
         inputs = processor(text=input_str, images=image_input)

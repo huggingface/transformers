@@ -39,11 +39,11 @@ class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
     # Fuyu uses a tokenizer with a very large vocabulary (~262K tokens), making tests slow and
     # memory-intensive. tiny_model_id points to a trimmed tokenizer repo to keep tests lightweight.
     tiny_model_id = "hf-internal-testing/tiny-processor-fuyu"
-    image_input_name = "image_patches"
+    images_input_name = "image_patches"
 
-    image_text_kwargs_max_length = 22
-    image_text_kwargs_override_max_length = 22
-    image_unstructured_max_length = 22
+    images_text_kwargs_max_length = 22
+    images_text_kwargs_override_max_length = 22
+    images_unstructured_max_length = 22
 
     @classmethod
     def _setup_test_attributes(cls, processor):
@@ -167,7 +167,7 @@ class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.get_processor()
 
         text = self.prepare_text_inputs(batch_size=3, modalities="image")
-        image_inputs = self.prepare_image_inputs(batch_size=3)
+        image_inputs = self.prepare_images_inputs(batch_size=3)
         processing_kwargs = {"return_tensors": "pt", "padding": True, "multi_page": True}
 
         # Call with nested list of vision inputs

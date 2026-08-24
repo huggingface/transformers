@@ -85,8 +85,8 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @parameterized.expand(
         [
             ("text",),
-            ("image",),
-            ("video",),
+            ("images",),
+            ("videos",),
             ("audio",),
         ]
     )
@@ -101,7 +101,6 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         parameterized_config = MODALITY_CONFIG[modality]
         subprocessor = self.get_component(component_key)
-        input_key = parameterized_config["input_kwarg"]  # images/videos/audio
 
         # Get all other required components for processor
         components = {}
@@ -119,14 +118,14 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             tokenizer_init_kwargs=processor.tokenizer.init_kwargs if hasattr(processor, "tokenizer") else {},
             **kwargs,
         )
-        kwargs = merged_kwargs[f"{input_key}_kwargs"]
+        kwargs = merged_kwargs[f"{modality}_kwargs"]
         kwargs.pop("seconds_per_chunk", None)  # pop, used only in `processor.__call__`
         kwargs.pop("use_audio_in_video", None)
         kwargs.pop("position_id_per_seconds", None)
 
         input_subproc = subprocessor(modality_input, **kwargs)
         try:
-            input_processor = processor(**{input_key: modality_input, **kwargs})
+            input_processor = processor(**{modality: modality_input, **kwargs})
         except Exception:
             input_processor = {}
 
@@ -214,10 +213,10 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             load_audio_from_video=True,
         )
         self.assertTrue(self.audio_input_name in out_dict)
-        self.assertTrue(self.video_input_name in out_dict)
+        self.assertTrue(self.videos_input_name in out_dict)
 
         # should always have input_ids and attention_mask
         self.assertEqual(len(out_dict["input_ids"]), 1)  # batch-size=1
         self.assertEqual(len(out_dict["attention_mask"]), 1)  # batch-size=1
         self.assertEqual(len(out_dict[self.audio_input_name]), 1)  # 1 audio in the conversation
-        self.assertEqual(len(out_dict[self.video_input_name]), 10800)  # 1 video in the conversation
+        self.assertEqual(len(out_dict[self.videos_input_name]), 10800)  # 1 video in the conversation

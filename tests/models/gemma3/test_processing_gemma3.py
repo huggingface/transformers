@@ -64,9 +64,9 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         }  # fmt: skip
 
     # Override as Gemma3 needs images to be an explicitly nested batch
-    def prepare_image_inputs(self, batch_size: int | None = None):
+    def prepare_images_inputs(self, batch_size: int | None = None):
         """This function prepares a list of PIL images for testing"""
-        images = super().prepare_image_inputs(batch_size)
+        images = super().prepare_images_inputs(batch_size)
         if isinstance(images, (list, tuple)):
             images = [[image] for image in images]
         return images
@@ -80,7 +80,7 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         text_single_image = f"{processor.boi_token}Dummy text!"
         text_no_image = "Dummy text!"
 
-        image = self.prepare_image_inputs()
+        image = self.prepare_images_inputs()
 
         # If text has no image tokens, image should be `None`
         with self.assertRaises(ValueError):
@@ -96,7 +96,7 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             text=[text_single_image, text_single_image], images=[[image], [image]], return_tensors="pt"
         )
         self.assertListEqual(
-            out_batch_oneimage[self.image_input_name].tolist(), out_multiimages[self.image_input_name].tolist()
+            out_batch_oneimage[self.images_input_name].tolist(), out_multiimages[self.images_input_name].tolist()
         )
 
     def test_pan_and_scan(self):
@@ -105,7 +105,7 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.processor_class(**processor_components, **processor_kwargs)
 
         input_str = self.prepare_text_inputs(modalities="image")
-        image_input = self.prepare_image_inputs()
+        image_input = self.prepare_images_inputs()
         inputs = processor(
             text=input_str,
             images=image_input,
@@ -116,7 +116,7 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
 
         # base image + 4 crops
-        self.assertEqual(len(inputs[self.image_input_name]), 5)
+        self.assertEqual(len(inputs[self.images_input_name]), 5)
         baseline = processor(
             text=input_str,
             images=image_input,
@@ -133,7 +133,7 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.get_processor()
 
         input_str = self.prepare_text_inputs(batch_size=2, modalities="image")
-        image_input = self.prepare_image_inputs(batch_size=2)
+        image_input = self.prepare_images_inputs(batch_size=2)
         _ = processor(
             text=input_str,
             images=image_input,
