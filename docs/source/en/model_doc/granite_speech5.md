@@ -53,7 +53,6 @@ print(out)
 
 ```python
 from datasets import Audio, load_dataset
-
 from transformers import AutoModelForCTC, AutoProcessor
 
 model_id = "ibm-granite/granite-speech-5.0-470m-turboctc"
