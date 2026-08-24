@@ -1145,26 +1145,22 @@ class Qwen4ExpTextPLELayer(nn.Module):
             dilation=conv_dilation,
             bias=False,
         )
-        self.activation = "silu"
 
     def _short_conv(self, hidden_states: torch.Tensor, past_key_values: Cache | None) -> torch.Tensor:
         seq_len = hidden_states.shape[1]
         hidden_states = hidden_states.transpose(1, 2)
 
-        conv_input = hidden_states
         if past_key_values is not None:
-            conv_input = past_key_values.update_conv_state(
+            hidden_states = past_key_values.update_conv_state(
                 hidden_states, self.layer_idx, state_idx=1, conv_kernel_size=self.short_conv_state_len
             )
 
-        conv_input = F.pad(conv_input, (self.short_conv_state_len, 0))
-        conv_input = conv_input[..., -(self.short_conv_state_len + seq_len) :]
-        # We cannot use the usual functions/kernels here for the short conv as the conv1d has dilation
-        hidden_states = F.silu(self.conv1d(conv_input))
+        # We always pad and slice due to the dilation in the conv, to make sure we have enough states
+        hidden_states = F.pad(hidden_states, (self.short_conv_state_len, 0))
+        hidden_states = hidden_states[..., -(self.short_conv_state_len + seq_len) :]
 
-        # Drop the additional previous states
-        if past_key_values is not None:
-            hidden_states = hidden_states[:, :, -seq_len:]
+        # We cannot use the usual functions/kernels here for the short conv as the conv1d has dilation
+        hidden_states = F.silu(self.conv1d(hidden_states))
 
         hidden_states = hidden_states.transpose(1, 2)
         return hidden_states
