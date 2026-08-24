@@ -79,5 +79,16 @@ class GlmConfig(PreTrainedConfig):
             self.eos_token_id = [151329, 151336, 151338]
         super().__post_init__(**kwargs)
 
+    def validate_architecture(self):
+        """Part of ``@strict``-powered validation."""
+        super().validate_architecture()
+        if (
+            self.num_key_value_heads is not None
+            and self.num_attention_heads % self.num_key_value_heads != 0
+        ):
+            raise ValueError(
+                "`num_attention_heads` must be divisible by `num_key_value_heads` for grouped-query attention."
+            )
+
 
 __all__ = ["GlmConfig"]

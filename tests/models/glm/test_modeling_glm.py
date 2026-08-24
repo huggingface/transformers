@@ -15,6 +15,7 @@
 
 import unittest
 
+import huggingface_hub
 import pytest
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, is_torch_available
@@ -34,8 +35,59 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        GlmConfig,
+        GlmForCausalLM,
         GlmModel,
     )
+
+
+def _tiny_gqa_config(num_attention_heads=8, num_key_value_heads=2):
+    return GlmConfig(
+        vocab_size=128,
+        hidden_size=256,
+        intermediate_size=512,
+        num_hidden_layers=1,
+        num_attention_heads=num_attention_heads,
+        num_key_value_heads=num_key_value_heads,
+        head_dim=32,
+        max_position_embeddings=64,
+        pad_token_id=0,
+        eos_token_id=1,
+    )
+
+
+@require_torch
+class GlmConfigTest(unittest.TestCase):
+    def test_default_gqa_config_is_valid(self):
+        config = GlmConfig()
+        config.validate_architecture()
+
+    def test_valid_gqa_config_forward(self):
+        config = _tiny_gqa_config(num_attention_heads=8, num_key_value_heads=2)
+        config.validate_architecture()
+
+        model = GlmForCausalLM(config).eval()
+        input_ids = torch.randint(2, config.vocab_size, (1, 8))
+        with torch.no_grad():
+            output = model(input_ids=input_ids)
+
+        self.assertEqual(output.logits.shape, (1, 8, config.vocab_size))
+
+    def test_invalid_gqa_config_raises_on_validate_architecture(self):
+        config = _tiny_gqa_config(num_attention_heads=8, num_key_value_heads=2)
+        config.num_attention_heads = 7
+
+        with self.assertRaises(ValueError) as context:
+            config.validate_architecture()
+
+        self.assertIn("divisible", str(context.exception))
+
+    def test_invalid_gqa_config_raises_on_construction(self):
+        with self.assertRaisesRegex(
+            huggingface_hub.errors.StrictDataclassClassValidationError,
+            "divisible",
+        ):
+            _tiny_gqa_config(num_attention_heads=7, num_key_value_heads=2)
 
 
 @require_torch
