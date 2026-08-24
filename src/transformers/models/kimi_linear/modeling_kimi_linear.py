@@ -23,13 +23,16 @@ from collections.abc import Callable
 
 import torch
 import torch.nn.functional as F
-from einops import rearrange
 from torch import nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
+from ...integrations import (
+    use_experts_implementation,
+    use_kernel_forward_from_hub,
+    use_kernel_func_from_hub_with_fallback,
+)
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
@@ -59,6 +62,26 @@ class KimiLinearRMSNorm(nn.Module):
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
+
+@use_kernel_forward_from_hub("RMSNormGated")
+class KimiLinearRMSNormGated(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6, **kwargs):
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+        self.activation = "silu"
+
+    def forward(self, hidden_states, gate=None):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        # Norm before gate
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        hidden_states = self.weight * hidden_states.to(input_dtype)
+        hidden_states = hidden_states * ACT2FN[self.activation](gate.to(torch.float32))
+
+        return hidden_states.to(input_dtype)
 
 
 @use_experts_implementation
@@ -271,150 +294,243 @@ class KimiLinearAttention(nn.Module):
         return attn_output, attn_weights
 
 
-# Closest parent: Qwen3NextGatedDeltaNet. NEEDS ADJUSTMENT: the conv1d / chunked-delta-rule recurrence /
-# gated-RMSNorm plumbing is the same family (gated delta net), but currently implemented against the
-# external `fla-core` package (chunk_kda, fused_recurrent_kda, ShortConvolution, FusedRMSNormGated,
-# fused_kda_gate) instead of Qwen3Next's in-repo pure-PyTorch kernels (torch_chunk_gated_delta_rule,
-# torch_recurrent_gated_delta_rule, causal_conv1d_fn/update, Qwen3NextRMSNormGated) — should be ported onto
-# those to drop the hard dependency. KDA also adds two low-rank bottlenecks Qwen3Next doesn't have: the
-# forget gate (f_a_proj -> f_b_proj) and the output gate (g_a_proj -> g_b_proj); those are genuinely new code.
-class KimiLinearDeltaAttention(nn.Module):
+def apply_mask_to_padding_states(hidden_states, attention_mask):
+    """
+    Tunes out the hidden states for padding tokens, see https://github.com/state-spaces/mamba/issues/66
+    """
+    # NOTE: attention mask is a 2D boolean tensor
+    if attention_mask is not None:
+        dtype = hidden_states.dtype
+        hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
+
+    return hidden_states
+
+
+@use_kernel_func_from_hub_with_fallback("causal_conv1d_update", "causal_conv1d")
+def causal_conv1d_update(
+    hidden_states: torch.Tensor,
+    conv_state: torch.Tensor,
+    weight: nn.Parameter,
+    bias: nn.Parameter | None = None,
+    activation: str | None = None,
+):
+    _, hidden_size, seq_len = hidden_states.shape
+    state_len = conv_state.shape[-1]
+
+    hidden_states_new = torch.cat([conv_state, hidden_states], dim=-1).to(weight.dtype)
+    conv_state.copy_(hidden_states_new[:, :, -state_len:])
+    out = F.conv1d(hidden_states_new, weight.unsqueeze(1), bias, padding=0, groups=hidden_size)
+    out = out[:, :, -seq_len:]
+    if activation is not None:
+        out = ACT2FN[activation](out)
+    return out.to(hidden_states.dtype)
+
+
+@use_kernel_func_from_hub_with_fallback("causal_conv1d_fn", "causal_conv1d")
+def causal_conv1d_fn(
+    hidden_states: torch.Tensor,
+    weight: nn.Parameter,
+    bias: nn.Parameter | None = None,
+    activation: str | None = None,
+    **kwargs,
+):
+    _, hidden_size, seq_len = hidden_states.shape
+    padding = weight.shape[-1] - 1
+
+    out = F.conv1d(
+        hidden_states.to(weight.dtype),
+        weight=weight.unsqueeze(1),
+        bias=bias,
+        padding=padding,
+        groups=hidden_size,
+    )[:, :, :seq_len]
+    if activation is not None:
+        out = ACT2FN[activation](out)
+    return out.to(hidden_states.dtype)
+
+
+class KimiK3DeltaAttention(nn.Module):
+    # Annotations to make ty happy
+    chunk_kda: Callable[..., tuple[torch.Tensor, torch.Tensor | None]]
+    recurrent_kda: Callable[..., tuple[torch.Tensor, torch.Tensor | None]]
+
     def __init__(self, config: KimiLinearConfig, layer_idx: int):
         super().__init__()
         self.config = config
-        self.mode = "chunk"
-
-        self.hidden_size = config.hidden_size
-        self.conv_size = config.linear_attn_config["short_conv_kernel_size"]
-        self.head_dim = config.linear_attn_config["head_dim"]
-        self.num_heads = config.linear_attn_config["num_heads"]
-        self.head_k_dim = self.head_dim
-        self.num_k_heads = self.num_heads
-
         self.layer_idx = layer_idx
 
-        assert self.mode in ["chunk", "fused_recurrent"], f"Not suppoerted mode `{self.mode}`."
+        # Attention attributes
+        self.hidden_size = config.hidden_size
+        self.num_k_heads = config.linear_attn_key_heads
+        self.head_k_dim = config.linear_attn_key_head_dim
+        self.num_v_heads = config.linear_attn_value_heads
+        self.head_v_dim = config.linear_attn_value_head_dim
+        self.conv_kernel_size = config.linear_conv_kernel_dim
 
-        projection_k_size = self.head_k_dim * self.num_k_heads
-        projection_size = self.head_dim * self.num_heads
+        # QVK modules (3 projections and 1 packed convolution)
+        self.projection_k_size = self.head_k_dim * self.num_k_heads
+        self.projection_v_size = self.head_v_dim * self.num_v_heads
+        conv_size = 2 * self.projection_k_size + self.projection_v_size
 
-        self.q_proj = nn.Linear(self.hidden_size, projection_k_size, bias=False)
-        self.k_proj = nn.Linear(self.hidden_size, projection_k_size, bias=False)
-        self.v_proj = nn.Linear(self.hidden_size, projection_size, bias=False)
+        self.q_proj = nn.Linear(self.hidden_size, self.projection_k_size, bias=False)
+        self.k_proj = nn.Linear(self.hidden_size, self.projection_k_size, bias=False)
+        self.v_proj = nn.Linear(self.hidden_size, self.projection_v_size, bias=False)
 
-        self.q_conv1d = ShortConvolution(
-            hidden_size=projection_k_size,
-            kernel_size=self.conv_size,
-            activation="silu",
+        self.conv1d = nn.Conv1d(
+            in_channels=conv_size,
+            out_channels=conv_size,
+            bias=False,
+            kernel_size=self.conv_kernel_size,
+            groups=self.conv_dim,
+            padding=self.conv_kernel_size - 1,
         )
-        self.k_conv1d = ShortConvolution(hidden_size=projection_k_size, kernel_size=self.conv_size, activation="silu")
-        self.v_conv1d = ShortConvolution(hidden_size=projection_size, kernel_size=self.conv_size, activation="silu")
 
-        self.A_log = torch.nn.Parameter(
-            torch.log(torch.empty(self.num_heads, dtype=torch.float32).uniform_(1, 16)).view(1, 1, -1, 1)
-        )
+        # Kimi Delta Attention (KDA) modules
+        self.forget_gate_down = nn.Linear(self.hidden_size, self.head_v_dim, bias=False)
+        self.forget_gate_up = nn.Linear(self.head_v_dim, self.projection_v_size, bias=False)
+        self.beta_proj = nn.Linear(self.hidden_size, self.num_v_heads, bias=False)
 
-        self.f_a_proj = nn.Linear(self.hidden_size, self.head_dim, bias=False)
-        self.f_b_proj = nn.Linear(self.head_dim, projection_size, bias=False)
+        A_log_init = torch.empty(self.num_v_heads, 1, dtype=torch.float32).uniform_(1, 16)  # need actual values to log
+        self.A_log = torch.nn.Parameter(A_log_init.log())
+        self.dt_bias = nn.Parameter(torch.empty(self.num_v_heads, self.head_v_dim, dtype=torch.float32))
+        self.forget_gate_lower_bound = config.forget_gate_lower_bound
 
-        self.dt_bias = nn.Parameter(torch.empty(projection_size, dtype=torch.float32))
+        # Output normalization and projection
+        self.use_full_rank_output_gate = config.use_full_rank_output_gate
+        if self.use_full_rank_output_gate:
+            self.output_gate = nn.Linear(self.hidden_size, self.projection_v_size, bias=False)
+        else:
+            self.output_gate_down = nn.Linear(self.hidden_size, self.head_v_dim, bias=False)
+            self.output_gate_up = nn.Linear(self.head_v_dim, self.projection_v_size, bias=False)
 
-        self.b_proj = nn.Linear(self.hidden_size, self.num_heads, bias=False)
-
-        self.g_a_proj = nn.Linear(self.hidden_size, self.head_dim, bias=False)
-        self.g_b_proj = nn.Linear(self.head_dim, projection_size, bias=False)
-
-        self.o_norm = FusedRMSNormGated(self.head_dim, eps=config.rms_norm_eps, activation="sigmoid")
-        self.o_proj = nn.Linear(projection_size, self.hidden_size, bias=False)
+        self.o_norm = KimiLinearRMSNormGated(self.head_v_dim, eps=config.rms_norm_eps, activation="sigmoid")
+        self.o_proj = nn.Linear(self.projection_v_size, self.hidden_size, bias=False)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        cache_params: KimiDynamicCache | None = None,
-        **kwargs: Unpack[dict],
-    ) -> tuple[torch.Tensor, torch.Tensor | None, Cache | None]:
+        past_key_values: Cache | None = None,
+        attention_mask: torch.Tensor | None = None,  # [batch, num_heads, seqlen_q, seqlen_k] or [seqlen_q, seqlen_k]
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, None]:
+        # Apply the 2D padding mask to the hidden states if there is one
         if attention_mask is not None:
+            # Attention mask must be 2D: try switching to the padding mask if it's not
             if attention_mask.dim() != 2:
-                attention_mask = kwargs.get("padding_mask")
-
-            if attention_mask is not None and attention_mask.dim() != 2:
+                attention_mask = kwargs.get("padding_mask", attention_mask)
+            if attention_mask.dim() != 2:
                 raise ValueError(
-                    "attention_mask must be a 0-1 matrix of shape [batch_size, seq_len] "
-                    "(0 = padding). 3D masks are not supported here."
+                    f"Mask must be a 0-1 matrix of shape [batch_size, seq_len] but got {attention_mask.shape = }",
                 )
-        use_cache = cache_params is not None
-        batch_size, q_len, _ = hidden_states.shape
-        mode = "fused_recurrent" if q_len <= 64 else self.mode
-        if self.training:
-            assert mode == "chunk", "Only chunk mode is supported in training."
+            apply_mask_to_padding_states(hidden_states, attention_mask)
 
-        cu_seqlens = kwargs.get("cu_seqlens")
-        indices = None
-        if attention_mask is not None:
-            indices, cu_seqlens, _ = get_unpad_data(attention_mask[:, -q_len:])
-            hidden_states = index_first_axis(rearrange(hidden_states, "b s ... -> (b s) ..."), indices).unsqueeze(0)
+        # Apply projections
+        batch_size, seq_len = hidden_states.shape[:2]
+        q_states = self.q_proj(hidden_states)
+        k_states = self.k_proj(hidden_states)
+        v_states = self.v_proj(hidden_states)
 
-        conv_state_q, conv_state_k, conv_state_v = None, None, None
-        recurrent_state = None
-        if cache_params is not None:
-            if cache_params.conv_states[self.layer_idx] is not None:
-                conv_state_q, conv_state_k, conv_state_v = cache_params.conv_states[self.layer_idx]
-            recurrent_state = cache_params.recurrent_states[self.layer_idx]
-        q, conv_state_q = self.q_conv1d(
-            x=self.q_proj(hidden_states), cache=conv_state_q, output_final_state=use_cache, cu_seqlens=cu_seqlens
-        )
-        k, conv_state_k = self.k_conv1d(
-            x=self.k_proj(hidden_states), cache=conv_state_k, output_final_state=use_cache, cu_seqlens=cu_seqlens
-        )
-        v, conv_state_v = self.v_conv1d(
-            x=self.v_proj(hidden_states), cache=conv_state_v, output_final_state=use_cache, cu_seqlens=cu_seqlens
-        )
-        g = self.f_b_proj(self.f_a_proj(hidden_states))
-        g = fused_kda_gate(g, self.A_log, self.head_dim, g_bias=self.dt_bias)
-        beta = self.b_proj(hidden_states).float().sigmoid()
+        # Apply convolutions and update conv_states cache. conv_states are used as left-side padding for convolution:
+        # we apply convolution to groups of N tokens, so we need to keep N-1 tokens around for the next forward pass,
+        # so that token T can see the token T-1, T-2, ..., T-N+1.
+        mixed_qkv = torch.cat((q_states, k_states, v_states), dim=-1)
+        use_precomputed_states = past_key_values is not None and past_key_values.has_previous_state(self.layer_idx)
 
-        q, k = map(lambda x: rearrange(x, "... (h d) -> ... h d", d=self.head_k_dim), (q, k))
-        v = rearrange(v, "... (h d) -> ... h d", d=self.head_dim)
-
-        if mode == "chunk":
-            o, recurrent_state = chunk_kda(
-                q=q,
-                k=k,
-                v=v,
-                g=g,
-                beta=beta,
-                initial_state=recurrent_state,
-                output_final_state=True,
-                use_qk_l2norm_in_kernel=True,
-                cu_seqlens=cu_seqlens,
+        if use_precomputed_states and seq_len == 1 and not past_key_values.layers[self.layer_idx].record_past:
+            conv_state = past_key_values.layers[self.layer_idx].conv_states[0]
+            # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
+            mixed_qkv = causal_conv1d_update(
+                mixed_qkv,
+                conv_state,
+                self.conv1d.weight.squeeze(1),
+                self.conv1d.bias,
+                self.activation,
             )
         else:
-            o, recurrent_state = fused_recurrent_kda(
-                q=q,
-                k=k,
-                v=v,
-                g=g,
-                beta=beta,
-                initial_state=recurrent_state,
-                output_final_state=True,
-                use_qk_l2norm_in_kernel=True,
-                cu_seqlens=cu_seqlens,
+            if past_key_values is not None:
+                mixed_qkv = past_key_values.update_conv_state(
+                    mixed_qkv, self.layer_idx, conv_kernel_size=self.conv_kernel_size
+                )
+            mixed_qkv = causal_conv1d_fn(
+                mixed_qkv,
+                self.conv1d.weight.squeeze(1),
+                self.conv1d.bias,
+                activation=self.activation,
+                **kwargs,
             )
-        if cache_params is not None:
-            cache_params.recurrent_states[self.layer_idx] = recurrent_state
-            cache_params.conv_states[self.layer_idx] = (conv_state_q, conv_state_k, conv_state_v)
+            # Drop the additional previous states
+            if past_key_values is not None:
+                mixed_qkv = mixed_qkv[:, :, -seq_len:]
 
-        g = self.g_b_proj(self.g_a_proj(hidden_states))
-        g = rearrange(g, "... (h d) -> ... h d", d=self.head_dim)
-        o = self.o_norm(o, g)
+        mixed_qkv = mixed_qkv.transpose(1, 2)
+        q_states, k_states, v_states = torch.split(
+            mixed_qkv, [self.projection_k_size, self.projection_k_size, self.projection_v_size], dim=-1
+        )
 
-        o = rearrange(o, "b t h d -> b t (h d)")
-        o = self.o_proj(o)
-        if attention_mask is not None:
-            o = pad_input(o.squeeze(0), indices, batch_size, q_len)
+        # Reshape QVK states for Kimi linear attention
+        key_shape = (batch_size, seq_len, self.num_k_heads, self.head_k_dim)
+        value_shape = (batch_size, seq_len, self.num_v_heads, self.head_v_dim)
 
-        return o
+        q_states = q_states.view(key_shape)
+        k_states = k_states.view(key_shape)
+        v_states = v_states.view(value_shape)
+
+        # Compute the gate, ie. the log-decay of the states, called "g" in flash-linear-attention API
+        gate = self.forget_gate_up(self.forget_gate_down(hidden_states))
+        gate = gate.reshape(value_shape)
+        log_decay_scale = self.A_log.exp()
+        # If a lower bound is provided for the gate, the way to compute the log_decay is different
+        if self.forget_gate_lower_bound is not None:
+            gate = self.forget_gate_lower_bound * (log_decay_scale * (gate + self.dt_bias)).sigmoid()
+        else:
+            gate = -log_decay_scale * F.softplus(gate.float() + self.dt_bias)
+
+        beta = self.beta_proj(hidden_states).float().sigmoid()
+
+        # Retrieve the old recurrent state if there is one
+        if use_precomputed_states:
+            recurrent_state = past_key_values.layers[self.layer_idx].recurrent_states[0]  # type: ignore
+        else:
+            recurrent_state = None
+
+        # Apply the KDA delta rule, here in the non-chunked mode (for decoding with a cache)
+        if use_precomputed_states and seq_len == 1:
+            kda_fn = self.recurrent_kda
+            kwargs = {}
+        # Otherwise (prefill or no cache) use the "chunked" mode, which is more efficient for longer input sequences
+        else:
+            kda_fn = self.chunk_kda
+            kwargs = {"cu_seqlens": kwargs.get("cu_seq_lens_q")}
+
+        core_attn_out, last_recurrent_state = kda_fn(
+            q_states,
+            k_states,
+            v_states,
+            g=gate,
+            beta=beta,
+            initial_state=recurrent_state,
+            output_final_state=past_key_values is not None,
+            use_qk_l2norm_in_kernel=True,
+            **kwargs,  # TODO: FLA kernel can do more and we precompute less, but it means more code divergence before
+        )
+
+        # Update cache
+        if past_key_values is not None:
+            past_key_values.update_recurrent_state(last_recurrent_state, self.layer_idx)
+
+        # Apply normalization to the attention output
+        if self.use_full_rank_output_gate:
+            output_gate = self.output_gate(hidden_states)
+        else:
+            output_gate = self.output_gate_down(self.output_gate_up(hidden_states))
+        output_gate = output_gate.reshape(value_shape)
+        normed_attn_out = self.o_norm(core_attn_out, output_gate)
+
+        # Apply output projection
+        normed_attn_out = normed_attn_out.reshape(batch_size, seq_len, -1)
+        output = self.o_proj(normed_attn_out)
+        # TODO: BUG: is there an attn mask to apply here?
+        return output, None  # we add a "None" so it matches the MLA return type
 
 
 class KimiLinearTopkRouter(nn.Module):
@@ -552,7 +668,7 @@ class KimiLinearDecoderLayer(nn.Module):
             hidden_states = self.self_attn(
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
-                cache_params=past_key_values,
+                past_key_values=past_key_values,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
                 **kwargs,
