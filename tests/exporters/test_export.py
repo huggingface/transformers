@@ -103,9 +103,13 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "TODO: refactor to a cache-based SSM pattern (like Mamba/Mamba2)."
         ),
         "MoshiForConditionalGeneration": (
-            "`generate()` creates `blank_user_audio_codes` outside the traced forward and "
-            "passes it as a kwarg; the resulting ONNX input has mismatched rank (scalar vs 3D). "
-            "TODO: make `blank_user_audio_codes` part of the model state."
+            "Its audio kwargs reach no graph: the dynamo drive dies in `_validate_model_kwargs` (`The "
+            "following model_kwargs are not used by the model: ['moshi_audio_codes', 'user_audio_codes']`) "
+            "and the ONNX one on a device mismatch (`X1 and X2 must have the same device type. X1: cpu X2: "
+            "cuda`) — not the rank mismatch this entry used to claim. Only the *merged* decode, and only "
+            "without a static cache: measured with this lifted, 34 of 36 variants pass and those two fail. "
+            "TODO: carry a model's own per-step audio kwargs through the decomposition, the way "
+            "`PerceptionLMForConditionalGeneration` needs for its video path — the same shape of gap."
         ),
         "CohereAsrForConditionalGeneration": (
             "Its decoder reads `encoder_outputs.attention_mask` (the encoder's own frame mask), but the "
@@ -124,18 +128,18 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "from the graph's own declared rank, the way `_mask_feed` already does for mixed attention."
         ),
         "UdopForConditionalGeneration": (
-            "Exported decoder output is missing `attention_mask` vs eager — encoder-decoder "
-            "cross-attention mask doesn't flow through the generate decomposition correctly."
-        ),
-        "VoxtralRealtimeForConditionalGeneration": (
-            "Exported prefill drops `past_key_values.*.{keys,values,_sliding_window_tensor}` "
-            "tensors that eager returns. Plain forward exports work. "
-            "TODO: align generate-decomposition path with the realtime KV-cache shape."
+            "Same cause as `CohereAsrForConditionalGeneration`, measured: both die on `AttributeError: "
+            "'BaseModelOutput' object has no attribute 'attention_mask'` before anything is exported "
+            "(neither reaches the runtime drive — 0 drive entries, failing in seconds). One fix — carrying "
+            "the encoder's own output class through export — covers both."
         ),
         "Gemma3nForConditionalGeneration": (
-            "KV-shared layers (`num_kv_shared_layers`) reuse cache entries from earlier layers; "
-            "exported prefill returns only `logits` while eager surfaces the populated KV cache. "
-            "Same shape as Voxtral. TODO: align the generate-decomposition path."
+            "Its text model takes an extra `per_layer_inputs` tensor that the multi-modal decomposition does "
+            "not carry, so the captured call raises `TypeError` on `self.language_model(...)` "
+            "(`modeling_gemma3n.py:2148`) — immediately, on all three backends, before any export runs. The "
+            'old reason here (prefill returning only `logits`, "same shape as Voxtral") no longer applies: '
+            "Voxtral now passes and its entry is gone. Measured with this lifted: 18 of 36 variants pass, 11 "
+            "reach the runtime drive. TODO: let the decomposition carry a model's extra per-layer inputs."
         ),
     },
     # Every backend, dynamic-shape only.
@@ -187,14 +191,6 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "lacks API `generate` expects (`is_compileable`), so every step of building and driving it "
             "surfaces as the next `AttributeError`. TODO: bring the class up to the `Cache` API rather than "
             "special-case it in the runtime."
-        ),
-        "VibeVoiceAsrForConditionalGeneration": (
-            "Keeps two co-equal audio encoders (`acoustic_tokenizer_encoder`, `semantic_tokenizer_encoder`) "
-            'and so has no single `get_encoder(modality="audio")` to report; without that the model is not '
-            "detected as multi-modal and never splits, leaving the audio path — and its data-dependent "
-            "relation between the placeholder-token count and the waveform length — inside the text prefill "
-            "graph, whose deferred assert (`Eq(u0, s2//2)`) then fires on the runtime's own feed. Splitting "
-            "it needs the model to name an audio encoder, not the exporter to guess one."
         ),
         "DeepseekV4ForCausalLM": (
             "Its HCA/CSA cache layers hold dict-keyed state that the trace bakes into the input tree spec, "
@@ -250,17 +246,43 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "decode step re-picks the prefill graph and trips its baked prompt-length guard. TODO: teach "
             "`cache_input`/`forward` the `state` kwarg, or port RWKV onto a `Cache` subclass."
         ),
-        "PerceptionLMForConditionalGeneration": (
-            "Routes videos through a *second* `get_image_features` call (`pixel_values=pixel_values_videos`); "
-            "the decomposition and runtime model one modality per getter, so the video kwarg has no route "
-            "and its features would need the image runner run twice with different scatter targets. "
-            "TODO: let a modality spec share another's runner."
-        ),
     },
     # Generate path, multi-token decode capture only — the two decode steps merged by
     # `_merge_decode_calls` into one graph whose query axis stays symbolic, so a single graph serves both
     # the prompt and every decode step. Backend-agnostic. The single-token capture, which exports prefill
     # and decode as separate graphs with their own fixed query lengths, still runs.
+    # Scoped to the one configuration that *checks* the invariant, which is not the same as the only one it
+    # is violated in — see the entry.
+    "dynamo.generate.runtime.dynamic": {
+        "VibeVoiceAsrForConditionalGeneration": (
+            "Keeps two co-equal audio encoders (`acoustic_tokenizer_encoder`, `semantic_tokenizer_encoder`) "
+            'and so has no single `get_encoder(modality="audio")` to report; without that the model is not '
+            "detected as multi-modal and never splits, leaving the audio path — and its data-dependent "
+            "relation between the placeholder-token count and the waveform length — inside the text prefill "
+            "graph, whose deferred assert then fires on the runtime's own feed (`Runtime assertion failed "
+            "for expression Eq(u0, (s2//2))`). Splitting it needs the model to name an audio encoder, not "
+            "the exporter to guess one.\n"
+            "Measured with this entry lifted: 16 of 18 generate variants drive fine, the two dynamic dynamo "
+            "ones fail. Do not read that as the other backends serving this model — dynamo is the only one "
+            "that still *has* the assert to fail. ONNX erases assertion nodes (`_fix_assertion`) and "
+            "ExecuTorch drops them before lowering (`_drop_runtime_asserts`), both by design, and a static "
+            "trace folds the comparison at fixed sizes; none of those check the relation, so their passing "
+            "says nothing about whether it holds. Narrow the scope only because that is where the failure is "
+            "observable, and revisit the other backends' silence if the audio path is ever split properly."
+        ),
+    },
+    # The runtime drives these, but not from a *merged* decode — every other variant is served.
+    "generate.runtime.multi_token": {
+        "PerceptionLMForConditionalGeneration": (
+            "Routes videos through a *second* `get_image_features` call (`pixel_values=pixel_values_videos`), "
+            "and the decomposition models one modality per getter — so the video kwarg reaches no graph and "
+            "`generate` refuses it (`The following model_kwargs are not used by the model: "
+            "['pixel_values_videos']`). Only the merged decode is affected: a multi-modal model exports no "
+            "standalone prefill, so that one graph serves the prompt and is where the video kwarg would land. "
+            "Measured with this entry lifted: 14 of 18 generate variants drive fine, the 4 merged-decode ones "
+            "fail. TODO: let a modality spec share another's runner."
+        ),
+    },
     "generate.multi_token": {
         "ZayaForCausalLM": (
             "Its merged decode graph specializes the query axis instead of keeping it symbolic, which is the "
@@ -275,20 +297,6 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "so the router slice is what compounds it here. Fails identically on dynamo and ONNX, and "
             "predates the metadata work (measured on both). Every other zaya variant passes."
         ),
-        "Gemma3ForConditionalGeneration": (
-            "Sliding-window cache **and** multi-modal. A multi-modal model exports no `prefill` graph, so its "
-            "merged decode graph serves the prompt too — and a decode graph is traced mid-generation, with "
-            "the sliding-window layer's `cumulative_length` fixed at that moment in the cache's pytree "
-            "context, which the fresh cache a prompt arrives on cannot match. Neither half alone breaks: "
-            "gemma2 / mistral / gemma3-text bake the same counter but route the prompt through their own "
-            "`prefill`, and llava / qwen2_vl are multi-modal with nothing step-dependent baked. "
-            "Three fixes were tried together and reverted — capturing with the model's prebuilt mask (so the "
-            "counter leaves the graph), explicit query/key dims on that mask (so `Dim.AUTO` cannot infer "
-            "`q == kv` from a prompt), and normalizing the counter out of the spec. The mask dims are what "
-            "fail: torch rejects a dim marked dynamic that the code specializes, and a *static* cache's key "
-            "axis is genuinely constant, so one spec cannot cover both cache kinds."
-        ),
-        "Gemma4ForConditionalGeneration": "Same sliding-window-plus-multi-modal shape as `Gemma3ForConditionalGeneration`.",
         "ZambaForCausalLM": (
             "Its hand-copied mixer runs the selective scan per head with the associative path deliberately "
             "off ('Old model: only when user request it explicitly'), so the sequential scan unrolls and "
@@ -809,7 +817,11 @@ class ExportTesterMixin:
         ``"all"`` always applies, ``"generate"`` only for generate tests, ``"dynamic"`` / ``"static"``
         for that shape variant, ``"generate.multi_token"`` for the merged multi-token decode capture, and
         ``"generate.runtime"`` for driving the exported graphs through `generate` (the export itself still
-        runs — use it when a model exports fine and only the runtime cannot serve it). Every one of these
+        runs — use it when a model exports fine and only the runtime cannot serve it), and
+        ``"generate.runtime.multi_token"`` for a model the runtime drives fine *except* from a merged decode.
+        The runtime scope carries the shape variant too (``"generate.runtime.dynamic"`` /
+        ``"generate.runtime.static"``), so an entry can say "only the dynamic drive fails" instead of gating
+        every variant — and, backend-prefixed, "only this backend's dynamic drive". Every one of these
         also exists ``"<backend>."``-prefixed (``"onnx.generate.multi_token"``, …) to skip on one backend
         only, plus the bare ``"<backend>"`` for that whole backend. Also skips static-cache variants
         (a ``generation_config`` requesting one) on models that can't compile fullgraph — they don't
@@ -827,6 +839,9 @@ class ExportTesterMixin:
                 scopes.append("generate.multi_token")
             if runtime:
                 scopes.append("generate.runtime")
+                if multi_token:
+                    scopes.append("generate.runtime.multi_token")
+                scopes.append("generate.runtime.dynamic" if dynamic else "generate.runtime.static")
         scopes.append("dynamic" if dynamic else "static")
         if backend:
             scopes += [backend] + [f"{backend}.{scope}" for scope in scopes if scope != "all"]

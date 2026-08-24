@@ -77,7 +77,7 @@ from .integrations.flash_attention import flash_attention_forward
 from .integrations.flash_paged import paged_attention_forward
 from .integrations.flex_attention import flex_attention_forward
 from .integrations.hub_kernels import allow_all_hub_kernels, is_kernel, kernelize
-from .integrations.moe import ALL_EXPERTS_FUNCTIONS
+from .integrations.moe import ALL_EXPERTS_FUNCTIONS, dispatches_experts_implementation
 from .integrations.peft import maybe_load_adapters
 from .integrations.sdpa_attention import sdpa_attention_forward
 from .integrations.sdpa_paged import sdpa_attention_paged_forward
@@ -2017,27 +2017,13 @@ class PreTrainedModel(
 
     @classmethod
     def _can_set_experts_implementation(cls) -> bool:
-        """Detect whether the class supports setting its experts implementation dynamically. Inspects the module source
-        as a heuristic, which avoids maintaining yet another property flag. Instead, the flag is set dynamically
-        on the first successful call.
+        """Whether this class's experts resolve their implementation per forward, so it can be switched at
+        runtime with `set_experts_implementation`.
         """
-        # Early return if there is a cached value
-        cached_value = getattr(cls, "_can_set_experts_implementation_cached_value", None)
-        if isinstance(cached_value, bool):
-            return cached_value
-
-        class_module = sys.modules.get(cls.__module__)
-        # Missing module entry (e.g. cleared by a test) or custom model in a jupyter notebook / repl -> do not allow to set it
-        if class_module is None:
-            return False
-        try:
-            code = inspect.getsource(class_module)
-        except (OSError, TypeError):
-            return False
-        # Heuristic: if the `@use_experts_implementation` decorator is used, then we can set it
-        can_set = "@use_experts_implementation" in code
-        cls._can_set_experts_implementation_cached_value = can_set
-        return can_set
+        module = sys.modules.get(cls.__module__)
+        return module is not None and any(
+            isinstance(obj, type) and dispatches_experts_implementation(obj) for obj in vars(module).values()
+        )
 
     def set_attn_implementation(self, attn_implementation: str | dict, allow_all_kernels: bool = False):
         """
@@ -2230,6 +2216,13 @@ class PreTrainedModel(
                     if not isinstance(experts_implementation, dict)
                     else experts_implementation.get(subconfig_key, subconfig._experts_implementation)
                 )
+
+        if requested_implementation not in self.get_experts_implementation().values():
+            logger.warning(
+                f"Could not set the experts implementation to {requested_implementation!r} on "
+                f"{self.__class__.__name__} or any of its submodels; their experts are not wrapped by "
+                "`use_experts_implementation`."
+            )
 
     def enable_input_require_grads(self):
         """

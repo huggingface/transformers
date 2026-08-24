@@ -520,6 +520,17 @@ def _default_apply_gate(self, gate_up_out: torch.Tensor) -> torch.Tensor:
     return self.act_fn(gate) * up  # (S, intermediate_dim)
 
 
+def dispatches_experts_implementation(experts_class: type) -> bool:
+    """Whether `experts_class.forward` is the dispatcher `use_experts_implementation` installs.
+
+    That wrapper resolves the implementation on every call, which is what makes an instance switchable at
+    runtime. Asked of the function rather than of a flag on the class: the wrapper is defined in this module,
+    so it carries this module's globals, and `functools.wraps` copies names but never `__globals__`.
+    """
+    forward = getattr(experts_class, "forward", None)
+    return getattr(forward, "__globals__", {}).get("__name__") == __name__
+
+
 def use_experts_implementation(
     experts_class: type[torch.nn.Module] | None = None,
     *,
