@@ -203,9 +203,7 @@ class Glm5NextVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
                 video_metadata=[video_metadata[0]],
                 return_tensors="pt",
             )[self.input_name]
-            expected_output_video_shape = self.video_processor_tester.expected_output_video_shape(
-                [video_inputs[0]]
-            )
+            expected_output_video_shape = self.video_processor_tester.expected_output_video_shape([video_inputs[0]])
             self.assertEqual(list(encoded_videos.shape), expected_output_video_shape)
 
             encoded_videos = video_processing(
@@ -231,9 +229,7 @@ class Glm5NextVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
                 video_metadata=[video_metadata[0]],
                 return_tensors="pt",
             )[self.input_name]
-            expected_output_video_shape = self.video_processor_tester.expected_output_video_shape(
-                [video_inputs[0]]
-            )
+            expected_output_video_shape = self.video_processor_tester.expected_output_video_shape([video_inputs[0]])
             self.assertEqual(list(encoded_videos.shape), expected_output_video_shape)
 
             encoded_videos = video_processing(
@@ -259,9 +255,7 @@ class Glm5NextVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
                 video_metadata=[video_metadata[0]],
                 return_tensors="pt",
             )[self.input_name]
-            expected_output_video_shape = self.video_processor_tester.expected_output_video_shape(
-                [video_inputs[0]]
-            )
+            expected_output_video_shape = self.video_processor_tester.expected_output_video_shape([video_inputs[0]])
             self.assertEqual(list(encoded_videos.shape), expected_output_video_shape)
 
             encoded_videos = video_processing(
@@ -294,9 +288,7 @@ class Glm5NextVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
                 image_mean=(0.0, 0.0, 0.0, 0.0),
                 image_std=(1.0, 1.0, 1.0, 1.0),
             )[self.input_name]
-            expected_output_video_shape = self.video_processor_tester.expected_output_video_shape(
-                [video_inputs[0]]
-            )
+            expected_output_video_shape = self.video_processor_tester.expected_output_video_shape([video_inputs[0]])
             self.assertEqual(list(encoded_videos.shape), expected_output_video_shape)
 
             # Test batched
@@ -330,9 +322,7 @@ class Glm5NextVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
                 video_metadata=[video_metadata[0]],
                 return_tensors="pt",
             )[self.input_name]
-            expected_output_video_shape = self.video_processor_tester.expected_output_video_shape(
-                [video_inputs[0]]
-            )
+            expected_output_video_shape = self.video_processor_tester.expected_output_video_shape([video_inputs[0]])
             self.assertEqual(list(encoded_videos.shape), expected_output_video_shape)
 
             # Test batched

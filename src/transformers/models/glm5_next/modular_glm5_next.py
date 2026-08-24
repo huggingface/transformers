@@ -1715,7 +1715,7 @@ def smart_resize(
 
     # Dynamically adjust pixel count
     # TODO: possibly integrate directly into size dict (into the values)
-    pixels_per_token = temporal_factor * factor ** 2
+    pixels_per_token = temporal_factor * factor**2
     min_pixels *= pixels_per_token
     max_pixels *= pixels_per_token
 
@@ -1820,7 +1820,7 @@ class Glm5NextImageProcessor(GlmgaImageProcessor):
         )
 
         # Dynamic padded to ensure aspect ratio is compatible with `_patchify`
-        pixels_per_token = temporal_factor * factor ** 2
+        pixels_per_token = temporal_factor * factor**2
         scale = min(target_height / height, target_width / width)
         if temporal_factor * height * width >= (pixels_per_token * min_image_tokens):
             scale = min(1.0, scale)
@@ -1974,7 +1974,7 @@ class Glm5NextImageProcessorPil(GlmgaImageProcessorPil):
         )
 
         # Dynamic padded to ensure aspect ratio is compatible with `_patchify`
-        pixels_per_token = temporal_factor * factor ** 2
+        pixels_per_token = temporal_factor * factor**2
         scale = min(target_height / height, target_width / width)
         if temporal_factor * height * width >= (pixels_per_token * min_image_tokens):
             scale = min(1.0, scale)
@@ -2286,7 +2286,7 @@ class Glm5NextVideoProcessor(GlmgaVideoProcessor):
         )
 
         # Dynamic padded to ensure aspect ratio is compatible with `_patchify`
-        pixels_per_token = temporal_factor * factor ** 2
+        pixels_per_token = temporal_factor * factor**2
         scale = min(target_height / height, target_width / width)
         if videos.shape[1] * height * width >= (pixels_per_token * min_image_tokens):
             scale = min(1.0, scale)

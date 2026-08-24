@@ -102,7 +102,10 @@ class Glm5NextImageProcessingTester:
                 max_pixels=self.max_image_tokens,
             )
             seq_len += (resized_height // self.patch_size) * (resized_width // self.patch_size)
-        return (seq_len, hidden_dim,)
+        return (
+            seq_len,
+            hidden_dim,
+        )
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         return prepare_image_inputs(
@@ -166,7 +169,6 @@ class Glm5NextImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
-
     def test_call_numpy(self):
         for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
@@ -187,7 +189,6 @@ class Glm5NextImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
-
     def test_call_pytorch(self):
         for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
@@ -207,7 +208,6 @@ class Glm5NextImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
             expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
-
 
     def test_call_numpy_4_channels(self):
         for image_processing_class in self.image_processing_classes.values():
@@ -260,10 +260,7 @@ class Glm5NextImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 return_tensors="pt",
             ).pixel_values
 
-            patch_dim = (
-                self.image_processor_tester.temporal_patch_size
-                * self.image_processor_tester.patch_size**2
-            )
+            patch_dim = self.image_processor_tester.temporal_patch_size * self.image_processor_tester.patch_size**2
             for channel, expected in enumerate((1.0, 128 / 255 / 2, 51 / 255 / 4, 0.0)):
                 block = output[:, channel * patch_dim : (channel + 1) * patch_dim]
                 torch.testing.assert_close(block, torch.full_like(block, expected))
