@@ -158,6 +158,7 @@ class GraniteSpeech5EncoderAttention(MoonshineStreamingEncoderAttention):
 
     def __init__(self, config: GraniteSpeech5EncoderConfig, layer_idx: int):
         super().__init__(config, layer_idx)
+        self.context_size = config.context_size
         self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
@@ -174,7 +175,7 @@ class GraniteSpeech5EncoderAttention(MoonshineStreamingEncoderAttention):
         batch_size, seq_length, _ = hidden_states.shape
 
         # right-pad the sequence to a whole number of blocks
-        num_padded = -seq_length % self.config.context_size
+        num_padded = -seq_length % self.context_size
         if num_padded > 0:
             hidden_states = nn.functional.pad(hidden_states, (0, 0, 0, num_padded))
             if attention_mask is None:
@@ -182,17 +183,23 @@ class GraniteSpeech5EncoderAttention(MoonshineStreamingEncoderAttention):
             attention_mask = nn.functional.pad(attention_mask, (0, num_padded), value=False)
 
         # every block is folded into the batch dimension, so all blocks attend independently in one call
-        flattened_batch_size = batch_size * (hidden_states.shape[1] // self.config.context_size)
-        hidden_shape = (flattened_batch_size, self.config.context_size, self.config.num_attention_heads, -1)
+        flattened_batch_size = batch_size * (hidden_states.shape[1] // self.context_size)
+        hidden_shape = (flattened_batch_size, self.context_size, self.config.num_attention_heads, -1)
         query_states = self.q_proj(hidden_states).reshape(hidden_shape).transpose(1, 2)
         key_states = self.k_proj(hidden_states).reshape(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).reshape(hidden_shape).transpose(1, 2)
 
         relative_position_embeddings = self.rel_pos_emb(position_embeddings) * self.scaling
-        position_bias = torch.einsum("b h c d, c r d -> b h c r", query_states, relative_position_embeddings)
+        queries = query_states.permute(2, 0, 1, 3).reshape(self.context_size, -1, self.head_dim)
+        position_bias = queries @ relative_position_embeddings.transpose(1, 2)
+        position_bias = position_bias.view(
+            self.context_size, flattened_batch_size, self.config.num_attention_heads, self.context_size
+        )
+        position_bias = position_bias.permute(1, 2, 0, 3)
+        position_bias = position_bias.contiguous()  # the fused attention kernels want a contiguous bias
         if attention_mask is not None:
             # mask padded key columns so no query attends to a padded frame
-            key_mask = attention_mask.reshape(flattened_batch_size, self.config.context_size)
+            key_mask = attention_mask.reshape(flattened_batch_size, self.context_size)
             position_bias = position_bias.masked_fill(
                 ~key_mask[:, None, None, :], torch.finfo(position_bias.dtype).min
             )
