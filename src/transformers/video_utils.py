@@ -755,20 +755,18 @@ def load_video(
 
 
 def convert_to_rgb(
-    video: np.ndarray,
+    video: Union[np.ndarray, "torch.Tensor"],
     input_data_format: str | ChannelDimension | None = None,
 ) -> np.ndarray:
     """
     Convert video to RGB by blending the transparency layer if it's in RGBA format, otherwise simply returns it.
 
     Args:
-        video (`np.ndarray`):
+        video (`np.ndarray | torch.Tensor`):
             The video to convert.
         input_data_format (`ChannelDimension`, *optional*):
             The channel dimension format of the input video. If unset, will use the inferred format from the input.
     """
-    if not isinstance(video, np.ndarray):
-        raise TypeError(f"Video has to be a numpy array to convert to RGB format, but found {type(video)}")
 
     # np.array usually comes with ChannelDimension.LAST so let's convert it
     if input_data_format is None:
