@@ -19,8 +19,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_tr_hash import *
-    from .modeling_tr_hash import *
+    from .configuration_tr_hash_moe import *
+    from .modeling_tr_hash_moe import *
 else:
     import sys
 

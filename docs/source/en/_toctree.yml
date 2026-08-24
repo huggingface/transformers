@@ -915,7 +915,7 @@
         title: T5Gemma2
       - local: model_doc/t5v1.1
         title: T5v1.1
-      - local: model_doc/tr_hash
+      - local: model_doc/tr_hash_moe
         title: TR-HASH
       - local: model_doc/ul2
         title: UL2

@@ -655,7 +655,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("tipsv2_dpt", "Tipsv2DptConfig"),
         ("tipsv2_text_model", "Tipsv2TextConfig"),
         ("tipsv2_vision_model", "Tipsv2VisionConfig"),
-        ("tr_hash", "TRHashConfig"),
+        ("tr_hash_moe", "TRHashConfig"),
         ("trocr", "TrOCRConfig"),
         ("tvp", "TvpConfig"),
         ("udop", "UdopConfig"),

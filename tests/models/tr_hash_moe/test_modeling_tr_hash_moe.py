@@ -163,6 +163,7 @@ class TRHashIntegrationTest(unittest.TestCase):
     def test_model_from_pretrained(self):
         model = AutoModelForCausalLM.from_pretrained(
             "AETHORIA-AI/TR-HASH-MoE-200M-160B-SFT",
+            revision="047e290291eac6e2543f1074c44f9ec5deef8c33",
             dtype=torch.float32,
         ).to(torch_device)
         input_ids = torch.tensor([[2, 101, 2024, 17, 23, 31999, 7, 0]], device=torch_device)
@@ -170,4 +171,4 @@ class TRHashIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             predicted_tokens = model(input_ids, use_cache=False).logits.argmax(dim=-1)
 
-        self.assertEqual(predicted_tokens.tolist(), [[18388, 12, 17, 202, 17, 311, 63, 6]])
+        self.assertEqual(predicted_tokens.tolist(), [[13825, 12, 265, 202, 17, 17, 7, 224]])
