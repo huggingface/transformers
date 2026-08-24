@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Environment Variables
+# Environment variables
 
 ## HF_ENABLE_PARALLEL_LOADING
 
