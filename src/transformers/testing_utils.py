@@ -1454,7 +1454,7 @@ def require_deterministic_for_accelerator(test_case=None, *, devices=None):
     """Decorator that enables deterministic algorithms for the duration of a test.
 
     Uses ``get_device_properties()`` to detect the device type — no per-backend
-    ``is_torch_*_available()`` conditions needed.
+    ``is_torch_*_available()`` conditions needed. On CPU the test runs unchanged.
 
     Args:
         devices: Optional list of device type strings (e.g. ``["cuda", "xpu"]``). If given,
