@@ -19,11 +19,11 @@ limitations under the License.
 *This model was contributed to Hugging Face Transformers on 2026-08-15.*
 
 
-# GLM-5.3-Flash
+# GLM 5.3 Flash
 
 ## Overview
 
-The GLM-5.3-Flash model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
+The GLM 5.3 Flash model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
 <INSERT SHORT SUMMARY HERE>
 
 The abstract from the paper is the following:
