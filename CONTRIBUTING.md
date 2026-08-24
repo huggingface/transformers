@@ -205,7 +205,7 @@ There are four timelines for model additions depending on the model contributor 
 
   Open issues tagged ["New model"](https://github.com/huggingface/transformers/issues?q=is%3Aopen+is%3Aissue+label%3A%22New+model%22) are the entry point for outside contributors. Start with the most-requested architectures to maximize impact. We'll review and guide you through it.
 
-- Hub-first release: ship your model directly on the Hub via Transformers' [remote-code](./docs/source/en/models#custom-models.md) support, with no upstream PR required.
+- Hub-first release: ship your model directly on the Hub via Transformers' [remote-code](./docs/source/en/models.md#custom-models) support, with no upstream PR required.
 
   Popular Hub-first models often get integrated into Transformers later, which unlocks first-class docs, maintenance, and optimization. Hub-first is the lowest-friction way to add a model. However, it can be more fragile if a model requires weight conversion or other backward compatibility issues.
 

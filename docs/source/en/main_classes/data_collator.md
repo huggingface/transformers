@@ -23,7 +23,7 @@ To be able to build batches, data collators may apply some processing (like padd
 [`DataCollatorForLanguageModeling`]) also apply some random data augmentation (like random masking)
 on the formed batch.
 
-Examples of use can be found in the [example scripts](../examples) or [example notebooks](../notebooks).
+Examples of use can be found in the [example scripts](https://github.com/huggingface/transformers/tree/main/examples) or [example notebooks](../notebooks).
 
 ## Default data collator
 
