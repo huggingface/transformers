@@ -24,6 +24,7 @@ from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...integrations import use_kernelized_func
+from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
@@ -37,6 +38,7 @@ from ..qwen3_5.modeling_qwen3_5 import (
     Qwen3_5GatedDeltaNet,
     Qwen3_5RMSNorm,
     Qwen3_5TextRotaryEmbedding,
+    apply_mask_to_padding_states,
     causal_conv1d_fn,
     causal_conv1d_update,
     rotate_half,
@@ -737,23 +739,45 @@ class Qwen4ExpTextPLELayer(nn.Module):
             dilation=conv_dilation,
             bias=False,
         )
+        self.activation = "silu"
 
     def _short_conv(self, hidden_states: torch.Tensor, past_key_values: Cache | None) -> torch.Tensor:
+        seq_len = hidden_states.shape[1]
+        use_precomputed_states = past_key_values is not None and past_key_values.has_previous_state(
+            self.layer_idx, state_idx=1
+        )
         hidden_states = hidden_states.transpose(1, 2)
-        sequence_length = hidden_states.shape[-1]
-        conv_input = hidden_states
-        if self.short_conv_state_len:
+        if use_precomputed_states and seq_len == 1 and not past_key_values.layers[self.layer_idx].record_past:
+            conv_state = past_key_values.layers[self.layer_idx].conv_states[1]
+            # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
+            hidden_states = causal_conv1d_update(
+                hidden_states,
+                conv_state,
+                self.conv1d.weight.squeeze(1),
+                self.conv1d.bias,
+                self.activation,
+            )
+        else:
             if past_key_values is not None:
-                conv_input = past_key_values.update_conv_state(
-                    hidden_states,
-                    self.layer_idx,
-                    state_idx=1,
-                    conv_kernel_size=self.short_conv_state_len,
+                hidden_states = past_key_values.update_conv_state(
+                    hidden_states, self.layer_idx, state_idx=1, conv_kernel_size=self.short_conv_state_len
                 )
-            conv_input = F.pad(conv_input, (self.short_conv_state_len, 0))
-            conv_input = conv_input[..., -(self.short_conv_state_len + sequence_length) :]
-        return F.silu(self.conv1d(conv_input)).transpose(1, 2)
 
+            hidden_states = causal_conv1d_fn(
+                hidden_states,
+                self.conv1d.weight.squeeze(1),
+                self.conv1d.bias,
+                activation=self.activation,
+            )
+
+            # Drop the additional previous states
+            if past_key_values is not None:
+                hidden_states = hidden_states[:, :, -seq_len:]
+
+        hidden_states = hidden_states.transpose(1, 2)
+        return hidden_states
+
+    @force_accelerate_hooks("conv1d")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -771,11 +795,10 @@ class Qwen4ExpTextPLELayer(nn.Module):
         gated_value_normed = self.norm_conv(gated_value.flatten(-2))
         gated_value = gated_value.flatten(-2)
         if conv_mask is not None:
-            current_conv_mask = conv_mask[:, -input_ids.shape[1] :].unsqueeze(-1).to(gated_value.dtype)
-            gated_value = gated_value * current_conv_mask
-            gated_value_normed = gated_value_normed * current_conv_mask
+            gated_value = apply_mask_to_padding_states(gated_value, conv_mask)
+            gated_value_normed = apply_mask_to_padding_states(gated_value_normed, conv_mask)
         output = gated_value + self._short_conv(gated_value_normed, past_key_values)
-        return output if conv_mask is None else output * current_conv_mask
+        return output
 
 
 class Qwen4ExpTextDecoderLayer(GradientCheckpointingLayer):
