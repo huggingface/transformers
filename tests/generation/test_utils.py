@@ -87,6 +87,7 @@ if is_torch_available():
         LinearAttentionAndFullAttentionLayer,
         LinearAttentionAndSlidingWindowAttentionLayer,
         LinearAttentionLayer,
+        MtpCache,
         QuantoQuantizedLayer,
         StaticCache,
     )
@@ -3961,26 +3962,30 @@ class GenerationIntegrationTests(unittest.TestCase):
             head_dim=8,
             vocab_size=32,
             max_position_embeddings=16,
+            sliding_window=None,
         )
         config.num_mtp_layers = 2
+        config.layer_types = ["full_attention", "full_attention"]
+        config.mtp_layer_types = ["sliding_attention", "full_attention"]
         config.mtp_per_layer_config = {
-            0: {"is_causal": True},
-            1: {"is_causal": False},
+            0: {"sliding_window": 2},
+            1: {"sliding_window": None},
         }
         config._attn_implementation = "eager"
         main_model = AutoModelForCausalLM.from_config(config)
         mtp_model = MtpModel(main_model, num_mtp_layers=2)
 
-        inputs_embeds = torch.randn(1, 2, config.hidden_size)
-        position_ids = torch.arange(2).unsqueeze(0)
-        mtp_cache = DynamicCache(config=mtp_model.config)
-        causal_mask = mtp_model.create_masks_for_mtp_layer(0, inputs_embeds, mtp_cache, position_ids)["attention_mask"]
-        bidirectional_mask = mtp_model.create_masks_for_mtp_layer(1, inputs_embeds, mtp_cache, position_ids)[
+        inputs_embeds = torch.randn(1, 4, config.hidden_size)
+        position_ids = torch.arange(4).unsqueeze(0)
+        mtp_cache = MtpCache()
+        sliding_mask = mtp_model.create_masks_for_mtp_layer(0, inputs_embeds, mtp_cache, position_ids)[
             "attention_mask"
         ]
+        full_mask = mtp_model.create_masks_for_mtp_layer(1, inputs_embeds, mtp_cache, position_ids)["attention_mask"]
 
-        self.assertIsNotNone(causal_mask)
-        self.assertIsNone(bidirectional_mask)
+        min_dtype = torch.finfo(inputs_embeds.dtype).min
+        torch.testing.assert_close(sliding_mask[0, 0, -1], torch.tensor([min_dtype, min_dtype, 0.0, 0.0]))
+        torch.testing.assert_close(full_mask[0, 0, -1], torch.zeros(4))
 
     @require_torch_multi_accelerator
     def test_mtp_use_correct_device_when_drafting(self):
