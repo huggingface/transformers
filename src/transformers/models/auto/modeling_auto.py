@@ -775,6 +775,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("jais2", "Jais2ForCausalLM"),
         ("jamba", "JambaForCausalLM"),
         ("jetmoe", "JetMoeForCausalLM"),
+        ("kimi_linear", "KimiLinearForCausalLM"),
         ("laguna", "LagunaForCausalLM"),
         ("lfm2", "Lfm2ForCausalLM"),
         ("lfm2_moe", "Lfm2MoeForCausalLM"),
