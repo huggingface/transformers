@@ -533,17 +533,17 @@ class MtpModel(PreTrainedModel):
                     logits, labels, vocab_size=self.config.vocab_size, shift_labels=shift_labels, **kwargs
                 )
 
-            # Append the drafted logits
-            drafted_logits.append(logits)
             # Decode one token
             next_token_logits = logits[:, -1, :].to(device=input_ids.device)
             if logits_processor is not None and full_input_ids is not None:
-                next_token_scores = logits_processor(full_input_ids, next_token_logits.to(torch.float32))
+                next_token_logits = logits_processor(full_input_ids, next_token_logits.to(dtype=torch.float32))
+            # Append the drafted logits AFTER logits processors if any
+            drafted_logits.append(next_token_logits[:, None, :])
             if do_sample:
-                probs = nn.functional.softmax(next_token_scores, dim=-1, dtype=torch.float32)
+                probs = nn.functional.softmax(next_token_logits, dim=-1, dtype=torch.float32)
                 next_mtp_token = torch.multinomial(probs, num_samples=1)
             else:
-                next_mtp_token = torch.argmax(next_token_scores, dim=-1, keepdim=True)
+                next_mtp_token = torch.argmax(next_token_logits, dim=-1, keepdim=True)
             drafted_tokens.append(next_mtp_token)
 
             # Roll by 1 and append for next layer
@@ -635,7 +635,6 @@ class MtpModel(PreTrainedModel):
             load_config=LoadStateDictConfig(
                 weight_mapping=weight_conversions, device_map=device_map, dtype=main_model.config.dtype
             ),
-            tp_plan=None,
         )
         # finally close all opened file pointers
         for k in all_pointer:

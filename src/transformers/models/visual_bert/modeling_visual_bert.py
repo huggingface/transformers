@@ -52,9 +52,7 @@ class VisualBertEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False)
 
         # For Visual Features
         # Token type and position embedding for image features
@@ -628,8 +626,8 @@ class VisualBertModel(VisualBertPreTrainedModel):
             config=self.config,
             inputs_embeds=embedding_output[:, 0:1, :],  # force q_len == 1
             attention_mask=combined_attention_mask,
-            # Force mask creation
-            and_mask_function=lambda *args: torch.tensor(True, dtype=torch.bool),
+            # Always materialize the mask; the encoder below consumes it as a tensor.
+            allow_is_bidirectional_skip=False,
         )
 
         if self.bypass_transformer and visual_embeds is not None:

@@ -87,6 +87,7 @@ class MimiModelTester:
         num_key_value_heads=2,
         sliding_window=4,
         use_cache=False,
+        max_position_embeddings=512,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -106,6 +107,7 @@ class MimiModelTester:
         self.num_key_value_heads = num_key_value_heads
         self.sliding_window = sliding_window
         self.use_cache = use_cache
+        self.max_position_embeddings = max_position_embeddings
 
     def prepare_config_and_inputs(self, input_values_length=None):
         input_values = floats_tensor(
@@ -134,6 +136,7 @@ class MimiModelTester:
 
     def get_config(self):
         return MimiConfig(
+            max_position_embeddings=self.max_position_embeddings,
             audio_channels=self.num_channels,
             chunk_in_sec=None,
             hidden_size=self.hidden_size,

@@ -12,9 +12,9 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import logging
 from ..deepseek_v2.modeling_deepseek_v2 import (
+    DeepseekV2Attention,
     DeepseekV2Moe,
     DeepseekV2TopkRouter,
-    yarn_apply_mscale,
 )
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
@@ -90,7 +90,7 @@ class DeepseekV3TopkRouter(DeepseekV2TopkRouter):
         del self.topk_method
         self.num_experts = config.num_local_experts
         self.norm_topk_prob = config.norm_topk_prob
-        self.register_buffer("e_score_correction_bias", torch.zeros(self.num_experts))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts))
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.hidden_dim)
@@ -132,72 +132,8 @@ class DeepseekV3MoE(DeepseekV2Moe):
     """
 
 
-class DeepseekV3Attention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
-
-    def __init__(self, config: DeepseekV3Config, layer_idx: int):
-        super().__init__()
-        self.config = config
-        self.layer_idx = layer_idx
-        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
-        self.attention_dropout = config.attention_dropout
-        self.num_heads = config.num_attention_heads
-
-        self.q_lora_rank = config.q_lora_rank
-        self.qk_rope_head_dim = config.qk_rope_head_dim
-        self.kv_lora_rank = config.kv_lora_rank
-        self.v_head_dim = config.v_head_dim
-        self.qk_nope_head_dim = config.qk_nope_head_dim
-        self.qk_head_dim = config.qk_head_dim
-
-        self.is_causal = True
-        self.q_proj = (
-            nn.Linear(config.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
-            if self.q_lora_rank is None
-            else None
-        )
-        self.q_a_proj = (
-            nn.Linear(config.hidden_size, config.q_lora_rank, bias=config.attention_bias)
-            if self.q_lora_rank is not None
-            else None
-        )
-        self.q_a_layernorm = DeepseekV3RMSNorm(config.q_lora_rank) if self.q_lora_rank is not None else None
-        self.q_b_proj = (
-            nn.Linear(config.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
-            if self.q_lora_rank is not None
-            else None
-        )
-
-        self.kv_a_proj_with_mqa = nn.Linear(
-            config.hidden_size,
-            self.kv_lora_rank + self.qk_rope_head_dim,
-            bias=config.attention_bias,
-        )
-        self.kv_a_layernorm = DeepseekV3RMSNorm(self.kv_lora_rank)
-        self.kv_b_proj = nn.Linear(
-            self.kv_lora_rank,
-            self.num_heads * (self.qk_nope_head_dim + self.v_head_dim),
-            bias=False,
-        )
-
-        self.o_proj = nn.Linear(
-            self.num_heads * self.v_head_dim,
-            config.hidden_size,
-            bias=config.attention_bias,
-        )
-
-        self.scaling = yarn_apply_mscale(config.rope_parameters, self.qk_head_dim ** (-0.5))
-
-    def expand_kv(self, k_nope: torch.Tensor, k_pe: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        key_shape = (*k_nope.shape[:-1], -1, self.qk_nope_head_dim + self.v_head_dim)
-
-        k_nope = self.kv_b_proj(k_nope).view(key_shape).transpose(1, 2)
-        k_nope, value_states = torch.split(k_nope, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
-
-        k_pe = k_pe.expand(*k_nope.shape[:-1], -1)
-        key_states = torch.cat((k_nope, k_pe), dim=-1)
-
-        return key_states, value_states
+class DeepseekV3Attention(DeepseekV2Attention):
+    """Multi-headed Latent Attention (MLA) from Deepseek V2"""
 
     def forward(
         self,
@@ -218,8 +154,10 @@ class DeepseekV3Attention(nn.Module):
         q_pass, q_rot = torch.split(q_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
 
         compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
-        kv_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
-        k_pass = self.kv_a_layernorm(kv_pass)
+        kv_nope, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
+        kv_nope = self.kv_a_layernorm(kv_nope)
+        # Both latents are viewed as single-head, 4D tensors so all cache layers handle them correctly
+        kv_nope = kv_nope.view(batch_size, 1, seq_length, self.kv_lora_rank)
         k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
 
         cos, sin = position_embeddings
@@ -228,12 +166,13 @@ class DeepseekV3Attention(nn.Module):
         else:
             q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin)
 
+        # Cache read / write is performed while latent KV is still compressed
+        if past_key_values is not None:
+            kv_nope, k_rot = past_key_values.update(kv_nope, k_rot, self.layer_idx)
+
         query_states = torch.cat((q_pass, q_rot), dim=-1)
 
-        key_states, value_states = self.expand_kv(k_pass, k_rot)
-
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        key_states, value_states = self.expand_kv(kv_nope, k_rot)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
