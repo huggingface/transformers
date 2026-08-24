@@ -119,7 +119,7 @@ class Glm5NextTextConfig(PreTrainedConfig):
     num_experts_per_tok: int = 8
     norm_topk_prob: bool = True
     hidden_act: str = "silu"
-    max_position_embeddings: int = 4096  # TODO: check this value on relase
+    max_position_embeddings: int = 1048576
     initializer_range: float = 0.02
     rms_norm_eps: float = 1e-5
     use_cache: bool = True

@@ -138,7 +138,7 @@ class Glm5NextTextConfig(GlmMoeDsaConfig):
     num_attention_heads: int = 64
     num_key_value_heads: int = 64
     head_dim: int = 0
-    max_position_embeddings: int = 4096  # TODO: check this value on relase
+    max_position_embeddings: int = 1048576
     q_lora_rank: int = 1536
     kv_lora_rank: int = 512
     qk_nope_head_dim: int = 256

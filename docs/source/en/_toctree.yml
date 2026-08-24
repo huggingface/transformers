@@ -669,7 +669,7 @@
         title: GLM-4.7-Flash
       - local: model_doc/glm_image
         title: GLM-Image
-      - local: model_doc/glm5_3_flash
+      - local: model_doc/glm5_next
         title: GLM-5.3-Flash
       - local: model_doc/glm_moe_dsa
         title: GlmMoeDsa
