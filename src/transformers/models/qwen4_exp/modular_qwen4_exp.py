@@ -188,6 +188,11 @@ class Qwen4ExpTextConfig(Qwen3_5MoeTextConfig):
                 "linear_attention" if (i + 1) % interval_pattern else "deepseek_sparse_attention"
                 for i in range(self.num_hidden_layers)
             ]
+        # The real checkpoint contains "full_attention" entries for layers that are actually using an indexer
+        elif "full_attention" in self.layer_types:
+            self.layer_types = [
+                "deepseek_sparse_attention" if layer == "full_attention" else layer for layer in self.layer_types
+            ]
 
         PreTrainedConfig.__post_init__(self, **kwargs)
 
