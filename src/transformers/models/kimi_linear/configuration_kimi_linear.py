@@ -162,3 +162,6 @@ class KimiLinearConfig(PreTrainedConfig):
             self.layer_types = [
                 "full_attention" if i and i % 4 == 0 else "kda_attention" for i in range(self.num_hidden_layers)
             ]
+
+
+__all__ = ["KimiLinearConfig"]

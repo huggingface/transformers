@@ -24,9 +24,7 @@ from ... import initialization as init
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_func_from_hub_with_fallback, use_kernelized_func
-from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...models.deepseek_v3.configuration_deepseek_v3 import DeepseekV3Config
 from ...models.deepseek_v3.modeling_deepseek_v3 import (
@@ -47,7 +45,7 @@ from ...models.qwen3_next.modeling_qwen3_next import (
 )
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
-from ...utils.generic import OutputRecorder, check_model_inputs
+from ...utils.output_capturing import OutputRecorder
 from ..bamba.modeling_bamba import apply_mask_to_padding_states
 
 
@@ -122,11 +120,14 @@ class KimiLinearConfig(DeepseekV3Config):
                 "full_attention" if i and i % 4 == 0 else "kda_attention" for i in range(self.num_hidden_layers)
             ]
 
+
 class KimiLinearRMSNorm(LlamaRMSNorm):
     pass
 
+
 class KimiLinearRMSNormGated(Qwen3NextRMSNormGated):
     pass
+
 
 class KimiLinearExperts(DeepseekV3Experts):
     pass
@@ -134,7 +135,6 @@ class KimiLinearExperts(DeepseekV3Experts):
 
 class KimiLinearMLP(DeepseekV3MLP):
     pass
-
 
 
 class KimiLinearAttention(DeepseekV3Attention):
@@ -193,7 +193,6 @@ class KimiLinearAttention(DeepseekV3Attention):
         attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
-
 
 
 def l2norm(x: torch.FloatTensor, dim: int = -1, eps: float = 1e-6):
@@ -417,9 +416,7 @@ def torch_recurrent_kda(
     return core_attn_out, last_recurrent_state
 
 
-@use_kernelized_func(
-    [torch_recurrent_kda, torch_chunk_kda, causal_conv1d_fn, causal_conv1d_update]
-)
+@use_kernelized_func([torch_recurrent_kda, torch_chunk_kda, causal_conv1d_fn, causal_conv1d_update])
 class KimiLinearDeltaAttention(nn.Module):
     # Annotations to make ty happy
     chunk_kda: Callable[..., tuple[torch.Tensor, torch.Tensor | None]]
@@ -511,7 +508,7 @@ class KimiLinearDeltaAttention(nn.Module):
             conv_state = past_key_values.layers[self.layer_idx].conv_states[0]
             # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
             mixed_qkv = causal_conv1d_update(
-                mixed_qkv, conv_state, self.conv1d.weight.squeeze(1), self.conv1d.bias, self.activation,
+                mixed_qkv, conv_state, self.conv1d.weight.squeeze(1), self.conv1d.bias, self.activation
             )
         else:
             if past_key_values is not None:
@@ -519,7 +516,7 @@ class KimiLinearDeltaAttention(nn.Module):
                     mixed_qkv, self.layer_idx, conv_kernel_size=self.conv_kernel_size
                 )
             mixed_qkv = causal_conv1d_fn(
-                mixed_qkv, self.conv1d.weight.squeeze(1), self.conv1d.bias, activation=self.activation, **kwargs,
+                mixed_qkv, self.conv1d.weight.squeeze(1), self.conv1d.bias, activation=self.activation, **kwargs
             )
             # Drop the additional previous states
             if past_key_values is not None:
@@ -603,8 +600,8 @@ class KimiLinearTopkRouter(DeepseekV3TopkRouter):
 class KimiLinearMoE(DeepseekV3MoE):
     pass
 
-class KimiLinearDecoderLayer(DeepseekV3DecoderLayer):
 
+class KimiLinearDecoderLayer(DeepseekV3DecoderLayer):
     def __init__(self, config: KimiLinearConfig, layer_idx: int):
         nn.Module.__init__(self)
         self.hidden_size = config.hidden_size
@@ -621,6 +618,7 @@ class KimiLinearDecoderLayer(DeepseekV3DecoderLayer):
 
         self.input_layernorm = KimiLinearRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = KimiLinearRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
 
 class KimiLinearPreTrainedModel(PreTrainedModel):
     config: KimiLinearConfig
@@ -645,7 +643,7 @@ class KimiLinearPreTrainedModel(PreTrainedModel):
             init.ones_(module.dt_bias)
             # Lower bound kept away from 0 so log(A) never becomes -inf
             init.copy_(
-                module.A_log, torch.empty(module.num_v_heads, device=module.A_log.device).uniform_(0.01, 16).log_(),
+                module.A_log, torch.empty(module.num_v_heads, device=module.A_log.device).uniform_(0.01, 16).log_()
             )
         # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
         elif isinstance(module, KimiLinearRMSNorm):
@@ -676,3 +674,11 @@ class KimiLinearModel(Qwen3NextModel):
 
 class KimiLinearForCausalLM(DeepseekV3ForCausalLM, GenerationMixin):
     _tied_weights_keys = {}
+
+
+__all__ = [
+    "KimiLinearConfig",
+    "KimiLinearPreTrainedModel",
+    "KimiLinearModel",
+    "KimiLinearForCausalLM",
+]

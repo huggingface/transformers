@@ -42,8 +42,8 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast,
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import OutputRecorder, merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_kimi_linear import KimiLinearConfig
 
 
@@ -666,11 +666,7 @@ class KimiLinearDeltaAttention(nn.Module):
             conv_state = past_key_values.layers[self.layer_idx].conv_states[0]
             # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
             mixed_qkv = causal_conv1d_update(
-                mixed_qkv,
-                conv_state,
-                self.conv1d.weight.squeeze(1),
-                self.conv1d.bias,
-                self.activation,
+                mixed_qkv, conv_state, self.conv1d.weight.squeeze(1), self.conv1d.bias, self.activation
             )
         else:
             if past_key_values is not None:
@@ -678,11 +674,7 @@ class KimiLinearDeltaAttention(nn.Module):
                     mixed_qkv, self.layer_idx, conv_kernel_size=self.conv_kernel_size
                 )
             mixed_qkv = causal_conv1d_fn(
-                mixed_qkv,
-                self.conv1d.weight.squeeze(1),
-                self.conv1d.bias,
-                activation=self.activation,
-                **kwargs,
+                mixed_qkv, self.conv1d.weight.squeeze(1), self.conv1d.bias, activation=self.activation, **kwargs
             )
             # Drop the additional previous states
             if past_key_values is not None:
@@ -897,8 +889,7 @@ class KimiLinearPreTrainedModel(PreTrainedModel):
             init.ones_(module.dt_bias)
             # Lower bound kept away from 0 so log(A) never becomes -inf
             init.copy_(
-                module.A_log,
-                torch.empty(module.num_v_heads, device=module.A_log.device).uniform_(0.01, 16).log_(),
+                module.A_log, torch.empty(module.num_v_heads, device=module.A_log.device).uniform_(0.01, 16).log_()
             )
         # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
         elif isinstance(module, KimiLinearRMSNorm):
@@ -1065,3 +1056,6 @@ class KimiLinearForCausalLM(KimiLinearPreTrainedModel, GenerationMixin):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = ["KimiLinearPreTrainedModel", "KimiLinearModel", "KimiLinearForCausalLM"]

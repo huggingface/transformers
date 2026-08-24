@@ -274,6 +274,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("jina_embeddings_v3", "JinaEmbeddingsV3Model"),
         ("kimi_k25", "Kimi_K25Model"),
         ("kimi_k25_vision", "Kimi_K25VisionModel"),
+        ("kimi_linear", "KimiLinearModel"),
         ("kosmos-2", "Kosmos2Model"),
         ("kosmos-2.5", "Kosmos2_5Model"),
         ("kyutai_speech_to_text", "KyutaiSpeechToTextModel"),
