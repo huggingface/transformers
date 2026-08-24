@@ -18,7 +18,7 @@ import copy
 
 from ...audio_utils import AudioInput, make_list_of_audio_chat_template
 from ...feature_extraction_utils import BatchFeature
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import AudioKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, is_torch_available
 from ...utils.import_utils import requires
@@ -36,6 +36,18 @@ if is_torch_available():
 TEXT_MODALITY = 1
 AUDIO_INPUT_MODALITY = 2
 DEFAULT_AUDIO_TOKEN = "<|reserved_123|>"
+
+
+class Lfm2AudioAudioKwargs(AudioKwargs, total=False):
+    device: str | torch.device | None
+
+
+class Lfm2AudioProcessorKwargs(ProcessingKwargs, total=False):
+    audio_kwargs: Lfm2AudioAudioKwargs
+    _defaults = {}
+
+
+Lfm2AudioProcessorKwargs.__annotations__["audio_kwargs"] = Lfm2AudioAudioKwargs
 
 
 DEFAULT_CHAT_TEMPLATE = r"""{{- bos_token -}}
@@ -98,7 +110,7 @@ class Lfm2AudioProcessor(ProcessorMixin):
             Mimi checkpoint used lazily as a fallback by [`~Lfm2AudioProcessor.decode_audio`].
     """
 
-    valid_processor_kwargs = ProcessingKwargs
+    valid_processor_kwargs = Lfm2AudioProcessorKwargs
 
     def __init__(
         self,
@@ -223,7 +235,7 @@ class Lfm2AudioProcessor(ProcessorMixin):
         self,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         audio: AudioInput | None = None,
-        **kwargs: Unpack[ProcessingKwargs],
+        **kwargs: Unpack[Lfm2AudioProcessorKwargs],
     ) -> BatchFeature:
         common_kwargs = dict(kwargs.pop("common_kwargs", {}))
         if "return_tensors" not in kwargs:
@@ -269,8 +281,15 @@ class Lfm2AudioProcessor(ProcessorMixin):
         self,
         audio: str | list[str] | AudioInput,
         prompt: str = "Perform ASR.",
-        **kwargs: Unpack[ProcessingKwargs],
+        device: str | torch.device | None = None,
+        **kwargs: Unpack[Lfm2AudioProcessorKwargs],
     ) -> BatchFeature:
+        """Prepare an ASR request, optionally running the log-mel frontend on `device`."""
+        processor_kwargs = dict(kwargs)
+        if device is not None:
+            audio_kwargs = dict(processor_kwargs.get("audio_kwargs", {}))
+            audio_kwargs["device"] = device
+            processor_kwargs["audio_kwargs"] = audio_kwargs
         audio_items = list(make_list_of_audio_chat_template(audio))
         conversations = [
             [
@@ -289,14 +308,14 @@ class Lfm2AudioProcessor(ProcessorMixin):
             tokenize=True,
             add_generation_prompt=True,
             return_dict=True,
-            **kwargs,
+            processor_kwargs=processor_kwargs,
         )
 
     def apply_text_to_speech_request(
         self,
         text: str | list[str],
         prompt: str = "Perform TTS.",
-        **kwargs: Unpack[ProcessingKwargs],
+        **kwargs: Unpack[Lfm2AudioProcessorKwargs],
     ) -> BatchFeature:
         texts = [text] if isinstance(text, str) else list(text)
         conversations = [
@@ -311,7 +330,7 @@ class Lfm2AudioProcessor(ProcessorMixin):
             tokenize=True,
             add_generation_prompt=True,
             return_dict=True,
-            **kwargs,
+            processor_kwargs=dict(kwargs),
         )
 
     def decode_audio(

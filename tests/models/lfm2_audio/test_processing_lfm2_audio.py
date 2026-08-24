@@ -28,7 +28,7 @@ from transformers import (
     ParakeetFeatureExtractor,
     PreTrainedTokenizerFast,
 )
-from transformers.testing_utils import require_librosa, require_torch
+from transformers.testing_utils import require_librosa, require_torch, require_torch_gpu
 
 
 @require_torch
@@ -86,6 +86,17 @@ class Lfm2AudioProcessorTest(unittest.TestCase):
         self.assertEqual(int(outputs.input_features_attention_mask.sum()), 81)
         self.assertEqual(int((outputs.input_ids == self.processor.audio_token_id).sum()), 11)
         self.assertEqual(int((outputs.modality_ids == 2).sum()), 11)
+
+    @require_torch_gpu
+    def test_transcription_request_on_cuda(self):
+        import torch
+
+        audio = np.zeros(1600, dtype=np.float32)
+        outputs = self.processor.apply_transcription_request(audio, device=torch.device("cuda"))
+
+        self.assertEqual(outputs.input_features.device.type, "cuda")
+        self.assertEqual(outputs.input_features.dtype, torch.float32)
+        self.assertEqual(outputs.input_features_attention_mask.device.type, "cuda")
 
     def test_text_to_speech_template(self):
         outputs = self.processor.apply_text_to_speech_request("hello")

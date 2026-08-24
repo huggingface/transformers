@@ -62,10 +62,18 @@ dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", spl
 dataset = dataset.cast_column("audio", Audio(sampling_rate=16_000))
 waveform = dataset[0]["audio"]["array"]
 
-inputs = processor.apply_transcription_request(waveform).to(model.device)
+inputs = processor.apply_transcription_request(
+    waveform,
+    device=model.device,
+).to(device=model.device, dtype=model.dtype)
 output = model.generate(**inputs, max_new_tokens=256, text_top_k=1)
 transcript = processor.tokenizer.decode(output.sequences[0], skip_special_tokens=True)
 ```
+
+Passing `device=model.device` runs the log-mel frontend on the same accelerator as the model. The frontend remains in
+float32 for numerical stability; casting the returned inputs to `model.dtype` afterwards matches Liquid Audio's dtype
+boundary and reduces the audio-feature memory by half for a bfloat16 model. Integer token IDs and masks keep their
+original dtypes.
 
 ### Text-to-speech
 
@@ -75,7 +83,7 @@ Generated audio is represented by eight codebooks. Decode those codes with the d
 inputs = processor.apply_text_to_speech_request(
     "The past is just a story we tell ourselves.",
     prompt="Perform TTS. Use the UK male voice.",
-).to(model.device)
+).to(device=model.device, dtype=model.dtype)
 
 output = model.generate(
     **inputs,
