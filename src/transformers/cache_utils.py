@@ -1723,7 +1723,11 @@ def get_layer_types_and_kwargs(config: PreTrainedConfig) -> tuple[list[str], dic
     if "chunked_attention" in layer_types:
         layer_kwargs["sliding_window"] = config.attention_chunk_size
     # In this case, we need to pass the config as well to properly __init__ the layer classes
-    if "heavily_compressed_attention" in layer_types or "compressed_sparse_attention" in layer_types:
+    if (
+        "heavily_compressed_attention" in layer_types
+        or "compressed_sparse_attention" in layer_types
+        or "qwen_sparse_attention" in layer_types
+    ):
         layer_kwargs["config"] = config
     # We may need more than 1 conv/recurrent state
     if any(layer_type in ("conv", "linear_attention", "hybrid", "hybrid_sliding") for layer_type in layer_types):

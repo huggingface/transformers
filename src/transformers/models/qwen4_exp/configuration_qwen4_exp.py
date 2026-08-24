@@ -178,20 +178,20 @@ class Qwen4ExpTextConfig(PreTrainedConfig):
         if self.layer_types is None:
             interval_pattern = kwargs.pop("full_attention_interval", 4)
             self.layer_types = [
-                "linear_attention" if (i + 1) % interval_pattern else "deepseek_sparse_attention"
+                "linear_attention" if (i + 1) % interval_pattern else "qwen_sparse_attention"
                 for i in range(self.num_hidden_layers)
             ]
         # The real checkpoint contains "full_attention" entries for layers that are actually using an indexer
         elif "full_attention" in self.layer_types:
             self.layer_types = [
-                "deepseek_sparse_attention" if layer == "full_attention" else layer for layer in self.layer_types
+                "qwen_sparse_attention" if layer == "full_attention" else layer for layer in self.layer_types
             ]
 
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates Qwen4-Exp architecture invariants."""
-        unsupported_layer_types = sorted(set(self.layer_types) - {"linear_attention", "deepseek_sparse_attention"})
+        unsupported_layer_types = sorted(set(self.layer_types) - {"linear_attention", "qwen_sparse_attention"})
         if unsupported_layer_types:
             raise ValueError(f"Unsupported Qwen4-Exp layer types: {unsupported_layer_types}.")
         output_gate_type = self.output_gate_type or self.hidden_act

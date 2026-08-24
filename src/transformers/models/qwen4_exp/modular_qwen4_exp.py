@@ -21,7 +21,7 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
-from ...cache_utils import Cache, DynamicCache
+from ...cache_utils import Cache, DynamicCache, DynamicLayer, StaticLayer
 from ...configuration_utils import PreTrainedConfig
 from ...integrations import use_kernelized_func
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
@@ -29,7 +29,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils import TransformersKwargs, auto_docstring, is_torchdynamo_compiling, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..qwen3_5.modeling_qwen3_5 import (
@@ -186,20 +186,20 @@ class Qwen4ExpTextConfig(Qwen3_5MoeTextConfig):
         if self.layer_types is None:
             interval_pattern = kwargs.pop("full_attention_interval", 4)
             self.layer_types = [
-                "linear_attention" if (i + 1) % interval_pattern else "deepseek_sparse_attention"
+                "linear_attention" if (i + 1) % interval_pattern else "qwen_sparse_attention"
                 for i in range(self.num_hidden_layers)
             ]
         # The real checkpoint contains "full_attention" entries for layers that are actually using an indexer
         elif "full_attention" in self.layer_types:
             self.layer_types = [
-                "deepseek_sparse_attention" if layer == "full_attention" else layer for layer in self.layer_types
+                "qwen_sparse_attention" if layer == "full_attention" else layer for layer in self.layer_types
             ]
 
         PreTrainedConfig.__post_init__(self, **kwargs)
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates Qwen4-Exp architecture invariants."""
-        unsupported_layer_types = sorted(set(self.layer_types) - {"linear_attention", "deepseek_sparse_attention"})
+        unsupported_layer_types = sorted(set(self.layer_types) - {"linear_attention", "qwen_sparse_attention"})
         if unsupported_layer_types:
             raise ValueError(f"Unsupported Qwen4-Exp layer types: {unsupported_layer_types}.")
         output_gate_type = self.output_gate_type or self.hidden_act
@@ -330,6 +330,110 @@ class Qwen4ExpTextGatedDeltaNet(Qwen3_5GatedDeltaNet):
         )
 
 
+class Qwen4ExpSparseAttentionCacheLayerMixin:
+    """Cache completed QSA block keys and the raw states of the incomplete block."""
+
+    def __init__(self, config: Qwen4ExpTextConfig, **kwargs):
+        super().__init__(**kwargs)
+        self.indexer_compress_ratio = config.indexer_compress_ratio
+        self.indexer_keys: torch.Tensor | None = None
+        self.indexer_buffer: torch.Tensor | None = None
+
+    def _ensure_indexer_key_capacity(self, block_keys: torch.Tensor, block_capacity: int) -> None:
+        current_capacity = 0 if self.indexer_keys is None else self.indexer_keys.shape[1] - 1
+        if (
+            self.indexer_keys is not None
+            and current_capacity == block_capacity
+            and self.indexer_keys.shape[0] == block_keys.shape[0]
+        ):
+            return
+        resized_keys = block_keys.new_zeros((block_keys.shape[0], block_capacity + 1, block_keys.shape[-1]))
+        if self.indexer_keys is not None:
+            copy_length = min(current_capacity, block_capacity)
+            resized_keys[:, :copy_length] = self.indexer_keys[:, :copy_length]
+        self.indexer_keys = resized_keys
+
+    def get_indexer_buffer(self, indexer_states: torch.Tensor) -> torch.Tensor:
+        batch_size, _, state_dim = indexer_states.shape
+        if self.indexer_buffer is None:
+            return indexer_states.new_zeros((batch_size, self.indexer_compress_ratio - 1, state_dim))
+        return self.indexer_buffer
+
+    def update_indexer(
+        self,
+        block_keys: torch.Tensor,
+        block_offsets: torch.LongTensor,
+        new_block_counts: torch.LongTensor,
+        buffer: torch.Tensor,
+        block_capacity: int,
+    ) -> torch.Tensor:
+        max_cache_len = self.get_max_length()
+        if max_cache_len >= 0:
+            block_capacity = max_cache_len // self.indexer_compress_ratio
+        self._ensure_indexer_key_capacity(block_keys, block_capacity)
+        if self.indexer_buffer is None:
+            self.indexer_buffer = torch.zeros_like(buffer)
+            if self.is_compileable and not is_torchdynamo_compiling():
+                torch._dynamo.mark_static_address(self.indexer_keys)
+                torch._dynamo.mark_static_address(self.indexer_buffer)
+
+        num_new_slots = block_keys.shape[1]
+        new_slot_indices = torch.arange(num_new_slots, device=block_keys.device)
+        block_positions = block_offsets.unsqueeze(-1) + new_slot_indices
+        valid_blocks = new_slot_indices < new_block_counts.unsqueeze(-1)
+        # The extra final cache slot receives padded block entries and is never returned.
+        block_positions = block_positions.masked_fill(~valid_blocks, block_capacity)
+        self.indexer_keys.scatter_(1, block_positions.unsqueeze(-1).expand_as(block_keys), block_keys)
+        self.indexer_keys[:, block_capacity].zero_()
+        self.indexer_buffer.copy_(buffer)
+        return self.indexer_keys[:, :block_capacity]
+
+    def reset(self) -> None:
+        super().reset()
+        if self.indexer_keys is None:
+            return
+        if self.is_compileable:
+            self.indexer_keys.zero_()
+            self.indexer_buffer.zero_()
+        else:
+            self.indexer_keys = None
+            self.indexer_buffer = None
+
+    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
+        super().reorder_cache(beam_idx)
+        if self.indexer_keys is not None:
+            beam_idx = beam_idx.to(self.indexer_keys.device)
+            self.indexer_keys = self.indexer_keys.index_select(0, beam_idx)
+            self.indexer_buffer = self.indexer_buffer.index_select(0, beam_idx)
+
+
+class Qwen4ExpDynamicSparseAttentionLayer(Qwen4ExpSparseAttentionCacheLayerMixin, DynamicLayer):
+    _layer_type = "qwen_sparse_attention"
+
+    def crop(self, tokens_to_remove: int) -> None:
+        current_length = self.get_seq_length()
+        is_crop = tokens_to_remove < 0 or 0 < tokens_to_remove < current_length
+        if is_crop and self.indexer_keys is not None:
+            raise ValueError("Qwen4-Exp block-compressed QSA caches do not support cropping.")
+        super().crop(tokens_to_remove)
+
+    def batch_repeat_interleave(self, repeats: int) -> None:
+        super().batch_repeat_interleave(repeats)
+        if self.indexer_keys is not None:
+            self.indexer_keys = self.indexer_keys.repeat_interleave(repeats, dim=0)
+            self.indexer_buffer = self.indexer_buffer.repeat_interleave(repeats, dim=0)
+
+    def batch_select_indices(self, indices: torch.Tensor) -> None:
+        super().batch_select_indices(indices)
+        if self.indexer_keys is not None:
+            self.indexer_keys = self.indexer_keys[indices, ...]
+            self.indexer_buffer = self.indexer_buffer[indices, ...]
+
+
+class Qwen4ExpStaticSparseAttentionLayer(Qwen4ExpSparseAttentionCacheLayerMixin, StaticLayer):
+    _layer_type = "qwen_sparse_attention"
+
+
 def apply_rotary_pos_emb_single(x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor) -> torch.Tensor:
     """Apply partial RoPE to one tensor with broadcast-ready cosine and sine tensors."""
     rotary_dim = cos.shape[-1]
@@ -358,6 +462,44 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
         self.q_layernorm = Qwen4ExpTextRMSNorm(self.index_head_dim, eps=config.rms_norm_eps)
         self.k_layernorm = Qwen4ExpTextRMSNorm(self.index_head_dim, eps=config.rms_norm_eps)
 
+    def _group_indexer_states(
+        self,
+        indexer_states: torch.Tensor,
+        current_valid_mask: torch.BoolTensor,
+        buffer: torch.Tensor,
+        buffer_counts: torch.LongTensor,
+    ) -> tuple[torch.Tensor, torch.LongTensor, torch.Tensor]:
+        batch_size, _, state_dim = indexer_states.shape
+        buffer_length = self.compress_ratio - 1
+        buffer_positions = torch.arange(buffer_length, device=indexer_states.device)
+        buffer_valid = buffer_positions < buffer_counts.unsqueeze(-1)
+        combined_states = torch.cat([buffer, indexer_states], dim=1)
+        combined_valid = torch.cat([buffer_valid, current_valid_mask], dim=1)
+
+        # Compact valid states so left/right padding does not change content-relative block boundaries.
+        combined_length = combined_states.shape[1]
+        packed_positions = combined_valid.long().cumsum(dim=-1) - 1
+        packed_positions = packed_positions.masked_fill(~combined_valid, combined_length)
+        packed_states = combined_states.new_zeros((batch_size, combined_length + 1, state_dim))
+        packed_states.scatter_(
+            1,
+            packed_positions.unsqueeze(-1).expand_as(combined_states),
+            combined_states.masked_fill(~combined_valid.unsqueeze(-1), 0),
+        )
+
+        total_counts = combined_valid.sum(dim=-1)
+        new_block_counts = total_counts // self.compress_ratio
+        num_new_slots = combined_length // self.compress_ratio
+        block_states = packed_states[:, : num_new_slots * self.compress_ratio].view(
+            batch_size, num_new_slots, self.compress_ratio, state_dim
+        )
+
+        buffer_offsets = new_block_counts.unsqueeze(-1) * self.compress_ratio + buffer_positions
+        new_buffer = packed_states.gather(
+            1, buffer_offsets.clamp(max=combined_length).unsqueeze(-1).expand(-1, -1, state_dim)
+        )
+        return block_states, new_block_counts, new_buffer
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -380,8 +522,6 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
         q = apply_rotary_pos_emb_single(q, cos.unsqueeze(2), sin.unsqueeze(2))
 
         indexer_states = torch.cat([token_k, cos.to(token_k.dtype), sin.to(token_k.dtype)], dim=-1)
-        if past_key_values is not None:
-            indexer_states = past_key_values.update_indexer(indexer_states, self.layer_idx)
 
         # Eager/SDPA provide a 4D bool/additive mask. QSA follows the model's contiguous left/right-padding contract
         # (not packed sequences), so every query sees a prefix of one valid-key sequence and block keys can be reused.
@@ -397,23 +537,46 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
             key_offsets < valid_key_counts.unsqueeze(-1), ordered_key_indices, key_length
         )
 
-        num_blocks = key_length // self.compress_ratio
+        past_length = 0
+        if past_key_values is not None:
+            cache_layer = past_key_values.layers[self.layer_idx]
+            if not isinstance(cache_layer, Qwen4ExpSparseAttentionCacheLayerMixin):
+                raise ValueError(
+                    "Qwen4-Exp QSA requires a cache initialized from a config containing qwen_sparse_attention layers."
+                )
+            past_length = cache_layer.get_seq_length()
+            buffer = cache_layer.get_indexer_buffer(indexer_states)
+        else:
+            buffer = indexer_states.new_zeros((batch_size, self.compress_ratio - 1, indexer_states.shape[-1]))
+
+        current_key_positions = past_length + torch.arange(sequence_length, device=hidden_states.device)
+        current_valid_mask = valid_key_mask.gather(1, current_key_positions.expand(batch_size, -1))
+        past_valid_counts = valid_key_counts - current_valid_mask.sum(dim=-1)
+        buffer_counts = past_valid_counts % self.compress_ratio
+        block_states, new_block_counts, buffer = self._group_indexer_states(
+            indexer_states, current_valid_mask, buffer, buffer_counts
+        )
+
+        rotary_dim = cos.shape[-1]
+        raw_keys, key_cos, key_sin = torch.split(block_states, [self.index_head_dim, rotary_dim, rotary_dim], dim=-1)
+        pooled_keys = self.k_layernorm(raw_keys.float().mean(dim=2).to(raw_keys.dtype))
+        block_key_states = apply_rotary_pos_emb_single(pooled_keys, key_cos[:, :, 0], key_sin[:, :, 0])
+
+        block_capacity = key_length // self.compress_ratio
+        if past_key_values is not None:
+            block_key_states = cache_layer.update_indexer(
+                block_key_states,
+                past_valid_counts // self.compress_ratio,
+                new_block_counts,
+                buffer,
+                block_capacity,
+            )
+        else:
+            block_key_states = block_key_states[:, :block_capacity]
+
+        num_blocks = block_key_states.shape[1]
         block_token_indices = ordered_key_indices[:, : num_blocks * self.compress_ratio].view(
             batch_size, num_blocks, self.compress_ratio
-        )
-        # Invalid key positions use `key_length` as a sentinel; append one zero row so it can be gathered safely.
-        indexer_states = F.pad(indexer_states, (0, 0, 0, 1))
-        rotary_dim = cos.shape[-1]
-        raw_keys, key_cos, key_sin = torch.split(indexer_states, [self.index_head_dim, rotary_dim, rotary_dim], dim=-1)
-
-        # Pool raw keys within each block before applying normalization and RoPE at the block's first position.
-        batch_indices = torch.arange(batch_size, device=hidden_states.device)[:, None]
-        key_groups = raw_keys[batch_indices.unsqueeze(-1), block_token_indices]
-        pooled_keys = self.k_layernorm(key_groups.float().mean(dim=2).to(raw_keys.dtype))
-
-        group_starts = block_token_indices[:, :, 0]
-        block_key_states = apply_rotary_pos_emb_single(
-            pooled_keys, key_cos[batch_indices, group_starts], key_sin[batch_indices, group_starts]
         )
 
         visible_token_counts = visible_token_mask.sum(dim=-1)

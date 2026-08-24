@@ -28,7 +28,7 @@ PLE enriches selected decoder layers with layer-specific lexical features derive
 ## Usage tips
 
 - `ple_layer_ids` uses one-based decoder layer indices. When PLE is enabled and the model receives `inputs_embeds`, pass the original token ids through `ple_input_ids`. If `input_ids` are provided, the model uses them for PLE automatically.
-- During cached generation, PLE maintains both n-gram context and dilated-convolution state. [`DynamicCache`] is the recommended default, and [`StaticCache`] is also supported. Offloaded caches are not supported when PLE or QSA is enabled.
+- During cached generation, PLE maintains both n-gram context and dilated-convolution state. [`DynamicCache`] is the recommended default, and [`StaticCache`] is also supported. Cache cropping is not supported when PLE or QSA is enabled. With cache offloading, GatedDeltaNet, PLE, and QSA indexer states remain on device while attention key/value states are offloaded.
 - `split_ngram_parts` controls the logical checkpoint shards for each large PLE n-gram embedding table. Transformers concatenates these shards along the vocabulary dimension into one runtime weight. The default `save_pretrained(save_original_format=True)` writes the configured original sharded layout.
 - `hc_count` sets the number of residual streams, and `hc_lowrank` sets the rank of the learned GR input mixer.
 - Providing the complete set of QSA indexer fields enables sparse token selection on full-attention layers. Eager and SDPA attention are supported; other requested backends fall back to eager. Automatic generation compilation is disabled because token selection is data-dependent.
