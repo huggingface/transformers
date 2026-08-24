@@ -2488,7 +2488,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             keys_to_ignore_unexpected = model_class._keys_to_ignore_on_load_unexpected or []
             # If we don't have any mtp patterns, skip
             if not hasattr(config.get_text_config(), "num_mtp_layers") or not any(
-                "mtp" in x or re.search(r"layers\.\d+", x) is not None for x in keys_to_ignore_unexpected
+                "mtp" in x or re.search(r"layers\\?\.\d+", x) is not None for x in keys_to_ignore_unexpected
             ):
                 self.skipTest("No MTP keys registered")
 
