@@ -994,8 +994,8 @@ class Gemma4IntegrationTest(unittest.TestCase):
         self.assertEqual(output_text_with_cache, output_text_without_cache)
 
     # Note: we do not test FA2 as the head dim is 512 on some layers, which is not compatible with the kernels
-    @require_deterministic_for_accelerator(devices=["cuda"])
     @parameterized.expand([("sdpa",), ("eager",)])
+    @require_deterministic_for_accelerator(devices=["cuda"])
     def test_generation_beyond_sliding_window(self, attn_implementation: str):
         """Test that we can correctly generate beyond the sliding window. Outputs for every attention functions
         should be coherent and identical.
