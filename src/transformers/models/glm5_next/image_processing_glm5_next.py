@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 import math
 
 import torch
@@ -27,21 +26,21 @@ from torchvision.transforms.v2 import functional as tvF
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
-from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling, SizeDict
-from ...processing_utils import ImagesKwargs
+from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
 
 
 class Glm5NextImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
-    patch_size (`int`):
-        Spatial patch size of the vision encoder.
-    temporal_patch_size (`int`):
-        Temporal patch size of the vision encoder.
-    merge_size (`int`):
-        Spatial merge size used before the language model.
-    patch_expand_factor (`int`):
-        Additional spatial alignment factor.
+    patch_size (`int`, *optional*, defaults to 14):
+        The spatial patch size of the vision encoder.
+    temporal_patch_size (`int`, *optional*, defaults to 2):
+        The temporal patch size of the vision encoder.
+    merge_size (`int`, *optional*, defaults to 2):
+        The merge size of the vision encoder to llm encoder.
+    patch_expand_factor (`int`, *optional*, defaults to 1):
+        The patch_expand_factor of the vision encoder to llm encoder.
     min_image_tokens (`int`):
         Minimum number of tokens per image.
     max_image_tokens (`int`):
@@ -61,25 +60,24 @@ def smart_resize(
     num_frames: int,
     height: int,
     width: int,
-    temporal_factor: int = 1,
-    height_factor: int = 28,
-    width_factor: int = 28,
-    min_pixels: int = 56 * 56,
-    max_pixels: int = 14 * 14 * 4 * 1280,
+    temporal_factor: int = 2,
+    factor: int = 28,
+    min_pixels: int = 16,
+    max_pixels: int = 8000,
 ) -> tuple[int, int]:
     """Compute an aligned canvas within the spatiotemporal pixel budget."""
-    if min(num_frames, height, width, temporal_factor, height_factor, width_factor) <= 0:
-        raise ValueError("Image dimensions and alignment factors must be positive.")
-    if min_pixels <= 0 or max_pixels <= 0:
-        raise ValueError("min_pixels and max_pixels must be positive.")
-    if min_pixels > max_pixels:
-        raise ValueError("min_pixels must be less than or equal to max_pixels.")
+
+    # Dynamically adjust pixel count
+    # TODO: possibly integrate directly into size dict (into the values)
+    pixels_per_token = temporal_factor * factor**2
+    min_pixels *= pixels_per_token
+    max_pixels *= pixels_per_token
 
     def align(value, factor):
         return math.ceil(value / factor) * factor
 
     def fit_within_budget(aligned_frames):
-        minimum_pixels = aligned_frames * height_factor * width_factor
+        minimum_pixels = aligned_frames * factor**2
         if max_pixels < minimum_pixels:
             raise ValueError(
                 f"max_pixels={max_pixels} is too small. "
@@ -87,13 +85,16 @@ def smart_resize(
             )
 
         low, high = 1, height
-        best_height, best_width = height_factor, width_factor
+        best_height, best_width = factor, factor
+        # Iteratively go over the allowed budget space until resized ratio has been found
         while low <= high:
             content_height = (low + high) // 2
             content_width = max(1, math.floor(width * content_height / height))
-            candidate_height = align(content_height, height_factor)
-            candidate_width = align(content_width, width_factor)
-            if aligned_frames * candidate_height * candidate_width <= max_pixels:
+            candidate_height = align(content_height, factor)
+            candidate_width = align(content_width, factor)
+
+            pixel_budget = aligned_frames * candidate_height * candidate_width
+            if pixel_budget <= max_pixels:
                 best_height, best_width = candidate_height, candidate_width
                 low = content_height + 1
             else:
@@ -101,16 +102,20 @@ def smart_resize(
         return best_height, best_width
 
     aligned_frames = max(temporal_factor, round(num_frames / temporal_factor) * temporal_factor)
-    aligned_height = align(height, height_factor)
-    aligned_width = align(width, width_factor)
-    if aligned_frames * aligned_height * aligned_width > max_pixels:
-        aligned_height, aligned_width = fit_within_budget(aligned_frames)
-    elif aligned_frames * aligned_height * aligned_width < min_pixels:
+    aligned_height = align(height, factor)
+    aligned_width = align(width, factor)
+    aligned_pixel_budget = aligned_frames * aligned_height * aligned_width
+
+    # Readjust budget if too little is found
+    if aligned_pixel_budget < min_pixels:
         scale = math.sqrt(min_pixels / (num_frames * height * width))
-        aligned_height = align(max(1, math.ceil(height * scale)), height_factor)
-        aligned_width = align(max(1, math.ceil(width * scale)), width_factor)
-        if aligned_frames * aligned_height * aligned_width > max_pixels:
-            aligned_height, aligned_width = fit_within_budget(aligned_frames)
+        aligned_height = align(max(1, math.ceil(height * scale)), factor)
+        aligned_width = align(max(1, math.ceil(width * scale)), factor)
+        aligned_pixel_budget = aligned_frames * aligned_height * aligned_width
+
+    # Cut into budget
+    if aligned_pixel_budget > max_pixels:
+        aligned_height, aligned_width = fit_within_budget(aligned_frames)
 
     return aligned_height, aligned_width
 
@@ -119,7 +124,7 @@ def smart_resize(
 class Glm5NextImageProcessor(TorchvisionBackend):
     do_resize = True
     resample = PILImageResampling.BICUBIC
-    size = {"longest_edge": 1}
+    size = {"longest_edge": 1}  # TODO: Refactor afterwards to be included within
     default_to_square = False
     do_rescale = True
     rescale_factor = 1 / 255
@@ -137,44 +142,44 @@ class Glm5NextImageProcessor(TorchvisionBackend):
     max_image_tokens = 8000
 
     @auto_docstring
-    def preprocess(self, images, **kwargs) -> BatchFeature:
-        overrides = {
-            "min_image_tokens": kwargs.get("min_image_tokens"),
-            "max_image_tokens": kwargs.get("max_image_tokens"),
-            "patch_expand_factor": kwargs.get("patch_expand_factor"),
-        }
-        overrides = {name: value for name, value in overrides.items() if value is not None}
-        if overrides:
-            self = copy.copy(self)
-            for name, value in overrides.items():
-                setattr(self, name, value)
-        if self.min_image_tokens is None or self.max_image_tokens is None:
-            raise ValueError("min_image_tokens and max_image_tokens must be provided.")
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[Glm5NextImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
-    def resize(self, images, size, resample, factor, temporal_factor, **kwargs) -> "torch.Tensor":
+    def resize(
+        self,
+        images: "torch.Tensor",
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        factor: int,
+        temporal_factor: int,
+        min_image_tokens: int,
+        max_image_tokens: int,
+        **kwargs,
+    ) -> "torch.Tensor":
         """Resize dynamically based on input image aspect ratio."""
+
         height, width = images.shape[-2:]
-        pixels_per_token = temporal_factor * (factor // self.patch_expand_factor) ** 2
-        min_pixels = self.min_image_tokens * pixels_per_token
         target_height, target_width = smart_resize(
-            num_frames=temporal_factor,
             height=height,
             width=width,
+            num_frames=temporal_factor,
+            factor=factor,
             temporal_factor=temporal_factor,
-            height_factor=factor,
-            width_factor=factor,
-            min_pixels=min_pixels,
-            max_pixels=self.max_image_tokens * pixels_per_token,
+            min_pixels=min_image_tokens,
+            max_pixels=max_image_tokens,
         )
+
+        # Dynamic padded to ensure aspect ratio is compatible with `_patchify`
+        pixels_per_token = temporal_factor * factor**2
         scale = min(target_height / height, target_width / width)
-        if temporal_factor * height * width >= min_pixels:
+        if temporal_factor * height * width >= (pixels_per_token * min_image_tokens):
             scale = min(1.0, scale)
         content_height = max(1, min(target_height, math.floor(height * scale)))
         content_width = max(1, min(target_width, math.floor(width * scale)))
 
+        # TODO: Also likely refactorable after min/max pixels has been added to size dict
         if (content_height, content_width) != (height, width):
             images = super().resize(images, SizeDict(height=content_height, width=content_width), resample=resample)
+
         return tvF.pad(images, [0, 0, target_width - content_width, target_height - content_height], fill=0)
 
     def patchify(
@@ -213,7 +218,7 @@ class Glm5NextImageProcessor(TorchvisionBackend):
         self,
         images: list["torch.Tensor"],
         do_resize: bool,
-        size: SizeDict,
+        size: SizeDict,  # TODO: Ignored for now, refactoring after min/max pixels PRs has been merged
         resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         do_rescale: bool,
         rescale_factor: float,
@@ -224,6 +229,8 @@ class Glm5NextImageProcessor(TorchvisionBackend):
         temporal_patch_size: int,
         merge_size: int,
         patch_expand_factor: int,
+        min_image_tokens: int,
+        max_image_tokens: int,
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
         **kwargs,
@@ -236,12 +243,14 @@ class Glm5NextImageProcessor(TorchvisionBackend):
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
+                # New resize requires new kwargs to be passed downstream
                 stacked_images = self.resize(
                     images=stacked_images,
-                    size=size,
                     resample=resample,
                     factor=patch_size * merge_size * patch_expand_factor,
                     temporal_factor=temporal_patch_size,
+                    min_image_tokens=min_image_tokens,
+                    max_image_tokens=max_image_tokens,
                 )
             resized_images_grouped[shape] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
@@ -274,7 +283,7 @@ class Glm5NextImageProcessor(TorchvisionBackend):
             data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
         )
 
-    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None) -> int:
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:
         """
         A utility that returns number of image patches for a given image size.
 
@@ -289,25 +298,25 @@ class Glm5NextImageProcessor(TorchvisionBackend):
             `int`: Number of image patches per image.
         """
         images_kwargs = images_kwargs or {}
-        patch_expand_factor = images_kwargs.get("patch_expand_factor", self.patch_expand_factor)
+        patch_size = images_kwargs.get("patch_size", self.patch_size)
+        merge_size = images_kwargs.get("merge_size", self.merge_size)
+
+        # Key difference is the dynamically based resize on min/max image tokens
         min_image_tokens = images_kwargs.get("min_image_tokens", self.min_image_tokens)
         max_image_tokens = images_kwargs.get("max_image_tokens", self.max_image_tokens)
-        if min_image_tokens is None or max_image_tokens is None:
-            raise ValueError("min_image_tokens and max_image_tokens must be provided.")
 
-        factor = self.patch_size * self.merge_size * patch_expand_factor
-        pixels_per_token = self.temporal_patch_size * (self.patch_size * self.merge_size) ** 2
+        factor = patch_size * merge_size
         resized_height, resized_width = smart_resize(
-            self.temporal_patch_size,
-            height,
-            width,
+            num_frames=self.temporal_patch_size,
+            height=height,
+            width=width,
+            factor=factor,
+            min_pixels=min_image_tokens,
+            max_pixels=max_image_tokens,
             temporal_factor=self.temporal_patch_size,
-            height_factor=factor,
-            width_factor=factor,
-            min_pixels=min_image_tokens * pixels_per_token,
-            max_pixels=max_image_tokens * pixels_per_token,
         )
-        return resized_height // self.patch_size * (resized_width // self.patch_size)
+        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
+        return grid_h * grid_w
 
 
 __all__ = ["Glm5NextImageProcessor"]

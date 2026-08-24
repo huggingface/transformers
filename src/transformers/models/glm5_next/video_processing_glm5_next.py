@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 import math
 
 import numpy as np
@@ -43,26 +42,22 @@ from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 
 class Glm5NextVideoProcessorInitKwargs(VideosKwargs, total=False):
     r"""
-    max_image_size (`dict`):
-        Maximum image size metadata retained for processor compatibility.
-    patch_size (`int`):
-        Spatial patch size of the vision encoder.
-    temporal_patch_size (`int`):
-        Temporal patch size of the vision encoder.
-    merge_size (`int`):
-        Spatial merge size used before the language model.
-    patch_expand_factor (`int`):
-        Additional spatial alignment factor.
-    max_frames (`int`, *optional*):
-        Per-call frame cap. Defaults to `max_frame_count_dynamic` when unset.
-    max_duration (`int`, *optional*, defaults to 0):
-        Maximum video duration in seconds. A non-positive value disables the duration cap.
+    patch_size (`int`, *optional*, defaults to 14):
+        The spacial patch size of the vision encoder.
+    temporal_patch_size (`int`, *optional*, defaults to 2):
+        The temporal patch size of the vision encoder.
+    merge_size (`int`, *optional*, defaults to 2):
+        The merge size of the vision encoder to llm encoder.
+    patch_expand_factor (`int`, *optional*, defaults to 1):
+        The patch_expand_factor of the vision encoder to llm encoder.
+    max_frames (`int`, *optional*, defaults to 2048):
+        The maximum number of frames that can be sampled.
+    max_image_size (`dict`, *optional*, defaults to `28 * 28 * 2 * 30000`):
+        The maximum pixels a video can be resized to.
     min_image_tokens (`int`):
-        Minimum spatial token budget for a video.
+        Minimum number of tokens per image.
     max_image_tokens (`int`):
-        Maximum spatial token budget for a video.
-    max_frame_count_dynamic (`int`, *optional*, defaults to 2048):
-        Maximum number of dynamically sampled frames.
+        Maximum number of tokens per image.
     """
 
     max_image_size: dict[str, int]
@@ -70,37 +65,34 @@ class Glm5NextVideoProcessorInitKwargs(VideosKwargs, total=False):
     temporal_patch_size: int
     merge_size: int
     patch_expand_factor: int
-    max_frames: int | None
+    max_frames: int
 
-    max_duration: int
     min_image_tokens: int
     max_image_tokens: int
-    max_frame_count_dynamic: int
 
 
 def smart_resize(
     num_frames: int,
     height: int,
     width: int,
-    temporal_factor: int = 1,
-    height_factor: int = 28,
-    width_factor: int = 28,
-    min_pixels: int = 56 * 56,
-    max_pixels: int = 14 * 14 * 4 * 1280,
+    temporal_factor: int = 2,
+    factor: int = 28,
+    min_pixels: int = 16,
+    max_pixels: int = 8000,
 ) -> tuple[int, int]:
     """Compute an aligned canvas within the spatiotemporal pixel budget."""
-    if min(num_frames, height, width, temporal_factor, height_factor, width_factor) <= 0:
-        raise ValueError("Image dimensions and alignment factors must be positive.")
-    if min_pixels <= 0 or max_pixels <= 0:
-        raise ValueError("min_pixels and max_pixels must be positive.")
-    if min_pixels > max_pixels:
-        raise ValueError("min_pixels must be less than or equal to max_pixels.")
+
+    # Dynamically adjust pixel count
+    # TODO: possibly integrate directly into size dict (into the values)
+    pixels_per_token = temporal_factor * factor**2
+    min_pixels *= pixels_per_token
+    max_pixels *= pixels_per_token
 
     def align(value, factor):
         return math.ceil(value / factor) * factor
 
     def fit_within_budget(aligned_frames):
-        minimum_pixels = aligned_frames * height_factor * width_factor
+        minimum_pixels = aligned_frames * factor**2
         if max_pixels < minimum_pixels:
             raise ValueError(
                 f"max_pixels={max_pixels} is too small. "
@@ -108,13 +100,16 @@ def smart_resize(
             )
 
         low, high = 1, height
-        best_height, best_width = height_factor, width_factor
+        best_height, best_width = factor, factor
+        # Iteratively go over the allowed budget space until resized ratio has been found
         while low <= high:
             content_height = (low + high) // 2
             content_width = max(1, math.floor(width * content_height / height))
-            candidate_height = align(content_height, height_factor)
-            candidate_width = align(content_width, width_factor)
-            if aligned_frames * candidate_height * candidate_width <= max_pixels:
+            candidate_height = align(content_height, factor)
+            candidate_width = align(content_width, factor)
+
+            pixel_budget = aligned_frames * candidate_height * candidate_width
+            if pixel_budget <= max_pixels:
                 best_height, best_width = candidate_height, candidate_width
                 low = content_height + 1
             else:
@@ -122,16 +117,20 @@ def smart_resize(
         return best_height, best_width
 
     aligned_frames = max(temporal_factor, round(num_frames / temporal_factor) * temporal_factor)
-    aligned_height = align(height, height_factor)
-    aligned_width = align(width, width_factor)
-    if aligned_frames * aligned_height * aligned_width > max_pixels:
-        aligned_height, aligned_width = fit_within_budget(aligned_frames)
-    elif aligned_frames * aligned_height * aligned_width < min_pixels:
+    aligned_height = align(height, factor)
+    aligned_width = align(width, factor)
+    aligned_pixel_budget = aligned_frames * aligned_height * aligned_width
+
+    # Readjust budget if too little is found
+    if aligned_pixel_budget < min_pixels:
         scale = math.sqrt(min_pixels / (num_frames * height * width))
-        aligned_height = align(max(1, math.ceil(height * scale)), height_factor)
-        aligned_width = align(max(1, math.ceil(width * scale)), width_factor)
-        if aligned_frames * aligned_height * aligned_width > max_pixels:
-            aligned_height, aligned_width = fit_within_budget(aligned_frames)
+        aligned_height = align(max(1, math.ceil(height * scale)), factor)
+        aligned_width = align(max(1, math.ceil(width * scale)), factor)
+        aligned_pixel_budget = aligned_frames * aligned_height * aligned_width
+
+    # Cut into budget
+    if aligned_pixel_budget > max_pixels:
+        aligned_height, aligned_width = fit_within_budget(aligned_frames)
 
     return aligned_height, aligned_width
 
@@ -154,25 +153,21 @@ class Glm5NextVideoProcessor(BaseVideoProcessor):
     merge_size = 2
     valid_kwargs = Glm5NextVideoProcessorInitKwargs
     num_frames = 16
-    fps = 2.0
+    fps = 2
 
     model_input_names = ["pixel_values_videos", "video_grid_thw"]
     patch_expand_factor = 1
-    max_frames = None
+    max_frames = 2048
     min_image_tokens = 16
     max_image_tokens = 240000
-    max_frame_count_dynamic = 2048
 
     def __init__(self, **kwargs: Unpack[Glm5NextVideoProcessorInitKwargs]):
         super().__init__(**kwargs)
-        if self.min_image_tokens is None or self.max_image_tokens is None:
-            raise ValueError("min_image_tokens and max_image_tokens must be provided.")
 
     def sample_frames(
         self,
         metadata: VideoMetadata,
         fps: int | float | None = None,
-        max_frames: int | None = None,
         **kwargs,
     ):
         """
@@ -194,23 +189,21 @@ class Glm5NextVideoProcessor(BaseVideoProcessor):
         total_frames = metadata.total_num_frames
         max_frame_idx = total_frames - 1
         duration = metadata.duration or round(max_frame_idx / metadata.fps) + 1
+        duration = duration if self.max_duration <= 0 else min(duration, self.max_duration)
+        target_fps = fps if fps is None else self.fps
+
         # Used later to cap frames, important to base on the original and not capped duration
         max_seconds = int(duration)
-        if self.max_duration > 0:
-            duration = min(duration, self.max_duration)
-
-        target_fps = fps
-        if target_fps is None:
-            target_fps = self.fps
 
         extract_t = int(duration * target_fps)
-        if max_frames is None:
-            max_frames = self.max_frame_count_dynamic
-        extract_t = min(extract_t, max_frames)
+        extract_t = min(extract_t, self.max_frames)
 
         duration_per_frame = 1 / metadata.fps
         timestamps = [i * duration_per_frame for i in range(total_frames)]
 
+        # Key change in the framed indices
+        # 1. Use linspace instead floored manual ranges
+        # 2. Cap by static max secon value
         if total_frames < extract_t:
             frame_indices = np.linspace(0, total_frames - 1, extract_t, dtype=int).tolist()
         else:
@@ -244,31 +237,43 @@ class Glm5NextVideoProcessor(BaseVideoProcessor):
 
         return np.array(uniq)
 
-    def resize(self, videos, size, resample, factor, temporal_factor, **kwargs) -> "torch.Tensor":
+    def resize(
+        self,
+        videos: "torch.Tensor",
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        factor: int,
+        temporal_factor: int,
+        min_image_tokens: int,
+        max_image_tokens: int,
+        **kwargs,
+    ) -> "torch.Tensor":
         """Resize dynamically based on input video aspect ratio."""
+
         height, width = videos.shape[-2:]
-        pixels_per_token = temporal_factor * (factor // self.patch_expand_factor) ** 2
-        min_pixels = self.min_image_tokens * pixels_per_token
         target_height, target_width = smart_resize(
-            num_frames=videos.shape[1],
             height=height,
             width=width,
+            num_frames=videos.shape[1],
+            factor=factor,
             temporal_factor=temporal_factor,
-            height_factor=factor,
-            width_factor=factor,
-            min_pixels=min_pixels,
-            max_pixels=self.max_image_tokens * pixels_per_token,
+            min_pixels=min_image_tokens,
+            max_pixels=max_image_tokens,
         )
+
+        # Dynamic padded to ensure aspect ratio is compatible with `_patchify`
+        pixels_per_token = temporal_factor * factor**2
         scale = min(target_height / height, target_width / width)
-        if videos.shape[1] * height * width >= min_pixels:
+        if videos.shape[1] * height * width >= (pixels_per_token * min_image_tokens):
             scale = min(1.0, scale)
         content_height = max(1, min(target_height, math.floor(height * scale)))
         content_width = max(1, min(target_width, math.floor(width * scale)))
 
+        # TODO: Also likely refactorable after min/max pixels has been added to size dict
         if (content_height, content_width) != (height, width):
             videos = TorchvisionBackend.resize(
                 self, videos, SizeDict(height=content_height, width=content_width), resample=resample
             )
+
         return tvF.pad(videos, [0, 0, target_width - content_width, target_height - content_height], fill=0)
 
     def patchify(
@@ -313,7 +318,7 @@ class Glm5NextVideoProcessor(BaseVideoProcessor):
 
     def _preprocess(
         self,
-        videos,
+        videos: list[torch.Tensor],
         do_convert_rgb: bool = True,
         do_resize: bool = True,
         size: SizeDict | None = None,
@@ -327,21 +332,11 @@ class Glm5NextVideoProcessor(BaseVideoProcessor):
         patch_size: int | None = None,
         temporal_patch_size: int | None = None,
         merge_size: int | None = None,
+        min_image_tokens: int | None = None,
+        max_image_tokens: int | None = None,
         return_tensors: str | TensorType | None = None,
         **kwargs,
     ):
-        overrides = {
-            "min_image_tokens": kwargs.get("min_image_tokens"),
-            "max_image_tokens": kwargs.get("max_image_tokens"),
-            "patch_expand_factor": patch_expand_factor,
-        }
-        overrides = {name: value for name, value in overrides.items() if value is not None}
-        if overrides:
-            self = copy.copy(self)
-            for name, value in overrides.items():
-                setattr(self, name, value)
-        if self.min_image_tokens is None or self.max_image_tokens is None:
-            raise ValueError("min_image_tokens and max_image_tokens must be provided.")
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
         resized_videos_grouped = {}
 
@@ -349,12 +344,14 @@ class Glm5NextVideoProcessor(BaseVideoProcessor):
             if do_convert_rgb:
                 stacked_videos = self.convert_to_rgb(stacked_videos)
             if do_resize:
+                # New resize requires new kwargs to be passed downstream
                 stacked_videos = self.resize(
                     videos=stacked_videos,
-                    size=size,
                     resample=resample,
                     factor=patch_size * merge_size * patch_expand_factor,
                     temporal_factor=temporal_patch_size,
+                    min_image_tokens=min_image_tokens,
+                    max_image_tokens=max_image_tokens,
                 )
             resized_videos_grouped[shape] = stacked_videos
         resized_videos = reorder_videos(resized_videos_grouped, grouped_videos_index)
