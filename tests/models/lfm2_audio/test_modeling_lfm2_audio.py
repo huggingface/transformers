@@ -259,6 +259,7 @@ class Lfm2AudioDetokenizerTest(unittest.TestCase):
             model = model_class(config).to(torch_device).eval()
             waveform = model(audio_codes)
 
+            self.assertEqual(model.lfm.config._attn_implementation, "sdpa")
             self.assertEqual(waveform.shape, (1, 3840))
             self.assertTrue(waveform.isfinite().all())
 

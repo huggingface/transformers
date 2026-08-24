@@ -203,6 +203,7 @@ class Lfm2AudioDetokenizer(PreTrainedModel):
 
     config_class = Lfm2Config
     main_input_name = "audio_codes"
+    _supports_sdpa = True
 
     def __init__(self, config: Lfm2Config):
         config = copy.deepcopy(config)
