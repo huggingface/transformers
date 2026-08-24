@@ -24,7 +24,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="zai-org/GLM-5-Next")
+@auto_docstring(checkpoint="zai-org/GLM-5.3-Flash")
 @strict
 class Glm5NextTextConfig(PreTrainedConfig):
     r"""
@@ -228,7 +228,7 @@ class Glm5NextTextConfig(PreTrainedConfig):
             )
 
 
-@auto_docstring(checkpoint="zai-org/GLM-5-Next")
+@auto_docstring(checkpoint="zai-org/GLM-5.3-Flash")
 @strict
 class Glm5NextVisionConfig(PreTrainedConfig):
     r"""
@@ -262,7 +262,7 @@ class Glm5NextVisionConfig(PreTrainedConfig):
     swiglu_limit: float = 10.0
 
 
-@auto_docstring(checkpoint="zai-org/GLM-5-Next")
+@auto_docstring(checkpoint="zai-org/GLM-5.3-Flash")
 @strict
 class Glm5NextConfig(PreTrainedConfig):
     r"""
@@ -282,7 +282,7 @@ class Glm5NextConfig(PreTrainedConfig):
     ```python
     >>> from transformers import Glm5NextConfig
 
-    >>> # Initializing a GLM-5-Next style configuration
+    >>> # Initializing a GLM-5.3-Flash style configuration
     >>> configuration = Glm5NextConfig()
     ```"""
 
@@ -304,7 +304,7 @@ class Glm5NextConfig(PreTrainedConfig):
         if isinstance(self.text_config, dict):
             self.text_config = self.sub_configs["text_config"](**self.text_config)
         elif self.text_config is None:
-            # Flat (text-only) GLM-5-Next checkpoints store the text fields at the
+            # Flat (text-only) GLM-5.3-Flash checkpoints store the text fields at the
             # top level; forward them so `text_config` is populated for BC.
             self.text_config = self.sub_configs["text_config"](**kwargs)
 

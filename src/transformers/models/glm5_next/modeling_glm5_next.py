@@ -296,7 +296,7 @@ class Glm5NextTextHyperConnection(nn.Module):
 
 
 class Glm5NextTextHyperHead(nn.Module):
-    """Final GLM-5-Next HC-stream collapse. Unlike DeepSeek-V4, this is an unweighted mean."""
+    """Final GLM-5.3-Flash HC-stream collapse. Unlike DeepSeek-V4, this is an unweighted mean."""
 
     def forward(self, hidden_streams: torch.Tensor) -> torch.Tensor:
         return hidden_streams.mean(dim=2)
@@ -582,7 +582,7 @@ def chunk_kimi_delta_attention(
     [chunk_kimi_delta_attention, recurrent_kimi_delta_attention, causal_conv1d_fn, causal_conv1d_update]
 )
 class Glm5NextTextLinearAttention(nn.Module):
-    """Kimi-style KDA (Kimi Linear Attention) for GLM-5-Next."""
+    """Kimi-style KDA (Kimi Linear Attention) for GLM-5.3-Flash."""
 
     def __init__(
         self,
@@ -735,7 +735,7 @@ class Glm5NextTextLinearAttention(nn.Module):
 
 class Glm5NextTextIndexer(nn.Module):
     """
-    DeepSeek Sparse Attention (DSA) indexer with k-pool compression for GLM-5-Next.
+    DeepSeek Sparse Attention (DSA) indexer with k-pool compression for GLM-5.3-Flash.
 
     The indexer uses lightweight projections (`wq_b`, `wk`) separate from the main MLA
     attention path. It scores compressed k-pool candidates, expands selected pools back
@@ -2147,8 +2147,8 @@ class Glm5NextForConditionalGeneration(Glm5NextPreTrainedModel, GenerationMixin)
         >>> from transformers import AutoProcessor, Glm5NextForConditionalGeneration
         >>> import torch
 
-        >>> model = Glm5NextForConditionalGeneration.from_pretrained("zai-org/GLM-5-Next")
-        >>> processor = AutoProcessor.from_pretrained("zai-org/GLM-5-Next")
+        >>> model = Glm5NextForConditionalGeneration.from_pretrained("zai-org/GLM-5.3-Flash")
+        >>> processor = AutoProcessor.from_pretrained("zai-org/GLM-5.3-Flash")
 
         >>> messages = [
         ...     {

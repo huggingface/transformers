@@ -87,7 +87,7 @@ from ..qwen3_next.modeling_qwen3_next import apply_mask_to_padding_states
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="zai-org/GLM-5-Next")
+@auto_docstring(checkpoint="zai-org/GLM-5.3-Flash")
 @strict
 class Glm5NextTextConfig(GlmMoeDsaConfig):
     r"""
@@ -243,7 +243,7 @@ class Glm5NextTextConfig(GlmMoeDsaConfig):
             )
 
 
-@auto_docstring(checkpoint="zai-org/GLM-5-Next")
+@auto_docstring(checkpoint="zai-org/GLM-5.3-Flash")
 @strict
 class Glm5NextVisionConfig(GlmOcrVisionConfig):
     r"""
@@ -260,7 +260,7 @@ class Glm5NextVisionConfig(GlmOcrVisionConfig):
     swiglu_limit: float = 10.0
 
 
-@auto_docstring(checkpoint="zai-org/GLM-5-Next")
+@auto_docstring(checkpoint="zai-org/GLM-5.3-Flash")
 @strict
 class Glm5NextConfig(PreTrainedConfig):
     r"""
@@ -280,7 +280,7 @@ class Glm5NextConfig(PreTrainedConfig):
     ```python
     >>> from transformers import Glm5NextConfig
 
-    >>> # Initializing a GLM-5-Next style configuration
+    >>> # Initializing a GLM-5.3-Flash style configuration
     >>> configuration = Glm5NextConfig()
     ```"""
 
@@ -302,7 +302,7 @@ class Glm5NextConfig(PreTrainedConfig):
         if isinstance(self.text_config, dict):
             self.text_config = self.sub_configs["text_config"](**self.text_config)
         elif self.text_config is None:
-            # Flat (text-only) GLM-5-Next checkpoints store the text fields at the
+            # Flat (text-only) GLM-5.3-Flash checkpoints store the text fields at the
             # top level; forward them so `text_config` is populated for BC.
             self.text_config = self.sub_configs["text_config"](**kwargs)
 
@@ -366,7 +366,7 @@ class Glm5NextTextHyperConnection(DeepseekV4HyperConnection):
 
 
 class Glm5NextTextHyperHead(nn.Module):
-    """Final GLM-5-Next HC-stream collapse. Unlike DeepSeek-V4, this is an unweighted mean."""
+    """Final GLM-5.3-Flash HC-stream collapse. Unlike DeepSeek-V4, this is an unweighted mean."""
 
     def forward(self, hidden_streams: torch.Tensor) -> torch.Tensor:
         return hidden_streams.mean(dim=2)
@@ -595,7 +595,7 @@ def chunk_kimi_delta_attention(
     [chunk_kimi_delta_attention, recurrent_kimi_delta_attention, causal_conv1d_fn, causal_conv1d_update]
 )
 class Glm5NextTextLinearAttention(nn.Module):
-    """Kimi-style KDA (Kimi Linear Attention) for GLM-5-Next."""
+    """Kimi-style KDA (Kimi Linear Attention) for GLM-5.3-Flash."""
 
     def __init__(
         self,
@@ -748,7 +748,7 @@ class Glm5NextTextLinearAttention(nn.Module):
 
 class Glm5NextTextIndexer(GlmMoeDsaIndexer):
     """
-    DeepSeek Sparse Attention (DSA) indexer with k-pool compression for GLM-5-Next.
+    DeepSeek Sparse Attention (DSA) indexer with k-pool compression for GLM-5.3-Flash.
 
     The indexer uses lightweight projections (`wq_b`, `wk`) separate from the main MLA
     attention path. It scores compressed k-pool candidates, expands selected pools back
@@ -1600,8 +1600,8 @@ class Glm5NextForConditionalGeneration(Glm46VForConditionalGeneration, Glm5NextP
         >>> from transformers import AutoProcessor, Glm5NextForConditionalGeneration
         >>> import torch
 
-        >>> model = Glm5NextForConditionalGeneration.from_pretrained("zai-org/GLM-5-Next")
-        >>> processor = AutoProcessor.from_pretrained("zai-org/GLM-5-Next")
+        >>> model = Glm5NextForConditionalGeneration.from_pretrained("zai-org/GLM-5.3-Flash")
+        >>> processor = AutoProcessor.from_pretrained("zai-org/GLM-5.3-Flash")
 
         >>> messages = [
         ...     {
@@ -1715,7 +1715,7 @@ def smart_resize(
 
     # Dynamically adjust pixel count
     # TODO: possibly integrate directly into size dict (into the values)
-    pixels_per_token = temporal_factor * factor ** 2
+    pixels_per_token = temporal_factor * factor**2
     min_pixels *= pixels_per_token
     max_pixels *= pixels_per_token
 
@@ -1820,7 +1820,7 @@ class Glm5NextImageProcessor(GlmgaImageProcessor):
         )
 
         # Dynamic padded to ensure aspect ratio is compatible with `_patchify`
-        pixels_per_token = temporal_factor * factor ** 2
+        pixels_per_token = temporal_factor * factor**2
         scale = min(target_height / height, target_width / width)
         if temporal_factor * height * width >= (pixels_per_token * min_image_tokens):
             scale = min(1.0, scale)
@@ -1974,7 +1974,7 @@ class Glm5NextImageProcessorPil(GlmgaImageProcessorPil):
         )
 
         # Dynamic padded to ensure aspect ratio is compatible with `_patchify`
-        pixels_per_token = temporal_factor * factor ** 2
+        pixels_per_token = temporal_factor * factor**2
         scale = min(target_height / height, target_width / width)
         if temporal_factor * height * width >= (pixels_per_token * min_image_tokens):
             scale = min(1.0, scale)
@@ -2286,7 +2286,7 @@ class Glm5NextVideoProcessor(GlmgaVideoProcessor):
         )
 
         # Dynamic padded to ensure aspect ratio is compatible with `_patchify`
-        pixels_per_token = temporal_factor * factor ** 2
+        pixels_per_token = temporal_factor * factor**2
         scale = min(target_height / height, target_width / width)
         if videos.shape[1] * height * width >= (pixels_per_token * min_image_tokens):
             scale = min(1.0, scale)

@@ -233,7 +233,7 @@ class Glm5NextVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
         )
         self.assertEqual(video_processor.size, {"longest_edge": 42})
 
-    # GLM-5-Next samples by fps over the metadata duration
+    # GLM-5.3-Flash samples by fps over the metadata duration
     def test_sample_frames_reference_cases(self):
         processor = Glm5NextVideoProcessor(**{**self.video_processor_dict, "fps": 1})
         cases = [
