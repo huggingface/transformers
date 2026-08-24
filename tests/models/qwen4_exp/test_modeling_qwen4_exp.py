@@ -56,7 +56,7 @@ class Qwen4ExpTextModelTester(CausalLMModelTester):
         super().__init__(parent=parent)
         self.hidden_act = "silu"
         self.rope_parameters = {"rope_type": "default", "partial_rotary_factor": 0.25}
-        self.layer_types = ["linear_attention", "deepseek_sparse_attention"]
+        self.layer_types = ["linear_attention", "qwen_sparse_attention"]
         self.linear_conv_kernel_dim = 2
         self.linear_key_head_dim = 16
         self.linear_value_head_dim = 16
@@ -123,7 +123,7 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
             layer_types=[
                 "linear_attention",
                 "linear_attention",
-                "deepseek_sparse_attention",
+                "qwen_sparse_attention",
             ],
         )
 
@@ -245,14 +245,14 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
         ):
             self.model_tester.get_config(
                 ple_layer_ids=[2],
-                layer_types=["linear_attention", "deepseek_sparse_attention"],
+                layer_types=["linear_attention", "qwen_sparse_attention"],
             )
 
     def test_ple_padding_and_static_cache_match_unpadded_sequence(self):
         torch.manual_seed(0)
         config = self.model_tester.get_config(
             ple_layer_ids=[2],
-            layer_types=["deepseek_sparse_attention", "linear_attention"],
+            layer_types=["qwen_sparse_attention", "linear_attention"],
         )
         config._attn_implementation = "sdpa"
         model = Qwen4ExpForCausalLM(config).to(torch_device).eval()
@@ -307,7 +307,7 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
     def test_ple_beam_generation(self):
         config = self.model_tester.get_config(
             ple_layer_ids=[1],
-            layer_types=["linear_attention", "deepseek_sparse_attention"],
+            layer_types=["linear_attention", "qwen_sparse_attention"],
         )
         config._attn_implementation = "eager"
         model = Qwen4ExpForCausalLM(config).to(torch_device).eval()
@@ -402,7 +402,7 @@ class Qwen4ExpVisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("num_key_value_heads", 1)
         kwargs.setdefault("head_dim", 24)
         kwargs.setdefault("hidden_act", "silu")
-        kwargs.setdefault("layer_types", ["linear_attention", "deepseek_sparse_attention"])
+        kwargs.setdefault("layer_types", ["linear_attention", "qwen_sparse_attention"])
         kwargs.setdefault("linear_conv_kernel_dim", 2)
         kwargs.setdefault("linear_key_head_dim", 16)
         kwargs.setdefault("linear_value_head_dim", 16)
