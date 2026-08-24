@@ -105,7 +105,9 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         """
         # override to pop processor-only keys from `merged_kwargs`
         parameterized_config = MODALITY_CONFIG[modality]
-        subprocessor = self.get_component(parameterized_config["component_key"])
+        attributes = self.processor_class.get_attributes()
+        component_key = self._get_subprocessor_name(modality, attributes)
+        subprocessor = self.get_component(component_key)
         input_key = parameterized_config["input_kwarg"]  # images/videos/audio
 
         # Get all other required components for processor

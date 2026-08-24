@@ -48,18 +48,6 @@ class SamProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_chat_template_save_loading(self):
         self.skipTest("SamProcessor does not have a tokenizer")
 
-    def test_image_processor_defaults_preserved_by_image_kwargs(self):
-        self.skipTest("SamProcessor does not have a tokenizer")
-
-    def test_kwargs_overrides_default_image_processor_kwargs(self):
-        self.skipTest("SamProcessor does not have a tokenizer")
-
-    def test_kwargs_overrides_default_tokenizer_kwargs(self):
-        self.skipTest("SamProcessor does not have a tokenizer")
-
-    def test_tokenizer_defaults_preserved_by_kwargs(self):
-        self.skipTest("SamProcessor does not have a tokenizer")
-
     def test_image_processor_no_masks(self):
         image_processor = self.get_component("image_processor")
 

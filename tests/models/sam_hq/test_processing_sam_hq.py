@@ -47,36 +47,6 @@ class SamHQProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         mask_inputs = [Image.fromarray(x) for x in mask_inputs]
         return mask_inputs
 
-    def test_tokenizer_defaults_preserved_by_kwargs(self):
-        self.skipTest("SamHQProcessor does not have a tokenizer")
-
-    def test_image_processor_defaults_preserved_by_image_kwargs(self):
-        self.skipTest("SamHQProcessor does not have a tokenizer")
-
-    def test_chat_template_save_loading(self):
-        self.skipTest("SamHQProcessor does not have a tokenizer")
-
-    def test_kwargs_overrides_default_image_processor_kwargs(self):
-        self.skipTest("SamHQProcessor does not have a tokenizer")
-
-    def test_kwargs_overrides_default_tokenizer_kwargs(self):
-        self.skipTest("SamHQProcessor does not have a tokenizer")
-
-    def test_unstructured_kwargs(self):
-        self.skipTest("SamHQProcessor does not have a tokenizer")
-
-    def test_unstructured_kwargs_batched(self):
-        self.skipTest("SamHQProcessor does not have a tokenizer")
-
-    def test_doubly_passed_kwargs(self):
-        self.skipTest("SamHQProcessor does not have a tokenizer")
-
-    def test_structured_kwargs_nested(self):
-        self.skipTest("SamHQProcessor does not have a tokenizer")
-
-    def test_structured_kwargs_nested_from_dict(self):
-        self.skipTest("SamHQProcessor does not have a tokenizer")
-
     def test_image_processor_no_masks(self):
         image_processor = self.get_component("image_processor")
 
