@@ -826,7 +826,7 @@ class KimiLinearDecoderLayer(GradientCheckpointingLayer):
         else:
             self.self_attn = KimiLinearDeltaAttention(config=config, layer_idx=layer_idx)
 
-        if layer_idx >= config.first_k_dense_replace:
+        if config.mlp_layer_types[layer_idx] == "sparse":
             self.mlp = KimiLinearMoE(config)
         else:
             self.mlp = KimiLinearMLP(config)

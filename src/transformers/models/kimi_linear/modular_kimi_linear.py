@@ -52,6 +52,15 @@ from ..bamba.modeling_bamba import apply_mask_to_padding_states
 @auto_docstring(checkpoint="moonshotai/Kimi-Linear-48B-A3B-Base")
 @strict
 class KimiLinearConfig(DeepseekV3Config):
+    r"""
+    linear_num_key_heads (`int`, *optional*):
+        Number of key heads for the linear attention layers. Defaults to 32.
+    linear_key_head_dim (`int`, *optional*):
+        Dimension of each key head in linear attention layers. Defaults to 128.
+    linear_conv_kernel_dim (`int`, *optional*, defaults to 4):
+        Kernel size for the short convolution applied to queries, keys, and values in linear attention layers.
+    """
+
     model_type = "kimi_linear"
     attribute_map = {
         "model_max_length": "max_position_embeddings",
@@ -72,8 +81,8 @@ class KimiLinearConfig(DeepseekV3Config):
     routed_scaling_factor: float = 2.446
     q_lora_rank: int | None = None
     n_group: int = 1
+    mlp_layer_types: list[str] | None = None
     topk_group: int | None = 1
-    first_k_dense_replace: int | None = 1
     norm_topk_prob: bool = True
     max_position_embeddings: int = 1048576
     rms_norm_eps: float = 1e-5
@@ -88,8 +97,9 @@ class KimiLinearConfig(DeepseekV3Config):
     linear_num_key_heads: int = 32
     linear_conv_kernel_dim: int = 4
 
-    # del rope_parameters TODO
-    # del rope_interleave
+    rope_parameters = AttributeError()
+    rope_interleave = AttributeError()
+    first_k_dense_replace = AttributeError()
 
     def __post_init__(self, **kwargs):
         super().__post_init__(**kwargs)
@@ -106,19 +116,22 @@ class KimiLinearConfig(DeepseekV3Config):
         if self.layer_types is not None:
             pass  # nothing to do here
         elif "full_attn_layers" in linear_attn_config and "kda_layers" in linear_attn_config:
-            self.layer_types = [None] * self.num_hidden_layers
+            layer_types = [None] * self.num_hidden_layers
             for layer in linear_attn_config["full_attn_layers"]:
-                self.layer_types[layer - 1] = "full_attention"  # types are 1-indexed in the checkpoint
+                layer_types[layer - 1] = "full_attention"  # types are 1-indexed in the checkpoint
             for layer in linear_attn_config["kda_layers"]:
-                self.layer_types[layer - 1] = "kda_attention"
-            if None in self.layer_types:
-                raise ValueError(
-                    "Layer types are not fully specified. You can provide an explicit `layer_types` list to solve this."
-                )
+                layer_types[layer - 1] = "linear_attention"
+            self.layer_types = layer_types
         else:
             self.layer_types = [
-                "full_attention" if i and i % 4 == 0 else "kda_attention" for i in range(self.num_hidden_layers)
+                "full_attention" if i and i % 4 == 0 else "linear_attention" for i in range(self.num_hidden_layers)
             ]
+
+        # Same for MLP layer types, which indicate MLP or MoE
+        if self.mlp_layer_types is None:
+            first_k_dense_replace = kwargs.pop("first_k_dense_replace", 1)
+            mlp_layer_types = ["mlp" if i < first_k_dense_replace else "moe" for i in range(self.num_hidden_layers)]
+            self.mlp_layer_types = mlp_layer_types
 
 
 class KimiLinearRMSNorm(LlamaRMSNorm):
@@ -611,7 +624,7 @@ class KimiLinearDecoderLayer(DeepseekV3DecoderLayer):
         else:
             self.self_attn = KimiLinearDeltaAttention(config=config, layer_idx=layer_idx)
 
-        if layer_idx >= config.first_k_dense_replace:
+        if config.mlp_layer_types[layer_idx] == "sparse":
             self.mlp = KimiLinearMoE(config)
         else:
             self.mlp = KimiLinearMLP(config)

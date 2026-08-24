@@ -22,7 +22,6 @@
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
@@ -30,29 +29,13 @@ from ...utils import auto_docstring
 @strict
 class KimiLinearConfig(PreTrainedConfig):
     r"""
-    n_group (`int`, *optional*, defaults to 8):
-        Number of groups for routed experts.
-    first_k_dense_replace (`int`, *optional*, defaults to 3):
-        Number of dense layers in shallow layers(embed->dense->dense->...->dense->moe->moe...->lm_head).
-                                                        \--k dense layers--/
-    rope_interleave (`bool`, *optional*, defaults to `True`):
-        Whether to interleave the rotary position embeddings.
-    num_mtp_layers (`int`, *optional*, defaults to 1):
-        Number of Multi-Token Prediction (MTP) modules available to append after the base transformer model. When `0`,
-        the model behaves as a standard decoder. When `>0`, each extra module can predict one additional future token at inference
-        time (speculative decoding via `generate(..., use_mtp=True)`).
-
-    Example:
-
-    ```python
-    >>> from transformers import KimiLinearModel, KimiLinearConfig
-
-    >>> # Initializing a Deepseek-V3 style configuration
-    >>> configuration = KimiLinearConfig()
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
+    linear_num_key_heads (`int`, *optional*):
+        Number of key heads for the linear attention layers. Defaults to 32.
+    linear_key_head_dim (`int`, *optional*):
+        Dimension of each key head in linear attention layers. Defaults to 128.
+    linear_conv_kernel_dim (`int`, *optional*, defaults to 4):
+        Kernel size for the short convolution applied to queries, keys, and values in linear attention layers.
+    """
 
     model_type = "kimi_linear"
     keys_to_ignore_at_inference = ["past_key_values"]
@@ -105,7 +88,6 @@ class KimiLinearConfig(PreTrainedConfig):
     n_group: int = 1
     topk_group: int | None = 1
     num_experts_per_tok: int | None = 8
-    first_k_dense_replace: int | None = 1
     norm_topk_prob: bool = True
     hidden_act: str = "silu"
     max_position_embeddings: int = 1048576
@@ -117,11 +99,10 @@ class KimiLinearConfig(PreTrainedConfig):
     eos_token_id: int | list[int] | None = 163586
     pretraining_tp: int | None = 1
     tie_word_embeddings: bool = False
-    rope_parameters: RopeParameters | dict | None = None
-    rope_interleave: bool | None = True
     attention_bias: bool = False
     attention_dropout: float | int | None = 0.0
     num_mtp_layers: int = 0
+    mlp_layer_types: list[str] | None = None
     layer_types: list[str] | None = None
 
     head_dim: int = 72
@@ -149,19 +130,22 @@ class KimiLinearConfig(PreTrainedConfig):
         if self.layer_types is not None:
             pass  # nothing to do here
         elif "full_attn_layers" in linear_attn_config and "kda_layers" in linear_attn_config:
-            self.layer_types = [None] * self.num_hidden_layers
+            layer_types = [None] * self.num_hidden_layers
             for layer in linear_attn_config["full_attn_layers"]:
-                self.layer_types[layer - 1] = "full_attention"  # types are 1-indexed in the checkpoint
+                layer_types[layer - 1] = "full_attention"  # types are 1-indexed in the checkpoint
             for layer in linear_attn_config["kda_layers"]:
-                self.layer_types[layer - 1] = "kda_attention"
-            if None in self.layer_types:
-                raise ValueError(
-                    "Layer types are not fully specified. You can provide an explicit `layer_types` list to solve this."
-                )
+                layer_types[layer - 1] = "linear_attention"
+            self.layer_types = layer_types
         else:
             self.layer_types = [
-                "full_attention" if i and i % 4 == 0 else "kda_attention" for i in range(self.num_hidden_layers)
+                "full_attention" if i and i % 4 == 0 else "linear_attention" for i in range(self.num_hidden_layers)
             ]
+
+        # Same for MLP layer types, which indicate MLP or MoE
+        if self.mlp_layer_types is None:
+            first_k_dense_replace = kwargs.pop("first_k_dense_replace", 1)
+            mlp_layer_types = ["mlp" if i < first_k_dense_replace else "moe" for i in range(self.num_hidden_layers)]
+            self.mlp_layer_types = mlp_layer_types
 
 
 __all__ = ["KimiLinearConfig"]
