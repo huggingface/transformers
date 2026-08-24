@@ -303,7 +303,7 @@ def get_uniform_frame_indices(total_num_frames: int, num_frames: int | None = No
     return indices
 
 
-def default_sample_indices_fn(metadata: VideoMetadata, num_frames=None, fps=None, **kwargs):
+def default_sample_indices_fn(metadata: VideoMetadata, num_frames=None, fps=None, **kwargs) -> list[int]:
     """
     A default sampling function that replicates the logic used in get_uniform_frame_indices,
     while optionally handling `fps` if `num_frames` is not provided.
@@ -319,24 +319,21 @@ def default_sample_indices_fn(metadata: VideoMetadata, num_frames=None, fps=None
     Returns:
         `np.ndarray`: Array of frame indices to sample.
     """
+    if fps is not None and num_frames is not None:
+        raise ValueError("`num_frames` and `fps` are mutually exclusive arguments, please use only one!")
+
     total_num_frames = metadata.total_num_frames
     video_fps = metadata.fps
 
     # If num_frames is not given but fps is, calculate num_frames from fps
     if num_frames is None and fps is not None:
         num_frames = int(total_num_frames / video_fps * fps)
-        if num_frames > total_num_frames:
-            raise ValueError(
-                f"When loading the video with fps={fps}, we computed num_frames={num_frames} "
-                f"which exceeds total_num_frames={total_num_frames}. Check fps or video metadata."
-            )
 
     if num_frames is not None:
         if num_frames > total_num_frames:
             raise ValueError(
                 f"When loading the video with num_frames={num_frames}, the requested number of frames "
-                f"exceeds total_num_frames={total_num_frames}. Please set num_frames to a value less than "
-                f"or equal to the number of frames in the video."
+                f"exceeds total_num_frames={total_num_frames}. Please set num_frames or fps to a smaller value."
             )
         indices = np.arange(0, total_num_frames, total_num_frames / num_frames, dtype=int)
     else:
@@ -361,7 +358,7 @@ def read_video_opencv(
             If not provided, simple uniform sampling with fps is performed.
             Example:
             def sample_indices_fn(metadata, **kwargs):
-                return np.linspace(0, metadata.total_num_frames - 1, num_frames, dtype=int)
+                return np.linspace(0, metadata.total_num_frames - 1, num_frames, dtype=int).tolist()
 
     Returns:
         tuple[`np.ndarray`, `VideoMetadata`]: A tuple containing:
@@ -423,7 +420,7 @@ def read_video_decord(
             If not provided, simple uniform sampling with fps is performed.
             Example:
             def sample_indices_fn(metadata, **kwargs):
-                return np.linspace(0, metadata.total_num_frames - 1, num_frames, dtype=int)
+                return np.linspace(0, metadata.total_num_frames - 1, num_frames, dtype=int).tolist()
 
     Returns:
         tuple[`np.array`, `VideoMetadata`]: A tuple containing:
@@ -475,7 +472,7 @@ def read_video_pyav(
             If not provided, simple uniform sampling with fps is performed.
             Example:
             def sample_indices_fn(metadata, **kwargs):
-                return np.linspace(0, metadata.total_num_frames - 1, num_frames, dtype=int)
+                return np.linspace(0, metadata.total_num_frames - 1, num_frames, dtype=int).tolist()
 
     Returns:
         tuple[`np.array`, `VideoMetadata`]: A tuple containing:
@@ -551,7 +548,7 @@ def read_video_torchvision(
             If not provided, simple uniform sampling with fps is performed.
             Example:
             def sample_indices_fn(metadata, **kwargs):
-                return np.linspace(0, metadata.total_num_frames - 1, num_frames, dtype=int)
+                return np.linspace(0, metadata.total_num_frames - 1, num_frames, dtype=int).tolist()
 
     Returns:
         tuple[`torch.Tensor`, `VideoMetadata`]: A tuple containing:
@@ -611,7 +608,7 @@ def read_video_torchcodec(
             If not provided, simple uniform sampling with fps is performed.
             Example:
             def sample_indices_fn(metadata, **kwargs):
-                return np.linspace(0, metadata.total_num_frames - 1, num_frames, dtype=int)
+                return np.linspace(0, metadata.total_num_frames - 1, num_frames, dtype=int).tolist()
 
     Returns:
         Tuple[`torch.Tensor`, `VideoMetadata`]: A tuple containing:
@@ -688,7 +685,7 @@ def load_video(
 
             Example:
             def sample_indices_fn(metadata, **kwargs):
-                return np.linspace(0, metadata.total_num_frames - 1, num_frames, dtype=int)
+                return np.linspace(0, metadata.total_num_frames - 1, num_frames, dtype=int).tolist()
 
     Returns:
         tuple[`np.ndarray`, Dict]: A tuple containing:

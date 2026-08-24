@@ -121,8 +121,7 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
             stack_frames (`int`, *optional*):
                 Sub-frames per second to stack. Value of `1` disables stacking.
         Returns:
-            np.ndarray:
-                Indices to sample video frames.
+            list[int]: Indices to sample video frames.
         """
         if metadata is None or metadata.duration is None or metadata.fps is None:
             raise ValueError(

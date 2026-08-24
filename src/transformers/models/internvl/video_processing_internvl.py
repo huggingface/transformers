@@ -13,6 +13,7 @@
 # limitations under the License.
 """Fast Video processor class for InternVL."""
 
+import numpy as np
 import torch
 import torchvision.transforms.v2.functional as tvF
 
@@ -68,8 +69,7 @@ class InternVLVideoProcessor(BaseVideoProcessor):
                 The initial shift to apply when sampling frames. If `True`, the shift is set so that frames are sampled from the middle of the video.
 
         Returns:
-            np.ndarray:
-                Indices to sample video frames.
+            np.ndarray: Indices to sample video frames.
         """
         num_frames = num_frames if num_frames is not None else self.num_frames
         initial_shift = initial_shift if initial_shift is not None else self.initial_shift
@@ -92,7 +92,7 @@ class InternVLVideoProcessor(BaseVideoProcessor):
                 f"Video can't be sampled. The `num_frames={num_frames}` exceeds `total_num_frames={total_num_frames}`. "
             )
 
-        indices = torch.arange(initial_shift, total_num_frames, total_num_frames / num_frames).int()
+        indices = np.arange(initial_shift, total_num_frames, total_num_frames / num_frames, dtype=int)
         return indices
 
     def _preprocess(

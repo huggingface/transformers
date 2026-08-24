@@ -17,6 +17,7 @@ import itertools
 import math
 from collections.abc import Callable
 
+import numpy as np
 import torch
 import torch.nn as nn
 from huggingface_hub.dataclasses import strict
@@ -424,8 +425,7 @@ class MuseGlimmerVideoProcessor(BaseVideoProcessor):
                 Target frames to sample per second. Defaults to `self.fps`.
 
         Returns:
-            np.ndarray:
-                Indices to sample video frames.
+            np.ndarray: Indices to sample video frames.
         """
         if metadata.fps is None:
             logger.warning_once(
@@ -438,7 +438,7 @@ class MuseGlimmerVideoProcessor(BaseVideoProcessor):
         num_frames = min(int(total_num_frames * fps / metadata.fps), num_frames, total_num_frames)
         num_frames = max(temporal_patch_size, (num_frames // temporal_patch_size) * temporal_patch_size)
         num_frames = min(num_frames, total_num_frames)
-        indices = torch.linspace(0, total_num_frames - 1, num_frames).long()
+        indices = np.linspace(0, total_num_frames - 1, num_frames, dtype=int)
         return indices
 
     def _preprocess(
