@@ -186,7 +186,7 @@ def _get_model_class(config, model_mapping):
         if arch in name_to_model:
             return name_to_model[arch]
 
-    # If not architecture is set in the config or match the supported models, the first element of the tuple is the
+    # If architecture is not set in the config or match the supported models, the first element of the tuple is the
     # defaults.
     return supported_models[0]
 
