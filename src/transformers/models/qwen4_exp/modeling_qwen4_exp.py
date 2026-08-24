@@ -570,42 +570,12 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-def apply_rotary_pos_emb(q, k=None, cos=None, sin=None, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors, or only the queries if the keys are not provided.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor if provided.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
+def apply_rotary_pos_emb_single(x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor) -> torch.Tensor:
+    """Apply partial RoPE to one tensor with broadcast-ready cosine and sine tensors."""
     rotary_dim = cos.shape[-1]
-
-    # Keep half or full tensor for later concatenation
-    q_rope, q_nope = q[..., :rotary_dim], q[..., rotary_dim:]
-    # Apply rotary embeddings on the first half or full tensor
-    q_rope = (q_rope * cos) + (rotate_half(q_rope) * sin)
-    # Concatenate back to full shape
-    q_rotated = torch.cat([q_rope, q_nope], dim=-1)
-
-    if k is not None:
-        k_rope, k_nope = k[..., :rotary_dim], k[..., rotary_dim:]
-        k_rope = (k_rope * cos) + (rotate_half(k_rope) * sin)
-        k_rotated = torch.cat([k_rope, k_nope], dim=-1)
-        return q_rotated, k_rotated
-    else:
-        return q_rotated
+    x_rope, x_nope = x[..., :rotary_dim], x[..., rotary_dim:]
+    x_rope = (x_rope * cos) + (rotate_half(x_rope) * sin)
+    return torch.cat([x_rope, x_nope], dim=-1)
 
 
 class Qwen4ExpTextQSAIndexer(nn.Module):
@@ -647,7 +617,7 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
         )
         q, token_k = q.reshape(*hidden_shape), token_k.reshape(*hidden_shape).squeeze(2)
         q = self.q_layernorm(q)
-        q = apply_rotary_pos_emb(q, cos=cos, sin=sin, unsqueeze_dim=2)
+        q = apply_rotary_pos_emb_single(q, cos.unsqueeze(2), sin.unsqueeze(2))
 
         indexer_states = torch.cat([token_k, cos.to(token_k.dtype), sin.to(token_k.dtype)], dim=-1)
         if past_key_values is not None:
@@ -682,12 +652,9 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
         pooled_keys = self.k_layernorm(key_groups.float().mean(dim=2).to(raw_keys.dtype))
 
         group_starts = block_token_indices[:, :, 0]
-        block_key_states = apply_rotary_pos_emb(
-            pooled_keys.unsqueeze(2),
-            cos=key_cos[batch_indices, group_starts],
-            sin=key_sin[batch_indices, group_starts],
-            unsqueeze_dim=2,
-        ).squeeze(2)
+        block_key_states = apply_rotary_pos_emb_single(
+            pooled_keys, key_cos[batch_indices, group_starts], key_sin[batch_indices, group_starts]
+        )
 
         visible_token_counts = visible_token_mask.sum(dim=-1)
         num_visible_blocks = visible_token_counts // self.compress_ratio
@@ -743,6 +710,45 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
             selected_token_mask = torch.where(selected_token_mask, attention_mask.new_zeros(()), min_dtype)
 
         return selected_token_mask
+
+
+# Adapted from transformers.models.glm.modular_glm.apply_rotary_pos_emb
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors.
+
+    Removes the interleaving of cos and sin from GLM
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+
+    # Keep half or full tensor for later concatenation
+    rotary_dim = cos.shape[-1]
+    q_rot, q_pass = q[..., :rotary_dim], q[..., rotary_dim:]
+    k_rot, k_pass = k[..., :rotary_dim], k[..., rotary_dim:]
+
+    # Apply rotary embeddings on the first half or full tensor
+    q_embed = (q_rot * cos) + (rotate_half(q_rot) * sin)
+    k_embed = (k_rot * cos) + (rotate_half(k_rot) * sin)
+
+    # Concatenate back to full shape
+    q_embed = torch.cat([q_embed, q_pass], dim=-1)
+    k_embed = torch.cat([k_embed, k_pass], dim=-1)
+    return q_embed, k_embed
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
