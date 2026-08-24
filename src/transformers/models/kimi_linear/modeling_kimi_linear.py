@@ -74,7 +74,7 @@ class KimiLinearRMSNormGated(nn.Module):
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
-        self.activation = "silu"
+        self.activation = "sigmoid"
 
     def forward(self, hidden_states, gate=None):
         input_dtype = hidden_states.dtype

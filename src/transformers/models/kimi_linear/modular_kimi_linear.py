@@ -151,7 +151,9 @@ class KimiLinearRMSNorm(LlamaRMSNorm):
 
 
 class KimiLinearRMSNormGated(Qwen3NextRMSNormGated):
-    pass
+    def __init__(self, hidden_size, eps=1e-6, **kwargs):
+        super().__init__(hidden_size, eps=eps, **kwargs)
+        self.activation = "sigmoid"
 
 
 class KimiLinearExperts(DeepseekV3Experts):
