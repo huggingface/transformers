@@ -27,7 +27,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...cache_utils import Cache
+from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import (
     use_experts_implementation,
@@ -35,14 +35,15 @@ from ...integrations import (
     use_kernel_func_from_hub_with_fallback,
     use_kernelized_func,
 )
-from ...masking_utils import create_causal_mask
+from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import OutputRecorder, check_model_inputs
+from ...utils.generic import OutputRecorder, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_kimi_linear import KimiLinearConfig
 
 
@@ -915,49 +916,20 @@ class KimiLinearPreTrainedModel(PreTrainedModel):
         #         module.weight.data[module.padding_idx].zero_()
 
 
-# Closest parent: Qwen3NextModel. NEEDS ADJUSTMENT: same hybrid forward loop (per-layer mask dispatch driven
-# by `layer_types`, generic `DynamicCache` init), but the hand-rolled `_update_linear_attn_mask` should
-# become `create_recurrent_attention_mask` from `masking_utils` (used together with `create_causal_mask`,
-# same pattern as olmo_hybrid), and the hardcoded "force flash_attention_2" block should be dropped —
-# that's a remote-code hack, not transformers convention.
 class KimiLinearModel(KimiLinearPreTrainedModel):
     def __init__(self, config: KimiLinearConfig):
         super().__init__(config)
-        self.padding_idx = config.pad_token_id
-        self.vocab_size = config.vocab_size
-
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, config.pad_token_id)
         self.layers = nn.ModuleList(
             [KimiLinearDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = KimiLinearRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
-        if getattr(config, "_attn_implementation", None) is not None:
-            if config._attn_implementation != "flash_attention_2":
-                logger.warning_once(f"Ignoring the provided attention implementation {config._attn_implementation}")
-                logger.warning_once("Using flash_attention_2 backend instead.")
-                config._attn_implementation = "flash_attention_2"
-        else:
-            config._attn_implementation = "flash_attention_2"
-
-        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 
-    def _update_linear_attn_mask(self, attention_mask, cache_position):
-        """
-        NOTE: Left-padding is used for linear attention mask.
-        No need for zeroing states when
-            1. Cached forward
-            2. Attending to all inputs
-        """
-        linear_attn_mask = attention_mask
-        if cache_position[0] > 0 or (attention_mask is not None and torch.all(attention_mask == 1)):
-            linear_attn_mask = None
-        return linear_attn_mask
-
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -966,68 +938,66 @@ class KimiLinearModel(KimiLinearPreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        cache_position: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPast:
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-
-        if (input_ids is None) and (inputs_embeds is None):
+    ) -> MoeModelOutputWithPast:
+        if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        # Get inputs_embeds
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
-            past_key_values = KimiDynamicCache(config=self.config)
-
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position: torch.Tensor = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
+            past_key_values = DynamicCache(config=self.config)
 
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
-        causal_mask = create_causal_mask(
-            config=self.config,
-            input_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            cache_position=cache_position,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
-        )
-        linear_attn_mask = self._update_linear_attn_mask(attention_mask, cache_position)
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            # Prepare mask arguments
+            mask_kwargs = {
+                "config": self.config,
+                "inputs_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "past_key_values": past_key_values,
+                "position_ids": position_ids,
+            }
+            # Create the masks
+            causal_mask_mapping = {
+                "full_attention": create_causal_mask(**mask_kwargs),
+                "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
+            }
 
         hidden_states = inputs_embeds
-        if past_key_values is not None:
-            assert isinstance(past_key_values, KimiDynamicCache)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        for decoder_layer in self.layers:
-            layer_mask = linear_attn_mask if decoder_layer.is_linear_attn else causal_mask
-
+        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=layer_mask,
+                position_embeddings=position_embeddings,
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
+                position_ids=position_ids,
                 past_key_values=past_key_values,
-                cache_position=cache_position,
+                use_cache=use_cache,
                 **kwargs,
             )
 
         hidden_states = self.norm(hidden_states)
 
-        return BaseModelOutputWithPast(
+        return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
 
 
-# Closest parent: DeepseekV3ForCausalLM. PERFECT match: standard causal-LM head wiring around `self.model`
-# (embed -> layers -> norm -> lm_head), nothing Kimi-specific here beyond the config type.
-class KimiLinearForCausalLM(KimiPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+@auto_docstring
+class KimiLinearForCausalLM(KimiLinearPreTrainedModel, GenerationMixin):
+    _tied_weights_keys = {}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
+    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
 
     def __init__(self, config):
         super().__init__(config)
@@ -1042,36 +1012,24 @@ class KimiLinearForCausalLM(KimiPreTrainedModel, GenerationMixin):
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: list[torch.FloatTensor] | None = None,
+        past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        generation_mode: bool | None = None,
-        return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | CausalLMOutputWithPast:
+    ) -> CausalLMOutputWithPast:
         r"""
-        Args:
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-        Returns:
-
         Example:
 
         ```python
         >>> from transformers import AutoTokenizer, KimiLinearForCausalLM
 
-        >>> model = KimiLinearForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
-        >>> tokenizer = AutoTokenizer.from_pretrained(PATH_TO_CONVERTED_TOKENIZER)
+        >>> model = KimiLinearForCausalLM.from_pretrained("meta-kimi_linear/KimiLinear-2-7b-hf")
+        >>> tokenizer = AutoTokenizer.from_pretrained("meta-kimi_linear/KimiLinear-2-7b-hf")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
@@ -1081,34 +1039,24 @@ class KimiLinearForCausalLM(KimiPreTrainedModel, GenerationMixin):
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
-
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.model(
+        outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            cache_position=cache_position,
+            **kwargs,
         )
 
-        logits = outputs[0]
-        if generation_mode:
-            logits = logits[:, -1:]
-        logits = self.lm_head(logits)
+        hidden_states = outputs.last_hidden_state
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
         return CausalLMOutputWithPast(
             loss=loss,

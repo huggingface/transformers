@@ -40,6 +40,7 @@ from ...models.deepseek_v3.modeling_deepseek_v3 import (
 )
 from ...models.llama.modeling_llama import LlamaRMSNorm, eager_attention_forward  # used in modeling
 from ...models.qwen3_next.modeling_qwen3_next import (
+    Qwen3NextModel,
     Qwen3NextRMSNormGated,
     causal_conv1d_fn,
     causal_conv1d_update,
@@ -662,4 +663,16 @@ class KimiLinearPreTrainedModel(PreTrainedModel):
         #         module.weight.data[module.padding_idx].zero_()
 
 
+# Closest parent: Qwen3NextModel. NEEDS ADJUSTMENT: same hybrid forward loop (per-layer mask dispatch driven
+# by `layer_types`, generic `DynamicCache` init), but the hand-rolled `_update_linear_attn_mask` should
+# become `create_recurrent_attention_mask` from `masking_utils` (used together with `create_causal_mask`,
+# same pattern as olmo_hybrid), and the hardcoded "force flash_attention_2" block should be dropped —
+# that's a remote-code hack, not transformers convention.
+class KimiLinearModel(Qwen3NextModel):
+    def __init__(self, config: KimiLinearConfig):
+        super().__init__(config)
+        del self.rotary_emb
 
+
+class KimiLinearForCausalLM(DeepseekV3ForCausalLM, GenerationMixin):
+    _tied_weights_keys = {}
