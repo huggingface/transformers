@@ -1,0 +1,27 @@
+{
+  "add_special_token": false,
+  "candidate_resolutions": [
+    [
+      1024,
+      1024
+    ]
+  ],
+  "downsample_ratio": 4,
+  "ignore_id": -100,
+  "image_mean": [
+    0.5,
+    0.5,
+    0.5
+  ],
+  "image_std": [
+    0.5,
+    0.5,
+    0.5
+  ],
+  "image_token": "<image>",
+  "mask_prompt": false,
+  "normalize": true,
+  "pad_token": "<\uff5c\u2581pad\u2581\uff5c>",
+  "patch_size": 16,
+  "processor_class": "UnlimitedOCRProcessor"
+}
