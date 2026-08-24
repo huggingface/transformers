@@ -34,12 +34,12 @@ from transformers import (
 from transformers.testing_utils import (
     Expectations,
     cleanup,
+    require_deterministic_for_xpu,
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
     slow,
     torch_device,
-    require_deterministic_for_xpu,
 )
 
 from ...generation.test_utils import GenerationTesterMixin

@@ -34,12 +34,12 @@ from transformers import (
 from transformers.testing_utils import (
     Expectations,
     cleanup,
+    require_deterministic_for_xpu,
     require_torch,
     require_torch_large_accelerator,
     require_torchcodec,
     slow,
     torch_device,
-    require_deterministic_for_xpu,
 )
 from transformers.utils import is_torchcodec_available
 
