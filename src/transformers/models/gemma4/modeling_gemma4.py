@@ -704,6 +704,7 @@ class Gemma4VisionMLP(nn.Module):
         return down_proj
 
 
+# Adapted from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl.Qwen2_5_VLVisionRotaryEmbedding
 class Gemma4VisionRotaryEmbedding(nn.Module):
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Gemma4VisionConfig, device=None):
@@ -738,11 +739,6 @@ class Gemma4VisionRotaryEmbedding(nn.Module):
         """
         base = config.rope_parameters["rope_theta"]
         dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-
-        # The reference implementation computes RoPE frequencies INDEPENDENTLY
-        # for each spatial dimension using the partitioned head_dim (head_dim // ndim),
-        # so both x and y dimensions get identical frequency ranges.
-        # This is different from splitting the global inv_freq between dimensions.
         spatial_dim = dim // 2
 
         attention_factor = 1.0  # Unused in this type of RoPE
@@ -752,21 +748,20 @@ class Gemma4VisionRotaryEmbedding(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, ...].float()
-        position_ids_expanded = position_ids.permute(1, 2, 0).float()  # shape (positions, 2, 1)
+        position_ids = position_ids.permute(1, 2, 0)
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = position_ids_expanded @ inv_freq_expanded
+        with maybe_autocast(device_type=device_type, enabled=False):
+            freqs = position_ids.float() * self.inv_freq
             cos = freqs.cos() * self.attention_scaling
             sin = freqs.sin() * self.attention_scaling
-        cos = self.recomposition_to_2d(cos).to(dtype=x.dtype)
-        sin = self.recomposition_to_2d(sin).to(dtype=x.dtype)
 
+        cos = self.recomposition_to_2d(cos)
+        sin = self.recomposition_to_2d(sin)
         return cos, sin
 
     def recomposition_to_2d(self, freq):
-        # in contrast to pixtral, interleave grids as H-H-W-W
+        # in contrast to other 2D rope modules, interleave grids as H-H-W-W
         freq_h, freq_w = freq[:, 0], freq[:, 1]
         return torch.cat([freq_h, freq_h, freq_w, freq_w], dim=-1)[None, ...]
 

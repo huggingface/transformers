@@ -71,9 +71,9 @@ from ..gemma3n.modeling_gemma3n import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
-from ..sam3.modeling_sam3 import Sam3ViTRotaryEmbedding
 from ..mixtral.modeling_mixtral import MixtralExperts
 from ..moonshine_streaming.modeling_moonshine_streaming import sliding_window_mask_function
+from ..sam3.modeling_sam3 import Sam3ViTRotaryEmbedding
 from .configuration_gemma4 import Gemma4AudioConfig, Gemma4Config, Gemma4TextConfig, Gemma4VisionConfig
 
 
@@ -777,7 +777,7 @@ def apply_multidimensional_rope(
 
 
 class Gemma4VisionRotaryEmbedding(Sam3ViTRotaryEmbedding):
-    def __init__(config: Gemma4VisionConfig, device=None):
+    def __init__(self, config: Gemma4VisionConfig, device=None):
         super().__init__(config, device)
 
     def compute_default_rope_parameters(
@@ -785,8 +785,21 @@ class Gemma4VisionRotaryEmbedding(Sam3ViTRotaryEmbedding):
     ) -> tuple[torch.Tensor, float]:
         return super().compute_default_rope_parameters(config, device, **kwargs)
 
+    def forward(self, x, position_ids):
+        position_ids = position_ids.permute(1, 2, 0)
+
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with maybe_autocast(device_type=device_type, enabled=False):
+            freqs = position_ids.float() * self.inv_freq
+            cos = freqs.cos() * self.attention_scaling
+            sin = freqs.sin() * self.attention_scaling
+
+        cos = self.recomposition_to_2d(cos)
+        sin = self.recomposition_to_2d(sin)
+        return cos, sin
+
     def recomposition_to_2d(self, freq):
-        # in contrast to pixtral, interleave grids as H-H-W-W
+        # in contrast to other 2D rope modules, interleave grids as H-H-W-W
         freq_h, freq_w = freq[:, 0], freq[:, 1]
         return torch.cat([freq_h, freq_h, freq_w, freq_w], dim=-1)[None, ...]
 
