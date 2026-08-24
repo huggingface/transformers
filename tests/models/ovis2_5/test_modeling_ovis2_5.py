@@ -964,3 +964,15 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         self.assertFalse(any("vision_tower.head_" in key for key in state_dict))
         self.assertFalse(any("visual_tokenizer.head." in key for key in state_dict))
         self.assertNotIn("model.visual_tokenizer.indicator_padding", state_dict)
+
+    def test_visual_token_projector_buffer_initialization(self):
+        model = Ovis2_5Model(self.model_tester.get_config()).to(torch_device)
+        with torch.no_grad():
+            model.visual_tokenizer.indicator_padding.fill_(1)
+
+        model._init_weights(model.visual_tokenizer)
+
+        torch.testing.assert_close(
+            model.visual_tokenizer.indicator_padding,
+            torch.zeros_like(model.visual_tokenizer.indicator_padding),
+        )

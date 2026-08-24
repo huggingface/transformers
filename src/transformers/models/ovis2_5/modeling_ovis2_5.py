@@ -505,6 +505,8 @@ class Ovis2_5PreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         super()._init_weights(module)
+        if isinstance(module, Ovis2_5VisualTokenProjector):
+            nn.init.zeros_(module.indicator_padding)
 
 
 @auto_docstring(custom_intro="The Ovis2.5 vision tower, without the visual tokenizer or language model.")
