@@ -166,7 +166,7 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
         if len(uniq) & 1:
             uniq.append(uniq[-1])
 
-        return torch.tensor(uniq, dtype=torch.int32)
+        return np.array(uniq, dtype=int)
 
     def resize(
         self,

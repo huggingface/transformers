@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import numpy as np
-import torch
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -182,7 +181,7 @@ class Glm46VVideoProcessor(Glm4vVideoProcessor):
         if len(uniq) & 1:
             uniq.append(uniq[-1])
 
-        return torch.tensor(uniq, dtype=torch.int32)
+        return np.array(uniq, dtype=int)
 
 
 __all__ = [
