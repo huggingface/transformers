@@ -38,6 +38,7 @@ from transformers.testing_utils import (
     cleanup,
     require_torch,
     require_torch_accelerator,
+    require_deterministic_for_accelerator,
     slow,
     torch_device,
 )
@@ -77,6 +78,7 @@ class Gemma4IntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
+    @require_deterministic_for_accelerator(devices=["cuda"])
     def _test_generation_beyond_sliding_window(self, attn_implementation: str):
         """Actual testing logic for generation beyond the sliding window."""
         # torch.use_deterministic_algorithms(True)
