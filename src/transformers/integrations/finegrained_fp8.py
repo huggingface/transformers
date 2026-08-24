@@ -37,7 +37,6 @@ from .deepgemm import (
 )
 from .hub_kernels import _MISSING_KERNELS_MESSAGE, lazy_load_kernel
 from .moe import ExpertsInterface, use_experts_implementation
-from .tensor_parallel import to_local
 
 
 logger = logging.get_logger(__name__)
@@ -336,13 +335,10 @@ class FP8Linear(nn.Linear):
         if self.weight.element_size() > 1:
             return F.linear(input, self.weight, self.bias)
 
-        weight = to_local(self.weight)
-        scale_inv = to_local(self.weight_scale_inv)
-
         return fp8_linear(
             input,
-            weight,
-            scale_inv,
+            self.weight,
+            self.weight_scale_inv,
             block_size=self.block_size,
             activation_scale=self.activation_scale,
             bias=self.bias,
@@ -395,8 +391,8 @@ class FP8GroupedLinear(FP8Linear):
                 y.add_(self.bias.view(self.n_groups, -1))
             return y
 
-        w = to_local(self.weight)
-        scale_inv = to_local(self.weight_scale_inv)
+        w = self.weight
+        scale_inv = self.weight_scale_inv
 
         w = w.view(self.n_groups, -1, hidden_dim)
         x = x.movedim(-2, 0).reshape(-1, hidden_dim)
@@ -450,10 +446,10 @@ def fp8_batched_mm_experts_forward(
     # zeroes them before the per-token reduction so `uninit * 0 = NaN` can't poison the sum.
     sentinel_mask = (expert_ids >= self.num_experts).unsqueeze(-1)
 
-    weight_up = to_local(self.gate_up_proj if self.has_gate else self.up_proj)
-    weight_scale_up = to_local(self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv)
-    weight_down = to_local(self.down_proj)
-    weight_scale_down = to_local(self.down_proj_scale_inv)
+    weight_up = self.gate_up_proj if self.has_gate else self.up_proj
+    weight_scale_up = self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv
+    weight_down = self.down_proj
+    weight_scale_down = self.down_proj_scale_inv
 
     # --- Up projection per expert (FP8 batched) ---
     proj_out = finegrained_fp8.batched_matmul(
@@ -538,10 +534,10 @@ def fp8_grouped_mm_experts_forward(
     # quantized weights are inference-only, so no bwd pre-mask is needed.
     sentinel_mask = (expert_ids_g >= self.num_experts).unsqueeze(-1)
 
-    weight_up = to_local(self.gate_up_proj if self.has_gate else self.up_proj)
-    weight_scale_up = to_local(self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv)
-    weight_down = to_local(self.down_proj)
-    weight_scale_down = to_local(self.down_proj_scale_inv)
+    weight_up = self.gate_up_proj if self.has_gate else self.up_proj
+    weight_scale_up = self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv
+    weight_down = self.down_proj
+    weight_scale_down = self.down_proj_scale_inv
 
     # --- Up projection per expert (FP8 grouped) ---
     proj_out = finegrained_fp8.grouped_matmul(
@@ -870,6 +866,8 @@ def replace_with_fp8_linear(
                     has_bias=module.bias is not None,
                 )
             if new_module is not None:
+                # TP must use local tensors because this quantization path does not support DTensor inputs or weights.
+                new_module._hf_quantized_needs_local_tp = True
                 model.set_submodule(module_name, new_module)
                 has_been_replaced = True
 
