@@ -82,20 +82,6 @@ class DbrxFFNConfig(PreTrainedConfig):
         if self.ffn_act_fn is None:
             self.ffn_act_fn = {"name": "silu"}
 
-        for k in [
-            "model_type",
-            "attn_implementation",
-            "experts_implementation",
-            "transformers_version",
-            "_commit_hash",
-            "torch_dtype",
-            "dtype",
-        ]:
-            if k in kwargs:
-                kwargs.pop(k)
-        if len(kwargs) != 0:
-            raise ValueError(f"Found unknown {kwargs=}")
-
         super().__post_init__(**kwargs)
 
 

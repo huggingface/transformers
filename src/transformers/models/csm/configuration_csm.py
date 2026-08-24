@@ -182,6 +182,21 @@ class CsmConfig(PreTrainedConfig):
         self.tie_word_embeddings = False
         super().__post_init__(**kwargs)
 
+    def validate_token_ids(self):
+        # Final vocab size includes each codebook
+        vocab_size = self.vocab_size * self.num_codebooks
+        if vocab_size is not None:
+            # Check for all special tokens, e..g. pad_token_id, image_token_id, audio_token_id
+            for name in self:
+                value = getattr(self, name)
+                if name.endswith("_token_id") and isinstance(value, int) and not 0 <= value < vocab_size:
+                    # Can't be an exception until we can load configs that fail validation: several configs on the Hub
+                    # store invalid special tokens, e.g. `pad_token_id=-1`
+                    logger.warning_once(
+                        f"Model config: {name} must be `None` or an integer within the vocabulary (between 0 "
+                        f"and {vocab_size - 1}), got {value}. This may result in unexpected behavior."
+                    )
+
 
 __all__ = [
     "CsmDepthDecoderConfig",

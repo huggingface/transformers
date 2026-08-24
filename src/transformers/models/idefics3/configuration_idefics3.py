@@ -85,7 +85,7 @@ class Idefics3Config(PreTrainedConfig):
     vision_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
     scale_factor: int = 2
-    pad_token_id: int | None = 128_002
+    pad_token_id: int | None = 128_002  # deprecate!
 
     def __post_init__(self, **kwargs):
         if self.vision_config is None:
@@ -99,10 +99,7 @@ class Idefics3Config(PreTrainedConfig):
             self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
         elif self.text_config is None:
             logger.info("text_config is None, using default Llama text config")
-            self.text_config = CONFIG_MAPPING["llama"](
-                rms_norm_eps=1e-5,
-                pad_token_id=self.pad_token_id,
-            )
+            self.text_config = CONFIG_MAPPING["llama"](rms_norm_eps=1e-5)
 
         super().__post_init__(**kwargs)
 

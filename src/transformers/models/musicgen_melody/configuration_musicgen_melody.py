@@ -16,8 +16,11 @@
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring
+from ...utils import auto_docstring, logging
 from ..auto.configuration_auto import AutoConfig
+
+
+logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="facebook/musicgen-melody")
@@ -55,6 +58,22 @@ class MusicgenMelodyDecoderConfig(PreTrainedConfig):
     tie_word_embeddings: bool = False
     is_decoder: bool = False
     add_cross_attention: bool = False
+
+    def validate_token_ids(self):
+        # override: MusicGenMelody init an embedding layer with `vocab_size+1`
+        text_config = self.get_text_config(decoder=True)
+        vocab_size = getattr(text_config, "vocab_size", None)
+        if vocab_size is not None:
+            # Check for all special tokens, e..g. pad_token_id, image_token_id, audio_token_id
+            for name in text_config:
+                value = getattr(text_config, name)
+                if name.endswith("_token_id") and isinstance(value, int) and not 0 <= value <= vocab_size:
+                    # Can't be an exception until we can load configs that fail validation: several configs on the Hub
+                    # store invalid special tokens, e.g. `pad_token_id=-1`
+                    logger.warning_once(
+                        f"Model config: {name} must be `None` or an integer within the vocabulary (between 0 "
+                        f"and {vocab_size}), got {value}. This may result in unexpected behavior."
+                    )
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
