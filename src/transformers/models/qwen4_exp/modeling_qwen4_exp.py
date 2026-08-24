@@ -632,7 +632,7 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None,
+        attention_mask: torch.Tensor,
         past_key_values: Cache | None,
     ) -> torch.Tensor:
         batch_size, sequence_length, _ = hidden_states.shape
@@ -653,70 +653,96 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
         if past_key_values is not None:
             indexer_states = past_key_values.update_indexer(indexer_states, self.layer_idx)
 
+        # Eager/SDPA provide a 4D bool/additive mask. QSA follows the model's contiguous left/right-padding contract
+        # (not packed sequences), so every query sees a prefix of one valid-key sequence and block keys can be reused.
+        visible_token_mask = attention_mask if attention_mask.dtype == torch.bool else attention_mask == 0
+        visible_token_mask = visible_token_mask[:, 0]
+        key_length = visible_token_mask.shape[-1]
+        valid_key_mask = visible_token_mask.any(dim=1)
+        valid_key_counts = valid_key_mask.sum(dim=-1)
+        first_valid_key = valid_key_mask.int().argmax(dim=-1)
+        key_offsets = torch.arange(key_length + 1, device=hidden_states.device)
+        ordered_key_indices = first_valid_key.unsqueeze(-1) + key_offsets
+        ordered_key_indices = torch.where(
+            key_offsets < valid_key_counts.unsqueeze(-1), ordered_key_indices, key_length
+        )
+
+        num_blocks = key_length // self.compress_ratio
+        block_token_indices = ordered_key_indices[:, : num_blocks * self.compress_ratio].view(
+            batch_size, num_blocks, self.compress_ratio
+        )
+        # Invalid key positions use `key_length` as a sentinel; append one zero row so it can be gathered safely.
+        indexer_states = F.pad(indexer_states, (0, 0, 0, 1))
         rotary_dim = cos.shape[-1]
         raw_keys, key_cos, key_sin = torch.split(indexer_states, [self.index_head_dim, rotary_dim, rotary_dim], dim=-1)
 
-        # Note that the mask is never None here as we only allow eager and sdpa, and we do not allow sdpa's mask skip
-        # It's always 4D with either bool (sdpa) or float (eager) and already gives us the valid indices
-        visible_token_indices = attention_mask if attention_mask.dtype == torch.bool else attention_mask == 0
+        # Pool raw keys within each block before applying normalization and RoPE at the block's first position.
+        batch_indices = torch.arange(batch_size, device=hidden_states.device)[:, None]
+        key_groups = raw_keys[batch_indices.unsqueeze(-1), block_token_indices]
+        pooled_keys = self.k_layernorm(key_groups.float().mean(dim=2).to(raw_keys.dtype))
 
-        selected_token_indices = torch.full(
-            (batch_size, sequence_length, self.token_budget + self.compress_ratio - 1),
-            -1,
-            dtype=torch.int32,
-            device=hidden_states.device,
-        )
-        for batch_idx in range(batch_size):
-            for query_idx in range(sequence_length):
-                local_visible_indices = torch.nonzero(
-                    visible_token_indices[batch_idx, 0, query_idx], as_tuple=False
-                ).flatten()
-                num_complete_blocks = local_visible_indices.shape[-1] // self.compress_ratio
-                # Compute selected tokens
-                if num_complete_blocks > 0:
-                    block_token_indices = local_visible_indices[: num_complete_blocks * self.compress_ratio].view(
-                        num_complete_blocks, self.compress_ratio
-                    )
+        group_starts = block_token_indices[:, :, 0]
+        block_key_states = apply_rotary_pos_emb(
+            pooled_keys.unsqueeze(2),
+            cos=key_cos[batch_indices, group_starts],
+            sin=key_sin[batch_indices, group_starts],
+            unsqueeze_dim=2,
+        ).squeeze(2)
 
-                    key_groups = raw_keys[batch_idx].index_select(0, block_token_indices.flatten())
-                    key_groups = key_groups.view(*block_token_indices.shape, self.index_head_dim)
-                    pooled_keys = key_groups.float().mean(dim=1).to(raw_keys.dtype)
-                    pooled_keys = self.k_layernorm(pooled_keys)
-                    group_starts = block_token_indices[:, 0]
-                    block_key_states = apply_rotary_pos_emb(
-                        pooled_keys.unsqueeze(1),
-                        cos=key_cos[batch_idx].index_select(0, group_starts),
-                        sin=key_sin[batch_idx].index_select(0, group_starts),
-                    ).squeeze(1)
-
-                    scores = torch.matmul(
-                        q[batch_idx, query_idx].float(), block_key_states.float().transpose(-1, -2)
-                    ).transpose(-1, -2)
-                    scores = torch.relu(scores).sum(dim=-1) / math.sqrt(self.index_head_dim)
-
-                    selected_block_indices = scores.topk(min(self.block_topk, num_complete_blocks), dim=0).indices
-                    # Remap the indices of the blocks to the indices of individual tokens
-                    selected_tokens = block_token_indices.index_select(0, selected_block_indices).flatten()
-                else:
-                    selected_tokens = torch.tensor([], device=hidden_states.device)
-                tail = local_visible_indices[num_complete_blocks * self.compress_ratio :]
-                selected_tokens = torch.cat([selected_tokens, tail]).to(torch.int32)
-                selected_token_indices[batch_idx, query_idx, : selected_tokens.numel()] = selected_tokens
-
-        # Create the additive mask to be added to the main causal mask
-        kv_length = attention_mask.shape[-1]
+        visible_token_counts = visible_token_mask.sum(dim=-1)
+        num_visible_blocks = visible_token_counts // self.compress_ratio
         selected_token_mask = torch.zeros(
-            (*selected_token_indices.shape[:-1], kv_length + 1), device=attention_mask.device, dtype=torch.bool
+            (batch_size, sequence_length, key_length + 1), device=attention_mask.device, dtype=torch.bool
         )
-        # We absorb all the -1 by scaterring them to the last index that we will drop
-        scatter_indices = torch.where(selected_token_indices >= 0, selected_token_indices, kv_length)
-        selected_token_mask = selected_token_mask.scatter(-1, scatter_indices, True)[..., :kv_length].unsqueeze(1)
-        # if using eager, convert to float mask
+        num_topk_blocks = min(self.block_topk, num_blocks)
+        block_indices = torch.arange(num_blocks, device=hidden_states.device)
+        tail_offsets = torch.arange(self.compress_ratio - 1, device=hidden_states.device)
+        transposed_block_keys = block_key_states.float().transpose(-1, -2).unsqueeze(1)
+        # Bound the temporary `[batch, queries, indexer_heads, blocks]` score tensor for long prefills.
+        max_score_elements = 1 << 22  # 16 MiB in float32
+        score_elements_per_query = batch_size * self.index_n_heads * max(num_blocks, 1)
+        query_chunk_size = min(sequence_length, max(1, max_score_elements // score_elements_per_query))
+        for query_start in range(0, sequence_length, query_chunk_size):
+            query_end = min(query_start + query_chunk_size, sequence_length)
+            query = q[:, query_start:query_end]
+            query_num_visible_blocks = num_visible_blocks[:, query_start:query_end]
+
+            scores = torch.matmul(query.float(), transposed_block_keys)
+            scores = torch.relu(scores).sum(dim=2) / math.sqrt(self.index_head_dim)
+            scores = scores.masked_fill(
+                block_indices >= query_num_visible_blocks.unsqueeze(-1), torch.finfo(scores.dtype).min
+            )
+            selected_blocks = scores.topk(num_topk_blocks, dim=-1).indices
+
+            # Expand selected blocks back to token indices, then append the current incomplete block as the tail.
+            selected_block_tokens = (
+                block_token_indices[:, None]
+                .expand(-1, query.shape[1], -1, -1)
+                .gather(2, selected_blocks.unsqueeze(-1).expand(-1, -1, -1, self.compress_ratio))
+            )
+            valid_selected_blocks = selected_blocks < query_num_visible_blocks.unsqueeze(-1)
+            selected_block_tokens = selected_block_tokens.masked_fill(~valid_selected_blocks.unsqueeze(-1), -1)
+
+            tail_positions = query_num_visible_blocks.unsqueeze(-1) * self.compress_ratio + tail_offsets
+            valid_tail = tail_positions < visible_token_counts[:, query_start:query_end].unsqueeze(-1)
+            tail_tokens = (
+                ordered_key_indices[:, None]
+                .expand(-1, query.shape[1], -1)
+                .gather(2, tail_positions.clamp(max=key_length))
+            )
+            selected_tokens = torch.cat(
+                [selected_block_tokens.flatten(2), tail_tokens.masked_fill(~valid_tail, -1)], dim=-1
+            )
+            # Invalid selections land in the extra final column, which is removed below.
+            scatter_indices = selected_tokens.masked_fill(selected_tokens < 0, key_length)
+            selected_token_mask[:, query_start:query_end].scatter_(-1, scatter_indices, True)
+
+        selected_token_mask = selected_token_mask[..., :key_length].unsqueeze(1)
         if attention_mask.is_floating_point():
             min_dtype = torch.finfo(attention_mask.dtype).min
             selected_token_mask = torch.where(selected_token_mask, attention_mask.new_zeros(()), min_dtype)
 
-        return selected_token_indices, selected_token_mask
+        return selected_token_mask
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -792,9 +818,7 @@ class Qwen4ExpTextAttention(nn.Module):
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        selected_token_indices, selected_token_mask = self.indexer(
-            hidden_states, position_embeddings, attention_mask, past_key_values
-        )
+        selected_token_mask = self.indexer(hidden_states, position_embeddings, attention_mask, past_key_values)
         # Combine both masks (they are never None, and are always 4D with either bool for sdpa, or float for eager)
         if attention_mask.is_floating_point():
             attention_mask = attention_mask + selected_token_mask
