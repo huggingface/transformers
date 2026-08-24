@@ -222,11 +222,9 @@ class Mistral3Model(LlavaModel):
 class Mistral3ForSequenceClassification(GenericForSequenceClassification, Mistral3PreTrainedModel):
     r"""Sequence classification head.
 
-    Projects every position with the score layer then pools according to config.pooling:
-
     - ``eos`` (default when ``pooling`` is ``None``): the rightmost non-pad token.
     - ``bos``: the first token. Meaningful only when the text backbone is bidirectional.
-    - ``mean``: masked mean over non-pad tokens.
+    - ``mean``: masked mean over non-pad hidden states, followed by the score layer.
     """
 
     config: Mistral3Config
@@ -280,23 +278,27 @@ class Mistral3ForSequenceClassification(GenericForSequenceClassification, Mistra
             vision_feature_layer=vision_feature_layer,
             **kwargs,
         )
-        logits = self.score(outputs.last_hidden_state)
+        hidden_states = outputs.last_hidden_state
 
         if self.pooling == "bos":
+            logits = self.score(hidden_states)
             pooled_logits = logits[:, 0, :]
         else:
             if attention_mask is not None:
-                non_pad_mask = attention_mask.to(logits.device, torch.bool)
+                non_pad_mask = attention_mask.to(hidden_states.device, torch.bool)
             elif input_ids is not None and self.config.get_text_config().pad_token_id is not None:
-                non_pad_mask = (input_ids != self.config.get_text_config().pad_token_id).to(logits.device)
+                non_pad_mask = (input_ids != self.config.get_text_config().pad_token_id).to(hidden_states.device)
             else:
                 non_pad_mask = None
 
             if non_pad_mask is None:
-                pooled_logits = logits.mean(dim=1)
+                pooled_hidden_states = hidden_states.mean(dim=1)
             else:
-                mask = non_pad_mask.to(logits.dtype).unsqueeze(-1)
-                pooled_logits = (logits * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1)
+                mask = non_pad_mask.to(hidden_states.dtype).unsqueeze(-1)
+                pooled_hidden_states = (hidden_states * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1)
+
+            pooled_logits = self.score(pooled_hidden_states)
+            logits = pooled_logits
 
         loss = None
         if labels is not None:

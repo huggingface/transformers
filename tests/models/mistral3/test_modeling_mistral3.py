@@ -16,6 +16,7 @@
 import json
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import accelerate
 import pytest
@@ -226,6 +227,32 @@ class Mistral3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
                 output = model(input_ids=input_ids, attention_mask=attention_mask)
             expected = torch.tensor([[expected_score]], device=torch_device)
             torch.testing.assert_close(output.logits, expected)
+
+    def test_sequence_classification_mean_pooling_precedes_score_projection(self):
+        from transformers.modeling_outputs import BaseModelOutputWithPast
+
+        config = self.model_tester.get_config()
+        config.num_labels = 1
+        config.pooling = "mean"
+        model = Mistral3ForSequenceClassification(config).to(device=torch_device, dtype=torch.float16).eval()
+
+        hidden_states = torch.zeros(1, 3, self.model_tester.hidden_size, device=torch_device, dtype=torch.float16)
+        hidden_states[0, :, 0] = torch.tensor([40000.0, -40000.0, 0.0], device=torch_device, dtype=torch.float16)
+        input_ids = torch.tensor([[1, 2, self.model_tester.pad_token_id]], device=torch_device)
+        attention_mask = torch.tensor([[1, 1, 0]], device=torch_device)
+
+        with torch.no_grad():
+            model.score.weight.zero_()
+            model.score.weight[0, 0] = 2
+            with patch.object(
+                model.model,
+                "forward",
+                return_value=BaseModelOutputWithPast(last_hidden_state=hidden_states),
+            ):
+                output = model(input_ids=input_ids, attention_mask=attention_mask)
+
+        self.assertTrue(torch.isfinite(output.logits).all())
+        torch.testing.assert_close(output.logits, torch.zeros_like(output.logits))
 
     def test_sequence_classification_multimodal_auto_round_trip(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
