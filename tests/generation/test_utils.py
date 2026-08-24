@@ -3950,6 +3950,38 @@ class GenerationIntegrationTests(unittest.TestCase):
         )
         self.assertTrue(out.shape[-1] <= (input_length + 7))
 
+    def test_mtp_mask_creation_uses_per_layer_config(self):
+        config = AutoConfig.for_model(
+            "llama",
+            hidden_size=16,
+            intermediate_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            num_key_value_heads=2,
+            head_dim=8,
+            vocab_size=32,
+            max_position_embeddings=16,
+        )
+        config.num_mtp_layers = 2
+        config.mtp_per_layer_config = {
+            0: {"is_causal": True},
+            1: {"is_causal": False},
+        }
+        config._attn_implementation = "eager"
+        main_model = AutoModelForCausalLM.from_config(config)
+        mtp_model = MtpModel(main_model, num_mtp_layers=2)
+
+        inputs_embeds = torch.randn(1, 2, config.hidden_size)
+        position_ids = torch.arange(2).unsqueeze(0)
+        mtp_cache = DynamicCache(config=mtp_model.config)
+        causal_mask = mtp_model.create_masks_for_mtp_layer(0, inputs_embeds, mtp_cache, position_ids)["attention_mask"]
+        bidirectional_mask = mtp_model.create_masks_for_mtp_layer(1, inputs_embeds, mtp_cache, position_ids)[
+            "attention_mask"
+        ]
+
+        self.assertIsNotNone(causal_mask)
+        self.assertIsNone(bidirectional_mask)
+
     @require_torch_multi_accelerator
     def test_mtp_use_correct_device_when_drafting(self):
         """Test that when drafting the new token, mtp puts it back on the correct same device as `input_ids`"""
