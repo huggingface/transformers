@@ -461,18 +461,21 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
         label_expectations = Expectations(
             {
                 ("cuda", (8, 0)): [17, 17, 75, 75, 63],
+                ("xpu", None): [17, 17, 75, 75, 63],
                 ("cpu", None): [17, 17, 75, 75, 63],
             }
         )
         score_expectations = Expectations(
             {
                 ("cuda", (8, 0)): [0.960207, 0.934029, 0.896868, 0.718928, 0.707891],
+                ("xpu", None): [0.960207, 0.934029, 0.896868, 0.718928, 0.707891],
                 ("cpu", None): [0.960285, 0.934246, 0.896883, 0.718877, 0.707271],
             }
         )
         box_expectations = Expectations(
             {
                 ("cuda", (8, 0)): [7.24499, 54.62048, 318.17670, 472.14398],
+                ("xpu", None): [7.24499, 54.62048, 318.17670, 472.14398],
                 ("cpu", None): [7.24640, 54.62370, 318.17166, 472.14819],
             }
         )
@@ -519,18 +522,21 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
         od_label_expectations = Expectations(
             {
                 ("cuda", (8, 0)): [17, 17, 75, 75, 63],
+                ("xpu", None): [17, 17, 75, 75, 63],
                 ("cpu", None): [17, 17, 75, 75, 63],
             }
         )
         od_score_expectations = Expectations(
             {
                 ("cuda", (8, 0)): [0.944035, 0.910815, 0.907229, 0.819838, 0.405123],
+                ("xpu", None): [0.944035, 0.910815, 0.907229, 0.819838, 0.405123],
                 ("cpu", None): [0.944035, 0.910815, 0.907229, 0.819837, 0.405120],
             }
         )
         od_box_expectations = Expectations(
             {
                 ("cuda", (8, 0)): [9.45281, 53.83556, 318.41138, 471.58243],
+                ("xpu", None): [9.45281, 53.83556, 318.41138, 471.58243],
                 ("cpu", None): [9.45285, 53.83560, 318.41138, 471.58237],
             }
         )
@@ -554,12 +560,14 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
         instance_label_expectations = Expectations(
             {
                 ("cuda", (8, 0)): [17, 17, 75, 75],
+                ("xpu", None): [17, 17, 75, 75],
                 ("cpu", None): [17, 17, 75, 75],
             }
         )
         instance_score_expectations = Expectations(
             {
                 ("cuda", (8, 0)): [0.944035, 0.910815, 0.907229, 0.819838],
+                ("xpu", None): [0.944035, 0.910815, 0.907229, 0.819838],
                 ("cpu", None): [0.944035, 0.910815, 0.907229, 0.819837],
             }
         )
@@ -580,6 +588,7 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
         pred_masks_head_expectations = Expectations(
             {
                 ("cuda", (8, 0)): [-13.01990, -13.06471, -13.93228, -13.86109, -13.67009],
+                ("xpu", None): [-13.01990, -13.06471, -13.93228, -13.86109, -13.67009],
                 ("cpu", None): [-13.01991, -13.06470, -13.93225, -13.86107, -13.67006],
             }
         )
@@ -590,6 +599,7 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
         mask_pixel_count_expectations = Expectations(
             {
                 ("cuda", (8, 0)): [51784, 60323, 4187, 2177],
+                ("xpu", None): [51784, 60323, 4187, 2177],
                 ("cpu", None): [51784, 60323, 4187, 2177],
             }
         )
