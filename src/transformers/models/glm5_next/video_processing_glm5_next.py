@@ -70,7 +70,7 @@ class Glm5NextVideoProcessorInitKwargs(VideosKwargs, total=False):
     temporal_patch_size: int
     merge_size: int
     patch_expand_factor: int
-    max_frames: int
+    max_frames: int | None
 
     max_duration: int
     min_image_tokens: int
@@ -136,45 +136,6 @@ def smart_resize(
     return aligned_height, aligned_width
 
 
-def _prepare_processor(processor, kwargs=None):
-    kwargs = kwargs or {}
-    nested_kwargs = kwargs.get("kwargs") or kwargs.get("super_kwargs") or {}
-    overrides = {
-        name: value
-        for name in ("min_image_tokens", "max_image_tokens", "patch_expand_factor")
-        if (value := kwargs.get(name, nested_kwargs.get(name))) is not None
-    }
-    if overrides:
-        processor = copy.copy(processor)
-        for name, value in overrides.items():
-            setattr(processor, name, value)
-
-    if processor.min_image_tokens is None or processor.max_image_tokens is None:
-        raise ValueError("min_image_tokens and max_image_tokens must be provided.")
-    return processor
-
-
-def _get_resize_geometry(processor, num_frames, height, width, factor, temporal_factor):
-    pixels_per_token = temporal_factor * (factor // processor.patch_expand_factor) ** 2
-    min_pixels = processor.min_image_tokens * pixels_per_token
-    target_height, target_width = smart_resize(
-        num_frames,
-        height,
-        width,
-        temporal_factor=temporal_factor,
-        height_factor=factor,
-        width_factor=factor,
-        min_pixels=min_pixels,
-        max_pixels=processor.max_image_tokens * pixels_per_token,
-    )
-    scale = min(target_height / height, target_width / width)
-    if num_frames * height * width >= min_pixels:
-        scale = min(1.0, scale)
-    content_height = max(1, min(target_height, math.floor(height * scale)))
-    content_width = max(1, min(target_width, math.floor(width * scale)))
-    return target_height, target_width, content_height, content_width
-
-
 @auto_docstring
 class Glm5NextVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
@@ -204,9 +165,16 @@ class Glm5NextVideoProcessor(BaseVideoProcessor):
 
     def __init__(self, **kwargs: Unpack[Glm5NextVideoProcessorInitKwargs]):
         super().__init__(**kwargs)
-        _prepare_processor(self)
+        if self.min_image_tokens is None or self.max_image_tokens is None:
+            raise ValueError("min_image_tokens and max_image_tokens must be provided.")
 
-    def sample_frames(self, metadata: VideoMetadata, fps: int | float | None = None, **kwargs):
+    def sample_frames(
+        self,
+        metadata: VideoMetadata,
+        fps: int | float | None = None,
+        max_frames: int | None = None,
+        **kwargs,
+    ):
         """
         Args:
             metadata (`VideoMetadata`):
@@ -219,57 +187,84 @@ class Glm5NextVideoProcessor(BaseVideoProcessor):
         """
         if metadata is None or getattr(metadata, "fps", None) is None:
             raise ValueError(
-                "Asked to sample frames per second but no video metadata was provided. Pass a VideoMetadata object "
-                "or set do_sample_frames=False."
+                "Asked to sample frames per second but no video metadata was provided which is required when sampling in Glm5Next. "
+                "Please pass in a VideoMetadata object or set do_sample_frames=False"
             )
 
         total_frames = metadata.total_num_frames
-        duration = metadata.duration
-        if not duration:
-            duration = round((total_frames - 1) / metadata.fps) + 1 if metadata.fps else 0
+        max_frame_idx = total_frames - 1
+        duration = metadata.duration or round(max_frame_idx / metadata.fps) + 1
+        # Used later to cap frames, important to base on the original and not capped duration
+        max_seconds = int(duration)
+        if self.max_duration > 0:
+            duration = min(duration, self.max_duration)
 
-        max_frames = kwargs.get("max_frames")
+        target_fps = fps
+        if target_fps is None:
+            target_fps = self.fps
+
+        extract_t = int(duration * target_fps)
         if max_frames is None:
             max_frames = self.max_frame_count_dynamic
-        effective_duration = duration if self.max_duration <= 0 else min(duration, self.max_duration)
-        target_fps = fps if fps is not None else self.fps
-        extract_t = min(int(effective_duration * target_fps), max_frames)
+        extract_t = min(extract_t, max_frames)
 
-        timestamps = [index / metadata.fps for index in range(total_frames)]
-        max_second = int(duration)
+        duration_per_frame = 1 / metadata.fps
+        timestamps = [i * duration_per_frame for i in range(total_frames)]
+
         if total_frames < extract_t:
             frame_indices = np.linspace(0, total_frames - 1, extract_t, dtype=int).tolist()
         else:
             frame_indices = []
             current_second = 0
             inv_fps = 1 / target_fps
-            for frame_index, timestamp in enumerate(timestamps):
-                if timestamp >= current_second:
+            for frame_index in range(total_frames):
+                if timestamps[frame_index] >= current_second:
                     current_second += inv_fps
                     frame_indices.append(frame_index)
-                    if current_second >= max_second:
+                    if current_second >= max_seconds:
                         break
 
         if len(frame_indices) < extract_t:
-            if frame_indices:
-                start, end = frame_indices[0], frame_indices[-1]
-            else:
+            if len(frame_indices) == 0:
                 start, end = 0, max(total_frames - 1, 0)
+            else:
+                start, end = frame_indices[0], frame_indices[-1]
             frame_indices = np.linspace(start, end, extract_t, dtype=int).tolist()
         elif len(frame_indices) > extract_t:
             frame_indices = np.linspace(0, total_frames - 1, extract_t, dtype=int).tolist()
 
-        frame_indices = list(dict.fromkeys(frame_indices))
-        if len(frame_indices) & 1:
-            frame_indices.append(frame_indices[-1])
-        return np.array(frame_indices)
+        seen, uniq = set(), []
+        for idx in frame_indices:
+            if idx not in seen:
+                seen.add(idx)
+                uniq.append(idx)
+
+        if len(uniq) & 1:
+            uniq.append(uniq[-1])
+
+        return np.array(uniq)
 
     def resize(self, videos, size, resample, factor, temporal_factor, **kwargs) -> "torch.Tensor":
         """Resize dynamically based on input video aspect ratio."""
         height, width = videos.shape[-2:]
-        target_height, target_width, content_height, content_width = _get_resize_geometry(
-            self, videos.shape[1], height, width, factor, temporal_factor
+        pixels_per_token = temporal_factor * (factor // self.patch_expand_factor) ** 2
+        min_pixels = self.min_image_tokens * pixels_per_token
+        target_height, target_width = smart_resize(
+            num_frames=videos.shape[1],
+            height=height,
+            width=width,
+            temporal_factor=temporal_factor,
+            height_factor=factor,
+            width_factor=factor,
+            min_pixels=min_pixels,
+            max_pixels=self.max_image_tokens * pixels_per_token,
         )
+        scale = min(target_height / height, target_width / width)
+        if videos.shape[1] * height * width >= min_pixels:
+            scale = min(1.0, scale)
+        content_height = max(1, min(target_height, math.floor(height * scale)))
+        content_width = max(1, min(target_width, math.floor(width * scale)))
+
         if (content_height, content_width) != (height, width):
             videos = TorchvisionBackend.resize(
                 self, videos, SizeDict(height=content_height, width=content_width), resample=resample
@@ -335,7 +330,18 @@ class Glm5NextVideoProcessor(BaseVideoProcessor):
         return_tensors: str | TensorType | None = None,
         **kwargs,
     ):
-        self = _prepare_processor(self, locals())
+        overrides = {
+            "min_image_tokens": kwargs.get("min_image_tokens"),
+            "max_image_tokens": kwargs.get("max_image_tokens"),
+            "patch_expand_factor": patch_expand_factor,
+        }
+        overrides = {name: value for name, value in overrides.items() if value is not None}
+        if overrides:
+            self = copy.copy(self)
+            for name, value in overrides.items():
+                setattr(self, name, value)
+        if self.min_image_tokens is None or self.max_image_tokens is None:
+            raise ValueError("min_image_tokens and max_image_tokens must be provided.")
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
         resized_videos_grouped = {}
 

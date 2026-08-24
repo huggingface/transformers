@@ -223,16 +223,28 @@ class Glm5NextModelTest(VLMModelTest, unittest.TestCase):
         config = self.model_tester.get_config()
         model = Glm5NextModel(config).to(torch_device).eval()
         input_ids = torch.tensor(
-            [[config.image_token_id, config.video_token_id, config.image_token_id, config.text_config.pad_token_id]],
+            [
+                [
+                    config.image_token_id,
+                    config.video_start_token_id,
+                    config.image_token_id,
+                    config.image_token_id,
+                    config.video_end_token_id,
+                    config.text_config.pad_token_id,
+                ]
+            ],
             device=torch_device,
         )
         inputs_embeds = model.get_input_embeddings()(input_ids)
         hidden_size = inputs_embeds.shape[-1]
-        image_features = torch.zeros(2, hidden_size, device=torch_device)
-        video_features = torch.zeros(1, hidden_size, device=torch_device)
+        image_features = torch.zeros(1, hidden_size, device=torch_device)
+        video_features = torch.zeros(2, hidden_size, device=torch_device)
 
-        expected_image_mask = input_ids == config.image_token_id
-        expected_video_mask = input_ids == config.video_token_id
+        in_video_span = (input_ids == config.video_start_token_id).cumsum(-1) > (
+            input_ids == config.video_end_token_id
+        ).cumsum(-1)
+        expected_image_mask = (input_ids == config.image_token_id) & ~in_video_span
+        expected_video_mask = (input_ids == config.image_token_id) & in_video_span
         for ids in (input_ids, None):
             image_mask, video_mask = model.get_placeholder_mask(
                 ids,

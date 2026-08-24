@@ -28,7 +28,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...image_processing_backends import PilBackend, TorchvisionBackend
-from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, SizeDict
+from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling, SizeDict
 from ...integrations import (
     use_kernel_forward_from_hub,
     use_kernel_func_from_hub_with_fallback,
@@ -41,6 +41,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, MoeCausalLMOutputWithPa
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
+    TensorType,
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
@@ -1452,16 +1453,19 @@ class Glm5NextModel(Exaone4_5_Model, Glm5NextPreTrainedModel):
         equal to the length of multimodal features. If the lengths are different, an error is raised.
         """
         if input_ids is None:
-            embed_tokens = self.get_input_embeddings()
-
-            def _token_hits(token_id: int) -> torch.Tensor:
-                token_embed = embed_tokens(torch.tensor(token_id, dtype=torch.long, device=inputs_embeds.device))
-                return (inputs_embeds == token_embed).all(-1)
-
-            special_mm_mask = _token_hits(self.config.image_token_id)
-            in_video_span = _token_hits(self.config.video_start_token_id).cumsum(-1) > _token_hits(
-                self.config.video_end_token_id
-            ).cumsum(-1)
+            special_mm_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_mm_mask = special_mm_mask.all(-1)
+            video_start_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.full((), self.config.video_start_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            video_start_mask = video_start_mask.all(-1)
+            video_end_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.full((), self.config.video_end_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            video_end_mask = video_end_mask.all(-1)
+            in_video_span = video_start_mask.cumsum(-1) > video_end_mask.cumsum(-1)
         else:
             special_mm_mask = input_ids == self.config.image_token_id
             in_video_span = (input_ids == self.config.video_start_token_id).cumsum(-1) > (
@@ -1688,22 +1692,7 @@ class Glm5NextForConditionalGeneration(Glm46VForConditionalGeneration, Glm5NextP
 
 
 class Glm5NextProcessor(Glm46VProcessor):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_token_type_ids": False,
-            "return_mm_token_type_ids": False,
-        },
-        "videos_kwargs": {"return_metadata": True},
-    }
-
-    def create_mm_token_type_ids(self, input_ids: list) -> list[list[int]]:
-        mm_token_type_ids = []
-        for token_ids in input_ids:
-            token_ids = np.asarray(token_ids)
-            token_types = (token_ids == self.image_token_id).astype(np.int64)
-            mm_token_type_ids.append(token_types.tolist())
-        return mm_token_type_ids
+    pass
 
 
 def smart_resize(
@@ -1764,62 +1753,6 @@ def smart_resize(
     return aligned_height, aligned_width
 
 
-def _prepare_processor(processor, kwargs=None):
-    kwargs = kwargs or {}
-    nested_kwargs = kwargs.get("kwargs") or kwargs.get("super_kwargs") or {}
-    overrides = {
-        name: value
-        for name in ("min_image_tokens", "max_image_tokens", "patch_expand_factor")
-        if (value := kwargs.get(name, nested_kwargs.get(name))) is not None
-    }
-    if overrides:
-        processor = copy.copy(processor)
-        for name, value in overrides.items():
-            setattr(processor, name, value)
-
-    if processor.min_image_tokens is None or processor.max_image_tokens is None:
-        raise ValueError("min_image_tokens and max_image_tokens must be provided.")
-    return processor
-
-
-def _get_resize_geometry(processor, num_frames, height, width, factor, temporal_factor):
-    pixels_per_token = temporal_factor * (factor // processor.patch_expand_factor) ** 2
-    min_pixels = processor.min_image_tokens * pixels_per_token
-    target_height, target_width = smart_resize(
-        num_frames,
-        height,
-        width,
-        temporal_factor=temporal_factor,
-        height_factor=factor,
-        width_factor=factor,
-        min_pixels=min_pixels,
-        max_pixels=processor.max_image_tokens * pixels_per_token,
-    )
-    scale = min(target_height / height, target_width / width)
-    if num_frames * height * width >= min_pixels:
-        scale = min(1.0, scale)
-    content_height = max(1, min(target_height, math.floor(height * scale)))
-    content_width = max(1, min(target_width, math.floor(width * scale)))
-    return target_height, target_width, content_height, content_width
-
-
-def _get_number_of_image_patches(processor, height: int, width: int, images_kwargs: dict | None = None) -> int:
-    processor = _prepare_processor(processor, images_kwargs)
-    factor = processor.patch_size * processor.merge_size * processor.patch_expand_factor
-    pixels_per_token = processor.temporal_patch_size * (processor.patch_size * processor.merge_size) ** 2
-    resized_height, resized_width = smart_resize(
-        processor.temporal_patch_size,
-        height,
-        width,
-        temporal_factor=processor.temporal_patch_size,
-        height_factor=factor,
-        width_factor=factor,
-        min_pixels=processor.min_image_tokens * pixels_per_token,
-        max_pixels=processor.max_image_tokens * pixels_per_token,
-    )
-    return resized_height // processor.patch_size * (resized_width // processor.patch_size)
-
-
 class Glm5NextImageProcessorKwargs(GlmgaImageProcessorKwargs, total=False):
     r"""
     patch_size (`int`):
@@ -1853,14 +1786,40 @@ class Glm5NextImageProcessor(GlmgaImageProcessor):
     valid_kwargs = Glm5NextImageProcessorKwargs
 
     def preprocess(self, images, **kwargs):
-        self = _prepare_processor(self, kwargs)
+        overrides = {
+            "min_image_tokens": kwargs.get("min_image_tokens"),
+            "max_image_tokens": kwargs.get("max_image_tokens"),
+            "patch_expand_factor": kwargs.get("patch_expand_factor"),
+        }
+        overrides = {name: value for name, value in overrides.items() if value is not None}
+        if overrides:
+            self = copy.copy(self)
+            for name, value in overrides.items():
+                setattr(self, name, value)
+        if self.min_image_tokens is None or self.max_image_tokens is None:
+            raise ValueError("min_image_tokens and max_image_tokens must be provided.")
         return super().preprocess(images, **kwargs)
 
     def resize(self, images, size, resample, factor, temporal_factor, **kwargs):
         height, width = images.shape[-2:]
-        target_height, target_width, content_height, content_width = _get_resize_geometry(
-            self, temporal_factor, height, width, factor, temporal_factor
+        pixels_per_token = temporal_factor * (factor // self.patch_expand_factor) ** 2
+        min_pixels = self.min_image_tokens * pixels_per_token
+        target_height, target_width = smart_resize(
+            num_frames=temporal_factor,
+            height=height,
+            width=width,
+            temporal_factor=temporal_factor,
+            height_factor=factor,
+            width_factor=factor,
+            min_pixels=min_pixels,
+            max_pixels=self.max_image_tokens * pixels_per_token,
         )
+        scale = min(target_height / height, target_width / width)
+        if temporal_factor * height * width >= min_pixels:
+            scale = min(1.0, scale)
+        content_height = max(1, min(target_height, math.floor(height * scale)))
+        content_width = max(1, min(target_width, math.floor(width * scale)))
+
         if (content_height, content_width) != (height, width):
             images = TorchvisionBackend.resize(
                 self, images, SizeDict(height=content_height, width=content_width), resample=resample
@@ -1868,7 +1827,26 @@ class Glm5NextImageProcessor(GlmgaImageProcessor):
         return tvF.pad(images, [0, 0, target_width - content_width, target_height - content_height], fill=0)
 
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
-        return _get_number_of_image_patches(self, height, width, images_kwargs)
+        images_kwargs = images_kwargs or {}
+        patch_expand_factor = images_kwargs.get("patch_expand_factor", self.patch_expand_factor)
+        min_image_tokens = images_kwargs.get("min_image_tokens", self.min_image_tokens)
+        max_image_tokens = images_kwargs.get("max_image_tokens", self.max_image_tokens)
+        if min_image_tokens is None or max_image_tokens is None:
+            raise ValueError("min_image_tokens and max_image_tokens must be provided.")
+
+        factor = self.patch_size * self.merge_size * patch_expand_factor
+        pixels_per_token = self.temporal_patch_size * (self.patch_size * self.merge_size) ** 2
+        resized_height, resized_width = smart_resize(
+            self.temporal_patch_size,
+            height,
+            width,
+            temporal_factor=self.temporal_patch_size,
+            height_factor=factor,
+            width_factor=factor,
+            min_pixels=min_image_tokens * pixels_per_token,
+            max_pixels=max_image_tokens * pixels_per_token,
+        )
+        return resized_height // self.patch_size * (resized_width // self.patch_size)
 
 
 class Glm5NextImageProcessorPil(GlmgaImageProcessorPil):
@@ -1884,15 +1862,41 @@ class Glm5NextImageProcessorPil(GlmgaImageProcessorPil):
     valid_kwargs = Glm5NextImageProcessorKwargs
 
     def preprocess(self, images, **kwargs):
-        self = _prepare_processor(self, kwargs)
+        overrides = {
+            "min_image_tokens": kwargs.get("min_image_tokens"),
+            "max_image_tokens": kwargs.get("max_image_tokens"),
+            "patch_expand_factor": kwargs.get("patch_expand_factor"),
+        }
+        overrides = {name: value for name, value in overrides.items() if value is not None}
+        if overrides:
+            self = copy.copy(self)
+            for name, value in overrides.items():
+                setattr(self, name, value)
+        if self.min_image_tokens is None or self.max_image_tokens is None:
+            raise ValueError("min_image_tokens and max_image_tokens must be provided.")
         return super().preprocess(images, **kwargs)
 
     def resize(self, image, size, resample, factor, temporal_factor, **kwargs):
         factor *= self.patch_expand_factor
         height, width = image.shape[-2:]
-        target_height, target_width, content_height, content_width = _get_resize_geometry(
-            self, temporal_factor, height, width, factor, temporal_factor
+        pixels_per_token = temporal_factor * (factor // self.patch_expand_factor) ** 2
+        min_pixels = self.min_image_tokens * pixels_per_token
+        target_height, target_width = smart_resize(
+            num_frames=temporal_factor,
+            height=height,
+            width=width,
+            temporal_factor=temporal_factor,
+            height_factor=factor,
+            width_factor=factor,
+            min_pixels=min_pixels,
+            max_pixels=self.max_image_tokens * pixels_per_token,
         )
+        scale = min(target_height / height, target_width / width)
+        if temporal_factor * height * width >= min_pixels:
+            scale = min(1.0, scale)
+        content_height = max(1, min(target_height, math.floor(height * scale)))
+        content_width = max(1, min(target_width, math.floor(width * scale)))
+
         if (content_height, content_width) != (height, width):
             image = PilBackend.resize(
                 self, image, SizeDict(height=content_height, width=content_width), resample=resample
@@ -1904,7 +1908,26 @@ class Glm5NextImageProcessorPil(GlmgaImageProcessorPil):
         )
 
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
-        return _get_number_of_image_patches(self, height, width, images_kwargs)
+        images_kwargs = images_kwargs or {}
+        patch_expand_factor = images_kwargs.get("patch_expand_factor", self.patch_expand_factor)
+        min_image_tokens = images_kwargs.get("min_image_tokens", self.min_image_tokens)
+        max_image_tokens = images_kwargs.get("max_image_tokens", self.max_image_tokens)
+        if min_image_tokens is None or max_image_tokens is None:
+            raise ValueError("min_image_tokens and max_image_tokens must be provided.")
+
+        factor = self.patch_size * self.merge_size * patch_expand_factor
+        pixels_per_token = self.temporal_patch_size * (self.patch_size * self.merge_size) ** 2
+        resized_height, resized_width = smart_resize(
+            self.temporal_patch_size,
+            height,
+            width,
+            temporal_factor=self.temporal_patch_size,
+            height_factor=factor,
+            width_factor=factor,
+            min_pixels=min_image_tokens * pixels_per_token,
+            max_pixels=max_image_tokens * pixels_per_token,
+        )
+        return resized_height // self.patch_size * (resized_width // self.patch_size)
 
 
 class Glm5NextVideoProcessorInitKwargs(GlmgaVideoProcessorInitKwargs, total=False):
@@ -1935,6 +1958,7 @@ class Glm5NextVideoProcessorInitKwargs(GlmgaVideoProcessorInitKwargs, total=Fals
     min_image_tokens: int
     max_image_tokens: int
     max_frame_count_dynamic: int
+    max_frames: int | None
 
 
 class Glm5NextVideoProcessor(GlmgaVideoProcessor):
@@ -1956,65 +1980,145 @@ class Glm5NextVideoProcessor(GlmgaVideoProcessor):
 
     def __init__(self, **kwargs: Unpack[Glm5NextVideoProcessorInitKwargs]):
         super().__init__(**kwargs)
-        _prepare_processor(self)
+        if self.min_image_tokens is None or self.max_image_tokens is None:
+            raise ValueError("min_image_tokens and max_image_tokens must be provided.")
 
-    def sample_frames(self, metadata: VideoMetadata, fps: int | float | None = None, **kwargs):
+    def sample_frames(
+        self,
+        metadata: VideoMetadata,
+        fps: int | float | None = None,
+        max_frames: int | None = None,
+        **kwargs,
+    ):
         if metadata is None or getattr(metadata, "fps", None) is None:
             raise ValueError(
-                "Asked to sample frames per second but no video metadata was provided. Pass a VideoMetadata object "
-                "or set do_sample_frames=False."
+                "Asked to sample frames per second but no video metadata was provided which is required when sampling in Glm5Next. "
+                "Please pass in a VideoMetadata object or set do_sample_frames=False"
             )
 
         total_frames = metadata.total_num_frames
-        duration = metadata.duration
-        if not duration:
-            duration = round((total_frames - 1) / metadata.fps) + 1 if metadata.fps else 0
+        max_frame_idx = total_frames - 1
+        duration = metadata.duration or round(max_frame_idx / metadata.fps) + 1
+        # Used later to cap frames, important to base on the original and not capped duration
+        max_seconds = int(duration)
+        if self.max_duration > 0:
+            duration = min(duration, self.max_duration)
 
-        max_frames = kwargs.get("max_frames")
+        target_fps = fps
+        if target_fps is None:
+            target_fps = self.fps
+
+        extract_t = int(duration * target_fps)
         if max_frames is None:
             max_frames = self.max_frame_count_dynamic
-        effective_duration = duration if self.max_duration <= 0 else min(duration, self.max_duration)
-        target_fps = fps if fps is not None else self.fps
-        extract_t = min(int(effective_duration * target_fps), max_frames)
+        extract_t = min(extract_t, max_frames)
 
-        timestamps = [index / metadata.fps for index in range(total_frames)]
-        max_second = int(duration)
+        duration_per_frame = 1 / metadata.fps
+        timestamps = [i * duration_per_frame for i in range(total_frames)]
+
         if total_frames < extract_t:
             frame_indices = np.linspace(0, total_frames - 1, extract_t, dtype=int).tolist()
         else:
             frame_indices = []
             current_second = 0
             inv_fps = 1 / target_fps
-            for frame_index, timestamp in enumerate(timestamps):
-                if timestamp >= current_second:
+            for frame_index in range(total_frames):
+                if timestamps[frame_index] >= current_second:
                     current_second += inv_fps
                     frame_indices.append(frame_index)
-                    if current_second >= max_second:
+                    if current_second >= max_seconds:
                         break
 
         if len(frame_indices) < extract_t:
-            if frame_indices:
-                start, end = frame_indices[0], frame_indices[-1]
-            else:
+            if len(frame_indices) == 0:
                 start, end = 0, max(total_frames - 1, 0)
+            else:
+                start, end = frame_indices[0], frame_indices[-1]
             frame_indices = np.linspace(start, end, extract_t, dtype=int).tolist()
         elif len(frame_indices) > extract_t:
             frame_indices = np.linspace(0, total_frames - 1, extract_t, dtype=int).tolist()
 
-        frame_indices = list(dict.fromkeys(frame_indices))
-        if len(frame_indices) & 1:
-            frame_indices.append(frame_indices[-1])
-        return np.array(frame_indices)
+        seen, uniq = set(), []
+        for idx in frame_indices:
+            if idx not in seen:
+                seen.add(idx)
+                uniq.append(idx)
 
-    def _preprocess(self, videos, **super_kwargs):
-        self = _prepare_processor(self, locals())
-        return super()._preprocess(videos, **super_kwargs)
+        if len(uniq) & 1:
+            uniq.append(uniq[-1])
+
+        return np.array(uniq)
+
+    def _preprocess(
+        self,
+        videos,
+        do_convert_rgb: bool = True,
+        do_resize: bool = True,
+        size: SizeDict | None = None,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None" = PILImageResampling.BICUBIC,
+        do_rescale: bool = True,
+        rescale_factor: float = 1 / 255.0,
+        do_normalize: bool = True,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        patch_expand_factor: int | None = None,
+        patch_size: int | None = None,
+        temporal_patch_size: int | None = None,
+        merge_size: int | None = None,
+        return_tensors: str | TensorType | None = None,
+        **kwargs,
+    ):
+        overrides = {
+            "min_image_tokens": kwargs.get("min_image_tokens"),
+            "max_image_tokens": kwargs.get("max_image_tokens"),
+            "patch_expand_factor": patch_expand_factor,
+        }
+        overrides = {name: value for name, value in overrides.items() if value is not None}
+        if overrides:
+            self = copy.copy(self)
+            for name, value in overrides.items():
+                setattr(self, name, value)
+        if self.min_image_tokens is None or self.max_image_tokens is None:
+            raise ValueError("min_image_tokens and max_image_tokens must be provided.")
+        return super()._preprocess(
+            videos=videos,
+            do_convert_rgb=do_convert_rgb,
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            patch_expand_factor=patch_expand_factor,
+            patch_size=patch_size,
+            temporal_patch_size=temporal_patch_size,
+            merge_size=merge_size,
+            return_tensors=return_tensors,
+            **kwargs,
+        )
 
     def resize(self, videos, size, resample, factor, temporal_factor, **kwargs):
         height, width = videos.shape[-2:]
-        target_height, target_width, content_height, content_width = _get_resize_geometry(
-            self, videos.shape[1], height, width, factor, temporal_factor
+        pixels_per_token = temporal_factor * (factor // self.patch_expand_factor) ** 2
+        min_pixels = self.min_image_tokens * pixels_per_token
+        target_height, target_width = smart_resize(
+            num_frames=videos.shape[1],
+            height=height,
+            width=width,
+            temporal_factor=temporal_factor,
+            height_factor=factor,
+            width_factor=factor,
+            min_pixels=min_pixels,
+            max_pixels=self.max_image_tokens * pixels_per_token,
         )
+        scale = min(target_height / height, target_width / width)
+        if videos.shape[1] * height * width >= min_pixels:
+            scale = min(1.0, scale)
+        content_height = max(1, min(target_height, math.floor(height * scale)))
+        content_width = max(1, min(target_width, math.floor(width * scale)))
+
         if (content_height, content_width) != (height, width):
             videos = TorchvisionBackend.resize(
                 self, videos, SizeDict(height=content_height, width=content_width), resample=resample

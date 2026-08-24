@@ -228,7 +228,9 @@ class Glm5NextVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
             torch.testing.assert_close(block, torch.full_like(block, expected))
 
     def test_video_processor_from_dict_with_kwargs(self):
-        video_processor = self.fast_video_processing_class.from_dict(self.video_processor_dict, size={"longest_edge": 42})
+        video_processor = self.fast_video_processing_class.from_dict(
+            self.video_processor_dict, size={"longest_edge": 42}
+        )
         self.assertEqual(video_processor.size, {"longest_edge": 42})
 
     # GLM-5-Next samples by fps over the metadata duration
@@ -267,7 +269,9 @@ class Glm5NextVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
             for m in self.video_processor_tester.prepare_video_metadata(video_inputs)
         ]
         output = video_processing(video_inputs, video_metadata=metadata, return_tensors="pt")
-        expected_grid_t = self.video_processor_tester.num_frames // 2 // self.video_processor_tester.temporal_patch_size
+        expected_grid_t = (
+            self.video_processor_tester.num_frames // 2 // self.video_processor_tester.temporal_patch_size
+        )
         self.assertEqual(output["video_grid_thw"][:, 0].tolist(), [expected_grid_t] * len(video_inputs))
 
     def test_call_without_metadata_raises(self):

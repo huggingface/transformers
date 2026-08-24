@@ -1891,16 +1891,19 @@ class Glm5NextModel(Glm5NextPreTrainedModel):
         equal to the length of multimodal features. If the lengths are different, an error is raised.
         """
         if input_ids is None:
-            embed_tokens = self.get_input_embeddings()
-
-            def _token_hits(token_id: int) -> torch.Tensor:
-                token_embed = embed_tokens(torch.tensor(token_id, dtype=torch.long, device=inputs_embeds.device))
-                return (inputs_embeds == token_embed).all(-1)
-
-            special_mm_mask = _token_hits(self.config.image_token_id)
-            in_video_span = _token_hits(self.config.video_start_token_id).cumsum(-1) > _token_hits(
-                self.config.video_end_token_id
-            ).cumsum(-1)
+            special_mm_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_mm_mask = special_mm_mask.all(-1)
+            video_start_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.full((), self.config.video_start_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            video_start_mask = video_start_mask.all(-1)
+            video_end_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.full((), self.config.video_end_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            video_end_mask = video_end_mask.all(-1)
+            in_video_span = video_start_mask.cumsum(-1) > video_end_mask.cumsum(-1)
         else:
             special_mm_mask = input_ids == self.config.image_token_id
             in_video_span = (input_ids == self.config.video_start_token_id).cumsum(-1) > (
