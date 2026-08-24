@@ -81,7 +81,7 @@ class CanaryPreTrainedModel(PreTrainedModel):
     main_input_name = "input_features"
     input_modalities = "audio"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["ParakeetEncoderBlock", "CanaryDecoderLayer"]
+    _no_split_modules = ["CanaryDecoderLayer"]
     _supports_flash_attn = True
     _supports_sdpa = True
 

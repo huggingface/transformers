@@ -59,7 +59,7 @@ class CanaryPositionalEmbedding(SinusoidsPositionEmbedding):
 @auto_docstring
 class CanaryPreTrainedModel(CohereAsrPreTrainedModel):
     config: CanaryConfig
-    _no_split_modules = ["ParakeetEncoderBlock", "CanaryDecoderLayer"]
+    _no_split_modules = ["CanaryDecoderLayer"]
 
     def _get_feat_extract_output_lengths(self):
         raise AttributeError("Not needed for Canary")
