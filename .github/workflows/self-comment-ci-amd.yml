@@ -180,7 +180,7 @@ jobs:
   upload_dummy_artifact:
     name: Upload dummy artifact
     if: ${{ needs.get-tests.outputs.models != '[]' }}
-    needs: [get-tests]
+    needs: [create_run, get-tests]
     runs-on: ubuntu-22.04
     steps:
       - run: mkdir dummy_artifact && echo "placeholder" > dummy_artifact/placeholder.txt
