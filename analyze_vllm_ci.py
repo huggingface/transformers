@@ -96,12 +96,21 @@ def fetch_run_jobs(run_id, repo=REPO, token=None):
     return jobs
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Redirect handler that refuses to follow redirects so we can read Location ourselves."""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
 def fetch_job_log(job_id, repo=REPO, token=None):
     """
     Return raw log text for a job.
-    GitHub responds with 302 redirect to blob storage; urllib follows it
-    automatically and drops the Authorization header on cross-domain redirect
-    (correct behaviour — blob storage doesn't need our token).
+
+    GitHub responds with a 302 redirect to a signed Azure Blob Storage URL.
+    We must NOT forward the Authorization header to the blob URL — Azure
+    rejects any request that carries a Bearer token it doesn't own (401).
+    Fix: intercept the redirect, read the Location URL, then fetch the blob
+    without any auth headers.
     """
     url = f"https://api.github.com/repos/{repo}/actions/jobs/{job_id}/logs"
     headers = {
@@ -110,15 +119,30 @@ def fetch_job_log(job_id, repo=REPO, token=None):
     }
     if token:
         headers["Authorization"] = f"Bearer {token}"
+
+    # Step 1: ask GitHub for the signed blob URL (expect 302, do NOT follow it)
+    opener = urllib.request.build_opener(_NoRedirect)
     req = urllib.request.Request(url, headers=headers)
     try:
-        with urllib.request.urlopen(req, timeout=120) as resp:
+        with opener.open(req, timeout=30) as resp:
+            # Unexpected 200 — read directly
             return resp.read().decode("utf-8", errors="replace")
     except urllib.error.HTTPError as e:
-        print(f"  HTTP {e.code} fetching log for job {job_id}: {e.reason}", file=sys.stderr)
-        return ""
+        if e.code in (301, 302, 303, 307, 308) and "Location" in e.headers:
+            blob_url = e.headers["Location"]
+        else:
+            print(f"  HTTP {e.code} fetching log for job {job_id}: {e.reason}", file=sys.stderr)
+            return ""
     except urllib.error.URLError as e:
         print(f"  URL error fetching log for job {job_id}: {e.reason}", file=sys.stderr)
+        return ""
+
+    # Step 2: fetch the signed blob URL without any auth headers
+    try:
+        with urllib.request.urlopen(blob_url, timeout=120) as resp:
+            return resp.read().decode("utf-8", errors="replace")
+    except Exception as e:
+        print(f"  Error fetching log content for job {job_id}: {e}", file=sys.stderr)
         return ""
 
 
@@ -193,8 +217,11 @@ def collect_run_failures(run_id, repo=REPO, token=None, plugin=None):
 
     for job in jobs:
         conclusion = job.get("conclusion") or "unknown"
-        if conclusion == "success":
-            continue  # no failures to parse
+        # Only fetch logs for jobs that actually ran and failed/were cancelled.
+        # Skip success (no failures), skipped (never ran), and unknown (still
+        # running — e.g. the report job itself querying its own run).
+        if conclusion not in ("failure", "cancelled"):
+            continue
 
         job_group = normalize_job_name(job["name"])
         print(
