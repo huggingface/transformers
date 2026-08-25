@@ -32,6 +32,7 @@ files with `ast` rather than imported, so they cannot drift and cost nothing.
 import ast
 import hashlib
 import re
+import statistics
 import subprocess
 import sys
 from collections import defaultdict
@@ -685,6 +686,106 @@ def ancestors(model: str, parents: dict[str, frozenset[str]] | None = None) -> s
         seen.add(current)
         stack.extend(parents.get(current, ()))
     return seen
+
+
+# --------------------------------------------------------------------------------------------------
+# Measured override cost -- the ground truth for the axis order
+# --------------------------------------------------------------------------------------------------
+@dataclass
+class Override:
+    """One `class Child(Parent):` in a modular file, and how many lines it actually spends."""
+
+    child_model: str
+    parent_model: str
+    kind: str
+    child_class: str
+    parent_class: str
+    loc: int
+
+
+def modular_overrides(models_root: Path = MODELS_ROOT) -> list[Override]:
+    """Every cross-model block subclass declared in a `modular_*.py`, with its size in lines."""
+    found: list[Override] = []
+    for model_dir in sorted(p for p in models_root.iterdir() if p.is_dir()):
+        for path in sorted(model_dir.glob("modular_*.py")):
+            try:
+                tree = ast.parse(path.read_text(encoding="utf-8"))
+            except (OSError, SyntaxError):
+                continue
+            # `from ..llama.modeling_llama import LlamaAttention` -> {"LlamaAttention": "llama"}
+            owner: dict[str, str] = {}
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ImportFrom) and node.level == 2 and node.module:
+                    parent = node.module.split(".")[0]
+                    for alias in node.names:
+                        owner[alias.asname or alias.name] = parent
+            for node in tree.body:
+                if not isinstance(node, ast.ClassDef) or not node.bases:
+                    continue
+                base = node.bases[0]
+                base_name = base.id if isinstance(base, ast.Name) else getattr(base, "attr", None)
+                if base_name not in owner:
+                    continue
+                kind = classify(node.name)
+                if kind is None:
+                    continue
+                found.append(
+                    Override(
+                        model_dir.name,
+                        owner[base_name],
+                        kind,
+                        node.name,
+                        base_name,
+                        node.end_lineno - node.lineno + 1,
+                    )
+                )
+    return found
+
+
+MIN_SAMPLES_PER_AXIS = 3
+
+
+def measure_axis_costs(blocks: list[Block]) -> tuple[dict[tuple[str, str], float], dict[str, list[int]]]:
+    """
+    Measure what differing on each axis actually costs, in lines of override.
+
+    Ground truth is every `class Child(Parent)` in a modular file: we know the axes on which the
+    child's variant differs from the parent's, and we can count the lines the child spends. Cases
+    differing on exactly one axis measure that axis directly. Axes with too few samples fall back to
+    their block kind's median so a lucky single observation cannot dominate the ordering.
+
+    Returns the per-axis costs and, per kind, the sizes of the overrides whose variant *matches*
+    the parent -- the baseline this whole design rests on (it should be ~2 lines).
+    """
+    exact = {(b.model, b.class_name): b for b in blocks}
+    per_axis: dict[tuple[str, str], list[int]] = defaultdict(list)
+    per_kind: dict[str, list[int]] = defaultdict(list)
+    baseline: dict[str, list[int]] = defaultdict(list)
+
+    for override in modular_overrides():
+        child = exact.get((override.child_model, override.child_class))
+        parent = exact.get((override.parent_model, override.parent_class))
+        if child is None or parent is None or child.kind != parent.kind:
+            continue
+        axes = TIER1_AXES.get(child.kind, ())
+        delta = [
+            axis
+            for axis, mine, theirs in zip(axes, child.variant.split("|"), parent.variant.split("|"))
+            if mine != theirs
+        ]
+        if not delta:
+            baseline[child.kind].append(override.loc)
+        elif len(delta) == 1:
+            per_axis[(child.kind, delta[0])].append(override.loc)
+            per_kind[child.kind].append(override.loc)
+
+    costs: dict[tuple[str, str], float] = {}
+    for kind, axes in TIER1_AXES.items():
+        kind_median = statistics.median(per_kind[kind]) if per_kind.get(kind) else 0.0
+        for axis in axes:
+            samples = per_axis.get((kind, axis), [])
+            costs[(kind, axis)] = statistics.median(samples) if len(samples) >= MIN_SAMPLES_PER_AXIS else kind_median
+    return costs, baseline
 
 
 # --------------------------------------------------------------------------------------------------

@@ -30,6 +30,8 @@ ships in a release wheel.
 """
 
 import argparse
+import itertools
+import statistics
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -44,6 +46,7 @@ from blocks_facets import (  # noqa: E402
     ancestors,
     build_date_data,
     build_variants,
+    measure_axis_costs,
     modular_parents,
     scan_file,
     scan_repo,
@@ -346,6 +349,80 @@ def cmd_lint(args: argparse.Namespace) -> int:
     return 1 if findings and args.strict else 0
 
 
+# --------------------------------------------------------------------------------------------------
+# fit-order
+# --------------------------------------------------------------------------------------------------
+def _score_ordering(order: tuple[str, ...], variants: list[str], weights: dict, costs: dict, kind: str) -> float:
+    """
+    Total override LoC the codebase would pay under this axis ordering.
+
+    Each variant picks the existing variant it shares the longest prefix with -- the rule the trie
+    and the wizard both use -- and pays for the axes on which they still differ. Ordering the
+    expensive axes first makes agreement on them likelier, so less gets paid.
+    """
+    facets = {v: v.split("|") for v in variants}
+    index = {axis: i for i, axis in enumerate(TIER1_AXES[kind])}
+    positions = [index[axis] for axis in order]
+    total = 0.0
+    for mine in variants:
+        best_prefix, best_cost = -1, 0.0
+        my_facets = facets[mine]
+        for theirs in variants:
+            if theirs == mine:
+                continue
+            other = facets[theirs]
+            prefix = 0
+            for pos in positions:
+                if my_facets[pos] != other[pos]:
+                    break
+                prefix += 1
+            cost = sum(costs[(kind, a)] for a, i in index.items() if my_facets[i] != other[i])
+            # Longest prefix wins; among equals prefer the cheaper remaining diff.
+            if prefix > best_prefix or (prefix == best_prefix and cost < best_cost):
+                best_prefix, best_cost = prefix, cost
+        if best_prefix >= 0:
+            total += best_cost * weights[mine]
+    return total
+
+
+def cmd_fit_order(args: argparse.Namespace) -> int:
+    blocks, _ = scan_repo()
+    costs, baseline = measure_axis_costs(blocks)
+
+    print("== baseline: overrides whose variant MATCHES the class they inherit")
+    for kind, locs in sorted(baseline.items(), key=lambda kv: -len(kv[1])):
+        print(f"   {kind:10s} {len(locs):4d} overrides   median {statistics.median(locs):5.0f} LoC")
+    print("   (this is the design's premise: same tier-1 variant means a trivial override)\n")
+
+    variant_map = build_variants(blocks)
+    for kind in ("attention", "moe", "mlp"):
+        axes = TIER1_AXES[kind]
+        if len(axes) < 2:
+            continue
+        kind_variants = [v.variant for v in variant_map.values() if v.kind == kind]
+        weights = {v.variant: len(v.owners) for v in variant_map.values() if v.kind == kind}
+        print(f"== {kind}: measured cost per axis (LoC of override when only this axis differs)")
+        for axis in sorted(axes, key=lambda a: -costs[(kind, a)]):
+            print(f"   {axis:14s} {costs[(kind, axis)]:6.0f}")
+
+        orderings = list(itertools.permutations(axes))
+        scored = sorted((_score_ordering(o, kind_variants, weights, costs, kind), o) for o in orderings)
+        best_score, best = scored[0]
+        current_score = _score_ordering(tuple(axes), kind_variants, weights, costs, kind)
+        by_cost = tuple(sorted(axes, key=lambda a: -costs[(kind, a)]))
+        by_cost_score = _score_ordering(by_cost, kind_variants, weights, costs, kind)
+        print(f"   searched {len(orderings)} orderings")
+        print(f"   current    {current_score:9.0f}   {' > '.join(axes)}")
+        print(f"   by cost    {by_cost_score:9.0f}   {' > '.join(by_cost)}")
+        print(f"   best       {best_score:9.0f}   {' > '.join(best)}")
+        if best == by_cost:
+            print("   -> the exhaustive optimum IS descending measured cost")
+        else:
+            print(f"   -> optimum differs from descending cost by {by_cost_score - best_score:.0f} LoC")
+        print()
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -360,6 +437,9 @@ def main() -> int:
     p_scan = sub.add_parser("scan", help="print the facets of one model or modeling file")
     p_scan.add_argument("target", help="a model name (llama) or a path to a modeling file")
     p_scan.set_defaults(func=cmd_scan)
+
+    p_fit = sub.add_parser("fit-order", help="measure axis costs and search for the best axis order")
+    p_fit.set_defaults(func=cmd_fit_order)
 
     p_lint = sub.add_parser("lint", help="report duplicated, wrongly-parented and anachronistic blocks")
     p_lint.add_argument("--rules", help="comma-separated subset of R1,R2,R3")
