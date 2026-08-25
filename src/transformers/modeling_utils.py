@@ -4186,12 +4186,24 @@ class PreTrainedModel(
                 ": PartialState().process_index} where PartialState comes from accelerate library"
             )
 
-        if tp_plan is not None or tp_size is not None:
-            if distributed_config is not None:
-                raise ValueError(
-                    "`tp_plan` and `tp_size` are the older spelling of `distributed_config`; pass one or the other, "
-                    "not both. Set `DistributedConfig(tp_plan=..., tp_size=...)` instead."
-                )
+        has_standalone_tp_args = tp_plan is not None or tp_size is not None
+
+        if distributed_config is not None and has_standalone_tp_args:
+            raise ValueError(
+                "Pass either `distributed_config` or the standalone `tp_plan`/`tp_size` arguments, not both. "
+                "Set tensor-parallel options on `DistributedConfig` when using it."
+            )
+
+        if tp_plan is not None:
+            warnings.warn(
+                "Passing `tp_plan` directly to `from_pretrained` is deprecated and will be removed in v5.18. "
+                "Pass it in `distributed_config=DistributedConfig(tp_plan=...)` instead.",
+                FutureWarning,
+                stacklevel=2,
+            )
+
+        if has_standalone_tp_args:
+            # For backwards compatibility, we still support passing `tp_plan` and `tp_size` directly to `from_pretrained`.
             distributed_config = DistributedConfig(tp_plan=tp_plan, tp_size=tp_size)
 
         if distributed_config is not None:
