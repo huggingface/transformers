@@ -462,7 +462,7 @@ class FP8LinearTest(unittest.TestCase):
 
 
 class FP8DeepGEMMMultiDeviceTest(unittest.TestCase):
-    """`disable_deepgemm_on_multi_device` must flag FP8 modules based on the devices they actually
+    """`_disable_deepgemm_on_multi_device` must flag FP8 modules based on the devices they actually
     occupy — DeepGEMM's kernels are bound to a single CUDA context and corrupt across devices, but a
     model that fits on one device must keep DeepGEMM even when other GPUs are visible (no overshoot).
     """
@@ -475,22 +475,22 @@ class FP8DeepGEMMMultiDeviceTest(unittest.TestCase):
 
     @require_torch_multi_gpu
     def test_multi_device_disables_deepgemm(self):
-        from transformers.integrations.finegrained_fp8 import disable_deepgemm_on_multi_device
+        from transformers.integrations.finegrained_fp8 import _disable_deepgemm_on_multi_device
 
         model = torch.nn.Module()
         model.a = self._fp8_module("cuda:0")
         model.b = self._fp8_module("cuda:1")
-        disable_deepgemm_on_multi_device(model)
+        _disable_deepgemm_on_multi_device(model)
         self.assertTrue(model.a._deepgemm_disabled)
         self.assertTrue(model.b._deepgemm_disabled)
 
     @require_torch_gpu
     def test_single_device_keeps_deepgemm(self):
-        from transformers.integrations.finegrained_fp8 import disable_deepgemm_on_multi_device
+        from transformers.integrations.finegrained_fp8 import _disable_deepgemm_on_multi_device
 
         model = torch.nn.Module()
         model.a = self._fp8_module("cuda:0")
         model.b = self._fp8_module("cuda:0")
-        disable_deepgemm_on_multi_device(model)
+        _disable_deepgemm_on_multi_device(model)
         self.assertFalse(model.a._deepgemm_disabled)
         self.assertFalse(model.b._deepgemm_disabled)
