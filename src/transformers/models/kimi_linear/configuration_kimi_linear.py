@@ -25,7 +25,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="moonshotai/Kimi-Linear-48B-A3B-Base")
+@auto_docstring(checkpoint="moonshotai/Kimi-Linear-48B-A3B-Instruct")
 @strict
 class KimiLinearConfig(PreTrainedConfig):
     r"""

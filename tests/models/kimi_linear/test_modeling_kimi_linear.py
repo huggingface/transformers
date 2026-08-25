@@ -1,0 +1,269 @@
+# Copyright 2026 The Moonshot AI Team and the HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Testing suite for the PyTorch Kimi Linear model."""
+
+import unittest
+
+from transformers import AutoTokenizer, is_torch_available
+from transformers.testing_utils import (
+    Expectations,
+    cleanup,
+    require_torch,
+    require_torch_accelerator,
+    slow,
+    torch_device,
+)
+
+from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_modeling_common import ids_tensor
+
+
+if is_torch_available():
+    import torch
+
+    from transformers import (
+        DynamicCache,
+        KimiLinearForCausalLM,
+        KimiLinearModel,
+    )
+
+
+class KimiLinearModelTester(CausalLMModelTester):
+    if is_torch_available():
+        base_model_class = KimiLinearModel
+
+    def __init__(self, parent):
+        super().__init__(parent=parent)
+        # NOTE: must be 0.0 for TP backward tests. In train mode, non-zero dropout causes different RNG
+        # states between the non-TP and TP model forward passes, leading to mismatched losses.
+        self.attention_probs_dropout_prob = 0.0
+        self.hidden_act = "silu"
+        # Two layers covering all four branches: a KDA layer with a dense MLP, and an MLA layer with a MoE
+        # block. Anything less would leave one of the decoder-layer paths untested.
+        self.layer_types = ["linear_attention", "full_attention"]
+        self.mlp_layer_types = ["dense", "sparse"]
+        # KDA (linear attention) layers
+        self.linear_conv_kernel_dim = 2
+        self.linear_key_head_dim = 16
+        self.linear_num_key_heads = 4
+        # MLA (full attention) layers. The released checkpoints have no query LoRA, so keep `q_lora_rank`
+        # unset to exercise the same `q_proj` branch they take.
+        self.q_lora_rank = None
+        self.kv_lora_rank = 16
+        self.qk_nope_head_dim = 32
+        self.qk_rope_head_dim = 16
+        self.v_head_dim = 32
+        # MoE
+        self.moe_intermediate_size = 16
+        self.n_routed_experts = 8
+        self.n_shared_experts = 1
+        self.num_experts_per_tok = 2
+        self.n_group = 1
+        self.topk_group = 1
+
+
+@require_torch
+class KimiLinearModelTest(CausalLMModelTest, unittest.TestCase):
+    model_tester_class = KimiLinearModelTester
+    model_tester: KimiLinearModelTester
+
+    def _get_conv_state_shape(self, batch_size: int, config):
+        # KDA packs the q/k/v short convolutions into a single depthwise conv1d
+        conv_dim = 2 * config.linear_num_key_heads * config.linear_key_head_dim + (
+            config.linear_num_value_heads * config.linear_value_head_dim
+        )
+        return (batch_size, conv_dim, config.linear_conv_kernel_dim)
+
+    def _get_recurrent_state_shape(self, batch_size: int, config):
+        return (
+            batch_size,
+            config.linear_num_value_heads,
+            config.linear_key_head_dim,
+            config.linear_value_head_dim,
+        )
+
+    def test_attention_outputs(self):
+        """Overwritten: Kimi Linear alternates KDA layers with full-attention (MLA) layers, so only the
+        latter contribute an attention map."""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+        config._attn_implementation = "eager"
+        seq_len = getattr(self.model_tester, "seq_length", None)
+        expected_num_attentions = sum(layer == "full_attention" for layer in config.layer_types)
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = False
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            self.assertEqual(len(outputs.attentions), expected_num_attentions)
+
+            # check that output_attentions also work using config
+            del inputs_dict["output_attentions"]
+            config.output_attentions = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.attentions
+            self.assertEqual(len(attentions), expected_num_attentions)
+            self.assertListEqual(list(attentions[0].shape[-3:]), [config.num_attention_heads, seq_len, seq_len])
+            out_len = len(outputs)
+
+            # Check attention is always last and order is fine
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            self.assertEqual(out_len + 1, len(outputs))
+            self_attentions = outputs.attentions
+            self.assertEqual(len(self_attentions), expected_num_attentions)
+            self.assertListEqual(list(self_attentions[0].shape[-3:]), [config.num_attention_heads, seq_len, seq_len])
+
+    def test_linear_attention_multi_token_cached_forward_matches_single_token(self):
+        """
+        A KDA layer must produce the same output for a token whether it is fed as a single-token cached
+        forward or as the first token of a multi-token chunk continuing from the same cache (chunked-prefill
+        continuation / speculative verification). This exercises the chunked and the recurrent KDA paths
+        against each other: a causal LM's output at position `i` cannot depend on tokens at positions > `i`,
+        even across separate forward calls sharing a cache.
+        """
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        config._attn_implementation = "eager"
+        model = KimiLinearModel._from_config(config)
+        model.to(torch_device)
+        model.eval()
+
+        prompt = ids_tensor((1, 8), config.vocab_size).to(torch_device)
+        next_token = ids_tensor((1, 1), config.vocab_size).to(torch_device)
+
+        # Reference: prefill, then forward the next token alone against the populated cache.
+        cache_single = DynamicCache(config=config)
+        with torch.no_grad():
+            model(input_ids=prompt, past_key_values=cache_single, use_cache=True)
+            single_out = model(input_ids=next_token, past_key_values=cache_single, use_cache=True)
+        ref_first = single_out.last_hidden_state[:, 0, :]
+
+        # Under test: same prefill, then forward [next_token, *distractors] in one call. The first position
+        # must match the single-token forward exactly.
+        distractors = ids_tensor((1, 7), config.vocab_size).to(torch_device)
+        cache_multi = DynamicCache(config=config)
+        with torch.no_grad():
+            model(input_ids=prompt, past_key_values=cache_multi, use_cache=True)
+            multi_out = model(input_ids=torch.cat([next_token, distractors], dim=1), past_key_values=cache_multi)
+        under_test_first = multi_out.last_hidden_state[:, 0, :]
+
+        torch.testing.assert_close(under_test_first, ref_first, rtol=1e-4, atol=1e-4)
+
+    def test_incremental_decoding_matches_full_forward(self):
+        """
+        Decoding token by token through the cache must match a single forward pass over the whole sequence.
+        This is what generation relies on, and it covers the three cache kinds Kimi Linear mixes at once:
+        the KDA recurrent state, the KDA conv state, and the MLA latent KV cache.
+        """
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        config._attn_implementation = "eager"
+        model = KimiLinearModel._from_config(config)
+        model.to(torch_device)
+        model.eval()
+
+        input_ids = ids_tensor((1, 10), config.vocab_size).to(torch_device)
+        with torch.no_grad():
+            full = model(input_ids=input_ids, use_cache=False).last_hidden_state
+
+            cache = DynamicCache(config=config)
+            # prefill everything but the last token, then decode the remaining ones one at a time
+            model(input_ids=input_ids[:, :-3], past_key_values=cache, use_cache=True)
+            stepwise = []
+            for i in range(input_ids.shape[1] - 3, input_ids.shape[1]):
+                out = model(input_ids=input_ids[:, i : i + 1], past_key_values=cache, use_cache=True)
+                stepwise.append(out.last_hidden_state[:, -1, :])
+
+        torch.testing.assert_close(torch.stack(stepwise, dim=1), full[:, -3:, :], rtol=1e-3, atol=1e-3)
+
+
+@require_torch_accelerator
+@slow
+class KimiLinearIntegrationTest(unittest.TestCase):
+    model_id = "moonshotai/Kimi-Linear-48B-A3B-Instruct"
+    # "The capital of France is"
+    input_ids = [1008, 10484, 318, 15383, 387]
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
+    def test_model_48b_a3b_logits(self):
+        model = KimiLinearForCausalLM.from_pretrained(
+            self.model_id, device_map="auto", dtype=torch.bfloat16, attn_implementation="eager"
+        )
+        with torch.no_grad():
+            out = model(torch.tensor([self.input_ids]).to(torch_device))
+
+        # fmt: off
+        expected_means = Expectations(
+            {
+                ("cuda", None): torch.tensor([[-4.0342, -4.4775, -4.5614, -4.7169, -4.9126]]),
+            }
+        )
+        expected_slices = Expectations(
+            {
+                ("cuda", None): torch.tensor([2.1406, 6.5312, 2.6094, 3.5625, 4.3750, 1.7344, 4.0625, 6.6250, 3.2031, 3.4062, 1.1250, 6.4688, 3.6406, 6.2188, 4.2500]),
+            }
+        )
+        # fmt: on
+
+        logits = out.logits.float()
+        torch.testing.assert_close(
+            logits.mean(-1), expected_means.get_expectation().to(torch_device), rtol=1e-2, atol=1e-2
+        )
+        torch.testing.assert_close(
+            logits[0, -1, :15], expected_slices.get_expectation().to(torch_device), rtol=1e-2, atol=1e-2
+        )
+        self.assertEqual(logits[0, -1].argmax().item(), 17374)  # " Paris"
+
+    def test_model_48b_a3b_generation(self):
+        """
+        Kimi Linear carries a recurrent state across every decode step in its KDA layers, so a one-line answer
+        would barely exercise it. Generating 40 tokens drives that state (and the conv / latent-KV caches)
+        through enough steps for any drift to show up as diverging text, while staying short enough that the
+        expectation is still identical under eager and sdpa -- past ~60 tokens the two part ways, which is
+        inherent to greedy decoding in bf16 rather than a bug.
+        """
+        # the checkpoint ships a custom tiktoken-based tokenizer, so remote code is required for it
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id, trust_remote_code=True)
+        model = KimiLinearForCausalLM.from_pretrained(self.model_id, device_map="auto", dtype=torch.bfloat16)
+
+        expected_texts = Expectations(
+            {
+                ("cuda", None): "The French Revolution (1789–1799) was a period of radical political and social upheaval in France that profoundly changed the course of modern history. It began with widespread frustration over the mon",
+            }
+        )  # fmt: skip
+
+        text = tokenizer.apply_chat_template(
+            [{"role": "user", "content": "Tell me about the french revolution."}],
+            add_generation_prompt=True,
+            tokenize=False,
+        )
+        inputs = tokenizer(text, return_tensors="pt", add_special_tokens=False).to(model.device)
+        generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False)
+        completion = tokenizer.decode(generated_ids[0][inputs.input_ids.shape[1] :], skip_special_tokens=True)
+        self.assertEqual(completion, expected_texts.get_expectation())

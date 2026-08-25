@@ -56,7 +56,7 @@ from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..bamba.modeling_bamba import apply_mask_to_padding_states
 
 
-@auto_docstring(checkpoint="moonshotai/Kimi-Linear-48B-A3B-Base")
+@auto_docstring(checkpoint="moonshotai/Kimi-Linear-48B-A3B-Instruct")
 @strict
 class KimiLinearConfig(DeepseekV3Config):
     r"""
