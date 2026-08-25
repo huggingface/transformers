@@ -33,6 +33,7 @@ from ..utils.import_utils import (
     is_kernels_available,
     is_rocm_platform,
     is_torch_available,
+    is_torchdynamo_exporting,
     resolve_internal_import,
 )
 from .flash_attention import flash_attention_forward
@@ -64,7 +65,7 @@ _kernels_enabled = _TRANSFORMERS_USE_HUB_KERNELS in ENV_VARS_TRUE_VALUES
 # Maps from func name to the internal module path
 _KERNELS_INTERNAL_PATH_MAPPINGS = {
     "chunk_gated_delta_rule": "ops.gated_delta_rule",
-    "recurrent_gated_delta_rule": "ops.gated_delta_rule",
+    "fused_recurrent_gated_delta_rule": "ops.gated_delta_rule",
     "mamba_split_conv1d_scan_combined": "ops.triton.ssd_combined",
     "selective_state_update": "ops.triton.selective_state_update",
     "mamba_chunk_scan_combined": "ops.triton.ssd_combined",
@@ -205,7 +206,7 @@ if is_kernels_available():
                     ),
                 },
             },
-            "recurrent_gated_delta_rule": {
+            "fused_recurrent_gated_delta_rule": {
                 "cuda": {
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/fla",
@@ -817,9 +818,15 @@ def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, interna
 
         # Make it "frozen" like to let dynamo not try to look into any ordering
         applicable_params = tuple(inspect.signature(implementation).parameters)
+        # A boolean to track if the implementation is new, i.e. not the original torch function
+        is_new_implementation = implementation is not torch_function
 
         @functools.wraps(torch_function)
         def wrapped(*args, **kwargs):
+            # Some original packages are incompatible with torch.export, so we always use the torch path when exporting
+            if is_new_implementation and is_torchdynamo_exporting():
+                return torch_function(*args, **kwargs)
+
             kwargs = {k: v for k, v in kwargs.items() if k in applicable_params}
             return implementation(*args, **kwargs)
 
