@@ -416,39 +416,6 @@ class BertGenerationEmbeddings(nn.Module):
         return embeddings
 
 
-class BertGenerationPredictionHeadTransform(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        if isinstance(config.hidden_act, str):
-            self.transform_act_fn = ACT2FN[config.hidden_act]
-        else:
-            self.transform_act_fn = config.hidden_act
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.transform_act_fn(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states)
-        return hidden_states
-
-
-class BertGenerationLMPredictionHead(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.transform = BertGenerationPredictionHeadTransform(config)
-
-        # The output weights are the same as the input embeddings, but there is
-        # an output-only bias for each token.
-        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=True)
-        self.bias = nn.Parameter(torch.zeros(config.vocab_size))
-
-    def forward(self, hidden_states):
-        hidden_states = self.transform(hidden_states)
-        hidden_states = self.decoder(hidden_states)
-        return hidden_states
-
-
 @auto_docstring
 class BertGenerationPreTrainedModel(PreTrainedModel):
     config_class = BertGenerationConfig
@@ -468,11 +435,6 @@ class BertGenerationPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
-        if isinstance(module, BertGenerationLMPredictionHead):
-            init.zeros_(module.bias)
-        elif isinstance(module, BertGenerationEmbeddings):
-            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
-            init.zeros_(module.token_type_ids)
         if isinstance(module, BertGenerationOnlyLMHead):
             init.zeros_(module.bias)
         elif isinstance(module, BertGenerationEmbeddings):
@@ -481,14 +443,7 @@ class BertGenerationPreTrainedModel(PreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
-    cross-attention is added between the self-attention layers, following the architecture described in [Attention is
-    all you need](https://huggingface.co/papers/1706.03762) by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
-    Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
-
-    To behave as an decoder the model needs to be initialized with the `is_decoder` argument of the configuration set
-    to `True`. To be used in a Seq2Seq model, the model needs to initialized with both `is_decoder` argument and
-    `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
+    The bare BertGeneration model transformer outputting raw hidden-states without any specific head on top.
     """
 )
 class BertGenerationEncoder(BertGenerationPreTrainedModel):
@@ -509,10 +464,6 @@ class BertGenerationEncoder(BertGenerationPreTrainedModel):
     """
 
     def __init__(self, config):
-        r"""
-        add_pooling_layer (bool, *optional*, defaults to `True`):
-            Whether to add a pooling layer
-        """
         super().__init__(config)
         self.config = config
         self.gradient_checkpointing = False
@@ -637,6 +588,11 @@ class BertGenerationOnlyLMHead(nn.Module):
         return logits
 
 
+@auto_docstring(
+    custom_intro="""
+    BertGeneration Model with a `language modeling` head on top for CLM fine-tuning.
+    """
+)
 class BertGenerationDecoder(BertGenerationPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {
         "lm_head.decoder.weight": "bert.embeddings.word_embeddings.weight",

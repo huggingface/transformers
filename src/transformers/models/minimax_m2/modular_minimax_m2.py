@@ -31,9 +31,9 @@ from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import capture_outputs
 from ..flex_olmo.modeling_flex_olmo import FlexOlmoAttention
 from ..glm4_moe.modeling_glm4_moe import (
-    Glm4MoeRotaryEmbedding,
     apply_rotary_pos_emb,  # noqa: F401
 )
+from ..gpt_neox.modeling_gpt_neox import GPTNeoXRotaryEmbedding
 from ..mixtral.modeling_mixtral import (
     MixtralExperts,
     MixtralForCausalLM,
@@ -155,7 +155,7 @@ class MiniMaxM2RMSNorm(MixtralRMSNorm):
     pass
 
 
-class MiniMaxM2RotaryEmbedding(Glm4MoeRotaryEmbedding):
+class MiniMaxM2RotaryEmbedding(GPTNeoXRotaryEmbedding):
     pass
 
 

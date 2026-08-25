@@ -28,7 +28,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple
 from ...utils.output_capturing import OutputRecorder
-from ..altclip.modeling_altclip import AltCLIPEncoder, AltCLIPEncoderLayer
+from ..altclip.modeling_altclip import AltCLIPEncoder
 from ..beit.modeling_beit import BeitDropPath
 from ..clip.modeling_clip import (
     CLIPMLP,
@@ -106,7 +106,7 @@ class XCLIPMLP(CLIPMLP):
         super().__init__(config)
 
 
-class XCLIPEncoderLayer(AltCLIPEncoderLayer):
+class XCLIPEncoderLayer(CLIPEncoderLayer):
     def __init__(self, config: XCLIPVisionConfig):
         super().__init__()
         self.self_attn = XCLIPAttention(config)

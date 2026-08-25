@@ -842,7 +842,7 @@ def modular_overrides(models_root: Path = MODELS_ROOT) -> list[Override]:
             # Levels 2 and 3 both occur; see `parent_from_module`.
             owner: dict[str, str] = {}
             for node in ast.walk(tree):
-                if not isinstance(node, ast.ImportFrom) or node.level not in (2, 3) or not node.module:
+                if not is_cross_model_import(node):
                     continue
                 parent = parent_from_module(node.module)
                 if parent is None or parent == model_dir.name:
@@ -874,6 +874,24 @@ def modular_overrides(models_root: Path = MODELS_ROOT) -> list[Override]:
 
 # `# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->BlenderbotSmall`
 _COPIED_FROM_RE = re.compile(r"#\s*Copied from transformers\.models\.(\w+)\.\w+\.(\w+)")
+
+
+def is_cross_model_import(node: ast.AST) -> bool:
+    """
+    Whether an `ImportFrom` pulls from another model, in any of the three spellings in use.
+
+    `from ..llama.modeling_llama import X`            (level 2, ~805 lines -- the convention)
+    `from ...models.jamba.modeling_jamba import X`    (level 3, 3 models)
+    `from transformers.models.blip_2.modeling_blip_2 import X`  (absolute, 13 models)
+
+    Accepting only the relative forms made 25 declared inheritances invisible, so the registry
+    reported classes as written-from-scratch when they were already inheriting correctly.
+    """
+    if not isinstance(node, ast.ImportFrom) or not node.module:
+        return False
+    if node.level in (2, 3):
+        return True
+    return node.level == 0 and node.module.startswith("transformers.models.")
 
 
 @cache
@@ -927,7 +945,7 @@ def modular_class_edges(models_root: Path = MODELS_ROOT) -> dict[tuple[str, str]
                 continue
             owner: dict[str, str] = {}
             for node in ast.walk(tree):
-                if not isinstance(node, ast.ImportFrom) or node.level not in (2, 3) or not node.module:
+                if not is_cross_model_import(node):
                     continue
                 parent = parent_from_module(node.module)
                 if parent is None or parent == model_dir.name:

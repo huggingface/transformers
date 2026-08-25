@@ -23,11 +23,18 @@ compares a model's generated files symbol by symbol against a snapshot taken bef
 
 Why this exists rather than reading a diff:
 
-- `super().__init__(config)` in a child `__init__` makes the converter **inline the parent's body
-  and then append the child's statements** -- it merges, it does not replace. The result carries the
-  parent's dead locals and reordered assignments, yet imports cleanly, passes ruff, and usually
-  passes the test suite. Only symbol-level comparison catches it. (The fix is to call the grandparent
-  directly, e.g. `PreTrainedModel.__init__(self, config)`, which replaces the body.)
+- **Any** overridden method that calls its own `super()` makes the converter **inline the parent's
+  body and then append the child's statements** -- it merges, it does not replace. This is not
+  limited to `__init__`: an `_init_weights` override written that way ran both branches, called
+  `init.zeros_` on a buffer the model does not have, and dragged two unused classes into the file.
+  It imported cleanly and ruff was clean. The fix is to call the grandparent directly, e.g.
+  `PreTrainedModel.__init__(self, config)` or `PreTrainedModel._init_weights(self, module)`, which
+  replaces the body instead of merging.
+- Renaming is wider than a marker claims: `with Bert->BertGeneration` renames only `Bert`, but the
+  converter also maps `bert` -> `bert_generation`, silently rewriting lowercase model names inside
+  strings (checkpoint ids, `base_model_prefix`, error messages).
+- A parent method's docstring is inherited unconditionally when the child's override has none, and
+  can end up documenting arguments the child does not accept. There is no way to suppress it.
 - The converter emits **only** what the modular declares, so an incomplete modular silently deletes
   code -- one conversion attempt dropped 565 of 655 lines and still imported.
 - `git diff` is not usable for this in this repo: `diff.external` is set to difftastic, so the output
@@ -36,9 +43,13 @@ Why this exists rather than reading a diff:
 Docstrings are ignored, matching the block registry: they are not what we compare on.
 Order is ignored too -- the converter legitimately emits imported helpers earlier in the file.
 
-A clean report here is necessary but not sufficient. Two known-harmless classes of difference remain
-that only a runtime check can clear: class-attribute declaration order follows the parent, and a
-parent's class-level decorator can be replaced but never removed.
+A clean report here is necessary but **not sufficient**. Run a runtime equivalence check too --
+identical `state_dict` keys, bit-identical weights under a fixed seed, bit-identical outputs. The
+reason is that a stale `# Copied from` marker can name a parent that has since been refactored: in
+`donut` only 8 of 20 symbols were still identical to `swin`, and inheriting on the marker's word
+would have changed the `state_dict` layout while leaving the symbol *set* untouched. Two further
+harmless differences also need a human read: class-attribute declaration order follows the parent,
+and a parent's class-level decorator can be replaced but never removed.
 """
 
 import argparse

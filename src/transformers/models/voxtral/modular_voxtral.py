@@ -31,10 +31,10 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
+from ..blenderbot.modeling_blenderbot import BlenderbotEncoderLayer
 from ..qwen2_audio.modeling_qwen2_audio import (
     Qwen2AudioAttention,
     Qwen2AudioEncoder,
-    Qwen2AudioEncoderLayer,
     Qwen2AudioPreTrainedModel,
 )
 from .configuration_voxtral import VoxtralConfig
@@ -44,7 +44,7 @@ class VoxtralAttention(Qwen2AudioAttention):
     pass
 
 
-class VoxtralEncoderLayer(Qwen2AudioEncoderLayer):
+class VoxtralEncoderLayer(BlenderbotEncoderLayer):
     pass
 
 

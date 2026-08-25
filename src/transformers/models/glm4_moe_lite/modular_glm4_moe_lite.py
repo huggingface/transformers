@@ -19,19 +19,18 @@ from huggingface_hub.dataclasses import strict
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
-from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3Attention
+from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3Attention, DeepseekV3MoE
 from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeDecoderLayer,
     Glm4MoeExperts,
     Glm4MoeForCausalLM,
     Glm4MoeMLP,
     Glm4MoeModel,
-    Glm4MoeMoE,
     Glm4MoePreTrainedModel,
     Glm4MoeRMSNorm,
-    Glm4MoeRotaryEmbedding,
     Glm4MoeTopkRouter,
 )
+from ..gpt_neox.modeling_gpt_neox import GPTNeoXRotaryEmbedding
 
 
 @auto_docstring(checkpoint="zai-org/GLM-4.5")
@@ -131,7 +130,7 @@ class Glm4MoeLiteConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-class Glm4MoeLiteRotaryEmbedding(Glm4MoeRotaryEmbedding):
+class Glm4MoeLiteRotaryEmbedding(GPTNeoXRotaryEmbedding):
     pass
 
 
@@ -155,7 +154,7 @@ class Glm4MoeLiteExperts(Glm4MoeExperts):
     pass
 
 
-class Glm4MoeLiteMoE(Glm4MoeMoE):
+class Glm4MoeLiteMoE(DeepseekV3MoE):
     pass
 
 

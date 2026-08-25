@@ -39,7 +39,8 @@ from ...vision_utils import get_vision_position_ids
 from ..auto import AutoConfig
 from ..clip.modeling_clip import CLIPMLP, CLIPAttention, CLIPEncoderLayer
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4Experts
-from ..gemma3.modeling_gemma3 import Gemma3RMSNorm
+from ..gemma.modeling_gemma import GemmaRMSNorm
+from ..gpt_neox.modeling_gpt_neox import GPTNeoXRotaryEmbedding
 from ..laguna.modeling_laguna import LagunaSparseMoeBlock
 from ..llama.modeling_llama import eager_attention_forward
 from ..llava.modeling_llava import (
@@ -54,7 +55,6 @@ from ..minimax_m2.modeling_minimax_m2 import (
     MiniMaxM2ForCausalLM,
     MiniMaxM2Model,
     MiniMaxM2PreTrainedModel,
-    MiniMaxM2RotaryEmbedding,
     MiniMaxM2TopKRouter,
     apply_rotary_pos_emb,
 )
@@ -320,7 +320,7 @@ class MiniMaxM3VLSparseStaticCacheLayer(StaticLayer):
             self.idx_keys = self.idx_keys.index_select(0, beam_idx.to(self.idx_keys.device))
 
 
-class MiniMaxM3VLRMSNorm(Gemma3RMSNorm):
+class MiniMaxM3VLRMSNorm(GemmaRMSNorm):
     """Gemma-style RMSNorm: normalizes in fp32 and scales by `weight + 1`."""
 
 
@@ -384,7 +384,7 @@ class MiniMaxM3VLSparseMoeBlock(LagunaSparseMoeBlock):
         self.shared_experts = MiniMaxM3VLDenseMLP(config, intermediate_size=config.shared_intermediate_size)
 
 
-class MiniMaxM3VLRotaryEmbedding(MiniMaxM2RotaryEmbedding):
+class MiniMaxM3VLRotaryEmbedding(GPTNeoXRotaryEmbedding):
     pass
 
 

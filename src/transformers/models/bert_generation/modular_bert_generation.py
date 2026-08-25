@@ -19,13 +19,11 @@ from torch import nn
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
+from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    TransformersKwargs,
-    auto_docstring,
-    logging,
-)
+from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..bert.modeling_bert import (
@@ -33,13 +31,11 @@ from ..bert.modeling_bert import (
     BertCrossAttention,
     BertIntermediate,
     BertLayer,
-    BertModel,
     BertOutput,
     BertPreTrainedModel,
     BertSelfAttention,
     BertSelfOutput,
 )
-from .configuration_bert_generation import BertGenerationConfig
 
 
 logger = logging.get_logger(__name__)
@@ -145,15 +141,19 @@ class BertGenerationPreTrainedModel(BertPreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        super()._init_weights(module)
+        PreTrainedModel._init_weights(self, module)
         if isinstance(module, BertGenerationOnlyLMHead):
             init.zeros_(module.bias)
         elif isinstance(module, BertGenerationEmbeddings):
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
 
-
-class BertGenerationEncoder(BertModel):
+@auto_docstring(
+    custom_intro="""
+    The bare BertGeneration model transformer outputting raw hidden-states without any specific head on top.
+    """
+)
+class BertGenerationEncoder(BertGenerationPreTrainedModel):
     """
 
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
@@ -170,10 +170,8 @@ class BertGenerationEncoder(BertModel):
     `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
     """
 
-    _no_split_modules = AttributeError()  # bert's value does not apply here
-
     def __init__(self, config):
-        BertGenerationPreTrainedModel.__init__(self, config)
+        super().__init__(config)
         self.config = config
         self.gradient_checkpointing = False
 
@@ -182,6 +180,12 @@ class BertGenerationEncoder(BertModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def get_input_embeddings(self):
+        return self.embeddings.word_embeddings
+
+    def set_input_embeddings(self, value):
+        self.embeddings.word_embeddings = value
 
     @merge_with_config_defaults
     @capture_outputs
@@ -247,6 +251,38 @@ class BertGenerationEncoder(BertModel):
             past_key_values=encoder_outputs.past_key_values,
         )
 
+    def _create_attention_masks(
+        self,
+        attention_mask,
+        encoder_attention_mask,
+        embedding_output,
+        encoder_hidden_states,
+        past_key_values,
+    ):
+        if self.config.is_decoder:
+            attention_mask = create_causal_mask(
+                config=self.config,
+                inputs_embeds=embedding_output,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
+            )
+        else:
+            attention_mask = create_bidirectional_mask(
+                config=self.config,
+                inputs_embeds=embedding_output,
+                attention_mask=attention_mask,
+            )
+
+        if encoder_attention_mask is not None:
+            encoder_attention_mask = create_bidirectional_mask(
+                config=self.config,
+                inputs_embeds=embedding_output,
+                attention_mask=encoder_attention_mask,
+                encoder_hidden_states=encoder_hidden_states,
+            )
+
+        return attention_mask, encoder_attention_mask
+
 
 class BertGenerationOnlyLMHead(nn.Module):
     def __init__(self, config):
@@ -259,6 +295,11 @@ class BertGenerationOnlyLMHead(nn.Module):
         return logits
 
 
+@auto_docstring(
+    custom_intro="""
+    BertGeneration Model with a `language modeling` head on top for CLM fine-tuning.
+    """
+)
 class BertGenerationDecoder(BertGenerationPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {
         "lm_head.decoder.weight": "bert.embeddings.word_embeddings.weight",
