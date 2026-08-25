@@ -18,10 +18,11 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_unlimitedocr import *
-    from .image_processing_unlimitedocr import *
-    from .modeling_unlimitedocr import *
-    from .processing_unlimitedocr import *
+    from .configuration_unlimited_ocr import *
+    from .image_processing_pil_unlimited_ocr import *
+    from .image_processing_unlimited_ocr import *
+    from .modeling_unlimited_ocr import *
+    from .processing_unlimited_ocr import *
 else:
     import sys
 

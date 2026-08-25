@@ -84,6 +84,8 @@ HARDCODED_CONFIG_FOR_MODELS = {
     "wav2vec2-with-lm": "Wav2Vec2Config",
     "radio": "RADIOConfig",
     "cosmos3-edge": "Cosmos3EdgeConfig",
+    "unlimited-ocr": "UnlimitedOCRConfig",
+    "unlimitedocr": "UnlimitedOCRConfig",
 }
 
 _re_checkpoint = re.compile(r"\[(.+?)\]\((https://huggingface\.co/.+?)\)")

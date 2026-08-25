@@ -1777,14 +1777,18 @@ def _build_checkpoint_conversion_mapping():
     ]
 
 
-    mapping["unlimited-ocr"] = [
+    mapping["unlimited_ocr"] = [
         WeightRenaming(
             source_patterns=r"(^|model\.)vision_model\.",
-            target_patterns=r"\1vision_model.vision_encoder.",
+            target_patterns=r"\1vision_tower.vision_encoder.",
         ),
         WeightRenaming(
             source_patterns=r"(^|model\.)sam_model\.",
-            target_patterns=r"\1vision_model.sam_encoder.",
+            target_patterns=r"\1vision_tower.sam_encoder.",
+        ),
+        WeightRenaming(
+            source_patterns=r"(^|model\.)view_seperator",
+            target_patterns=r"\1view_separator",
         ),
         WeightRenaming(
             source_patterns=r"sam_encoder\.blocks\.",
@@ -1881,6 +1885,8 @@ def _build_checkpoint_conversion_mapping():
             operations=[Chunk(dim=0)],
         ),
     ]
+    # Hub checkpoints still advertise model_type "unlimited-ocr".
+    mapping["unlimited-ocr"] = mapping["unlimited_ocr"]
 
     for model_type, base_pattern in _MODEL_TO_CONVERSION_PATTERN.items():
         if model_type in mapping:

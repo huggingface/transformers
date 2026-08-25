@@ -11,10 +11,10 @@
     "UnlimitedOCRForConditionalGeneration"
   ],
   "auto_map": {
-    "AutoConfig": "modeling_unlimitedocr.UnlimitedOCRConfig",
-    "AutoModel": "modeling_unlimitedocr.UnlimitedOCRForConditionalGeneration",
-    "AutoModelForCausalLM": "modeling_unlimitedocr.UnlimitedOCRForConditionalGeneration",
-    "AutoModelForImageTextToText": "modeling_unlimitedocr.UnlimitedOCRForConditionalGeneration"
+    "AutoConfig": "modeling_unlimited_ocr.UnlimitedOCRConfig",
+    "AutoModel": "modeling_unlimited_ocr.UnlimitedOCRForConditionalGeneration",
+    "AutoModelForCausalLM": "modeling_unlimited_ocr.UnlimitedOCRForConditionalGeneration",
+    "AutoModelForImageTextToText": "modeling_unlimited_ocr.UnlimitedOCRForConditionalGeneration"
   },
   "language_config": {
     "architectures": [
@@ -53,7 +53,7 @@
     "vocab_size": 129280,
     "sliding_window_size": 128
   },
-  "model_type": "unlimited-ocr",
+  "model_type": "unlimited_ocr",
   "projector_config": {
     "input_dim": 2048,
     "model_type": "mlp_projector",
