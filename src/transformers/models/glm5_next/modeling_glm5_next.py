@@ -1729,6 +1729,7 @@ class Glm5NextVisionPatchEmbed(nn.Module):
         return hidden_states
 
 
+@auto_docstring
 class Glm5NextVisionModel(Glm5NextPreTrainedModel):
     config: Glm5NextVisionConfig
     input_modalities = ("image", "video")
@@ -2071,6 +2072,7 @@ def load_balancing_loss_func(
     return overall_loss * num_experts
 
 
+@auto_docstring
 class Glm5NextForConditionalGeneration(Glm5NextPreTrainedModel, GenerationMixin):
     """
     Main Glm5Next conditional generation class.
