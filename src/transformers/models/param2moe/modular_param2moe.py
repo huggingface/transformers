@@ -12,28 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import torch
 from huggingface_hub.dataclasses import strict
 
-from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
-from ...utils.output_capturing import OutputRecorder
 from ..deepseek_v3.modeling_deepseek_v3 import (
+    DeepseekV3DecoderLayer,
     DeepseekV3Experts,
+    DeepseekV3ForCausalLM,
+    DeepseekV3MLP,
+    DeepseekV3Model,
     DeepseekV3MoE,
+    DeepseekV3PreTrainedModel,
+    DeepseekV3RMSNorm,
+    DeepseekV3RotaryEmbedding,
     DeepseekV3TopkRouter,
 )
-from ..llama.modeling_llama import (
-    LlamaDecoderLayer,
-    LlamaPreTrainedModel,
-    LlamaRMSNorm,
-    LlamaRotaryEmbedding,
-)
-from ..mixtral.modeling_mixtral import MixtralForCausalLM, MixtralModel
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeAttention
 
 
@@ -42,36 +37,27 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="bharatgenai/Param2-17B-A2.4B-Thinking")
 @strict
-class Param2MoEConfig(PreTrainedConfig):
+class Param2MoeConfig(PreTrainedConfig):
     r"""
     first_k_dense_replace (`int`, *optional*, defaults to 1):
         Number of dense layers in the shallow layers before switching to MoE layers.
     n_group (`int`, *optional*, defaults to 1):
         Number of groups for routed experts.
-    router_dtype (`str`, *optional*, defaults to `"fp32"`):
-        Data type used for router weight computation. Using float32 improves numerical
-        stability of the routing scores.
     partial_rotary_factor (`float`, *optional*, defaults to 1.0):
         Fraction of each attention head's dimension to apply rotary position embeddings
         to. A value of 1.0 applies RoPE to the full head dimension.
     rope_theta (`float`, *optional*, defaults to 1000000.0):
         Base period (theta) for rotary position embeddings. Larger values extend
         the effective context length.
-    scoring_func (`str`, *optional*, defaults to `"sigmoid"`):
-        Activation function used to convert router logits to routing scores.
-        `"sigmoid"` gives independent per-expert probabilities; `"softmax"` applies
-        competitive normalization across all experts.
-    torch_dtype (`str`, *optional*, defaults to `"bfloat16"`):
-        Default torch dtype for model weights when loading with `from_pretrained`.
 
     Example:
 
     ```python
-    >>> from transformers import Param2MoEModel, Param2MoEConfig
-    >>> # Initializing a Param2MoE style configuration
-    >>> configuration = Param2MoEConfig()
+    >>> from transformers import Param2MoeModel, Param2MoeConfig
+    >>> # Initializing a Param2Moe style configuration
+    >>> configuration = Param2MoeConfig()
     >>> # Accessing the model configuration
-    >>> model = Param2MoEModel(configuration)
+    >>> model = Param2MoeModel(configuration)
     >>> print(model.config)
     ```
     """
@@ -139,15 +125,8 @@ class Param2MoEConfig(PreTrainedConfig):
     num_experts_per_tok: int | None = 6
     moe_intermediate_size: int = 2048
     rope_parameters: RopeParameters | dict | None = None
-    router_aux_loss_coef: float = 0.0
-    router_dtype: str = "fp32"
     partial_rotary_factor: float = 1.0
-    max_window_layers: int = 20
-    output_router_logits: bool = False
-    sliding_window: int | None = None
     rope_theta: float = 1000000.0
-    scoring_func: str = "sigmoid"
-    torch_dtype: str = "bfloat16"
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
@@ -158,81 +137,55 @@ class Param2MoEConfig(PreTrainedConfig):
             )
 
 
-class Param2MoEMLP(Qwen2MoeMLP):
+class Param2MoeMLP(DeepseekV3MLP):
     pass
 
 
-class Param2MoERMSNorm(LlamaRMSNorm):
+class Param2MoeRMSNorm(DeepseekV3RMSNorm):
     pass
 
 
-class Param2MoERotaryEmbedding(LlamaRotaryEmbedding):
+class Param2MoeRotaryEmbedding(DeepseekV3RotaryEmbedding):
     pass
 
 
-class Param2MoEExperts(DeepseekV3Experts):
+class Param2MoeExperts(DeepseekV3Experts):
     pass
 
 
-class Param2MoETopkRouter(DeepseekV3TopkRouter):
+class Param2MoeTopkRouter(DeepseekV3TopkRouter):
     pass
 
 
-class Param2MoESparseMoeBlock(DeepseekV3MoE):
+class Param2MoeMoE(DeepseekV3MoE):
     pass
 
 
-class Param2MoEAttention(Qwen3MoeAttention):
+class Param2MoeAttention(Qwen3MoeAttention):
     pass
 
 
-class Param2MoEDecoderLayer(LlamaDecoderLayer):
-    def __init__(self, config: Param2MoEConfig, layer_idx: int):
-        super().__init__(config, layer_idx)
-
-        self.self_attn = Param2MoEAttention(config=config, layer_idx=layer_idx)
-        self.mlp = (
-            # CODEPATH: bharatgenai/Param2-17B-A2.4B-Thinking sets first_k_dense_replace=1,
-            # so layer 0 is a dense Param2MoEMLP and all subsequent layers use the MoE block.
-            Param2MoESparseMoeBlock(config) if layer_idx >= config.first_k_dense_replace else Param2MoEMLP(config)
-        )
-
-        self.input_layernorm = Param2MoERMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = Param2MoERMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
-
-class Param2MoEPreTrainedModel(LlamaPreTrainedModel):
-    _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
-
-    _can_record_outputs = {
-        "router_logits": OutputRecorder(Param2MoETopkRouter, index=0),
-        "hidden_states": Param2MoEDecoderLayer,
-        "attentions": Param2MoEAttention,
-    }
-
-    @torch.no_grad()
-    def _init_weights(self, module):
-        PreTrainedModel._init_weights(self, module)
-        std = self.config.initializer_range
-        if isinstance(module, Param2MoEExperts):
-            init.normal_(module.gate_up_proj, mean=0.0, std=std)
-            init.normal_(module.down_proj, mean=0.0, std=std)
-        elif isinstance(module, Param2MoETopkRouter):
-            init.normal_(module.weight, mean=0.0, std=std)
-            init.zeros_(module.e_score_correction_bias)
-
-
-class Param2MoEModel(MixtralModel):
+class Param2MoeDecoderLayer(DeepseekV3DecoderLayer):
+    # `first_k_dense_replace=1` for bharatgenai/Param2-17B-A2.4B-Thinking: layer 0 is dense, the rest are MoE.
     pass
 
 
-class Param2MoEForCausalLM(MixtralForCausalLM):
+class Param2MoePreTrainedModel(DeepseekV3PreTrainedModel):
+    # DeepseekV3 ignores its own `layers.61`; Param2Moe has 21 layers.
+    _keys_to_ignore_on_load_unexpected = None
+
+
+class Param2MoeModel(DeepseekV3Model):
+    pass
+
+
+class Param2MoeForCausalLM(DeepseekV3ForCausalLM):
     pass
 
 
 __all__ = [
-    "Param2MoEConfig",
-    "Param2MoEPreTrainedModel",
-    "Param2MoEModel",
-    "Param2MoEForCausalLM",
+    "Param2MoeConfig",
+    "Param2MoePreTrainedModel",
+    "Param2MoeModel",
+    "Param2MoeForCausalLM",
 ]

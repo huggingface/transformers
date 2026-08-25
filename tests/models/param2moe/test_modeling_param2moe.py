@@ -107,7 +107,6 @@ class Param2MoEModelTester(CausalLMModelTester):
         num_shared_experts=1,
         routed_scaling_factor=1.0,
         norm_topk_prob=True,
-        router_aux_loss_coef=0.001,
     ):
         super().__init__(parent=parent)
         self.num_attention_heads = num_attention_heads
@@ -122,7 +121,6 @@ class Param2MoEModelTester(CausalLMModelTester):
         self.num_shared_experts = num_shared_experts
         self.routed_scaling_factor = routed_scaling_factor
         self.norm_topk_prob = norm_topk_prob
-        self.router_aux_loss_coef = router_aux_loss_coef
 
     def get_config(self):
         from transformers import Param2MoEConfig
@@ -157,12 +155,9 @@ class Param2MoEModelTester(CausalLMModelTester):
             n_shared_experts=self.num_shared_experts,
             routed_scaling_factor=self.routed_scaling_factor,
             norm_topk_prob=self.norm_topk_prob,
-            router_aux_loss_coef=self.router_aux_loss_coef,
-            output_router_logits=False,
-            router_dtype="fp32",
             rope_parameters={"rope_type": "default", "rope_theta": 10000.0},
             rope_theta=10000.0,
-            sliding_window=None,
+        )
         )
 
 
