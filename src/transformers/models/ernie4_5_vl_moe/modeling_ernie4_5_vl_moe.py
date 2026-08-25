@@ -57,7 +57,7 @@ logger = logging.get_logger(__name__)
 
 class Ernie4_5_VLMoeTextRotaryEmbedding(nn.Module):
     @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config, device=None):
+    def __init__(self, config: Ernie4_5_VLMoeTextConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings

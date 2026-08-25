@@ -276,7 +276,7 @@ class Qwen3VLVisionBlock(Qwen2_5_VLVisionBlock):
 
 
 class Qwen3VLTextRotaryEmbedding(Ernie4_5_VLMoeTextRotaryEmbedding):
-    def __init__(self, config, device=None):
+    def __init__(self, config: Qwen3VLTextConfig, device=None):
         nn.Module.__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings

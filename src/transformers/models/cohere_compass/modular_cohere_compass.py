@@ -186,7 +186,7 @@ class CohereCompassRotaryEmbedding(Gemma3RotaryEmbedding):
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
     def compute_default_rope_parameters(
-        config, device=None, layer_type: str | None = None, **kwargs
+        config: CohereCompassTextConfig, device=None, layer_type: str | None = None, **kwargs
     ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
