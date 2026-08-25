@@ -266,7 +266,7 @@ def torch_chunk_gated_delta_rule(
     # state influence the old state. Beta is often normalized to (0, 1) where 0 = no update; 1 = overwrite old state.
     v_beta = value * beta.unsqueeze(-1)
     k_beta = key * beta.unsqueeze(-1)
-    del value  # since this function needs quite a bit of VRAM, we delete the intermediate tensors as soon as possible
+    value = None  # since this function needs quite a bit of VRAM, we rm the intermediate tensors as soon as possible
 
     # Reshape all tensors to chunk the sequence dimension (adds a new dimension of size chunk_size)
     query, key, k_beta, v_beta = [
@@ -283,26 +283,24 @@ def torch_chunk_gated_delta_rule(
 
     # First phase: compute intra-chunk quantities.
     # The pairwise decays: pairwise_decay[..., i, j] = exp(cum_log_decay_i - cum_log_decay_j) is the decay
-    # accumulated between positions j and i of a chunk
+    # accumulated between positions j and i of a chunk. Positive values are masked to -inf before exp to avoid overflow
     pairwise_decay = cum_log_decay.unsqueeze(4) - cum_log_decay.unsqueeze(3)
-    pairwise_decay.masked_fill_(strictly_upper_mask, float("-inf"))  # no overflow: positive entries become -inf
-    pairwise_decay.exp_()
+    pairwise_decay = pairwise_decay.masked_fill(strictly_upper_mask, float("-inf"))
+    pairwise_decay = pairwise_decay.exp()
 
     # Compute auxiliary tensors: the UT transform system and the intra-chunk attention (QK dot product)
     ut_system = (k_beta @ key.transpose(-1, -2)) * pairwise_decay
     intra_chunk_attn = (query @ key.transpose(-1, -2)) * pairwise_decay
-    del pairwise_decay
     decayed_k_beta = k_beta * cum_log_decay.exp().unsqueeze(-1)
-    del k_beta
+    k_beta, pairwise_decay = None, None
 
     # Gated delta attention uses a UT transform to condense several delta rule updates into a few matmuls. After the UT
     # system is solved, we can then compute the new_values (called "u" in the DeltaNet paper) and the decayed keys
     # reading the old state (k_cumdecay). In the update, the part of new_values that the old state already predicts is
     # subtracted out, so that only the correction is written to the recurrent state: this is the delta rule.
 
-    # On CUDA, use a fast solver (which is in torch since 1.11 and backwards compatible); elsewhere, build the inverse
-    # by forward substitution.
-    if ut_system.is_cuda and not is_torchdynamo_exporting():
+    # Not all export targets support the fast triangular solver, so we build the inverse by forward substitution then
+    if not is_torchdynamo_exporting():
         new_values = torch.linalg.solve_triangular(ut_system, v_beta, upper=False, unitriangular=True)
         k_cumdecay = torch.linalg.solve_triangular(ut_system, decayed_k_beta, upper=False, unitriangular=True)
     else:
@@ -313,10 +311,9 @@ def torch_chunk_gated_delta_rule(
             ut_system[..., i, :i] = row + (row.unsqueeze(-1) * sub).sum(-2)
         ut_system = ut_system + torch.eye(chunk_size, dtype=ut_system.dtype, device=ut_system.device)
         new_values, k_cumdecay = ut_system @ v_beta, ut_system @ decayed_k_beta
-    del ut_system, decayed_k_beta, v_beta
+    ut_system, decayed_k_beta, v_beta = None, None, None
 
-    # Create the storage for the last recurrent state, which will be updated in place. If a previous state is provided,
-    # it is the starting point, otherwise start with a zeroed buffer.
+    # If a previous state is provided, it is the starting point, otherwise start with a zeroed buffer.
     if initial_state is None:
         recurrent_state_shape = (batch_size, num_v_heads, k_head_dim, v_head_dim)
         last_recurrent_state = torch.zeros(recurrent_state_shape, dtype=new_values.dtype, device=new_values.device)
