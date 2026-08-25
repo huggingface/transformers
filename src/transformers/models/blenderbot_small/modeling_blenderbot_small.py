@@ -399,7 +399,7 @@ class BlenderbotSmallEncoder(BlenderbotSmallPreTrainedModel):
         embed_dim = config.d_model
         self.padding_idx = config.pad_token_id
         self.max_source_positions = config.max_position_embeddings
-        embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
+        self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
 
         self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
 
@@ -411,7 +411,6 @@ class BlenderbotSmallEncoder(BlenderbotSmallPreTrainedModel):
         self.layernorm_embedding = nn.LayerNorm(embed_dim)
 
         self.gradient_checkpointing = False
-        self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -485,7 +484,7 @@ class BlenderbotSmallDecoder(BlenderbotSmallPreTrainedModel):
         self.layerdrop = config.decoder_layerdrop
         self.padding_idx = config.pad_token_id
         self.max_target_positions = config.max_position_embeddings
-        embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
+        self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
 
@@ -499,7 +498,6 @@ class BlenderbotSmallDecoder(BlenderbotSmallPreTrainedModel):
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
 
         self.gradient_checkpointing = False
-        self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -603,7 +601,6 @@ class BlenderbotSmallModel(BlenderbotSmallPreTrainedModel):
         super().__init__(config)
 
         padding_idx, vocab_size = config.pad_token_id, config.vocab_size
-        embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
         self.shared = nn.Embedding(vocab_size, config.d_model, padding_idx)
 
         self.encoder = BlenderbotSmallEncoder(config)

@@ -21,7 +21,6 @@ from torch.nn import CrossEntropyLoss
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
-from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -31,7 +30,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..bart.modeling_bart import (
@@ -44,8 +43,12 @@ from ..bart.modeling_bart import (
     BartForCausalLM,
     BartForConditionalGeneration,
     BartModel,
+    shift_tokens_right,
 )
 from .configuration_blenderbot_small import BlenderbotSmallConfig
+
+
+logger = logging.get_logger(__name__)
 
 
 class BlenderbotSmallLearnedPositionalEmbedding(nn.Embedding):
@@ -109,7 +112,7 @@ class BlenderbotSmallPreTrainedModel(PreTrainedModel):
 
 class BlenderbotSmallEncoder(BartEncoder):
     def __init__(self, config: BlenderbotSmallConfig):
-        super().__init__(config)
+        PreTrainedModel.__init__(self, config)
 
         self.dropout = config.dropout
         self.layerdrop = config.encoder_layerdrop
@@ -183,7 +186,7 @@ class BlenderbotSmallEncoder(BartEncoder):
 
 class BlenderbotSmallDecoder(BartDecoder):
     def __init__(self, config: BlenderbotSmallConfig):
-        super().__init__(config)
+        PreTrainedModel.__init__(self, config)
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
         self.padding_idx = config.pad_token_id
@@ -302,7 +305,7 @@ class BlenderbotSmallModel(BartModel):
     }
 
     def __init__(self, config: BlenderbotSmallConfig):
-        super().__init__(config)
+        PreTrainedModel.__init__(self, config)
 
         padding_idx, vocab_size = config.pad_token_id, config.vocab_size
         self.shared = nn.Embedding(vocab_size, config.d_model, padding_idx)
