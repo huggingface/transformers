@@ -330,7 +330,8 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
         prompt_ignore_length (`int`, *optional*):
             The original input ids sequence length, which if provided, will not be used in the penalty calculation.
         normalize (`bool`, *optional*, defaults to `False`):
-            Apply the penalty to normalized log-probabilities instead of raw logits. See [this paper](https://arxiv.org/abs/2607.09791) for more details.
+            Apply the penalty to normalized log-probabilities instead of raw logits. See [this
+            paper](https://arxiv.org/abs/2607.09791) for more details.
 
     Examples:
 
@@ -486,13 +487,8 @@ class EncoderRepetitionPenaltyLogitsProcessor(LogitsProcessor):
         if self.normalize:
             scores = torch.log_softmax(scores, dim=-1)
         score = torch.gather(scores, 1, self.encoder_input_ids)
-
-        # if score < 0 then hallucination penalty has to be multiplied to increase the token probabilities
-        if self.normalize:
-            score = score * self.penalty
-        else:
-            score = torch.where(score < 0, score * self.penalty, score / self.penalty)
-
+        # self.penalty = 1/penalty, so applying the "penalty" boosts the encoder tokens
+        score = _apply_penalty(score, self.penalty, self.normalize)
         scores_processed = scores.scatter(1, self.encoder_input_ids, score)
         return scores_processed
 
