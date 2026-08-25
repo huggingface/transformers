@@ -19,62 +19,159 @@
 # limitations under the License.
 
 from collections.abc import Callable
+from copy import deepcopy
 
 import torch
-import torch.nn.functional as F
 from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
+from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import merge_with_config_defaults
+from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_tr_hash_moe import TRHashConfig
 
 
-class TRHashRMSNorm(nn.Module):
-    """RMSNorm used by the reference implementation without an fp32 upcast."""
+def _mix32(values: torch.Tensor) -> torch.Tensor:
+    values = values.bitwise_and(0xFFFFFFFF)
+    values = (values ^ (values >> 16)).bitwise_and(0xFFFFFFFF)
+    values = (values * 0x7FEB352D).bitwise_and(0xFFFFFFFF)
+    values = (values ^ (values >> 15)).bitwise_and(0xFFFFFFFF)
+    values = (values * 0x846CA68B).bitwise_and(0xFFFFFFFF)
+    return (values ^ (values >> 16)).bitwise_and(0xFFFFFFFF)
 
-    def __init__(self, hidden_size: int, eps: float = 1e-6):
+
+def _build_multi_hash_route_table(config: TRHashConfig, layer_idx: int) -> torch.LongTensor:
+    token_ids = torch.arange(config.vocab_size, dtype=torch.int64, device="cpu").unsqueeze(1)
+    expert_ids = torch.arange(config.num_experts, dtype=torch.int64, device="cpu").unsqueeze(0)
+    scores = torch.zeros(config.vocab_size, config.num_experts, dtype=torch.int64, device="cpu")
+    layer_salt = (int(config.route_seed) + int(layer_idx) * 0x9E3779B1) & 0xFFFFFFFF
+    for hash_index in range(config.route_hash_count):
+        channel_salt = (layer_salt + hash_index * 0x85EBCA77) & 0xFFFFFFFF
+        expert_salts = _mix32(expert_ids + (channel_salt ^ 0xC2B2AE3D))
+        scores.add_(_mix32(token_ids ^ expert_salts ^ channel_salt))
+    return scores.topk(config.num_experts_per_tok, dim=1, largest=True, sorted=True).indices.T.long()
+
+
+class TRHashRouter(nn.Module):
+    """Select experts from token IDs using the persisted deterministic route table."""
+
+    def __init__(self, config: TRHashConfig, layer_idx: int):
         super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
+        self.config = config
+        self.layer_idx = layer_idx
+        self.top_k = config.num_experts_per_tok
+        self.num_experts = config.num_experts
+        self.register_buffer("route_table", _build_multi_hash_route_table(config, layer_idx), persistent=True)
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        variance = hidden_states.pow(2).mean(dim=-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states
+        remaining_weight = (1.0 - config.top_k_primary_weight) / (self.top_k - 1)
+        route_weights = (config.top_k_primary_weight, *((remaining_weight,) * (self.top_k - 1)))
+        self.register_buffer("route_weights", torch.tensor(route_weights), persistent=False)
 
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+    def resize_route_table(self, new_vocab_size: int) -> None:
+        old_route_table = self.route_table
+        self.config.vocab_size = new_vocab_size
+        new_route_table = _build_multi_hash_route_table(self.config, self.layer_idx)
+        preserved_tokens = min(old_route_table.shape[1], new_vocab_size)
+        new_route_table[:, :preserved_tokens] = old_route_table[:, :preserved_tokens].to(new_route_table.device)
+        self.route_table = new_route_table.to(old_route_table.device)
+
+    def forward(self, token_ids: torch.LongTensor) -> tuple[None, torch.Tensor, torch.Tensor]:
+        selected_experts = self.route_table[:, token_ids].movedim(0, -1).reshape(-1, self.top_k)
+        routing_weights = self.route_weights.expand(selected_experts.shape[0], -1)
+        return None, routing_weights, selected_experts
 
 
-class TRHashRotaryEmbedding(nn.Module):
-    """Per-layer RoPE module matching the persisted reference checkpoint keys."""
+@use_experts_implementation
+class TRHashExperts(nn.Module):
+    """Standard fused SwiGLU experts driven by the deterministic router."""
 
     def __init__(self, config: TRHashConfig):
+        # The public TR-HASH config stores the per-expert width separately from the aggregate MLP width.
         super().__init__()
-        inv_freq = 1.0 / (
-            config.rope_theta ** (torch.arange(0, config.head_dim, 2, dtype=torch.float32) / config.head_dim)
-        )
-        self.register_buffer("inv_freq", inv_freq, persistent=True)
+        self.num_experts = config.num_experts
+        self.hidden_dim = config.hidden_size
+        self.intermediate_dim = config.expert_width
+        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
+        self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
+        self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(
         self,
-        position_ids: torch.LongTensor,
-        dtype: torch.dtype,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        frequencies = torch.einsum("bi,j->bij", position_ids.float(), self.inv_freq.float())
-        embeddings = torch.cat((frequencies, frequencies), dim=-1)
-        return embeddings.cos().to(dtype=dtype), embeddings.sin().to(dtype=dtype)
+        hidden_states: torch.Tensor,
+        top_k_index: torch.Tensor,
+        top_k_weights: torch.Tensor,
+    ) -> torch.Tensor:
+        final_hidden_states = torch.zeros_like(hidden_states)
+        with torch.no_grad():
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
+            expert_mask = expert_mask.permute(2, 1, 0)
+            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+
+        for expert_idx in expert_hit:
+            expert_idx = expert_idx[0]
+            if expert_idx == self.num_experts:
+                continue
+            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
+            current_state = hidden_states[token_idx]
+            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
+            current_hidden_states = self.act_fn(gate) * up
+            current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
+            current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
+            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
+
+        return final_hidden_states
+
+
+class TRHashSharedExpert(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, x):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
+
+
+class TRHashMLP(nn.Module):
+    """Always-on shared expert plus deterministically routed experts."""
+
+    def __init__(self, config: TRHashConfig, layer_idx: int):
+        super().__init__()
+        shared_config = deepcopy(config)
+        shared_config.intermediate_size = config.shared_intermediate_size
+        self.shared_expert = TRHashSharedExpert(shared_config)
+        self.router = TRHashRouter(config, layer_idx)
+        self.experts = TRHashExperts(config)
+        self.shared_output_scale = config.shared_output_scale
+        self.routed_output_scale = config.routed_output_scale
+
+    def forward(self, hidden_states: torch.Tensor, token_ids: torch.LongTensor) -> torch.Tensor:
+        batch_size, sequence_length, hidden_size = hidden_states.shape
+        flat_states = hidden_states.reshape(-1, hidden_size)
+        _, routing_weights, selected_experts = self.router(token_ids)
+        routing_weights = routing_weights.to(dtype=flat_states.dtype, device=flat_states.device)
+        routed_output = self.experts(flat_states, selected_experts, routing_weights)
+        output = self.shared_output_scale * self.shared_expert(flat_states)
+        output = output + self.routed_output_scale * routed_output
+        return output.view(batch_size, sequence_length, hidden_size)
 
 
 def rotate_half(x):
@@ -149,62 +246,49 @@ def eager_attention_forward(
 
 @use_kernelized_func(apply_rotary_pos_emb)
 class TRHashAttention(nn.Module):
-    """Qwen3-style GQA with checkpoint-compatible K/Q/V order and per-layer RoPE."""
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config: TRHashConfig, layer_idx: int):
         super().__init__()
+        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.config = config
-        self.attention_type = config.attention_type
         self.layer_idx = layer_idx
-        self.head_dim = config.head_dim
-        self.num_heads = config.num_attention_heads
-        self.num_key_value_heads = config.num_key_value_heads
-        self.num_key_value_groups = config.num_key_value_groups
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
 
-        key_value_size = self.num_key_value_heads * self.head_dim
-        self.k_proj = nn.Linear(config.hidden_size, key_value_size, bias=False)
-        self.q_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
-        self.v_proj = nn.Linear(config.hidden_size, key_value_size, bias=False)
-        self.o_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
-        if config.use_qk_norm:  # CODEPATH: AETHORIA-AI/TR-HASH-MoE-200M-160B-SFT
-            self.q_norm = TRHashRMSNorm(self.head_dim, eps=1e-6)
-            self.k_norm = TRHashRMSNorm(self.head_dim, eps=1e-6)
-        else:
-            self.q_norm = None
-            self.k_norm = None
-        # trf-ignore: TRF050 (the released checkpoint persists one RoPE buffer per layer)
-        self.rotary_emb = TRHashRotaryEmbedding(config)
+        self.q_proj = nn.Linear(
+            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.k_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.v_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.o_proj = nn.Linear(
+            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
+        )
+        self.q_norm = TRHashRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
+        self.k_norm = TRHashRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # thus post q_norm does not need reshape
+        self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        attention_mask: torch.Tensor | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
-        **kwargs: Unpack[TransformersKwargs],
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        # K/Q/V order and fused projection match Complexity Framework exactly.
-        projection = F.linear(
-            hidden_states,
-            torch.cat((self.k_proj.weight, self.q_proj.weight, self.v_proj.weight), dim=0),
-        )
-        key_value_size = self.num_key_value_heads * self.head_dim
-        key_states, query_states, value_states = projection.split(
-            (key_value_size, self.num_heads * self.head_dim, key_value_size), dim=-1
-        )
-        query_states = query_states.view(hidden_shape).transpose(1, 2)
-        key_states = key_states.view(hidden_shape).transpose(1, 2)
-        value_states = value_states.view(hidden_shape).transpose(1, 2)
-
-        if self.q_norm is not None:
-            query_states = self.q_norm(query_states)
-            key_states = self.k_norm(key_states)
+        query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+        key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
@@ -213,10 +297,10 @@ class TRHashAttention(nn.Module):
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation,
-            eager_attention_forward,
+            self.config._attn_implementation, eager_attention_forward
         )
-        attention_output, attention_weights = attention_interface(
+
+        attn_output, attn_weights = attention_interface(
             self,
             query_states,
             key_states,
@@ -224,161 +308,66 @@ class TRHashAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
+            sliding_window=self.sliding_window,  # diff with Llama
             **kwargs,
         )
 
-        attention_output = attention_output.reshape(*input_shape, -1).contiguous()
-        return self.o_proj(attention_output), attention_weights
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
 
 
-def _mix32(values: torch.Tensor) -> torch.Tensor:
-    values = values.bitwise_and(0xFFFFFFFF)
-    values = (values ^ (values >> 16)).bitwise_and(0xFFFFFFFF)
-    values = (values * 0x7FEB352D).bitwise_and(0xFFFFFFFF)
-    values = (values ^ (values >> 15)).bitwise_and(0xFFFFFFFF)
-    values = (values * 0x846CA68B).bitwise_and(0xFFFFFFFF)
-    return (values ^ (values >> 16)).bitwise_and(0xFFFFFFFF)
-
-
-def _build_multi_hash_route_table(config: TRHashConfig, layer_idx: int) -> torch.LongTensor:
-    token_ids = torch.arange(config.vocab_size, dtype=torch.int64, device="cpu").unsqueeze(1)
-    expert_ids = torch.arange(config.num_experts, dtype=torch.int64, device="cpu").unsqueeze(0)
-    scores = torch.zeros(config.vocab_size, config.num_experts, dtype=torch.int64, device="cpu")
-    layer_salt = (int(config.route_seed) + int(layer_idx) * 0x9E3779B1) & 0xFFFFFFFF
-    for hash_index in range(config.route_hash_count):
-        channel_salt = (layer_salt + hash_index * 0x85EBCA77) & 0xFFFFFFFF
-        expert_salts = _mix32(expert_ids + (channel_salt ^ 0xC2B2AE3D))
-        scores.add_(_mix32(token_ids ^ expert_salts ^ channel_salt))
-    return scores.topk(config.num_experts_per_tok, dim=1, largest=True, sorted=True).indices.T.long()
-
-
-def _compile_top2_pair_metadata(
-    route_table: torch.LongTensor,
-    num_experts: int,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    expert_pairs = torch.combinations(
-        torch.arange(num_experts, dtype=torch.int32, device="cpu"),
-        r=2,
-    )
-    unordered_routes = route_table.sort(dim=0).values
-    pair_matches = (unordered_routes[0].unsqueeze(0) == expert_pairs[:, 0].long().unsqueeze(1)) & (
-        unordered_routes[1].unsqueeze(0) == expert_pairs[:, 1].long().unsqueeze(1)
-    )
-    pair_indices = pair_matches.to(torch.int64).argmax(dim=0)
-    swap = route_table[0].eq(unordered_routes[1]).to(torch.int64)
-    swap_bit = 0x8 if expert_pairs.shape[0] <= 8 else 0x20
-    return (pair_indices | (swap * swap_bit)).to(torch.uint8), expert_pairs
-
-
-class TRHashExpertEngine(nn.Module):
-    """Always-on shared SwiGLU plus deterministic top-k routed experts."""
-
-    def __init__(self, config: TRHashConfig, layer_idx: int):
+@use_kernel_forward_from_hub("RMSNorm")
+class TRHashRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
+        """
+        TRHashRMSNorm is equivalent to T5LayerNorm
+        """
         super().__init__()
-        self.layer_idx = layer_idx
-        self.num_experts = config.num_experts
-        self.num_experts_per_tok = config.num_experts_per_tok
-        self.vocab_size = config.vocab_size
-        self.routing_strategy = config.routing_strategy
-        self.shared_expert = config.shared_expert
-        self.shared_output_scale = config.shared_output_scale
-        self.routed_output_scale = config.routed_output_scale
-        self.act_fn = ACT2FN[config.hidden_act]
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
 
-        self.intermediate_size = config.intermediate_size
-        expert_width = config.expert_width
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
 
-        if self.num_experts_per_tok == 1:
-            route_weights = (1.0,)
-        else:
-            primary_weight = (
-                1.0 / self.num_experts_per_tok if config.top_k_primary_weight is None else config.top_k_primary_weight
-            )
-            route_weights = (
-                primary_weight,
-                *(
-                    (1.0 - primary_weight) / (self.num_experts_per_tok - 1)
-                    for _ in range(self.num_experts_per_tok - 1)
-                ),
-            )
-        self.route_weights = tuple(float(weight) for weight in route_weights)
-
-        route_table = _build_multi_hash_route_table(config, layer_idx)
-        fused_route_codes, fused_expert_pairs = _compile_top2_pair_metadata(route_table, config.num_experts)
-        self.register_buffer("route_table", route_table, persistent=True)
-        self.register_buffer("fused_route_codes", fused_route_codes, persistent=True)
-        self.register_buffer("fused_expert_pairs", fused_expert_pairs, persistent=True)
-
-        self.expert_gate = nn.Parameter(torch.empty(config.num_experts, config.hidden_size, expert_width))
-        self.expert_up = nn.Parameter(torch.empty(config.num_experts, config.hidden_size, expert_width))
-        self.expert_down = nn.Parameter(torch.empty(config.num_experts, expert_width, config.hidden_size))
-        self.shared_gate = nn.Linear(config.hidden_size, config.shared_intermediate_size, bias=False)
-        self.shared_up = nn.Linear(config.hidden_size, config.shared_intermediate_size, bias=False)
-        self.shared_down = nn.Linear(config.shared_intermediate_size, config.hidden_size, bias=False)
-
-    @property
-    def experts(self) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        return self.expert_gate, self.expert_up, self.expert_down
-
-    def forward(self, hidden_states: torch.Tensor, token_ids: torch.LongTensor) -> torch.Tensor:
-        batch_size, sequence_length, hidden_size = hidden_states.shape
-        flat_states = hidden_states.reshape(-1, hidden_size)
-        shared_output = self.shared_down(self.act_fn(self.shared_gate(flat_states)) * self.shared_up(flat_states))
-
-        routes = self.route_table[:, token_ids.clamp(0, self.vocab_size - 1)].reshape(self.num_experts_per_tok, -1)
-        route_weights = flat_states.new_tensor(self.route_weights).view(-1, 1)
-        routed_output = torch.zeros_like(flat_states)
-        for expert_index in range(self.num_experts):
-            token_weight = (routes.eq(expert_index).to(flat_states.dtype) * route_weights).sum(dim=0)
-            active_states = flat_states * token_weight.ne(0).to(flat_states.dtype).unsqueeze(-1)
-            intermediate_states = self.act_fn(active_states @ self.expert_gate[expert_index]) * (
-                active_states @ self.expert_up[expert_index]
-            )
-            expert_output = intermediate_states @ self.expert_down[expert_index]
-            routed_output.add_(expert_output * token_weight.unsqueeze(-1))
-
-        output = self.shared_output_scale * shared_output + self.routed_output_scale * routed_output
-        return output.view(batch_size, sequence_length, hidden_size)
-
-
-class TRHashMLP(nn.Module):
-    def __init__(self, config: TRHashConfig, layer_idx: int):
-        super().__init__()
-        self.mlp_type = config.mlp_type
-        self.engine = TRHashExpertEngine(config, layer_idx)
-
-    @property
-    def experts(self):
-        return self.engine.experts
-
-    def forward(self, hidden_states: torch.Tensor, token_ids: torch.LongTensor) -> torch.Tensor:
-        return self.engine(hidden_states, token_ids)
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
 class TRHashDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: TRHashConfig, layer_idx: int):
         super().__init__()
-        self.norm_type = config.norm_type
-        self.self_attn = TRHashAttention(config, layer_idx)
+        self.hidden_size = config.hidden_size
+
+        self.self_attn = TRHashAttention(config=config, layer_idx=layer_idx)
         self.mlp = TRHashMLP(config, layer_idx)
-        self.input_layernorm = TRHashRMSNorm(config.hidden_size, eps=config.norm_eps)
-        self.post_attention_layernorm = TRHashRMSNorm(config.hidden_size, eps=config.norm_eps)
+        self.input_layernorm = TRHashRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = TRHashRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         token_ids: torch.LongTensor,
-        attention_mask: torch.Tensor | None,
-        position_ids: torch.LongTensor,
-        past_key_values: Cache | None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = False,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
+        hidden_states = self.input_layernorm(hidden_states)
         hidden_states, _ = self.self_attn(
-            self.input_layernorm(hidden_states),
+            hidden_states=hidden_states,
             attention_mask=attention_mask,
-            position_embeddings=self.self_attn.rotary_emb(position_ids, hidden_states.dtype),
+            position_ids=position_ids,
             past_key_values=past_key_values,
+            use_cache=use_cache,
+            position_embeddings=position_embeddings,
             **kwargs,
         )
         hidden_states = residual + hidden_states
@@ -395,45 +384,92 @@ class TRHashPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["TRHashDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn = False
+    _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_flex_attn = False
-    _can_compile_fullgraph = False
+    _supports_flex_attn = True
+
+    _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": TRHashDecoderLayer,
         "attentions": TRHashAttention,
     }
+    _keys_to_ignore_on_load_unexpected = [r"mlp\.engine\.fused_(expert_pairs|route_codes)"]
 
-    # trf-ignore: TRF018 (TR-HASH initializes stacked expert parameters and persisted routing buffers)
+    # trf-ignore: TRF018 (stacked expert parameters are not Linear modules)
     def _init_weights(self, module):
-        if isinstance(module, (nn.Linear, nn.Embedding)):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if getattr(module, "bias", None) is not None:
-                init.zeros_(module.bias)
-            if (
-                isinstance(module, nn.Embedding)
-                and module.padding_idx is not None
-                and not getattr(module.weight, "_is_hf_initialized", False)
-            ):
-                with torch.no_grad():
-                    module.weight[module.padding_idx].zero_()
-        elif isinstance(module, TRHashRMSNorm):
-            init.ones_(module.weight)
-        elif isinstance(module, TRHashRotaryEmbedding):
-            inv_freq = 1.0 / (
-                self.config.rope_theta
-                ** (torch.arange(0, self.config.head_dim, 2, dtype=torch.float32) / self.config.head_dim)
-            )
-            init.copy_(module.inv_freq, inv_freq.to(module.inv_freq.device))
-        elif isinstance(module, TRHashExpertEngine):
-            for parameter in (module.expert_gate, module.expert_up, module.expert_down):
+        super()._init_weights(module)
+        if isinstance(module, TRHashRouter):
+            route_table = _build_multi_hash_route_table(module.config, module.layer_idx)
+            module.route_table.copy_(route_table.to(module.route_table.device))
+            remaining_weight = (1.0 - module.config.top_k_primary_weight) / (module.top_k - 1)
+            route_weights = (module.config.top_k_primary_weight, *((remaining_weight,) * (module.top_k - 1)))
+            module.route_weights.copy_(torch.tensor(route_weights, device=module.route_weights.device))
+        elif isinstance(module, TRHashExperts):
+            for parameter in (module.gate_up_proj, module.down_proj):
                 init.normal_(parameter, mean=0.0, std=self.config.initializer_range)
-            route_table = _build_multi_hash_route_table(self.config, module.layer_idx)
-            fused_route_codes, fused_expert_pairs = _compile_top2_pair_metadata(route_table, self.config.num_experts)
-            init.copy_(module.route_table, route_table.to(module.route_table.device))
-            init.copy_(module.fused_route_codes, fused_route_codes.to(module.fused_route_codes.device))
-            init.copy_(module.fused_expert_pairs, fused_expert_pairs.to(module.fused_expert_pairs.device))
+
+    def resize_token_embeddings(self, new_num_tokens=None, pad_to_multiple_of=None, mean_resizing=True):
+        embeddings = super().resize_token_embeddings(new_num_tokens, pad_to_multiple_of, mean_resizing)
+        if new_num_tokens is not None or pad_to_multiple_of is not None:
+            for module in self.modules():
+                if isinstance(module, TRHashRouter):
+                    module.resize_route_table(self.config.vocab_size)
+        return embeddings
+
+
+class TRHashRotaryEmbedding(nn.Module):
+    @deprecate_kwarg("device", version="5.18")
+    def __init__(self, config: TRHashConfig, device=None):
+        super().__init__()
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+
+        self.config = config
+
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type != "default":
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
+
+    @staticmethod
+    @deprecate_kwarg("device", version="5.18")
+    def compute_default_rope_parameters(config: TRHashConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        return inv_freq.to(device), attention_factor
+
+    @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def forward(self, x, position_ids):
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        position_ids_expanded = position_ids[:, None, :].float()
+
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
+
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
 @auto_docstring
@@ -447,8 +483,10 @@ class TRHashModel(TRHashPreTrainedModel):
         self.layers = nn.ModuleList(
             [TRHashDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.norm = TRHashRMSNorm(config.hidden_size, eps=config.norm_eps)
+        self.norm = TRHashRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = TRHashRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
+        self.has_sliding_layers = "sliding_attention" in self.config.layer_types
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -466,34 +504,38 @@ class TRHashModel(TRHashPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         if input_ids is None:
-            raise ValueError("TR-HASH requires `input_ids` because expert routing is token-ID deterministic.")
+            raise ValueError("TR-HASH routing requires `input_ids`.")
 
         hidden_states = self.embed_tokens(input_ids)
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
-        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
         if position_ids is None:
-            position_ids = torch.arange(
-                past_seen_tokens,
-                past_seen_tokens + input_ids.shape[1],
-                device=input_ids.device,
-            ).unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(input_ids.shape[1], device=input_ids.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
-        causal_mask = create_causal_mask(
-            config=self.config,
-            inputs_embeds=hidden_states,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
-        )
+        # `generate` can pass a mask that was already prepared for the inherited attention implementation.
+        if isinstance(attention_mask, dict):
+            causal_mask = attention_mask["full_attention"]
+        else:
+            causal_mask = create_causal_mask(
+                config=self.config,
+                inputs_embeds=hidden_states,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
+                position_ids=position_ids,
+            )
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states = decoder_layer(
                 hidden_states,
                 token_ids=input_ids,
                 attention_mask=causal_mask,
+                position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
+                use_cache=use_cache,
                 **kwargs,
             )
 
@@ -511,7 +553,7 @@ class TRHashForCausalLM(TRHashPreTrainedModel, GenerationMixin):
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     _fsdp_plan = {"lm_head": "keep_full_weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: TRHashConfig):
         super().__init__(config)
         self.model = TRHashModel(config)
         self.vocab_size = config.vocab_size
@@ -528,6 +570,7 @@ class TRHashForCausalLM(TRHashPreTrainedModel, GenerationMixin):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -535,40 +578,44 @@ class TRHashForCausalLM(TRHashPreTrainedModel, GenerationMixin):
     ) -> CausalLMOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the causal language modeling loss. Tokens set to `-100` are ignored.
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example:
 
         ```python
-        >>> from transformers import AutoModelForCausalLM, AutoTokenizer
+        >>> from transformers import AutoTokenizer, TRHashForCausalLM
 
-        >>> checkpoint = "AETHORIA-AI/TR-HASH-MoE-200M-160B-SFT"
-        >>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
-        >>> model = AutoModelForCausalLM.from_pretrained(checkpoint)
-        >>> inputs = tokenizer("Hello", return_tensors="pt")
-        >>> generated_ids = model.generate(**inputs, max_new_tokens=8)
-        ```
-        """
-        outputs = self.model(
+        >>> model = TRHashForCausalLM.from_pretrained("Qwen/TRHash-8B")
+        >>> tokenizer = AutoTokenizer.from_pretrained("Qwen/TRHash-8B")
+
+        >>> prompt = "Hey, are you conscious? Can you talk to me?"
+        >>> inputs = tokenizer(prompt, return_tensors="pt")
+
+        >>> # Generate
+        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
+        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
+        ```"""
+        outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
         )
 
         hidden_states = outputs.last_hidden_state
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
+
         loss = None
         if labels is not None:
-            loss = self.loss_function(
-                logits=logits,
-                labels=labels,
-                vocab_size=self.config.vocab_size,
-                **kwargs,
-            )
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
         return CausalLMOutputWithPast(
             loss=loss,

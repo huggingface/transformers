@@ -55,12 +55,14 @@ print(tokenizer.decode(output_ids[0, inputs.input_ids.shape[1] :], skip_special_
 
 For each layer, multiple token-ID hash channels assign a score to every expert. The top two experts are compiled into
 the persisted `route_table`. Runtime dispatch therefore performs a table lookup rather than a learned routing
-projection. The accompanying compact pair metadata is also persisted for optimized runtimes.
+projection. The route table is the single canonical routing artifact; the original release's redundant compact
+pair/code buffers are ignored by the native checkpoint conversion.
 
 For every token, the model adds the always-on shared SwiGLU output to the weighted outputs of the two selected routed
 experts. The public checkpoint stores routed gate, up, and down projections as tensors shaped respectively
 `[num_experts, hidden_size, expert_width]`, `[num_experts, hidden_size, expert_width]`, and
-`[num_experts, expert_width, hidden_size]`.
+`[num_experts, expert_width, hidden_size]`. Native loading transposes and combines these into the standard fused
+`gate_up_proj` and `down_proj` expert layout used by Transformers MoE implementations.
 
 ## TRHashConfig
 

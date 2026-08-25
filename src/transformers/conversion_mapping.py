@@ -143,6 +143,23 @@ _MODEL_TO_CONVERSION_PATTERN = {
 
 def _build_checkpoint_conversion_mapping():
     mapping = {
+        # The original TR-HASH release predates the native router/expert module split.
+        "tr_hash_moe": [
+            WeightRenaming(r"\.mlp\.engine\.route_table", ".mlp.router.route_table"),
+            WeightConverter(
+                source_patterns=[r"\.mlp\.engine\.expert_gate", r"\.mlp\.engine\.expert_up"],
+                target_patterns=".mlp.experts.gate_up_proj",
+                operations=[Concatenate(dim=2), Transpose(dim0=1, dim1=2)],
+            ),
+            WeightConverter(
+                source_patterns=r"\.mlp\.engine\.expert_down",
+                target_patterns=".mlp.experts.down_proj",
+                operations=[Transpose(dim0=1, dim1=2)],
+            ),
+            WeightRenaming(r"\.mlp\.engine\.shared_gate", ".mlp.shared_expert.gate_proj"),
+            WeightRenaming(r"\.mlp\.engine\.shared_up", ".mlp.shared_expert.up_proj"),
+            WeightRenaming(r"\.mlp\.engine\.shared_down", ".mlp.shared_expert.down_proj"),
+        ],
         # Cosmos3 Edge's composite checkpoint stores its dense reasoner text tower as conventional attention + MLP
         # blocks. The visual/projector tensors already use their native module names and intentionally need no mapping.
         "cosmos3_edge": [

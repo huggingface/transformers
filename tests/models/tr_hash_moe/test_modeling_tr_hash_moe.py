@@ -42,7 +42,7 @@ class TRHashModelTester(CausalLMModelTester):
             seq_length=7,
             vocab_size=64,
             hidden_size=32,
-            intermediate_size=16,
+            intermediate_size=32,
             shared_intermediate_size=48,
             num_hidden_layers=2,
             num_attention_heads=4,
@@ -85,25 +85,21 @@ class TRHashModelTest(CausalLMModelTest, unittest.TestCase):
     def test_generate_from_random_inputs_embeds(self):
         pass
 
+    @unittest.skip(reason="TR-HASH cannot reconstruct deterministic expert routes from arbitrary input embeddings.")
+    def test_generate_from_inputs_embeds_with_static_cache(self):
+        pass
+
     def test_multi_hash_route_tables_match_reference(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         model = TRHashModel(config)
 
         self.assertEqual(
-            model.layers[0].mlp.engine.route_table[:, :8].tolist(),
+            model.layers[0].mlp.router.route_table[:, :8].tolist(),
             [[0, 2, 1, 3, 1, 3, 0, 3], [3, 0, 3, 1, 2, 0, 3, 2]],
         )
         self.assertEqual(
-            model.layers[1].mlp.engine.route_table[:, :8].tolist(),
+            model.layers[1].mlp.router.route_table[:, :8].tolist(),
             [[1, 3, 0, 2, 2, 0, 3, 3], [0, 1, 2, 0, 3, 3, 2, 0]],
-        )
-        self.assertEqual(
-            model.layers[0].mlp.engine.fused_route_codes[:8].tolist(),
-            [2, 9, 4, 12, 3, 10, 2, 13],
-        )
-        self.assertEqual(
-            model.layers[0].mlp.engine.fused_expert_pairs.tolist(),
-            [[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]],
         )
 
     def test_route_table_controls_expert_selection(self):
@@ -114,8 +110,8 @@ class TRHashModelTest(CausalLMModelTest, unittest.TestCase):
         with torch.no_grad():
             original = model(input_ids, use_cache=False).logits
             for layer in model.model.layers:
-                layer.mlp.engine.route_table[0].fill_(0)
-                layer.mlp.engine.route_table[1].fill_(1)
+                layer.mlp.router.route_table[0].fill_(0)
+                layer.mlp.router.route_table[1].fill_(1)
             rerouted = model(input_ids, use_cache=False).logits
 
         self.assertFalse(torch.equal(original, rerouted))
@@ -139,15 +135,44 @@ class TRHashModelTest(CausalLMModelTest, unittest.TestCase):
     def test_persisted_routing_metadata_roundtrip(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         model = TRHashForCausalLM(config)
-        expected_table = model.model.layers[0].mlp.engine.route_table.clone()
-        expected_codes = model.model.layers[0].mlp.engine.fused_route_codes.clone()
+        expected_table = model.model.layers[0].mlp.router.route_table.clone()
 
         with tempfile.TemporaryDirectory() as temporary_directory:
             model.save_pretrained(temporary_directory)
             reloaded = AutoModelForCausalLM.from_pretrained(temporary_directory)
 
-        torch.testing.assert_close(reloaded.model.layers[0].mlp.engine.route_table, expected_table)
-        torch.testing.assert_close(reloaded.model.layers[0].mlp.engine.fused_route_codes, expected_codes)
+        torch.testing.assert_close(reloaded.model.layers[0].mlp.router.route_table, expected_table)
+
+    def test_config_does_not_expose_single_value_architecture_flags(self):
+        config_class = self.model_tester.config_class
+        config = config_class(
+            attention_type="gqa",
+            mlp_type="tr_hash_engine",
+            norm_type="rmsnorm",
+            routing_strategy="token_id_multi_hash",
+            shared_expert=True,
+            top_k=2,
+            norm_eps=1e-5,
+            rope_theta=500000.0,
+            rope_type="standard",
+            use_qk_norm=True,
+        )
+
+        for attribute in (
+            "attention_type",
+            "mlp_type",
+            "norm_type",
+            "routing_strategy",
+            "shared_expert",
+            "top_k",
+            "norm_eps",
+            "rope_theta",
+            "rope_type",
+            "use_qk_norm",
+        ):
+            self.assertFalse(hasattr(config, attribute))
+        self.assertEqual(config.rms_norm_eps, 1e-5)
+        self.assertEqual(config.rope_parameters["rope_theta"], 500000.0)
 
     def test_architecture_top_k_does_not_override_generation_top_k(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -161,11 +186,18 @@ class TRHashModelTest(CausalLMModelTest, unittest.TestCase):
 class TRHashIntegrationTest(unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
-        model = AutoModelForCausalLM.from_pretrained(
+        model, loading_info = AutoModelForCausalLM.from_pretrained(
             "AETHORIA-AI/TR-HASH-MoE-200M-160B-SFT",
             revision="047e290291eac6e2543f1074c44f9ec5deef8c33",
             dtype=torch.float32,
-        ).to(torch_device)
+            output_loading_info=True,
+        )
+        model = model.to(torch_device)
+        self.assertEqual(loading_info["missing_keys"], set())
+        self.assertEqual(loading_info["unexpected_keys"], set())
+        self.assertEqual(loading_info["mismatched_keys"], set())
+        self.assertEqual(model.model.layers[0].mlp.experts.gate_up_proj.shape, (4, 128, 896))
+        self.assertEqual(model.model.layers[0].mlp.experts.down_proj.shape, (4, 896, 64))
         input_ids = torch.tensor([[2, 101, 2024, 17, 23, 31999, 7, 0]], device=torch_device)
 
         with torch.no_grad():

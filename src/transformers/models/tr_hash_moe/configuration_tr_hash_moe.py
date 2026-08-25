@@ -20,6 +20,7 @@
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
@@ -28,37 +29,22 @@ from ...utils import auto_docstring
 class TRHashConfig(PreTrainedConfig):
     r"""
     shared_intermediate_size (`int`, *optional*, defaults to 3072):
-        Intermediate width of the always-on shared SwiGLU branch.
-    attention_type (`str`, *optional*, defaults to `"gqa"`):
-        Attention backbone. Native support currently covers grouped-query attention only.
-    mlp_type (`str`, *optional*, defaults to `"tr_hash_engine"`):
-        Name used by Complexity Framework for the deterministic routed MLP.
-    norm_type (`str`, *optional*, defaults to `"rmsnorm"`):
-        Normalization type used by the checkpoint.
+        Intermediate width of the always-on shared SwiGLU expert.
+    num_experts (`int`, *optional*, defaults to 4):
+        Number of stored routed experts.
     num_experts_per_tok (`int`, *optional*, defaults to 2):
         Number of deterministic expert routes activated for every token.
     top_k_primary_weight (`float`, *optional*, defaults to 0.5):
-        Blend weight assigned to the primary deterministic route. The remaining weight is
-        distributed uniformly over the other active routes.
-    routing_strategy (`str`, *optional*, defaults to `"token_id_multi_hash"`):
-        Deterministic routing strategy represented by the persisted route tables.
+        Fixed weight assigned to the primary route. The remaining weight is distributed over the
+        other active routes.
     route_hash_count (`int`, *optional*, defaults to 2):
-        Number of persisted independent token-ID hash routes.
+        Number of independent token-ID hashes used to build the persisted route table.
     route_seed (`int`, *optional*, defaults to 119364119):
-        Seed used to construct deterministic per-layer routing tables when a checkpoint does not
-        provide persisted tables.
-    shared_expert (`bool`, *optional*, defaults to `True`):
-        Whether to execute the always-on shared SwiGLU branch.
+        Seed used to construct a route table when one is not loaded from a checkpoint.
     shared_output_scale (`float`, *optional*, defaults to 1.0):
-        Fixed multiplier applied to the shared branch output.
+        Fixed multiplier applied to the shared expert output.
     routed_output_scale (`float`, *optional*, defaults to 2.0):
-        Fixed multiplier applied to the blended routed expert output.
-    use_qk_norm (`bool`, *optional*, defaults to `True`):
-        Whether to apply per-head RMS normalization to queries and keys.
-    norm_eps (`float`, *optional*, defaults to 1e-6):
-        Epsilon used by RMS normalization.
-    rope_theta (`float`, *optional*, defaults to 10000.0):
-        Base period used by rotary position embeddings.
+        Fixed multiplier applied to the routed expert output.
     expert_width (`int`, *optional*):
         Intermediate width of each routed expert. When omitted, this is derived as
         `intermediate_size // num_experts`.
@@ -73,84 +59,99 @@ class TRHashConfig(PreTrainedConfig):
 
     model_type = "tr_hash_moe"
     keys_to_ignore_at_inference = ["past_key_values"]
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
+        "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.shared_expert.gate_proj": "colwise",
+        "layers.*.mlp.shared_expert.up_proj": "colwise",
+        "layers.*.mlp.shared_expert.down_proj": "rowwise",
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
+    }
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
+    }
 
     vocab_size: int = 32000
     hidden_size: int = 896
     intermediate_size: int = 256
-    shared_intermediate_size: int = 3072
     num_hidden_layers: int = 16
     num_attention_heads: int = 14
     num_key_value_heads: int = 2
-    max_position_embeddings: int = 2048
-    attention_dropout: float = 0.0
+    head_dim: int = 64
     hidden_act: str = "silu"
+    max_position_embeddings: int = 2048
     initializer_range: float = 0.02
-    norm_eps: float = 1e-6
+    rms_norm_eps: float = 1e-6
     use_cache: bool = True
     tie_word_embeddings: bool = True
+    rope_parameters: RopeParameters | dict | None = None
+    attention_bias: bool = False
+    use_sliding_window: bool = False
+    sliding_window: int | None = 4096
+    max_window_layers: int = 28
+    layer_types: list[str] | None = None
+    attention_dropout: float = 0.0
     pad_token_id: int | None = 1
     bos_token_id: int | None = 2
     eos_token_id: int | list[int] | None = 0
+    base_model_ep_plan = {
+        "layers.*.mlp.router": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_tp_experts",
+    }
+    shared_intermediate_size: int = 3072
 
-    attention_type: str = "gqa"
-    mlp_type: str = "tr_hash_engine"
-    norm_type: str = "rmsnorm"
     num_experts: int = 4
     num_experts_per_tok: int = 2
-    top_k_primary_weight: float | None = 0.5
-    routing_strategy: str = "token_id_multi_hash"
+    top_k_primary_weight: float = 0.5
     route_hash_count: int = 2
     route_seed: int = 0x71D5A17
-    shared_expert: bool = True
     shared_output_scale: float = 1.0
     routed_output_scale: float = 2.0
-    use_qk_norm: bool = True
-    rope_theta: float = 10000.0
-    head_dim: int | None = None
     expert_width: int | None = None
 
     def __post_init__(self, **kwargs):
-        if self.head_dim is None:
-            self.head_dim = self.hidden_size // self.num_attention_heads
+        self.sliding_window = self.sliding_window if self.use_sliding_window else None
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
+
+        if self.layer_types is None:
+            self.layer_types = [
+                "sliding_attention"
+                if self.sliding_window is not None and i >= self.max_window_layers
+                else "full_attention"
+                for i in range(self.num_hidden_layers)
+            ]
+        super().__post_init__(**kwargs)
+        # Compatibility with the released config, before RoPE and RMSNorm names were standardized.
+        if "norm_eps" in self.__dict__:
+            self.rms_norm_eps = self.__dict__["norm_eps"]
+        if "rope_theta" in self.__dict__:
+            self.rope_parameters = {"rope_type": "default", "rope_theta": self.__dict__["rope_theta"]}
         if self.expert_width is None:
             self.expert_width = self.intermediate_size // self.num_experts
-        super().__post_init__(**kwargs)
-
-    @property
-    def num_key_value_groups(self) -> int:
-        return self.num_attention_heads // self.num_key_value_heads
-
-    def validate_architecture(self):
-        if self.attention_type != "gqa":
-            raise ValueError("TR-HASH native support currently requires `attention_type='gqa'`.")
-        if self.mlp_type not in {"tr_hash_engine", "tr_hash_moe"}:
-            raise ValueError("TR-HASH requires `mlp_type='tr_hash_engine'` or `mlp_type='tr_hash_moe'`.")
-        if self.norm_type != "rmsnorm":
-            raise ValueError("TR-HASH native support currently requires RMSNorm.")
-        if self.hidden_size % self.num_attention_heads != 0:
-            raise ValueError("`hidden_size` must be divisible by `num_attention_heads`.")
-        if self.head_dim * self.num_attention_heads != self.hidden_size:
-            raise ValueError("`head_dim * num_attention_heads` must equal `hidden_size`.")
-        if self.num_attention_heads % self.num_key_value_heads != 0:
-            raise ValueError("`num_attention_heads` must be divisible by `num_key_value_heads`.")
-        if self.intermediate_size % self.num_experts != 0:
-            raise ValueError("`intermediate_size` must be divisible by `num_experts`.")
-        if self.expert_width * self.num_experts != self.intermediate_size:
-            raise ValueError("`expert_width * num_experts` must equal `intermediate_size`.")
-        if self.num_experts_per_tok != 2:
-            raise ValueError("TR-HASH native support currently covers deterministic top-2 routing only.")
-        if not 2 <= self.num_experts <= 8:
-            raise ValueError("TR-HASH top-2 pair metadata supports between 2 and 8 experts.")
-        if not 2 <= self.route_hash_count <= 8:
-            raise ValueError("`route_hash_count` must be between 2 and 8.")
-        if self.routing_strategy != "token_id_multi_hash":
-            raise ValueError("Native support currently covers persisted token-ID multi-hash routing only.")
-        if not self.shared_expert:
-            raise ValueError("The released TR-HASH checkpoints require the shared SwiGLU expert.")
-        if self.top_k_primary_weight is not None and not 0.0 <= self.top_k_primary_weight <= 1.0:
-            raise ValueError("`top_k_primary_weight` must be in [0, 1].")
-        if self.shared_output_scale < 0.0 or self.routed_output_scale < 0.0:
-            raise ValueError("TR-HASH output scales must be non-negative.")
+        for legacy_key in (
+            "attention_type",
+            "mlp_type",
+            "norm_type",
+            "routing_strategy",
+            "shared_expert",
+            "top_k",
+            "norm_eps",
+            "rope_theta",
+            "rope_type",
+            "use_qk_norm",
+        ):
+            self.__dict__.pop(legacy_key, None)
 
 
 __all__ = ["TRHashConfig"]
