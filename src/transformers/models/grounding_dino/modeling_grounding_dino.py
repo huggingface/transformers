@@ -431,7 +431,7 @@ class GroundingDinoConvEncoder(nn.Module):
         return out
 
 
-# TODO: use modular - Copied from transformers.models.detr.modeling_detr.DetrConvModel with Detr->GroundingDino
+# TODO: use modular -
 class GroundingDinoConvModel(nn.Module):
     """
     This module adds 2D position embeddings to all intermediate feature maps of the convolutional encoder.

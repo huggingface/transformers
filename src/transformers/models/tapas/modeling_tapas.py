@@ -230,7 +230,6 @@ class TapasSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfOutput
 class TapasSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -273,7 +272,6 @@ class TapasAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate
 class TapasIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -289,7 +287,6 @@ class TapasIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOutput
 class TapasOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -363,7 +360,6 @@ class TapasLayer(GradientCheckpointingLayer):
 
         return outputs
 
-    # Copied from transformers.models.bert.modeling_bert.BertLayer.feed_forward_chunk
     def feed_forward_chunk(self, attention_output):
         intermediate_output = self.intermediate(attention_output)
         layer_output = self.output(intermediate_output, attention_output)

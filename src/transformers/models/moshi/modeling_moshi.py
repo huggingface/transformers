@@ -502,7 +502,7 @@ class MoshiAttention(nn.Module):
         return attn_output, attn_weights
 
 
-# NO LONGER EXIST Copied from transformers.models.gemma.modeling_gemma.GemmaFlashAttention2 with Gemma->Moshi
+# NO LONGER EXIST
 # TODO cyril: modular
 class MoshiDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: MoshiConfig, layer_idx: int, use_flexible_linear: bool, use_rope=True):

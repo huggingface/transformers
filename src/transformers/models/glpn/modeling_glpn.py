@@ -54,7 +54,7 @@ class GLPNOverlapPatchEmbeddings(nn.Module):
         return embeddings, height, width
 
 
-# Todo - Refactor as part of vision refactor. Copied from transformers.models.segformer.modeling_segformer.SegformerEfficientSelfAttention
+# Todo - Refactor as part of vision refactor.
 class GLPNEfficientSelfAttention(nn.Module):
     """SegFormer's efficient self-attention mechanism. Employs the sequence reduction process introduced in the [PvT
     paper](https://huggingface.co/papers/2102.12122)."""
@@ -134,7 +134,7 @@ class GLPNEfficientSelfAttention(nn.Module):
         return outputs
 
 
-# Todo - Refactor as part of vision refactor. Copied from transformers.models.segformer.modeling_segformer.SegformerSelfOutput
+# Todo - Refactor as part of vision refactor.
 class GLPNSelfOutput(nn.Module):
     def __init__(self, config, hidden_size):
         super().__init__()
@@ -183,7 +183,7 @@ class GLPNDepthWiseConv(nn.Module):
         return hidden_states
 
 
-# Todo - Refactor as part of vision refactor. Copied from transformers.models.segformer.modeling_segformer.SegformerMixFFN with Segformer->GLPN
+# Todo - Refactor as part of vision refactor.
 class GLPNMixFFN(nn.Module):
     def __init__(self, config, in_features, hidden_features=None, out_features=None):
         super().__init__()

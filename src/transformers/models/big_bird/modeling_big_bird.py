@@ -1043,8 +1043,14 @@ class BigBirdBlockSparseAttention(nn.Module):
         return np.array(selected_random_blocks, dtype=np.int32)
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->BigBird
 class BigBirdSelfOutput(nn.Module):
+    """Output projection plus the residual LayerNorm, kept for the cross-attention path only.
+
+    The self-attention path no longer uses this: its projection is `BigBirdAttention.o_proj` and its
+    LayerNorm belongs to `BigBirdLayer`. Cross-attention keeps the original layout deliberately, so
+    that the rare checkpoints carrying `crossattention.*` weights load with no key renaming at all.
+    """
+
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -1054,11 +1060,107 @@ class BigBirdSelfOutput(nn.Module):
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)
-        return hidden_states
+        return self.LayerNorm(hidden_states + input_tensor)
 
 
 class BigBirdAttention(nn.Module):
+    """Self-attention -- dense or block-sparse -- with its output projection.
+
+    The `self` indirection stays because BigBird really has two interchangeable scoring
+    implementations, swapped by `set_attention_type`; `BigBirdModel` falls back to the dense one
+    whenever the sequence is too short to be worth blocking. What used to be `BigBirdSelfOutput` is
+    now just `o_proj`; its dropout and residual LayerNorm belong to `BigBirdLayer`.
+    """
+
+    def __init__(self, config, seed=None):
+        super().__init__()
+        self.attention_type = config.attention_type
+        self.config = config
+        self.seed = seed
+
+        if self.config.attention_type == "original_full":
+            self.self = BigBirdSelfAttention(config, layer_idx=seed)
+        elif self.config.attention_type == "block_sparse":
+            self.self = BigBirdBlockSparseAttention(config, seed)
+        else:
+            raise ValueError(
+                f"attention_type can either be original_full or block_sparse, but is {self.config.attention_type}"
+            )
+
+        self.o_proj = nn.Linear(config.hidden_size, config.hidden_size)
+
+    def set_attention_type(self, value: str, layer_idx=None):
+        if value not in ["original_full", "block_sparse"]:
+            raise ValueError(
+                f"attention_type can only be set to either 'original_full' or 'block_sparse', but is {value}"
+            )
+        # attention type is already correctly set
+        if value == self.attention_type:
+            return
+
+        self.attention_type = value
+        if value == "original_full":
+            # copy all weights to new full attention class
+            attn_weights = BigBirdSelfAttention(self.config, layer_idx=layer_idx)
+        else:
+            # copy all weights to new sparse attention class
+            attn_weights = BigBirdBlockSparseAttention(self.config, self.seed)
+
+        attn_weights.query = self.self.query
+        attn_weights.value = self.self.value
+        attn_weights.key = self.self.key
+        self.self = attn_weights
+        if not self.training:
+            self.self.eval()
+
+    def forward(
+        self,
+        hidden_states,
+        attention_mask=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        past_key_values=None,
+        # block_sparse config
+        band_mask=None,
+        from_mask=None,
+        to_mask=None,
+        from_blocked_mask=None,
+        to_blocked_mask=None,
+        **kwargs: Unpack[TransformersKwargs],
+    ):
+        # fp16 compatibility
+        if band_mask is not None:
+            band_mask = band_mask.to(hidden_states.dtype)
+        if from_mask is not None:
+            from_mask = from_mask.to(hidden_states.dtype)
+        if to_mask is not None:
+            to_mask = to_mask.to(hidden_states.dtype)
+        if self.attention_type == "original_full":
+            attention_output, attn_weights = self.self(
+                hidden_states,
+                attention_mask=attention_mask,
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_attention_mask,
+                past_key_values=past_key_values,
+                **kwargs,
+            )
+        else:
+            if encoder_hidden_states is not None:
+                raise ValueError("BigBird cannot be used as a decoder when config.attention_type != 'original_full'")
+            attention_output, attn_weights = self.self(
+                hidden_states, band_mask, from_mask, to_mask, from_blocked_mask, to_blocked_mask, **kwargs
+            )
+
+        return self.o_proj(attention_output), attn_weights
+
+
+class BigBirdCrossAttentionBlock(nn.Module):
+    """Cross-attention plus its output projection, in BigBird's original module layout.
+
+    Byte-for-byte the module layout `BigBirdAttention` had before the collapse, kept so that
+    `crossattention.*` checkpoint keys need no renaming.
+    """
+
     def __init__(self, config, seed=None):
         super().__init__()
         self.attention_type = config.attention_type
@@ -1142,53 +1244,48 @@ class BigBirdAttention(nn.Module):
         return attention_output, attn_weights
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->BigBird
-class BigBirdIntermediate(nn.Module):
+class BigBirdMLP(nn.Module):
+    """Ungated feed-forward network.
+
+    Replaces `BigBirdIntermediate` (up projection plus activation) and `BigBirdOutput` (down projection
+    plus the residual LayerNorm); the LayerNorm and residual now belong to `BigBirdLayer`.
+    """
+
     def __init__(self, config):
         super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
-        if isinstance(config.hidden_act, str):
-            self.intermediate_act_fn = ACT2FN[config.hidden_act]
-        else:
-            self.intermediate_act_fn = config.hidden_act
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.intermediate_act_fn(hidden_states)
-        return hidden_states
-
-
-# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->BigBird
-class BigBirdOutput(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.act_fn = ACT2FN[config.hidden_act] if isinstance(config.hidden_act, str) else config.hidden_act
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)
-        return hidden_states
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return self.dropout(self.down_proj(self.act_fn(self.up_proj(hidden_states))))
 
 
 class BigBirdLayer(GradientCheckpointingLayer):
+    """Post-norm transformer layer: `LayerNorm(x + sublayer(x))` for each sublayer.
+
+    The norms and residuals are here rather than inside the sublayers, so the layer's topology is
+    stated in one place. The arithmetic is unchanged from the previous five-class arrangement.
+    """
+
     def __init__(self, config, seed=None):
         super().__init__()
         self.config = config
         self.attention_type = config.attention_type
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = BigBirdAttention(config, seed=seed)
+        self.self_attn = BigBirdAttention(config, seed=seed)
+        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.attention_dropout = nn.Dropout(config.hidden_dropout_prob)
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:
             if not self.is_decoder:
                 raise TypeError(f"{self} should be used as a decoder model if cross attention is added")
-            self.crossattention = BigBirdAttention(config, seed=seed)
-        self.intermediate = BigBirdIntermediate(config)
-        self.output = BigBirdOutput(config)
+            self.crossattention = BigBirdCrossAttentionBlock(config, seed=seed)
+        self.mlp = BigBirdMLP(config)
+        self.post_feedforward_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def set_attention_type(self, value: str, layer_idx=None):
         if value not in ["original_full", "block_sparse"]:
@@ -1199,7 +1296,7 @@ class BigBirdLayer(GradientCheckpointingLayer):
         if value == self.attention_type:
             return
         self.attention_type = value
-        self.attention.set_attention_type(value, layer_idx=layer_idx)
+        self.self_attn.set_attention_type(value, layer_idx=layer_idx)
 
         if self.add_cross_attention:
             self.crossattention.set_attention_type(value, layer_idx=layer_idx)
@@ -1218,7 +1315,7 @@ class BigBirdLayer(GradientCheckpointingLayer):
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
-        attention_output, _ = self.attention(
+        attn_output, _ = self.self_attn(
             hidden_states,
             attention_mask=attention_mask,
             encoder_hidden_states=encoder_hidden_states,
@@ -1231,6 +1328,7 @@ class BigBirdLayer(GradientCheckpointingLayer):
             to_blocked_mask=blocked_encoder_mask,
             **kwargs,
         )
+        hidden_states = self.post_attention_layernorm(hidden_states + self.attention_dropout(attn_output))
 
         if self.is_decoder and encoder_hidden_states is not None:
             if not hasattr(self, "crossattention"):
@@ -1239,24 +1337,20 @@ class BigBirdLayer(GradientCheckpointingLayer):
                     " cross-attention layers by setting `config.add_cross_attention=True`"
                 )
 
-            attention_output, _ = self.crossattention(
-                attention_output,
+            hidden_states, _ = self.crossattention(
+                hidden_states,
                 attention_mask=encoder_attention_mask,
                 encoder_hidden_states=encoder_hidden_states,
                 past_key_values=past_key_values,
                 **kwargs,
             )
 
-        layer_output = apply_chunking_to_forward(
-            self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
+        return apply_chunking_to_forward(
+            self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, hidden_states
         )
 
-        return layer_output
-
-    def feed_forward_chunk(self, attention_output):
-        intermediate_output = self.intermediate(attention_output)
-        layer_output = self.output(intermediate_output, attention_output)
-        return layer_output
+    def feed_forward_chunk(self, hidden_states):
+        return self.post_feedforward_layernorm(hidden_states + self.mlp(hidden_states))
 
 
 class BigBirdEncoder(nn.Module):
@@ -1397,8 +1491,8 @@ class BigBirdPreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": BigBirdLayer,
         "attentions": [
-            OutputRecorder(BigBirdSelfAttention, index=1, layer_name=".attention."),
-            OutputRecorder(BigBirdBlockSparseAttention, index=1, layer_name=".attention."),
+            OutputRecorder(BigBirdSelfAttention, index=1, layer_name=".self_attn."),
+            OutputRecorder(BigBirdBlockSparseAttention, index=1, layer_name=".self_attn."),
         ],
         "cross_attentions": OutputRecorder(BigBirdSelfAttention, index=1, layer_name=".crossattention."),
     }
@@ -2346,16 +2440,15 @@ class BigBirdForQuestionAnsweringHead(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.intermediate = BigBirdIntermediate(config)
-        self.output = BigBirdOutput(config)
+        self.mlp = BigBirdMLP(config)
+        self.post_feedforward_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
     def forward(self, encoder_output):
-        hidden_states = self.dropout(encoder_output)
-        hidden_states = self.intermediate(hidden_states)
-        hidden_states = self.output(hidden_states, encoder_output)
-        hidden_states = self.qa_outputs(hidden_states)
-        return hidden_states
+        # This head reuses the encoder's feed-forward shape, so it collapses the same way: what were
+        # `BigBirdIntermediate` + `BigBirdOutput` is now `BigBirdMLP` plus the residual LayerNorm.
+        hidden_states = self.post_feedforward_layernorm(encoder_output + self.mlp(self.dropout(encoder_output)))
+        return self.qa_outputs(hidden_states)
 
 
 @auto_docstring

@@ -29,11 +29,9 @@ from ...utils.output_capturing import capture_outputs
 from ..bert.modeling_bert import (
     BertAttention,
     BertCrossAttention,
-    BertIntermediate,
     BertLayer,
-    BertOutput,
+    BertMLP,
     BertPreTrainedModel,
-    BertSelfAttention,
     BertSelfOutput,
 )
 
@@ -41,11 +39,7 @@ from ..bert.modeling_bert import (
 logger = logging.get_logger(__name__)
 
 
-class BertGenerationSelfOutput(BertSelfOutput):
-    pass
-
-
-class BertGenerationSelfAttention(BertSelfAttention):
+class BertGenerationAttention(BertAttention):
     pass
 
 
@@ -53,15 +47,12 @@ class BertGenerationCrossAttention(BertCrossAttention):
     pass
 
 
-class BertGenerationAttention(BertAttention):
+# Kept for the cross-attention path, which retains BERT's original module layout.
+class BertGenerationSelfOutput(BertSelfOutput):
     pass
 
 
-class BertGenerationIntermediate(BertIntermediate):
-    pass
-
-
-class BertGenerationOutput(BertOutput):
+class BertGenerationMLP(BertMLP):
     pass
 
 

@@ -262,7 +262,7 @@ class DabDetrConvEncoder(nn.Module):
         return out
 
 
-# TODO: use modular - Copied from transformers.models.detr.modeling_detr.DetrConvModel with Detr->DabDetr
+# TODO: use modular -
 class DabDetrConvModel(nn.Module):
     """
     This module adds 2D position embeddings to all intermediate feature maps of the convolutional encoder.

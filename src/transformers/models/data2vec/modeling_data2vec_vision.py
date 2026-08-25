@@ -191,7 +191,7 @@ class Data2VecVisionPatchEmbeddings(nn.Module):
         return embeddings, (patch_height, patch_width)
 
 
-# Todo - Refactor as part of vision refactor. Copied from transformers.models.beit.modeling_beit.BeitSelfAttention with Beit->Data2VecVision
+# Todo - Refactor as part of vision refactor.
 class Data2VecVisionSelfAttention(nn.Module):
     def __init__(self, config: Data2VecVisionConfig, window_size: tuple | None = None) -> None:
         super().__init__()
@@ -265,7 +265,7 @@ class Data2VecVisionSelfAttention(nn.Module):
         return outputs
 
 
-# Todo - Refactor as part of vision refactor. Copied from transformers.models.beit.modeling_beit.BeitSdpaSelfAttention with Beit->Data2VecVision
+# Todo - Refactor as part of vision refactor.
 class Data2VecVisionSdpaSelfAttention(Data2VecVisionSelfAttention):
     def forward(
         self,
@@ -317,7 +317,7 @@ class Data2VecVisionSdpaSelfAttention(Data2VecVisionSelfAttention):
         return context_layer, None
 
 
-# Todo - Refactor as part of vision refactor. Copied from transformers.models.beit.modeling_beit.BeitSelfOutput with Beit->Data2VecVision
+# Todo - Refactor as part of vision refactor.
 class Data2VecVisionSelfOutput(nn.Module):
     """
     The residual connection is defined in Data2VecVisionLayer instead of here (as is the case with other models), due to the
@@ -369,7 +369,7 @@ class Data2VecVisionAttention(nn.Module):
         return outputs
 
 
-# Todo - Refactor as part of vision refactor. Copied from transformers.models.beit.modeling_beit.BeitIntermediate with Beit->Data2VecVision
+# Todo - Refactor as part of vision refactor.
 class Data2VecVisionIntermediate(nn.Module):
     def __init__(self, config: Data2VecVisionConfig) -> None:
         super().__init__()
@@ -386,7 +386,7 @@ class Data2VecVisionIntermediate(nn.Module):
         return hidden_states
 
 
-# Todo - Refactor as part of vision refactor. Copied from transformers.models.beit.modeling_beit.BeitOutput with Beit->Data2VecVision
+# Todo - Refactor as part of vision refactor.
 class Data2VecVisionOutput(nn.Module):
     def __init__(self, config: Data2VecVisionConfig) -> None:
         super().__init__()
@@ -576,7 +576,7 @@ class Data2VecVisionRelativePositionBias(nn.Module):
         return relative_position_bias.unsqueeze(0)
 
 
-# Todo - Refactor as part of vision refactor. Copied from transformers.models.beit.modeling_beit.BeitEncoder with Beit->Data2VecVision
+# Todo - Refactor as part of vision refactor.
 class Data2VecVisionEncoder(nn.Module):
     def __init__(self, config: Data2VecVisionConfig, window_size: tuple | None = None) -> None:
         super().__init__()

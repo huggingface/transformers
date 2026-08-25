@@ -38,6 +38,7 @@ sys.path.append(str(Path(__file__).parent))
 from blocks_cli import _render_markdown, cmd_lint  # noqa: E402
 from blocks_export import export_all  # noqa: E402
 from blocks_facets import build_date_data, build_variants, scan_repo  # noqa: E402
+from blocks_screen import MARKER  # noqa: E402
 
 
 CHECKER_CONFIG = {
@@ -57,6 +58,7 @@ CHECKER_CONFIG = {
 }
 
 CATALOG_PATH = Path("docs/source/en/model_blocks.md")
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def _catalog_text() -> str:
@@ -82,6 +84,22 @@ def main() -> int:
     elif stale:
         print(
             "utils/model_blocks.json is out of date. Run `python utils/check_model_blocks.py --fix_and_overwrite`.",
+            file=sys.stderr,
+        )
+        return 1
+
+    # A modular file must never carry a `# Copied from` marker: modular *replaces* that mechanism,
+    # expressing the relationship as an import plus a base class. A marker inside a modular is a
+    # claim nothing checks, and the draft generator seeded ten of them before this check existed.
+    offenders = []
+    for path in sorted((REPO_ROOT / "src" / "transformers" / "models").glob("*/modular_*.py")):
+        hits = [i + 1 for i, line in enumerate(path.read_text(encoding="utf-8").splitlines()) if MARKER.search(line)]
+        if hits:
+            offenders.append(f"{path.relative_to(REPO_ROOT)}:{','.join(map(str, hits[:4]))}")
+    if offenders:
+        print(
+            "modular files must not contain `# Copied from` markers; use an import and a base class:\n  "
+            + "\n  ".join(offenders),
             file=sys.stderr,
         )
         return 1

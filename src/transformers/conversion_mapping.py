@@ -66,6 +66,27 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "olmoe": "qwen2_moe",
     "exaone_moe": "qwen2_moe",
     "cohere2_moe": "qwen2_moe",
+    # BERT-shaped: each of these carried its own hand-written copy of BERT's five-module attention +
+    # feed-forward split, so they collapse the same way and take `bert`'s renames verbatim. Every
+    # pattern was checked to fire on real keys for each one, which `test_reverse_loading_mapping`
+    # requires. `big_bird`, `deberta` and `xlm-roberta-xl` are deliberately *not* here: their
+    # mechanisms differ and they carry their own lists.
+    #
+    # Chinese-CLIP is registered under its *text* sub-config's model type, not under "chinese_clip",
+    # so `get_model_conversion_mapping` scopes the patterns to the `text_model.` sub-module. That
+    # matters because the CLIP vision tower legitimately owns `self_attn.q_proj` / `k_proj` / `v_proj`
+    # keys of its own; unscoped, the reverse mapping applied at save time would rewrite those to
+    # `attention.self.query` and corrupt three tensors per vision layer. Loading
+    # `ChineseCLIPTextModel` on its own still gets the patterns unscoped, which is correct -- every
+    # key is then a text key.
+    "electra": "bert",
+    "roberta": "bert",
+    "camembert": "bert",
+    "xlm-roberta": "bert",
+    "ernie": "bert",
+    "bert-generation": "bert",
+    "data2vec-text": "bert",
+    "chinese_clip_text_model": "bert",
     "rt_detr_v2": "rt_detr",
     "pp_doclayout_v2": "rt_detr",
     "pp_doclayout_v3": "rt_detr",
@@ -143,6 +164,92 @@ _MODEL_TO_CONVERSION_PATTERN = {
 
 def _build_checkpoint_conversion_mapping():
     mapping = {
+        # BERT's self-attention and feed-forward used to be spread over five modules
+        # (`BertSelfAttention` + `BertSelfOutput` + a `BertAttention` wrapper, and
+        # `BertIntermediate` + `BertOutput`). They are now two, `BertAttention` and `BertMLP`, with
+        # the residual LayerNorms owned by `BertLayer`. The arithmetic is unchanged, so every
+        # published checkpoint stays loadable through these renames alone: all 1:1, nothing split,
+        # merged or reordered.
+        #
+        # The cross-attention path deliberately keeps its original layout, so `crossattention.*`
+        # weights need no renaming. That is also why the feed-forward patterns carry a lookbehind:
+        # a bare `\.output\.dense\.` would match `crossattention.output.dense` too and corrupt it.
+        "bert": [
+            WeightRenaming(r"\.attention\.self\.query\.", ".self_attn.q_proj."),
+            WeightRenaming(r"\.attention\.self\.key\.", ".self_attn.k_proj."),
+            WeightRenaming(r"\.attention\.self\.value\.", ".self_attn.v_proj."),
+            WeightRenaming(r"\.attention\.output\.dense\.", ".self_attn.o_proj."),
+            WeightRenaming(r"\.attention\.output\.LayerNorm\.", ".post_attention_layernorm."),
+            WeightRenaming(r"\.intermediate\.dense\.", ".mlp.up_proj."),
+            WeightRenaming(r"(?<!attention)\.output\.dense\.", ".mlp.down_proj."),
+            WeightRenaming(r"(?<!attention)\.output\.LayerNorm\.", ".post_feedforward_layernorm."),
+        ],
+        # BigBird keeps two interchangeable scoring implementations (dense and block-sparse) behind
+        # `self_attn.self`, swapped at runtime by `set_attention_type`, so one level of nesting
+        # survives the collapse and `attention.self.*` is renamed wholesale rather than per q/k/v.
+        # Ordering is the same story as DeBERTa below: blanket rule first, `o_proj` last.
+        # `crossattention.*` keeps BigBird's original layout and so appears nowhere here. The
+        # feed-forward patterns also cover `BigBirdForQuestionAnswering`'s head, which reused the same
+        # `intermediate` + `output` pair and therefore collapsed the same way.
+        "big_bird": [
+            WeightRenaming(r"\.attention\.self\.", ".self_attn.self."),
+            WeightRenaming(r"\.attention\.output\.LayerNorm\.", ".post_attention_layernorm."),
+            WeightRenaming(r"\.intermediate\.dense\.", ".mlp.up_proj."),
+            WeightRenaming(r"(?<!attention)\.output\.dense\.", ".mlp.down_proj."),
+            WeightRenaming(r"(?<!attention)\.output\.LayerNorm\.", ".post_feedforward_layernorm."),
+            WeightRenaming(r"\.attention\.output\.dense\.", ".self_attn.o_proj."),
+        ],
+        # DeBERTa's `DisentangledSelfAttention` is a different mechanism from BERT's: one fused
+        # `in_proj` plus separate `q_bias`/`v_bias`, and optional relative-position and talking-head
+        # projections. It is left as it was, so instead of BERT's three q/k/v renames there is a
+        # single rename of the whole `attention.self.*` namespace, which covers every one of those
+        # tensors whether or not the config enables them.
+        #
+        # The output projection folded into that same module as `o_proj`, which is why the order here
+        # looks inverted: `.attention.self.` has to come first and `.attention.output.dense.` last.
+        # Renamings chain (every matching rule fires, in order) and saving walks the list backwards,
+        # so on the way out `.self_attn.o_proj.` must be rewritten before the blanket `.self_attn.`
+        # rule gets to it -- otherwise `o_proj` is serialized as `attention.self.o_proj`.
+        "deberta": [
+            WeightRenaming(r"\.attention\.self\.", ".self_attn."),
+            WeightRenaming(r"\.attention\.output\.LayerNorm\.", ".post_attention_layernorm."),
+            WeightRenaming(r"\.intermediate\.dense\.", ".mlp.up_proj."),
+            WeightRenaming(r"(?<!attention)\.output\.dense\.", ".mlp.down_proj."),
+            WeightRenaming(r"(?<!attention)\.output\.LayerNorm\.", ".post_feedforward_layernorm."),
+            WeightRenaming(r"\.attention\.output\.dense\.", ".self_attn.o_proj."),
+        ],
+        # Chinese-CLIP's text tower took the same five-modules-to-two treatment as `bert` above, so it
+        # needs the same eight renames. It is registered under the *text* sub-config's model type, not
+        # under "chinese_clip": `get_model_conversion_mapping` then scopes these patterns to the
+        # `text_model.` sub-module, which matters because the CLIP vision tower legitimately owns
+        # `self_attn.q_proj` / `self_attn.k_proj` / `self_attn.v_proj` keys of its own. Unscoped, the
+        # reverse mapping applied at save time would rewrite those to `attention.self.query` and
+        # corrupt three tensors per vision layer. Loading `ChineseCLIPTextModel` on its own still gets
+        # the patterns unscoped, which is correct -- every key is then a text key.
+        # RoBERTa carried its own copy of BERT's five-module split, and CamemBERT, XLM-RoBERTa, ERNIE and
+        # BertGeneration are in turn copies of RoBERTa's, so all five collapse identically and take the same
+        # renames as `bert`. Each pattern was checked to fire on real keys for each model, which
+        # `test_reverse_loading_mapping` requires. `xlm-roberta-xl` is *not* one of these: it is pre-norm and
+        # needs its own set, below.
+        # XLM-RoBERTa-XL is pre-norm -- that is its whole difference from XLM-RoBERTa -- so its two output
+        # modules never carried a LayerNorm and it needs a different set from `bert` above: the two
+        # `.output.LayerNorm.` patterns are dropped (they could never match, and `test_reverse_loading_mapping`
+        # requires every pattern to match a real key), and two are added for the norms that sit *before* the
+        # sublayers. `attention.self_attn_layer_norm` moves up to the layer as `pre_attention_layernorm`, and the
+        # layer's bare `LayerNorm` -- the pre-feed-forward norm -- becomes `pre_feedforward_layernorm`. That last
+        # pattern carries a lookbehind so it cannot touch `encoder.LayerNorm`, the extra norm at the end of the
+        # stack, which keeps its name. As with `bert`, the `crossattention.*` path is left alone on purpose, and
+        # the `(?<!attention)` lookbehind is what stops `.output.dense.` from corrupting it.
+        "xlm-roberta-xl": [
+            WeightRenaming(r"\.attention\.self_attn_layer_norm\.", ".pre_attention_layernorm."),
+            WeightRenaming(r"\.attention\.self\.query\.", ".self_attn.q_proj."),
+            WeightRenaming(r"\.attention\.self\.key\.", ".self_attn.k_proj."),
+            WeightRenaming(r"\.attention\.self\.value\.", ".self_attn.v_proj."),
+            WeightRenaming(r"\.attention\.output\.dense\.", ".self_attn.o_proj."),
+            WeightRenaming(r"\.intermediate\.dense\.", ".mlp.up_proj."),
+            WeightRenaming(r"(?<!attention)\.output\.dense\.", ".mlp.down_proj."),
+            WeightRenaming(r"(?<!encoder)\.LayerNorm\.", ".pre_feedforward_layernorm."),
+        ],
         # Cosmos3 Edge's composite checkpoint stores its dense reasoner text tower as conventional attention + MLP
         # blocks. The visual/projector tensors already use their native module names and intentionally need no mapping.
         "cosmos3_edge": [
@@ -424,8 +531,19 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"^encoder\.", "swin.encoder."),
             WeightRenaming(r"^embeddings\.", "swin.embeddings."),
         ],
+        # AltCLIP's text tower is XLM-RoBERTa, so it collapses with the same eight renames as `roberta`
+        # above. They are safe to leave unscoped here: the vision tower is CLIP's, whose keys are
+        # `self_attn.q_proj` and `mlp.fc1` already, so none of these patterns can match a vision key.
         "altclip": [
             WeightRenaming(source_patterns=r"layer\.", target_patterns="layers."),
+            WeightRenaming(r"\.attention\.self\.query\.", ".self_attn.q_proj."),
+            WeightRenaming(r"\.attention\.self\.key\.", ".self_attn.k_proj."),
+            WeightRenaming(r"\.attention\.self\.value\.", ".self_attn.v_proj."),
+            WeightRenaming(r"\.attention\.output\.dense\.", ".self_attn.o_proj."),
+            WeightRenaming(r"\.attention\.output\.LayerNorm\.", ".post_attention_layernorm."),
+            WeightRenaming(r"\.intermediate\.dense\.", ".mlp.up_proj."),
+            WeightRenaming(r"(?<!attention)\.output\.dense\.", ".mlp.down_proj."),
+            WeightRenaming(r"(?<!attention)\.output\.LayerNorm\.", ".post_feedforward_layernorm."),
         ],
         "kimi_k25": [
             # Same as llava, add `model` as prefix if needed

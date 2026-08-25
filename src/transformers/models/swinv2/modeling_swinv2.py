@@ -492,7 +492,7 @@ class Swinv2SelfAttention(nn.Module):
         return relative_coords_table, relative_position_index
 
 
-# Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinSelfOutput with Swin->Swinv2
+# Todo - Refactor as part of vision refactor.
 class Swinv2SelfOutput(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
@@ -532,7 +532,7 @@ class Swinv2Attention(nn.Module):
         return outputs
 
 
-# Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinIntermediate with Swin->Swinv2
+# Todo - Refactor as part of vision refactor.
 class Swinv2Intermediate(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
@@ -548,7 +548,7 @@ class Swinv2Intermediate(nn.Module):
         return hidden_states
 
 
-# Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinOutput with Swin->Swinv2
+# Todo - Refactor as part of vision refactor.
 class Swinv2Output(nn.Module):
     def __init__(self, config, dim):
         super().__init__()

@@ -391,7 +391,6 @@ class TvpAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->Tvp
 class TvpIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()

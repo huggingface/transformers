@@ -63,10 +63,12 @@ def eager_attention_forward(
     if scaling is None:
         scaling = query.size(-1) ** -0.5
 
+    # Take the dot product between "query" and "key" to get the raw attention scores.
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
     if position_bias is not None:
         attn_weights = attn_weights + position_bias
+
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
 

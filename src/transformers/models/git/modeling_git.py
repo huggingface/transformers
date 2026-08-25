@@ -182,7 +182,6 @@ class GitSelfAttention(nn.Module):
         return context_layer, attention_probs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfOutput
 class GitSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -225,7 +224,6 @@ class GitAttention(nn.Module):
         return attention_output
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate
 class GitIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -241,7 +239,6 @@ class GitIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOutput
 class GitOutput(nn.Module):
     def __init__(self, config):
         super().__init__()

@@ -200,7 +200,6 @@ class MPNetAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate
 class MPNetIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -216,7 +215,6 @@ class MPNetIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOutput
 class MPNetOutput(nn.Module):
     def __init__(self, config):
         super().__init__()

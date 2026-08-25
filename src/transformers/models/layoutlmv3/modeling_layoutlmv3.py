@@ -288,7 +288,6 @@ class LayoutLMv3SelfAttention(nn.Module):
         return context_layer, attention_probs
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaSelfOutput
 class LayoutLMv3SelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -481,7 +480,6 @@ class LayoutLMv3Encoder(nn.Module):
         return BaseModelOutput(last_hidden_state=hidden_states)
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaIntermediate
 class LayoutLMv3Intermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -497,7 +495,6 @@ class LayoutLMv3Intermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaOutput
 class LayoutLMv3Output(nn.Module):
     def __init__(self, config):
         super().__init__()

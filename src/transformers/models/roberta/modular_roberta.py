@@ -34,7 +34,7 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple
-from ..bert.modeling_bert import BertCrossAttention, BertEmbeddings, BertLayer, BertModel, BertSelfAttention
+from ..bert.modeling_bert import BertAttention, BertCrossAttention, BertEmbeddings, BertLayer, BertModel
 from .configuration_roberta import RobertaConfig
 
 
@@ -136,7 +136,7 @@ class RobertaEmbeddings(BertEmbeddings):
         return incremental_indices.long() + padding_idx
 
 
-class RobertaSelfAttention(BertSelfAttention):
+class RobertaAttention(BertAttention):
     pass
 
 
@@ -159,7 +159,7 @@ class RobertaPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": RobertaLayer,
-        "attentions": RobertaSelfAttention,
+        "attentions": RobertaAttention,
         "cross_attentions": RobertaCrossAttention,
     }
 

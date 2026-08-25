@@ -237,7 +237,7 @@ class TableTransformerConvEncoder(nn.Module):
         return out
 
 
-# TODO: use modular - Copied from transformers.models.detr.modeling_detr.DetrConvModel with Detr->TableTransformer
+# TODO: use modular -
 class TableTransformerConvModel(nn.Module):
     """
     This module adds 2D position embeddings to all intermediate feature maps of the convolutional encoder.
@@ -321,7 +321,7 @@ class TableTransformerLearnedPositionEmbedding(nn.Module):
         return pos
 
 
-# TODO: use modular - Copied from transformers.models.detr.modeling_detr.build_position_encoding with Detr->TableTransformer
+# TODO: use modular -
 def build_position_encoding(config):
     n_steps = config.d_model // 2
     if config.position_embedding_type == "sine":
@@ -335,7 +335,7 @@ def build_position_encoding(config):
     return position_embedding
 
 
-# TODO: use modular - Copied from transformers.models.detr.modeling_detr.DetrAttention with DETR->TABLE_TRANSFORMER,Detr->TableTransformer
+# TODO: use modular -
 class TableTransformerAttention(nn.Module):
     """
     Multi-headed attention from 'Attention Is All You Need' paper.

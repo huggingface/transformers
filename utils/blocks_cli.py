@@ -339,7 +339,10 @@ def cmd_lint(args: argparse.Namespace) -> int:
                     continue
                 # Only interesting when the base predates nothing: the canonical owner is older, so
                 # the same code could have come from further up the real lineage.
-                if dates.get(override.parent_model, "0000") <= dates.get(canonical or "", "9999-99-99"):
+                # `<` not `<=`: a base that shares the canonical owner's date is still the wrong
+                # parent, and same-day siblings are common (qwen3 and qwen3_moe both 2025-03-31, so
+                # reaching into qwen3_moe for the attention qwen3 owns slipped through unreported).
+                if dates.get(override.parent_model, "0000") < dates.get(canonical or "", "9999-99-99"):
                     continue
                 if reach.get((block.model, override.parent_model), 0) > 1:
                     continue

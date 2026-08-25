@@ -66,7 +66,13 @@ TRACKED_HELPERS = ("repeat_kv", "rotate_half", "apply_rotary_pos_emb", "eager_at
 # costs (LoC): mix 72, extras 62, rope 58, qkv 52, qk_norm 50, window 50. This descending-cost order
 # scores 26 591 against the exhaustive optimum's 26 584 -- 8 LoC apart, i.e. noise -- while the
 # hand-picked order it replaced scored 30 571, 15% worse.
-ATTENTION_AXES = ("mix", "extras", "rope", "qkv", "qk_norm", "window")
+# `layer_typing` sits next to `window` because it gates the same thing: whether the layer picks a
+# mask function from `config.layer_types[layer_idx]` or uses one uniformly. It is tier 1 -- it
+# changes which mask `forward` requests -- and it is exactly what made `qwen3` and `qwen3_moe` look
+# interchangeable: their forwards are byte-identical and `Qwen3MoeAttention.__init__` does
+# `del self.layer_type`, which no other facet could see. The order needs re-fitting now that a
+# seventh axis exists; `blocks_cli.py fit-order` does that.
+ATTENTION_AXES = ("mix", "extras", "rope", "qkv", "qk_norm", "window", "layer_typing")
 MLP_AXES = ("gating",)
 # Left in semantic order on purpose: every MoE axis had fewer than 3 single-axis overrides to
 # measure, so `fit-order` falls back to the kind median for all six and its "best" permutation is
@@ -84,6 +90,7 @@ TIER1_AXES = {
     "rotary": ROTARY_AXES,
     "mixer": MIXER_AXES,
     "layer": ("topology",),
+    "conv_block": ("conv",),
 }
 
 
@@ -285,6 +292,20 @@ def _bias_source(src: str) -> str:
 # --------------------------------------------------------------------------------------------------
 # Per-kind facet extraction
 # --------------------------------------------------------------------------------------------------
+def is_conv_block(src: str) -> bool:
+    """
+    True for a `*Layer`/`*Block` class that convolves and never attends.
+
+    Name-based classification alone put 73 of these in with the transformer layers -- `BeitConvLayer`,
+    `Data2VecAudioConvLayer`, `EfficientNetDepthwiseLayer`. They have no residual-and-norm topology
+    to report, so they made the layer census look far more degenerate than it was. They are a
+    different kind of block, not a badly-written transformer layer.
+    """
+    convolves = _has(src, "nn.Conv1d", "nn.Conv2d", "nn.Conv3d", "nn.ConvTranspose")
+    attends = _has(src, "self_attn", "self.attention", "self.attn", "self_attention", "Attention(")
+    return convolves and not attends
+
+
 def is_container(src: str) -> bool:
     """
     True for a class that owns no parameters and only wires sub-modules together.
@@ -356,6 +377,10 @@ def _attention_facets(src: str, flags: frozenset[str] = frozenset()) -> tuple[di
     else:
         rope = "no_pos_emb"
 
+    # Reading `config.layer_types[layer_idx]` means the model mixes attention patterns per layer;
+    # deleting it (as `Qwen3MoeAttention` does) means one pattern throughout.
+    layer_typing = "per_layer_type" if _has(src, "layer_types[", "self.layer_type") else "uniform_layer"
+
     extras = tuple(
         name
         for name, present in (
@@ -373,6 +398,7 @@ def _attention_facets(src: str, flags: frozenset[str] = frozenset()) -> tuple[di
         "window": window,
         "rope": rope,
         "extras": "+".join(extras) or "no_extras",
+        "layer_typing": layer_typing,
     }
     tier2 = {
         "bias": _bias_source(src),
@@ -515,6 +541,11 @@ _EVENT_PATTERNS = (
 )
 _SCALED_RESIDUAL_RE = re.compile(r"residual\s*\*|\*\s*residual|residual_multiplier|residual_scale")
 _RESIDUAL_RE = re.compile(r"residual\s*\+|\+\s*residual")
+# `norm(x + sublayer(x))` or `x = x + sublayer(x)`: an add whose left operand is the value being
+# threaded through the layer, written without naming it `residual`.
+_INLINE_RESIDUAL_RE = re.compile(
+    r"(?:self\.\w*(?:norm|_ln|ln_)\w*\s*\([^)]*\+|(\w+)\s*=\s*\1\s*\+|hidden_states\s*\+\s*self\.)"
+)
 
 
 def forward_topology(class_node: ast.ClassDef, file_source: str) -> str | None:
@@ -530,9 +561,45 @@ def forward_topology(class_node: ast.ClassDef, file_source: str) -> str | None:
     forward = next((n for n in class_node.body if isinstance(n, ast.FunctionDef) and n.name == "forward"), None)
     if forward is None:
         return None
-    body = "\n".join(file_source.splitlines()[forward.lineno - 1 : forward.end_lineno])
+    lines = file_source.splitlines()
+    body = "\n".join(lines[forward.lineno - 1 : forward.end_lineno])
+
+    # Follow `apply_chunking_to_forward(self.feed_forward_chunk, ...)` into the method it calls.
+    # BERT and its family put the whole feed-forward half of the layer behind that helper, so
+    # reading `forward` alone reported `attn-norm-cross_attn` and hid the residual and the MLP
+    # entirely -- the topology looked degenerate when it was merely indirect.
+    # Inline any of the class's own methods that `forward` hands off to, whether by name in
+    # `apply_chunking_to_forward(self.feed_forward_chunk, ...)` or by calling it directly.
+    methods = {n.name: n for n in class_node.body if isinstance(n, ast.FunctionDef) and n.name != "forward"}
+    nodes = [forward]
+    for name in re.findall(r"self\.(\w+)", body):
+        target = methods.get(name)
+        if target is not None and target not in nodes:
+            nodes.append(target)
+            body += "\n" + "\n".join(lines[target.lineno - 1 : target.end_lineno])
+
+    # Which lines perform a residual add? Regex cannot chase every naming convention -- `residual`,
+    # `hidden_states`, `x`, `inputs` -- so take it from the syntax: an `Add` where one side is a bare
+    # name is the layer threading a value past a sublayer. `ctrl` writes `x + attn_output`, which no
+    # name-based pattern would ever catch.
+    residual_lines: set[int] = set()
+    for node in nodes:
+        for sub in ast.walk(node):
+            if isinstance(sub, ast.BinOp) and isinstance(sub.op, ast.Add):
+                if isinstance(sub.left, ast.Name) or isinstance(sub.right, ast.Name):
+                    residual_lines.add(sub.lineno)
+
     events: list[str] = []
-    for raw_line in body.splitlines():
+    numbered = [
+        (forward.lineno + i, raw)
+        for i, raw in enumerate("\n".join(lines[forward.lineno - 1 : forward.end_lineno]).splitlines())
+    ]
+    for node in nodes[1:]:
+        numbered += [
+            (node.lineno + i, raw)
+            for i, raw in enumerate("\n".join(lines[node.lineno - 1 : node.end_lineno]).splitlines())
+        ]
+    for lineno, raw_line in numbered:
         line = raw_line.split("#")[0]
         # A norm and a call can share a line (`self.mlp(self.norm(x))`), so these are not exclusive;
         # attention vs cross-attention are, since the cross pattern is the more specific one.
@@ -548,6 +615,15 @@ def forward_topology(class_node: ast.ClassDef, file_source: str) -> str | None:
             events.append("scaled_residual")
         elif _RESIDUAL_RE.search(line):
             events.append("residual")
+        elif lineno in residual_lines:
+            # A post-norm layer writes the add inline, with no variable called `residual`:
+            # `x = self.post_attention_layernorm(x + self.self_attn(x))`. Looking only for the name
+            # `residual` reported those layers as having no residual at all -- 23 models read as
+            # `attn-cross_attn` when they were ordinary post-norm blocks. The add precedes the norm,
+            # so it is emitted before the `norm` that this same line already produced.
+            # A post-norm layer adds before it normalises, and both happen on one line, so the
+            # residual is placed before the `norm` this same line already emitted.
+            events.insert(len(events) - 1 if events and events[-1] == "norm" else len(events), "residual")
     return "-".join(events) or None
 
 
@@ -673,7 +749,12 @@ def scan_file(path: Path, model: str) -> tuple[list[Block], list[Helper]]:
             continue
         if kind in ("attention", "mlp") and is_container(class_source):
             continue
-        if kind in ("layer", "layer_other"):
+        if kind in ("layer", "layer_other") and is_conv_block(class_source):
+            kind = "conv_block"
+        if kind == "conv_block":
+            tier1 = {"conv": "depthwise" if _has(class_source, "groups=") else "plain"}
+            tier2 = {"norm": "yes" if _has(class_source, "Norm") else "no"}
+        elif kind in ("layer", "layer_other"):
             topology = forward_topology(node, source)
             if topology is None:
                 continue
@@ -873,7 +954,7 @@ def modular_overrides(models_root: Path = MODELS_ROOT) -> list[Override]:
 
 
 # `# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->BlenderbotSmall`
-_COPIED_FROM_RE = re.compile(r"#\s*Copied from transformers\.models\.(\w+)\.\w+\.(\w+)")
+_COPIED_FROM_RE = re.compile(r"#\s*copied from transformers\.models\.(\w+)\.\w+\.(\w+)", re.IGNORECASE)
 
 
 def is_cross_model_import(node: ast.AST) -> bool:
@@ -1087,6 +1168,14 @@ def _selfcheck() -> None:
 
     qwen3 = next(b for b in by_model_kind[("qwen3", "attention")] if b.class_name == "Qwen3Attention")
     assert qwen3.tier1["qk_norm"] == "qk_rmsnorm", qwen3.tier1
+    assert qwen3.tier1["layer_typing"] == "per_layer_type", qwen3.tier1
+
+    # qwen3_moe's attention forward is byte-identical to qwen3's, but its `__init__` deletes
+    # `layer_type`. Without this axis the two read as one variant with `init_diff=0`, which is how a
+    # model came to inherit the MoE flavour of an attention it did not want.
+    qwen3_moe = next(b for b in by_model_kind[("qwen3_moe", "attention")] if b.class_name == "Qwen3MoeAttention")
+    assert qwen3_moe.tier1["layer_typing"] == "uniform_layer", qwen3_moe.tier1
+    assert qwen3.variant != qwen3_moe.variant, "qwen3 and qwen3_moe attention must be distinguishable"
 
     # olmoe threads `getattr(config, "sliding_window", None)` but declares no window anywhere, so
     # it must not be classified as -- let alone become the canonical owner of -- a sliding variant.
@@ -1151,6 +1240,7 @@ def _selfcheck() -> None:
         ("attention", "qk_norm"): {"no_qk_norm", "qk_rmsnorm", "qk_layernorm"},
         ("attention", "window"): set(layer_pattern_vocabulary()),
         ("attention", "rope"): {"no_pos_emb", "rope_half", "rope_interleaved", "alibi"},
+        ("attention", "layer_typing"): {"per_layer_type", "uniform_layer"},
         ("mlp", "gating"): {"gated_mlp", "ungated_mlp", "fused_gate_up_mlp", "conv_ffn", "linear_projector"},
         ("moe", "router"): {"softmax_router", "sigmoid_router", "unknown"},
         ("moe", "router_bias"): {"router_bias", "no_router_bias"},

@@ -225,7 +225,6 @@ class VisualBertSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->VisualBert
 class VisualBertSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -262,7 +261,6 @@ class VisualBertAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->VisualBert
 class VisualBertIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -278,7 +276,6 @@ class VisualBertIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->VisualBert
 class VisualBertOutput(nn.Module):
     def __init__(self, config):
         super().__init__()

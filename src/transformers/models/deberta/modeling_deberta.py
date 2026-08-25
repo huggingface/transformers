@@ -55,20 +55,6 @@ class DebertaLayerNorm(nn.Module):
         return y
 
 
-class DebertaSelfOutput(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.LayerNorm = DebertaLayerNorm(config.hidden_size, config.layer_norm_eps)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-
-    def forward(self, hidden_states, input_tensor):
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)
-        return hidden_states
-
-
 @torch.jit.script
 def build_relative_position(query_layer, key_layer):
     """
@@ -148,7 +134,12 @@ def uneven_size_corrected(p2c_att, query_layer: torch.Tensor, key_layer: torch.T
 
 class DisentangledSelfAttention(nn.Module):
     """
-    Disentangled self-attention module
+    Disentangled self-attention module, with its output projection.
+
+    The disentangled score computation (`in_proj`, the content-to-position and position-to-content
+    biases, the optional talking heads) is DeBERTa's own and is left exactly as it was. Only the
+    output projection was folded in, from what used to be `DebertaSelfOutput.dense`; that module's
+    residual LayerNorm now belongs to `DebertaLayer`.
 
     Parameters:
         config (`str`):
@@ -194,6 +185,7 @@ class DisentangledSelfAttention(nn.Module):
                 self.pos_q_proj = nn.Linear(config.hidden_size, self.all_head_size)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+        self.o_proj = nn.Linear(config.hidden_size, config.hidden_size)
 
     def transpose_for_scores(self, x):
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, -1)
@@ -283,6 +275,7 @@ class DisentangledSelfAttention(nn.Module):
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (-1,)
         context_layer = context_layer.view(new_context_layer_shape)
+        context_layer = self.o_proj(context_layer)
         if not output_attentions:
             return (context_layer, None)
         return (context_layer, attention_probs)
@@ -423,23 +416,49 @@ class DebertaEmbeddings(nn.Module):
         return embeddings
 
 
-class DebertaAttention(nn.Module):
+class DebertaMLP(nn.Module):
+    """Ungated feed-forward network.
+
+    Replaces `DebertaIntermediate` (up projection plus activation) and `DebertaOutput` (down projection
+    plus the residual LayerNorm); the LayerNorm and residual now belong to `DebertaLayer`.
+    """
+
     def __init__(self, config):
         super().__init__()
-        self.self = DisentangledSelfAttention(config)
-        self.output = DebertaSelfOutput(config)
-        self.config = config
+        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.act_fn = ACT2FN[config.hidden_act] if isinstance(config.hidden_act, str) else config.hidden_act
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return self.dropout(self.down_proj(self.act_fn(self.up_proj(hidden_states))))
+
+
+class DebertaLayer(GradientCheckpointingLayer):
+    """Post-norm transformer layer: `LayerNorm(x + sublayer(x))` for each sublayer.
+
+    The norms and residuals are here rather than inside the sublayers, so the layer's topology is
+    stated in one place. The arithmetic is unchanged from the previous five-class arrangement.
+    """
+
+    def __init__(self, config):
+        super().__init__()
+        self.self_attn = DisentangledSelfAttention(config)
+        self.post_attention_layernorm = DebertaLayerNorm(config.hidden_size, config.layer_norm_eps)
+        self.attention_dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.mlp = DebertaMLP(config)
+        self.post_feedforward_layernorm = DebertaLayerNorm(config.hidden_size, config.layer_norm_eps)
 
     def forward(
         self,
         hidden_states,
         attention_mask,
-        output_attentions: bool = False,
         query_states=None,
         relative_pos=None,
         rel_embeddings=None,
+        output_attentions: bool = False,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        self_output, att_matrix = self.self(
+        attn_output, att_matrix = self.self_attn(
             hidden_states,
             attention_mask,
             output_attentions,
@@ -447,78 +466,13 @@ class DebertaAttention(nn.Module):
             relative_pos=relative_pos,
             rel_embeddings=rel_embeddings,
         )
-        if query_states is None:
-            query_states = hidden_states
-        attention_output = self.output(self_output, query_states)
-
-        if output_attentions:
-            return (attention_output, att_matrix)
-        else:
-            return (attention_output, None)
-
-
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->Deberta
-class DebertaIntermediate(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
-        if isinstance(config.hidden_act, str):
-            self.intermediate_act_fn = ACT2FN[config.hidden_act]
-        else:
-            self.intermediate_act_fn = config.hidden_act
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.intermediate_act_fn(hidden_states)
-        return hidden_states
-
-
-class DebertaOutput(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.LayerNorm = DebertaLayerNorm(config.hidden_size, config.layer_norm_eps)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.config = config
-
-    def forward(self, hidden_states, input_tensor):
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)
-        return hidden_states
-
-
-class DebertaLayer(GradientCheckpointingLayer):
-    def __init__(self, config):
-        super().__init__()
-        self.attention = DebertaAttention(config)
-        self.intermediate = DebertaIntermediate(config)
-        self.output = DebertaOutput(config)
-
-    def forward(
-        self,
-        hidden_states,
-        attention_mask,
-        query_states=None,
-        relative_pos=None,
-        rel_embeddings=None,
-        output_attentions: bool = False,
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        attention_output, att_matrix = self.attention(
-            hidden_states,
-            attention_mask,
-            output_attentions=output_attentions,
-            query_states=query_states,
-            relative_pos=relative_pos,
-            rel_embeddings=rel_embeddings,
-        )
-        intermediate_output = self.intermediate(attention_output)
-        layer_output = self.output(intermediate_output, attention_output)
-
-        if output_attentions:
-            return (layer_output, att_matrix)
-        else:
-            return (layer_output, None)
+        # DeBERTa adds the attention output back onto the *query* stream, which is `hidden_states`
+        # everywhere except in `DebertaModel`'s `z_steps` refinement loop, where the same layer is
+        # re-run against a query taken from a later layer.
+        query_stream = hidden_states if query_states is None else query_states
+        hidden_states = self.post_attention_layernorm(query_stream + self.attention_dropout(attn_output))
+        hidden_states = self.post_feedforward_layernorm(hidden_states + self.mlp(hidden_states))
+        return (hidden_states, att_matrix)
 
 
 class DebertaEncoder(nn.Module):
