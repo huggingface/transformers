@@ -25,6 +25,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -338,7 +339,7 @@ class ClapAudioSelfAttention(nn.Module):
             torch.zeros((2 * self.window_size[0] - 1) * (2 * self.window_size[1] - 1), num_heads)
         )
 
-        self.register_buffer("relative_position_index", self.create_relative_position_index())
+        self.relative_position_index = nn.Buffer(self.create_relative_position_index())
 
         self.query = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
         self.key = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
@@ -523,31 +524,28 @@ class ClapAudioLayer(nn.Module):
             )
 
     def get_attn_mask(self, height, width, dtype, device):
-        if self.shift_size > 0:
-            # calculate attention mask for SW-MSA
-            img_mask = torch.zeros((1, height, width, 1), dtype=dtype, device=device)
-            height_slices = (
-                slice(0, -self.window_size),
-                slice(-self.window_size, -self.shift_size),
-                slice(-self.shift_size, None),
-            )
-            width_slices = (
-                slice(0, -self.window_size),
-                slice(-self.window_size, -self.shift_size),
-                slice(-self.shift_size, None),
-            )
-            count = 0
-            for height_slice in height_slices:
-                for width_slice in width_slices:
-                    img_mask[:, height_slice, width_slice, :] = count
-                    count += 1
+        """Build the cyclic-shift attention mask for shifted-window MSA; returns None when shift_size is 0.
 
-            mask_windows = window_partition(img_mask, self.window_size)
-            mask_windows = mask_windows.view(-1, self.window_size * self.window_size)
-            attn_mask = mask_windows.unsqueeze(1) - mask_windows.unsqueeze(2)
-            attn_mask = attn_mask.masked_fill(attn_mask != 0, -100.0).masked_fill(attn_mask == 0, 0.0)
-        else:
-            attn_mask = None
+        Each (h, w) position belongs to one of 9 cyclic-shift regions (3 along each axis), encoded
+        as ``h_region * 3 + w_region``. Regions per axis:
+        - 0: indices ``[0, axis - window_size)``
+        - 1: indices ``[axis - window_size, axis - shift_size)``
+        - 2: indices ``[axis - shift_size, axis)``
+        Implementation note: a single arithmetic pass on `torch.arange` (two comparisons +
+        broadcast add) replaces the original 9-iteration nested-Python-loop slice-assignment —
+        fully vectorised, no per-cell host-side scatter, no GPU↔host sync.
+        """
+        if self.shift_size <= 0:
+            return None
+        h_idx = torch.arange(height, device=device)
+        w_idx = torch.arange(width, device=device)
+        h_region = (h_idx >= height - self.window_size).long() + (h_idx >= height - self.shift_size).long()
+        w_region = (w_idx >= width - self.window_size).long() + (w_idx >= width - self.shift_size).long()
+        img_mask = (h_region[None, :, None, None] * 3 + w_region[None, None, :, None]).to(dtype)
+        mask_windows = window_partition(img_mask, self.window_size)
+        mask_windows = mask_windows.view(-1, self.window_size * self.window_size)
+        attn_mask = mask_windows.unsqueeze(1) - mask_windows.unsqueeze(2)
+        attn_mask = attn_mask.masked_fill(attn_mask != 0, -100.0).masked_fill(attn_mask == 0, 0.0)
         return attn_mask
 
     def maybe_pad(self, hidden_states, height, width):
@@ -934,12 +932,8 @@ class ClapTextEmbeddings(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=True
-        )
-        self.register_buffer(
-            "token_type_ids", torch.zeros(self.position_ids.size(), dtype=torch.long), persistent=True
-        )
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=True)
+        self.token_type_ids = nn.Buffer(torch.zeros(self.position_ids.size(), dtype=torch.long), persistent=True)
 
         self.padding_idx = config.pad_token_id
         self.position_embeddings = nn.Embedding(
@@ -976,7 +970,7 @@ class ClapTextEmbeddings(nn.Module):
         if token_type_ids is None:
             if hasattr(self, "token_type_ids"):
                 # NOTE: We assume either pos ids to have bsz == 1 (broadcastable) or bsz == effective bsz (input_shape[0])
-                buffered_token_type_ids = self.token_type_ids.expand(position_ids.shape[0], -1)
+                buffered_token_type_ids = self.token_type_ids.to(position_ids.device).expand(position_ids.shape[0], -1)
                 buffered_token_type_ids = torch.gather(buffered_token_type_ids, dim=1, index=position_ids)
                 token_type_ids = buffered_token_type_ids.expand(batch_size, seq_length)
             else:
@@ -1262,6 +1256,7 @@ class ClapPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
+        super()._init_weights(module)
         factor = self.config.initializer_factor
 
         if isinstance(module, ClapTextEmbeddings):
@@ -1274,13 +1269,6 @@ class ClapPreTrainedModel(PreTrainedModel):
             init.constant_(module.logit_scale_t, math.log(self.config.logit_scale_init_value))
         elif isinstance(module, nn.Embedding):
             init.normal_(module.weight, mean=0.0, std=factor * 0.02)
-        elif isinstance(module, (nn.LayerNorm, nn.BatchNorm2d)):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-            if getattr(module, "running_mean", None) is not None:
-                init.zeros_(module.running_mean)
-                init.ones_(module.running_var)
-                init.zeros_(module.num_batches_tracked)
         elif isinstance(module, (nn.Conv2d, nn.Linear)):
             in_proj_std = (self.config.hidden_size**-0.5) * ((2 * self.config.num_hidden_layers) ** -0.5) * factor
             init.normal_(module.weight, std=in_proj_std)
@@ -1413,19 +1401,22 @@ class ClapTextModel(ClapPreTrainedModel):
         if attention_mask is None:
             attention_mask = torch.ones(((batch_size, seq_length)), device=device)
 
-        # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
-        # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
-
         embedding_output = self.embeddings(
             input_ids=input_ids,
             position_ids=position_ids,
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
         )
+
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=embedding_output,
+            attention_mask=attention_mask,
+        )
+
         encoder_outputs = self.encoder(
             embedding_output,
-            attention_mask=extended_attention_mask,
+            attention_mask=attention_mask,
             **kwargs,
         )
         sequence_output = encoder_outputs[0]

@@ -42,12 +42,35 @@ CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
 # Usually of small list of allowed attrs, but can be True to allow all
 SPECIAL_CASES_TO_ALLOW = {
+    # EP related refactor that also relies on correct naming for FP8/4 conventions
+    "DeepseekV3Config": ["n_routed_experts"],
+    "Glm4MoeConfig": ["n_routed_experts"],
+    "Glm4MoeLiteConfig": ["n_routed_experts"],
+    "Glm4vMoeTextConfig": ["n_routed_experts"],
+    "Mistral4Config": ["n_routed_experts"],
+    "SolarOpenConfig": ["n_routed_experts"],
+    "NemotronAsrStreamingEncoderConfig": ["num_mel_bins"],  # Used via the `subsampling_out_hidden_size` property
+    "Gemma4UnifiedAudioConfig": ["audio_embed_dim"],  # Used as meta data for other attributes/properties
+    "Gemma4UnifiedVisionConfig": [
+        "patch_size",
+        "pooling_kernel_size",
+    ],  # Used as meta data for other attributes/properties
+    "MiniCPM3Config": ["dim_model_base"],  # Used by the logits_scaling property
     "MiniCPMV4_6Config": ["drop_vision_last_layer"],
+    "MiniMaxM3VLTextConfig": ["rotary_dim", "router_jitter_noise"],
+    "Step3p7TextConfig": [
+        "n_routed_experts",
+        "num_sliding_attention_heads",
+        # Consumed by `get_mtp_config()` in its config, not used directly by the modeling forward.
+        "mtp_layer_types",
+        "mtp_mlp_layer_types",
+    ],
     "OpenAIPrivacyFilterConfig": ["classifier_dropout", "output_router_logits", "router_aux_loss_coef"],
     "HYV3Config": ["output_router_logits"],
     "NougatConfig": ["decoder", "encoder"],
     "PI0Config": ["vlm_projection_dim"],
     "EuroBertConfig": ["is_causal"],  # not used directly, allows causal-bidirectional switch
+    "EsmcConfig": ["expansion_ratio"],  # consumed in __post_init__ to derive intermediate_size
     "Ernie4_5_VL_MoeConfig": ["args"],  # BC Alias
     "Ernie4_5_VL_MoeTextConfig": ["args"],  # BC Alias
     "Ernie4_5_VL_MoeVisionConfig": ["args"],  # BC Alias
@@ -58,14 +81,30 @@ SPECIAL_CASES_TO_ALLOW = {
     "Lfm2Config": ["full_attn_idxs"],
     "DiaConfig": ["delay_pattern"],
     "BambaConfig": ["attn_layer_indices"],
-    "Dots1Config": ["max_window_layers"],
-    "JambaConfig": ["attn_layer_offset", "attn_layer_period", "expert_layer_offset", "expert_layer_period"],
+    "Dots1Config": ["max_window_layers", "n_routed_experts"],
+    "JambaConfig": [
+        "attn_layer_offset",
+        "attn_layer_period",
+        "expert_layer_offset",
+        "expert_layer_period",
+        "use_mamba_kernels",
+    ],
     "JetMoeConfig": ["output_router_logits"],
     "Phi3Config": ["embd_pdrop"],
     "EncodecConfig": ["overlap"],
     "XcodecConfig": ["sample_rate", "audio_channels"],
     "RecurrentGemmaConfig": ["block_types", "attention_window_size"],
     "MambaConfig": ["expand"],
+    "InklingTextConfig": [
+        # Consumed by config logic (build `layer_types`) or carried for checkpoint round-trip (MTP/MoE block),
+        # not referenced directly by the modeling forward.
+        "local_layer_ids",
+        "mtp_local_layer_ids",
+        "chain_hidden_post_norm",
+        "mtp_hidden_states_first",
+        "rms_norm_eps_moe_gate",
+        "shared_expert_sink",
+    ],
     "FalconMambaConfig": ["expand"],
     "FSMTConfig": ["langs", "common_kwargs", "early_stopping", "length_penalty", "max_length", "num_beams"],
     "GPTNeoConfig": ["attention_types"],
@@ -87,8 +126,10 @@ SPECIAL_CASES_TO_ALLOW = {
     "TimeSeriesTransformerConfig": ["num_static_real_features", "num_time_features"],
     "AutoformerConfig": ["num_static_real_features", "num_time_features"],
     "SamVisionConfig": ["mlp_ratio"],
+    "DeepseekOcr2SamVisionConfig": ["mlp_ratio"],
     "Sam3VisionConfig": ["backbone_feature_sizes"],
     "SamHQVisionConfig": ["mlp_ratio"],
+    "Step3p7VisionConfig": ["mlp_ratio"],
     "ClapAudioConfig": ["num_classes"],
     "ClvpDecoderConfig": ["add_cross_attention"],
     "SpeechT5HifiGanConfig": ["sampling_rate"],
@@ -105,6 +146,26 @@ SPECIAL_CASES_TO_ALLOW = {
     "Gemma3nVisionConfig": ["architecture", "do_pooling", "model_args"],
     "HiggsAudioV2Config": ["audio_bos_token", "audio_stream_bos_id", "audio_stream_eos_id"],
     "HiggsAudioV2TokenizerConfig": ["downsample_factor"],
+    "HunYuanVLConfig": ["im_end_id", "im_newline_id", "im_start_id"],
+    "HunYuanVLTextConfig": [
+        "attention_head_dim",
+        "enable_lm_head_fp32",
+        "org_vocab_size",
+        "pad_id",
+        "rope_scaling",
+        "use_cla",
+        "use_qk_norm",
+    ],
+    "HunYuanVLVisionConfig": [
+        "img_max_token_num",
+        "learnable_mlp_pooling_size",
+        "max_vit_seq_len",
+        "out_hidden_size",
+        "remove_prenorm",
+        "resize_resolution",
+        "temporal_patch_size",
+    ],
+    "Cohere2MoeConfig": ["rope_scaling", "sliding_window_pattern"],
     "CsmConfig": ["tie_codebooks_embeddings"],
     "DeepseekV2Config": ["norm_topk_prob"],
     "DeepseekV4Config": [
@@ -125,8 +186,27 @@ SPECIAL_CASES_TO_ALLOW = {
         "num_nextn_predict_layers",
         "router_jitter_noise",
     ],
+    "DeepseekV32Config": ["head_dim", "layer_types", "mlp_bias", "first_k_dense_replace", "n_routed_experts"],
+    "GlmMoeDsaConfig": ["head_dim", "layer_types", "mlp_bias", "first_k_dense_replace", "n_routed_experts"],
     "EsmFoldConfig": ["esm_ablate_pairwise", "esm_ablate_sequence", "esm_input_dropout", "esm_type"],
     "TrunkConfig": ["cpu_grad_checkpoint", "layer_drop"],
+    "Zamba2Config": ["use_mamba_kernels", "use_mem_eff_path"],
+    "EsmFold2Config": [
+        # Only read in the config's own __post_init__, to derive the transition FFN widths.
+        "transition_expansion_ratio",
+        # Read in generation_esmfold2.py (the sampling loop), which this check does not scan --
+        # it only looks at files named modeling_*.
+        "num_diffusion_samples",
+        "max_atomic_number",
+    ],
+    # ESMFold2's sub-configs are reached as `config.<sub_config>.<attribute>`, but this check only
+    # matches the literal `config.<attribute>`, so it cannot resolve nested access at all.
+    "EsmFold2AtomEncoderConfig": True,
+    "EsmFold2DiffusionModuleConfig": True,
+    "EsmFold2StructureHeadConfig": True,
+    "EsmFold2ConfidenceHeadConfig": True,
+    "EsmFold2MsaEncoderConfig": True,
+    "EsmFold2LmEncoderConfig": True,
     "SeamlessM4TConfig": True,
     "SeamlessM4Tv2Config": True,
     "ConditionalDetrConfig": True,
@@ -192,6 +272,13 @@ SPECIAL_CASES_TO_ALLOW = {
     # Internally uses Got Ocr2 so no need to use in the modeling code as we remap in auto instead
     "PPChart2TableConfig": True,
     "PPChart2TableVisionConfig": True,
+    "GlmgaConfig": ["vision_config"],
+    "Sapiens2Config": [
+        "num_first_full_attention_layers",  # builder attr consumed in __post_init__ to compute num_key_value_heads_per_layer
+        "num_key_value_attention_heads",  # builder attr consumed in __post_init__ to compute num_key_value_heads_per_layer
+        "num_last_full_attention_layers",  # builder attr consumed in __post_init__ to compute num_key_value_heads_per_layer
+        "flip_pairs",  # used externally for post-processing keypoints, not in forward pass
+    ],
 }
 
 # Common and important attributes, even if they do not always appear in the modeling files (can be a regex pattern)
@@ -247,6 +334,9 @@ ATTRIBUTES_TO_ALLOW = (
     "vision_feature_layer",
     "vision_feature_select_strategy",
     "vision_aspect_ratio",
+    "num_mtp_layers",  # for MTP, not used by main model architecture
+    # used by GenericForTokenClassification in modeling_layers.py via getattr
+    "token_classification_bias",
 )
 
 

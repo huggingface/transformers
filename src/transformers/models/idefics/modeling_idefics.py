@@ -59,12 +59,6 @@ class IdeficsBaseModelOutputWithPast(ModelOutput):
 
         If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
         hidden_size)` is output.
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
-        `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
-        input) to speed up sequential decoding.
     image_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
         Tuple of `torch.FloatTensor` (one for the output of the image embeddings, `(batch_size, num_images,
         sequence_length, hidden_size)`.
@@ -371,7 +365,7 @@ class IdeficsEmbedding(torch.nn.Module):
             self.base
             ** (torch.arange(0, self.dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / self.dim)
         )
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
 
         # Build here to make `torch.jit.trace` work.
         self._set_cos_sin_cache(
@@ -385,8 +379,8 @@ class IdeficsEmbedding(torch.nn.Module):
         freqs = torch.einsum("i,j->ij", t, self.inv_freq)
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
         emb = torch.cat((freqs, freqs), dim=-1)
-        self.register_buffer("cos_cached", emb.cos().to(dtype), persistent=False)
-        self.register_buffer("sin_cached", emb.sin().to(dtype), persistent=False)
+        self.cos_cached = nn.Buffer(emb.cos().to(dtype), persistent=False)
+        self.sin_cached = nn.Buffer(emb.sin().to(dtype), persistent=False)
 
     def forward(self, x, seq_len=None):
         # x: [bs, num_attention_heads, seq_len, head_size]
@@ -814,7 +808,7 @@ class IdeficsPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
-    _no_split_modules = ["IdeficsDecoderLayer", "IdeficsGatedCrossAttentionLayer"]
+    _no_split_modules = ["IdeficsDecoderLayer", "IdeficsGatedCrossAttentionLayer", "IdeficsVisionEncoderLayer"]
     _supports_sdpa = True
 
     _supports_flash_attn = False  # only eager/sdpa creation is supported
@@ -1017,30 +1011,26 @@ class IdeficsModel(IdeficsPreTrainedModel):
             raise ValueError("If `perceiver_embeddings` are passed, use_resampler should be True")
 
         image_hidden_states = image_hidden_states.view(batch_size, num_images * image_seq_len, image_hidden_size)
-        # # Hack to use the model in full language modeling mode
-        # image_attention_mask = torch.zeros(batch_size, seq_length, 1, dtype=torch.long, device=image_hidden_states.device)
-        # Make image_attention_mask compatible with hidden states
-        text_seq_len = image_attention_mask.size(1)
-        image_attention_mask = image_attention_mask.unsqueeze(-1)
-        image_attention_mask = image_attention_mask.repeat(1, 1, 1, image_seq_len)
-        image_attention_mask = image_attention_mask.view(batch_size, text_seq_len, num_images * image_seq_len)
 
-        if image_hidden_states is not None:
-            image_batch_size, image_sequence_length, _ = image_hidden_states.size()
-            image_hidden_shape = (image_batch_size, image_sequence_length)
-            if image_attention_mask is None:
-                image_attention_mask = torch.ones(image_hidden_shape, device=device)
-            image_attention_mask = self.invert_attention_mask(image_attention_mask)
-        else:
-            image_attention_mask = None
+        # Mask is in 3D (incompatible with our mask API --> manual expansion)
+        # image_attention_mask:    [batch_size,    text_seq_length,       num_images          ]
+        #                       -> [batch_size, 1, text_seq_length, num_images * image_seq_len]
+        image_attention_mask = (
+            image_attention_mask[..., None]
+            .expand(-1, -1, -1, image_seq_len)
+            .reshape(*image_attention_mask.shape[:2], -1)
+        )
+        image_attention_mask = torch.where(
+            image_attention_mask[:, None, :, :].bool(),
+            torch.full((), 0.0, device=device, dtype=image_hidden_states.dtype),
+            torch.finfo(image_hidden_states.dtype).min,
+        )
 
-        # cross_attention_gate:
         # For any tokens attending to no images, the hidden_states coming out of the cross-attention should be zeroed-out.
-        # `image_attention_mask` has shape [bsz, 1, num_images, hidden_size] with elements equal to either 0.0 or a very negative number.
         # If any of the elements are 0.0, then the token is attending to at least one image and the gate value is 1. Otherwise the gate value is 0.
         # `cross_attention_gate` has shape [bsz, seq_len] with elements equal to either 0.0 or 1.0.
-        cross_attention_gate = ((((image_attention_mask == 0.0).any(dim=-1)).to(dtype=self.dtype)).squeeze(dim=1)).to(
-            device
+        cross_attention_gate = (
+            (image_attention_mask == 0.0).any(dim=-1).to(dtype=self.dtype, device=device).squeeze(dim=1)
         )
 
         # embed positions
@@ -1218,17 +1208,6 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
         **kwargs,
     ):
         # Overwritten -- custom processing based on `config.use_resampler`
-
-        images_kwargs = {}
-        if image_hidden_states is not None:
-            if self.config.use_resampler:
-                images_kwargs["perceiver_embeddings"] = image_hidden_states
-            else:
-                images_kwargs["image_encoder_embeddings"] = image_hidden_states
-        else:
-            images_kwargs["pixel_values"] = pixel_values
-        images_kwargs["interpolate_pos_encoding"] = kwargs.pop("interpolate_pos_encoding", False)
-
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
@@ -1237,9 +1216,17 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
             position_ids=position_ids,
             use_cache=use_cache,
             image_attention_mask=image_attention_mask,
-            **images_kwargs,
             **kwargs,
         )
+
+        if image_hidden_states is not None:
+            if self.config.use_resampler:
+                model_inputs["perceiver_embeddings"] = image_hidden_states
+            else:
+                model_inputs["image_encoder_embeddings"] = image_hidden_states
+        else:
+            model_inputs["pixel_values"] = pixel_values
+        model_inputs["interpolate_pos_encoding"] = kwargs.pop("interpolate_pos_encoding", False)
 
         if image_attention_mask is not None and inputs_embeds is None:
             seq_length = model_inputs["input_ids"].shape[1]

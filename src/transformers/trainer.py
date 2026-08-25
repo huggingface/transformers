@@ -46,7 +46,7 @@ import numpy as np
 import safetensors.torch
 import torch
 import torch.distributed as dist
-from huggingface_hub import CommitInfo, ModelCard, create_repo, upload_folder
+from huggingface_hub import CommitInfo, ModelCard
 from packaging import version
 from torch import nn
 from torch.utils.data import DataLoader, Dataset, IterableDataset, RandomSampler, SequentialSampler
@@ -55,6 +55,7 @@ from . import __version__
 from .configuration_utils import PreTrainedConfig
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .debug_utils import DebugOption, DebugUnderflowOverflow
+from .distributed.fsdp import get_fsdp_ckpt_kwargs, update_fsdp_plugin_peft
 from .feature_extraction_sequence_utils import SequenceFeatureExtractor
 from .feature_extraction_utils import FeatureExtractionMixin
 from .hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS, default_hp_search_backend
@@ -66,11 +67,11 @@ from .integrations.deepspeed import (
     is_deepspeed_available,
     propagate_args_to_deepspeed,
 )
-from .integrations.fsdp import get_fsdp_ckpt_kwargs, update_fsdp_plugin_peft
 from .integrations.liger import apply_liger_kernel
 from .integrations.neftune import activate_neftune, deactivate_neftune
 from .integrations.peft import MIN_PEFT_VERSION
 from .integrations.tpu import save_tpu_checkpoint, tpu_spmd_dataloader, wrap_model_xla_fsdp
+from .loss.loss_utils import LOSS_MAPPING, ForCausalLMLoss
 from .modelcard import TrainingSummary
 from .modeling_utils import PreTrainedModel, unwrap_model
 from .models.auto.modeling_auto import (
@@ -79,6 +80,7 @@ from .models.auto.modeling_auto import (
 )
 from .optimization import GreedyLR, get_scheduler
 from .processing_utils import ProcessorMixin
+from .pytorch_utils import is_torch_greater_or_equal_than_2_6
 from .tokenization_utils_base import PreTrainedTokenizerBase
 from .trainer_callback import (
     CallbackHandler,
@@ -161,6 +163,7 @@ from .utils import (
     can_return_loss,
     check_torch_load_is_safe,
     find_labels,
+    hf_api,
     is_accelerate_available,
     is_datasets_available,
     is_in_notebook,
@@ -284,6 +287,9 @@ class Trainer:
             `torch.Generator` for the randomization that must be identical on all processes (and the Trainer will
             manually set the seed of this `generator` at each epoch) or have a `set_epoch()` method that internally
             sets the seed of the RNGs used.
+
+            If the dataset does not implement `__len__` (e.g. a streaming `IterableDataset`), `max_steps` must be set,
+            since the total number of training steps cannot be inferred.
         eval_dataset (`torch.utils.data.Dataset` | dict[str, `torch.utils.data.Dataset`] | `datasets.Dataset`, *optional*):
              The dataset to use for evaluation. If it is a [`~datasets.Dataset`], columns not accepted by the
              `model.forward()` method are automatically removed. If it is a dictionary, it will evaluate on each
@@ -447,13 +453,13 @@ class Trainer:
             elif len(devices) == 1:
                 self.is_model_parallel = self.args.device != torch.device(devices[0])
 
-        self.is_fsdp_xla_enabled = args.fsdp_config["xla"]
-        if len(args.fsdp) > 0:
+        self.is_fsdp_xla_enabled = args.fsdp and args.fsdp_config.get("xla", False)
+        if args.fsdp:
             if self.is_deepspeed_enabled:
                 raise ValueError(
                     "Using --fsdp xxx together with --deepspeed is not possible, deactivate one of those flags."
                 )
-            if not args.fsdp_config["xla"] and args.parallel_mode != ParallelMode.DISTRIBUTED:
+            if not self.is_fsdp_xla_enabled and args.parallel_mode != ParallelMode.DISTRIBUTED:
                 raise ValueError("Using fsdp only works in distributed training.")
 
         # Postpone switching model to cuda when MP, DeepSpeed, full bf16/fp16 eval, or FSDP
@@ -507,6 +513,18 @@ class Trainer:
         default_label_names = find_labels(model_to_inspect.__class__)
         self.label_names = default_label_names if self.args.label_names is None else self.args.label_names
         self.can_return_loss = can_return_loss(model_to_inspect.__class__)
+
+        # Causal LM losses shift labels internally (predictions at position i target label[i+1]), so position 0 of
+        # each row is never a prediction target. The valid-prediction count used by `num_items_in_batch` must therefore
+        # be taken over `labels[..., 1:]`, not the full label tensor. Inspect the actual loss function via
+        # LOSS_MAPPING so model-specific loss_types that route to ForCausalLMLoss (e.g. CsmForConditionalGeneration)
+        # are caught too. Encoder-decoder models are excluded: their loss is aligned with unshifted targets (usually
+        # because they feed right-shifted `decoder_input_ids` to the decoder), so every non-`-100` label is a
+        # prediction target and the decoder-only `labels[..., 1:]` counting rule must not apply -- it would
+        # under-count and over-scale the loss.
+        self._loss_shifts_labels = LOSS_MAPPING.get(
+            getattr(model_to_inspect, "loss_type", None)
+        ) is ForCausalLMLoss and not getattr(getattr(model_to_inspect, "config", None), "is_encoder_decoder", False)
 
         if self.args.label_smoothing_factor != 0:
             if getattr(self.model.config, "problem_type", None) == "multi_label_classification":
@@ -598,7 +616,7 @@ class Trainer:
         if getattr(self.model, "config", None) is not None:
             self.model.config.use_cache = self.args.use_cache
 
-        self.is_fsdp_xla_v2_enabled = args.fsdp_config.get("xla_fsdp_v2", False)
+        self.is_fsdp_xla_v2_enabled = args.fsdp and args.fsdp_config.get("xla_fsdp_v2", False)
         if self.is_fsdp_xla_v2_enabled:
             if not IS_XLA_FSDPV2_POST_2_2:
                 raise ValueError("FSDPv2 requires `torch_xla` 2.2 or higher.")
@@ -680,8 +698,9 @@ class Trainer:
             logger.info("max_steps is given, it will override any value given in num_train_epochs")
         if self.train_dataset is not None and not has_length(self.train_dataset) and args.max_steps <= 0:
             raise ValueError(
-                "The train_dataset does not implement __len__, max_steps has to be specified. "
-                "The number of steps needs to be known in advance for the learning rate scheduler."
+                "The train_dataset does not implement __len__, so the number of training steps cannot be inferred; "
+                "max_steps has to be specified. The total number of steps must be known in advance to bound the "
+                "training loop and to configure the learning rate scheduler."
             )
 
         if self.train_dataset is not None and isinstance(self.train_dataset, torch.utils.data.IterableDataset):
@@ -822,10 +841,7 @@ class Trainer:
 
         # post accelerator creation setup
         if self.is_fsdp_enabled:
-            fsdp_plugin = self.accelerator.state.fsdp_plugin
-            for param in ["limit_all_gathers", "activation_checkpointing"]:
-                setattr(fsdp_plugin, param, self.args.fsdp_config.get(param, getattr(fsdp_plugin, param)))
-            if fsdp_plugin.activation_checkpointing and self.args.gradient_checkpointing:
+            if self.accelerator.state.fsdp_plugin.activation_checkpointing and self.args.gradient_checkpointing:
                 raise ValueError(
                     "The activation_checkpointing in FSDP config and the gradient_checkpointing in training arg "
                     "can't be set to True simultaneously. Please use FSDP's activation_checkpointing logic "
@@ -890,7 +906,7 @@ class Trainer:
 
         Args:
             eval_dataset (`str` or `torch.utils.data.Dataset`, *optional*):
-                If a `str`, will use `self.eval_dataset[eval_dataset]` as the evaluation dataset. If a `Dataset`, will override `self.eval_dataset` and must implement `__len__`. If it is a [`~datasets.Dataset`], columns not accepted by the `model.forward()` method are automatically removed.
+                If a `str`, will use `self.eval_dataset[eval_dataset]` as the evaluation dataset. If a `Dataset`, will override `self.eval_dataset`. If it is a [`~datasets.Dataset`], columns not accepted by the `model.forward()` method are automatically removed.
         """
         if eval_dataset is None and self.eval_dataset is None:
             raise ValueError("Trainer: evaluation requires an eval_dataset.")
@@ -930,7 +946,7 @@ class Trainer:
         Args:
             test_dataset (`torch.utils.data.Dataset`, *optional*):
                 The test dataset to use. If it is a [`~datasets.Dataset`], columns not accepted by the
-                `model.forward()` method are automatically removed. It must implement `__len__`.
+                `model.forward()` method are automatically removed.
         """
         return self._get_dataloader(
             dataset=test_dataset,
@@ -970,23 +986,23 @@ class Trainer:
         else:
             data_collator = self._get_collator_with_removed_columns(self.data_collator, description=description)
 
-        # MPS requrires forking if multiple workers are specified
-        should_fork = torch.backends.mps.is_available() and self.args.dataloader_num_workers > 1
-
         dataloader_params = {
             "batch_size": batch_size,
             "collate_fn": data_collator,
             "num_workers": self.args.dataloader_num_workers,
             "pin_memory": self.args.dataloader_pin_memory,
             "persistent_workers": self.args.dataloader_persistent_workers,
-            "multiprocessing_context": "fork" if should_fork else None,
+            "multiprocessing_context": self.args.dataloader_multiprocessing_context,
+            "prefetch_factor": self.args.dataloader_prefetch_factor,
         }
+        # `in_order` was added in torch 2.6; on older versions the loader always behaves as `in_order=True`.
+        if is_torch_greater_or_equal_than_2_6:
+            dataloader_params["in_order"] = self.args.dataloader_in_order
 
         if not isinstance(dataset, torch.utils.data.IterableDataset):
             if sampler_fn is not None:
                 dataloader_params["sampler"] = sampler_fn(dataset)
             dataloader_params["drop_last"] = self.args.dataloader_drop_last
-            dataloader_params["prefetch_factor"] = self.args.dataloader_prefetch_factor
             if is_training:
                 dataloader_params["worker_init_fn"] = partial(
                     seed_worker, num_workers=self.args.dataloader_num_workers, rank=self.args.process_index
@@ -1008,6 +1024,12 @@ class Trainer:
         if train_dataset is None:
             train_dataset = self.train_dataset
         if train_dataset is None or not has_length(train_dataset):
+            if train_dataset is not None and self.args.train_sampling_strategy == "group_by_length":
+                logger.warning(
+                    "`train_sampling_strategy='group_by_length'` is ignored because the training dataset does not "
+                    "implement `__len__` (e.g. an `IterableDataset`). Examples will be consumed in the dataset's own "
+                    "order."
+                )
             return None
 
         # Build the sampler.
@@ -1056,6 +1078,9 @@ class Trainer:
                 dataset=eval_dataset,
                 lengths=lengths,
                 model_input_name=model_input_name,
+                generator=torch.Generator().manual_seed(
+                    self.args.data_seed if self.args.data_seed is not None else self.args.seed
+                ),
             )
 
         if self.args.world_size <= 1:
@@ -1914,6 +1939,8 @@ class Trainer:
                 and self.state.global_step % self.args.torch_empty_cache_steps == 0
             ):
                 clear_device_cache()
+                if torch.backends.mps.is_available() and hasattr(torch.mps, "clear_graph_cache"):
+                    torch.mps.clear_graph_cache()
 
             kwargs = {}
 
@@ -2001,9 +2028,9 @@ class Trainer:
                 else unwrapped_model._get_name()
             )
             if model_name in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values():
-                loss = self.label_smoother(outputs, labels, shift_labels=True)
+                loss = self.label_smoother(outputs, labels, shift_labels=True, num_items_in_batch=num_items_in_batch)
             else:
-                loss = self.label_smoother(outputs, labels)
+                loss = self.label_smoother(outputs, labels, num_items_in_batch=num_items_in_batch)
         else:
             if isinstance(outputs, dict) and "loss" not in outputs:
                 raise ValueError(
@@ -2018,7 +2045,12 @@ class Trainer:
             and (self.model_accepts_loss_kwargs or self.compute_loss_func)
             and num_items_in_batch is not None
         ):
-            loss *= self.accelerator.num_processes if self.args.n_gpu <= 1 else self.args.n_gpu
+            # TP and EP-as-TP ranks see replicated batches; `num_processes` over-counts
+            # them by `tp_size`. Mirror the divisor used in `_get_num_items_in_batch`.
+            loss_scale = self.accelerator.num_processes
+            if (pc := getattr(self.accelerator, "parallelism_config", None)) is not None:
+                loss_scale //= pc.tp_size
+            loss *= loss_scale if self.args.n_gpu <= 1 else self.args.n_gpu
 
         return (loss, outputs) if return_outputs else loss
 
@@ -2091,7 +2123,7 @@ class Trainer:
             self._save_checkpoint(model, trial)
             self.control = self.callback_handler.on_save(self.args, self.state, self.control)
 
-    # ---- Training Utilites ----
+    # ---- Training Utilities ----
     def get_batch_samples(
         self, epoch_iterator: Iterator, num_batches: int, device: torch.device
     ) -> tuple[list, torch.Tensor | int | None]:
@@ -2136,7 +2168,17 @@ class Trainer:
         if count_num_items_in_batch:
             # For now we don't support object detection
             try:
-                num_items_in_batch = sum((batch["labels"].ne(-100)).sum() for batch in batch_samples)
+                # Causal LM losses shift labels; count over `labels[..., 1:]` to avoid over-counting position 0.
+                # If the collator already provides `shift_labels` (e.g. padding-free collators), use it as-is.
+                labels_for_count = [
+                    batch["shift_labels"]
+                    if "shift_labels" in batch
+                    else batch["labels"][..., 1:]
+                    if self._loss_shifts_labels
+                    else batch["labels"]
+                    for batch in batch_samples
+                ]
+                num_items_in_batch = sum(labels.ne(-100).sum() for labels in labels_for_count)
             except (TypeError, AttributeError):
                 pass
 
@@ -2530,8 +2572,7 @@ class Trainer:
             eval_dataset (`Dataset` | dict[str, `Dataset`], *optional*):
                 Pass a dataset if you wish to override `self.eval_dataset`. If it is a [`~datasets.Dataset`], columns
                 not accepted by the `model.forward()` method are automatically removed. If it is a dictionary, it will
-                evaluate on each dataset, prepending the dictionary key to the metric name. Datasets must implement the
-                `__len__` method.
+                evaluate on each dataset, prepending the dictionary key to the metric name.
 
                 <Tip>
 
@@ -2831,7 +2872,7 @@ class Trainer:
         Args:
             test_dataset (`Dataset`):
                 Dataset to run the predictions on. If it is an `datasets.Dataset`, columns not accepted by the
-                `model.forward()` method are automatically removed. Has to implement the method `__len__`
+                `model.forward()` method are automatically removed.
             ignore_keys (`list[str]`, *optional*):
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
                 gathering predictions.
@@ -2956,8 +2997,12 @@ class Trainer:
                     logits = smp_nested_concat(logits_mb)
             else:
                 if has_labels or loss_without_labels:
-                    with self.compute_loss_context_manager():
-                        num_items_in_batch = self._get_num_items_in_batch([inputs], self.args.device)
+                    # Count before sharding: `context_parallel` splits the buffers in place.
+                    num_items_in_batch = self._get_num_items_in_batch([inputs], self.args.device)
+                    cp_context, inputs = self._prepare_context_parallel_inputs(model, inputs)
+                    with self.compute_loss_context_manager(), cp_context():
+                        if self.args.use_liger_kernel and prediction_loss_only:
+                            inputs = {**inputs, "skip_logits": True}
                         loss, outputs = self.compute_loss(
                             model, inputs, return_outputs=True, num_items_in_batch=num_items_in_batch
                         )
@@ -3736,8 +3781,10 @@ class Trainer:
     def _issue_warnings_after_load(self, load_result: Any) -> None:
         """Log warnings for missing or unexpected keys after loading a checkpoint."""
         if len(load_result.missing_keys) != 0:
-            if self.model._keys_to_ignore_on_save is not None and set(load_result.missing_keys) == set(
-                self.model._keys_to_ignore_on_save
+            if (
+                self.model._keys_to_ignore_on_save is not None
+                and len(self.model._keys_to_ignore_on_save) > 0
+                and set(load_result.missing_keys) == set(self.model._keys_to_ignore_on_save)
             ):
                 self.model.tie_weights()
             else:
@@ -3918,7 +3965,7 @@ class Trainer:
             repo_name = self.args.hub_model_id
 
         token = token if token is not None else self.args.hub_token
-        repo_url = create_repo(repo_name, token=token, private=self.args.hub_private_repo, exist_ok=True)
+        repo_url = hf_api().create_repo(repo_name, token=token, private=self.args.hub_private_repo, exist_ok=True)
         self.hub_model_id = repo_url.repo_id
         self.push_in_progress = None
 
@@ -4068,7 +4115,7 @@ class Trainer:
         # Wait for the current upload to be finished.
         self._finish_current_push()
 
-        return upload_folder(
+        return hf_api().upload_folder(
             repo_id=self.hub_model_id,
             folder_path=self.args.output_dir,
             commit_message=commit_message,
@@ -4115,7 +4162,7 @@ class Trainer:
         else:
             commit_message = f"Training in progress, epoch {int(self.state.epoch)}"
 
-        model_push_job = upload_folder(
+        model_push_job = hf_api().upload_folder(
             repo_id=self.hub_model_id,
             folder_path=output_dir,
             commit_message=commit_message,
@@ -4131,7 +4178,7 @@ class Trainer:
             path_in_repo = (
                 "last-checkpoint" if self.args.hub_strategy == HubStrategy.CHECKPOINT else Path(checkpoint_folder).name
             )
-            checkpoint_push = upload_folder(
+            checkpoint_push = hf_api().upload_folder(
                 repo_id=self.hub_model_id,
                 folder_path=checkpoint_folder,
                 path_in_repo=path_in_repo,

@@ -119,9 +119,9 @@ class EncodecConv1d(nn.Module):
         # Effective kernel size with dilations.
         kernel_size = torch.tensor((kernel_size - 1) * dilation + 1, dtype=torch.int64)
 
-        self.register_buffer("stride", stride, persistent=False)
-        self.register_buffer("kernel_size", kernel_size, persistent=False)
-        self.register_buffer("padding_total", kernel_size - stride, persistent=False)
+        self.stride = nn.Buffer(stride, persistent=False)
+        self.kernel_size = nn.Buffer(kernel_size, persistent=False)
+        self.padding_total = nn.Buffer(kernel_size - stride, persistent=False)
 
     def _get_extra_padding_for_conv1d(
         self,
@@ -356,10 +356,10 @@ class EncodecEuclideanCodebook(nn.Module):
 
         self.codebook_size = config.codebook_size
 
-        self.register_buffer("inited", torch.Tensor([True]))
-        self.register_buffer("cluster_size", torch.zeros(config.codebook_size))
-        self.register_buffer("embed", embed)
-        self.register_buffer("embed_avg", embed.clone())
+        self.inited = nn.Buffer(torch.Tensor([True]))
+        self.cluster_size = nn.Buffer(torch.zeros(config.codebook_size))
+        self.embed = nn.Buffer(embed)
+        self.embed_avg = nn.Buffer(embed.clone())
 
     def quantize(self, hidden_states):
         embed = self.embed.t()
@@ -439,7 +439,7 @@ class EncodecResidualVectorQuantizer(nn.Module):
 
     def decode(self, codes: torch.Tensor) -> torch.Tensor:
         """Decode the given codes to the quantized representation."""
-        quantized_out = torch.tensor(0.0, device=codes.device)
+        quantized_out = torch.full((), 0.0, device=codes.device)
         for i, indices in enumerate(codes):
             layer = self.layers[i]
             quantized = layer.decode(indices)
@@ -455,23 +455,12 @@ class EncodecPreTrainedModel(PreTrainedAudioTokenizerBase):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, nn.GroupNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-        elif isinstance(module, nn.Conv1d):
+        super()._init_weights(module)
+        if isinstance(module, nn.Conv1d):
             init.kaiming_normal_(module.weight)
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 init.uniform_(module.bias, a=-k, b=k)
-        elif isinstance(module, nn.ConvTranspose1d):
-            module.reset_parameters()
-        elif isinstance(module, nn.LSTM):
-            for name, param in module.named_parameters():
-                if "weight" in name:
-                    init.xavier_uniform_(param)
-                elif "bias" in name:
-                    init.constant_(param, 0.0)
         elif isinstance(module, EncodecConv1d):
             kernel_size = module.conv.kernel_size[0]
             stride = torch.tensor(module.conv.stride[0], dtype=torch.int64)

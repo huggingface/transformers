@@ -9,12 +9,11 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
-
-*This model was released on 2025-07-10 and added to Hugging Face Transformers on 2025-11-12.*
+*This model was published in HF papers on 2025-07-10 and contributed to Hugging Face Transformers on 2025-11-12.*
 
 # Audio Flamingo 3
 
@@ -292,7 +291,7 @@ inputs = processor.apply_chat_template(
     tokenize=True,
     add_generation_prompt=True,
     return_dict=True,
-    output_labels=True,
+    processor_kwargs={"output_labels": True},
 ).to(model.device, dtype=model.dtype)
 
 loss = model(**inputs).loss
@@ -401,6 +400,11 @@ are forwarded, so you can tweak padding or tensor formats just like when calling
 ## AudioFlamingo3Encoder
 
 [[autodoc]] AudioFlamingo3Encoder
+    - forward
+
+## AudioFlamingo3Model
+
+[[autodoc]] AudioFlamingo3Model
     - forward
 
 ## AudioFlamingo3ForConditionalGeneration

@@ -102,7 +102,7 @@ class RTDetrV2Config(PreTrainedConfig):
     matcher_bbox_cost (`float`, *optional*, defaults to 5.0):
         The relative weight of the bounding box loss used by the Hungarian Matcher.
     matcher_giou_cost (`float`, *optional*, defaults to 2.0):
-        The relative weight of the giou loss of used by the Hungarian Matcher.
+        The relative weight of the giou loss used by the Hungarian Matcher.
     use_focal_loss (`bool`, *optional*, defaults to `True`):
         Parameter informing if focal loss should be used.
     focal_loss_alpha (`float`, *optional*, defaults to 0.75):
@@ -268,7 +268,7 @@ def multi_scale_deformable_attention_v2(
                 .repeat(1, sampling_coord.shape[1])
             )
             sampling_value_l_ = value_l_[sampling_idx, :, sampling_coord[..., 1], sampling_coord[..., 0]]
-            sampling_value_l_ = sampling_value_l_.permute(0, 2, 1).reshape(
+            sampling_value_l_ = sampling_value_l_.transpose(1, 2).reshape(
                 batch_size * num_heads, hidden_dim, num_queries, num_points_list[level_id]
             )
         sampling_value_list.append(sampling_value_l_)
@@ -332,7 +332,7 @@ class RTDetrV2MultiscaleDeformableAttention(nn.Module):
         n_points_list = [self.n_points for _ in range(self.n_levels)]
         self.n_points_list = n_points_list
         n_points_scale = [1 / n for n in n_points_list for _ in range(n)]
-        self.register_buffer("n_points_scale", torch.tensor(n_points_scale, dtype=torch.float32))
+        self.n_points_scale = nn.Buffer(torch.tensor(n_points_scale, dtype=torch.float32))
 
     def forward(
         self,

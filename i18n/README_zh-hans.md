@@ -61,23 +61,26 @@ checkpoint: 检查点
 
 <h4 align="center">
     <p>
-        <a href="https://github.com/huggingface/transformers/blob/main/README.md">English</a> |
+        <a href="../README.md">English</a> |
         <b>简体中文</b> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_zh-hant.md">繁體中文</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ko.md">한국어</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_es.md">Español</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ja.md">日本語</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_hd.md">हिन्दी</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ru.md">Русский</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_pt-br.md">Português</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_te.md">తెలుగు</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_fr.md">Français</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_de.md">Deutsch</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_it.md">Italiano</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_vi.md">Tiếng Việt</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ar.md">العربية</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ur.md">اردو</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_bn.md">বাংলা</a> |
+        <a href="README_zh-hant.md">繁體中文</a> |
+        <a href="README_ko.md">한국어</a> |
+        <a href="README_es.md">Español</a> |
+        <a href="README_ja.md">日本語</a> |
+        <a href="README_hd.md">हिन्दी</a> |
+        <a href="README_ru.md">Русский</a> |
+        <a href="README_pt-br.md">Português</a> |
+        <a href="README_te.md">తెలుగు</a> |
+        <a href="README_fr.md">Français</a> |
+        <a href="README_de.md">Deutsch</a> |
+        <a href="README_it.md">Italiano</a> |
+        <a href="README_vi.md">Tiếng Việt</a> |
+        <a href="README_ar.md">العربية</a> |
+        <a href="README_ur.md">اردو</a> |
+        <a href="README_bn.md">বাংলা</a> |
+        <a href="README_fa.md">فارسی</a> |
+        <a href="README_ro.md">Română</a> |
+        <a href="README_tr.md">Türkçe</a>
     </p>
 </h4>
 
@@ -337,7 +340,7 @@ Transformers 不止是一个使用预训练模型的工具包，它还是围绕 
 
 ## 引用
 
-我们已将此库的[论文](https://www.aclweb.org/anthology/2020.emnlp-demos.6/)正式发表，如果你使用了 🤗 Transformers 库，请引用:
+我们已将此库的[论文](https://aclanthology.org/2020.emnlp-demos.6/)正式发表，如果你使用了 🤗 Transformers 库，请引用:
 ```bibtex
 @inproceedings{wolf-etal-2020-transformers,
     title = "Transformers: State-of-the-Art Natural Language Processing",
@@ -347,7 +350,7 @@ Transformers 不止是一个使用预训练模型的工具包，它还是围绕 
     year = "2020",
     address = "Online",
     publisher = "Association for Computational Linguistics",
-    url = "https://www.aclweb.org/anthology/2020.emnlp-demos.6",
+    url = "https://aclanthology.org/2020.emnlp-demos.6/",
     pages = "38--45"
 }
 ```

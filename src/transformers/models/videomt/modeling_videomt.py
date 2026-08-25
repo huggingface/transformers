@@ -101,7 +101,7 @@ class VideomtEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.num_prefix_tokens = 1 + config.num_register_tokens  # 1 for [CLS]
         self.position_embeddings = nn.Embedding(num_patches, config.hidden_size)
-        self.register_buffer("position_ids", torch.arange(num_patches).expand((1, -1)), persistent=False)
+        self.position_ids = nn.Buffer(torch.arange(num_patches).expand((1, -1)), persistent=False)
         self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
 
     def forward(self, pixel_values: torch.Tensor, bool_masked_pos: torch.Tensor | None = None) -> torch.Tensor:
@@ -640,7 +640,7 @@ class VideomtLoss(nn.Module):
         self.eos_coef = config.no_object_weight
         empty_weight = torch.ones(self.num_labels + 1)
         empty_weight[-1] = self.eos_coef
-        self.register_buffer("empty_weight", empty_weight)
+        self.empty_weight = nn.Buffer(empty_weight)
 
         # pointwise mask loss parameters
         self.num_points = config.train_num_points
@@ -951,6 +951,7 @@ class VideomtPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module) -> None:
+        super()._init_weights(module)
         std = self.config.initializer_range
         if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
             init.kaiming_uniform_(module.weight, a=math.sqrt(5))
@@ -958,9 +959,6 @@ class VideomtPreTrainedModel(PreTrainedModel):
                 fan_in, _ = torch.nn.init._calculate_fan_in_and_fan_out(module.weight)
                 bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
                 init.uniform_(module.bias, -bound, bound)
-        elif isinstance(module, nn.LayerNorm):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
             init.normal_(module.weight, mean=0.0, std=1)
             # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
@@ -1080,7 +1078,7 @@ class VideomtForUniversalSegmentation(VideomtPreTrainedModel):
 
         self.criterion = VideomtLoss(config=config, weight_dict=self.weight_dict)
 
-        self.register_buffer("attn_mask_probs", torch.ones(config.num_blocks))
+        self.attn_mask_probs = nn.Buffer(torch.ones(config.num_blocks))
         self.query_updater = nn.Linear(config.hidden_size, config.hidden_size)
 
         self.post_init()

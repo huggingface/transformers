@@ -165,7 +165,7 @@ class Sam2VideoConfig(PreTrainedConfig):
     ... )
 
     >>> # Initializing a Sam2Config with `"facebook/sam2.1_hiera_tiny"` style configuration
-    >>> configuration = Sam2config()
+    >>> configuration = Sam2Config()
 
     >>> # Initializing a Sam2Model (with random weights) from the `"facebook/sam2.1_hiera_tiny"` style configuration
     >>> model = Sam2Model(configuration)
@@ -964,8 +964,8 @@ class Sam2VideoVisionRotaryEmbedding(nn.Module):
 
         # directly register the cos and sin embeddings as we have a fixed feature shape
         inv_freq = self.create_inv_freq()
-        self.register_buffer("rope_embeddings_cos", inv_freq.cos(), persistent=False)
-        self.register_buffer("rope_embeddings_sin", inv_freq.sin(), persistent=False)
+        self.rope_embeddings_cos = nn.Buffer(inv_freq.cos(), persistent=False)
+        self.rope_embeddings_sin = nn.Buffer(inv_freq.sin(), persistent=False)
 
     @torch.no_grad()
     def forward(self) -> tuple[torch.Tensor, torch.Tensor]:
@@ -989,7 +989,7 @@ class Sam2VideoVisionRotaryEmbedding(nn.Module):
 
 def rotate_pairwise(x):
     """
-    pairwise rotation of the hidden dims of the input. Differerent from Llama Half-Tensor Rotation.
+    pairwise rotation of the hidden dims of the input. Different from Llama Half-Tensor Rotation.
 
     This is an optimized version of the following more explicit implementation:
     ```python
@@ -1341,7 +1341,9 @@ class Sam2VideoMemoryEncoder(nn.Module):
         self.mask_downsampler = Sam2VideoMaskDownSampler(config)
         self.feature_projection = nn.Conv2d(hidden_size, hidden_size, kernel_size=1)
         self.memory_fuser = Sam2VideoMemoryFuser(config)
-        self.position_encoding = Sam2VideoPositionEmbeddingSine(num_pos_feats=output_channels // 2, normalize=True)
+        self.position_encoding = Sam2VideoPositionEmbeddingSine(
+            num_position_features=output_channels // 2, normalize=True
+        )
         self.projection = nn.Conv2d(hidden_size, output_channels, kernel_size=1)
 
     def forward(
@@ -2090,7 +2092,7 @@ class Sam2VideoModel(Sam2Model):
 
         # Reshape from (Batch, H*W, Channels) to (Batch, Channels, Height, Width)
         conditioned_feature_map = (
-            conditioned_feature_map_flat.squeeze(1).permute(0, 2, 1).view(batch_size, num_channels, height, width)
+            conditioned_feature_map_flat.squeeze(1).transpose(1, 2).view(batch_size, num_channels, height, width)
         )
         return conditioned_feature_map
 
@@ -2261,6 +2263,7 @@ class Sam2VideoModel(Sam2Model):
             ].expand(*maskmem_features.shape)
 
         # convert to bfloat16 to save memory, and for consistency with the original implementation
+        # flatten from BxCxHxW to HWxBxC
         maskmem_features = maskmem_features.to(torch.bfloat16).flatten(2).permute(2, 0, 1)
         maskmem_pos_enc = maskmem_pos_enc.to(pred_masks_high_res.dtype).flatten(2).permute(2, 0, 1)
 

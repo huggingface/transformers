@@ -653,7 +653,7 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
 
             wte = model.get_input_embeddings()[inputs_dict["codebook_idx"]]
 
-            inputs["input_embeds"] = wte(input_ids[:, :, inputs_dict["codebook_idx"]])
+            inputs["inputs_embeds"] = wte(input_ids[:, :, inputs_dict["codebook_idx"]])
 
             with torch.no_grad():
                 model(**inputs)[0]

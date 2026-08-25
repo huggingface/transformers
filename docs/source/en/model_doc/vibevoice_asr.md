@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2026-01-26 and added to Hugging Face Transformers on 2026-03-02.*
+*This model was published in HF papers on 2026-01-26 and contributed to Hugging Face Transformers on 2026-03-02.*
 
 # VibeVoice ASR
 
@@ -330,7 +330,7 @@ num_runs = 20
 
 # Load processor + model
 processor = AutoProcessor.from_pretrained(model_id)
-model = VibeVoiceAsrForConditionalGeneration.from_pretrained(model_id, device_map="cuda")
+model = VibeVoiceAsrForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 
 # Prepare static inputs
 chat_template = [
@@ -354,7 +354,7 @@ inputs = processor.apply_chat_template(
     chat_template,
     tokenize=True,
     return_dict=True,
-).to("cuda", torch.bfloat16)
+).to(model.device, torch.bfloat16)
 
 # Benchmark without compile
 print("Warming up without compile...")
@@ -362,15 +362,15 @@ with torch.no_grad():
     for _ in range(num_warmup):
         _ = model(**inputs)
 
-torch.cuda.synchronize()
+torch.accelerator.synchronize()
 
 print("\nBenchmarking without torch.compile...")
-torch.cuda.synchronize()
+torch.accelerator.synchronize()
 start = time.time()
 with torch.no_grad():
     for _ in range(num_runs):
         _ = model(**inputs)
-torch.cuda.synchronize()
+torch.accelerator.synchronize()
 no_compile_time = (time.time() - start) / num_runs
 print(f"Average time without compile: {no_compile_time:.4f}s")
 
@@ -383,15 +383,15 @@ with torch.no_grad():
     for _ in range(num_warmup):
         _ = model(**inputs)
 
-torch.cuda.synchronize()
+torch.accelerator.synchronize()
 
 print("\nBenchmarking with torch.compile...")
-torch.cuda.synchronize()
+torch.accelerator.synchronize()
 start = time.time()
 with torch.no_grad():
     for _ in range(num_runs):
         _ = model(**inputs)
-torch.cuda.synchronize()
+torch.accelerator.synchronize()
 compile_time = (time.time() - start) / num_runs
 print(f"Average time with compile: {compile_time:.4f}s")
 
@@ -451,6 +451,11 @@ print(transcription)
     - __call__
     - apply_transcription_request
     - decode
+
+## VibeVoiceAsrModel
+
+[[autodoc]] VibeVoiceAsrModel
+    - forward
 
 ## VibeVoiceAsrForConditionalGeneration
 

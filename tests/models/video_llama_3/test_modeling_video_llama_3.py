@@ -350,6 +350,9 @@ class VideoLlama3VisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (VideoLlama3VisionModel,) if is_torch_available() else ()
     additional_model_inputs = ["grid_thw", "merge_sizes"]
+    test_torch_exportable = (
+        False  # data-dependent per-image `pixel_unshuffle` loop with per-image `merge_size` reshapes
+    )
     test_resize_embeddings = False
     test_cpu_offload = False
     test_disk_offload_safetensors = False
@@ -653,6 +656,9 @@ class VideoLlama3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
     )
     pipeline_model_mapping = {"image-text-to-text": VideoLlama3ForConditionalGeneration}
     _is_composite = True
+    test_torch_exportable = (
+        False  # data-dependent per-image `pixel_unshuffle` loop with per-image `merge_size` reshapes
+    )
 
     def setUp(self):
         self.model_tester = VideoLlama3VisionText2TextModelTester(self)
@@ -883,8 +889,8 @@ class VideoLlama3IntegrationTest(unittest.TestCase):
         EXPECTED_DECODED_TEXT = Expectations(
             {
                 ("cuda", None): [
-                    'user\n\nDescribe the image.\nassistant\nThe image captures a vibrant night scene in a bustling Japanese city. A woman in a striking red dress',
-                    'user\nWhat is relativity?\nassistant\nRelativity is a scientific theory that describes the relationship between space and time. It was first proposed by'
+                    "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant night scene in a bustling Japanese city. A woman in a striking red dress",
+                    "user\nWhat is relativity?\nassistant\nRelativity is a scientific theory that describes the relationship between space and time. It was first proposed by",
                 ],
                 ("xpu", None): [
                     "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant nighttime scene on a bustling city street. A woman in a striking red dress",
@@ -918,8 +924,8 @@ class VideoLlama3IntegrationTest(unittest.TestCase):
         EXPECTED_DECODED_TEXT = Expectations(
             {
                 ("cuda", None): [
-                    'user\n\nDescribe the image.\nassistant\nThe image captures a vibrant night scene in a bustling Japanese city. A woman in a striking red dress',
-                    'user\n\nDescribe the image.\nassistant\nThe image depicts a striking urban scene at night. A person is standing in the center of a wet'
+                    "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant night scene in a bustling Japanese city. A woman in a striking red dress",
+                    "user\n\nDescribe the image.\nassistant\nThe image depicts a striking urban scene at night. A person is standing in the center of a wet",
                 ],
                 ("xpu", None): [
                     "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant night scene in a bustling Japanese city. A woman in a striking red dress",

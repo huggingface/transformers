@@ -107,7 +107,7 @@ def dynamic_rope_update(rope_forward):
             )
             # TODO joao: may break with compilation
             self.register_buffer(f"{prefix}inv_freq", inv_freq, persistent=False)
-            setattr(self, f"{layer_type}_max_seq_len_cached", seq_len)
+            setattr(self, f"{prefix}max_seq_len_cached", seq_len)
 
         if seq_len < self.original_max_seq_len and max_seq_len_cached > self.original_max_seq_len:  # reset
             # This .to() is needed if the model has been moved to a device after being initialized (because
@@ -115,7 +115,7 @@ def dynamic_rope_update(rope_forward):
             original_inv_freq = original_inv_freq.to(device)
             self.register_buffer(f"{prefix}inv_freq", original_inv_freq, persistent=False)
             setattr(self, f"{prefix}original_inv_freq", original_inv_freq)
-            setattr(self, f"{layer_type}_max_seq_len_cached", self.original_max_seq_len)
+            setattr(self, f"{prefix}max_seq_len_cached", self.original_max_seq_len)
 
     @wraps(rope_forward)
     def wrapper(self, x, position_ids, layer_type=None):
@@ -162,6 +162,12 @@ def _compute_linear_scaling_rope_parameters(
         Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
         post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
     """
+    # Sloppy workaround for per-layer-config in gemma4 family which raises error for other models (DS4)
+    try:
+        config = config.per_layer_config[layer_type] if layer_type is not None else config
+    except ValueError:
+        pass
+
     # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
     config.standardize_rope_params()
     rope_parameters_dict = config.rope_parameters[layer_type] if layer_type is not None else config.rope_parameters
@@ -220,6 +226,12 @@ def _compute_proportional_rope_parameters(
         Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
         post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
     """
+    # Sloppy workaround for per-layer-config in gemma4 family which raises error for other models (DS4)
+    try:
+        config = config.per_layer_config[layer_type] if layer_type is not None else config
+    except ValueError:
+        pass
+
     # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
     config.standardize_rope_params()
     rope_parameters_dict = config.rope_parameters[layer_type] if layer_type is not None else config.rope_parameters
@@ -296,6 +308,12 @@ def _compute_dynamic_ntk_parameters(
         Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
         post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
     """
+    # Sloppy workaround for per-layer-config in gemma4 family which raises error for other models (DS4)
+    try:
+        config = config.per_layer_config[layer_type] if layer_type is not None else config
+    except ValueError:
+        pass
+
     # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
     config.standardize_rope_params()
     rope_parameters_dict = config.rope_parameters[layer_type] if layer_type is not None else config.rope_parameters
@@ -353,7 +371,7 @@ def _compute_yarn_parameters(
                     (only) in the linear ramp function.
                 *   `factor` (`float`, *optional*): The scaling factor applied when interpolating the position IDs to
                     extend the possible context length. Additionally, if `attention_factor` is None, the log of this
-                    value is used to compute a value for `attention_factor`, possibly in conjunciton with `mscale` and
+                    value is used to compute a value for `attention_factor`, possibly in conjunction with `mscale` and
                     `mscale_all_dim`, if provided.
                 *   `mscale` (`float`, *optional*): If `attention_factor` is None and both `mscale` and
                     `mscale_all_dim` are provided, `mscale` acts scalar augmenting `log(factor)` when computing the
@@ -381,6 +399,12 @@ def _compute_yarn_parameters(
         Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
         post-processing scaling factor applied to the computed cos/sin.
     """
+    # Sloppy workaround for per-layer-config in gemma4 family which raises error for other models (DS4)
+    try:
+        config = config.per_layer_config[layer_type] if layer_type is not None else config
+    except ValueError:
+        pass
+
     # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
     config.standardize_rope_params()
     rope_parameters_dict = config.rope_parameters[layer_type] if layer_type is not None else config.rope_parameters
@@ -396,7 +420,7 @@ def _compute_yarn_parameters(
     mscale_all_dim = rope_parameters_dict.get("mscale_all_dim")
     original_max_position_embeddings = rope_parameters_dict["original_max_position_embeddings"]
 
-    # NOTE: DeekSeek-V3 (and potentially other models) have `original_max_position_embeddings` field
+    # NOTE: DeepSeek-V3 (and potentially other models) have `original_max_position_embeddings` field
     # containing the pretrained value. They use the ratio between `max_position_embeddings` and this value
     # to compute the default attention scaling factor, instead of using `factor`.
     if factor is None:
@@ -508,6 +532,12 @@ def _compute_longrope_parameters(
         Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
         post-processing scaling factor applied to the computed cos/sin.
     """
+    # Sloppy workaround for per-layer-config in gemma4 family which raises error for other models (DS4)
+    try:
+        config = config.per_layer_config[layer_type] if layer_type is not None else config
+    except ValueError:
+        pass
+
     # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
     config.standardize_rope_params()
     rope_parameters_dict = config.rope_parameters[layer_type] if layer_type is not None else config.rope_parameters
@@ -591,6 +621,12 @@ def _compute_llama3_parameters(
         Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
         post-processing scaling factor applied to the computed cos/sin.
     """
+    # Sloppy workaround for per-layer-config in gemma4 family which raises error for other models (DS4)
+    try:
+        config = config.per_layer_config[layer_type] if layer_type is not None else config
+    except ValueError:
+        pass
+
     # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
     config.standardize_rope_params()
     rope_parameters_dict = config.rope_parameters[layer_type] if layer_type is not None else config.rope_parameters
@@ -719,7 +755,9 @@ class RotaryEmbeddingConfigMixin:
         partial_rotary_factor = kwargs.get("partial_rotary_factor", getattr(self, "partial_rotary_factor", None))
         if partial_rotary_factor is not None:
             self.rope_parameters.setdefault("partial_rotary_factor", partial_rotary_factor)
-            self.ignore_keys_at_rope_validation = self.ignore_keys_at_rope_validation | {"partial_rotary_factor"}
+            self.ignore_keys_at_rope_validation = set(self.ignore_keys_at_rope_validation or []) | {
+                "partial_rotary_factor"
+            }
 
         self.standardize_rope_params()
         return kwargs
@@ -733,7 +771,9 @@ class RotaryEmbeddingConfigMixin:
         rope_theta = getattr(self, "rope_theta", None)
         partial_rotary_factor = getattr(self, "partial_rotary_factor", None)
         rope_parameters = getattr(self, "rope_parameters", None) or {}
-        layer_types = getattr(self, "layer_types", None)
+
+        # Deepseekv4 has `layer_types` which are different from `_rope_type_labels`
+        layer_types = getattr(self, "_rope_type_labels", getattr(self, "layer_types", None))
 
         # Case 0: no RoPE params defined
         if not (rope_parameters or rope_theta):
@@ -760,6 +800,9 @@ class RotaryEmbeddingConfigMixin:
         # Case 2: different RoPE for each layer -> several params as nested dict
         else:
             for layer_type in set(layer_types):
+                # skip if saved with `None` value
+                if rope_parameters[layer_type] is None:
+                    continue
                 rope_parameters[layer_type].setdefault("rope_type", rope_parameters[layer_type].get("type", "default"))
                 rope_parameters[layer_type].setdefault("rope_theta", rope_theta)
                 if partial_rotary_factor is not None:
@@ -790,6 +833,9 @@ class RotaryEmbeddingConfigMixin:
             rope_parameters_dict = {"full_attention": rope_parameters_dict}
 
         for rope_parameters in rope_parameters_dict.values():
+            # skip when set to `None`, possibly a NoPE layer
+            if rope_parameters is None:
+                continue
             rope_type = rope_parameters.get("rope_type", rope_parameters.get("type", "default"))
             validation_fn = getattr(self, f"_validate_{rope_type}_rope_parameters", None)
             rope_parameters["rope_type"] = rope_type
@@ -876,7 +922,7 @@ class RotaryEmbeddingConfigMixin:
         # Double-check: `factor` should be the ratio between the pre-yarn and post-yarn context lengths.
         # NOTE: we might get `implicit_factor == 1` if config's `original_max_position_embeddings` was
         # inferred from `max_position_embeddings` during standardization
-        original_max_position_embeddings = self.rope_parameters["original_max_position_embeddings"]
+        original_max_position_embeddings = rope_parameters["original_max_position_embeddings"]
         implicit_factor = self.max_position_embeddings / original_max_position_embeddings
         if implicit_factor != factor and implicit_factor != 1:
             logger.warning_once(
@@ -992,7 +1038,7 @@ class RotaryEmbeddingConfigMixin:
             logger.warning(
                 "`rope_parameters`'s partial_rotary_factor is None. This will default to 1.0 in the computation, "
                 "making this equivalent to the linear_scaling RoPE type. Provide a value in the range [0.0, 1.0) to "
-                "make use of the proportional RoPE funcitonality."
+                "make use of the proportional RoPE functionality."
             )
 
     @staticmethod

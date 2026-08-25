@@ -55,7 +55,7 @@ def _load_cv_utils_kernel_once():
         return
 
     try:
-        cv_utils_kernel = get_kernel("kernels-community/cv-utils")
+        cv_utils_kernel = get_kernel("kernels-community/cv-utils", version=1)
     except Exception as e:
         logger.warning_once(
             f"Failed to load cv_utils kernel (your torch/cuda setup may not be supported): {e}. "
@@ -592,7 +592,7 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
                     input_ids=inference_session.prompt_input_ids[prompt_id],
                     attention_mask=inference_session.prompt_attention_masks[prompt_id],
                     return_dict=True,
-                ).pooler_output
+                )
                 inference_session.prompt_embeddings[prompt_id] = text_embeds
             else:
                 text_embeds = inference_session.prompt_embeddings[prompt_id]
@@ -1133,7 +1133,7 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         pred_masks = torch.where(keep, pred_masks, torch.clamp(pred_masks, max=-10.0))
         return pred_masks
 
-    def _suppress_shrinked_masks(self, pred_masks, new_pred_masks, shrink_threshold=0.3):
+    def _suppress_shrunk_masks(self, pred_masks, new_pred_masks, shrink_threshold=0.3):
         area_before = (pred_masks > 0).sum(dim=(-1, -2))
         area_after = (new_pred_masks > 0).sum(dim=(-1, -2))
         area_before = torch.clamp(area_before, min=1.0)
@@ -1172,7 +1172,7 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
             return pred_masks
 
         pixel_level_non_overlapping_masks = self._apply_non_overlapping_constraints(pred_masks)
-        pred_masks = self._suppress_shrinked_masks(pred_masks, pixel_level_non_overlapping_masks)
+        pred_masks = self._suppress_shrunk_masks(pred_masks, pixel_level_non_overlapping_masks)
         return pred_masks
 
     def _tracker_update_memories(

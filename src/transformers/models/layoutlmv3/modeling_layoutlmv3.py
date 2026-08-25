@@ -23,6 +23,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -96,9 +97,7 @@ class LayoutLMv3TextEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False)
 
         self.padding_idx = config.pad_token_id
         self.position_embeddings = nn.Embedding(
@@ -557,8 +556,8 @@ class LayoutLMv3Model(LayoutLMv3PreTrainedModel):
             self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
             if self.config.has_relative_attention_bias or self.config.has_spatial_attention_bias:
-                self.register_buffer(
-                    "visual_bbox", self.create_visual_bbox(image_size=(self.size, self.size)), persistent=False
+                self.visual_bbox = nn.Buffer(
+                    self.create_visual_bbox(image_size=(self.size, self.size)), persistent=False
                 )
 
             self.norm = nn.LayerNorm(config.hidden_size, eps=1e-6)
@@ -774,15 +773,17 @@ class LayoutLMv3Model(LayoutLMv3PreTrainedModel):
                 position_ids = position_ids.expand_as(input_ids)
                 final_position_ids = position_ids
 
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
-            attention_mask, None, dtype=embedding_output.dtype
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=embedding_output,
+            attention_mask=attention_mask,
         )
 
         encoder_outputs = self.encoder(
             embedding_output,
             bbox=final_bbox,
             position_ids=final_position_ids,
-            attention_mask=extended_attention_mask,
+            attention_mask=attention_mask,
             patch_height=patch_height,
             patch_width=patch_width,
             **kwargs,

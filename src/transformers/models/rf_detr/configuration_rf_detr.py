@@ -25,7 +25,7 @@ from ...utils import auto_docstring
 from ..auto import AutoConfig
 
 
-@auto_docstring(checkpoint="stevenbucaille/rf-detr-base")
+@auto_docstring(checkpoint="Roboflow/rf-detr-base")
 @strict
 class RfDetrDinov2Config(BackboneConfigMixin, PreTrainedConfig):
     r"""
@@ -98,7 +98,7 @@ class RfDetrDinov2Config(BackboneConfigMixin, PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="stevenbucaille/rf-detr-base")
+@auto_docstring(checkpoint="Roboflow/rf-detr-base")
 @strict
 class RfDetrConfig(PreTrainedConfig):
     r"""
@@ -154,10 +154,10 @@ class RfDetrConfig(PreTrainedConfig):
     ```python
     >>> from transformers import RfDetrConfig, RfDetrModel
 
-    >>> # Initializing a LW-DETR stevenbucaille/RfDetr_small_60e_coco style configuration
+    >>> # Initializing a RF-DETR roboflow/rf-detr-base style configuration
     >>> configuration = RfDetrConfig()
 
-    >>> # Initializing a model (with random weights) from the stevenbucaille/RfDetr_small_60e_coco style configuration
+    >>> # Initializing a model (with random weights) from the Roboflow/rf-detr-base style configuration
     >>> model = RfDetrModel(configuration)
 
     >>> # Accessing the model configuration

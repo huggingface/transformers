@@ -60,9 +60,12 @@ class QuantizationMethod(str, Enum):
     FPQUANT = "fp_quant"
     AUTOROUND = "auto-round"
     MXFP4 = "mxfp4"
+    NVFP4 = "nvfp4"
+    MXFP8 = "mxfp8"
     METAL = "metal"
     FOUR_OVER_SIX = "fouroversix"
     SINQ = "sinq"
+    GEMMA = "gemma"
 
 
 class AwqFormat(str, Enum):
@@ -213,7 +216,7 @@ class AutoRoundConfig(QuantizationConfigMixin):
             The number of bits to quantize to, supported numbers are (2, 3, 4, 8).
         group_size (`int`, *optional*, defaults to 128): Group-size value
         sym (`bool`, *optional*, defaults to `True`): Symmetric quantization or not
-        backend (`str`, *optional*, defaults to `"auto"`): The kernel to use, e.g., ipex,marlin, exllamav2, triton, etc. Ref. https://github.com/intel/auto-round?tab=readme-ov-file#specify-backend
+        backend (`str`, *optional*, defaults to `"auto"`): The inference backend. By default, AutoRound selects a compatible backend based on the device, quantization settings, and installed libraries. See [Specify inference backend](https://github.com/intel/auto-round/blob/main/docs/step_by_step.md#specify-inference-backend) for all backend options.
     """
 
     def __init__(
@@ -903,13 +906,13 @@ class AqlmConfig(QuantizationConfigMixin):
         Safety checker that arguments are correct - also replaces some NoneType arguments with their default values.
         """
         if not isinstance(self.in_group_size, int):
-            raise TypeError("in_group_size must be a float")
+            raise TypeError("in_group_size must be an int")
         if not isinstance(self.out_group_size, int):
-            raise TypeError("out_group_size must be a float")
+            raise TypeError("out_group_size must be an int")
         if not isinstance(self.num_codebooks, int):
-            raise TypeError("num_codebooks must be a float")
+            raise TypeError("num_codebooks must be an int")
         if not isinstance(self.nbits_per_codebook, int):
-            raise TypeError("nbits_per_codebook must be a float")
+            raise TypeError("nbits_per_codebook must be an int")
 
         if self.linear_weights_not_to_quantize is not None and not isinstance(
             self.linear_weights_not_to_quantize, list
@@ -1099,8 +1102,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         config_groups (`typing.dict[str, typing.Union[ForwardRef('QuantizationScheme'), typing.list[str]]]`, *optional*):
             dictionary mapping group name to a quantization scheme definition
         format (`str`, *optional*, defaults to `"dense"`):
-            format the model is represented as. Set `run_compressed` True to execute model as the
-            compressed format if not `dense`
+            format the weights are stored in, e.g. `dense`, `float-quantized` or `pack-quantized`
         quantization_status (`QuantizationStatus`, *optional*, defaults to `"initialized"`):
             status of model in the quantization lifecycle, ie 'initialized', 'calibration', 'frozen'
         kv_cache_scheme (`typing.Union[QuantizationArgs, NoneType]`, *optional*):
@@ -1109,12 +1111,18 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
             0-1 float percentage of model compression
         ignore (`typing.Union[typing.list[str], NoneType]`, *optional*):
             layer names or types to not quantize, supports regex prefixed by 're:'
-        sparsity_config (`typing.dict[str, typing.Any]`, *optional*):
-            configuration for sparsity compression
         quant_method (`str`, *optional*, defaults to `"compressed-tensors"`):
             do not override, should be compressed-tensors
-        run_compressed (`bool`, *optional*, defaults to `True`): alter submodules (usually linear) in order to
-            emulate compressed model execution if True, otherwise use default submodule
+        run_compressed (`bool`, *optional*): deprecated, use `dequantize` instead. Its only effect is to set
+            `dequantize` to its opposite, `run_compressed=False` meaning `dequantize=True`.
+        dequantize (`bool`, *optional*, defaults to `False`): when `True`, the quantized weights are dequantized
+            back to the model dtype (e.g. BF16) at load time, which is what fine-tuning or saving the model in its
+            original dtype needs. When `False`, the weights are left in their compressed form and
+            compressed-tensors decompresses them on the first forward pass.
+        use_optimized_inference (`bool`, *optional*, defaults to `False`): when `True`, the layers whose scheme we
+            have kernels for keep their quantized weights and run through those kernels (currently W8A8 FP8, on
+            CUDA SM89+ or XPU). Inference only, and opt-in: without it the model goes through the regular
+            compressed-tensors route. Ignored when `dequantize=True`.
     """
 
     def __init__(
@@ -1125,22 +1133,29 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         kv_cache_scheme: Optional["QuantizationArgs"] = None,  # noqa: F821
         global_compression_ratio: float | None = None,
         ignore: list[str] | None = None,
-        sparsity_config: dict[str, Any] | None = None,
         quant_method: str = "compressed-tensors",
-        run_compressed: bool = True,
+        run_compressed: bool | None = None,
+        dequantize: bool = False,
+        use_optimized_inference: bool = False,
         **kwargs,
     ):
         if is_compressed_tensors_available():
-            from compressed_tensors.config import SparsityCompressionConfig
             from compressed_tensors.quantization import QuantizationConfig
         else:
             raise ImportError(
-                "compressed_tensors is not installed and is required for compressed-tensors quantization. Please install it with `pip install compressed-tensors`."
+                "compressed-tensors>=0.15.0 is required for compressed-tensors quantization. Please install it with `pip install compressed-tensors>=0.15.0`."
             )
         self.quantization_config = None
-        self.sparsity_config = None
 
-        self.run_compressed = run_compressed
+        if run_compressed is not None:
+            logger.warning_once(
+                "`run_compressed` is deprecated and will be removed in a future version. "
+                "Use `dequantize=True` instead of `run_compressed=False`."
+            )
+            # Its only effect is to set `dequantize`; an explicit `dequantize=True` wins over it.
+            dequantize = dequantize or not run_compressed
+        self.dequantize = dequantize
+        self.use_optimized_inference = use_optimized_inference
 
         # parse from dict to load nested QuantizationScheme objects
         if config_groups or kv_cache_scheme:
@@ -1157,26 +1172,32 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
                 }
             )
 
-        if sparsity_config:
-            self.sparsity_config = SparsityCompressionConfig.load_from_registry(
-                sparsity_config.get("format"), **sparsity_config
-            )
-
         self.quant_method = QuantizationMethod.COMPRESSED_TENSORS
 
     def post_init(self):
-        if self.run_compressed:
-            if self.is_sparsification_compressed:
+        if not self.dequantize and not self.is_quantization_compressed:
+            # Nothing is stored compressed, so there is neither anything to execute compressed nor
+            # anything to accelerate: the weights are already dense.
+            logger.warning(
+                "Compressed execution is only supported for compressed checkpoints. Setting `dequantize=True`."
+            )
+            self.dequantize = True
+
+        if self.use_optimized_inference:
+            # Whether the optimized path is reachable at all is decided here; whether the hardware
+            # can run its kernels is left to `HfQuantizer.validate_environment`.
+            if self.dequantize:
                 logger.warning(
-                    "`run_compressed` is only supported for quantized_compressed models"
-                    " and not for sparsified models. Setting `run_compressed=False`"
+                    "`dequantize=True` dequantizes the weights at load time, which leaves nothing for the quantized "
+                    "kernels to run on. Setting `use_optimized_inference=False`."
                 )
-                self.run_compressed = False
-            elif not self.is_quantization_compressed:
-                logger.warning(
-                    "`run_compressed` is only supported for compressed models. Setting `run_compressed=False`"
+                self.use_optimized_inference = False
+            elif not self.has_fp8_modules:
+                logger.info(
+                    "There are no kernels for this scheme. We only support fp8 for now for compressed tensors. "
+                    "Setting `use_optimized_inference=False`."
                 )
-                self.run_compressed = False
+                self.use_optimized_inference = False
 
     @classmethod
     def from_dict(cls, config_dict, return_unused_kwargs=False, **kwargs):
@@ -1199,10 +1220,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         """
 
         if "quantization_config" in config_dict:
-            config_dict = dict(
-                sparsity_config=config_dict.get("sparsity_config"),
-                **config_dict["quantization_config"],
-            )
+            config_dict = config_dict["quantization_config"]
 
         return super().from_dict(config_dict, return_unused_kwargs=return_unused_kwargs, **kwargs)
 
@@ -1218,11 +1236,6 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
             quantization_config = self.quantization_config.model_dump()
         else:
             quantization_config["quant_method"] = QuantizationMethod.COMPRESSED_TENSORS
-
-        if self.sparsity_config is not None:
-            quantization_config["sparsity_config"] = self.sparsity_config.model_dump()
-        else:
-            quantization_config["sparsity_config"] = {}
 
         return quantization_config
 
@@ -1248,7 +1261,22 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         return serializable_config_dict
 
     def get_loading_attributes(self):
-        return {"run_compressed": self.run_compressed}
+        return {"dequantize": self.dequantize, "use_optimized_inference": self.use_optimized_inference}
+
+    @property
+    def has_fp8_modules(self):
+        """Whether any config group quantizes weights to FP8 (float, 8 bits). Quantization
+        may only cover part of the model: each group scopes its scheme with `targets`, and
+        mixed configs (e.g. Kimi: FP8 attention + INT4 experts) combine FP8 with other
+        schemes."""
+        ct_qconfig = self.quantization_config
+        if ct_qconfig is None:
+            return False
+        for group in ct_qconfig.config_groups.values():
+            weights = group.weights
+            if weights is not None and weights.type == "float" and weights.num_bits == 8:
+                return True
+        return False
 
     @property
     def is_quantized(self):
@@ -1260,18 +1288,6 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
 
         qc = self.quantization_config
         return self.is_quantized and (qc is not None and qc.quantization_status == QuantizationStatus.COMPRESSED)
-
-    @property
-    def is_sparsification_compressed(self):
-        from compressed_tensors.config import (
-            CompressionFormat,
-            SparsityCompressionConfig,
-        )
-
-        return (
-            isinstance(self.sparsity_config, SparsityCompressionConfig)
-            and self.sparsity_config.format != CompressionFormat.dense.value
-        )
 
 
 @dataclass
@@ -1686,6 +1702,9 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
             Whether to dequantize the model during loading.
         modules_to_not_convert (`list`, *optional*):
             A list of module names that should not be converted during quantization.
+        scale_fmt (`str`, *optional*, defaults to `"float"`):
+            Storage dtype of the per-block weight scales: `"float"` (fp32, V3-style) or
+            `"ue8m0"` (1-byte `torch.float8_e8m0fnu`, V4-style).
     """
 
     def __init__(
@@ -1694,13 +1713,18 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
         weight_block_size: tuple[int, int] = (128, 128),
         dequantize: bool = False,
         modules_to_not_convert: list | None = None,
+        scale_fmt: str = "float",
         **kwargs,
     ):
-        self.quant_method = QuantizationMethod.FP8
+        self.quant_method = kwargs.pop("quant_method", QuantizationMethod.FP8)
+        # MiniMax ships the skip-list under ``ignored_layers``; accept it as an alias.
+        if modules_to_not_convert is None and "ignored_layers" in kwargs:
+            modules_to_not_convert = kwargs.pop("ignored_layers")
         self.modules_to_not_convert = modules_to_not_convert
         self.activation_scheme = activation_scheme
         self.weight_block_size = weight_block_size
         self.dequantize = dequantize
+        self.scale_fmt = scale_fmt
         self.post_init()
 
     def post_init(self):
@@ -1714,6 +1738,8 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
             raise ValueError("weight_block_size must be a tuple of two integers")
         if self.weight_block_size is not None and (self.weight_block_size[0] <= 0 or self.weight_block_size[1] <= 0):
             raise ValueError("weight_block_size must be a tuple of two positive integers")
+        if self.scale_fmt not in ("float", "ue8m0"):
+            raise ValueError(f"scale_fmt must be 'float' or 'ue8m0'; got {self.scale_fmt!r}")
 
     def get_loading_attributes(self):
         return {"dequantize": self.dequantize, "modules_to_not_convert": self.modules_to_not_convert}
@@ -1728,10 +1754,10 @@ class QuarkConfig(QuantizationConfigMixin):
             from quark import __version__ as quark_version
             from quark.torch.export.config.config import JsonExporterConfig
             from quark.torch.export.main_export.quant_config_parser import QuantConfigParser
-            from quark.torch.quantization.config.config import Config
+            from quark.torch.quantization.config.config import QConfig
         else:
             raise ImportError(
-                "Quark is not installed. Please refer to https://quark.docs.amd.com/latest/install.html."
+                "Please install the latest version of Quark (>=0.12).Please refer to https://quark.docs.amd.com/latest/install.html."
             )
         # This might be e.g. `"fp8"` or `"awq"`.
         self.custom_mode = kwargs["quant_method"]
@@ -1742,7 +1768,7 @@ class QuarkConfig(QuantizationConfigMixin):
             self.quant_config = QuantConfigParser.from_custom_config(kwargs, is_bias_quantized=False)
             self.json_export_config = JsonExporterConfig()
         else:
-            self.quant_config = Config.from_dict(kwargs)
+            self.quant_config = QConfig.from_dict(kwargs)
 
             if "export" in kwargs:
                 # TODO: Remove this check once configuration version is handled natively by Quark.
@@ -1999,4 +2025,58 @@ class SinqConfig(QuantizationConfigMixin):
         if self.group_size is not None and self.group_size % 8 != 0:
             logger.warning(
                 f"SINQ: group_size={self.group_size} is not a multiple of 8; this may be rejected by the backend."
+            )
+
+
+@dataclass
+class GemmaQuantizationConfig(QuantizationConfigMixin):
+    """Quantization config for pre-quantized Gemma checkpoints.
+
+    Args:
+        num_bits (`int`, *optional*, defaults to 4):
+            Bit width applied to modules that don't match any pattern in
+            `module_quant_configs`, and to matched entries that omit `num_bits`.
+        quantize_embeddings (`bool`, *optional*, defaults to `False`):
+            If True, `nn.Embedding` modules are also replaced with quantized
+            counterparts. Off by default since most checkpoints leave them as
+            regular fp embeddings.
+        module_quant_configs (`dict[str, dict]`, *optional*):
+            Ordered mapping from module-name regex (matched with `re.search`) to
+            per-module quantization options. The only key understood today is
+            `"num_bits"` (2, 4, or 8).
+        modules_to_not_convert (`list[str]`, *optional*):
+            Module names to skip during quantized-layer replacement.
+    """
+
+    def __init__(
+        self,
+        num_bits: int = 4,
+        quantize_embeddings: bool = False,
+        module_quant_configs: dict[str, dict] | None = None,
+        modules_to_not_convert: list[str] | None = None,
+        **kwargs,
+    ):
+        self.quant_method = QuantizationMethod.GEMMA
+        self.num_bits = num_bits
+        self.quantize_embeddings = quantize_embeddings
+        self.module_quant_configs = module_quant_configs
+        self.modules_to_not_convert = modules_to_not_convert
+
+
+class NVFP4Config(QuantizationConfigMixin):
+    """Configuration for on-the-fly NVFP4 weight quantization.
+
+    Args:
+        modules_to_not_convert (`list[str]`, *optional*):
+            Module-name patterns that should remain in their original precision.
+        kwargs (`dict[str, Any]`, *optional*):
+            Additional values are ignored and reported through the Transformers logger.
+    """
+
+    def __init__(self, modules_to_not_convert: list[str] | None = None, **kwargs):
+        self.quant_method = QuantizationMethod.NVFP4
+        self.modules_to_not_convert = modules_to_not_convert
+        if kwargs:
+            logger.info(
+                f"Unused kwargs: {list(kwargs.keys())}. These kwargs are not used in {self.__class__.__name__}."
             )

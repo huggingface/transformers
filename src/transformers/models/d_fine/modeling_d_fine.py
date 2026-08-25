@@ -112,16 +112,16 @@ class DFineFrozenBatchNorm2d(nn.Module):
     """
     BatchNorm2d where the batch statistics and the affine parameters are fixed.
 
-    Copy-paste from torchvision.misc.ops with added eps before rqsrt, without which any other models than
+    Copy-paste from torchvision.misc.ops with added eps before rsqrt, without which any other models than
     torchvision.models.resnet[18,34,50,101] produce nans.
     """
 
     def __init__(self, n):
         super().__init__()
-        self.register_buffer("weight", torch.ones(n))
-        self.register_buffer("bias", torch.zeros(n))
-        self.register_buffer("running_mean", torch.zeros(n))
-        self.register_buffer("running_var", torch.ones(n))
+        self.weight = nn.Buffer(torch.ones(n))
+        self.bias = nn.Buffer(torch.zeros(n))
+        self.running_mean = nn.Buffer(torch.zeros(n))
+        self.running_var = nn.Buffer(torch.ones(n))
 
     def _load_from_state_dict(
         self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
@@ -203,7 +203,7 @@ def multi_scale_deformable_attention_v2(
                 .repeat(1, sampling_coord.shape[1])
             )
             sampling_value_l_ = value_l_[sampling_idx, :, sampling_coord[..., 1], sampling_coord[..., 0]]
-            sampling_value_l_ = sampling_value_l_.permute(0, 2, 1).reshape(
+            sampling_value_l_ = sampling_value_l_.transpose(1, 2).reshape(
                 batch_size * num_heads, hidden_dim, num_queries, num_points_list[level_id]
             )
         sampling_value_list.append(sampling_value_l_)
@@ -241,7 +241,7 @@ class DFineMultiscaleDeformableAttention(nn.Module):
 
         self.num_points_list = num_points_list
         num_points_scale = [1 / n for n in self.num_points_list for _ in range(n)]
-        self.register_buffer("num_points_scale", torch.tensor(num_points_scale, dtype=torch.float32))
+        self.num_points_scale = nn.Buffer(torch.tensor(num_points_scale, dtype=torch.float32))
 
         self.total_points = self.n_heads * sum(self.num_points_list)
 
@@ -668,7 +668,11 @@ class DFineSinePositionEmbedding(nn.Module):
         self.embed_dim = embed_dim
         self.temperature = temperature
 
+    @staticmethod
     @compile_compatible_method_lru_cache(maxsize=32)
+    def _cached_build_2d_sinusoidal_position_embedding(*args, **kwargs) -> torch.Tensor:
+        return build_2d_sinusoidal_position_embedding(*args, **kwargs)
+
     def forward(
         self,
         width: int,
@@ -682,7 +686,7 @@ class DFineSinePositionEmbedding(nn.Module):
         Returns:
             Position embeddings of shape (1, height*width, embed_dim)
         """
-        return build_2d_sinusoidal_position_embedding(
+        return self._cached_build_2d_sinusoidal_position_embedding(
             height=torch_int(height),
             width=torch_int(width),
             embed_dim=self.embed_dim,
@@ -722,7 +726,7 @@ class DFineAIFILayer(nn.Module):
         batch_size = hidden_states.shape[0]
         height, width = hidden_states.shape[2:]
 
-        hidden_states = hidden_states.flatten(2).permute(0, 2, 1)
+        hidden_states = hidden_states.flatten(2).transpose(1, 2)
 
         if self.training or self.eval_size is None:
             pos_embed = self.position_embedding(
@@ -743,7 +747,7 @@ class DFineAIFILayer(nn.Module):
             )
 
         hidden_states = (
-            hidden_states.permute(0, 2, 1).reshape(batch_size, self.encoder_hidden_dim, height, width).contiguous()
+            hidden_states.transpose(1, 2).reshape(batch_size, self.encoder_hidden_dim, height, width).contiguous()
         )
 
         return hidden_states
@@ -1619,13 +1623,14 @@ class DFineModel(DFinePreTrainedModel):
         for param in self.backbone.parameters():
             param.requires_grad_(True)
 
+    @staticmethod
     @compile_compatible_method_lru_cache(maxsize=32)
-    def generate_anchors(self, spatial_shapes=None, grid_size=0.05, device="cpu", dtype=torch.float32):
-        if spatial_shapes is None:
-            spatial_shapes = [
-                [int(self.config.anchor_image_size[0] / s), int(self.config.anchor_image_size[1] / s)]
-                for s in self.config.feat_strides
-            ]
+    def _cached_generate_anchors(
+        spatial_shapes: tuple[tuple[int, int], ...],
+        grid_size: float,
+        device: torch.device | str = "cpu",
+        dtype: torch.dtype = torch.float32,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         anchors = []
         for level, (height, width) in enumerate(spatial_shapes):
             grid_y, grid_x = torch.meshgrid(
@@ -1644,9 +1649,17 @@ class DFineModel(DFinePreTrainedModel):
         anchors = torch.concat(anchors, 1)
         valid_mask = ((anchors > eps) * (anchors < 1 - eps)).all(-1, keepdim=True)
         anchors = torch.log(anchors / (1 - anchors))
-        anchors = torch.where(valid_mask, anchors, torch.tensor(torch.finfo(dtype).max, dtype=dtype, device=device))
+        anchors = torch.where(valid_mask, anchors, torch.full((), torch.finfo(dtype).max, dtype=dtype, device=device))
 
         return anchors, valid_mask
+
+    def generate_anchors(self, spatial_shapes=None, grid_size=0.05, device="cpu", dtype=torch.float32):
+        if spatial_shapes is None:
+            spatial_shapes = (
+                (int(self.config.anchor_image_size[0] / s), int(self.config.anchor_image_size[1] / s))
+                for s in self.config.feat_strides
+            )
+        return self._cached_generate_anchors(spatial_shapes, grid_size, device, dtype)
 
     @auto_docstring
     @can_return_tuple
@@ -1729,7 +1742,7 @@ class DFineModel(DFinePreTrainedModel):
         # Lowest resolution feature maps are obtained via 3x3 stride 2 convolutions on the final stage
         if self.config.num_feature_levels > len(sources):
             _len_sources = len(sources)
-            sources.append(self.decoder_input_proj[_len_sources](encoder_outputs.last_hidden_state)[-1])
+            sources.append(self.decoder_input_proj[_len_sources](encoder_outputs.last_hidden_state[-1]))
             for i in range(_len_sources + 1, self.config.num_feature_levels):
                 sources.append(self.decoder_input_proj[i](encoder_outputs.last_hidden_state[-1]))
 
@@ -1857,7 +1870,7 @@ class DFineModel(DFinePreTrainedModel):
 class DFineObjectDetectionOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
-        Total loss as a linear combination of a negative log-likehood (cross-entropy) for class prediction and a
+        Total loss as a linear combination of a negative log-likelihood (cross-entropy) for class prediction and a
         bounding box loss. The latter is defined as a linear combination of the L1 loss and the generalized
         scale-invariant IoU loss.
     loss_dict (`Dict`, *optional*):

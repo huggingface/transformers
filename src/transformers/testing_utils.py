@@ -72,6 +72,7 @@ from .integrations.deepspeed import is_deepspeed_available
 from .utils import (
     ACCELERATE_MIN_VERSION,
     GGUF_MIN_VERSION,
+    MISTRAL_COMMON_MIN_VERSION,
     SAFE_WEIGHTS_INDEX_NAME,
     TRITON_MIN_VERSION,
     WEIGHTS_INDEX_NAME,
@@ -83,17 +84,20 @@ from .utils import (
     is_av_available,
     is_bitsandbytes_available,
     is_bs4_available,
+    is_causal_conv1d_available,
     is_compressed_tensors_available,
     is_cv2_available,
     is_cython_available,
     is_decord_available,
     is_detectron2_available,
     is_essentia_available,
+    is_executorch_available,
     is_faiss_available,
     is_fbgemm_gpu_available,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
     is_flash_attn_4_available,
+    is_flash_linear_attention_available,
     is_flute_available,
     is_fouroversix_available,
     is_fp_quant_available,
@@ -108,7 +112,6 @@ from .utils import (
     is_huggingface_hub_greater_or_equal,
     is_ipython_available,
     is_jinja_available,
-    is_jmespath_available,
     is_jumanpp_available,
     is_kernels_available,
     is_levenshtein_available,
@@ -121,11 +124,14 @@ from .utils import (
     is_nltk_available,
     is_numba_available,
     is_onnx_available,
+    is_onnxruntime_available,
+    is_onnxscript_available,
     is_openai_available,
     is_optimum_available,
     is_optimum_quanto_available,
     is_pandas_available,
     is_peft_available,
+    is_peft_greater_or_equal,
     is_phonemizer_available,
     is_pretty_midi_available,
     is_psutil_available,
@@ -143,6 +149,7 @@ from .utils import (
     is_sentencepiece_available,
     is_seqio_available,
     is_serve_available,
+    is_soundfile_available,
     is_spacy_available,
     is_speech_available,
     is_spqr_available,
@@ -162,6 +169,7 @@ from .utils import (
     is_torch_optimi_available,
     is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
+    is_torch_tpu_available,
     is_torch_xla_available,
     is_torch_xpu_available,
     is_torchao_available,
@@ -228,12 +236,40 @@ _VLM_COMMON_MODEL_NAMES_MAP = {
     "conditional_generation_class": "ForConditionalGeneration",
 }
 
+# Shared text-model defaults for CausalLMModelTester and MultiModalModelTester.
+_TEXT_MODEL_TESTER_DEFAULTS = {
+    "batch_size": 13,
+    "seq_length": 7,
+    "is_training": True,
+    "use_input_mask": True,
+    "use_labels": True,
+    "vocab_size": 99,
+    "hidden_size": 32,
+    "num_hidden_layers": 2,
+    "num_attention_heads": 2,
+    "num_key_value_heads": 2,
+    "intermediate_size": 32,
+    "hidden_act": "gelu",
+    "max_position_embeddings": 512,
+    "pad_token_id": 0,
+    "bos_token_id": 1,
+    "eos_token_id": 2,
+    "expert_interval": 1,
+    "moe_layer_start_index": 0,
+    "moe_intermediate_size": 16,
+    "shared_expert_intermediate_size": 36,
+    "shared_expert_gate": True,
+    "moe_num_shared_experts": 2,
+    "num_experts_per_tok": 2,
+    "num_experts": 8,
+}
+
 
 if is_torch_available():
     import torch
     from safetensors.torch import load_file
 
-    from .modeling_utils import FLASH_ATTN_KERNEL_FALLBACK, PreTrainedModel
+    from .modeling_utils import PreTrainedModel
 
     IS_ROCM_SYSTEM = torch.version.hip is not None
     IS_CUDA_SYSTEM = torch.version.cuda is not None
@@ -285,6 +321,7 @@ _run_pipeline_tests = parse_flag_from_env("RUN_PIPELINE_TESTS", default=True)
 _run_agent_tests = parse_flag_from_env("RUN_AGENT_TESTS", default=False)
 _run_training_tests = parse_flag_from_env("RUN_TRAINING_TESTS", default=True)
 _run_tensor_parallel_tests = parse_flag_from_env("RUN_TENSOR_PARALLEL_TESTS", default=True)
+_run_fsdp_tests = parse_flag_from_env("RUN_FSDP_TESTS", default=True)
 
 
 def is_staging_test(test_case):
@@ -367,6 +404,22 @@ def is_tensor_parallel_test(test_case):
             return pytest.mark.is_tensor_parallel_test()(test_case)
 
 
+def is_fsdp_test(test_case):
+    """
+    Decorator marking a test as an FSDP test. If RUN_FSDP_TESTS is set to a falsy value, those tests will be
+    skipped.
+    """
+    if not _run_fsdp_tests:
+        return unittest.skip(reason="test is fsdp test")(test_case)
+    else:
+        try:
+            import pytest  # We don't need a hard dependency on pytest in the main library
+        except ImportError:
+            return test_case
+        else:
+            return pytest.mark.is_fsdp_test()(test_case)
+
+
 def slow(test_case):
     """
     Decorator marking a test as slow.
@@ -374,6 +427,12 @@ def slow(test_case):
     Slow tests are skipped by default. Set the RUN_SLOW environment variable to a truthy value to run them.
 
     """
+    try:
+        import pytest  # We don't need a hard dependency on pytest in the main library
+
+        test_case = pytest.mark.slow(test_case)
+    except ImportError:
+        pass
     return unittest.skipUnless(_run_slow_tests, "test is slow")(test_case)
 
 
@@ -529,7 +588,7 @@ def require_triton(min_version: str = TRITON_MIN_VERSION):
 
 def require_gguf(test_case, min_version: str = GGUF_MIN_VERSION):
     """
-    Decorator marking a test that requires ggguf. These tests are skipped when gguf isn't installed.
+    Decorator marking a test that requires gguf. These tests are skipped when gguf isn't installed.
     """
     return unittest.skipUnless(is_gguf_available(min_version), f"test requires gguf version >= {min_version}")(
         test_case
@@ -566,15 +625,20 @@ def require_jinja(test_case):
     return unittest.skipUnless(is_jinja_available(), "test requires jinja")(test_case)
 
 
-def require_jmespath(test_case):
-    """
-    Decorator marking a test that requires jmespath. These tests are skipped when jmespath isn't installed.
-    """
-    return unittest.skipUnless(is_jmespath_available(), "test requires jmespath")(test_case)
-
-
 def require_onnx(test_case):
     return unittest.skipUnless(is_onnx_available(), "test requires ONNX")(test_case)
+
+
+def require_onnxscript(test_case):
+    return unittest.skipUnless(is_onnxscript_available(), "test requires ONNXScript")(test_case)
+
+
+def require_onnxruntime(test_case):
+    return unittest.skipUnless(is_onnxruntime_available(), "test requires ONNX Runtime")(test_case)
+
+
+def require_executorch(test_case):
+    return unittest.skipUnless(is_executorch_available(), "test requires ExecuTorch")(test_case)
 
 
 def require_timm(test_case):
@@ -644,16 +708,8 @@ def require_flash_attn(test_case):
     These tests are skipped when Flash Attention isn't installed.
 
     """
-    flash_attn_available = is_flash_attn_2_available()
-    kernels_available = is_kernels_available()
-    try:
-        from kernels import get_kernel
-
-        get_kernel(FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"])
-    except Exception as _:
-        kernels_available = False
-
-    return unittest.skipUnless(kernels_available | flash_attn_available, "test requires Flash Attention")(test_case)
+    flash_attn_available = is_flash_attn_2_available(kernels_fallback_ok=True)
+    return unittest.skipUnless(flash_attn_available, "test requires Flash Attention")(test_case)
 
 
 def require_kernels(test_case):
@@ -685,24 +741,43 @@ def require_flash_attn_4(test_case):
 
 
 def require_all_flash_attn(test_case):
-    flash_attn_available = is_flash_attn_2_available()
-    kernels_available = is_kernels_available()
-    try:
-        from kernels import get_kernel
-
-        get_kernel(FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"])
-    except Exception as _:
-        kernels_available = False
+    flash_attn_available = is_flash_attn_2_available(kernels_fallback_ok=True)
 
     return unittest.skipUnless(
         all(
             (
-                flash_attn_available | kernels_available,
+                flash_attn_available,
                 is_flash_attn_3_available(),
                 is_flash_attn_4_available(),
             )
         ),
         "test requires all mainline Flash Attention packages",
+    )(test_case)
+
+
+def require_flash_linear_attention(test_case):
+    """
+    Decorator marking a test that requires Flash Linear Attention.
+
+    These tests are skipped when Flash Linear Attention isn't installed.
+    """
+
+    return unittest.skipUnless(
+        is_flash_linear_attention_available(),
+        "test requires `flash-linear-attention`",
+    )(test_case)
+
+
+def require_causal_conv1d(test_case):
+    """
+    Decorator marking a test that requires causal-conv1d.
+
+    These tests are skipped when causal-conv1d isn't installed.
+    """
+
+    return unittest.skipUnless(
+        is_causal_conv1d_available(),
+        "test requires `causal-conv1d`",
     )(test_case)
 
 
@@ -716,6 +791,21 @@ def require_peft(test_case):
     return unittest.skipUnless(is_peft_available(), "test requires PEFT")(test_case)
 
 
+def require_peft_greater_or_equal(version: str):
+    """
+    Decorator marking a test that requires PEFT version >= `version`.
+
+    These tests are skipped when PEFT version is less than `version`.
+    """
+
+    def decorator(test_case):
+        return unittest.skipUnless(is_peft_greater_or_equal(version), f"test requires PEFT version >= {version}")(
+            test_case
+        )
+
+    return decorator
+
+
 def require_torchvision(test_case):
     """
     Decorator marking a test that requires Torchvision.
@@ -724,6 +814,21 @@ def require_torchvision(test_case):
 
     """
     return unittest.skipUnless(is_torchvision_available(), "test requires Torchvision")(test_case)
+
+
+def require_torchvision_video_decoding(test_case):
+    """
+    Decorator marking a test that requires the torchvision video decoding API.
+
+    These tests are skipped when torchvision isn't installed, or when it is too recent to still ship the video
+    decoding API (removed in `torchvision==0.26`).
+
+    """
+    from .video_utils import is_torchvision_video_decoding_available
+
+    return unittest.skipUnless(
+        is_torchvision_video_decoding_available(), "test requires Torchvision with video decoding support"
+    )(test_case)
 
 
 def require_torchcodec(test_case):
@@ -766,7 +871,7 @@ def require_seqio(test_case):
 
 def require_scipy(test_case):
     """
-    Decorator marking a test that requires Scipy. These tests are skipped when SentencePiece isn't installed.
+    Decorator marking a test that requires Scipy. These tests are skipped when Scipy isn't installed.
     """
     return unittest.skipUnless(is_scipy_available(), "test requires Scipy")(test_case)
 
@@ -846,6 +951,19 @@ def require_torch_multi_accelerator(test_case):
     )
 
 
+def require_torch_n_accelerators(n: int):
+    """Decorator marking a test that requires at least `n` accelerators (in PyTorch)."""
+
+    def decorator(test_case):
+        if not is_torch_available():
+            return unittest.skip(reason="test requires PyTorch")(test_case)
+        return unittest.skipUnless(backend_device_count(torch_device) >= n, f"test requires >= {n} accelerators")(
+            test_case
+        )
+
+    return decorator
+
+
 def require_torch_non_multi_gpu(test_case):
     """
     Decorator marking a test that requires 0 or 1 GPU setup (in PyTorch).
@@ -906,6 +1024,13 @@ def require_torch_neuroncore(test_case):
     return unittest.skipUnless(is_torch_neuroncore_available(check_device=False), "test requires PyTorch NeuronCore")(
         test_case
     )
+
+
+def require_torch_tpu(test_case):
+    """
+    Decorator marking a test that requires TPU (in PyTorch via torch_tpu).
+    """
+    return unittest.skipUnless(is_torch_tpu_available(), "test requires PyTorch TPU")(test_case)
 
 
 def require_torch_npu(test_case):
@@ -1069,17 +1194,141 @@ def require_torch_mps(test_case):
     return unittest.skipUnless(torch_device == "mps", "test requires MPS")(test_case)
 
 
-def require_large_cpu_ram(test_case, memory: float = 80):
-    """Decorator marking a test that requires a CPU RAM with more than `memory` GiB of memory."""
+def require_rocm(test_case):
+    """Decorator marking a test that requires a ROCm (AMD) GPU and PyTorch."""
+    return unittest.skipUnless(torch_device == "cuda" and IS_ROCM_SYSTEM, "test requires a ROCm (AMD) GPU")(test_case)
+
+
+def get_cgroup_memory_limit_bytes() -> int | None:
+    """
+    Memory limit enforced on the current cgroup, or `None` when there is no limit / no cgroup to read.
+
+    This is what the OOM killer actually enforces inside a container. `psutil.virtual_memory().total` reads the
+    *host* `/proc/meminfo`, so in a K8S pod it reports the whole node (~750 GiB) and says nothing about how much this
+    process may use before it is SIGKILLed.
+    """
+    candidates = (
+        ("/sys/fs/cgroup/memory.max", "max"),  # cgroup v2
+        ("/sys/fs/cgroup/memory/memory.limit_in_bytes", None),  # cgroup v1
+    )
+    for path, unlimited_marker in candidates:
+        try:
+            with open(path) as f:
+                raw = f.read().strip()
+        except OSError:
+            continue
+        if raw == unlimited_marker:
+            return None
+        try:
+            limit = int(raw)
+        except ValueError:
+            continue
+        # cgroup v1 writes a huge sentinel (a page-aligned 2**63-1) rather than a marker when unlimited
+        if limit <= 0 or limit >= 2**62:
+            return None
+        return limit
+    return None
+
+
+# Set by `patch_psutil_cpu_memory` to the pre-patch `psutil.virtual_memory`, so the guards below can still read
+# the machine's real RAM after conftest has capped what the rest of the session sees.
+_UNPATCHED_VIRTUAL_MEMORY = None
+
+
+def get_physical_cpu_ram_gib() -> float | None:
+    """
+    RAM physically present on this machine, in GiB, or `None` when psutil is unavailable.
+
+    Deliberately reads *past* the `patch_psutil_cpu_memory` cap: that cap is a `device_map="auto"` planning budget
+    (`CI_CPU_MEMORY_LIMIT_GB` per accelerator), not a statement about the machine. Note this is the wrong number
+    inside a pod, where it reports the whole node -- `get_cpu_ram_total_gib` is what combines it with the cgroup
+    limit to get an answer that holds in both places.
+    """
     if not is_psutil_available():
-        return test_case
+        return None
 
     import psutil
 
-    return unittest.skipUnless(
-        psutil.virtual_memory().total / 1024**3 > memory,
-        f"test requires a machine with more than {memory} GiB of CPU RAM memory",
-    )(test_case)
+    virtual_memory = _UNPATCHED_VIRTUAL_MEMORY or psutil.virtual_memory
+    return virtual_memory().total / 1024**3
+
+
+def get_ci_cpu_memory_budget_gib() -> float | None:
+    """
+    CPU RAM budget this CI runner is entitled to, in GiB, or `None` outside CI.
+
+    `CI_CPU_MEMORY_LIMIT_GB` is a *per-accelerator* budget: a single-accelerator A10 runner gets 60 GiB, and a
+    runner with more accelerators gets proportionally more, because `device_map="auto"` can legitimately use more
+    CPU RAM for intermediate storage when more devices are present. So the budget is the variable times the
+    accelerator count -- reading the variable raw would report 60 GiB on a 2-accelerator runner that has 180.
+
+    This is the single source of truth for that arithmetic, shared with the `patch_psutil_cpu_memory` call in
+    `conftest.py`.
+    """
+    limit_per_device = os.environ.get("CI_CPU_MEMORY_LIMIT_GB")
+    if limit_per_device is None:
+        return None
+    try:
+        limit_per_device = float(limit_per_device)
+    except ValueError:
+        return None
+
+    num_accelerators = max(1, backend_device_count(torch_device)) if torch_device is not None else 1
+    return limit_per_device * num_accelerators
+
+
+def get_cpu_ram_total_gib() -> float:
+    """
+    CPU RAM this process may actually use, in GiB.
+
+    Prefers what can be *measured* -- the cgroup limit the OOM killer enforces, and the machine's physical RAM --
+    taking the smaller of the two, since each is wrong on its own: there is no cgroup limit outside a container,
+    and physical RAM reports the whole node inside a pod.
+
+    Falls back to the CI budget (`get_ci_cpu_memory_budget_gib`) only when neither can answer, because that budget
+    is an allocation policy rather than a measurement: it is deliberately `CI_CPU_MEMORY_LIMIT_GB` per accelerator,
+    so on a 2-accelerator runner it reads 120 GiB where the runner really has 180. Using it as a term in the `min`
+    would make every guard on such a runner over-skip.
+
+    Returns `inf` when nothing can answer at all -- no cgroup, no psutil, no CI budget. That is an ordinary local
+    setup rather than a broken one, so callers run their test instead of silently dropping coverage; a guard is
+    only useful where the limit is actually knowable.
+    """
+    measured = []
+
+    cgroup_limit = get_cgroup_memory_limit_bytes()
+    if cgroup_limit is not None:
+        measured.append(cgroup_limit / 1024**3)
+
+    physical_ram = get_physical_cpu_ram_gib()
+    if physical_ram is not None:
+        measured.append(physical_ram)
+
+    if measured:
+        return min(measured)
+
+    ci_budget = get_ci_cpu_memory_budget_gib()
+    return ci_budget if ci_budget is not None else float("inf")
+
+
+def require_large_cpu_ram(test_case=None, *, memory: float = 80):
+    """
+    Decorator marking a test that requires a CPU RAM with more than `memory` GiB of memory.
+
+    Usable bare (`@require_large_cpu_ram`) or with a budget (`@require_large_cpu_ram(memory=48)`). The default 80
+    is not an estimate of any particular model: it was picked as "more than the 60 GiB of our GPU runners", so a
+    bare use means "do not run this on a CI GPU runner". Pass `memory=` when the test has a real footprint.
+    """
+
+    def memory_decorator(tc):
+        # `get_cpu_ram_total_gib` returns `inf` when it cannot measure anything (psutil missing and no cgroup), so
+        # an undetermined budget runs the test instead of silently dropping coverage.
+        return unittest.skipUnless(
+            get_cpu_ram_total_gib() > memory,
+            f"test requires a machine with more than {memory} GiB of CPU RAM memory",
+        )(tc)
+
+    return memory_decorator if test_case is None else memory_decorator(test_case)
 
 
 def require_torch_large_gpu(test_case, memory: float = 20):
@@ -1109,6 +1358,41 @@ def require_torch_large_accelerator(test_case=None, *, memory: float = 20):
     return memory_decorator if test_case is None else memory_decorator(test_case)
 
 
+def get_accelerator_total_memory_gib() -> float:
+    """
+    Total memory of *all* visible accelerators, in GiB.
+
+    Use this rather than the memory of a single device for tests that spread one model over every visible device
+    (`device_map="auto"`, tensor parallelism, ...). Returns 0 on CPU, and on the backends that do not expose
+    `get_device_properties(...).total_memory` -- so callers treat "we cannot tell" the same as "it does not fit",
+    which is the safe direction: guessing too high OOM-kills the whole test process.
+    """
+    # Same restriction as `require_torch_large_accelerator`: only cuda and xpu report `total_memory`. ROCm is
+    # covered by the cuda branch -- a HIP build of torch reports `torch_device == "cuda"`, see `IS_ROCM_SYSTEM`.
+    if not is_torch_available() or torch_device not in ("cuda", "xpu"):
+        return 0.0
+
+    torch_accel = getattr(torch, torch_device)
+    total = sum(torch_accel.get_device_properties(i).total_memory for i in range(torch_accel.device_count()))
+    return total / 1024**3
+
+
+def require_torch_accelerator_memory(test_case=None, *, memory: float):
+    """
+    Decorator marking a test that needs at least `memory` GiB of accelerator memory *in total*, summed over every
+    visible accelerator. Prefer this over `require_torch_large_accelerator` (which only looks at device 0) for tests
+    that shard a single model across all visible devices.
+    """
+
+    def memory_decorator(tc):
+        return unittest.skipUnless(
+            get_accelerator_total_memory_gib() >= memory,
+            f"test requires {memory} GiB of accelerator memory in total",
+        )(tc)
+
+    return memory_decorator if test_case is None else memory_decorator(test_case)
+
+
 def require_torch_accelerator(test_case):
     """Decorator marking a test that requires an accessible accelerator and PyTorch."""
     return unittest.skipUnless(torch_device is not None and torch_device != "cpu", "test requires accelerator")(
@@ -1131,11 +1415,14 @@ def require_fp8(test_case):
 
 
 def require_cuda_capability_at_least(major, minor):
-    """Decorator to skip tests when CUDA capability is below the given version."""
+    """Decorator: when running on CUDA, skip if device capability is below the given
+    threshold. On non-CUDA backends this is a no-op — pair with :func:`require_torch_gpu`
+    if the test is CUDA-only, or leave alone if it should also run on other backends
+    (which won't be capability-gated)."""
     import torch
 
     if not torch.cuda.is_available():
-        return unittest.skip("CUDA not available")
+        return lambda test_case: test_case
     capability = torch.cuda.get_device_capability()
     return unittest.skipIf(capability < (major, minor), f"Requires CUDA capability >= {major}.{minor}")
 
@@ -1422,6 +1709,13 @@ def require_librosa(test_case):
     return unittest.skipUnless(is_librosa_available(), "test requires librosa")(test_case)
 
 
+def require_soundfile(test_case):
+    """
+    Decorator marking a test that requires soundfile
+    """
+    return unittest.skipUnless(is_soundfile_available(), "test requires soundfile")(test_case)
+
+
 def require_multipart(test_case):
     """
     Decorator marking a test that requires python-multipart
@@ -1519,11 +1813,13 @@ def require_serve(test_case):
     return unittest.skipUnless(is_serve_available(), "test requires serving dependencies")(test_case)
 
 
-def require_mistral_common(test_case):
+def require_mistral_common(test_case, min_version: str = MISTRAL_COMMON_MIN_VERSION):
     """
     Decorator marking a test that requires mistral-common. These tests are skipped when mistral-common isn't available.
     """
-    return unittest.skipUnless(is_mistral_common_available(), "test requires mistral-common")(test_case)
+    return unittest.skipUnless(
+        is_mistral_common_available(min_version), f"test requires mistral-common version >= {min_version}"
+    )(test_case)
 
 
 def get_gpu_count():
@@ -2816,7 +3112,7 @@ def preprocess_string(string, skip_cuda_tests):
     cuda stuff is detective (with a heuristic), this method will return an empty string so no doctest will be run for
     `string`.
     """
-    codeblock_pattern = r"(```(?:python|py)\s*\n\s*>>> )(.*?```)"
+    codeblock_pattern = r"(```(?:python|py)[^\S\n]*\n\s*>>> )(.*?```)"
     codeblocks = re.split(codeblock_pattern, string, flags=re.DOTALL)
     is_cuda_found = False
     for i, codeblock in enumerate(codeblocks):
@@ -3207,23 +3503,25 @@ def get_device_properties() -> DeviceProperties:
     if IS_CUDA_SYSTEM or IS_ROCM_SYSTEM:
         import torch
 
-        major, minor = torch.cuda.get_device_capability()
-        if IS_ROCM_SYSTEM:
-            return ("rocm", major, minor)
-        else:
-            return ("cuda", major, minor)
-    elif IS_XPU_SYSTEM:
+        if torch.cuda.is_available():
+            major, minor = torch.cuda.get_device_capability()
+            if IS_ROCM_SYSTEM:
+                return ("rocm", major, minor)
+            else:
+                return ("cuda", major, minor)
+    if IS_XPU_SYSTEM:
         import torch
 
-        # To get more info of the architecture meaning and bit allocation, refer to https://github.com/intel/llvm/blob/sycl/sycl/include/sycl/ext/oneapi/experimental/device_architecture.def
-        arch = torch.xpu.get_device_capability()["architecture"]
-        gen_mask = 0x000000FF00000000
-        gen = (arch & gen_mask) >> 32
-        return ("xpu", gen, None)
-    elif IS_NPU_SYSTEM:
-        return ("npu", None, None)
-    else:
-        return (torch_device, None, None)
+        if torch.xpu.is_available():
+            # To get more info of the architecture meaning and bit allocation, refer to https://github.com/intel/llvm/blob/sycl/sycl/include/sycl/ext/oneapi/experimental/device_architecture.def
+            arch = torch.xpu.get_device_capability()["architecture"]
+            gen_mask = 0x000000FF00000000
+            gen = (arch & gen_mask) >> 32
+            return ("xpu", gen, None)
+    if IS_NPU_SYSTEM:
+        if torch.npu.is_available():
+            return ("npu", None, None)
+    return (torch_device, None, None)
 
 
 def unpack_device_properties(
@@ -3242,6 +3540,40 @@ def unpack_device_properties(
     else:
         major, minor = major_minor
     return device_type, major, minor
+
+
+@functools.lru_cache(maxsize=1)
+def supports_sdpa_flash_backend() -> bool | None:
+    """Whether torch's SDPA flash backend can actually dispatch on this device.
+
+    Ask torch instead of guessing from the ROCm architecture number: CDNA
+    (flash-capable) reports major 9 while RDNA parts report 10/11/12, so a
+    "major >= 9" gate admits RDNA hardware that has no flash kernel. Returns
+    None when torch's capability API is unavailable.
+    """
+    import torch
+
+    if not torch.cuda.is_available():
+        return False
+    try:
+        from torch.backends.cuda import SDPAParams, can_use_flash_attention
+    except ImportError:
+        return None
+    try:
+        q = torch.empty(1, 1, 1, 16, device="cuda", dtype=torch.float16)
+        return bool(can_use_flash_attention(SDPAParams(q, q, q, None, 0.0, False, False), False))
+    except Exception:
+        return None
+
+
+def rocm_has_sdpa_flash_backend(major: int) -> bool:
+    """Whether this ROCm device can dispatch the SDPA flash backend, falling back
+    to the historical "major >= 9" heuristic when torch's query is unavailable.
+    """
+    supported = supports_sdpa_flash_backend()
+    if supported is None:
+        return major >= 9
+    return supported
 
 
 class Expectations(UserDict[PackedDeviceProperties, Any]):
@@ -3346,6 +3678,36 @@ def patch_torch_compile_force_graph():
             return orig_method(*args, **kwargs)
 
         torch.compile = patched
+
+
+def patch_psutil_cpu_memory(limit_bytes: int):
+    """
+    Patch `psutil.virtual_memory` to cap the reported CPU memory to `limit_bytes`.
+
+    In K8S instance-sharing CI, each runner sees the full machine's CPU RAM (~750 GB) even though it only
+    owns a fraction. This causes `device_map="auto"` to overfill GPU+CPU with nothing offloaded to disk,
+    leading to GPU OOM at runtime. Calling this function caps `total`, `available`, `used`, and `percent`
+    so the entire test session sees a realistic per-runner memory budget.
+    """
+    global _UNPATCHED_VIRTUAL_MEMORY
+
+    import psutil
+
+    _original_virtual_memory = psutil.virtual_memory
+    # Keep the honest reader reachable: the cap above is a `device_map="auto"` planning budget, but a guard that
+    # asks "will this OOM-kill the container?" needs the machine's real RAM. See `get_physical_cpu_ram_gib`.
+    if _UNPATCHED_VIRTUAL_MEMORY is None:
+        _UNPATCHED_VIRTUAL_MEMORY = _original_virtual_memory
+
+    def _capped_virtual_memory():
+        mem = _original_virtual_memory()
+        total = min(mem.total, limit_bytes)
+        available = min(mem.available, limit_bytes)
+        used = min(mem.used, total)
+        percent = 100 * used / total if total > 0 else 0.0
+        return mem._replace(total=total, available=available, used=used, percent=percent)
+
+    psutil.virtual_memory = _capped_virtual_memory
 
 
 def _get_test_info():
@@ -4386,3 +4748,40 @@ def force_serialization_as_bin_files():
         yield
     finally:
         PreTrainedModel.save_pretrained = original_save
+
+
+@contextmanager
+def preserve_module_forwards(model: "PreTrainedModel"):
+    """
+    A context to keep track of __dict__["forward"] for each module. Upon entering, the context creates a dict where keys
+    are module and values module.__dict__["forward"]; on exit those entries are restored (if there was no "forward" key
+    in __dict__, we only pop the "forward" key).
+    This cancels the effect of a call to "kernelize" because it re-routes module.forward by adding a "forward" key to
+    the modules' __dict__ object. Exists mainly because `kernels` does not provide an `unkernelize` function.
+    """
+    original_fw = {}
+    _fw_not_set = object()  # has a unique id
+
+    # Before entering: create the dictionnary of original __dict__["forward"]
+    for _, module in model.named_modules():
+        # This is a dictionnary w/ keys -> module that can be kernelized
+        _kernel_funcs = getattr(module, "_kernel_funcs", {})
+        kernelizable_modules = list(_kernel_funcs.values())
+        # If the module is simply a wrapper around a kernel function, it has the attribute "kernel_layer_name"
+        if hasattr(type(module), "kernel_layer_name"):
+            kernelizable_modules.append(module)
+        # Go through kernelizable modules and keep track of the original forward
+        for k_module in kernelizable_modules:
+            original_fw[k_module] = k_module.__dict__.get("forward", _fw_not_set)
+
+    # Enter context manager
+    try:
+        yield
+
+    # On exit: restore the original __dict__["forward"] if they were set, otherwise pop them
+    finally:
+        for module, original_forward in original_fw.items():
+            if original_forward is _fw_not_set:
+                module.__dict__.pop("forward", None)
+            else:
+                module.__dict__["forward"] = original_forward

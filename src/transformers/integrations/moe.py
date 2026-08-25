@@ -24,17 +24,12 @@ from ..utils.import_utils import (
     is_torch_less_or_equal,
     is_torchdynamo_compiling,
 )
+from .deepgemm import deepgemm_bf16_experts_forward
 from .sonicmoe import sonicmoe_experts_forward
 
 
 if is_torch_available():
     import torch
-
-    # Patch the version-check helpers so dynamo doesn't trace into them — they transitively call
-    # `importlib.util.find_spec`, which dynamo refuses to trace. `assume_constant_result` makes
-    # dynamo evaluate them once at trace time and inline the bool, no body tracing.
-    is_torch_greater_or_equal = torch._dynamo.assume_constant_result(is_torch_greater_or_equal)
-    is_torch_less_or_equal = torch._dynamo.assume_constant_result(is_torch_less_or_equal)
 
 
 logger = logging.get_logger(__name__)
@@ -133,7 +128,8 @@ def batched_mm_experts_forward(
     # Clamp EP sentinels so `gate_up_proj[expert_ids]` stays in-bounds. Routing weights are already
     # zero at sentinel slots (RouterParallel masks them at dispatch), so the weighted mul drops
     # those contributions — we pay the wasted GEMM compute because batched_mm has no offset to skip.
-    expert_ids.clamp_(0, self.num_experts - 1)
+    # Out-of-place to avoid mutating the caller's routing tensor (a contiguous `reshape(-1)` aliases it).
+    expert_ids = expert_ids.clamp(0, self.num_experts - 1)
 
     # Select gate_up or just up projection weights and biases
     if self.has_gate:
@@ -275,23 +271,26 @@ def _can_use_grouped_mm(input: torch.Tensor, weight: torch.Tensor, offs: torch.T
     Returns:
         `bool`: True if grouped_mm can be used, False otherwise.
     """
-    if (is_torchdynamo_compiling() and weight.dtype != torch.bfloat16) or (
-        weight.device.type == "cpu"
-        # accept_dev=True is necessary for "+cpu"/"+xpu" etc.
+    # accept_dev=True is necessary for "+cpu"/"+xpu" etc.
+    if (
+        (is_torchdynamo_compiling() and weight.dtype != torch.bfloat16)
+        or weight.device.type == "cpu"
         and is_torch_less_or_equal("2.10.0", accept_dev=True)
         and (weight.data_ptr() % 16 != 0 or input.data_ptr() % 16 != 0)
+        or weight.device.type == "cpu"
+        and is_torch_less_or_equal("2.8.0", accept_dev=True)
     ):
-        # Under the following conditions we cannot use torch.grouped_mm and have to fall back:
+        # We cannot use torch.grouped_mm and have to fall back when:
         # 1. torch.grouped_mm is not supported in torch.compile / inductor with dtypes other than bf16
-        # 2. Before PyTorch 2.11, torch.grouped_mm on CPU required 16 bytes alignment which is not
-        #    guaranteed for tensors loaded using memmap (e.g. using safetensors lazy tensor loading)
-        #    and not really necessary because the cpu path uses a fallback for-loop implementation.
+        # 2. on CPU with torch <= 2.10, the kernel requires 16 bytes alignment, which is not guaranteed for
+        #    tensors loaded using memmap (e.g. safetensors lazy loading)
+        # 3. on CPU with torch <= 2.8, torch._grouped_mm has no CPU kernel at all (raises NotImplementedError)
         #    issue: https://github.com/pytorch/pytorch/issues/172440
         return False
 
     # On CUDA, `grouped_mm` availability also depends on GPU compute capability:
     # `torch.nn.functional.grouped_mm` in torch>=2.10 and `torch._grouped_mm` in torch>=2.9 support SM80+
-    # but older `torch._grouped_mm` requires SM90+.
+    # but older `torch._grouped_mm` in torch<=2.8 is Hopper-only (SM90, compute capability 9.x).
     if weight.device.type == "cuda":
         if hasattr(torch.nn.functional, "grouped_mm"):
             return torch.cuda.get_device_capability(weight.device) >= (8, 0)
@@ -299,7 +298,7 @@ def _can_use_grouped_mm(input: torch.Tensor, weight: torch.Tensor, offs: torch.T
             if is_torch_greater_or_equal("2.9", accept_dev=True):
                 return torch.cuda.get_device_capability(weight.device) >= (8, 0)
             else:
-                return torch.cuda.get_device_capability(weight.device) >= (9, 0)
+                return torch.cuda.get_device_capability(weight.device)[0] == 9
 
         return False
 
@@ -483,6 +482,7 @@ class ExpertsInterface(GeneralInterface):
     """Interface for registering custom experts forward functions."""
 
     _global_mapping = {
+        "deepgemm": deepgemm_bf16_experts_forward,
         "batched_mm": batched_mm_experts_forward,
         "grouped_mm": grouped_mm_experts_forward,
         "sonicmoe": sonicmoe_experts_forward,

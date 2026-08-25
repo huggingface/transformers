@@ -147,7 +147,7 @@ class Sam3TrackerPositionalEmbedding(nn.Module):
         super().__init__()
         self.scale = config.scale
         positional_embedding = self.scale * torch.randn((2, config.hidden_size // 2))
-        self.register_buffer("positional_embedding", positional_embedding)
+        self.positional_embedding = nn.Buffer(positional_embedding)
 
     def forward(self, input_coords, input_shape=None):
         """Positionally encode points that are normalized to [0,1]."""
@@ -392,7 +392,7 @@ class Sam3TrackerTwoWayAttentionBlock(GradientCheckpointingLayer):
         Arguments:
             config (`Sam3TrackerMaskDecoderConfig`):
                 The configuration file used to instantiate the block
-            attention_downsample_rate (*optionalk*, int, defaults to 2):
+            attention_downsample_rate (*optional*, int, defaults to 2):
                 The downsample ratio of the block used to reduce the inner dim of the attention.
             skip_first_layer_pe (*optional*, bool, defaults to `False`):
                 Whether or not to skip the addition of the query_point_embedding on the first layer.
@@ -485,8 +485,8 @@ class Sam3TrackerTwoWayTransformer(nn.Module):
         if image_embeddings is None:
             raise ValueError("You have to specify an image_embedding")
 
-        image_embeddings = image_embeddings.flatten(2).permute(0, 2, 1).unsqueeze(1)
-        image_positional_embeddings = image_positional_embeddings.flatten(2).permute(0, 2, 1).unsqueeze(1)
+        image_embeddings = image_embeddings.flatten(2).transpose(1, 2).unsqueeze(1)
+        image_positional_embeddings = image_positional_embeddings.flatten(2).transpose(1, 2).unsqueeze(1)
 
         # Prepare queries
         queries = point_embeddings
@@ -751,14 +751,6 @@ class Sam3TrackerVisionEncoderOutput(BaseModelOutputWithPooling):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, height, width, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the model.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-        one for the output of each stage) of shape `(batch_size, height, width, hidden_size)`. Hidden-states of the
-        model at the output of each stage.
-    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-        sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-        the self-attention heads.
     fpn_hidden_states (`tuple(torch.FloatTensor)`):
         Tuple of `torch.FloatTensor` (one for each feature level, from high to low resolution) of shape
         `(batch_size, hidden_size, height, width)`. Feature maps from the Feature Pyramid Network neck.
@@ -1094,8 +1086,8 @@ class Sam3TrackerModel(Sam3TrackerPreTrainedModel):
         # flatten NxCxHxW to HWxNxC
         feature_maps = [feature_map.flatten(2).permute(2, 0, 1) for feature_map in feature_maps]
         feature_maps_position_embeddings = [
-            feature_map_position_embedding.flatten(2).permute(2, 0, 1)
-            for feature_map_position_embedding in feature_maps_position_embeddings
+            feature_maps_position_embeddings.flatten(2).permute(2, 0, 1)
+            for feature_maps_position_embeddings in feature_maps_position_embeddings
         ]
         vision_outputs.fpn_hidden_states = feature_maps
         vision_outputs.fpn_position_encoding = feature_maps_position_embeddings

@@ -86,6 +86,8 @@
     title: 问题定位及解决
   - local: perf_torch_compile
     title: 使用 `torch.compile()` 优化推理
+  - local: kernels
+    title: Kernels（自定义内核）
   title: 性能和可扩展性
 - sections:
   - local: contributing

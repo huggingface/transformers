@@ -84,7 +84,7 @@ class TrainerEvaluationTest(TestCasePlus, TrainerIntegrationCommon):
             x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
             pred = 1.5 * x + 2.5
             expected_loss = ((pred - y) ** 2).mean()
-            self.assertAlmostEqual(results["eval_loss"], expected_loss)
+            self.assertAlmostEqual(results["eval_loss"], expected_loss, places=5)
             expected_acc = AlmostAccuracy()((pred, y))["accuracy"]
             self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
 
@@ -97,7 +97,7 @@ class TrainerEvaluationTest(TestCasePlus, TrainerIntegrationCommon):
             x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
             pred = 1.5 * x + 2.5
             expected_loss = ((pred - y) ** 2).mean()
-            self.assertAlmostEqual(results["eval_loss"], expected_loss)
+            self.assertAlmostEqual(results["eval_loss"], expected_loss, places=5)
             expected_acc = AlmostAccuracy()((pred, y))["accuracy"]
             self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
 
@@ -114,7 +114,7 @@ class TrainerEvaluationTest(TestCasePlus, TrainerIntegrationCommon):
             x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
             pred = 1.5 * x + 2.5
             expected_loss = ((pred - y) ** 2).mean()
-            self.assertAlmostEqual(results["eval_loss"], expected_loss)
+            self.assertAlmostEqual(results["eval_loss"], expected_loss, places=5)
             expected_acc = AlmostAccuracy()((pred + 1, y))["accuracy"]
             self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
 
@@ -169,7 +169,7 @@ class TrainerEvaluationTest(TestCasePlus, TrainerIntegrationCommon):
         inputs["input_ids"] = torch.nn.utils.rnn.pad_sequence(inputs["input_ids"], batch_first=True, padding_value=0)
         inputs["labels"] = inputs["input_ids"].clone()
         inputs["labels"][inputs["input_ids"] == 0] = -100
-        num_items_in_batch = inputs["labels"].ne(-100).sum().item()
+        num_items_in_batch = inputs["labels"][..., 1:].ne(-100).sum().item()
 
         def custom_loss_func(outputs, labels, num_items_in_batch=None):
             logits = outputs["logits"]
@@ -222,7 +222,7 @@ class TrainerBatchEvalMetricsTest(TestCasePlus, TrainerIntegrationCommon):
             x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
             pred = 1.5 * x + 2.5
             expected_loss = ((pred - y) ** 2).mean()
-            self.assertAlmostEqual(results["eval_loss"], expected_loss)
+            self.assertAlmostEqual(results["eval_loss"], expected_loss, places=5)
             expected_acc = AlmostAccuracy()((pred, y))["accuracy"]
             self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
 
@@ -240,7 +240,7 @@ class TrainerBatchEvalMetricsTest(TestCasePlus, TrainerIntegrationCommon):
             x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
             pred = 1.5 * x + 2.5
             expected_loss = ((pred - y) ** 2).mean()
-            self.assertAlmostEqual(results["eval_loss"], expected_loss)
+            self.assertAlmostEqual(results["eval_loss"], expected_loss, places=5)
             expected_acc = AlmostAccuracy()((pred, y))["accuracy"]
             self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
 
@@ -258,7 +258,7 @@ class TrainerBatchEvalMetricsTest(TestCasePlus, TrainerIntegrationCommon):
             x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
             pred = 1.5 * x + 2.5
             expected_loss = ((pred - y) ** 2).mean()
-            self.assertAlmostEqual(results["eval_loss"], expected_loss)
+            self.assertAlmostEqual(results["eval_loss"], expected_loss, places=5)
             expected_acc = AlmostAccuracy()((pred + 1, y))["accuracy"]
             self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
 

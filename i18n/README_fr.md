@@ -35,23 +35,26 @@ limitations under the License.
 
 <h4 align="center">
     <p>
-        <a href="https://github.com/huggingface/transformers/">English</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_zh-hans.md">简体中文</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_zh-hant.md">繁體中文</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ko.md">한국어</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_es.md">Español</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ja.md">日本語</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_hd.md">हिन्दी</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ru.md">Русский</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_pt-br.md">Рortuguês</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_te.md">తెలుగు</a> |
+        <a href="../README.md">English</a> |
+        <a href="README_zh-hans.md">简体中文</a> |
+        <a href="README_zh-hant.md">繁體中文</a> |
+        <a href="README_ko.md">한국어</a> |
+        <a href="README_es.md">Español</a> |
+        <a href="README_ja.md">日本語</a> |
+        <a href="README_hd.md">हिन्दी</a> |
+        <a href="README_ru.md">Русский</a> |
+        <a href="README_pt-br.md">Рortuguês</a> |
+        <a href="README_te.md">తెలుగు</a> |
         <b>Français</b> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_de.md">Deutsch</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_it.md">Italiano</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_vi.md">Tiếng Việt</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ar.md">العربية</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ur.md">اردو</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_bn.md">বাংলা</a> |
+        <a href="README_de.md">Deutsch</a> |
+        <a href="README_it.md">Italiano</a> |
+        <a href="README_vi.md">Tiếng Việt</a> |
+        <a href="README_ar.md">العربية</a> |
+        <a href="README_ur.md">اردو</a> |
+        <a href="README_bn.md">বাংলা</a> |
+        <a href="README_fa.md">فارسی</a> |
+        <a href="README_ro.md">Română</a> |
+        <a href="README_tr.md">Türkçe</a>
     </p>
 </h4>
 
@@ -245,7 +248,7 @@ Le modèle lui-même est un module [`nn.Module` PyTorch](https://pytorch.org/doc
 
 ### Avec pip
 
-Ce référentiel est testé sur Python 3.10+ et PyTorch 2.4+.
+Ce référentiel est testé sur Python 3.10+ et PyTorch 2.5+.
 
 Vous devriez installer 🤗 Transformers dans un [environnement virtuel](https://docs.python.org/3/library/venv.html). Si vous n'êtes pas familier avec les environnements virtuels Python, consultez le [guide utilisateur](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/).
 
@@ -301,7 +304,7 @@ Ces implémentations ont été testées sur plusieurs ensembles de données (voi
 
 ## Citation
 
-Nous disposons désormais d'un [article](https://www.aclweb.org/anthology/2020.emnlp-demos.6/) que vous pouvez citer pour la bibliothèque 🤗 Transformers :
+Nous disposons désormais d'un [article](https://aclanthology.org/2020.emnlp-demos.6/) que vous pouvez citer pour la bibliothèque 🤗 Transformers :
 ```bibtex
 @inproceedings{wolf-etal-2020-transformers,
     title = "Transformers: State-of-the-Art Natural Language Processing",
@@ -311,7 +314,7 @@ Nous disposons désormais d'un [article](https://www.aclweb.org/anthology/2020.e
     year = "2020",
     address = "Online",
     publisher = "Association for Computational Linguistics",
-    url = "https://www.aclweb.org/anthology/2020.emnlp-demos.6",
+    url = "https://aclanthology.org/2020.emnlp-demos.6/",
     pages = "38--45"
 }
 ```

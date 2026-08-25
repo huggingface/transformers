@@ -181,7 +181,7 @@ class Mistral3PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
 
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -204,12 +204,6 @@ class Mistral3Model(Mistral3PreTrainedModel):
         self.multi_modal_projector = Mistral3MultiModalProjector(config)
         self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
 
     @merge_with_config_defaults
     @can_return_tuple
@@ -260,7 +254,7 @@ class Mistral3Model(Mistral3PreTrainedModel):
         """
         if input_ids is None:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = special_image_mask.all(-1)
         else:
@@ -268,9 +262,9 @@ class Mistral3Model(Mistral3PreTrainedModel):
 
         n_image_tokens = special_image_mask.sum()
         n_image_features = image_features.shape[0] * image_features.shape[1]
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         torch_compilable_check(
-            inputs_embeds[special_image_mask].numel() == image_features.numel(),
+            n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
             f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {n_image_features}",
         )
         return special_image_mask
@@ -341,12 +335,6 @@ class Mistral3ForConditionalGeneration(Mistral3PreTrainedModel, GenerationMixin)
         self.model = Mistral3Model(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
 
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
@@ -439,38 +427,6 @@ class Mistral3ForConditionalGeneration(Mistral3PreTrainedModel, GenerationMixin)
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
         )
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        inputs_embeds=None,
-        pixel_values=None,
-        attention_mask=None,
-        logits_to_keep=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
-
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            logits_to_keep=logits_to_keep,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
-        if is_first_iteration or not kwargs.get("use_cache", True):
-            # Pixel values are used only in the first iteration if available
-            # In subsequent iterations, they are already merged with text and cached
-            # NOTE: first iteration doesn't have to be prefill, it can be the first
-            # iteration with a question and cached system prompt (continue generate from cache)
-            model_inputs["pixel_values"] = pixel_values
-
-        return model_inputs
 
 
 __all__ = ["Mistral3Model", "Mistral3PreTrainedModel", "Mistral3ForConditionalGeneration"]

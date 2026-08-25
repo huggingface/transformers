@@ -513,7 +513,7 @@ class SegformerDecodeHead(nn.Module):
             # unify channel dimension
             height, width = encoder_hidden_state.shape[2], encoder_hidden_state.shape[3]
             encoder_hidden_state = linear_proj(encoder_hidden_state)
-            encoder_hidden_state = encoder_hidden_state.permute(0, 2, 1)
+            encoder_hidden_state = encoder_hidden_state.transpose(1, 2)
             encoder_hidden_state = encoder_hidden_state.reshape(batch_size, -1, height, width)
             # upsample
             encoder_hidden_state = nn.functional.interpolate(
@@ -585,7 +585,6 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
             raise ValueError(f"Number of labels should be >=0: {self.config.num_labels}")
 
         # The decode head always needs all stage outputs, so force hidden_states on internally.
-        kwargs["output_hidden_states"] = True
         outputs = self.segformer(pixel_values, **kwargs)
 
         encoder_hidden_states = outputs.hidden_states

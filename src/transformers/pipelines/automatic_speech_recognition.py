@@ -38,6 +38,40 @@ if is_torch_available():
     from ..models.auto.modeling_auto import MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES
 
 
+def _to_mono(inputs):
+    """
+    Reduce a waveform to a single channel, or refuse when the layout is ambiguous.
+
+    The pipeline reads audio as `(channels, samples)`, which is what torchcodec returns
+    and what `datasets` returned before 4.0. Anything else is rejected rather than
+    guessed at: the shape alone cannot distinguish two-channel audio from a two-sample
+    recording, and averaging the wrong axis produces a silently wrong transcription
+    instead of an error.
+    """
+    if inputs.ndim == 1:
+        return inputs
+
+    if inputs.ndim != 2:
+        raise ValueError(
+            "AutomaticSpeechRecognitionPipeline expects mono audio shaped `(samples,)` or "
+            f"multi-channel audio shaped `(channels, samples)`, got {inputs.ndim} dimensions "
+            f"with shape {tuple(inputs.shape)}."
+        )
+
+    num_channels = inputs.shape[0]
+    if num_channels > 2:
+        raise ValueError(
+            "AutomaticSpeechRecognitionPipeline reads axis 0 as channels, and it has size "
+            f"{num_channels} in the input of shape {tuple(inputs.shape)}. If this array is "
+            "channels-last `(samples, channels)`, which is what `soundfile.read`, "
+            "`librosa.load(mono=False)` and `scipy.io.wavfile.read` return, transpose it "
+            "first. If it genuinely has more than 2 channels, downmix it to mono yourself "
+            "so the weighting is yours to choose."
+        )
+
+    return inputs.mean(axis=0)
+
+
 def rescale_stride(stride, ratio):
     """
     Rescales the stride values from audio space to tokens/logits space.
@@ -176,6 +210,9 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             self.type = "seq2seq_whisper"
         elif model.__class__.__name__ in MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES.values():
             self.type = "seq2seq"
+        elif model.config.model_type in ("parakeet_tdt", "parakeet_rnnt", "nemotron_asr_streaming", "nemotron3_5_asr"):
+            # All these transducers decode the same way (generate -> sequences); "tdt" is the transducer path.
+            self.type = "tdt"
         elif decoder is not None:
             self.decoder = decoder
             self.type = "ctc_with_lm"
@@ -392,6 +429,11 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             in_sampling_rate = inputs.pop("sampling_rate")
             extra = inputs
             inputs = _inputs
+            # Downmix first: the stride arithmetic below reads `shape[0]` as the
+            # sample count, which it is not until this runs. `F.resample` batches
+            # over leading axes, so it is not the step that breaks here.
+            if isinstance(inputs, (np.ndarray, torch.Tensor)):
+                inputs = _to_mono(inputs)
             if in_sampling_rate != self.feature_extractor.sampling_rate:
                 if is_torchaudio_available():
                     from torchaudio import functional as F
@@ -420,11 +462,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 stride = (inputs.shape[0], int(round(stride[0] * ratio)), int(round(stride[1] * ratio)))
         if not isinstance(inputs, (np.ndarray, torch.Tensor)):
             raise TypeError(f"We expect a numpy ndarray or torch tensor as input, got `{type(inputs)}`")
-        if inputs.ndim != 1:
-            logger.warning(
-                f"We expect a single channel audio input for AutomaticSpeechRecognitionPipeline, got {inputs.ndim}. Taking the mean of the channels for mono conversion."
-            )
-            inputs = inputs.mean(axis=0)
+        inputs = _to_mono(inputs)
 
         if chunk_length_s:
             if stride_length_s is None:
@@ -558,7 +596,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                                     out["lang_id"] = torch.tensor([token_id])
                                     break
 
-        else:
+        elif self.type in {"ctc", "ctc_with_lm"}:
             inputs = {
                 self.model.main_input_name: model_inputs.pop(self.model.main_input_name),
                 "attention_mask": attention_mask,
@@ -579,6 +617,17 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     out["stride"] = rescale_stride([stride], ratio)[0]
                 else:
                     out["stride"] = rescale_stride(stride, ratio)
+        elif self.type == "tdt":
+            inputs = {
+                self.model.main_input_name: model_inputs.pop(self.model.main_input_name),
+            }
+            if "attention_mask" in model_inputs:
+                inputs["attention_mask"] = model_inputs.pop("attention_mask")
+            outputs = self.model.generate(**inputs)
+            out = {"tokens": outputs.sequences}
+        else:
+            raise ValueError(f"Unsupported model type {self.type}.")
+
         # Leftover
         extra = model_inputs
         return {"is_last": is_last, **out, **extra}
@@ -659,10 +708,13 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     offsets.append({"word": word, "start_offset": start_offset, "end_offset": end_offset})
         elif self.type != "seq2seq_whisper":
             skip_special_tokens = self.type != "ctc"
-            text = self.tokenizer.decode(items, skip_special_tokens=skip_special_tokens)
+            # CTC collapses consecutive identical tokens (a token repeated across frames is one emission); the
+            # Parakeet transducers ("tdt") emit each token explicitly and must keep legitimate repeats.
+            decode_kwargs = {"group_tokens": False} if self.type == "tdt" else {}
+            text = self.tokenizer.decode(items, skip_special_tokens=skip_special_tokens, **decode_kwargs)
             if return_timestamps:
                 offsets = self.tokenizer.decode(
-                    items, skip_special_tokens=skip_special_tokens, output_char_offsets=True
+                    items, skip_special_tokens=skip_special_tokens, output_char_offsets=True, **decode_kwargs
                 )["char_offsets"]
                 if return_timestamps == "word":
                     offsets = self.tokenizer._get_word_offsets(offsets, self.tokenizer.replace_word_delimiter_char)

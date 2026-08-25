@@ -39,7 +39,6 @@ from ...utils import (
     is_torch_accelerator_available,
     logging,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel
 from .configuration_bark import (
     BarkCoarseConfig,
@@ -96,7 +95,7 @@ class BarkSelfAttention(nn.Module):
         if is_causal:
             block_size = config.block_size
             bias = torch.tril(torch.ones((block_size, block_size), dtype=bool)).view(1, 1, block_size, block_size)
-            self.register_buffer("bias", bias)
+            self.bias = nn.Buffer(bias)
 
     # Copied from transformers.models.gpt_neo.modeling_gpt_neo.GPTNeoSelfAttention._split_heads
     def _split_heads(self, tensor, num_heads, attn_head_size):
@@ -392,7 +391,6 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, new_embeddings):
         self.input_embeds_layer = new_embeddings
 
-    @deprecate_kwarg("input_embeds", version="5.6.0", new_name="inputs_embeds")
     @auto_docstring
     def forward(
         self,
@@ -668,7 +666,7 @@ class BarkCoarseModel(BarkCausalModel):
                 Codebook channel size, i.e. the size of the output vocabulary per codebook channel.
             history_prompt (`Optional[dict[str,torch.Tensor]]`):
                 Optional `Bark` speaker prompt.
-        Returns: Returns:
+        Returns:
             `tuple(torch.FloatTensor)`:
             - **x_semantic_history** (`torch.FloatTensor` -- Processed semantic speaker prompt.
             - **x_coarse_history** (`torch.FloatTensor`) -- Processed coarse speaker prompt.
@@ -990,7 +988,6 @@ class BarkFineModel(BarkPreTrainedModel):
 
         return model_embeds
 
-    @deprecate_kwarg("input_embeds", version="5.6.0", new_name="inputs_embeds")
     @auto_docstring
     def forward(
         self,

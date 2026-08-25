@@ -87,8 +87,8 @@ class CodeGenAttention(nn.Module):
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.rotary_dim = config.rotary_dim
         self.pos_embd_dim = self.rotary_dim or self.embed_dim
-        self.register_buffer(
-            "embed_positions", create_sinusoidal_positions(self.max_positions, self.pos_embd_dim), persistent=False
+        self.embed_positions = nn.Buffer(
+            create_sinusoidal_positions(self.max_positions, self.pos_embd_dim), persistent=False
         )
 
     def _split_heads(self, x, n_head, dim_head, mp_num):
@@ -263,7 +263,7 @@ class CodeGenPreTrainedModel(PreTrainedModel):
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
     _no_split_modules = ["CodeGenBlock"]
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
     _can_compile_fullgraph = True
 
     def _init_weights(self, module):

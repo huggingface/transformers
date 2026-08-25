@@ -24,7 +24,7 @@ from ...modeling_outputs import BaseModelOutputWithPooling, MaskedLMOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, eager_attention_forward
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from ..qwen3.modeling_qwen3 import Qwen3Attention, Qwen3DecoderLayer, Qwen3RMSNorm, Qwen3RotaryEmbedding
@@ -234,6 +234,7 @@ class PeAudioVideoEncoderEmbedder(nn.Module):
         return inputs_embeds, padding_mask, audio_output, video_output
 
 
+@no_inherit_decorator
 class PeAudioVideoEncoderAttention(Qwen3Attention):
     def __init__(self, config, layer_idx):
         super().__init__(config, layer_idx)
@@ -381,9 +382,9 @@ class PeAudioVideoEncoder(PeAudioVideoPreTrainedModel):
 
         self.post_init()
 
-    @can_return_tuple
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         input_values: torch.Tensor | None = None,
@@ -392,6 +393,18 @@ class PeAudioVideoEncoder(PeAudioVideoPreTrainedModel):
         padding_mask_videos: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple | PeAudioVideoEncoderOutput:
+        r"""
+        padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding samples of `input_values`. Mask values selected in `[0, 1]`:
+
+            - 1 for samples that are **not masked**,
+            - 0 for samples that are **masked**.
+        padding_mask_videos (`torch.Tensor` of shape `(batch_size, num_frames)`, *optional*):
+            Mask to avoid performing attention on padding video frames. Mask values selected in `[0, 1]`:
+
+            - 1 for frames that are **not masked**,
+            - 0 for frames that are **masked**.
+        """
         inputs_embeds, padding_mask, audio_output, video_output = self.embedder(
             input_values,
             pixel_values_videos,
@@ -588,6 +601,7 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         text_outputs: MaskedLMOutput = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
+            output_hidden_states=True,
             return_dict=True,
         )
         text_embeds = text_outputs.hidden_states[-1][:, 0]
@@ -643,6 +657,7 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         text_outputs: MaskedLMOutput = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
+            output_hidden_states=True,
             return_dict=True,
         )
         text_embeds = text_outputs.hidden_states[-1][:, 0]
@@ -665,6 +680,7 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         text_outputs: MaskedLMOutput = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
+            output_hidden_states=True,
             return_dict=True,
         )
         text_embeds = text_outputs.hidden_states[-1][:, 0]
@@ -673,6 +689,7 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         return self.video_plus_text_head(video_plus_text_embeds)
 
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.Tensor | None = None,
@@ -684,8 +701,25 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         return_loss=False,
         **kwargs,
     ) -> PeAudioVideoOutput:
+        r"""
+        padding_mask_videos (`torch.Tensor` of shape `(batch_size, num_frames)`, *optional*):
+            Mask to avoid performing attention on padding video frames. Mask values selected in `[0, 1]`:
+
+            - 1 for frames that are **not masked**,
+            - 0 for frames that are **masked**.
+        padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding samples of `input_values`. Mask values selected in `[0, 1]`:
+
+            - 1 for samples that are **not masked**,
+            - 0 for samples that are **masked**.
+        return_loss (`bool`, *optional*):
+            Whether or not to return the loss.
+        """
         if sum([input_ids is not None, pixel_values_videos is not None, input_values is not None]) < 2:
-            raise ValueError("At least two of input_ids, pixel_values_videos, or input_values must be provided")
+            raise ValueError(
+                "At least two of input_ids, pixel_values_videos, or input_values must be provided. "
+                "For encoding individual modalities, get_*_embeds methods are available."
+            )
 
         if pixel_values_videos is None:
             outputs = self.audio_model(

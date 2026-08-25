@@ -159,7 +159,7 @@ class Ovis2VisionEmbeddings(nn.Module):
         self.num_patches = (self.image_size // self.patch_size) ** 2
         self.num_positions = self.num_patches
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
-        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
+        self.position_ids = nn.Buffer(torch.arange(self.num_positions).expand((1, -1)), persistent=False)
         self.rms_norm = Ovis2RMSNorm(config.hidden_size, config.rms_norm_eps)
 
     def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
@@ -369,7 +369,7 @@ class Ovis2PreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["Ovis2VisionAttention"]
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
     _supports_cache_class = True
     _supports_flash_attn = True
     _supports_flex_attn = True
@@ -476,12 +476,6 @@ class Ovis2Model(Ovis2PreTrainedModel):
         self.visual_indicator_token_ids = config.visual_indicator_token_ids
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
-
     @can_return_tuple
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
@@ -523,7 +517,7 @@ class Ovis2Model(Ovis2PreTrainedModel):
         """
         if input_ids is None:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = special_image_mask.all(-1)
         else:
@@ -531,9 +525,9 @@ class Ovis2Model(Ovis2PreTrainedModel):
 
         n_image_tokens = special_image_mask.sum()
         n_image_features = image_features.shape[0] * image_features.shape[1]
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         torch_compilable_check(
-            inputs_embeds[special_image_mask].numel() == image_features.numel(),
+            n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
             f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {n_image_features}",
         )
         return special_image_mask
@@ -569,6 +563,7 @@ class Ovis2Model(Ovis2PreTrainedModel):
                 inputs_embeds=inputs_embeds,
                 image_features=image_features,
             )
+            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
             for i, visual_indicator_id in enumerate(self.visual_indicator_token_ids):
@@ -581,11 +576,7 @@ class Ovis2Model(Ovis2PreTrainedModel):
                     mask = (input_ids == visual_indicator_id).to(inputs_embeds.device)
 
                 if mask.any():
-                    inputs_embeds[mask] = (
-                        visual_indicator_features[i]
-                        .expand_as(inputs_embeds[mask])
-                        .to(inputs_embeds.device, inputs_embeds.dtype)
-                    )
+                    inputs_embeds[mask] = visual_indicator_features[i].to(inputs_embeds.device, inputs_embeds.dtype)
 
         outputs = self.language_model(
             attention_mask=attention_mask,
@@ -615,12 +606,6 @@ class Ovis2ForConditionalGeneration(Ovis2PreTrainedModel, GenerationMixin):
         self.model = Ovis2Model(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
 
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
@@ -705,38 +690,6 @@ class Ovis2ForConditionalGeneration(Ovis2PreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
         )
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        inputs_embeds=None,
-        pixel_values=None,
-        attention_mask=None,
-        logits_to_keep=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
-
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            logits_to_keep=logits_to_keep,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
-        if is_first_iteration or not kwargs.get("use_cache", True):
-            # Pixel values are used only in the first iteration if available
-            # In subsequent iterations, they are already merged with text and cached
-            # NOTE: first iteration doesn't have to be prefill, it can be the first
-            # iteration with a question and cached system prompt (continue generate from cache)
-            model_inputs["pixel_values"] = pixel_values
-
-        return model_inputs
 
 
 __all__ = ["Ovis2PreTrainedModel", "Ovis2Model", "Ovis2ForConditionalGeneration"]

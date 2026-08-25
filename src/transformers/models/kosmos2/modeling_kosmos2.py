@@ -58,6 +58,7 @@ class Kosmos2PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
+        super()._init_weights(module)
         if hasattr(self.config, "initializer_factor"):
             factor = self.config.initializer_factor
         elif hasattr(self.config, "vision_config"):
@@ -102,17 +103,11 @@ class Kosmos2PreTrainedModel(PreTrainedModel):
             init.normal_(module.embed_tokens.weight, mean=0.0, std=std)
             if module.embed_tokens.padding_idx is not None:
                 init.zeros_(module.embed_tokens.weight[module.embed_tokens.padding_idx])
-        elif isinstance(module, nn.LayerNorm):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
         elif isinstance(module, Kosmos2TextSinusoidalPositionalEmbedding):
             emb_weights = module.get_embedding(
                 module.num_positions + module.offset, module.embedding_dim, module.padding_idx
             )
             init.copy_(module.weights, emb_weights)
-
-        if isinstance(module, nn.Linear) and module.bias is not None:
-            init.zeros_(module.bias)
 
 
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: int | None = None):
@@ -169,12 +164,6 @@ class BaseModelOutputWithProjectionAttentions(BaseModelOutputWithPooling):
 @dataclass
 class Kosmos2ModelOutput(ModelOutput):
     r"""
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
-        `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
-        input) to speed up sequential decoding.
     image_embeds (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
         Sequence of hidden-states at the output of `Kosmos2ImageToTextProjection`.
     projection_attentions (`tuple(torch.FloatTensor)`, *optional*):
@@ -214,12 +203,6 @@ class Kosmos2ForConditionalGenerationModelOutput(ModelOutput):
         Language modeling loss (for next-token prediction).
     logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
-        `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
-        input) to speed up sequential decoding.
     image_embeds (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
         Sequence of hidden-states at the output of `Kosmos2ImageToTextProjection`.
     projection_attentions (`tuple(torch.FloatTensor)`, *optional*):
@@ -270,7 +253,7 @@ class Kosmos2VisionEmbeddings(nn.Module):
         self.num_patches = (self.image_size // self.patch_size) ** 2
         self.num_positions = self.num_patches + 1
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
-        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
+        self.position_ids = nn.Buffer(torch.arange(self.num_positions).expand((1, -1)), persistent=False)
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
@@ -584,7 +567,7 @@ class Kosmos2TextSinusoidalPositionalEmbedding(nn.Module):
             # in forward put the weights on the correct dtype and device of the param
             emb_weights = emb_weights.to(dtype=self.weights.dtype, device=self.weights.device)
 
-        self.register_buffer("weights", emb_weights, persistent=False)
+        self.weights = nn.Buffer(emb_weights, persistent=False)
 
     @staticmethod
     # Copied from transformers.models.m2m_100.modeling_m2m_100.M2M100SinusoidalPositionalEmbedding.get_embedding
@@ -711,7 +694,7 @@ class KosmosTextAttention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
-        # End opy
+        # End copy
         self.inner_attn_ln = None
         if add_inner_attn_layernorm:
             self.inner_attn_ln = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
@@ -967,9 +950,9 @@ class Kosmos2TextTransformer(Kosmos2PreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if image_embeds is not None:
-            inputs_embeds[img_input_mask.to(dtype=torch.bool)] = image_embeds.to(inputs_embeds.device).view(
-                -1, image_embeds.size(-1)
-            )
+            inputs_embeds[img_input_mask.to(dtype=torch.bool)] = image_embeds.to(
+                inputs_embeds.device, inputs_embeds.dtype
+            ).view(-1, image_embeds.size(-1))
 
         inputs_embeds = inputs_embeds * self.embed_scale
 
@@ -1012,7 +995,7 @@ class Kosmos2TextTransformer(Kosmos2PreTrainedModel):
         image_embeds (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of `Kosmos2ImageToTextProjection`.
         image_embeds_position_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to indicate the location in a sequence to insert the image features . Mask values selected in `[0,
+            Mask to indicate the location in a sequence to insert the image features. Mask values selected in `[0,
             1]`:
 
             - 1 for places where to put the image features,
@@ -1151,7 +1134,7 @@ class Kosmos2TextModel(Kosmos2PreTrainedModel):
         image_embeds (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of `Kosmos2ImageToTextProjection`.
         image_embeds_position_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to indicate the location in a sequence to insert the image features . Mask values selected in `[0,
+            Mask to indicate the location in a sequence to insert the image features. Mask values selected in `[0,
             1]`:
 
             - 1 for places where to put the image features,
@@ -1219,7 +1202,7 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel, GenerationMixin):
         image_embeds (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of `Kosmos2ImageToTextProjection`.
         image_embeds_position_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to indicate the location in a sequence to insert the image features . Mask values selected in `[0,
+            Mask to indicate the location in a sequence to insert the image features. Mask values selected in `[0,
             1]`:
 
             - 1 for places where to put the image features,
@@ -1427,7 +1410,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
     ) -> tuple | Kosmos2ModelOutput:
         r"""
         image_embeds_position_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to indicate the location in a sequence to insert the image features . Mask values selected in `[0,
+            Mask to indicate the location in a sequence to insert the image features. Mask values selected in `[0,
             1]`:
 
             - 1 for places where to put the image features,
@@ -1555,7 +1538,7 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel, GenerationMixin):
     ) -> tuple | Kosmos2ForConditionalGenerationModelOutput:
         r"""
         image_embeds_position_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to indicate the location in a sequence to insert the image features . Mask values selected in `[0,
+            Mask to indicate the location in a sequence to insert the image features. Mask values selected in `[0,
             1]`:
 
             - 1 for places where to put the image features,

@@ -23,6 +23,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
@@ -58,9 +59,7 @@ class RemBertEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False)
 
     def forward(
         self,
@@ -559,21 +558,6 @@ class RemBertModel(RemBertPreTrainedModel):
         if token_type_ids is None:
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
-        # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
-        # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
-
-        # If a 2D or 3D attention mask is provided for the cross-attention
-        # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
-        if self.config.is_decoder and encoder_hidden_states is not None:
-            encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
-            encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
-            if encoder_attention_mask is None:
-                encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
-            encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
-        else:
-            encoder_extended_attention_mask = None
-
         embedding_output = self.embeddings(
             input_ids=input_ids,
             position_ids=position_ids,
@@ -581,11 +565,26 @@ class RemBertModel(RemBertPreTrainedModel):
             inputs_embeds=inputs_embeds,
             past_key_values_length=past_key_values_length,
         )
+
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=embedding_output,
+            attention_mask=attention_mask,
+        )
+
+        if encoder_attention_mask is not None:
+            encoder_attention_mask = create_bidirectional_mask(
+                config=self.config,
+                inputs_embeds=embedding_output,
+                attention_mask=encoder_attention_mask,
+                encoder_hidden_states=encoder_hidden_states,
+            )
+
         encoder_outputs = self.encoder(
             embedding_output,
-            attention_mask=extended_attention_mask,
+            attention_mask=attention_mask,
             encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_extended_attention_mask,
+            encoder_attention_mask=encoder_attention_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
             output_attentions=output_attentions,
@@ -735,7 +734,7 @@ class RemBertForCausalLM(RemBertPreTrainedModel, GenerationMixin):
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
             `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are
-            ignored (masked), the loss is only computed for the tokens with labels n `[0, ..., config.vocab_size]`.
+            ignored (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example:
 

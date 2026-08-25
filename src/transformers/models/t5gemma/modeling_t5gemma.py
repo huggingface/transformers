@@ -18,17 +18,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
 from collections.abc import Callable
-from typing import Optional
 
 import torch
 import torch.nn as nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
-from ...generation import GenerationMixin
-from ...integrations import use_kernel_func_from_hub, use_kernelized_func
+from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache, StaticCache
+from ...generation import GenerationConfig, GenerationMixin, GenerationMode
+from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import (
     create_bidirectional_mask,
     create_bidirectional_sliding_window_mask,
@@ -49,6 +49,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_t5gemma import T5GemmaConfig, T5GemmaModuleConfig
@@ -97,8 +98,7 @@ class T5GemmaMLP(nn.Module):
 
 
 class T5GemmaRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
+    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: T5GemmaConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
@@ -112,24 +112,17 @@ class T5GemmaRotaryEmbedding(nn.Module):
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    def compute_default_rope_parameters(
-        config: T5GemmaConfig | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
+    @deprecate_kwarg("device", version="5.18")
+    def compute_default_rope_parameters(config: T5GemmaConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
             config ([`~transformers.PreTrainedConfig`]):
                 The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
         Returns:
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
@@ -138,12 +131,9 @@ class T5GemmaRotaryEmbedding(nn.Module):
         dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
 
         attention_factor = 1.0  # Unused in this type of RoPE
-
         # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
-        return inv_freq, attention_factor
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        return inv_freq.to(device), attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
@@ -168,7 +158,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-@use_kernel_func_from_hub("rotary_pos_emb")
+@use_kernel_forward_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -564,14 +554,8 @@ class T5GemmaPreTrainedModel(PreTrainedModel):
 
     _can_compile_fullgraph = True
     _supports_attention_backend = True
-    _can_record_outputs = {
-        "hidden_states": T5GemmaDecoderLayer,
-        "attentions": [
-            OutputRecorder(T5GemmaSelfAttention, index=1, layer_name="self_attn"),
-            OutputRecorder(T5GemmaSelfAttention, index=1, layer_name="cross_attn"),
-            OutputRecorder(T5GemmaCrossAttention, index=1, layer_name="cross_attn"),
-        ],
-    }
+    # Recording is declared on T5GemmaEncoder/T5GemmaDecoder; None avoids inheriting the gemma2 dict
+    _can_record_outputs = None
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -1048,6 +1032,81 @@ class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
 
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         return self._shift_right(labels)
+
+    def _prepare_cache_for_generation(
+        self,
+        generation_config: GenerationConfig,
+        model_kwargs: dict,
+        generation_mode: GenerationMode,
+        batch_size: int,
+        max_cache_length: int,
+    ) -> bool:
+        """Override cache preparation to force full attention on the cross-attention cache.
+
+        The decoder config may declare sliding-window layers, but cross-attention must always use full attention.
+        The default `_prepare_cache_for_generation` would otherwise build a sliding cross-attention cache.
+        """
+        super()._prepare_cache_for_generation(
+            generation_config,
+            model_kwargs,
+            generation_mode,
+            batch_size,
+            max_cache_length,
+        )
+
+        # If use_cache is False, do not prepare the cache.
+        if generation_config.use_cache is False:
+            return
+
+        cache_implementation = generation_config.cache_implementation
+        if cache_implementation is None:
+            offload_cache = False
+        else:
+            offload_cache = "offloaded" in generation_config.cache_implementation
+
+        # Main change: use full cache for cross-attention.
+        cross_attn_config = copy.deepcopy(self.config.get_text_config(decoder=True))
+        cross_attn_config.sliding_window = None
+        cross_attn_config.layer_types = ["full_attention"] * cross_attn_config.num_hidden_layers
+
+        cross_attn_cache_kwargs = {
+            "config": cross_attn_config,
+            "offloading": offload_cache,
+        }
+
+        past_key_values = model_kwargs.get("past_key_values")
+        if past_key_values is not None:
+            if not isinstance(past_key_values, EncoderDecoderCache):
+                raise ValueError(
+                    "The `past_key_values` in `model_kwargs` must be of type `EncoderDecoderCache` for T5Gemma model."
+                )
+
+            # Cache already established, no need to re-initialize.
+            if len(past_key_values.is_updated) > 0 and past_key_values.is_updated.get(0):
+                return
+
+            cross_attn_cls = type(past_key_values.cross_attention_cache)
+            if cross_attn_cls == StaticCache:
+                cross_attn_cache_kwargs["max_cache_len"] = model_kwargs["encoder_outputs"][0].shape[1]
+            # Update cross-attention cache only (switch from sliding_window to full).
+            past_key_values.cross_attention_cache = cross_attn_cls(**cross_attn_cache_kwargs)
+        else:
+            # Initialize new cache.
+            model_kwargs["past_key_values"] = EncoderDecoderCache(
+                DynamicCache(
+                    **{
+                        "config": self.config.get_text_config(decoder=True),
+                        "offloading": offload_cache,
+                    }
+                ),  # self-attention cache
+                DynamicCache(),  # cross-attention cache
+            )
+
+        if hasattr(self, "_cache") and self._cache is not None:
+            if not isinstance(self._cache, EncoderDecoderCache):
+                raise ValueError("The internal cache must be of type `EncoderDecoderCache` for T5Gemma model.")
+
+            self._cache = model_kwargs["past_key_values"]
 
 
 @auto_docstring

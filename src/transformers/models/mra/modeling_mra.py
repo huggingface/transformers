@@ -21,6 +21,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithCrossAttentions,
@@ -54,7 +55,7 @@ def load_cuda_kernels():
         raise ImportError("kernels is not installed, please install it with `pip install kernels`")
     from ...integrations.hub_kernels import get_kernel
 
-    mra_cuda_kernel = get_kernel("kernels-community/mra")
+    mra_cuda_kernel = get_kernel("kernels-community/mra", version=1)
 
 
 def sparse_max(sparse_qk_prod, indices, query_num_block, key_num_block):
@@ -474,11 +475,9 @@ class MraEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)) + 2)
-        self.register_buffer(
-            "token_type_ids",
-            torch.zeros(self.position_ids.size(), dtype=torch.long, device=self.position_ids.device),
-            persistent=False,
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)) + 2)
+        self.token_type_ids = nn.Buffer(
+            torch.zeros(self.position_ids.size(), dtype=torch.long, device=self.position_ids.device), persistent=False
         )
 
     def forward(self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None):
@@ -567,7 +566,7 @@ class MraSelfAttention(nn.Module):
             .transpose(1, 2)
         )
 
-        # revert changes made by get_extended_attention_mask
+        # revert changes made by float mask
         attention_mask = 1.0 + attention_mask / 10000.0
         attention_mask = (
             attention_mask.squeeze()
@@ -858,19 +857,24 @@ class MraModel(MraPreTrainedModel):
             else:
                 token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
-        # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
-        # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
-
         embedding_output = self.embeddings(
             input_ids=input_ids,
             position_ids=position_ids,
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
         )
+
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=embedding_output[:, 0:1, :],  # Force q_len == 1
+            attention_mask=attention_mask,
+            # Always materialize the mask; the encoder below consumes it as a tensor.
+            allow_is_bidirectional_skip=False,
+        )
+
         encoder_outputs = self.encoder(
             embedding_output,
-            attention_mask=extended_attention_mask,
+            attention_mask=attention_mask,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )

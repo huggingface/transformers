@@ -50,7 +50,7 @@ class JanusPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
-    _no_split_modules = ["LlamaDecoderLayer", "JanusVisionEncoderLayer"]
+    _no_split_modules = ["JanusVisionEncoderLayer"]
     _skip_keys_device_placement = ["past_key_values", "causal_mask"]
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -94,12 +94,6 @@ class JanusBaseModelOutputWithPast(ModelOutput):
 
         If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
         hidden_size)` is output.
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
-        `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
-        input) to speed up sequential decoding.
     image_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
         Tuple of `torch.FloatTensor` (one for the output of the image embeddings, `(batch_size, num_images,
         sequence_length, hidden_size)`.
@@ -165,7 +159,7 @@ class JanusVisionEmbeddings(nn.Module):
         self.num_patches = (self.image_size // self.patch_size) ** 2
         self.num_positions = self.num_patches
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
-        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
+        self.position_ids = nn.Buffer(torch.arange(self.num_positions).expand((1, -1)), persistent=False)
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
@@ -500,7 +494,7 @@ class JanusVQVAEVectorQuantizer(nn.Module):
     """
     A module for vector quantization using learned embedding vectors.
 
-    This module implements the quantization process similar to te one described in
+    This module implements the quantization process similar to the one described in
     the VQ-VAE (Vector Quantized Variational AutoEncoder) paper. It quantizes continuous
     input vectors into discrete codebook vectors, which are learned during training.
     Current implementation improves over previous ones by avoiding costly matrix multiplications
@@ -985,12 +979,6 @@ class JanusModel(JanusPreTrainedModel):
         # Initialize weights and apply final processing.
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
-
     @can_return_tuple
     @auto_docstring
     def get_image_features(
@@ -1010,7 +998,7 @@ class JanusModel(JanusPreTrainedModel):
         """
         if input_ids is None:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = special_image_mask.all(-1)
         else:
@@ -1018,9 +1006,9 @@ class JanusModel(JanusPreTrainedModel):
 
         n_image_tokens = special_image_mask.sum()
         n_image_features = image_features.shape[0] * image_features.shape[1]
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         torch_compilable_check(
-            inputs_embeds[special_image_mask].numel() == image_features.numel(),
+            n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
             f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {n_image_features}",
         )
         return special_image_mask
@@ -1088,12 +1076,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing.
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.model.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.language_model.set_input_embeddings(value)
-
     def prepare_embeddings_for_image_generation(self, inputs: torch.Tensor) -> torch.Tensor:
         hidden_state = self.model.generation_embeddings(inputs)
         hidden_state = self.model.generation_aligner(hidden_state)
@@ -1149,38 +1131,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
         )
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        pixel_values=None,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        logits_to_keep=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        # Overwritten -- extra custom processing
-
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            logits_to_keep=logits_to_keep,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
-        # Pixel values are used only in the first iteration if available
-        # In subsequent iterations, they are already merged with text and cached
-        # NOTE: first iteration doesn't have to be prefill, it can be the first
-        # iteration with a question and cached system prompt (continue generate from cache)
-        if is_first_iteration or not kwargs.get("use_cache", True):
-            model_inputs["pixel_values"] = pixel_values
-
-        return model_inputs
 
     def decode_image_tokens(self, image_tokens: torch.Tensor):
         """

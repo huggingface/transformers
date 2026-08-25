@@ -229,7 +229,7 @@ class LightOnOcrForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     skip_test_image_features_output_shape = True
 
     _is_composite = True
-    test_torch_exportable = False
+    test_torch_exportable = False  # data-dependent multimodal placeholder mask
 
     def setUp(self):
         self.model_tester = LightOnOcrVisionText2TextModelTester(self)

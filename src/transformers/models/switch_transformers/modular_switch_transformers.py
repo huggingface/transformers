@@ -22,7 +22,7 @@ from torch.nn import CrossEntropyLoss
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
-from ...masking_utils import create_causal_mask
+from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     MoEModelOutput,
@@ -287,43 +287,58 @@ class SwitchTransformersBlock(GradientCheckpointingLayer):
         encoder_attention_mask=None,
         encoder_decoder_position_bias=None,
         past_key_values=None,
-        use_cache=False,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
-        hidden_states, _ = self.layer[0](
+        hidden_states, self_attn_position_bias, _ = self.layer[0](
             hidden_states,
             attention_mask=attention_mask,
             position_bias=position_bias,
             past_key_values=past_key_values,
-            use_cache=use_cache,
+            **kwargs,
         )
 
         # clamp inf values to enable fp16 training
-        if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
-            clamp_value = torch.finfo(hidden_states.dtype).max - 1000
+        if hidden_states.dtype == torch.float16:
+            clamp_value = torch.where(
+                torch.isinf(hidden_states).any(),
+                torch.finfo(hidden_states.dtype).max - 1000,
+                torch.finfo(hidden_states.dtype).max,
+            )
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
+        cross_attn_position_bias = None
         do_cross_attention = self.is_decoder and encoder_hidden_states is not None
         if do_cross_attention:
-            hidden_states, _ = self.layer[1](
+            hidden_states, cross_attn_position_bias, _ = self.layer[1](
                 hidden_states,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
                 position_bias=encoder_decoder_position_bias,
                 past_key_values=past_key_values,
+                **kwargs,
             )
 
             # clamp inf values to enable fp16 training
-            if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
-                clamp_value = torch.finfo(hidden_states.dtype).max - 1000
+            if hidden_states.dtype == torch.float16:
+                clamp_value = torch.where(
+                    torch.isinf(hidden_states).any(),
+                    torch.finfo(hidden_states.dtype).max - 1000,
+                    torch.finfo(hidden_states.dtype).max,
+                )
                 hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
         hidden_states = self.layer[-1](hidden_states)
+
         # clamp inf values to enable fp16 training
-        if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
-            clamp_value = torch.finfo(hidden_states.dtype).max - 1000
+        if hidden_states.dtype == torch.float16:
+            clamp_value = torch.where(
+                torch.isinf(hidden_states).any(),
+                torch.finfo(hidden_states.dtype).max - 1000,
+                torch.finfo(hidden_states.dtype).max,
+            )
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
-        return hidden_states
+
+        return hidden_states, self_attn_position_bias, cross_attn_position_bias
 
 
 @auto_docstring
@@ -337,6 +352,7 @@ class SwitchTransformersPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
         factor = self.config.initializer_factor  # Used for testing weights initialization
         if isinstance(module, SwitchTransformersLayerNorm):
             init.constant_(module.weight, factor * 1.0)
@@ -485,34 +501,35 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
             causal_mask = causal_mask.to(dtype=inputs_embeds.dtype)
             causal_mask = (1.0 - causal_mask) * torch.finfo(inputs_embeds.dtype).min
 
-        # If a 2D or 3D attention mask is provided for the cross-attention
-        # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
-        if self.is_decoder and encoder_hidden_states is not None:
-            encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
-            encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
-            if encoder_attention_mask is None:
-                encoder_attention_mask = torch.ones(encoder_hidden_shape, device=inputs_embeds.device)
-            encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
-        else:
-            encoder_extended_attention_mask = None
+        if encoder_attention_mask is not None:
+            encoder_attention_mask = create_bidirectional_mask(
+                config=self.config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=encoder_attention_mask,
+                encoder_hidden_states=encoder_hidden_states,
+            )
 
         position_bias = None
         encoder_decoder_position_bias = None
 
         hidden_states = self.dropout(inputs_embeds)
 
-        for i, layer_module in enumerate(self.block):
-            hidden_states = layer_module(
+        for layer_module in self.block:
+            hidden_states, self_attention_position_bias, cross_attention_position_bias = layer_module(
                 hidden_states,
                 causal_mask,
                 position_bias,
                 encoder_hidden_states,
-                encoder_extended_attention_mask,
+                encoder_attention_mask,
                 encoder_decoder_position_bias,
                 past_key_values=past_key_values,
-                use_cache=use_cache,
                 **kwargs,
             )
+
+            # We share the position biases between the layers - the first layer stores them
+            position_bias = self_attention_position_bias
+            if self.is_decoder and encoder_hidden_states is not None:
+                encoder_decoder_position_bias = cross_attention_position_bias
 
         hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)

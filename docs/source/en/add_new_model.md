@@ -8,7 +8,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -105,7 +105,7 @@ In addition to learning more about your model, use the tips below to help you ad
 > Each contributor has a unique style and workflow for adding models to Transformers. For an example, take a look at how [Gemma](https://github.com/huggingface/transformers/pull/29167) was added.
 
 - Don't reinvent the wheel! Take your time to explore existing models and tokenizers to see what you can copy and reuse. [Grep](https://www.gnu.org/software/grep/) and [ripgrep](https://github.com/BurntSushi/ripgrep) are great tools for this.
-- This is more of an engineering than a science challenge. Focus on the more practical (setting up an efficient debugging environment for example) instead of the theorertical aspects of the model.
+- This is more of an engineering than a science challenge. Focus on the more practical (setting up an efficient debugging environment for example) instead of the theoretical aspects of the model.
 - Don't be shy to ask for help! We are here to support you. 🤗
 
 ## Dev environment
@@ -207,7 +207,7 @@ This can be difficult if the original model repository is lacking documentation 
 Orient yourself with the original repository by doing the following.
 
 - Locate the pretrained weights.
-- Figure out how to the load pretrained weights into the model.
+- Figure out how to load pretrained weights into the model.
 - Figure out how to run the tokenizer independently of the model.
 - Trace one forward pass to understand which classes and functions are required. These are probably the only classes and functions you'll have to implement.
 - Locate all the important components (model class, model subclasses, self-attention layer, etc.) of the model.
@@ -301,34 +301,36 @@ The automatically generated code in the `modeling.py` file has the same architec
 
 ### Model initialization
 
-At this point, your code doesn't have to be clean or even fully correct, It is more efficient to quickly create a first draft and then iteratively improve on it. The most important thing is that your model can be instantiated from Transformers. The command below creates a model from the configuration with random weights, verifying that the `__init__` method works.
+At this point, your code doesn't have to be clean or even fully correct. It is more efficient to quickly create a first draft and then iteratively improve on it. The most important thing is that your model can be instantiated from Transformers. The command below creates a model from the configuration with random weights, verifying that the `__init__` method works.
 
 ```py
 from transformers import BrandNewLlama, BrandNewLlamaConfig
 model = BrandNewLlama(BrandNewLlamaConfig())
 ```
 
-Random initialization occurs in the `_init_weights` method of `BrandNewLlamaPreTrainedModel`. All leaf modules are initialized depending on the configuration's variables.
+Random initialization occurs in the `_init_weights` method of `BrandNewLlamaPreTrainedModel`. All leaf modules are initialized depending on the configuration's variables. Use the helpers from the `transformers.initialization` module to set the values, rather than calling in-place operations directly on a weight or its `.data`.
 
 ```py
+from transformers import initialization as init
+
 def _init_weights(self, module):
     """Initialize the weights"""
     if isinstance(module, nn.Linear):
-        module.weight.normal_(mean=0.0, std=self.config.initializer_range)
+        init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
         if module.bias is not None:
-            module.bias.zero_()
+            init.zeros_(module.bias)
     elif isinstance(module, nn.Embedding):
-        module.weight.normal_(mean=0.0, std=self.config.initializer_range)
+        init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
         if module.padding_idx is not None:
-            module.weight.data[module.padding_idx].zero_()
+            init.zeros_(module.weight[module.padding_idx])
     elif isinstance(module, nn.LayerNorm):
-        module.bias.zero_()
-        module.weight.fill_(1.0)
+        init.zeros_(module.bias)
+        init.ones_(module.weight)
 ```
 
-The initialization scheme can look different if you need to adapt it to your model. For example, [`Wav2Vec2ForPreTraining`] initializes [nn.Linear](https://pytorch.org/docs/stable/generated/torch.nn.Linear.html) in its last two linear layers.
+Always initialize weights through the `transformers.initialization` helpers. In-place operations such as `module.bias.zero_()` or anything that touches `module.weight.data` bypass `_is_hf_initialized` that flags which parameters are already loaded. [`~PreTrainedModel.from_pretrained`] runs `_init_weights` after loading the checkpoint, so in-place operations silently overwrite the loaded weights with random values. This is enforced for Transformers models by the [TRF012](./modeling_rules#trf012) rule.
 
-The `_is_hf_initialized` flag makes sure the submodule is only initialized once. Setting `module.project_q` and `module.project_hid` to `True` ensures the custom initialization is not overridden later. The `_init_weights` function won't be applied to these modules.
+The initialization scheme can look different if you need to adapt it to your model. A submodule with its own `reset_parameters` method can call it directly. For example, [`Wav2Vec2ForPreTraining`] initializes [nn.Linear](https://pytorch.org/docs/stable/generated/torch.nn.Linear.html) in its last two linear layers. The call is safe because [`~PreTrainedModel.from_pretrained`] patches the underlying `torch.nn.init` functions to respect the `_is_hf_initialized` flag while it runs `_init_weights`, so loaded weights aren't overwritten.
 
 ```py
 def _init_weights(self, module):
@@ -336,12 +338,6 @@ def _init_weights(self, module):
     if isinstance(module, Wav2Vec2ForPreTraining):
         module.project_hid.reset_parameters()
         module.project_q.reset_parameters()
-        module.project_hid._is_hf_initialized = True
-        module.project_q._is_hf_initialized = True
-    elif isinstance(module, nn.Linear):
-        module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-        if module.bias is not None:
-            module.bias.zero_()
 ```
 
 ### Convert checkpoints to Transformers
@@ -511,7 +507,7 @@ SET RUN_SLOW=1 pytest -sv tests/models/brand_new_llama/test_modeling_brand_new_l
 
 All features unique to BrandNewLlama should be tested in a separate test under `BrandNewLlamaModelTester/BrandNewLlamaModelTest`. This test is often overlooked, but it is extremely important because:
 
-- it helps transfer knowledge you acquired during the process to the community by showing how the models novel features work
+- it helps transfer knowledge you acquired during the process to the community by showing how the model's novel features work
 - future contributors can quickly test changes to the model by running these special tests
 
 ## Implement tokenizer
@@ -639,26 +635,6 @@ You're finally ready to merge your pull request and officially add the model to 
 Congratulations on adding a new model to Transformers! 🥳
 
 This is a very significant contribution. Your work makes Transformers more accessible to developers and researchers around the world. You should be proud of your contribution and share your accomplishment with the community!
-
-## Model addition timeline
-
-There are four timelines for model additions depending on the model contributor and community demand for an architecture.
-
-- **day-0 integration**: If you plan on having a Transformers-first release, this is a great option because we can ensure the documentation is clear and optimize your model as much as possible (quantization, FlashAttention, KV-cache, etc.). We can also help you add the model, provide early reviews and make sure it works as expected.
-
-  Reach out to transformers@huggingface.co a few days (preferably weeks) in advance, especially if an architecture is particularly novel, to ensure model integration. We'll work together on a private fork of Transformers until your checkpoint and release is ready.
-
-- **same week integration**: Models with significant requests/demand are usually added the same week if the model author doesn't reach out.
-
-  Use the [issue tracker](https://github.com/huggingface/transformers/issues/new?assignees=&labels=New+model&projects=&template=new-model-addition.yml) to request a specific model to add. The more activity on the issue, the faster and more likely we'll integrate it.
-
-- **post-release integration**: Models without popular requests/demand or if we don't have the bandwidth to integrate it are added post-release.
-
-  This is a good opportunity if you're interested in contributing a model to Transformers. Take a look at open issues tagged with ["New model"](https://github.com/huggingface/transformers/issues?q=is%3Aopen+is%3Aissue+label%3A%22New+model%22). Feel free to give the most requested models a try first to multiply the impact of your contribution. We'll be there to help you each step of the way!
-
-- **Hub-first release**: Transformers [remote-code](./models#custom-models) feature allows Transformers-based projects to be shared directly on the Hub. This is a good option if you don't have the bandwidth to add a model directly to Transformers.
-
-  If a model ends up being very popular, then it's very likely that we'll integrate it in Transformers ourselves to enable better support (documentation, maintenance, optimization, etc.) for it. A Hub-first release is the most frictionless way to add a model.
 
 ## See also
 

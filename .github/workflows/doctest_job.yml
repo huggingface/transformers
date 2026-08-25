@@ -18,6 +18,9 @@ env:
   MKL_NUM_THREADS: 16
   TF_FORCE_GPU_ALLOW_GROWTH: true
 
+permissions:
+  contents: read
+
 jobs:
   run_doctests:
     name: " "
@@ -57,26 +60,28 @@ jobs:
       - name: Set `split_keys`
         shell: bash
         run: |
-          echo "${{ matrix.split_keys }}"
-          split_keys=${{ matrix.split_keys }}
+          echo "${MATRIX_SPLIT_KEYS}"
+          split_keys=${MATRIX_SPLIT_KEYS}
           split_keys=${split_keys//'/'/'_'}
           echo "split_keys"
           echo "split_keys=$split_keys" >> $GITHUB_ENV
+        env:
+          MATRIX_SPLIT_KEYS: ${{ matrix.split_keys }}
 
       - name: Run doctests
         working-directory: /transformers
         run: |
           cat doc_tests.txt
-          python3 -m pytest -v --make-reports doc_tests_gpu_${{ env.split_keys }} --doctest-modules $(cat doc_tests.txt) -sv --doctest-continue-on-failure --doctest-glob="*.md"
+          python3 -m pytest -v --make-reports "doc_tests_gpu_${split_keys}" --doctest-modules $(cat doc_tests.txt) -sv --doctest-continue-on-failure --doctest-glob="*.md"
 
       - name: Failure short reports
         if: ${{ failure() }}
         continue-on-error: true
-        run: cat /transformers/reports/doc_tests_gpu_${{ env.split_keys }}/failures_short.txt
+        run: cat "/transformers/reports/doc_tests_gpu_${split_keys}/failures_short.txt"
 
       - name: "Test suite reports artifacts: doc_tests_gpu_test_reports_${{ env.split_keys }}"
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: doc_tests_gpu_test_reports_${{ env.split_keys }}
           path: /transformers/reports/doc_tests_gpu_${{ env.split_keys }}

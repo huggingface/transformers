@@ -347,12 +347,12 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
                 "in your DeepSpeed config or convert your checkpoint to the expected format first."
             )
 
-    from ..core_model_loading import WeightConverter, dot_natural_key, rename_source_key
+    from ..core_model_loading import WeightConverter, WeightRenaming, dot_natural_key, rename_source_key
 
     # Preserve metadata from the original state dict
     metadata = getattr(state_dict, "_metadata", None)
 
-    prefix = model.base_model_prefix
+    base_model_prefix = model.base_model_prefix
 
     # Build a meta state dict for matching - only keys/shapes, no actual tensor data
     # This minimizes memory since we don't duplicate the model's parameters
@@ -360,6 +360,7 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
     for key, param in model.state_dict().items():
         model_state_dict[key] = torch.empty(param.shape, dtype=param.dtype, device="meta")
 
+    renamings = [entry for entry in weight_mapping if isinstance(entry, WeightRenaming)]
     converters = [entry for entry in weight_mapping if isinstance(entry, WeightConverter)]
 
     # Fast path: if we only have simple renamings and no converters, we can skip the expensive collection logic
@@ -367,7 +368,7 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
         new_state_dict = {}
         for original_key, tensor in state_dict.items():
             renamed_key, _ = rename_source_key(
-                original_key, weight_mapping, prefix=prefix, meta_state_dict=model_state_dict
+                original_key, renamings, [], base_model_prefix=base_model_prefix, meta_state_dict=model_state_dict
             )
             if renamed_key in model_state_dict:
                 new_state_dict[renamed_key] = tensor
@@ -388,7 +389,7 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
     for original_key in sorted_keys:
         tensor = state_dict.pop(original_key)
         renamed_key, source_pattern = rename_source_key(
-            original_key, weight_mapping, prefix=prefix, meta_state_dict=model_state_dict
+            original_key, renamings, converters, base_model_prefix=base_model_prefix, meta_state_dict=model_state_dict
         )
 
         # Only process if the renamed key is in the model's state dict
@@ -727,19 +728,17 @@ def deepspeed_sp_compute_loss(accelerator, model, inputs, return_outputs, pc):
             "Sequence parallelism is enabled but no SP process group is available. "
             "Ensure torch_device_mesh is initialized or sp_backend='deepspeed' with sp_size > 1."
         )
-    sp_world_size = pc.sp_size
     # differentiable weighted per-shard-loss aggregation across ranks
     losses_per_rank = torch.distributed.nn.functional.all_gather(loss, group=sp_group)
     # special dealing with SFT that has prompt tokens that aren't used in loss computation
     good_tokens = (inputs["shift_labels"] != -100).view(-1).sum()
     good_tokens_per_rank = torch.distributed.nn.functional.all_gather(good_tokens, group=sp_group)
-    # Skip ranks with zero valid tokens
-    total_loss = sum(
-        losses_per_rank[rank] * good_tokens_per_rank[rank]
-        for rank in range(sp_world_size)
-        if good_tokens_per_rank[rank] > 0
-    )
-    total_good_tokens = sum(good_tokens_per_rank)
-    loss = total_loss / max(total_good_tokens, 1)
+    losses_stacked = torch.stack(losses_per_rank)
+    good_tokens_stacked = torch.stack(good_tokens_per_rank)
+    mask = good_tokens_stacked > 0
+    safe_losses = torch.where(mask, losses_stacked, torch.zeros_like(losses_stacked))
+    total_loss = (safe_losses * good_tokens_stacked).sum()
+    total_good_tokens = good_tokens_stacked.sum()
+    loss = total_loss / total_good_tokens.clamp(min=1)
 
     return (loss, outputs) if return_outputs else loss

@@ -940,9 +940,11 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         n_docs = n_docs if n_docs is not None else self.config.n_docs
         do_deduplication = do_deduplication if do_deduplication is not None else self.config.do_deduplication
         num_doc_return_sequences = (
-            num_return_sequences if num_return_sequences is not None else self.config.num_return_sequences
+            num_return_sequences
+            if num_return_sequences is not None
+            else getattr(self.config, "num_return_sequences", 1)
         )
-        num_beams = num_beams if num_beams is not None else self.config.num_beams
+        num_beams = num_beams if num_beams is not None else getattr(self.config, "num_beams", 1)
 
         assert input_ids is not None or context_input_ids is not None, (
             " At least one of input_ids or context_input_ids must be given"
@@ -1428,19 +1430,19 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
                 Input IDs post-processed from the retrieved documents and the question encoder `input_ids` by the
                 retriever.
 
-                If the model has is not initialized with a `retriever`, `context_input_ids` has to be provided to the
+                If the model is not initialized with a `retriever`, `context_input_ids` has to be provided to the
                 forward pass. `context_input_ids` are returned by [`~RagRetriever.__call__`].
             context_attention_mask (`torch.LongTensor` of shape `(batch_size * config.n_docs, config.max_combined_length)`, *optional*, returned when *output_retrieved=True*):
                 Attention mask post-processed from the retrieved documents and the question encoder `input_ids` by the
                 retriever.
 
-                If the model has is not initialized with a `retriever`, `context_input_ids` has to be provided to the
+                If the model is not initialized with a `retriever`, `context_input_ids` has to be provided to the
                 forward pass. `context_input_ids` are returned by [`~RagRetriever.__call__`].
             doc_scores (`torch.FloatTensor` of shape `(batch_size, config.n_docs)`):
                 Score between each retrieved document embeddings (see `retrieved_doc_embeds`) and
                 `question_encoder_last_hidden_state`.
 
-                If the model has is not initialized with a `retriever`, `context_input_ids` has to be provided to the
+                If the model is not initialized with a `retriever`, `context_input_ids` has to be provided to the
                 forward pass. `context_input_ids` are returned by [`~RagRetriever.__call__`].
             n_docs (`int`, *optional*, defaults to `config.n_docs`)
                 Number of documents to retrieve and/or number of documents for which to generate an answer.

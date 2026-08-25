@@ -149,7 +149,7 @@ class ModernVBertPreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = []
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -195,7 +195,7 @@ class ModernVBertPreTrainedModel(PreTrainedModel):
     custom_intro="""
     ModernVBertModel is a model that combines a vision encoder (SigLIP) and a text encoder (ModernBert).
 
-    ModernVBert is the base model of the visual retriver ColModernVBert, and was introduced in the following paper:
+    ModernVBert is the base model of the visual retriever ColModernVBert, and was introduced in the following paper:
     [*ModernVBERT: Towards Smaller Visual Document Retrievers*](https://arxiv.org/abs/2510.01149).
     """
 )
@@ -245,7 +245,7 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
 
         if input_ids is None:
             image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             image_mask = image_mask[..., 0]  # slice off the hidden dim
         else:

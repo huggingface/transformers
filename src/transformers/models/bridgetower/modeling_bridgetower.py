@@ -195,7 +195,7 @@ class BridgeTowerVisionEmbeddings(nn.Module):
         self.num_patches = (self.image_size // self.patch_size) ** 2
         self.num_positions = self.num_patches + 1
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
-        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
+        self.position_ids = nn.Buffer(torch.arange(self.num_positions).expand((1, -1)), persistent=False)
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
@@ -778,12 +778,8 @@ class BridgeTowerTextEmbeddings(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
-        self.register_buffer(
-            "token_type_ids", torch.zeros(self.position_ids.size(), dtype=torch.long), persistent=False
-        )
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False)
+        self.token_type_ids = nn.Buffer(torch.zeros(self.position_ids.size(), dtype=torch.long), persistent=False)
 
         self.padding_idx = config.pad_token_id
         self.position_embeddings = nn.Embedding(
@@ -820,7 +816,7 @@ class BridgeTowerTextEmbeddings(nn.Module):
         if token_type_ids is None:
             if hasattr(self, "token_type_ids"):
                 # NOTE: We assume either pos ids to have bsz == 1 (broadcastable) or bsz == effective bsz (input_shape[0])
-                buffered_token_type_ids = self.token_type_ids.expand(position_ids.shape[0], -1)
+                buffered_token_type_ids = self.token_type_ids.to(position_ids.device).expand(position_ids.shape[0], -1)
                 buffered_token_type_ids = torch.gather(buffered_token_type_ids, dim=1, index=position_ids)
                 token_type_ids = buffered_token_type_ids.expand(batch_size, seq_length)
             else:
@@ -880,7 +876,7 @@ class BridgeTowerPreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = False
     _no_split_modules = ["BridgeTowerSelfAttention", "BridgeTowerResidualAttention"]
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
     _can_record_outputs = {
         "hidden_states": BridgeTowerTextLayer,
         "attentions": BridgeTowerSelfAttention,
@@ -889,6 +885,7 @@ class BridgeTowerPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
+        super()._init_weights(module)
         std = self.config.initializer_factor
         if isinstance(module, BridgeTowerVisionTransformer):
             proj_std = (self.config.hidden_size**-0.5) * ((2 * self.config.num_hidden_layers) ** -0.5)
@@ -905,9 +902,6 @@ class BridgeTowerPreTrainedModel(PreTrainedModel):
             init.normal_(module.embeddings.position_embedding.weight, std=attn_std * std)
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.Embedding)):
             init.normal_(module.weight, mean=0.0, std=0.05 * std)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
         elif isinstance(module, BridgeTowerForContrastiveLearning):
             init.constant_(module.logit_scale, self.config.logit_scale_init_value)
         elif isinstance(module, BridgeTowerVisionEmbeddings):
@@ -1218,8 +1212,11 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
 
         if attention_mask is None:
             attention_mask = torch.ones(input_shape, dtype=torch.long, device=input_ids.device)
-        extend_text_masks = self.text_model.get_extended_attention_mask(attention_mask, input_shape).to(
-            input_ids.device
+
+        extend_text_masks = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=text_embeds[:, 0:1, :],  # weird case where the mask always wants q_len == 1
+            attention_mask=attention_mask,
         )
 
         # The split_index determines how many layers of the uni-modal encoder are applied before the cross-modal encoder
@@ -1269,8 +1266,10 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             dtype=torch.long,
             device=input_ids.device,
         )
-        extend_image_masks = self.text_model.get_extended_attention_mask(pixel_mask, pixel_mask.size()).to(
-            input_ids.device
+        extend_image_masks = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=cross_modal_image,
+            attention_mask=pixel_mask,
         )
 
         layer_outputs_text = self.cross_modal_text_layers[0](

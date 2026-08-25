@@ -22,6 +22,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ... import initialization as init
 from ...activations import ACT2FN, get_activation
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithCrossAttentions,
@@ -60,12 +61,8 @@ class ConvBertEmbeddings(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.embedding_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
-        self.register_buffer(
-            "token_type_ids", torch.zeros(self.position_ids.size(), dtype=torch.long), persistent=False
-        )
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False)
+        self.token_type_ids = nn.Buffer(torch.zeros(self.position_ids.size(), dtype=torch.long), persistent=False)
 
     def forward(
         self,
@@ -630,8 +627,6 @@ class ConvBertModel(ConvBertPreTrainedModel):
             else:
                 token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
-        extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape)
-
         hidden_states = self.embeddings(
             input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
         )
@@ -639,9 +634,15 @@ class ConvBertModel(ConvBertPreTrainedModel):
         if hasattr(self, "embeddings_project"):
             hidden_states = self.embeddings_project(hidden_states)
 
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=hidden_states,
+            attention_mask=attention_mask,
+        )
+
         encoder_outputs: BaseModelOutputWithCrossAttentions = self.encoder(
             hidden_states,
-            attention_mask=extended_attention_mask,
+            attention_mask=attention_mask,
             **kwargs,
         )
 

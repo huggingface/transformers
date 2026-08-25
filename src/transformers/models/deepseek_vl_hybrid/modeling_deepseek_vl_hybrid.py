@@ -71,12 +71,6 @@ class DeepseekVLHybridBaseModelOutputWithPast(ModelOutput):
 
         If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
         hidden_size)` is output.
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
-        `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
-        input) to speed up sequential decoding.
     image_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
         Tuple of `torch.FloatTensor` (one for the output of the image embeddings, `(batch_size, num_images,
         sequence_length, hidden_size)`.
@@ -230,7 +224,6 @@ class DeepseekVLHybridPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
-    _no_split_modules = ["LlamaDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values", "causal_mask"]
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -240,17 +233,11 @@ class DeepseekVLHybridPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=self.config.text_config.initializer_range)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.Conv2d):
+        super()._init_weights(module)
+        if isinstance(module, nn.Conv2d):
             init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
             if module.bias is not None:
                 init.zeros_(module.bias)
-        elif isinstance(module, DeepseekVLHybridLayerNorm):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
         elif isinstance(module, DeepseekVLHybridModel):
             init.zeros_(module.high_res_vision_alpha)
 
@@ -286,12 +273,6 @@ class DeepseekVLHybridModel(DeepseekVLHybridPreTrainedModel):
         # Initialize weights and apply final processing.
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
-
     @can_return_tuple
     @auto_docstring(custom_args=DEEPSEEK_VL_COMMON_CUSTOM_ARGS)
     def get_image_features(
@@ -323,7 +304,7 @@ class DeepseekVLHybridModel(DeepseekVLHybridPreTrainedModel):
         """
         if input_ids is None:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = special_image_mask.all(-1)
         else:
@@ -331,9 +312,9 @@ class DeepseekVLHybridModel(DeepseekVLHybridPreTrainedModel):
 
         n_image_tokens = special_image_mask.sum()
         n_image_features = image_features.shape[0] * image_features.shape[1]
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         torch_compilable_check(
-            inputs_embeds[special_image_mask].numel() == image_features.numel(),
+            n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
             f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {n_image_features}",
         )
         return special_image_mask
@@ -367,13 +348,13 @@ class DeepseekVLHybridModel(DeepseekVLHybridPreTrainedModel):
         if pixel_values is not None:
             if input_ids is None:
                 image_attention_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                    torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
                 image_attention_mask = image_attention_mask.all(-1)
             else:
                 image_attention_mask = input_ids == self.config.image_token_id
 
-            image_attention_mask = image_attention_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+            image_attention_mask = image_attention_mask.unsqueeze(-1).to(inputs_embeds.device)
             image_embeds = self.get_image_features(pixel_values, high_res_pixel_values, return_dict=True).pooler_output
             image_features = image_embeds.reshape(-1, inputs_embeds.shape[-1])
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
@@ -444,12 +425,6 @@ class DeepseekVLHybridForConditionalGeneration(DeepseekVLHybridPreTrainedModel, 
         # Initialize weights and apply final processing.
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.model.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.language_model.set_input_embeddings(value)
-
     @can_return_tuple
     @auto_docstring(custom_args=DEEPSEEK_VL_COMMON_CUSTOM_ARGS)
     def forward(
@@ -502,38 +477,6 @@ class DeepseekVLHybridForConditionalGeneration(DeepseekVLHybridPreTrainedModel, 
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
         )
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        inputs_embeds=None,
-        pixel_values=None,
-        high_res_pixel_values=None,
-        attention_mask=None,
-        logits_to_keep=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            logits_to_keep=logits_to_keep,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
-        if is_first_iteration or not kwargs.get("use_cache", True):
-            # Pixel values are used only in the first iteration if available
-            # In subsequent iterations, they are already merged with text and cached
-            # NOTE: first iteration doesn't have to be prefill, it can be the first
-            # iteration with a question and cached system prompt (continue generate from cache)
-            model_inputs["pixel_values"] = pixel_values
-            model_inputs["high_res_pixel_values"] = high_res_pixel_values
-
-        return model_inputs
 
 
 __all__ = ["DeepseekVLHybridPreTrainedModel", "DeepseekVLHybridModel", "DeepseekVLHybridForConditionalGeneration"]

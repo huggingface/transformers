@@ -20,22 +20,24 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Optional
 
 import torch
 from torch import nn
 
 from ...activations import ACT2FN
-from ...integrations import use_kernel_func_from_hub, use_kernelized_func
+from ...generation import CompileConfig, GenerationMixin
+from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, CausalLMOutput
+from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ..auto import AutoModel
 from .configuration_lasr import LasrCTCConfig, LasrEncoderConfig
 
 
@@ -68,8 +70,7 @@ class LasrEncoderSubsampling(nn.Module):
 
 
 class LasrEncoderRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
+    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: LasrEncoderConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
@@ -83,24 +84,19 @@ class LasrEncoderRotaryEmbedding(nn.Module):
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
+    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
-        config: LasrEncoderConfig | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
+        config: LasrEncoderConfig, device=None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
             config ([`~transformers.PreTrainedConfig`]):
                 The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
         Returns:
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
@@ -109,22 +105,22 @@ class LasrEncoderRotaryEmbedding(nn.Module):
         dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
 
         attention_factor = 1.0  # Unused in this type of RoPE
-
         # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
-        return inv_freq, attention_factor
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        return inv_freq.to(device), attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        inv_freq_expanded = (
+            self.inv_freq[None, :, None].expand(position_ids.shape[0], -1, 1).to(dtype=torch.float, device=x.device)
+        )
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+        # Disable any outside autocast context if any, to really force fp32
+        with maybe_autocast(device_type=device_type, enabled=False):
+            freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling
             sin = emb.sin() * self.attention_scaling
@@ -139,7 +135,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-@use_kernel_func_from_hub("rotary_pos_emb")
+@use_kernel_forward_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -431,10 +427,6 @@ class LasrPreTrainedModel(PreTrainedModel):
         "attentions": LasrEncoderAttention,
     }
 
-    @torch.no_grad()
-    def _init_weights(self, module):
-        super()._init_weights(module)
-
     def _get_subsampling_output_length(self, input_lengths: torch.Tensor):
         encoder_config = self.config.encoder_config if isinstance(self.config, LasrCTCConfig) else self.config
         kernel_size = encoder_config.subsampling_conv_kernel_size
@@ -456,6 +448,26 @@ class LasrPreTrainedModel(PreTrainedModel):
         max_length = target_length if target_length is not None else output_lengths.max()
         attention_mask = torch.arange(max_length, device=attention_mask.device) < output_lengths[:, None]
         return attention_mask
+
+
+@auto_docstring(
+    custom_intro="""
+    Extends [~modeling_outputs.BaseModelOutputWithPooling] to include the output attention mask since sequence length
+    is not preserved in the model's forward.
+    """
+)
+@dataclass
+class LasrEncoderModelOutput(BaseModelOutputWithPooling):
+    r"""
+    attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+        Mask to avoid performing attention on padding token indices after sequence compression. Returned because the
+        sequence length may differ from the input sequence length. Mask values selected in `[0, 1]`:
+
+        - 1 for tokens that are **not masked**,
+        - 0 for tokens that are **masked**.
+    """
+
+    attention_mask: torch.Tensor | None = None
 
 
 @auto_docstring(
@@ -487,21 +499,24 @@ class LasrEncoder(LasrPreTrainedModel):
     @auto_docstring
     @merge_with_config_defaults
     @capture_outputs
-    @can_return_tuple
     def forward(
         self,
         input_features: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
+        output_attention_mask: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutput:
+    ) -> LasrEncoderModelOutput:
         r"""
+        output_attention_mask (`bool`, *optional*):
+            Whether to return the output attention mask.
+
         Example:
 
         ```python
         >>> from transformers import AutoProcessor, LasrEncoder
         >>> from datasets import load_dataset, Audio
 
-        >>> model_id = TODO
+        >>> model_id = "google/medasr"
         >>> processor = AutoProcessor.from_pretrained(model_id)
         >>> encoder = ParakeetEncoder.from_pretrained(model_id)
 
@@ -524,8 +539,10 @@ class LasrEncoder(LasrPreTrainedModel):
         cos = nn.functional.dropout(cos, p=self.dropout_positions, training=self.training)
         sin = nn.functional.dropout(sin, p=self.dropout_positions, training=self.training)
 
+        output_mask = None
         if attention_mask is not None:
-            attention_mask = self._get_output_attention_mask(attention_mask, target_length=hidden_states.shape[1])
+            output_mask = self._get_output_attention_mask(attention_mask, target_length=hidden_states.shape[1])
+            attention_mask = output_mask
 
         attention_mask = create_bidirectional_mask(
             config=self.config,
@@ -551,13 +568,16 @@ class LasrEncoder(LasrPreTrainedModel):
 
         hidden_states = self.out_norm(hidden_states)
 
-        return BaseModelOutput(last_hidden_state=hidden_states)
+        return LasrEncoderModelOutput(
+            last_hidden_state=hidden_states,
+            attention_mask=output_mask.int() if output_attention_mask and output_mask is not None else None,
+        )
 
 
 @dataclass
-class LasrGenerateOutput(ModelOutput):
+class LasrCTCGenerateOutput(ModelOutput):
     """
-    Outputs of Lasr models.
+    Outputs of Lasr CTC model generation.
 
     Args:
         sequences (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -586,12 +606,12 @@ class LasrGenerateOutput(ModelOutput):
     Lasr Encoder with a Connectionist Temporal Classification (CTC) head.
     """
 )
-class LasrForCTC(LasrPreTrainedModel):
+class LasrForCTC(LasrPreTrainedModel, GenerationMixin):
     config: LasrCTCConfig
 
     def __init__(self, config: LasrCTCConfig):
         super().__init__(config)
-        self.encoder = LasrEncoder(config.encoder_config)
+        self.encoder = AutoModel.from_config(config.encoder_config)
         # Conv rather than linear to be consistent with NeMO decoding layer
         self.ctc_head = nn.Conv1d(config.encoder_config.hidden_size, config.vocab_size, kernel_size=1)
 
@@ -626,6 +646,8 @@ class LasrForCTC(LasrPreTrainedModel):
         >>> print(outputs.loss)
         ```"""
 
+        if labels is not None:
+            kwargs.setdefault("output_attention_mask", True)
         encoder_outputs = self.encoder(
             input_features=input_features,
             attention_mask=attention_mask,
@@ -637,14 +659,9 @@ class LasrForCTC(LasrPreTrainedModel):
 
         loss = None
         if labels is not None:
-            # retrieve loss input_lengths from attention_mask
-            attention_mask = (
-                attention_mask if attention_mask is not None else torch.ones_like(input_features, dtype=torch.long)
-            )
-            input_lengths = self._get_subsampling_output_length(attention_mask.sum(-1))
+            encoder_lengths = encoder_outputs.attention_mask.sum(-1)
 
-            # assuming that padded tokens are filled with -100
-            # when not being attended to
+            # assuming that padded tokens are filled with pad_token_id when not being attended to
             labels_mask = labels != self.config.pad_token_id
             target_lengths = labels_mask.sum(-1)
             flattened_targets = labels.masked_select(labels_mask)
@@ -656,7 +673,7 @@ class LasrForCTC(LasrPreTrainedModel):
                 loss = nn.functional.ctc_loss(
                     log_probs,
                     flattened_targets,
-                    input_lengths,
+                    encoder_lengths,
                     target_lengths,
                     blank=self.config.pad_token_id,
                     reduction=self.config.ctc_loss_reduction,
@@ -676,8 +693,9 @@ class LasrForCTC(LasrPreTrainedModel):
         input_features: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         return_dict_in_generate: bool = False,
+        compile_config: CompileConfig | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> LasrGenerateOutput | torch.LongTensor:
+    ) -> LasrCTCGenerateOutput | torch.LongTensor:
         r"""
         Example:
 
@@ -685,7 +703,7 @@ class LasrForCTC(LasrPreTrainedModel):
         >>> from transformers import AutoProcessor, LasrForCTC
         >>> from datasets import load_dataset, Audio
 
-        >>> model_id = TODO
+        >>> model_id = "google/medasr"
         >>> processor = AutoProcessor.from_pretrained(model_id)
         >>> model = LasrForCTC.from_pretrained(model_id)
 
@@ -699,8 +717,10 @@ class LasrForCTC(LasrPreTrainedModel):
         >>> print(transcription)
         ```
         """
+        model_forward = self.get_compiled_call(compile_config) if compile_config is not None else self.__call__
+
         kwargs["return_dict"] = True
-        outputs: CausalLMOutput = self.forward(
+        outputs: CausalLMOutput = model_forward(
             input_features=input_features,
             attention_mask=attention_mask,
             **kwargs,
@@ -715,7 +735,7 @@ class LasrForCTC(LasrPreTrainedModel):
             sequences[~attention_mask] = self.config.pad_token_id
 
         if return_dict_in_generate:
-            return LasrGenerateOutput(
+            return LasrCTCGenerateOutput(
                 sequences=sequences,
                 logits=outputs.logits,
                 attentions=outputs.attentions,

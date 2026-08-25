@@ -127,8 +127,7 @@ class VideoLlavaPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("image", "video", "text")
     supports_gradient_checkpointing = True
-    _no_split_modules = ["VideoLlavaVisionAttention"]
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _can_compile_fullgraph = True
@@ -162,12 +161,6 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
         self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
-
     @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring(
@@ -182,7 +175,7 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values_images (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
+        pixel_values_images (`torch.FloatTensor` of shape `(batch_size, channels, height, width)`)
             The tensors corresponding to the input images.
         vision_feature_layer (`Union[int, list[int]]`, *optional*):
             The index of the layer to select the vision feature. If multiple indices are provided,
@@ -230,7 +223,7 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values_videos (`torch.FloatTensor]` of shape `(batch_size, num_frames, channels, height, width)`)
+        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_frames, channels, height, width)`)
             The tensors corresponding to the input videos.
         vision_feature_layer (`Union[int, list[int]]`, *optional*):
             The index of the layer to select the vision feature. If multiple indices are provided,
@@ -273,11 +266,11 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
         """
         if input_ids is None:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = special_image_mask.all(-1)
             special_video_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_video_mask = special_video_mask.all(-1)
         else:
@@ -285,18 +278,20 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
             special_video_mask = input_ids == self.config.video_token_id
 
         n_image_tokens = special_image_mask.sum()
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         if image_features is not None:
+            image_features = image_features.flatten(0, 1)
             torch_compilable_check(
-                inputs_embeds[special_image_mask].numel() == image_features.numel(),
+                n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
                 f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0] * image_features.shape[1]}",
             )
 
         n_video_tokens = special_video_mask.sum()
-        special_video_mask = special_video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_video_mask = special_video_mask.unsqueeze(-1).to(inputs_embeds.device)
         if video_features is not None:
+            video_features = video_features.flatten(0, 1)
             torch_compilable_check(
-                inputs_embeds[special_video_mask].numel() == video_features.numel(),
+                n_video_tokens * inputs_embeds.shape[-1] == video_features.numel(),
                 f"Video features and video tokens do not match, tokens: {n_video_tokens}, features: {video_features.shape[0] * video_features.shape[1]}",
             )
         return special_image_mask, special_video_mask
@@ -386,12 +381,6 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
-
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
 
@@ -406,7 +395,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values_images (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
+        pixel_values_images (`torch.FloatTensor` of shape `(batch_size, channels, height, width)`)
             The tensors corresponding to the input images.
         vision_feature_layer (`Union[int, list[int]]`, *optional*):
             The index of the layer to select the vision feature. If multiple indices are provided,
@@ -552,40 +541,6 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
             image_hidden_states=outputs.image_hidden_states,
             video_hidden_states=outputs.video_hidden_states,
         )
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        inputs_embeds=None,
-        pixel_values_images=None,
-        pixel_values_videos=None,
-        attention_mask=None,
-        logits_to_keep=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
-
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            logits_to_keep=logits_to_keep,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
-        if is_first_iteration or not kwargs.get("use_cache", True):
-            # Pixel values are used only in the first iteration if available
-            # In subsequent iterations, they are already merged with text and cached
-            # NOTE: first iteration doesn't have to be prefill, it can be the first
-            # iteration with a question and cached system prompt (continue generate from cache)
-            model_inputs["pixel_values_images"] = pixel_values_images
-            model_inputs["pixel_values_videos"] = pixel_values_videos
-
-        return model_inputs
 
 
 __all__ = ["VideoLlavaPreTrainedModel", "VideoLlavaModel", "VideoLlavaForConditionalGeneration"]

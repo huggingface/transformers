@@ -69,6 +69,7 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_non_multi_accelerator,
     require_torch_up_to_2_accelerators,
+    require_torchvision,
     require_vision,
     run_first,
     run_test_using_subprocess,
@@ -661,6 +662,7 @@ class TrainerAutoBatchSizeTest(TestCasePlus, TrainerIntegrationCommon):
             run_glue.main()
 
     @require_deepspeed
+    @require_torch_non_multi_accelerator
     def test_auto_batch_size_with_deepspeed(self):
         train_dataset = RegressionDataset(length=128)
 
@@ -981,7 +983,7 @@ class TrainerInterruptedTrainingTest(TestCasePlus, TrainerIntegrationCommon):
                 super().__init__()
                 self.fc = nn.Linear(10, 10, bias=False)
                 # data_order logs the order of data points seen by the model
-                self.register_buffer("data_order", torch.empty(0, dtype=torch.long))
+                self.data_order = nn.Buffer(torch.empty(0, dtype=torch.long))
 
             def load_state_dict(self, state_dict, strict=True):
                 # Handle data_order buffer size mismatch during checkpoint loading
@@ -1511,6 +1513,7 @@ class TrainerSavingTest(TestCasePlus, TrainerIntegrationCommon):
         )
 
     @require_vision
+    @require_torchvision
     def test_trainer_saves_image_processor(self):
         MODEL_ID = "openai/clip-vit-base-patch32"
         image_processor = AutoImageProcessor.from_pretrained(MODEL_ID)
@@ -1545,6 +1548,7 @@ class TrainerSavingTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertDictEqual(feature_extractor.to_dict(), reloaded_feature_extractor.to_dict())
 
     @require_vision
+    @require_torchvision
     def test_trainer_saves_processor(self):
         MODEL_ID = "openai/clip-vit-base-patch32"
         image_processor = AutoImageProcessor.from_pretrained(MODEL_ID)

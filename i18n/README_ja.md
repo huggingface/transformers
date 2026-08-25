@@ -71,23 +71,26 @@ user: ユーザ
 
 <h4 align="center">
     <p>
-        <a href="https://github.com/huggingface/transformers/">English</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_zh-hans.md">简体中文</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_zh-hant.md">繁體中文</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ko.md">한국어</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_es.md">Español</a> |
+        <a href="../README.md">English</a> |
+        <a href="README_zh-hans.md">简体中文</a> |
+        <a href="README_zh-hant.md">繁體中文</a> |
+        <a href="README_ko.md">한국어</a> |
+        <a href="README_es.md">Español</a> |
         <b>日本語</b> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_hd.md">हिन्दी</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ru.md">Русский</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_pt-br.md">Português</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_te.md">తెలుగు</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_fr.md">Français</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_de.md">Deutsch</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_it.md">Italiano</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_vi.md">Tiếng Việt</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ar.md">العربية</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ur.md">اردو</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_bn.md">বাংলা</a> |
+        <a href="README_hd.md">हिन्दी</a> |
+        <a href="README_ru.md">Русский</a> |
+        <a href="README_pt-br.md">Português</a> |
+        <a href="README_te.md">తెలుగు</a> |
+        <a href="README_fr.md">Français</a> |
+        <a href="README_de.md">Deutsch</a> |
+        <a href="README_it.md">Italiano</a> |
+        <a href="README_vi.md">Tiếng Việt</a> |
+        <a href="README_ar.md">العربية</a> |
+        <a href="README_ur.md">اردو</a> |
+        <a href="README_bn.md">বাংলা</a> |
+        <a href="README_fa.md">فارسی</a> |
+        <a href="README_ro.md">Română</a> |
+        <a href="README_tr.md">Türkçe</a>
     </p>
 </h4>
 
@@ -346,7 +349,7 @@ Transformersの10万スターを記念して、Transformersで構築された100
 
 ## 引用
 
-🤗 Transformersライブラリについて引用できる[論文](https://www.aclweb.org/anthology/2020.emnlp-demos.6/)ができました:
+🤗 Transformersライブラリについて引用できる[論文](https://aclanthology.org/2020.emnlp-demos.6/)ができました:
 ```bibtex
 @inproceedings{wolf-etal-2020-transformers,
     title = "Transformers: State-of-the-Art Natural Language Processing",
@@ -356,7 +359,7 @@ Transformersの10万スターを記念して、Transformersで構築された100
     year = "2020",
     address = "Online",
     publisher = "Association for Computational Linguistics",
-    url = "https://www.aclweb.org/anthology/2020.emnlp-demos.6",
+    url = "https://aclanthology.org/2020.emnlp-demos.6/",
     pages = "38--45"
 }
 ```

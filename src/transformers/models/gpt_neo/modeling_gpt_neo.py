@@ -65,7 +65,7 @@ class GPTNeoSelfAttention(nn.Module):
         if attention_type == "local":
             bias = torch.bitwise_xor(bias, torch.tril(bias, -config.window_size))
 
-        self.register_buffer("bias", bias, persistent=False)
+        self.bias = nn.Buffer(bias, persistent=False)
 
         self.attn_dropout = nn.Dropout(float(config.attention_dropout))
         self.resid_dropout = nn.Dropout(float(config.resid_dropout))
@@ -356,7 +356,7 @@ class GPTNeoPreTrainedModel(PreTrainedModel):
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
     _no_split_modules = ["GPTNeoBlock"]
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _can_compile_fullgraph = False  # TODO: needs a hybrid cache
 
