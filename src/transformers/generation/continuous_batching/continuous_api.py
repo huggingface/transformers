@@ -787,6 +787,12 @@ class ContinuousBatchingManager:
         # If this process is not a TP driver, request submission is a no-op
         if not self.is_tp_driver:
             return None
+        # If the background thread died on a fatal error, submitting is pointless: fail fast instead of letting
+        # the caller wait forever on results that will never come
+        if self.fatal_error is not None:
+            raise RuntimeError(
+                "The continuous batching background thread died with a fatal error."
+            ) from self.fatal_error
         # If the manager is not accepting new requests, throw a warning and return None
         if self.background_thread_status.local_status >= BackgroundThreadStatus.FLUSH_AND_STOP:
             preview = f"{input_ids[:3]}"[:-1] + ", ..., " + f"{input_ids[-3:]}"[1:]
@@ -864,16 +870,31 @@ class ContinuousBatchingManager:
     def get_result(self, request_id: str | None = None, timeout: float | None = None) -> GenerationOutput | None:
         """Retrieve one result from the output queue. If an ID is provided, returns the first matching request. If a
         timeout is provided, returns None after the timeout (in seconds)."""
-        if self._generation_thread is None and self.output_router.output_queue.empty():
-            return None
-        try:
-            result = self.output_router.output_queue.get(block=True, timeout=timeout)
+        # The wait is chunked so that a background thread dying mid-wait is noticed within a second instead of
+        # after the caller's full timeout
+        deadline = None if timeout is None else perf_counter() + timeout
+        while True:
+            # If the background thread died on a fatal error and the remaining results are drained, waiting is
+            # pointless: fail fast instead of returning None until the caller's timeout
+            if self.fatal_error is not None and self.output_router.output_queue.empty():
+                raise RuntimeError(
+                    "The continuous batching background thread died with a fatal error."
+                ) from self.fatal_error
+            if self._generation_thread is None and self.output_router.output_queue.empty():
+                return None
+            remaining = None if deadline is None else deadline - perf_counter()
+            if remaining is not None and remaining <= 0:
+                return None
+            try:
+                result = self.output_router.output_queue.get(
+                    block=True, timeout=1.0 if remaining is None else min(remaining, 1.0)
+                )
+            except queue.Empty:
+                continue
             if request_id is not None and result.request_id != request_id:
                 self.output_router.output_queue.put(result)
                 return None
             return result
-        except queue.Empty:
-            return None
 
     def __iter__(self):
         """Iterate over results as they become available."""
