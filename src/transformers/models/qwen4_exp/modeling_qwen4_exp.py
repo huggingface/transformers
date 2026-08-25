@@ -1367,10 +1367,12 @@ class Qwen4ExpTextModel(Qwen4ExpPreTrainedModel):
         elif position_ids.ndim == 2:
             position_ids = position_ids[None, ...].expand(4, position_ids.shape[0], -1)
 
-        if position_ids.ndim == 3 and position_ids.shape[0] == 4:
-            # Slice to current positionms for the text ids
+        if position_ids.shape[0] == 4:
             text_position_ids = position_ids[0]
             position_ids = position_ids[1:]
+        elif position_ids.shape[0] == 1:
+            text_position_ids = position_ids[0]
+            position_ids = position_ids.expand(3, -1, -1)
         else:
             text_position_ids = None
 
