@@ -128,7 +128,7 @@ class KimiLinearConfig(PreTrainedConfig):
         self.linear_value_head_dim = self.linear_key_head_dim
         self.linear_num_value_heads = self.linear_num_key_heads
 
-        # For layer types, the precedence is: explcit `layer_types` > checkpoint config > default
+        # For layer types, the precedence is: explicit `layer_types` > checkpoint config > default
         if self.layer_types is not None:
             pass  # nothing to do here
         elif "full_attn_layers" in linear_attn_config and "kda_layers" in linear_attn_config:

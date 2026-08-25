@@ -188,7 +188,6 @@ class KimiLinearAttention(nn.Module):
 
     def __init__(self, config: KimiLinearConfig, layer_idx: int):
         super().__init__()
-        config.attention_bias = False
         self.config = config
         self.layer_idx = layer_idx
         self.attention_dropout = config.attention_dropout
@@ -722,7 +721,7 @@ class KimiLinearDeltaAttention(nn.Module):  # TODO: can we try to inherit from q
             initial_state=recurrent_state,
             output_final_state=past_key_values is not None,
             use_qk_l2norm_in_kernel=True,
-            **kwargs,  # TODO: FLA kernel can do more and we precompute less, but it means more code divergence before
+            **kwargs,  # NOTE: FLA kernel can do more and we precompute less, but it means more code divergence before
         )
 
         # Update cache
@@ -737,7 +736,6 @@ class KimiLinearDeltaAttention(nn.Module):  # TODO: can we try to inherit from q
         # Apply output projection
         normed_attn_out = normed_attn_out.reshape(batch_size, seq_len, -1)
         output = self.o_proj(normed_attn_out)
-        # TODO: BUG: is there an attn mask to apply here?
         return output, None  # we add a "None" so it matches the MLA return type
 
 
@@ -870,7 +868,7 @@ class KimiLinearPreTrainedModel(PreTrainedModel):
         "attentions": KimiLinearAttention,
     }
     _is_stateful = True
-    _can_compile_fullgraph = True  # TODO: check
+    _can_compile_fullgraph = True
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -885,11 +883,6 @@ class KimiLinearPreTrainedModel(PreTrainedModel):
         elif isinstance(module, KimiLinearTopkRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.e_score_correction_bias)
-        # TODO: check what we keep in this
-        # elif isinstance(module, nn.Embedding):
-        #     module.weight.data.normal_(mean=0.0, std=std)
-        #     if module.padding_idx is not None:
-        #         module.weight.data[module.padding_idx].zero_()
 
 
 class KimiLinearModel(KimiLinearPreTrainedModel):

@@ -122,7 +122,7 @@ class KimiLinearConfig(DeepseekV3Config):
         self.linear_value_head_dim = self.linear_key_head_dim
         self.linear_num_value_heads = self.linear_num_key_heads
 
-        # For layer types, the precedence is: explcit `layer_types` > checkpoint config > default
+        # For layer types, the precedence is: explicit `layer_types` > checkpoint config > default
         if self.layer_types is not None:
             pass  # nothing to do here
         elif "full_attn_layers" in linear_attn_config and "kda_layers" in linear_attn_config:
@@ -149,7 +149,7 @@ class KimiLinearRMSNorm(LlamaRMSNorm):
     pass
 
 
-# NOTE: The `fla` referefence stays in fp32 until after the gate is applied, but the qwen norm does not. This is not an
+# NOTE: The `fla` reference stays in fp32 until after the gate is applied, but the qwen norm does not. This is not an
 # issue right now, but if it ever becomes one, change the parent or override `forward`.
 class KimiLinearRMSNormGated(Qwen3NextRMSNormGated):
     def __init__(self, hidden_size, eps=1e-6, **kwargs):
@@ -170,7 +170,6 @@ class KimiLinearAttention(DeepseekV3Attention):
     still shared."""
 
     def __init__(self, config: KimiLinearConfig, layer_idx: int):
-        config.attention_bias = False
         super().__init__(config, layer_idx)
         self.scaling = self.qk_head_dim ** (-0.5)
 
@@ -591,7 +590,7 @@ class KimiLinearDeltaAttention(nn.Module):  # TODO: can we try to inherit from q
             initial_state=recurrent_state,
             output_final_state=past_key_values is not None,
             use_qk_l2norm_in_kernel=True,
-            **kwargs,  # TODO: FLA kernel can do more and we precompute less, but it means more code divergence before
+            **kwargs,  # NOTE: FLA kernel can do more and we precompute less, but it means more code divergence before
         )
 
         # Update cache
@@ -606,7 +605,6 @@ class KimiLinearDeltaAttention(nn.Module):  # TODO: can we try to inherit from q
         # Apply output projection
         normed_attn_out = normed_attn_out.reshape(batch_size, seq_len, -1)
         output = self.o_proj(normed_attn_out)
-        # TODO: BUG: is there an attn mask to apply here?
         return output, None  # we add a "None" so it matches the MLA return type
 
 
@@ -651,7 +649,7 @@ class KimiLinearPreTrainedModel(PreTrainedModel):
         "attentions": KimiLinearAttention,
     }
     _is_stateful = True
-    _can_compile_fullgraph = True  # TODO: check
+    _can_compile_fullgraph = True
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -666,18 +664,8 @@ class KimiLinearPreTrainedModel(PreTrainedModel):
         elif isinstance(module, KimiLinearTopkRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.e_score_correction_bias)
-        # TODO: check what we keep in this
-        # elif isinstance(module, nn.Embedding):
-        #     module.weight.data.normal_(mean=0.0, std=std)
-        #     if module.padding_idx is not None:
-        #         module.weight.data[module.padding_idx].zero_()
 
 
-# Closest parent: Qwen3NextModel. NEEDS ADJUSTMENT: same hybrid forward loop (per-layer mask dispatch driven
-# by `layer_types`, generic `DynamicCache` init), but the hand-rolled `_update_linear_attn_mask` should
-# become `create_recurrent_attention_mask` from `masking_utils` (used together with `create_causal_mask`,
-# same pattern as olmo_hybrid), and the hardcoded "force flash_attention_2" block should be dropped —
-# that's a remote-code hack, not transformers convention.
 class KimiLinearModel(Qwen3NextModel):
     def __init__(self, config: KimiLinearConfig):
         super().__init__(config)
