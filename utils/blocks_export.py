@@ -49,7 +49,7 @@ from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent))
 
-from blocks_facets import REPO_ROOT, build_variants, scan_repo  # noqa: E402
+from blocks_facets import REPO_ROOT, build_date_data, build_variants, scan_repo  # noqa: E402
 
 
 MANIFEST_PATH = REPO_ROOT / "utils" / "model_blocks.json"
@@ -87,10 +87,15 @@ def build_manifest(blocks: list) -> dict[str, dict]:
             entry[kind] = owners[0] if len(owners) == 1 else owners
         if entry:
             models[model] = entry
-    return {
-        "variants": {kind: dict(sorted(definitions[kind].items())) for kind in KIND_ORDER if definitions.get(kind)},
-        "models": models,
+    # Variants in the order they entered the library, oldest first: the vocabulary reads as the
+    # architecture's history rather than as an alphabet.
+    dates = build_date_data()
+    ordered = {
+        kind: dict(sorted(definitions[kind].items(), key=lambda kv: (dates.get(kv[0], "9999-99-99"), kv[0])))
+        for kind in KIND_ORDER
+        if definitions.get(kind)
     }
+    return {"variants": ordered, "models": models}
 
 
 def render(manifest: dict) -> str:

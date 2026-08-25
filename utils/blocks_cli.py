@@ -85,7 +85,10 @@ def cmd_compile(args: argparse.Namespace) -> int:
 
     print(f"{len(blocks)} blocks and {len(helpers)} helper definitions -> {len(variants)} variants\n")
     for kind in REPORTED_KINDS:
-        kind_variants = sorted((v for v in variants.values() if v.kind == kind), key=lambda v: -len(v.owners))
+        kind_variants = sorted(
+            (v for v in variants.values() if v.kind == kind),
+            key=lambda v: (dates.get(v.canonical or "", "9999-99-99"), v.canonical or ""),
+        )
         if not kind_variants:
             continue
         singletons = sum(1 for v in kind_variants if len(v.owners) == 1)
@@ -130,7 +133,11 @@ def _render_markdown(variants, helper_groups, dates) -> str:
         "",
     ]
     for kind in REPORTED_KINDS:
-        kind_variants = sorted((v for v in variants.values() if v.kind == kind), key=lambda v: -len(v.owners))
+        # Oldest first: the table then reads as the order these shapes entered the library.
+        kind_variants = sorted(
+            (v for v in variants.values() if v.kind == kind),
+            key=lambda v: (dates.get(v.canonical or "", "9999-99-99"), v.canonical or ""),
+        )
         if not kind_variants:
             continue
         lines += [f"## {kind}", "", f"Axes: `{' | '.join(TIER1_AXES.get(kind, ('?',)))}`", ""]
