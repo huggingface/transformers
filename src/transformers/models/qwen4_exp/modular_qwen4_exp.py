@@ -959,15 +959,29 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
             past_key_values = DynamicCache(config=self.config)
 
         # position_ids are the full position_ids here, as the indexer needs full position_embeddings
+        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1] + past_seen_tokens, device=inputs_embeds.device)
             position_ids = position_ids.view(1, 1, -1).expand(4, inputs_embeds.shape[0], -1)
         elif position_ids.ndim == 2:
+            batch_size, current_seq_length = inputs_embeds.shape[:2]
+            full_length = past_seen_tokens + current_seq_length
+            # User passed sliced position_ids explicitly: expand them to full positions
+            if position_ids.shape[-1] < full_length:
+                full_position_ids = position_ids.new_zeros((batch_size, full_length))
+                full_position_ids[:, -current_seq_length:] = position_ids
+                for i in range(batch_size):
+                    first_pos = position_ids[i, 0].item()
+                    full_position_ids[i, -current_seq_length - first_pos : -current_seq_length] = torch.arange(
+                        first_pos, device=position_ids.device
+                    )
+                position_ids = full_position_ids
+            # Expand to 3d
             position_ids = position_ids[None, ...].expand(4, position_ids.shape[0], -1)
 
         if position_ids.ndim == 3 and position_ids.shape[0] == 4:
-            text_position_ids = position_ids[0]
+            # Slice to current positionms for the text ids
+            text_position_ids = position_ids[0][..., -inputs_embeds.shape[1] :]
             position_ids = position_ids[1:]
         else:
             text_position_ids = None
@@ -978,7 +992,7 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
                 "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
                 "past_key_values": past_key_values,
-                "position_ids": text_position_ids[..., -inputs_embeds.shape[1] :],
+                "position_ids": text_position_ids,
                 # Due to the indexer, we always want to create a mask to then simply overlay the indexer mask in each layer - otherwise
                 # we may have to recreate it in each layer if it gets skipped
                 "allow_is_causal_skip": False,
