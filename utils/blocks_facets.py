@@ -787,7 +787,13 @@ def modular_parents(models_root: Path = MODELS_ROOT) -> dict[str, frozenset[str]
     parents: dict[str, set[str]] = defaultdict(set)
     for model_dir in sorted(p for p in models_root.iterdir() if p.is_dir()):
         for path in sorted(model_dir.glob("modular_*.py")):
-            for module in extract_model_imports_from_file(path):
+            try:
+                modules = extract_model_imports_from_file(path)
+            except (OSError, SyntaxError):
+                # A modular file can be transiently unparseable while someone is editing it. The
+                # registry must degrade rather than take the whole tool down.
+                continue
+            for module in modules:
                 parent = parent_from_module(module)
                 if parent and parent != model_dir.name:
                     parents[model_dir.name].add(parent)

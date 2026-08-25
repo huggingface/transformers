@@ -245,6 +245,14 @@ class PeAudioVideoEncoderEmbedder(nn.Module):
         return inputs_embeds, padding_mask, audio_output, video_output
 
 
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
+    freqs_cis = stack_freqs(cos, sin)
+    freqs_cis = freqs_cis.unsqueeze(unsqueeze_dim)
+    q_ = q.reshape(*q.shape[:-1], -1, 1, 2)
+    k_ = k.reshape(*k.shape[:-1], -1, 1, 2)
+    return (q_ * freqs_cis).sum(5).flatten(3), (k_ * freqs_cis).sum(5).flatten(3)
+
+
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
@@ -288,14 +296,6 @@ def stack_freqs(cos: torch.Tensor, sin: torch.Tensor):
     sin = sin.narrow(-1, 0, dim // 2)
     freqs_cis = torch.stack((cos, -sin, sin, cos), dim=-1).view(*cos.size(), 2, 2)
     return freqs_cis
-
-
-def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
-    freqs_cis = stack_freqs(cos, sin)
-    freqs_cis = freqs_cis.unsqueeze(unsqueeze_dim)
-    q_ = q.reshape(*q.shape[:-1], -1, 1, 2)
-    k_ = k.reshape(*k.shape[:-1], -1, 1, 2)
-    return (q_ * freqs_cis).sum(5).flatten(3), (k_ * freqs_cis).sum(5).flatten(3)
 
 
 class PeAudioVideoEncoderAttention(nn.Module):

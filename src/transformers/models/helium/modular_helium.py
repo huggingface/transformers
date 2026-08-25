@@ -20,6 +20,7 @@ import torch.nn as nn
 from ...utils import logging
 from ...utils.generic import no_inherit_decorator
 from ..gemma.modeling_gemma import GemmaForCausalLM, GemmaForSequenceClassification, GemmaForTokenClassification
+from ..glm.modeling_glm import rotate_half
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaDecoderLayer,
@@ -57,13 +58,6 @@ class HeliumRotaryEmbedding(LlamaRotaryEmbedding):
 
 class HeliumMLP(LlamaMLP):
     pass
-
-
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., 0::2]
-    x2 = x[..., 1::2]
-    return torch.stack((-x2, x1), dim=-1).flatten(-2)
 
 
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):

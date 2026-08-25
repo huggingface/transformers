@@ -27,6 +27,7 @@ from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return
 from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
+from ..pe_audio.modeling_pe_audio import apply_rotary_pos_emb
 from ..qwen3.modeling_qwen3 import Qwen3Attention, Qwen3DecoderLayer, Qwen3RMSNorm, Qwen3RotaryEmbedding
 from .configuration_pe_audio_video import PeAudioVideoConfig, PeAudioVideoEncoderConfig
 
@@ -293,14 +294,6 @@ def stack_freqs(cos: torch.Tensor, sin: torch.Tensor):
     sin = sin.narrow(-1, 0, dim // 2)
     freqs_cis = torch.stack((cos, -sin, sin, cos), dim=-1).view(*cos.size(), 2, 2)
     return freqs_cis
-
-
-def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
-    freqs_cis = stack_freqs(cos, sin)
-    freqs_cis = freqs_cis.unsqueeze(unsqueeze_dim)
-    q_ = q.reshape(*q.shape[:-1], -1, 1, 2)
-    k_ = k.reshape(*k.shape[:-1], -1, 1, 2)
-    return (q_ * freqs_cis).sum(5).flatten(3), (k_ * freqs_cis).sum(5).flatten(3)
 
 
 class PeAudioVideoEncoderRotaryEmbedding(Qwen3RotaryEmbedding): ...
