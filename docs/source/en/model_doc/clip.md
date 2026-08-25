@@ -30,6 +30,8 @@ You can find all the original CLIP checkpoints under the [OpenAI](https://huggin
 
 > [!TIP]
 > Click on the CLIP models in the right sidebar for more examples of how to apply CLIP to different image and language tasks.
+>
+> Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Refer to [Loading kernels](../kernel_doc/loading_kernels) to learn more.
 
 The example below demonstrates how to calculate similarity scores between multiple text descriptions and an image with [`Pipeline`] or the [`AutoModel`] class.
 

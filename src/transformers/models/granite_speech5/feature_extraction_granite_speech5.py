@@ -207,11 +207,10 @@ class GraniteSpeech5FeatureExtractor(SequenceFeatureExtractor):
                 "`max_length`."
             )
 
-        raw_audio = torch.full(
-            (len(clips), target_length), self.padding_value, dtype=torch.float32, device=clips[0].device
-        )
+        buffer = np.full((len(clips), target_length), self.padding_value, dtype=np.float32)
         for index, (clip, length) in enumerate(zip(clips, lengths)):
-            raw_audio[index, :length] = clip[:length]
+            buffer[index, :length] = clip[:length].detach().cpu().numpy()
+        raw_audio = torch.from_numpy(buffer)
         return raw_audio, lengths
 
     def _extract_features(self, audio: "torch.Tensor", device: str | None = "cpu") -> "torch.Tensor":
