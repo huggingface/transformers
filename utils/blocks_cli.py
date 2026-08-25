@@ -33,7 +33,7 @@ import argparse
 import itertools
 import statistics
 import sys
-from collections import Counter, defaultdict
+from collections import defaultdict
 from pathlib import Path
 
 
@@ -49,6 +49,7 @@ from blocks_facets import (  # noqa: E402
     forwards_match,
     generates_modeling,
     measure_axis_costs,
+    modular_class_edges,
     modular_overrides,
     modular_parents,
     scan_file,
@@ -308,12 +309,11 @@ def cmd_lint(args: argparse.Namespace) -> int:
     if "R3" in rules:
         all_overrides = list(modular_overrides())
         declared = {(o.child_model, o.child_class): o for o in all_overrides}
-        # How many blocks each model takes from each base. A base that supplies several blocks is an
-        # established family relationship, and sourcing one more from it is right: Gemma3 taking its
-        # MLP from Gemma2 is descent, not drift, even though llama introduced `gated_mlp`. Only a
-        # base that supplies exactly one block is a one-off reach into an unrelated model -- which is
-        # the "Qwen VLM's text stack defined via GLM via Phi" problem worth reporting.
-        reach = Counter((o.child_model, o.parent_model) for o in all_overrides)
+        # A base that supplies several classes is an established relationship, and sourcing one more
+        # from it is descent, not drift: Gemma3 taking its MLP from Gemma2 is right even though llama
+        # introduced `gated_mlp`. Only a base supplying exactly one class is a one-off reach into an
+        # unrelated model -- the "Qwen VLM's text stack defined via GLM via Phi" problem.
+        reach = modular_class_edges()
         for variant in variants.values():
             if variant.kind not in OVERRIDE_COST or OVERRIDE_COST[variant.kind] < args.min_cost:
                 continue
@@ -333,7 +333,14 @@ def cmd_lint(args: argparse.Namespace) -> int:
                 # the same code could have come from further up the real lineage.
                 if dates.get(override.parent_model, "0000") <= dates.get(canonical or "", "9999-99-99"):
                     continue
-                if reach[(block.model, override.parent_model)] > 1:
+                if reach.get((block.model, override.parent_model), 0) > 1:
+                    continue
+                # Only worth reporting when the swap is free. Where the canonical owner's `__init__`
+                # differs, the older parent is the *wrong* one: nine models take `gated_mlp` from
+                # gemma (`bias=False`) rather than llama (`config.mlp_bias`), and switching to llama
+                # would need an `__init__` override longer than the inheritance it replaced -- on a
+                # config attribute those models do not even define.
+                if tier2_mismatch(block, canonical_block):
                     continue
                 findings.append(
                     (

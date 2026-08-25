@@ -861,6 +861,42 @@ def modular_overrides(models_root: Path = MODELS_ROOT) -> list[Override]:
     return found
 
 
+@cache
+def modular_class_edges(models_root: Path = MODELS_ROOT) -> dict[tuple[str, str], int]:
+    """
+    `{(child model, base model): how many classes the child subclasses from it}`.
+
+    Counts *every* class, not only blocks. Whether two models have an established relationship is
+    decided by everything they share -- `glm4` subclasses `GlmForCausalLM` and
+    `GlmForSequenceClassification` as well as `GlmAttention`, so taking its attention from glm is
+    descent. Counting blocks alone made that look like a one-off reach.
+    """
+    counts: dict[tuple[str, str], int] = defaultdict(int)
+    for model_dir in sorted(p for p in models_root.iterdir() if p.is_dir()):
+        for path in sorted(model_dir.glob("modular_*.py")):
+            try:
+                tree = ast.parse(path.read_text(encoding="utf-8"))
+            except (OSError, SyntaxError):
+                continue
+            owner: dict[str, str] = {}
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.ImportFrom) or node.level not in (2, 3) or not node.module:
+                    continue
+                parent = parent_from_module(node.module)
+                if parent is None or parent == model_dir.name:
+                    continue
+                for alias in node.names:
+                    owner[alias.asname or alias.name] = parent
+            for node in tree.body:
+                if not isinstance(node, ast.ClassDef):
+                    continue
+                for base in node.bases:
+                    name = base.id if isinstance(base, ast.Name) else getattr(base, "attr", None)
+                    if name in owner:
+                        counts[(model_dir.name, owner[name])] += 1
+    return dict(counts)
+
+
 MIN_SAMPLES_PER_AXIS = 3
 
 
