@@ -512,7 +512,6 @@ class TokenizersBackendTesterMixin:
 
         from transformers import convert_slow_tokenizer as convert_slow_tokenizer_module
 
-
         with tempfile.NamedTemporaryFile(suffix=".model", delete=False) as f:
             f.write(b"irrelevant content, extractor is mocked below")
             model_path = f.name
