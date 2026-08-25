@@ -174,15 +174,17 @@ class Qwen2VLConfig(PreTrainedConfig):
         text_kwargs = {key: kwargs.pop(key) for key in text_params if key in kwargs}
 
         if isinstance(self.text_config, dict):
-            # BC: pre-v5 saves placed `tie_word_embeddings` inside text_config. Forward it to the
-            # outer config (where v5's tying logic looks) when the root value is the default.
-            if not self.tie_word_embeddings and self.text_config.get("tie_word_embeddings"):
-                self.tie_word_embeddings = self.text_config["tie_word_embeddings"]
             self.text_config = self.sub_configs["text_config"](**self.text_config)
         elif self.text_config is None:
             # Hub configs are saved as flat dicts so we pop some of kwargs to init `TextConfig`
             text_kwargs["dtype"] = kwargs.get("torch_dtype", kwargs.get("dtype"))  # don't pop the dtype
             self.text_config = self.sub_configs["text_config"](**text_kwargs)
+
+        # BC: pre-v5 saves placed `tie_word_embeddings` inside text_config. Forward it to the outer
+        # config (where v5's tying logic looks) when the root value is the default. Checked after
+        # text_config init so it also covers a text config passed as an already-initialized instance.
+        if not self.tie_word_embeddings and getattr(self.text_config, "tie_word_embeddings", False):
+            self.tie_word_embeddings = True
 
         super().__post_init__(**kwargs)
 
