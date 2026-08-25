@@ -101,7 +101,6 @@ class CanaryConfig(PreTrainedConfig):
                 num_mel_bins=128,
                 scale_input=False,
                 layerdrop=0.0,
-                dropout_positions=0.0,
             )
 
         if isinstance(self.decoder_config, dict):
