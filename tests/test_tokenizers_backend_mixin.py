@@ -495,9 +495,7 @@ class TokenizersBackendTesterMixin:
 
         try:
             # fake TikTokenConverter so it doesn't actually run
-            with patch(
-                "transformers.convert_slow_tokenizer.TikTokenConverter"
-            ) as mock_tiktoken:
+            with patch("transformers.convert_slow_tokenizer.TikTokenConverter") as mock_tiktoken:
                 mock_tiktoken.return_value.converted.return_value = "fake_tokenizer_object"
                 result = TokenizersBackend.convert_to_native_format(vocab_file=corrupt_model_path)
                 self.assertEqual(result.get("tokenizer_object"), "fake_tokenizer_object")
@@ -516,9 +514,7 @@ class TokenizersBackendTesterMixin:
 
         try:
             # KeyError here is just a random unrelated error
-            with patch(
-                "transformers.convert_slow_tokenizer.SentencePieceExtractor"
-            ) as mock_extractor:
+            with patch("transformers.convert_slow_tokenizer.SentencePieceExtractor") as mock_extractor:
                 mock_extractor.side_effect = KeyError("TEST_UNRELATED_ERROR")
 
                 with self.assertRaises(KeyError):
