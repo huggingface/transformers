@@ -14,7 +14,9 @@
 
 import json
 import os
+import warnings
 from dataclasses import asdict, dataclass
+from typing import Literal
 
 
 @dataclass
@@ -27,7 +29,7 @@ class DistributedConfig:
             Number of devices for tensor parallelism. If `None` and `fsdp_size` is set, defaults to 1.
         tp_plan (`dict`, *optional*):
             Tensor parallel sharding plan. Leave as `None` to use the model's `base_model_tp_plan`.
-            Set explicitly to override.
+            Set explicitly to override. Passing `"auto"` is deprecated; leave it as `None` instead.
         enable_sequence_parallel (`bool`, *optional*, defaults to `False`):
             Reserved for sequence parallelism. Not wired up yet.
         enable_expert_parallel (`bool`, *optional*, defaults to `False`):
@@ -41,7 +43,7 @@ class DistributedConfig:
     """
 
     tp_size: int | None = None
-    tp_plan: dict[str, str] | None = None
+    tp_plan: dict[str, str] | Literal["auto"] | None = None
     enable_sequence_parallel: bool = False
     enable_expert_parallel: bool = False
     fsdp_size: int | None = None
@@ -50,18 +52,34 @@ class DistributedConfig:
     pp_size: int | None = None
 
     def __post_init__(self):
-        if self.tp_plan is not None and self.tp_size is None and self.fsdp_size is None and self.pp_size is None:
-            self.tp_size = int(os.environ.get("WORLD_SIZE", 1))
+        has_tp_plan = self.tp_plan is not None
+        if self.tp_plan == "auto":
+            warnings.warn(
+                '`DistributedConfig(tp_plan="auto")` is deprecated and will be removed in v5.18. '
+                "Set `tp_size` and leave `tp_plan` unset to use the model's predefined tensor-parallel plan.",
+                FutureWarning,
+                stacklevel=2,
+            )
+            self.tp_plan = None
 
-        if self.tp_size is None and self.fsdp_size is None and self.pp_size is None:
+        if not has_tp_plan and self.tp_size is None and self.fsdp_size is None and self.pp_size is None:
             return
 
-        if self.tp_size is None:
-            self.tp_size = 1
         if self.fsdp_size is None:
             self.fsdp_size = 1
         if self.pp_size is None:
             self.pp_size = 1
+        if self.tp_size is None and has_tp_plan:
+            world_size = int(os.environ.get("WORLD_SIZE", 1))
+            other_parallel_size = self.fsdp_size * self.pp_size
+            if world_size % other_parallel_size != 0:
+                raise ValueError(
+                    f"WORLD_SIZE ({world_size}) must be divisible by fsdp_size * pp_size "
+                    f"({other_parallel_size}) to derive tp_size."
+                )
+            self.tp_size = world_size // other_parallel_size
+        elif self.tp_size is None:
+            self.tp_size = 1
 
         if self.tp_size > 1 and self.fsdp_size > 1 and self.pp_size > 1:
             raise ValueError(
