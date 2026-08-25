@@ -54,10 +54,9 @@ class CanaryPositionalEmbedding(nn.Module):
 
     def __init__(self, length: int, channels: int):
         super().__init__()
-        max_timescale = 10000 ** ((channels - 2) / channels)
         self.length = length
         self.channels = channels
-        self.max_timescale = max_timescale
+        self.max_timescale = 10000 ** ((channels - 2) / channels)
         if channels % 2 != 0:
             raise ValueError("CanaryPositionalEmbedding needs even channels input")
         position_embedding = self.compute_default_singular_positional_embedding()
@@ -366,7 +365,6 @@ class CanaryDecoder(CanaryPreTrainedModel):
         self.gradient_checkpointing = False
         self.pos_emb = CanaryPositionalEmbedding(config.max_position_embeddings, config.hidden_size)
         self.embedding_layernorm = nn.LayerNorm(config.hidden_size)
-        self.proj = nn.Identity()
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -395,7 +393,6 @@ class CanaryDecoder(CanaryPreTrainedModel):
             - 0 for tokens that are **masked**.
             [What are attention masks?](../glossary#attention-mask)
         """
-        encoder_hidden_states = self.proj(encoder_hidden_states)
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 

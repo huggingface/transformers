@@ -21,9 +21,15 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
+from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...configuration_utils import PreTrainedConfig
+from ...masking_utils import create_bidirectional_mask, create_causal_mask
+from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..cohere_asr.modeling_cohere_asr import (
     CohereAsrDecoder,
@@ -32,6 +38,9 @@ from ..cohere_asr.modeling_cohere_asr import (
     CohereAsrPreTrainedModel,
 )
 from ..qwen2_5_omni.modeling_qwen2_5_omni import SinusoidsPositionEmbedding
+
+
+logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="harshaljanjani/canary-1b-v2-hf")
@@ -131,9 +140,6 @@ class CanaryConfig(PreTrainedConfig):
         return self.decoder_config
 
 
-logger = logging.get_logger(__name__)
-
-
 class CanaryPositionalEmbedding(SinusoidsPositionEmbedding):
     """
     Identical to [`SinusoidsPositionEmbedding`] except that the timescales and the `1 / sqrt(channels)` scaling match
@@ -141,8 +147,8 @@ class CanaryPositionalEmbedding(SinusoidsPositionEmbedding):
     """
 
     def __init__(self, length: int, channels: int):
-        max_timescale = 10000 ** ((channels - 2) / channels)
-        super().__init__(length, channels, max_timescale)
+        super().__init__(length, channels)
+        self.max_timescale = 10000 ** ((channels - 2) / channels)
 
     def compute_default_singular_positional_embedding(self) -> torch.Tensor:
         log_timescale_increment = np.log(self.max_timescale) / (self.channels // 2 - 1)
@@ -176,7 +182,83 @@ class CanaryDecoder(CohereAsrDecoder):
     def __init__(self, config: CanaryDecoderConfig):
         super().__init__(config)
         self.pos_emb = CanaryPositionalEmbedding(config.max_position_embeddings, config.hidden_size)
-        self.proj = nn.Identity()
+        del self.proj
+
+    @merge_with_config_defaults
+    @capture_outputs
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        encoder_hidden_states: torch.FloatTensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPastAndCrossAttentions:
+        r"""
+        encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
+            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
+            of the decoder.
+        encoder_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding indices in `encoder_hidden_states`. Mask values selected in `[0, 1]`:
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+            [What are attention masks?](../glossary#attention-mask)
+        """
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids)
+
+        if use_cache and past_key_values is None:
+            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
+
+        if position_ids is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
+
+        # Fixed sinusoidal position embedding added to token embeddings, then layernorm
+        pos_emb = self.pos_emb(position_ids.squeeze(0))
+        pos_emb = pos_emb.to(inputs_embeds.device)
+        inputs_embeds = self.embedding_layernorm(inputs_embeds + pos_emb)
+
+        causal_mask = create_causal_mask(
+            config=self.config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            position_ids=position_ids,
+        )
+        encoder_attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=encoder_attention_mask,
+            encoder_hidden_states=encoder_hidden_states,
+        )
+
+        hidden_states = inputs_embeds
+        for decoder_layer in self.layers:
+            hidden_states = decoder_layer(
+                hidden_states,
+                causal_mask,
+                encoder_hidden_states,  # as a positional argument for gradient checkpointing
+                encoder_attention_mask=encoder_attention_mask,
+                position_ids=position_ids,
+                past_key_values=past_key_values,
+                **kwargs,
+            )
+
+        hidden_states = self.norm(hidden_states)
+
+        return BaseModelOutputWithPastAndCrossAttentions(
+            last_hidden_state=hidden_states,
+            past_key_values=past_key_values if use_cache else None,
+        )
 
 
 @auto_docstring(
