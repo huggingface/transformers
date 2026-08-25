@@ -110,11 +110,35 @@ class MuseGlimmerVision2TextModelTest(VLMModelTest, unittest.TestCase):
                 _ = model(**curr_input_dict)
 
 
+# `meta-models/Muse-Glimmer-30B` is 29.8B parameters -- 55.5 GiB of bfloat16 weights, so it does not fit on the
+# single 24 GiB accelerator of the daily CI runner. `device_map="auto"` is what makes the test runnable there:
+# it fills the accelerator(s) and offloads the remainder to CPU RAM, planned against the `CI_CPU_MEMORY_LIMIT_GB`
+# budget `conftest.py` caps `psutil` to (60 GiB per accelerator). Loading with an explicit single-device map
+# instead asks for all 55.5 GiB on one card and raises `torch.OutOfMemoryError` while materializing weights.
 @slow
 @require_torch_accelerator
 class MuseGlimmerIntegrationTest(unittest.TestCase):
     EXPECTED_TEXT_PREFIX = " to find your gift. The purpose of life is to give it away."
     EXPECTED_IMAGE_PREFIX = " two cats sleeping on a pink"
+
+    model_id = "meta-models/Muse-Glimmer-30B"
+    model = None
+    processor = None
+
+    @classmethod
+    def setUpClass(cls):
+        # Loaded once for the whole class. Re-loading per test paid for 55.5 GiB of weight materialization
+        # twice, and left the first copy alive long enough to be a second source of OOM.
+        cls.model = MuseGlimmerForConditionalGeneration.from_pretrained(
+            cls.model_id, dtype=torch.bfloat16, device_map="auto"
+        )
+        cls.processor = AutoProcessor.from_pretrained(cls.model_id)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.model = None
+        cls.processor = None
+        cleanup(torch_device, gc_collect=True)
 
     def setUp(self):
         cleanup(torch_device, gc_collect=True)
@@ -124,11 +148,7 @@ class MuseGlimmerIntegrationTest(unittest.TestCase):
 
     @classmethod
     def get_model_and_processor(cls):
-        model = MuseGlimmerForConditionalGeneration.from_pretrained(
-            "meta-models/Muse-Glimmer-30B", dtype=torch.bfloat16, device_map=torch_device
-        )
-        processor = AutoProcessor.from_pretrained("meta-models/Muse-Glimmer-30B")
-        return model, processor
+        return cls.model, cls.processor
 
     def test_text_generation_matches_reference(self):
         # The reference implementation tokenizes raw completions as [bos] + encode(prompt).
@@ -139,7 +159,9 @@ class MuseGlimmerIntegrationTest(unittest.TestCase):
         prompt_ids = tokenizer(prompt, add_special_tokens=False).input_ids
         input_ids = torch.tensor([[tokenizer.bos_token_id] + prompt_ids], device=torch_device)
 
-        output = model.generate(input_ids=input_ids, max_new_tokens=30, do_sample=False)
+        # 24 new tokens: the asserted prefix is 15 tokens, and every decoded token restreams the offloaded
+        # weights from CPU on a single-accelerator runner, so the tail we never look at is pure wall-clock.
+        output = model.generate(input_ids=input_ids, max_new_tokens=24, do_sample=False)
         completion = tokenizer.decode(output[0, input_ids.shape[1] :], skip_special_tokens=True)
         self.assertEqual(completion[: len(self.EXPECTED_TEXT_PREFIX)], self.EXPECTED_TEXT_PREFIX)
 
@@ -164,7 +186,8 @@ class MuseGlimmerIntegrationTest(unittest.TestCase):
             input_ids=input_ids,
             pixel_values=image_inputs["pixel_values"].to(torch_device, torch.bfloat16),
             image_grid_thw=image_grid_thw.to(torch_device),
-            max_new_tokens=60,
+            # 12 new tokens, against a 6-token asserted prefix -- same reasoning as the text test above.
+            max_new_tokens=12,
             do_sample=False,
         )
         completion = tokenizer.decode(output[0, input_ids.shape[1] :], skip_special_tokens=True)
