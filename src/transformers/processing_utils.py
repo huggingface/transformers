@@ -201,6 +201,8 @@ class TextKwargs(TypedDict, total=False):
             The side on which padding will be applied.
         return_mm_token_type_ids (`bool`, *optional*):
             Whether to return multimodal token type ids indicating mm placeholder token positions.
+        return_text_replacement_offsets (`bool`, *optional*):
+            Whether to return character offsets for each mm placeholder and its replacement.
         return_tensors (`str` or [`~utils.TensorType`], *optional*):
             If set, will return tensors of a particular framework. Acceptable values are:
             - `'pt'`: Return PyTorch `torch.Tensor` objects.
@@ -226,6 +228,7 @@ class TextKwargs(TypedDict, total=False):
     verbose: bool | None
     padding_side: Literal["left", "right"] | None
     return_mm_token_type_ids: bool | None
+    return_text_replacement_offsets: bool | None
     return_tensors: Annotated[str | TensorType | None, tensor_type_validator()]
 
 
@@ -407,6 +410,9 @@ class AudioKwargs(TypedDict, total=False):
             If set, will pad the sequence to a multiple of the provided value.
         return_attention_mask (`bool`, *optional*):
             Whether or not [`~ASTFeatureExtractor.__call__`] should return `attention_mask`.
+        device (`str` or `torch.device`, *optional*):
+            The device to compute the audio features on (e.g. "cpu", "cuda"), only relevant for feature
+            extractors that compute them with torch.
         return_tensors (`str` or [`~utils.TensorType`], *optional*):
             If set, will return tensors of a particular framework. Acceptable values are:
             - `'pt'`: Return PyTorch `torch.Tensor` objects.
@@ -423,6 +429,7 @@ class AudioKwargs(TypedDict, total=False):
     truncation: Annotated[bool | str | TruncationStrategy | None, truncation_validator()]
     pad_to_multiple_of: Annotated[int | None, positive_int()]
     return_attention_mask: bool | None
+    device: Annotated[Union[str, "torch.device"] | None, device_validator()]
     return_tensors: Annotated[str | TensorType | None, tensor_type_validator()]
     load_audio_backend: str | None
 
@@ -671,7 +678,7 @@ class ProcessorMixin(PushToHubMixin):
             processed_images, images_replacements = self._process_images(images, **merged_kwargs["images_kwargs"])
         if videos is not None and hasattr(self, "video_processor"):
             processed_videos, videos_replacements = self._process_videos(videos, **merged_kwargs["videos_kwargs"])
-        if audio is not None and hasattr(self, "feature_extractor"):
+        if audio is not None and self._audio_processor is not None:
             processed_audio, audio_replacements = self._process_audio(audio, **merged_kwargs["audio_kwargs"])
 
         text_inputs = {}
@@ -726,9 +733,9 @@ class ProcessorMixin(PushToHubMixin):
             # avoid in-place updates on text
             text = list(text).copy()
 
-        if audio is not None and hasattr(self, "feature_extractor"):
-            sampling_rate = kwargs.get("sampling_rate", self.feature_extractor.sampling_rate)
-            audio = self.feature_extractor.fetch_audio(audio, sampling_rate=sampling_rate)
+        if audio is not None and self._audio_processor is not None:
+            sampling_rate = kwargs.get("sampling_rate", self._audio_processor.sampling_rate)
+            audio = self._audio_processor.fetch_audio(audio, sampling_rate=sampling_rate)
             audio = make_list_of_audio(audio)
 
         if images is not None and hasattr(self, "image_processor"):
@@ -783,8 +790,13 @@ class ProcessorMixin(PushToHubMixin):
 
         return processed_videos, video_replacements
 
+    @property
+    def _audio_processor(self):
+        # TODO: To be replaced with `audio_processor`
+        return getattr(self, "audio_processor", getattr(self, "feature_extractor", None))
+
     def _process_audio(self, audio: AudioInput, **kwargs):
-        processed_audio = self.feature_extractor(audio, **kwargs)
+        processed_audio = self._audio_processor(audio, **kwargs)
 
         audio_replacements = []
         if getattr(self, "audio_token", None) is not None:
@@ -794,7 +806,7 @@ class ProcessorMixin(PushToHubMixin):
 
         return processed_audio, audio_replacements
 
-    # To be overriden by each model's processor if they need to add placeholder tokens
+    # To be overridden by each model's processor if they need to add placeholder tokens
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         raise NotImplementedError
 
@@ -853,7 +865,7 @@ class ProcessorMixin(PushToHubMixin):
                     - `"text"` (`str`): the original placeholder token string that was matched
                     - `"replacement"` (`str`): the string it was replaced with
         """
-        # Early exit if no special tokens found, nothing to replace
+        # Early exit if no special tokens found, nothing to replace or if text is not a list
         if not self.all_special_multimodal_tokens:
             return text, []
 
@@ -2072,8 +2084,8 @@ class ProcessorMixin(PushToHubMixin):
         # Set the sampling rate to load the audio files if user hasn't already passed with `kwargs`
         sampling_rate = kwargs.get("sampling_rate", processor_kwargs.get("sampling_rate"))
         if sampling_rate is None:
-            if hasattr(self, "feature_extractor") and hasattr(self.feature_extractor, "sampling_rate"):
-                sampling_rate = self.feature_extractor.sampling_rate
+            if hasattr(self._audio_processor, "sampling_rate"):
+                sampling_rate = self._audio_processor.sampling_rate
             else:
                 sampling_rate = 16_000
 

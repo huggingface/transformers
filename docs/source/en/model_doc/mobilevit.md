@@ -15,7 +15,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 
 
 
-[MobileViT](https://huggingface.co/papers/2110.02178) is a lightweight vision transformer for mobile devices that merges CNNs's efficiency and inductive biases with transformers global context modeling. It treats transformers as convolutions, enabling global information processing without the heavy computational cost of standard ViTs.
+[MobileViT](https://huggingface.co/papers/2110.02178) is a lightweight vision transformer for mobile devices that merges CNN's efficiency and inductive biases with transformers global context modeling. It treats transformers as convolutions, enabling global information processing without the heavy computational cost of standard ViTs.
 
 <div class="flex justify-center">
    <img src = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/MobileViT.png">

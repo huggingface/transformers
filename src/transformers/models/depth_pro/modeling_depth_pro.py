@@ -378,7 +378,7 @@ class DepthProImageEncoder(nn.Module):
         )
 
         if not return_dict:
-            return (encodings[0], features) + encodings[2:]  # ignore last_hidden_state and poooler output
+            return (encodings[0], features) + encodings[2:]  # ignore last_hidden_state and pooler output
 
         return DepthProOutput(
             last_hidden_state=encodings.last_hidden_state,

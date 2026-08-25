@@ -20,12 +20,13 @@ REPO_CONSISTENCY_CHECKERS := \
 	import_complexity, \
 	copies, \
 	modular_conversion, \
+	inits, \
 	doc_toc, \
+	reviewers, \
 	modeling_rules_doc, \
 	docstrings, \
 	dummies, \
 	repo, \
-	inits, \
 	pipeline_typing, \
 	config_docstrings, \
 	config_attributes, \

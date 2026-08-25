@@ -233,6 +233,13 @@ class PeAudioVideoEncoderTest(ModelTesterMixin, unittest.TestCase):
     def test_model_get_set_embeddings(self):
         pass
 
+    @unittest.skip(
+        "TimmWrapper sets _supports_sdpa=True (timm uses F.scaled_dot_product_attention internally) but does not "
+        "support flash-only dispatch via sdpa_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False)."
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
     @unittest.skip("PeAudioVideoEncoder does not have language_model, vision_tower, multi_modal_projector.")
     def test_sdpa_can_dispatch_composite_models(self):
         pass
