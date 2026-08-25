@@ -1078,6 +1078,9 @@ class Trainer:
                 dataset=eval_dataset,
                 lengths=lengths,
                 model_input_name=model_input_name,
+                generator=torch.Generator().manual_seed(
+                    self.args.data_seed if self.args.data_seed is not None else self.args.seed
+                ),
             )
 
         if self.args.world_size <= 1:
@@ -2994,8 +2997,10 @@ class Trainer:
                     logits = smp_nested_concat(logits_mb)
             else:
                 if has_labels or loss_without_labels:
-                    with self.compute_loss_context_manager():
-                        num_items_in_batch = self._get_num_items_in_batch([inputs], self.args.device)
+                    # Count before sharding: `context_parallel` splits the buffers in place.
+                    num_items_in_batch = self._get_num_items_in_batch([inputs], self.args.device)
+                    cp_context, inputs = self._prepare_context_parallel_inputs(model, inputs)
+                    with self.compute_loss_context_manager(), cp_context():
                         if self.args.use_liger_kernel and prediction_loss_only:
                             inputs = {**inputs, "skip_logits": True}
                         loss, outputs = self.compute_loss(
