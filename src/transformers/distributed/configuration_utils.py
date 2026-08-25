@@ -38,6 +38,8 @@ class DistributedConfig:
             Whether to enable CPU offloading for FSDP2.
         fsdp_mixed_precision (`bool`, *optional*, defaults to `False`):
             Whether to enable mixed precision for FSDP2.
+        pp_size (`int`, *optional*):
+            Number of pipeline-parallel stages. Defaults to 1.
     """
 
     tp_size: int | None = None
@@ -50,21 +52,14 @@ class DistributedConfig:
     pp_size: int | None = None
 
     def __post_init__(self):
-        if self.tp_size is None and self.fsdp_size is None and self.pp_size is None:
-            return
+        self.tp_size = 1 if self.tp_size is None else self.tp_size
+        self.fsdp_size = 1 if self.fsdp_size is None else self.fsdp_size
+        self.pp_size = 1 if self.pp_size is None else self.pp_size
 
-        if self.tp_size is None:
-            self.tp_size = 1
-        if self.fsdp_size is None:
-            self.fsdp_size = 1
-        if self.pp_size is None:
-            self.pp_size = 1
-
-        if self.tp_size > 1 and self.fsdp_size > 1 and self.pp_size > 1:
+        if self.fsdp_size > 1 and (self.tp_size > 1 or self.pp_size > 1):
             raise ValueError(
-                "FSDP+TP+PP is not supported yet. "
-                "Use DistributedConfig(fsdp_size=N) or DistributedConfig(tp_size=N) or DistributedConfig(pp_size=N), not all three. "
-                "Only 1D support is available for now."
+                "Combining FSDP with tensor or pipeline parallelism is not supported yet. "
+                "Use FSDP alone, or combine tensor and pipeline parallelism."
             )
 
     @classmethod

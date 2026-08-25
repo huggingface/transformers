@@ -444,9 +444,9 @@ ADD_SPECIAL_TOKENS = {add_special_tokens!r}
 
 
 def main() -> int:
-    # `from_pretrained(distributed_config=…)` auto-sets `tp_plan="auto"`, which calls
-    # `initialize_tensor_parallelism`, which calls `torch.cuda.set_device(local_rank)`
-    # and `init_process_group` from the RANK/LOCAL_RANK/WORLD_SIZE env vars torchrun sets.
+    # `from_pretrained(distributed_config=…)` calls `initialize_distributed_mesh`, which calls
+    # `torch.cuda.set_device(local_rank)` and `init_process_group` from the
+    # RANK/LOCAL_RANK/WORLD_SIZE environment variables set by torchrun.
     rank = int(os.environ["RANK"])
     model = AutoModelForCausalLM.from_pretrained(
         MODEL_ID,

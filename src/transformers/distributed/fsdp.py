@@ -191,7 +191,7 @@ def apply_fully_sharded_data_parallelism(
     Apply FSDP2 (fully_shard) to a model.
 
     Torch availability, distributed initialization and the version requirement
-    are asserted upstream by `initialize_fully_sharded_data_parallelism`.
+    are asserted upstream by `initialize_distributed_mesh`.
     """
     fsdp_plan = dict(getattr(model, "_fsdp_plan", None) or {})
     if not fsdp_plan:
