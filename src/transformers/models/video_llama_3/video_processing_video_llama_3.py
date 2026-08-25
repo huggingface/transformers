@@ -58,6 +58,7 @@ class VideoLlama3VideoProcessorInitKwargs(VideosKwargs, total=False):
     merge_size: int
     min_frames: int
     max_frames: int
+    cap_pixels_per_frame: bool
 
     use_token_compression: bool | None
 
@@ -107,6 +108,7 @@ class VideoLlama3VideoProcessor(BaseVideoProcessor):
     min_frames = 4
     max_frames = 180
     do_sample_frames = False  # Set to False for BC, recommended to set `True` in new models
+    cap_pixels_per_frame = None
     valid_kwargs = VideoLlama3VideoProcessorInitKwargs
     model_input_names = ["pixel_values_videos", "video_grid_thw", "video_merge_sizes", "video_compression_mask"]
     use_token_compression = True
