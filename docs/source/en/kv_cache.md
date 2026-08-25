@@ -178,32 +178,15 @@ responses = tokenizer.batch_decode(out[:,-28:], skip_special_tokens=True)
 
 The [`QuantizedCache`] reduces memory requirements by quantizing the KV values to a lower precision. [`QuantizedCache`] currently supports two quantization backends:
 
-- `hqq` supports int2, int4, and int8 datatypes.
+- `hqq` supports int1, int2, int3, int4, and int8 datatypes.
 - `quanto` supports int2 and int4 datatypes. This is the default quantization backend.
 
 > [!WARNING]
 > Quantizing the cache can harm latency if the context length is short and there is enough GPU memory available for generation without enabling cache quantization. Try to find a balance between memory efficiency and latency.
 
-Enable [`QuantizedCache`] by configuring `cache_implementation="quantized"` in [`GenerationConfig`], and the quantization backend, as well as any additional quantization related parameters should also be passed either as a dict. You should use the default values for these additional parameters unless you're running out-of-memory. In that case, consider decreasing the residual length.
+Enable [`QuantizedCache`] by configuring `cache_implementation="quantized"` in [`GenerationConfig`]. The quantization backend, along with any additional quantization parameters, are specified in the `cache_config` dict passed to [`~GenerationMixin.generate`]. You should use the default values for these additional parameters unless you're running out-of-memory. In that case, consider decreasing the residual length.
 
-<hfoptions id="quantized-cache">
-
-For the `hqq` backend, we recommend setting the `axis-key` and `axis-value` parameters to `1`.
-
-```py
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, QuantizedCache
-
-tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf", dtype=torch.float16, device_map="auto")
-inputs = tokenizer("I like rock music because", return_tensors="pt").to(model.device)
-
-out = model.generate(**inputs, do_sample=False, max_new_tokens=20, cache_implementation="quantized", cache_config={"backend": "hqq"})
-print(tokenizer.batch_decode(out, skip_special_tokens=True)[0])
-I like rock music because it's loud and energetic. It's a great way to express myself and rel
-```
-
-For `quanto` backend, we recommend setting the `axis-key` and `axis-value` parameters to `0`.
+For the `hqq` backend, we recommend setting the `axis_key` and `axis_value` parameters to `1`.
 
 ```py
 import torch
@@ -213,7 +196,44 @@ tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
 model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf", dtype=torch.float16, device_map="auto")
 inputs = tokenizer("I like rock music because", return_tensors="pt").to(model.device)
 
-out = model.generate(**inputs, do_sample=False, max_new_tokens=20, cache_implementation="quantized", cache_config={"nbits": 4, "backend": "quanto"})
+out = model.generate(
+    **inputs,
+    do_sample=False,
+    max_new_tokens=20,
+    cache_implementation="quantized",
+    cache_config={
+        "nbits": 4,
+        "backend": "hqq",
+        "axis_key": 1,
+        "axis_value": 1
+    }
+)
+print(tokenizer.batch_decode(out, skip_special_tokens=True)[0])
+I like rock music because it's loud and energetic. It's a great way to express myself and rel
+```
+
+For the `quanto` backend, we recommend setting the `axis_key` and `axis_value` parameters to `0`.
+
+```py
+import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM
+
+tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf", dtype=torch.float16, device_map="auto")
+inputs = tokenizer("I like rock music because", return_tensors="pt").to(model.device)
+
+out = model.generate(
+    **inputs,
+    do_sample=False,
+    max_new_tokens=20,
+    cache_implementation="quantized",
+    cache_config={
+        "nbits": 4,
+        "backend": "quanto",
+        "axis_key": 0,
+        "axis_value": 0
+    }
+)
 print(tokenizer.batch_decode(out, skip_special_tokens=True)[0])
 I like rock music because it's loud and energetic. It's a great way to express myself and rel
 ```
