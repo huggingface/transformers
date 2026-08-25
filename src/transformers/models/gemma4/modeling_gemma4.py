@@ -748,22 +748,23 @@ class Gemma4VisionRotaryEmbedding(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        position_ids = position_ids.permute(1, 2, 0)
+        inv_freq_expanded = self.inv_freq[None, ...].float()
+        position_ids = position_ids[..., None].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = position_ids.float() * self.inv_freq
+            freqs = position_ids @ inv_freq_expanded
             cos = freqs.cos() * self.attention_scaling
             sin = freqs.sin() * self.attention_scaling
 
         cos = self.recomposition_to_2d(cos)
         sin = self.recomposition_to_2d(sin)
-        return cos, sin
+        return cos.to(x.dtype), sin.to(x.dtype)
 
     def recomposition_to_2d(self, freq):
         # in contrast to other 2D rope modules, interleave grids as H-H-W-W
-        freq_h, freq_w = freq[:, 0], freq[:, 1]
-        return torch.cat([freq_h, freq_h, freq_w, freq_w], dim=-1)[None, ...]
+        freq_h, freq_w = freq[:, :, 0], freq[:, :, 1]
+        return torch.cat([freq_h, freq_h, freq_w, freq_w], dim=-1)
 
 
 def rotate_half(x):

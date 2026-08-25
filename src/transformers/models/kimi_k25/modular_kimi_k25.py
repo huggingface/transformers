@@ -247,8 +247,8 @@ class Kimi_K25VisionPatchEmbed(nn.Module):
 
 class Kimi_K25VisionRotaryEmbedding(Glm4vVisionRotaryEmbedding):
     def recomposition_to_2d(self, freq):
-        # interleave grids as H-W-H-W
-        freq_hw = freq.transpose(1, 2).flatten(1)
+        # interleave within the head dim for HW
+        freq_hw = freq.permute(1, 2, 0).flatten(1)
         return torch.cat([freq_hw, freq_hw], dim=-1)
 
 

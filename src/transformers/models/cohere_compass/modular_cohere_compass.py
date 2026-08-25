@@ -162,12 +162,28 @@ class CohereCompassProcessor(Qwen3VLProcessor):
 
 # Same as Qwen3VL with layer-types
 class CohereCompassRotaryEmbedding(Gemma3RotaryEmbedding):
-    def __init__(self, **super_kwargs):
-        super().__init__(**super_kwargs)
-        self.mrope_section = {
-            layer_type: self.rope_type[layer_type].get("mrope_section", [22, 22, 20])
-            for layer_type in self.layer_types
-        }
+    def __init__(self, config: CohereCompassTextConfig, device=None):
+        nn.Module.__init__()
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+        self.config = config
+        self.layer_types = list(set(config.layer_types))
+        self.rope_type = {}
+        self.mrope_section = {}
+        for layer_type in self.layer_types:
+            rope_params = self.config.rope_parameters[layer_type]
+            if rope_params is None:
+                continue
+
+            self.rope_type[layer_type] = rope_params["rope_type"]
+            self.mrope_section[layer_type] = rope_params.get("mrope_section", [22, 22, 20])
+            rope_init_fn: Callable = self.compute_default_rope_parameters
+            if self.rope_type[layer_type] != "default":
+                rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, device, layer_type=layer_type)
+            setattr(self, f"{layer_type}_inv_freq", nn.Buffer(curr_inv_freq, persistent=False))
+            setattr(self, f"{layer_type}_original_inv_freq", nn.Buffer(curr_inv_freq.clone(), persistent=False))
+            setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
     def compute_default_rope_parameters(
         config, device=None, layer_type: str | None = None, **kwargs
