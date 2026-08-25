@@ -220,7 +220,7 @@ def collect_run_failures(run_id, repo=REPO, token=None, plugin=None):
         # Only fetch logs for jobs that actually ran and failed/were cancelled.
         # Skip success (no failures), skipped (never ran), and unknown (still
         # running — e.g. the report job itself querying its own run).
-        if conclusion not in ("failure", "cancelled"):
+        if conclusion != "failure":
             continue
 
         job_group = normalize_job_name(job["name"])
