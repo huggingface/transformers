@@ -262,6 +262,14 @@ class SwitchTransformersModelTester:
         self.parent.assertEqual(len(outputs), 15)
         self.parent.assertEqual(outputs["logits"].size(), (self.batch_size, self.decoder_seq_length, self.vocab_size))
         self.parent.assertEqual(outputs["loss"].size(), ())
+        self.parent.assertEqual(
+            outputs["encoder_router_logits"][0].shape,
+            (self.batch_size, self.encoder_seq_length, config.num_experts),
+        )
+        self.parent.assertEqual(
+            outputs["decoder_router_logits"][0].shape,
+            (self.batch_size, self.decoder_seq_length, config.num_experts),
+        )
 
     def create_and_check_decoder_model_past(
         self,
@@ -524,6 +532,8 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
 
     def test_with_lm_head(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        config_and_inputs[0].encoder_sparse_step = 2
+        config_and_inputs[0].decoder_sparse_step = 2
         self.model_tester.create_and_check_with_lm_head(*config_and_inputs)
 
     def test_decoder_model_past(self):
@@ -903,32 +913,33 @@ class SwitchTransformerRouterTest(unittest.TestCase):
             ).t()
         )
 
-        expert_index, _, router_logits = model(input_tokens)
+        _, expert_index, router_logits = model(input_tokens)
         router_probs = torch.softmax(router_logits, dim=-1)
 
         router_z_loss = router_z_loss_func(router_logits)
         auxiliary_loss = load_balancing_loss_func(router_probs, torch.argmax(expert_index, dim=-1))
 
-        self.assertAlmostEqual(router_z_loss.item(), 0.25389, places=5)
-        self.assertAlmostEqual(auxiliary_loss.item(), 1.000, places=5)
+        self.assertAlmostEqual(router_z_loss.item(), 0.4789799, places=5)
+        self.assertAlmostEqual(auxiliary_loss.item(), 1.000308, places=5)
         #
         # self.assertTrue(torch.allclose(expert_index.bool().unsqueeze(-1), expected_dispatch_mask))
 
     def test_max_routing_capacity(self):
         model = SwitchTransformersTop1Router(self.config)
-        seq_len = 128
-        batch_size = 4
-        hidden_states = torch.stack(batch_size * [torch.rand((seq_len, self.config.hidden_size))])
+        model.classifier.weight.data.zero_()
+        seq_len = 8
+        batch_size = 2
+        hidden_states = torch.ones((batch_size, seq_len, self.config.hidden_size))
 
-        _, _, router_probs = model.forward(hidden_states)
-        expert_index = torch.argmax(router_probs, dim=-1)
-        expert_index = torch.nn.functional.one_hot(expert_index, num_classes=self.config.num_experts)
+        router_probs, expert_index, router_logits = model(hidden_states)
 
-        token_priority = torch.cumsum(expert_index, dim=-2)
-        expert_capacity_mask = token_priority <= self.config.expert_capacity
-        expert_index = expert_index * expert_capacity_mask
-
-        assert torch.sum(expert_index) <= batch_size * self.config.num_experts * self.config.expert_capacity
+        self.assertEqual(router_probs.shape, (batch_size, seq_len, 1))
+        self.assertEqual(expert_index.shape, (batch_size, seq_len, self.config.num_experts))
+        self.assertEqual(router_logits.shape, (batch_size, seq_len, self.config.num_experts))
+        self.assertTrue(torch.all(expert_index.sum(dim=1) <= self.config.expert_capacity))
+        self.assertTrue(torch.all(expert_index[:, : self.config.expert_capacity, 0] == 1))
+        self.assertTrue(torch.all(expert_index[:, self.config.expert_capacity :] == 0))
+        self.assertTrue(torch.allclose(router_logits, model.classifier(hidden_states)))
 
 
 @slow
@@ -1029,6 +1040,26 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
 
 @require_torch
 class SwitchTransformersSparseMLPTests(unittest.TestCase):
+    def test_capacity_applied_per_sequence(self):
+        config = SwitchTransformersConfig(
+            d_model=4,
+            d_ff=8,
+            num_experts=2,
+            expert_capacity=2,
+            router_jitter_noise=0.0,
+            dropout_rate=0.0,
+        )
+        moe = SwitchTransformersSparseMLP(config).eval()
+        with torch.no_grad():
+            moe.router.classifier.weight.zero_()
+            moe.experts["expert_0"].wi.weight.fill_(1)
+            moe.experts["expert_0"].wo.weight.fill_(1)
+            outputs = moe(torch.ones(2, 4, config.d_model))
+
+        processed_tokens = outputs.ne(0).any(dim=-1)
+        expected_tokens = torch.tensor([[True, True, False, False], [True, True, False, False]])
+        torch.testing.assert_close(processed_tokens, expected_tokens)
+
     def test_token_dropping(self):
         r"""
         This test checks if the token dropping actually drops tokens.

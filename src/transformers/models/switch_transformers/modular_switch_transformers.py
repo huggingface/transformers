@@ -144,8 +144,11 @@ class SwitchTransformersTop1Router(nn.Module):
                 (batch_size, sequence_length, hidden_dim) from which router probabilities are computed.
         Returns:
             router_probabilities (`torch.Tensor`):
-                Tensor of shape (batch_size, sequence_length, num_experts) corresponding to the probabilities for each
-                token and expert. Used for routing tokens to experts.
+                Tensor of shape (batch_size, sequence_length, 1) containing the routing probability for the selected
+                expert of each token.
+            expert_index (`torch.Tensor`):
+                Tensor of shape (batch_size, sequence_length, num_experts) containing the capacity-masked expert
+                assignments.
             router_logits (`torch.Tensor`):
                 Logits tensor of shape (batch_size, sequence_length, num_experts) corresponding to raw router logits.
                 This is used later for computing router z-loss.
@@ -163,14 +166,13 @@ class SwitchTransformersTop1Router(nn.Module):
 
         # Apply Softmax and cast back to the original `dtype`
         router_probs = nn.functional.softmax(router_logits, dim=-1, dtype=self.dtype).to(self.input_dtype)
-        router_logits, expert_index = torch.max(router_probs, dim=-1, keepdim=True)
+        router_probs, expert_index = torch.max(router_probs, dim=-1)
         expert_index = torch.nn.functional.one_hot(expert_index, num_classes=self.num_experts)
         token_priority = torch.cumsum(expert_index, dim=-2)
         # mask if the token routed to the expert will overflow
         expert_capacity_mask = token_priority <= self.expert_capacity
         expert_index = expert_index * expert_capacity_mask
-        router_probs = torch.max(router_probs, dim=-1).values.unsqueeze(-1)
-        return router_probs, expert_index, router_logits
+        return router_probs.unsqueeze(-1), expert_index, router_logits
 
 
 class SwitchTransformersLayerNorm(T5LayerNorm):
@@ -211,8 +213,10 @@ class SwitchTransformersSparseMLP(nn.Module):  # inherit from mixtral
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
+        routing_weights, selected_experts, _ = self.router(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_dim)
-        _, selected_experts, routing_weights = self.router(hidden_states)
+        selected_experts = selected_experts.reshape(-1, 1, self.router.num_experts)
+        routing_weights = routing_weights.reshape(-1, 1)
         hidden_states = self.experts(hidden_states, selected_experts, routing_weights)
         hidden_states = hidden_states.reshape(batch_size, sequence_length, hidden_dim)
         return hidden_states
@@ -763,14 +767,9 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         )
 
     def _unpack_router_logits(self, router_outputs):
-        total_router_logits = []
-        total_expert_indexes = []
-        for router_output in router_outputs:
-            if len(router_output[0].shape) > 1:
-                router_logits, expert_indexes = router_output
-                total_router_logits.append(router_logits)
-                total_expert_indexes.append(expert_indexes)
-        return torch.cat(total_router_logits, dim=1), torch.cat(total_expert_indexes, dim=1)
+        router_logits = torch.cat(router_outputs, dim=1)
+        expert_indexes = torch.argmax(router_logits, dim=-1)
+        return router_logits, expert_indexes
 
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         return self._shift_right(labels)
