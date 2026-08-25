@@ -31,7 +31,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, DynamicLayer, StaticLayer
+from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...integrations import (
@@ -53,13 +53,7 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    TransformersKwargs,
-    auto_docstring,
-    can_return_tuple,
-    is_torchdynamo_compiling,
-    torch_compilable_check,
-)
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
     accepts_precomputed_kwargs,
@@ -569,110 +563,6 @@ class Qwen4ExpTextGatedDeltaNet(nn.Module):
         return output
 
 
-class Qwen4ExpSparseAttentionCacheLayerMixin:
-    """Cache completed QSA block keys and the raw states of the incomplete block."""
-
-    def __init__(self, config: Qwen4ExpTextConfig, **kwargs):
-        super().__init__(**kwargs)
-        self.indexer_compress_ratio = config.indexer_compress_ratio
-        self.indexer_keys: torch.Tensor | None = None
-        self.indexer_buffer: torch.Tensor | None = None
-
-    def _ensure_indexer_key_capacity(self, block_keys: torch.Tensor, block_capacity: int) -> None:
-        current_capacity = 0 if self.indexer_keys is None else self.indexer_keys.shape[1] - 1
-        if (
-            self.indexer_keys is not None
-            and current_capacity == block_capacity
-            and self.indexer_keys.shape[0] == block_keys.shape[0]
-        ):
-            return
-        resized_keys = block_keys.new_zeros((block_keys.shape[0], block_capacity + 1, block_keys.shape[-1]))
-        if self.indexer_keys is not None:
-            copy_length = min(current_capacity, block_capacity)
-            resized_keys[:, :copy_length] = self.indexer_keys[:, :copy_length]
-        self.indexer_keys = resized_keys
-
-    def get_indexer_buffer(self, indexer_states: torch.Tensor) -> torch.Tensor:
-        batch_size, _, state_dim = indexer_states.shape
-        if self.indexer_buffer is None:
-            return indexer_states.new_zeros((batch_size, self.indexer_compress_ratio - 1, state_dim))
-        return self.indexer_buffer
-
-    def update_indexer(
-        self,
-        block_keys: torch.Tensor,
-        block_offsets: torch.LongTensor,
-        new_block_counts: torch.LongTensor,
-        buffer: torch.Tensor,
-        block_capacity: int,
-    ) -> torch.Tensor:
-        max_cache_len = self.get_max_length()
-        if max_cache_len >= 0:
-            block_capacity = max_cache_len // self.indexer_compress_ratio
-        self._ensure_indexer_key_capacity(block_keys, block_capacity)
-        if self.indexer_buffer is None:
-            self.indexer_buffer = torch.zeros_like(buffer)
-            if self.is_compileable and not is_torchdynamo_compiling():
-                torch._dynamo.mark_static_address(self.indexer_keys)
-                torch._dynamo.mark_static_address(self.indexer_buffer)
-
-        num_new_slots = block_keys.shape[1]
-        new_slot_indices = torch.arange(num_new_slots, device=block_keys.device)
-        block_positions = block_offsets.unsqueeze(-1) + new_slot_indices
-        valid_blocks = new_slot_indices < new_block_counts.unsqueeze(-1)
-        # The extra final cache slot receives padded block entries and is never returned.
-        block_positions = block_positions.masked_fill(~valid_blocks, block_capacity)
-        self.indexer_keys.scatter_(1, block_positions.unsqueeze(-1).expand_as(block_keys), block_keys)
-        self.indexer_keys[:, block_capacity].zero_()
-        self.indexer_buffer.copy_(buffer)
-        return self.indexer_keys[:, :block_capacity]
-
-    def reset(self) -> None:
-        super().reset()
-        if self.indexer_keys is None:
-            return
-        if self.is_compileable:
-            self.indexer_keys.zero_()
-            self.indexer_buffer.zero_()
-        else:
-            self.indexer_keys = None
-            self.indexer_buffer = None
-
-    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
-        super().reorder_cache(beam_idx)
-        if self.indexer_keys is not None:
-            beam_idx = beam_idx.to(self.indexer_keys.device)
-            self.indexer_keys = self.indexer_keys.index_select(0, beam_idx)
-            self.indexer_buffer = self.indexer_buffer.index_select(0, beam_idx)
-
-
-class Qwen4ExpDynamicSparseAttentionLayer(Qwen4ExpSparseAttentionCacheLayerMixin, DynamicLayer):
-    _layer_type = "qwen_sparse_attention"
-
-    def crop(self, tokens_to_remove: int) -> None:
-        current_length = self.get_seq_length()
-        is_crop = tokens_to_remove < 0 or 0 < tokens_to_remove < current_length
-        if is_crop and self.indexer_keys is not None:
-            raise ValueError("Qwen4-Exp block-compressed QSA caches do not support cropping.")
-        super().crop(tokens_to_remove)
-
-    def batch_repeat_interleave(self, repeats: int) -> None:
-        super().batch_repeat_interleave(repeats)
-        if self.indexer_keys is not None:
-            self.indexer_keys = self.indexer_keys.repeat_interleave(repeats, dim=0)
-            self.indexer_buffer = self.indexer_buffer.repeat_interleave(repeats, dim=0)
-
-    def batch_select_indices(self, indices: torch.Tensor) -> None:
-        super().batch_select_indices(indices)
-        if self.indexer_keys is not None:
-            self.indexer_keys = self.indexer_keys[indices, ...]
-            self.indexer_buffer = self.indexer_buffer[indices, ...]
-
-
-class Qwen4ExpStaticSparseAttentionLayer(Qwen4ExpSparseAttentionCacheLayerMixin, StaticLayer):
-    _layer_type = "qwen_sparse_attention"
-
-
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
@@ -680,12 +570,42 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-def apply_rotary_pos_emb_single(x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor) -> torch.Tensor:
-    """Apply partial RoPE to one tensor with broadcast-ready cosine and sine tensors."""
+def apply_rotary_pos_emb(q, k=None, cos=None, sin=None, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors, or only the queries if the keys are not provided.
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor if provided.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
     rotary_dim = cos.shape[-1]
-    x_rope, x_nope = x[..., :rotary_dim], x[..., rotary_dim:]
-    x_rope = (x_rope * cos) + (rotate_half(x_rope) * sin)
-    return torch.cat([x_rope, x_nope], dim=-1)
+
+    # Keep half or full tensor for later concatenation
+    q_rope, q_nope = q[..., :rotary_dim], q[..., rotary_dim:]
+    # Apply rotary embeddings on the first half or full tensor
+    q_rope = (q_rope * cos) + (rotate_half(q_rope) * sin)
+    # Concatenate back to full shape
+    q_rotated = torch.cat([q_rope, q_nope], dim=-1)
+
+    if k is not None:
+        k_rope, k_nope = k[..., :rotary_dim], k[..., rotary_dim:]
+        k_rope = (k_rope * cos) + (rotate_half(k_rope) * sin)
+        k_rotated = torch.cat([k_rope, k_nope], dim=-1)
+        return q_rotated, k_rotated
+    else:
+        return q_rotated
 
 
 class Qwen4ExpTextQSAIndexer(nn.Module):
@@ -708,44 +628,6 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
         self.q_layernorm = Qwen4ExpTextRMSNorm(self.index_head_dim, eps=config.rms_norm_eps)
         self.k_layernorm = Qwen4ExpTextRMSNorm(self.index_head_dim, eps=config.rms_norm_eps)
 
-    def _group_indexer_states(
-        self,
-        indexer_states: torch.Tensor,
-        current_valid_mask: torch.BoolTensor,
-        buffer: torch.Tensor,
-        buffer_counts: torch.LongTensor,
-    ) -> tuple[torch.Tensor, torch.LongTensor, torch.Tensor]:
-        batch_size, _, state_dim = indexer_states.shape
-        buffer_length = self.compress_ratio - 1
-        buffer_positions = torch.arange(buffer_length, device=indexer_states.device)
-        buffer_valid = buffer_positions < buffer_counts.unsqueeze(-1)
-        combined_states = torch.cat([buffer, indexer_states], dim=1)
-        combined_valid = torch.cat([buffer_valid, current_valid_mask], dim=1)
-
-        # Compact valid states so left/right padding does not change content-relative block boundaries.
-        combined_length = combined_states.shape[1]
-        packed_positions = combined_valid.long().cumsum(dim=-1) - 1
-        packed_positions = packed_positions.masked_fill(~combined_valid, combined_length)
-        packed_states = combined_states.new_zeros((batch_size, combined_length + 1, state_dim))
-        packed_states.scatter_(
-            1,
-            packed_positions.unsqueeze(-1).expand_as(combined_states),
-            combined_states.masked_fill(~combined_valid.unsqueeze(-1), 0),
-        )
-
-        total_counts = combined_valid.sum(dim=-1)
-        new_block_counts = total_counts // self.compress_ratio
-        num_new_slots = combined_length // self.compress_ratio
-        block_states = packed_states[:, : num_new_slots * self.compress_ratio].view(
-            batch_size, num_new_slots, self.compress_ratio, state_dim
-        )
-
-        buffer_offsets = new_block_counts.unsqueeze(-1) * self.compress_ratio + buffer_positions
-        new_buffer = packed_states.gather(
-            1, buffer_offsets.clamp(max=combined_length).unsqueeze(-1).expand(-1, -1, state_dim)
-        )
-        return block_states, new_block_counts, new_buffer
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -765,159 +647,76 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
         )
         q, token_k = q.reshape(*hidden_shape), token_k.reshape(*hidden_shape).squeeze(2)
         q = self.q_layernorm(q)
-        q = apply_rotary_pos_emb_single(q, cos.unsqueeze(2), sin.unsqueeze(2))
+        q = apply_rotary_pos_emb(q, cos=cos, sin=sin, unsqueeze_dim=2)
 
         indexer_states = torch.cat([token_k, cos.to(token_k.dtype), sin.to(token_k.dtype)], dim=-1)
-
-        # Eager/SDPA provide a 4D bool/additive mask. QSA follows the model's contiguous left/right-padding contract
-        # (not packed sequences), so every query sees a prefix of one valid-key sequence and block keys can be reused.
-        visible_token_mask = attention_mask if attention_mask.dtype == torch.bool else attention_mask == 0
-        visible_token_mask = visible_token_mask[:, 0]
-        key_length = visible_token_mask.shape[-1]
-        valid_key_mask = visible_token_mask.any(dim=1)
-        valid_key_counts = valid_key_mask.sum(dim=-1)
-        first_valid_key = valid_key_mask.int().argmax(dim=-1)
-        key_offsets = torch.arange(key_length + 1, device=hidden_states.device)
-        ordered_key_indices = first_valid_key.unsqueeze(-1) + key_offsets
-        ordered_key_indices = torch.where(
-            key_offsets < valid_key_counts.unsqueeze(-1), ordered_key_indices, key_length
-        )
-
-        past_length = 0
         if past_key_values is not None:
-            cache_layer = past_key_values.layers[self.layer_idx]
-            if not isinstance(cache_layer, Qwen4ExpSparseAttentionCacheLayerMixin):
-                raise ValueError(
-                    "Qwen4-Exp QSA requires a cache initialized from a config containing qwen_sparse_attention layers."
-                )
-            past_length = cache_layer.get_seq_length()
-            buffer = cache_layer.get_indexer_buffer(indexer_states)
-        else:
-            buffer = indexer_states.new_zeros((batch_size, self.compress_ratio - 1, indexer_states.shape[-1]))
-
-        current_key_positions = past_length + torch.arange(sequence_length, device=hidden_states.device)
-        current_valid_mask = valid_key_mask.gather(1, current_key_positions.expand(batch_size, -1))
-        past_valid_counts = valid_key_counts - current_valid_mask.sum(dim=-1)
-        buffer_counts = past_valid_counts % self.compress_ratio
-        block_states, new_block_counts, buffer = self._group_indexer_states(
-            indexer_states, current_valid_mask, buffer, buffer_counts
-        )
+            indexer_states = past_key_values.update_indexer(indexer_states, self.layer_idx)
 
         rotary_dim = cos.shape[-1]
-        raw_keys, key_cos, key_sin = torch.split(block_states, [self.index_head_dim, rotary_dim, rotary_dim], dim=-1)
-        pooled_keys = self.k_layernorm(raw_keys.float().mean(dim=2).to(raw_keys.dtype))
-        block_key_states = apply_rotary_pos_emb_single(pooled_keys, key_cos[:, :, 0], key_sin[:, :, 0])
+        raw_keys, key_cos, key_sin = torch.split(indexer_states, [self.index_head_dim, rotary_dim, rotary_dim], dim=-1)
 
-        block_capacity = key_length // self.compress_ratio
-        if past_key_values is not None:
-            block_key_states = cache_layer.update_indexer(
-                block_key_states,
-                past_valid_counts // self.compress_ratio,
-                new_block_counts,
-                buffer,
-                block_capacity,
-            )
-        else:
-            block_key_states = block_key_states[:, :block_capacity]
+        # Note that the mask is never None here as we only allow eager and sdpa, and we do not allow sdpa's mask skip
+        # It's always 4D with either bool (sdpa) or float (eager) and already gives us the valid indices
+        visible_token_indices = attention_mask if attention_mask.dtype == torch.bool else attention_mask == 0
 
-        num_blocks = block_key_states.shape[1]
-        block_token_indices = ordered_key_indices[:, : num_blocks * self.compress_ratio].view(
-            batch_size, num_blocks, self.compress_ratio
+        selected_token_indices = torch.full(
+            (batch_size, sequence_length, self.token_budget + self.compress_ratio - 1),
+            -1,
+            dtype=torch.int32,
+            device=hidden_states.device,
         )
+        for batch_idx in range(batch_size):
+            for query_idx in range(sequence_length):
+                local_visible_indices = torch.nonzero(
+                    visible_token_indices[batch_idx, 0, query_idx], as_tuple=False
+                ).flatten()
+                num_complete_blocks = local_visible_indices.shape[-1] // self.compress_ratio
+                # Compute selected tokens
+                if num_complete_blocks > 0:
+                    block_token_indices = local_visible_indices[: num_complete_blocks * self.compress_ratio].view(
+                        num_complete_blocks, self.compress_ratio
+                    )
 
-        visible_token_counts = visible_token_mask.sum(dim=-1)
-        num_visible_blocks = visible_token_counts // self.compress_ratio
+                    key_groups = raw_keys[batch_idx].index_select(0, block_token_indices.flatten())
+                    key_groups = key_groups.view(*block_token_indices.shape, self.index_head_dim)
+                    pooled_keys = key_groups.float().mean(dim=1).to(raw_keys.dtype)
+                    pooled_keys = self.k_layernorm(pooled_keys)
+                    group_starts = block_token_indices[:, 0]
+                    block_key_states = apply_rotary_pos_emb(
+                        pooled_keys.unsqueeze(1),
+                        cos=key_cos[batch_idx].index_select(0, group_starts),
+                        sin=key_sin[batch_idx].index_select(0, group_starts),
+                    ).squeeze(1)
+
+                    scores = torch.matmul(
+                        q[batch_idx, query_idx].float(), block_key_states.float().transpose(-1, -2)
+                    ).transpose(-1, -2)
+                    scores = torch.relu(scores).sum(dim=-1) / math.sqrt(self.index_head_dim)
+
+                    selected_block_indices = scores.topk(min(self.block_topk, num_complete_blocks), dim=0).indices
+                    # Remap the indices of the blocks to the indices of individual tokens
+                    selected_tokens = block_token_indices.index_select(0, selected_block_indices).flatten()
+                else:
+                    selected_tokens = torch.tensor([], device=hidden_states.device)
+                tail = local_visible_indices[num_complete_blocks * self.compress_ratio :]
+                selected_tokens = torch.cat([selected_tokens, tail]).to(torch.int32)
+                selected_token_indices[batch_idx, query_idx, : selected_tokens.numel()] = selected_tokens
+
+        # Create the additive mask to be added to the main causal mask
+        kv_length = attention_mask.shape[-1]
         selected_token_mask = torch.zeros(
-            (batch_size, sequence_length, key_length + 1), device=attention_mask.device, dtype=torch.bool
+            (*selected_token_indices.shape[:-1], kv_length + 1), device=attention_mask.device, dtype=torch.bool
         )
-        num_topk_blocks = min(self.block_topk, num_blocks)
-        block_indices = torch.arange(num_blocks, device=hidden_states.device)
-        tail_offsets = torch.arange(self.compress_ratio - 1, device=hidden_states.device)
-        transposed_block_keys = block_key_states.float().transpose(-1, -2).unsqueeze(1)
-        # Bound the temporary `[batch, queries, indexer_heads, blocks]` score tensor for long prefills.
-        max_score_elements = 1 << 22  # 16 MiB in float32
-        score_elements_per_query = batch_size * self.index_n_heads * max(num_blocks, 1)
-        query_chunk_size = min(sequence_length, max(1, max_score_elements // score_elements_per_query))
-        for query_start in range(0, sequence_length, query_chunk_size):
-            query_end = min(query_start + query_chunk_size, sequence_length)
-            query = q[:, query_start:query_end]
-            query_num_visible_blocks = num_visible_blocks[:, query_start:query_end]
-
-            scores = torch.matmul(query.float(), transposed_block_keys)
-            scores = torch.relu(scores).sum(dim=2) / math.sqrt(self.index_head_dim)
-            scores = scores.masked_fill(
-                block_indices >= query_num_visible_blocks.unsqueeze(-1), torch.finfo(scores.dtype).min
-            )
-            selected_blocks = scores.topk(num_topk_blocks, dim=-1).indices
-
-            # Expand selected blocks back to token indices, then append the current incomplete block as the tail.
-            selected_block_tokens = (
-                block_token_indices[:, None]
-                .expand(-1, query.shape[1], -1, -1)
-                .gather(2, selected_blocks.unsqueeze(-1).expand(-1, -1, -1, self.compress_ratio))
-            )
-            valid_selected_blocks = selected_blocks < query_num_visible_blocks.unsqueeze(-1)
-            selected_block_tokens = selected_block_tokens.masked_fill(~valid_selected_blocks.unsqueeze(-1), -1)
-
-            tail_positions = query_num_visible_blocks.unsqueeze(-1) * self.compress_ratio + tail_offsets
-            valid_tail = tail_positions < visible_token_counts[:, query_start:query_end].unsqueeze(-1)
-            tail_tokens = (
-                ordered_key_indices[:, None]
-                .expand(-1, query.shape[1], -1)
-                .gather(2, tail_positions.clamp(max=key_length))
-            )
-            selected_tokens = torch.cat(
-                [selected_block_tokens.flatten(2), tail_tokens.masked_fill(~valid_tail, -1)], dim=-1
-            )
-            # Invalid selections land in the extra final column, which is removed below.
-            scatter_indices = selected_tokens.masked_fill(selected_tokens < 0, key_length)
-            selected_token_mask[:, query_start:query_end].scatter_(-1, scatter_indices, True)
-
-        selected_token_mask = selected_token_mask[..., :key_length].unsqueeze(1)
+        # We absorb all the -1 by scaterring them to the last index that we will drop
+        scatter_indices = torch.where(selected_token_indices >= 0, selected_token_indices, kv_length)
+        selected_token_mask = selected_token_mask.scatter(-1, scatter_indices, True)[..., :kv_length].unsqueeze(1)
+        # if using eager, convert to float mask
         if attention_mask.is_floating_point():
             min_dtype = torch.finfo(attention_mask.dtype).min
             selected_token_mask = torch.where(selected_token_mask, attention_mask.new_zeros(()), min_dtype)
 
         return selected_token_mask
-
-
-# Adapted from transformers.models.glm.modular_glm.apply_rotary_pos_emb
-def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    Removes the interleaving of cos and sin from GLM
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-
-    # Keep half or full tensor for later concatenation
-    rotary_dim = cos.shape[-1]
-    q_rot, q_pass = q[..., :rotary_dim], q[..., rotary_dim:]
-    k_rot, k_pass = k[..., :rotary_dim], k[..., rotary_dim:]
-
-    # Apply rotary embeddings on the first half or full tensor
-    q_embed = (q_rot * cos) + (rotate_half(q_rot) * sin)
-    k_embed = (k_rot * cos) + (rotate_half(k_rot) * sin)
-
-    # Concatenate back to full shape
-    q_embed = torch.cat([q_embed, q_pass], dim=-1)
-    k_embed = torch.cat([k_embed, k_pass], dim=-1)
-    return q_embed, k_embed
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -1559,9 +1358,10 @@ class Qwen4ExpTextModel(Qwen4ExpPreTrainedModel):
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
+        # position_ids are the full position_ids here, as the indexer needs full position_embeddings
         if position_ids is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = torch.arange(inputs_embeds.shape[1] + past_seen_tokens, device=inputs_embeds.device)
             position_ids = position_ids.view(1, 1, -1).expand(4, inputs_embeds.shape[0], -1)
         elif position_ids.ndim == 2:
             position_ids = position_ids[None, ...].expand(4, position_ids.shape[0], -1)
@@ -1838,6 +1638,12 @@ class Qwen4ExpForCausalLM(Qwen4ExpPreTrainedModel, GenerationMixin):
             "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
         }
         return causal_mask_mapping
+
+    def prepare_inputs_for_generation(self, input_ids, **kwargs):
+        model_inputs = super().prepare_inputs_for_generation(input_ids, **kwargs)
+        # We overwrite them here as we want the FULL position, not the sliced positions
+        model_inputs["position_ids"] = kwargs.get("position_ids")
+        return model_inputs
 
 
 class Qwen4ExpVisionRotaryEmbedding(nn.Module):
