@@ -120,14 +120,19 @@ class DistributedMixin:
                 )
 
         model_param_names = [name for name, _ in self.named_parameters()]
+
+        def _matches(pattern: str) -> bool:
+            regex_pattern = pattern.replace("*", r"\d+")
+            return any(re.match(regex_pattern, name) for name in model_param_names)
+
+        prefix = getattr(self, "base_model_prefix", "")
+        if prefix:
+            plan = {
+                f"{prefix}.{k}" if not _matches(k) and _matches(f"{prefix}.{k}") else k: v for k, v in plan.items()
+            }
+
         for layer_pattern in plan.keys():
-            regex_pattern = layer_pattern.replace("*", r"\d+")
-            pattern_matched = False
-            for param_name in model_param_names:
-                if re.match(regex_pattern, param_name):
-                    pattern_matched = True
-                    break
-            if not pattern_matched:
+            if not _matches(layer_pattern):
                 warnings.warn(
                     f"Layer pattern '{layer_pattern}' does not match any parameters in the model. This rule may not "
                     "be applied during tensor parallelization, or may lead to dimension mismatches"
@@ -198,6 +203,8 @@ class DistributedMixin:
 
             if distributed_config.tp_size > 1:
                 tp_mesh = device_mesh["tp"] if device_mesh.ndim > 1 else device_mesh
+                if isinstance(distributed_config.tp_plan, dict):
+                    model.tp_plan = distributed_config.tp_plan
                 model = apply_tensor_parallelism(model, tp_mesh)
 
             elif distributed_config.fsdp_size > 1:

@@ -348,7 +348,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         if per_layer_config is not None:
             self.per_layer_config = per_layer_config
 
-        if getattr(self, "tie_word_embeddings", False) and self.base_model_tp_plan is not None:
+        if self.base_model_tp_plan is not None and "embed_tokens" not in self.base_model_tp_plan:
             self.base_model_tp_plan = {
                 **self.base_model_tp_plan,
                 "embed_tokens": "embedding_rowwise",

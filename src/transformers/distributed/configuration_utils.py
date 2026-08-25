@@ -50,6 +50,9 @@ class DistributedConfig:
     pp_size: int | None = None
 
     def __post_init__(self):
+        if self.tp_plan is not None and self.tp_size is None and self.fsdp_size is None and self.pp_size is None:
+            self.tp_size = int(os.environ.get("WORLD_SIZE", 1))
+
         if self.tp_size is None and self.fsdp_size is None and self.pp_size is None:
             return
 

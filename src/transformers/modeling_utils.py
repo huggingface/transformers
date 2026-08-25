@@ -4142,6 +4142,8 @@ class PreTrainedModel(
         gguf_file = kwargs.pop("gguf_file", None)
         distributed_config: DistributedConfig = kwargs.pop("distributed_config", None)
         device_mesh = kwargs.pop("device_mesh", None)
+        tp_plan = kwargs.pop("tp_plan", None)
+        tp_size = kwargs.pop("tp_size", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         allow_all_kernels = kwargs.pop("allow_all_kernels", False)
         use_kernels = kwargs.pop("use_kernels", False)
@@ -4183,6 +4185,14 @@ class PreTrainedModel(
                 "If your plan is to load the model on each device, you should set device_map={"
                 ": PartialState().process_index} where PartialState comes from accelerate library"
             )
+
+        if tp_plan is not None or tp_size is not None:
+            if distributed_config is not None:
+                raise ValueError(
+                    "`tp_plan` and `tp_size` are the older spelling of `distributed_config`; pass one or the other, "
+                    "not both. Set `DistributedConfig(tp_plan=..., tp_size=...)` instead."
+                )
+            distributed_config = DistributedConfig(tp_plan=tp_plan, tp_size=tp_size)
 
         if distributed_config is not None:
             distributed_config, device_map, device_mesh = cls.prepare_distribute_model(
