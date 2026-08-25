@@ -34,6 +34,7 @@ from ...test_modeling_common import ids_tensor
 # Model Tester
 # ---------------------------------------------------------------------------
 
+
 class LummaModelTester(CausalLMModelTester):
     """
     Builds small configs suitable for fast unit-tests.
@@ -67,9 +68,7 @@ class LummaModelTester(CausalLMModelTester):
         self.shared_kv = True
         self.kv_cache_mode = "shared"
 
-        self.expected_num_hidden_layers = (
-            self.num_hidden_layers * self.layer_sharing_repeats + 1
-        )
+        self.expected_num_hidden_layers = self.num_hidden_layers * self.layer_sharing_repeats + 1
 
     def get_config(self):
         return LummaConfig(
@@ -132,21 +131,15 @@ class LummaModelTest(CausalLMModelTest, unittest.TestCase):
     # graphs capture tensor pointers – both are incompatible with the proxy
     # objects that _VirtualLayerCache creates on every forward call.
 
-    @unittest.skip(
-        "_VirtualLayerCache is incompatible with StaticCache (fixed pre-allocated slots)"
-    )
+    @unittest.skip("_VirtualLayerCache is incompatible with StaticCache (fixed pre-allocated slots)")
     def test_generate_with_static_cache(self):
         pass
 
-    @unittest.skip(
-        "_VirtualLayerCache is incompatible with StaticCache (fixed pre-allocated slots)"
-    )
+    @unittest.skip("_VirtualLayerCache is incompatible with StaticCache (fixed pre-allocated slots)")
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
-    @unittest.skip(
-        "Static cache used internally; _VirtualLayerCache needs a growable cache"
-    )
+    @unittest.skip("Static cache used internally; _VirtualLayerCache needs a growable cache")
     def test_generate_compile_model_forward_fullgraph(self):
         pass
 
@@ -157,9 +150,7 @@ class LummaModelTest(CausalLMModelTest, unittest.TestCase):
     def test_generate_compilation_all_outputs(self):
         pass
 
-    @unittest.skip(
-        "shared KV empty value cache is incompatible with StaticCache pre-allocation"
-    )
+    @unittest.skip("shared KV empty value cache is incompatible with StaticCache pre-allocation")
     def test_static_cache_no_recompile_with_smaller_length(self):
         pass
 
@@ -177,7 +168,6 @@ class LummaModelTest(CausalLMModelTest, unittest.TestCase):
         seq_len = self.model_tester.seq_length
 
         for model_class in self.all_model_classes:
-
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             model = model_class._from_config(config, attn_implementation="eager")
@@ -211,9 +201,7 @@ class LummaModelTest(CausalLMModelTest, unittest.TestCase):
                 [self.model_tester.num_attention_heads, seq_len, seq_len],
             )
 
-    def _check_past_key_values_for_generate(
-        self, batch_size, past_key_values, seq_length, config
-    ):
+    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
         """
         Lumma shared-KV + kv_cache_mode='shared' stores raw keys in the cache and
         passes an empty value sentinel (seq_len=0). Generic checks expect matching
@@ -231,9 +219,7 @@ class LummaModelTest(CausalLMModelTest, unittest.TestCase):
                 self.assertEqual(layer.values.shape, v_shape)
             return
 
-        super()._check_past_key_values_for_generate(
-            batch_size, past_key_values, seq_length, config
-        )
+        super()._check_past_key_values_for_generate(batch_size, past_key_values, seq_length, config)
 
     def test_factorized_embedding_architecture(self):
         """
@@ -641,7 +627,6 @@ class LummaModelTest(CausalLMModelTest, unittest.TestCase):
                 msg=f"Layer {layer_idx}: value cache should be empty sentinel in shared mode",
             )
 
-
     def test_q_norm_only_creates_q_norm_not_k_norm(self):
         """
         When q_norm=True, qk_norm=False:
@@ -784,8 +769,8 @@ class LummaModelTest(CausalLMModelTest, unittest.TestCase):
                 logits[label] = model(input_ids).logits
 
         self.assertFalse(torch.allclose(logits["q_only"], logits["qk_both"], atol=1e-5))
-        self.assertFalse(torch.allclose(logits["q_only"], logits["none"],    atol=1e-5))
-        self.assertFalse(torch.allclose(logits["qk_both"], logits["none"],   atol=1e-5))
+        self.assertFalse(torch.allclose(logits["q_only"], logits["none"], atol=1e-5))
+        self.assertFalse(torch.allclose(logits["qk_both"], logits["none"], atol=1e-5))
 
     def test_norm_applied_per_head_dim(self):
         """
@@ -1053,7 +1038,6 @@ class LummaModelTest(CausalLMModelTest, unittest.TestCase):
         """
         config = LummaConfig(factorized_embedding=False, hidden_size=32, num_attention_heads=2)
         self.assertEqual(config.rope_parameters["rope_theta"], 1_000_000.0)
-
 
     def test_shared_kv_and_layer_sharing_together(self):
         """

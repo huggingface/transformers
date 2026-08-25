@@ -132,13 +132,9 @@ class LummaConfig(LlamaConfig):
     def validate_architecture(self):
         """Sanity-check the configuration values."""
         if self.qk_norm and self.q_norm:
-            raise ValueError(
-                "Exactly one of `qk_norm` or `q_norm` may be True, not both."
-            )
+            raise ValueError("Exactly one of `qk_norm` or `q_norm` may be True, not both.")
         if self.kv_cache_mode not in ("shared", "vanilla"):
-            raise ValueError(
-                f"`kv_cache_mode` must be 'shared' or 'vanilla', got {self.kv_cache_mode!r}."
-            )
+            raise ValueError(f"`kv_cache_mode` must be 'shared' or 'vanilla', got {self.kv_cache_mode!r}.")
         if self.factorized_embedding and self.embedding_rank <= 0:
             raise ValueError(
                 f"`embedding_rank` must be a positive integer when `factorized_embedding=True`, "
@@ -150,23 +146,26 @@ class LummaConfig(LlamaConfig):
                 f"`num_attention_heads` ({self.num_attention_heads})."
             )
         if self.layer_sharing_repeats < 1:
-            raise ValueError(
-                f"`layer_sharing_repeats` must be >= 1, got {self.layer_sharing_repeats}."
-            )
+            raise ValueError(f"`layer_sharing_repeats` must be >= 1, got {self.layer_sharing_repeats}.")
         if self.layer_sharing and self.num_hidden_layers % self.layer_sharing_repeats != 0:
             raise ValueError(
                 f"`num_hidden_layers` ({self.num_hidden_layers}) must be divisible by "
                 f"`layer_sharing_repeats` ({self.layer_sharing_repeats}) when `layer_sharing=True`."
             )
 
+
 class LummaRMSNorm(LlamaRMSNorm):
     pass
+
 
 class LummaRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
+
 class LummaMLP(LlamaMLP):
     pass
+
+
 class LummaAttention(LlamaAttention):
     def __init__(self, config: LummaConfig, layer_idx: int):
         super().__init__(config, layer_idx)
@@ -278,6 +277,7 @@ class LummaAttention(LlamaAttention):
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 
+
 class LummaDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: LummaConfig, layer_idx: int):
         super().__init__()
@@ -335,6 +335,7 @@ class LummaPreTrainedModel(LlamaPreTrainedModel):
         "attentions": LummaAttention,
     }
 
+
 @auto_docstring
 class LummaModel(LummaPreTrainedModel):
     def __init__(self, config: LummaConfig):
@@ -349,9 +350,7 @@ class LummaModel(LummaPreTrainedModel):
         )
         self.embedding_proj = (
             # CODEPATH: FrontiersMind/Lumma-0.6B-Base uses factorized_embedding=True; no released checkpoint uses factorized_embedding=False.
-            nn.Linear(config.embedding_rank, config.hidden_size, bias=False)
-            if config.factorized_embedding
-            else None
+            nn.Linear(config.embedding_rank, config.hidden_size, bias=False) if config.factorized_embedding else None
         )
         self.layers = nn.ModuleList(
             [
@@ -367,6 +366,7 @@ class LummaModel(LummaPreTrainedModel):
         self.gradient_checkpointing = False
 
         self.post_init()
+
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
@@ -410,16 +410,10 @@ class LummaModel(LummaPreTrainedModel):
 
         hidden_states = inputs_embeds
         kv_cache_mode = getattr(self.config, "kv_cache_mode", "shared")
-        if (
-            getattr(self.config, "shared_kv", False)
-            and kv_cache_mode == "shared"
-            and past_key_values is not None
-        ):
+        if getattr(self.config, "shared_kv", False) and kv_cache_mode == "shared" and past_key_values is not None:
             past_len = past_key_values.get_seq_length(0)
             cur_len = inputs_embeds.shape[1]
-            full_position_ids = torch.arange(
-                past_len + cur_len, device=inputs_embeds.device
-            ).unsqueeze(0)
+            full_position_ids = torch.arange(past_len + cur_len, device=inputs_embeds.device).unsqueeze(0)
             position_embeddings = self.rotary_emb(hidden_states, position_ids=full_position_ids)
         else:
             position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
@@ -441,6 +435,8 @@ class LummaModel(LummaPreTrainedModel):
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
+
+
 @auto_docstring
 class LummaForCausalLM(LlamaForCausalLM):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
@@ -509,5 +505,6 @@ class LummaForCausalLM(LlamaForCausalLM):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
 
 __all__ = ["LummaConfig", "LummaPreTrainedModel", "LummaModel", "LummaForCausalLM"]
