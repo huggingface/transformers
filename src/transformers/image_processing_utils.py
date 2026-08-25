@@ -14,12 +14,10 @@
 
 import math
 from collections.abc import Iterable
-from copy import deepcopy
 from functools import partial
 from typing import Any
 
 import numpy as np
-from huggingface_hub.dataclasses import validate_typed_dict
 
 from .image_processing_base import BatchFeature, ImageProcessingMixin
 from .image_transforms import center_crop, normalize, rescale
@@ -192,25 +190,14 @@ class BaseImageProcessor(ImageProcessingMixin):
     rescale_factor = 1 / 255
     model_input_names = ["pixel_values"]
 
+    def _serialize_value(self, key, value):
+        # Coerce SizeDict attributes to plain dicts for JSON persistence.
+        return dict(value) if isinstance(value, SizeDict) else value
+
     def __init__(self, **kwargs: Unpack[ImagesKwargs]):
         super().__init__(**kwargs)
         # We don't call self._set_attributes in BaseImageProcessor for backward compatibility with remote code
         # We call it instead in the backend subclasses' __init__ methods.
-
-    def _set_attributes(self, **kwargs):
-        """Resolve and set instance attributes from kwargs and class-level defaults for all valid kwargs."""
-        attributes = {}
-        for key in self.valid_kwargs.__annotations__:
-            kwarg = kwargs.pop(key, None)
-            if kwarg is not None:
-                attributes[key] = kwarg
-            else:
-                attributes[key] = deepcopy(getattr(self, key, None))
-        attributes = self._standardize_kwargs(**attributes)
-        for key, value in attributes.items():
-            setattr(self, key, value)
-
-        self._valid_kwargs_names = list(self.valid_kwargs.__annotations__.keys())
 
     def __call__(self, images: ImageInput, *args, **kwargs: Unpack[ImagesKwargs]) -> BatchFeature:
         """Preprocess an image or a batch of images."""
@@ -384,40 +371,12 @@ class BaseImageProcessor(ImageProcessingMixin):
         """
         Preprocess an image or a batch of images.
         """
-        # Perform type validation on received kwargs
-        validate_typed_dict(self.valid_kwargs, kwargs)
+        # Common validate/setdefault/standardize/dispatch logic lives in `PreprocessingMixin.preprocess`.
+        return super().preprocess(images, *args, **kwargs)
 
-        # Set default kwargs from self
-        for kwarg_name in self._valid_kwargs_names:
-            kwargs.setdefault(kwarg_name, getattr(self, kwarg_name, None))
-
-        # Update kwargs that need further processing before being validated
-        kwargs = self._standardize_kwargs(**kwargs)
-
-        # Validate kwargs
-        self._validate_preprocess_kwargs(**kwargs)
-
+    def _preprocess_like_inputs(self, images: ImageInput, *args, **kwargs) -> BatchFeature:
+        """Dispatch hook called by `PreprocessingMixin.preprocess` with validated kwargs."""
         return self._preprocess_image_like_inputs(images, *args, **kwargs)
-
-    def to_dict(self) -> dict[str, Any]:
-        processor_dict = super().to_dict()
-
-        # Filter out None values that are class defaults
-        filtered_dict = {}
-        for key, value in processor_dict.items():
-            if isinstance(value, SizeDict):
-                value = dict(value)
-            if value is None:
-                class_default = getattr(type(self), key, "NOT_FOUND")
-                # Keep None if user explicitly set it (class default is non-None)
-                if class_default != "NOT_FOUND" and class_default is not None:
-                    filtered_dict[key] = value
-            else:
-                filtered_dict[key] = value
-
-        filtered_dict.pop("_valid_processor_keys", None)
-        filtered_dict.pop("_valid_kwargs_names", None)
-        return filtered_dict
 
     def rescale(
         self,
