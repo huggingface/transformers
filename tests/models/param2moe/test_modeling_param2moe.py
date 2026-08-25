@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch Param2MoE model."""
+"""Testing suite for the PyTorch Param2Moe model."""
 
 import tempfile
 import unittest
@@ -27,8 +27,8 @@ from ...test_tensor_parallel_mixin import _init_distributed
 if is_torch_available():
     import torch
 
-    from transformers import AutoTokenizer, Param2MoEForCausalLM, Param2MoEModel
-    from transformers.models.param2moe.modeling_param2moe import Param2MoERotaryEmbedding
+    from transformers import AutoTokenizer, Param2MoeForCausalLM, Param2MoeModel
+    from transformers.models.param2moe.modeling_param2moe import Param2MoeRotaryEmbedding
 
 
 def _test_tp_generation_quantized_param2moe_impl(_rank, model_path, model_class, max_new_tokens):
@@ -88,9 +88,9 @@ def _test_tp_generation_quantized_param2moe_impl(_rank, model_path, model_class,
     dist.barrier()
 
 
-class Param2MoEModelTester(CausalLMModelTester):
+class Param2MoeModelTester(CausalLMModelTester):
     if is_torch_available():
-        base_model_class = Param2MoEModel
+        base_model_class = Param2MoeModel
 
     def __init__(
         self,
@@ -123,11 +123,11 @@ class Param2MoEModelTester(CausalLMModelTester):
         self.norm_topk_prob = norm_topk_prob
 
     def get_config(self):
-        from transformers import Param2MoEConfig
+        from transformers import Param2MoeConfig
 
         hidden_size = self.num_attention_heads * self.head_dim  # e.g. 4*8 = 32
 
-        return Param2MoEConfig(
+        return Param2MoeConfig(
             vocab_size=self.vocab_size,
             hidden_size=hidden_size,
             intermediate_size=hidden_size * 2,
@@ -161,16 +161,16 @@ class Param2MoEModelTester(CausalLMModelTester):
 
 
 @require_torch
-class Param2MoEModelTest(CausalLMModelTest, unittest.TestCase):
+class Param2MoeModelTest(CausalLMModelTest, unittest.TestCase):
     test_all_params_have_gradient = False
-    model_tester_class = Param2MoEModelTester
+    model_tester_class = Param2MoeModelTester
     model_split_percents = [0.5, 0.7, 0.8]
 
-    _torch_compile_train_cls = Param2MoEForCausalLM if is_torch_available() else None
+    _torch_compile_train_cls = Param2MoeForCausalLM if is_torch_available() else None
 
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
         """
-        Param2MoE uses standard GQA (no MLA), so key/value shapes follow the
+        Param2Moe uses standard GQA (no MLA), so key/value shapes follow the
         normal DynamicCache layout: (batch, num_key_value_heads, seq_len, head_dim).
         """
         self.assertIsInstance(past_key_values, Cache)
@@ -187,7 +187,7 @@ class Param2MoEModelTest(CausalLMModelTest, unittest.TestCase):
 
     def test_model_rope_scaling_frequencies(self):
         """
-        Param2MoE uses real-domain RoPE (cos/sin), not complex-domain.
+        Param2Moe uses real-domain RoPE (cos/sin), not complex-domain.
         The rotary embedding forward() returns a (cos, sin) tuple; we check
         each component independently instead of comparing the tuple as a tensor.
         """
@@ -203,19 +203,19 @@ class Param2MoEModelTest(CausalLMModelTest, unittest.TestCase):
         def _get_cos(rope, x, position_ids):
             return rope(x, position_ids)[0]
 
-        original_rope = Param2MoERotaryEmbedding(config=config).to(torch_device)
+        original_rope = Param2MoeRotaryEmbedding(config=config).to(torch_device)
         cos_short = _get_cos(original_rope, x, position_ids_short)
         cos_long = _get_cos(original_rope, x, position_ids_long)
         torch.testing.assert_close(cos_short, cos_long[:, :short_input_length, :])
 
         config.rope_parameters = {"rope_type": "linear", "rope_theta": 10000.0, "factor": scaling_factor}
-        linear_rope = Param2MoERotaryEmbedding(config=config).to(torch_device)
+        linear_rope = Param2MoeRotaryEmbedding(config=config).to(torch_device)
         cos_lin_short = _get_cos(linear_rope, x, position_ids_short)
         cos_lin_long = _get_cos(linear_rope, x, position_ids_long)
         torch.testing.assert_close(cos_lin_short, cos_lin_long[:, :short_input_length, :])
 
         config.rope_parameters = {"rope_type": "dynamic", "rope_theta": 10000.0, "factor": scaling_factor}
-        ntk_rope = Param2MoERotaryEmbedding(config=config).to(torch_device)
+        ntk_rope = Param2MoeRotaryEmbedding(config=config).to(torch_device)
         cos_ntk_short = _get_cos(ntk_rope, x, position_ids_short)
         cos_ntk_long = _get_cos(ntk_rope, x, position_ids_long)
         torch.testing.assert_close(cos_ntk_short, cos_short)
@@ -224,7 +224,7 @@ class Param2MoEModelTest(CausalLMModelTest, unittest.TestCase):
         self.assertTrue((ntk_rope.inv_freq <= original_rope.inv_freq).all())
 
         config.rope_parameters = {"rope_type": "yarn", "rope_theta": 10000.0, "factor": scaling_factor}
-        yarn_rope = Param2MoERotaryEmbedding(config=config).to(torch_device)
+        yarn_rope = Param2MoeRotaryEmbedding(config=config).to(torch_device)
         cos_yarn_short = _get_cos(yarn_rope, x, position_ids_short)
         cos_yarn_long = _get_cos(yarn_rope, x, position_ids_long)
         torch.testing.assert_close(cos_yarn_short, cos_yarn_long[:, :short_input_length, :])
@@ -260,7 +260,7 @@ class Param2MoEModelTest(CausalLMModelTest, unittest.TestCase):
 
 @slow
 @require_torch_accelerator
-class Param2MoEIntegrationTest(unittest.TestCase):
+class Param2MoeIntegrationTest(unittest.TestCase):
     def test_param2moe_generation(self):
         EXPECTED_TEXT = [
             "An attention function can be described as mapping a query and a set of key-value pairs to an output, "
@@ -271,7 +271,7 @@ class Param2MoEIntegrationTest(unittest.TestCase):
         ]  # fmt: skip
 
         tokenizer = AutoTokenizer.from_pretrained("Bhargav369/hf_v5_test")
-        model = Param2MoEForCausalLM.from_pretrained(
+        model = Param2MoeForCausalLM.from_pretrained(
             "Bhargav369/hf_v5_test",
             device_map=torch_device,
             dtype=torch.bfloat16,
@@ -290,7 +290,7 @@ class Param2MoEIntegrationTest(unittest.TestCase):
     def test_logits_eager(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
 
-        model = Param2MoEForCausalLM.from_pretrained(
+        model = Param2MoeForCausalLM.from_pretrained(
             "Bhargav369/hf_v5_test",
             device_map=torch_device,
             dtype=torch.bfloat16,
@@ -328,7 +328,7 @@ class Param2MoEIntegrationTest(unittest.TestCase):
             "My favorite all time favorite condiment is ketchup.",
         ]
         tokenizer = AutoTokenizer.from_pretrained("Bhargav369/hf_v5_test", pad_token="</s>", padding_side="right")
-        model = Param2MoEForCausalLM.from_pretrained(
+        model = Param2MoeForCausalLM.from_pretrained(
             "Bhargav369/hf_v5_test",
             device_map=torch_device,
             dtype=torch.bfloat16,

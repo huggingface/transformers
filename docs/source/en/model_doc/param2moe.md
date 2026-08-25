@@ -18,11 +18,11 @@ limitations under the License.
 -->
 *This model was contributed to Hugging Face Transformers on 2026-08-25.*
 
-# Param2MoE
+# Param2Moe
 
 ## Overview
 
-Param2MoE was released by the [BharatGen AI](https://huggingface.co/bharatgenai) team as **Param-2-17B-MoE-A2.4B**, a Hybrid Mixture-of-Experts language model with 17B total parameters and only 2.4B active per token. It is pretrained from scratch on ~22 trillion tokens across two phases, with an emphasis on linguistic diversity — supporting English, Hindi, and 21 Indian languages. The model ships as an early post-training checkpoint with reasoning, tool calling, math, and code capabilities.
+Param2Moe was released by the [BharatGen AI](https://huggingface.co/bharatgenai) team as **Param-2-17B-MoE-A2.4B**, a Hybrid Mixture-of-Experts language model with 17B total parameters and only 2.4B active per token. It is pretrained from scratch on ~22 trillion tokens across two phases, with an emphasis on linguistic diversity — supporting English, Hindi, and 21 Indian languages. The model ships as an early post-training checkpoint with reasoning, tool calling, math, and code capabilities.
 
 The original model can be found [here](https://huggingface.co/bharatgenai/Param2-17B-A2.4B-Thinking).
 
@@ -37,13 +37,13 @@ Tips:
 
 ## Architecture
 
-Param2MoE's modular implementation is composed almost entirely of existing building blocks, with only config-level differences:
+Param2Moe's modular implementation is composed almost entirely of existing building blocks, with only config-level differences:
 
-- **MoE block, router, and experts** are inherited unchanged from **DeepSeek-V3** (`DeepseekV3MoE`, `DeepseekV3TopkRouter`, `DeepseekV3Experts`). This gives Param2MoE the same sigmoid-scored, grouped top-k routing with an expert-bias correction term and shared experts added on top of the routed output. The only differences from DeepSeek-V3 are in the config values: Param2MoE routes to 6 of 64 experts per token (vs. DeepSeek-V3's 8 of 256) with `n_group=1` (i.e. no grouping restricts which experts can be chosen — DeepSeek-V3 uses `n_group=8`/`topk_group=4`), and uses 2 shared experts (vs. DeepSeek-V3's 1).
-- **Attention** is inherited unchanged from **Qwen3-MoE** (`Qwen3MoeAttention`), not from DeepSeek-V3. This means Param2MoE uses standard multi-head attention with per-head QK RMSNorm (`q_norm`/`k_norm`), rather than DeepSeek-V3's Multi-head Latent Attention (MLA) with its low-rank Q/KV projections. There is no `q_lora_rank`/`kv_lora_rank` in `Param2MoEConfig` because of this.
+- **MoE block, router, and experts** are inherited unchanged from **DeepSeek-V3** (`DeepseekV3MoE`, `DeepseekV3TopkRouter`, `DeepseekV3Experts`). This gives Param2Moe the same sigmoid-scored, grouped top-k routing with an expert-bias correction term and shared experts added on top of the routed output. The only differences from DeepSeek-V3 are in the config values: Param2Moe routes to 6 of 64 experts per token (vs. DeepSeek-V3's 8 of 256) with `n_group=1` (i.e. no grouping restricts which experts can be chosen — DeepSeek-V3 uses `n_group=8`/`topk_group=4`), and uses 2 shared experts (vs. DeepSeek-V3's 1).
+- **Attention** is inherited unchanged from **Qwen3-MoE** (`Qwen3MoeAttention`), not from DeepSeek-V3. This means Param2Moe uses standard multi-head attention with per-head QK RMSNorm (`q_norm`/`k_norm`), rather than DeepSeek-V3's Multi-head Latent Attention (MLA) with its low-rank Q/KV projections. There is no `q_lora_rank`/`kv_lora_rank` in `Param2MoeConfig` because of this.
 - **Decoder layer, RMSNorm, rotary embedding, dense MLP, and causal-LM wrapper** follow the standard **Llama/Mixtral** pattern used across the MoE model family (`LlamaDecoderLayer`, `LlamaRMSNorm`, `LlamaRotaryEmbedding`, `MixtralForCausalLM`, `MixtralModel`), the same as Qwen3-MoE and DeepSeek-V3 itself.
 
-In short: Param2MoE = DeepSeek-V3's MoE/routing + Qwen3-MoE's attention, glued together with the shared Llama/Mixtral scaffolding, at a smaller scale (17B total / 2.4B active).
+In short: Param2Moe = DeepSeek-V3's MoE/routing + Qwen3-MoE's attention, glued together with the shared Llama/Mixtral scaffolding, at a smaller scale (17B total / 2.4B active).
 
 ## Usage examples
 
@@ -104,21 +104,21 @@ print("\n========== TOOL CALLS ==========\n", parsed["tool_calls"])
 print("\n========== FINAL ANSWER ==========\n", parsed["final_answer"])
 ```
 
-## Param2MoEConfig
+## Param2MoeConfig
 
-[[autodoc]] Param2MoEConfig
+[[autodoc]] Param2MoeConfig
 
-## Param2MoEPreTrainedModel
+## Param2MoePreTrainedModel
 
-[[autodoc]] Param2MoEPreTrainedModel
+[[autodoc]] Param2MoePreTrainedModel
     - forward
 
-## Param2MoEModel
+## Param2MoeModel
 
-[[autodoc]] Param2MoEModel
+[[autodoc]] Param2MoeModel
     - forward
 
-## Param2MoEForCausalLM
+## Param2MoeForCausalLM
 
-[[autodoc]] Param2MoEForCausalLM
+[[autodoc]] Param2MoeForCausalLM
     - forward
