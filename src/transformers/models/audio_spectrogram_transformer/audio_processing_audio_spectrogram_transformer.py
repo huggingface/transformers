@@ -32,12 +32,6 @@ class AudioSpectrogramTransformerAudioProcessor(TorchAudioBackend):
 
     spectrogram_config = AudioSpectrogramTransformerAudioProcessorNumpy.spectrogram_config
 
-    def extract_spectrogram(self, audio, **kwargs):
-        # Native kaldi-exact pipeline (bit-equal to `torchaudio.compliance.kaldi.fbank`),
-        # transposed to kaldi's (time, num_mel_bins) orientation expected downstream.
-        features = super().extract_spectrogram(audio, **kwargs)
-        return [f.transpose(-2, -1) for f in features]
-
     def _pad_features(self, features, padding, max_length, truncation, pad_to_multiple_of):
         # Always pad/truncate to max_length_frames regardless of caller's padding args
         return super()._pad_features(features, "max_length", self.max_length_frames, True, pad_to_multiple_of)

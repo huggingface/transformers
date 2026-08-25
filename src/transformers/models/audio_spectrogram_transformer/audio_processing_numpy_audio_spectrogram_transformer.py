@@ -17,8 +17,13 @@ from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
 class AudioSpectrogramTransformerAudioProcessorNumpy(NumpyAudioBackend):
-    """NumPy sibling of [`AudioSpectrogramTransformerAudioProcessor`]. Uses kaldi-compatible
-    fbank features via `_kaldi_fbank` (which delegates to torchaudio under the hood)."""
+    """NumPy sibling of [`AudioSpectrogramTransformerAudioProcessor`]. Runs the native
+    kaldi-style pipeline described by `spectrogram_config` — no torchaudio dependency.
+
+    The legacy FE calls `torchaudio.compliance.kaldi.fbank`, so bit-exactness with it is a
+    torch-only property (the torch sibling has it). numpy's FFT and window differ from torch's
+    in the last float32 ulp, which `log` amplifies in near-silent mel bins: typical |diff| is
+    ~3e-6, worst case ~1e-3 over a [-16, 10] value range."""
 
     sampling_rate = 16000
     force_mono = True
@@ -54,10 +59,8 @@ class AudioSpectrogramTransformerAudioProcessorNumpy(NumpyAudioBackend):
         preemphasis=0.97,
         remove_dc_offset=True,
         mel_floor=1.192092955078125e-07,
+        transpose_features=True,  # kaldi's (time, num_mel_bins) orientation
     )
-
-    def extract_spectrogram(self, audio, **kwargs):
-        return [self._kaldi_fbank(waveform, num_mel_bins=128, window_type="hanning") for waveform in audio]
 
     def _pad_features(self, features, padding, max_length, truncation, pad_to_multiple_of):
         # Always pad/truncate to max_length_frames regardless of caller's padding args

@@ -19,8 +19,13 @@ from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
 class SpeechToTextAudioProcessorNumpy(NumpyAudioBackend):
-    """NumPy sibling of [`SpeechToTextAudioProcessor`]. Per-waveform kaldi fbank features
-    followed by per-utterance CMVN on the padded batch (ADR 0001)."""
+    """NumPy sibling of [`SpeechToTextAudioProcessor`]. Per-waveform kaldi-style fbank
+    features from the native pipeline described by `spectrogram_config` (no torchaudio
+    dependency), followed by per-utterance CMVN on the padded batch.
+
+    The legacy FE calls `torchaudio.compliance.kaldi.fbank`, so bit-exactness with it is a
+    torch-only property (the torch sibling has it). numpy's FFT and window differ from torch's
+    in the last float32 ulp, which `log` amplifies in near-silent mel bins."""
 
     sampling_rate = 16000
     force_mono = True
@@ -49,23 +54,13 @@ class SpeechToTextAudioProcessorNumpy(NumpyAudioBackend):
         remove_dc_offset=True,
         mel_floor=1.192092955078125e-07,
         waveform_scale=32768.0,
+        transpose_features=True,  # kaldi's (time, n_mels) orientation
     )
 
     def __init__(self, normalize_means=True, normalize_vars=True, **kwargs):
         super().__init__(**kwargs)
         self.normalize_means = normalize_means
         self.normalize_vars = normalize_vars
-
-    def _extract_fbank_features(self, waveform):
-        """Extract log-mel filterbank features for a single waveform."""
-        # The `_kaldi_fbank` bridge bypasses the base pipeline (which would apply
-        # `spectrogram_config.waveform_scale` itself), so scale manually here.
-        waveform = waveform * self.spectrogram_config.waveform_scale
-        return self._kaldi_fbank(waveform, num_mel_bins=80)
-
-    def extract_spectrogram(self, audio, **kwargs):
-        # Per-waveform fbank extraction returning (time, n_mels)
-        return [self._extract_fbank_features(waveform) for waveform in audio]
 
     @staticmethod
     def utterance_cmvn(x, input_length, normalize_means=True, normalize_vars=True, padding_value=0.0):

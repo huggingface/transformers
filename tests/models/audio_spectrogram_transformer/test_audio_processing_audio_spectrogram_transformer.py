@@ -31,6 +31,13 @@ class AudioSpectrogramTransformerAudioProcessingTester:
 
 @require_torch
 class AudioSpectrogramTransformerAudioProcessingTest(AudioProcessingTestMixin, unittest.TestCase):
+    # The numpy sibling runs the native kaldi-style pipeline rather than bridging to
+    # `torchaudio.compliance.kaldi`, so it no longer matches torch bit-for-bit: numpy's FFT and
+    # window differ in the last float32 ulp and `log` amplifies that in near-silent mel bins
+    # (empirically up to ~2.4e-4 on the quiet fixture audio, after AudioSet normalization).
+    parity_atol = 5e-4
+    parity_rtol = 1e-4
+
     def setUp(self):
         # AST is registered under `audio-spectrogram-transformer` (hyphenated) but the test
         # directory uses underscores, so the mixin's auto-discovery cannot match.

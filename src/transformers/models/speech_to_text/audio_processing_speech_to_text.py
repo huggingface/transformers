@@ -35,12 +35,6 @@ class SpeechToTextAudioProcessor(TorchAudioBackend):
         self.normalize_means = normalize_means
         self.normalize_vars = normalize_vars
 
-    def extract_spectrogram(self, audio, **kwargs):
-        # Native kaldi-exact pipeline (bit-equal to `torchaudio.compliance.kaldi.fbank`),
-        # transposed to kaldi's (time, n_mels) orientation expected downstream.
-        features = super().extract_spectrogram(audio, **kwargs)
-        return [f.transpose(-2, -1) for f in features]
-
     @staticmethod
     def utterance_cmvn(x, input_length, normalize_means=True, normalize_vars=True, padding_value=0.0):
         # CMVN is computed in numpy to stay bit-exact with the legacy feature extractor
