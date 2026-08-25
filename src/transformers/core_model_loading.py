@@ -110,34 +110,50 @@ class _IdentityOp(ConversionOps):
 
 
 class Chunk(ConversionOps):
-    """Split a tensor along `dim` into equally sized chunks."""
+    """Split a tensor along `dim` into equally sized chunks. Additionally, `num_shards_attribute` is a config field to read
+    to know how many tensors to chunk into. Useful when concatenating an arbitrary number of tensors."""
 
-    def __init__(self, dim: int = 0):
+    def __init__(self, dim: int = 0, num_shards_attribute: str | None = None):
         self.dim = dim
+        self.num_shards_attribute = num_shards_attribute
 
     @torch.no_grad
     def convert(
         self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
     ) -> dict[str, torch.Tensor]:
+        if len(input_dict) > 1:
+            raise ValueError(f"Undefined Operation encountered")
         tensors = next(iter(input_dict.values()))
         tensor = tensors[0] if isinstance(tensors, list) else tensors
-        targets = target_patterns
-        sizes = len(targets)
-        chunks = tuple(chunk.contiguous() for chunk in torch.chunk(tensor, sizes, dim=self.dim))
-        if len(input_dict) > 1 or len(target_patterns) == 1 or len(chunks) != len(target_patterns):
-            raise ValueError(f"Failed to convert {kwargs.get('full_layer_name')}")
+        targets = self.get_target_patterns(target_patterns, **kwargs)
+        num_shards = len(targets)
+        chunks = tuple(chunk.contiguous() for chunk in torch.chunk(tensor, num_shards, dim=self.dim))
         return dict(zip(targets, chunks))
+
+    def get_target_patterns(self, target_patterns: list[str], **kwargs) -> str:
+        if self.num_shards_attribute is None:
+            return target_patterns
+        # In this case we need to use the config to know how many chunks to create
+        else:
+            if len(target_patterns) > 1:
+                raise ValueError(f"Undefined Operation encountered")
+            subconfig = kwargs["config"].get_text_config()
+            num_shards = getattr(subconfig, self.num_shards_attribute)
+            target_patterns = [target_patterns[0].replace(r"\d+", i) for i in range(num_shards)]
+            return target_patterns
 
     @property
     def reverse_op(self) -> ConversionOps:
-        return Concatenate(self.dim)
+        return Concatenate(self.dim, self.num_shards_attribute)
 
 
 class Concatenate(ConversionOps):
-    """Concatenate tensors along `dim`."""
+    """Concatenate tensors along `dim`. Additionally, if concatenating an aribitrary number of tensors, `num_shards_attribute` is
+    a config field to read to know how many tensors to recreate when using the opposite Ops."""
 
-    def __init__(self, dim: int = 0):
+    def __init__(self, dim: int = 0, num_shards_attribute: str | None = None):
         self.dim = dim
+        self.num_shards_attribute = num_shards_attribute
 
     @torch.no_grad
     def convert(
@@ -173,62 +189,7 @@ class Concatenate(ConversionOps):
 
     @property
     def reverse_op(self) -> ConversionOps:
-        return Chunk(self.dim)
-
-
-class ConcatenateShards(Concatenate):
-    """Concatenate checkpoint shards and split them back according to a config attribute when saving."""
-
-    def __init__(self, dim: int = 0, num_shards_attribute: str = "num_shards"):
-        super().__init__(dim)
-        self.num_shards_attribute = num_shards_attribute
-
-    @property
-    def reverse_op(self) -> ConversionOps:
-        return SplitShards(self.dim, self.num_shards_attribute)
-
-
-class SplitShards(ConversionOps):
-    """Split a tensor into checkpoint shards using the original ceil-divided shard layout."""
-
-    def __init__(self, dim: int = 0, num_shards_attribute: str = "num_shards"):
-        self.dim = dim
-        self.num_shards_attribute = num_shards_attribute
-
-    @torch.no_grad
-    def convert(
-        self,
-        input_dict: dict[str, torch.Tensor],
-        source_patterns: list[str],
-        target_patterns: list[str],
-        config,
-        **kwargs,
-    ) -> dict[str, torch.Tensor]:
-        if len(input_dict) != 1 or len(target_patterns) != 1:
-            raise ValueError(f"Failed to convert {kwargs.get('full_layer_name')}")
-
-        tensors = next(iter(input_dict.values()))
-        tensor = tensors[0] if isinstance(tensors, list) else tensors
-        subconfig = getattr(config, "text_config", config)
-        num_shards = getattr(subconfig, self.num_shards_attribute)
-        shard_size = math.ceil(tensor.size(self.dim) / num_shards)
-
-        target_pattern = target_patterns[0]
-        full_layer_name = kwargs.get("full_layer_name", target_pattern)
-        if target_pattern in full_layer_name:
-            target_pattern = full_layer_name
-
-        shards = {}
-        for shard_index in range(num_shards):
-            shard_start = min(shard_index * shard_size, tensor.size(self.dim))
-            shard_rows = min(shard_size, tensor.size(self.dim) - shard_start)
-            target = target_pattern.replace(r"\d+", str(shard_index))
-            shards[target] = tensor.narrow(self.dim, shard_start, shard_rows).contiguous()
-        return shards
-
-    @property
-    def reverse_op(self) -> ConversionOps:
-        return ConcatenateShards(self.dim, self.num_shards_attribute)
+        return Chunk(self.dim, self.num_shards_attribute)
 
 
 class Interleave(ConversionOps):
@@ -1747,9 +1708,7 @@ def convert_and_load_state_dict_in_model(
             if is_dtensor(empty_param):
                 sharding_op = DtensorShardOperation(empty_param)
 
-            if isinstance(mapping, WeightConverter) and any(
-                isinstance(operation, ConcatenateShards) for operation in mapping.operations
-            ):
+            if isinstance(mapping, WeightConverter) and "ple.ple_embedding.ngram_embedding." in renamed_key:
                 # ConcatenateShards represents pieces of one global parameter. Materialize its sources unsharded on
                 # CPU, then place/shard the converted global tensor exactly once.
                 mapping._deferred_load_placement = (sharding_op, materialize_device, _dtype)

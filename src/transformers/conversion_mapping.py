@@ -21,7 +21,6 @@ from typing import TYPE_CHECKING
 from .core_model_loading import (
     Chunk,
     Concatenate,
-    ConcatenateShards,
     ErnieFuseAndSplitTextVisionExperts,
     GroupWeightRename,
     Interleave,
@@ -1763,7 +1762,7 @@ def _build_checkpoint_conversion_mapping():
         WeightConverter(
             source_patterns=r"ngram_embedding\.shard_\d+\.weight",
             target_patterns="ngram_embedding.weight",
-            operations=[ConcatenateShards(dim=0, num_shards_attribute="split_ngram_parts")],
+            operations=[Concatenate(dim=0, num_shards_attribute="split_ngram_parts")],
         ),
     ]
 
