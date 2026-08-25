@@ -15,7 +15,6 @@
 import json
 import tempfile
 import unittest
-from unittest import mock
 
 import numpy as np
 
@@ -421,13 +420,14 @@ class Qwen2VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
 
     def test_cap_pixels_per_frame_bounds_dense_videos(self):
         # With the total budget binding, each frame is held to the budget's even share instead of
-        # the per-frame `longest_edge` cap. The budget is shrunk via the module constant so the
+        # the per-frame `longest_edge` cap. The budget is shrunk via `video_total_seq_len` so the
         # test does not need hundreds of frames to make the bound bind.
         size = {"longest_edge": 768 * 28 * 28 * 100, "shortest_edge": 400}
         for video_processing_class in self.video_processor_list:
             uncapped = self._process_frames(video_processing_class, 8, size)
-            with mock.patch("transformers.models.qwen2_vl.video_processing_qwen2_vl.VIDEO_TOTAL_SEQ_LEN", 128):
-                capped = self._process_frames(video_processing_class, 8, size, cap_pixels_per_frame=True)
+            capped = self._process_frames(
+                video_processing_class, 8, size, cap_pixels_per_frame=True, video_total_seq_len=128
+            )
             self.assertEqual(capped.shape[0], self._expected_capped_seq_len(8, 256, size, total_seq_len=128))
             self.assertLess(capped.shape[0], uncapped.shape[0])
 
@@ -436,8 +436,9 @@ class Qwen2VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
         # resolution instead of collapsing further.
         size = {"longest_edge": 768 * 28 * 28 * 100, "shortest_edge": 40000}
         for video_processing_class in self.video_processor_list:
-            with mock.patch("transformers.models.qwen2_vl.video_processing_qwen2_vl.VIDEO_TOTAL_SEQ_LEN", 128):
-                capped = self._process_frames(video_processing_class, 8, size, cap_pixels_per_frame=True)
+            capped = self._process_frames(
+                video_processing_class, 8, size, cap_pixels_per_frame=True, video_total_seq_len=128
+            )
             self.assertEqual(capped.shape[0], self._expected_capped_seq_len(8, 256, size, total_seq_len=128))
 
     def test_cap_pixels_per_frame_noop_when_not_binding(self):
@@ -456,12 +457,12 @@ class Qwen2VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
             video_processor_dict.pop("max_pixels", None)
             video_processor_dict["size"] = size
             video_processor_dict["do_sample_frames"] = False
+            video_processor_dict["video_total_seq_len"] = 128
             video_processing = video_processing_class(**video_processor_dict)
             video = [np.random.randint(0, 256, (256, 256, 3), dtype=np.uint8) for _ in range(8)]
 
             default_out = video_processing(video, return_tensors="pt")[self.input_name]
-            with mock.patch("transformers.models.qwen2_vl.video_processing_qwen2_vl.VIDEO_TOTAL_SEQ_LEN", 128):
-                capped_out = video_processing(video, return_tensors="pt", cap_pixels_per_frame=True)[self.input_name]
+            capped_out = video_processing(video, return_tensors="pt", cap_pixels_per_frame=True)[self.input_name]
 
             self.assertEqual(capped_out.shape[0], self._expected_capped_seq_len(8, 256, size, total_seq_len=128))
             self.assertLess(capped_out.shape[0], default_out.shape[0])

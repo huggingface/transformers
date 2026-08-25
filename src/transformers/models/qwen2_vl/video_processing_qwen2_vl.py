@@ -38,11 +38,6 @@ from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 
 logger = logging.get_logger(__name__)
 
-# From the reference implementation (qwen-vl-utils vision_process.py): the total pixel budget of a
-# video assumes a 128K-token model context; it is spread across the sampled frames when
-# `cap_pixels_per_frame` is enabled.
-VIDEO_TOTAL_SEQ_LEN = 128000
-
 
 # Copied from transformers.models.qwen2_vl.image_processing_qwen2_vl.smart_resize
 def smart_resize(
@@ -95,11 +90,14 @@ class Qwen2VLVideoProcessorInitKwargs(VideosKwargs, total=False):
     cap_pixels_per_frame (`bool`, *optional*):
         Whether to bound a video's total pixel cost the way the reference implementation
         (qwen-vl-utils) does: on top of the per-frame `size["longest_edge"]` cap, each frame is
-        limited to an even share of a total-video pixel budget (a 128K-token context's worth of
-        pixels), floored at `1.05 * size["shortest_edge"]`, so densely sampled videos cannot grow
-        without bound. If unset, the current behavior (no total bound) is kept and a warning is
-        emitted: the default will change to `True` in v5.22, after which the argument will be
-        removed.
+        limited to an even share of the total-video pixel budget (`video_total_seq_len` tokens'
+        worth of pixels), floored at `1.05 * size["shortest_edge"]`, so densely sampled videos
+        cannot grow without bound. If unset, the current behavior (no total bound) is kept and a
+        warning is emitted: the default will change to `True` in v5.22, after which the argument
+        will be removed.
+    video_total_seq_len (`int`, *optional*, defaults to 128000):
+        The model context length assumed when deriving the total-video pixel budget used by
+        `cap_pixels_per_frame` (the budget is 90% of this many tokens, following qwen-vl-utils).
     """
 
     min_pixels: int
@@ -110,6 +108,7 @@ class Qwen2VLVideoProcessorInitKwargs(VideosKwargs, total=False):
     min_frames: int
     max_frames: int
     cap_pixels_per_frame: bool
+    video_total_seq_len: int
 
 
 @auto_docstring
@@ -129,6 +128,7 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
     max_frames = 768
     do_sample_frames = False  # Set to False for BC, recommended to set `True` in new models
     cap_pixels_per_frame = None
+    video_total_seq_len = 128000
     valid_kwargs = Qwen2VLVideoProcessorInitKwargs
     model_input_names = ["pixel_values_videos", "video_grid_thw"]
 
@@ -242,10 +242,11 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
         max_pixels = size.longest_edge
         if cap_pixels_per_frame:
             # Mirrors qwen-vl-utils vision_process.py: the per-frame cap (`size.longest_edge`) is
-            # additionally bounded by an even share of the total-video pixel budget, floored just
-            # above min_pixels so densely sampled videos keep a usable per-frame resolution.
+            # additionally bounded by an even share of the total-video pixel budget (90% of
+            # `video_total_seq_len` tokens), floored just above min_pixels so densely sampled
+            # videos keep a usable per-frame resolution.
             num_frames = videos.shape[1]
-            total_pixels = int(VIDEO_TOTAL_SEQ_LEN * factor * factor * 0.9)
+            total_pixels = int(self.video_total_seq_len * factor * factor * 0.9)
             max_pixels = max(
                 min(max_pixels, total_pixels * temporal_factor // num_frames), int(size.shortest_edge * 1.05)
             )
@@ -325,12 +326,11 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
     ):
         if cap_pixels_per_frame is None:
             logger.warning_once(
-                "Qwen2VL video processing caps each frame at `size['longest_edge']` pixels but does not "
-                "bound the total pixel cost of a video, so densely sampled videos can produce very large "
-                "token counts. The reference implementation (qwen-vl-utils) also spreads a total pixel "
-                "budget across the sampled frames. In v5.22 the bounded behavior will become the default "
-                "and `cap_pixels_per_frame` will be removed. Pass `cap_pixels_per_frame=True` to adopt "
-                "the reference behavior now, or `False` to keep the current behavior and silence this "
+                "Qwen2VL video processing does not apply the per-frame pixel cap the reference "
+                "implementation (qwen-vl-utils) applies, so some videos cost far more tokens than they "
+                "would there. In v5.22 the capped behavior will become the default and "
+                "`cap_pixels_per_frame` will be removed. Pass `cap_pixels_per_frame=True` to adopt the "
+                "reference behavior now, or `False` to keep the current behavior and silence this "
                 "warning."
             )
             cap_pixels_per_frame = False
