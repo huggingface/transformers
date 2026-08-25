@@ -275,7 +275,7 @@ class CohereCompassVideoProcessor(BaseVideoProcessor):
     ):
         if cap_pixels_per_frame is None:
             logger.warning_once(
-                "Qwen3-VL video processing currently lets a video's sampled frames use the entire pixel "
+                "CohereCompass video processing currently lets a video's sampled frames use the entire pixel "
                 "budget (`size['longest_edge']`), so a short clip can cost almost as many tokens as a long "
                 "video. The reference implementation (qwen-vl-utils) caps per-frame cost instead. In v5.22 "
                 "the capped behavior will become the default and `cap_pixels_per_frame` will be removed. "
