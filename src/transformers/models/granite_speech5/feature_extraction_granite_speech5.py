@@ -33,15 +33,27 @@ if is_torchaudio_available():
 class GraniteSpeech5FeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a Granite Speech 5.0 feature extractor.
-      Args:
-            num_mel_bins (`int`, *optional*, defaults to 80): <fill_docstring>
-            sampling_rate (`int`, *optional*, defaults to 16000): <fill_docstring>
-            n_fft (`int`, *optional*, defaults to 512): <fill_docstring>
-            win_length (`int`, *optional*, defaults to 400): <fill_docstring>
-            hop_length (`int`, *optional*, defaults to 160): <fill_docstring>
-            delta_win_length (`int`, *optional*, defaults to 3): <fill_docstring>
-            logmel_floor_db (`float`, *optional*, defaults to 8.0): <fill_docstring>
-            padding_value (`float`, *optional*, defaults to 0.0): <fill_docstring>
+
+    This feature extractor inherits from [`~feature_extraction_sequence_utils.SequenceFeatureExtractor`] which contains
+    most of the main methods. Users should refer to this superclass for more information regarding those methods.
+
+    Args:
+        num_mel_bins (`int`, *optional*, defaults to 80):
+            Number of mel filter banks.
+        sampling_rate (`int`, *optional*, defaults to 16000):
+            The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
+        n_fft (`int`, *optional*, defaults to 512):
+            Size of the Fourier transform.
+        win_length (`int`, *optional*, defaults to 400):
+            Window length in samples.
+        hop_length (`int`, *optional*, defaults to 160):
+            Length of the overlapping windows for the STFT used to obtain the mel spectrogram, in samples.
+        delta_win_length (`int`, *optional*, defaults to 3):
+            Window length used to compute the delta features.
+        logmel_floor_db (`float`, *optional*, defaults to 8.0):
+            The log-mel features are floored at this many dB below the per-sample maximum.
+        padding_value (`float`, *optional*, defaults to 0.0):
+            Padding value used to pad the audio.
     """
 
     model_input_names = ["input_features", "attention_mask"]
