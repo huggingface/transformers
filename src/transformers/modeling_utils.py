@@ -3183,7 +3183,7 @@ class PreTrainedModel(
         # Tie weights needs to be called here, but it can use the pre-computed `all_tied_weights_keys`
         self.tie_weights(recompute_mapping=False)
 
-    def gradient_checkpointing_enable(self, gradient_checkpointing_kwargs=None):
+    def gradient_checkpointing_enable(self, gradient_checkpointing_kwargs=None, every_n_layers: int = 1):
         """
         Activates gradient checkpointing for the current model.
 
@@ -3191,6 +3191,10 @@ class PreTrainedModel(
         the module. https://discuss.pytorch.org/t/any-different-between-model-input-and-model-forward-input/3690/2
 
         Args:
+            every_n_layers (`int`, *optional*, defaults to 1):
+                Checkpoint only every `every_n_layers`-th decoder layer, leaving the rest to keep their activations.
+                `1` checkpoints every layer, which is the usual all-or-nothing behavior. Larger values trade memory
+                back for speed, which is worth it whenever the memory freed by full checkpointing is going unused.
             gradient_checkpointing_kwargs (dict, *optional*):
                 Additional keyword arguments passed along to the `torch.utils.checkpoint.checkpoint` function.
         """
@@ -3207,7 +3211,11 @@ class PreTrainedModel(
         _is_using_old_format = "value" in inspect.signature(self._set_gradient_checkpointing).parameters
 
         if not _is_using_old_format:
-            self._set_gradient_checkpointing(enable=True, gradient_checkpointing_func=gradient_checkpointing_func)
+            self._set_gradient_checkpointing(
+                enable=True,
+                gradient_checkpointing_func=gradient_checkpointing_func,
+                every_n_layers=every_n_layers,
+            )
         else:
             self.apply(partial(self._set_gradient_checkpointing, value=True))
             logger.warning(
@@ -3225,8 +3233,17 @@ class PreTrainedModel(
             # the gradients to make sure the gradient flows.
             self.enable_input_require_grads()
 
-    def _set_gradient_checkpointing(self, enable: bool = True, gradient_checkpointing_func: Callable = checkpoint):
+    def _set_gradient_checkpointing(
+        self,
+        enable: bool = True,
+        gradient_checkpointing_func: Callable = checkpoint,
+        every_n_layers: int = 1,
+    ):
+        # Imported here rather than at module scope: `modeling_layers` imports from this module.
+        from .modeling_layers import GradientCheckpointingLayer
+
         is_gradient_checkpointing_set = False
+        layer_index = 0
 
         # Apply it on the top-level module in case the top-level modules supports it
         # for example, LongT5Stack inherits from `PreTrainedModel`.
@@ -3238,7 +3255,13 @@ class PreTrainedModel(
         for module in self.modules():
             if hasattr(module, "gradient_checkpointing"):
                 setattr(module, "_gradient_checkpointing_func", gradient_checkpointing_func)
-                setattr(module, "gradient_checkpointing", enable)
+                # Only the repeated per-layer blocks are counted, so `every_n_layers` means what it says even when
+                # other modules also carry a `gradient_checkpointing` flag.
+                if enable and isinstance(module, GradientCheckpointingLayer):
+                    setattr(module, "gradient_checkpointing", layer_index % every_n_layers == 0)
+                    layer_index += 1
+                else:
+                    setattr(module, "gradient_checkpointing", enable)
                 is_gradient_checkpointing_set = True
 
         if not is_gradient_checkpointing_set:
@@ -4474,6 +4497,7 @@ class PreTrainedModel(
                 unexpected_keys=set(),
                 mismatched_keys=set(),
                 conversion_errors={},
+                skipped_pp_keys=set(),
             )
         else:
             all_pointer = set()
