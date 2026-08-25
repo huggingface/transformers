@@ -194,12 +194,26 @@ def format_duration(seconds):
 
 
 def render_ci_badge(pr_number, dashboard_url):
-    """Render the CI dashboard badge block inserted at the top of the PR body."""
-    badge_url = f"{BADGE_URL}?pr={pr_number}"
+    """Render the CI dashboard badge block inserted at the top of the PR body.
+
+    Two badges on one line, one per CI stream a PR accumulates: regular PR CI on
+    CPU, and the GPU runs a maintainer asks for with a `run-slow: <models>`
+    comment. They have separate verdicts, so a single badge had to pick one and
+    would report whichever ran last -- against a dashboard link that showed the
+    other.
+
+    Both are always emitted, and the GPU badge renders "not run" until a run-slow
+    run exists. That is deliberate: this workflow only fires on PR CI completion,
+    so a badge written only when a run-slow already existed would stay missing
+    after a run-slow that no push follows. The SVGs are live, so the URLs written
+    here keep answering for the newest run of their stream with no rewrite.
+    """
+    cpu_url = f"{BADGE_URL}?pr={pr_number}&event=pr-ci"
+    gpu_url = f"{BADGE_URL}?pr={pr_number}&event=run-slow"
     return "\n".join(
         [
             BADGE_START,
-            f"[![CI]({badge_url})]({dashboard_url})",
+            f"[![CPU CI]({cpu_url})]({dashboard_url}) [![GPU run-slow]({gpu_url})]({dashboard_url})",
             BADGE_END,
         ]
     )
