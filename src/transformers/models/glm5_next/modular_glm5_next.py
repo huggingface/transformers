@@ -1135,7 +1135,7 @@ class Glm5NextTextAttention(GlmMoeDsaAttention):
         # Eager
         min_dtype = torch.finfo(query_states.dtype).min
         # we need 0s where the tokens should be taken into account, and -inf otherwise (mask is already of boolean type)
-        mask = torch.where(mask, torch.tensor(0.0, device=query_states.device, dtype=query_states.dtype), min_dtype)
+        mask = torch.where(mask, torch.full((), 0.0, device=query_states.device, dtype=query_states.dtype), min_dtype)
         return mask
 
 
@@ -1406,6 +1406,7 @@ class Glm5NextVisionBlock(GlmOcrVisionBlock):
         self.mlp = Glm5NextVisionMLP(config, bias=config.attention_bias)
 
 
+@auto_docstring
 class Glm5NextVisionModel(GlmOcrVisionModel):
     def __init__(self, config) -> None:
         super().__init__(config)
@@ -1558,6 +1559,7 @@ class Glm5NextModel(Exaone4_5_Model, Glm5NextPreTrainedModel):
         )
 
 
+@auto_docstring
 class Glm5NextForConditionalGeneration(Glm46VForConditionalGeneration, Glm5NextPreTrainedModel):
     """
     Main Glm5Next conditional generation class.

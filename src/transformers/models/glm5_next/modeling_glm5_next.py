@@ -1252,7 +1252,7 @@ class Glm5NextTextAttention(nn.Module):
         # Eager
         min_dtype = torch.finfo(query_states.dtype).min
         # we need 0s where the tokens should be taken into account, and -inf otherwise (mask is already of boolean type)
-        mask = torch.where(mask, torch.tensor(0.0, device=query_states.device, dtype=query_states.dtype), min_dtype)
+        mask = torch.where(mask, torch.full((), 0.0, device=query_states.device, dtype=query_states.dtype), min_dtype)
         return mask
 
 
