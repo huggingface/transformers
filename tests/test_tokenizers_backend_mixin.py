@@ -488,6 +488,7 @@ class TokenizersBackendTesterMixin:
 
     def test_convert_to_native_format_falls_back_to_tiktoken_on_corrupt_sp_model(self):
         from unittest.mock import patch
+        from transformers import convert_slow_tokenizer as convert_slow_tokenizer_module
 
         with tempfile.NamedTemporaryFile(suffix=".model", delete=False) as f:
             f.write(b"not a valid sentencepiece protobuf")
@@ -495,7 +496,7 @@ class TokenizersBackendTesterMixin:
 
         try:
             # fake TikTokenConverter so it doesn't actually run
-            with patch("transformers.convert_slow_tokenizer.TikTokenConverter") as mock_tiktoken:
+            with patch.object(convert_slow_tokenizer_module, "TikTokenConverter") as mock_tiktoken:
                 mock_tiktoken.return_value.converted.return_value = "fake_tokenizer_object"
                 result = TokenizersBackend.convert_to_native_format(vocab_file=corrupt_model_path)
                 self.assertEqual(result.get("tokenizer_object"), "fake_tokenizer_object")
@@ -507,6 +508,8 @@ class TokenizersBackendTesterMixin:
 
     def test_convert_to_native_format_does_not_catch_unrelated_exception(self):
         from unittest.mock import patch
+        from transformers import convert_slow_tokenizer as convert_slow_tokenizer_module
+        
 
         with tempfile.NamedTemporaryFile(suffix=".model", delete=False) as f:
             f.write(b"irrelevant content, extractor is mocked below")
@@ -514,7 +517,7 @@ class TokenizersBackendTesterMixin:
 
         try:
             # KeyError here is just a random unrelated error
-            with patch("transformers.convert_slow_tokenizer.SentencePieceExtractor") as mock_extractor:
+            with patch.object(convert_slow_tokenizer_module, "SentencePieceExtractor") as mock_extractor:
                 mock_extractor.side_effect = KeyError("TEST_UNRELATED_ERROR")
 
                 with self.assertRaises(KeyError):
