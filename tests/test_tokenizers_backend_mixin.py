@@ -488,6 +488,7 @@ class TokenizersBackendTesterMixin:
 
     def test_convert_to_native_format_falls_back_to_tiktoken_on_corrupt_sp_model(self):
         from unittest.mock import patch
+
         from transformers import convert_slow_tokenizer as convert_slow_tokenizer_module
 
         with tempfile.NamedTemporaryFile(suffix=".model", delete=False) as f:
@@ -508,8 +509,9 @@ class TokenizersBackendTesterMixin:
 
     def test_convert_to_native_format_does_not_catch_unrelated_exception(self):
         from unittest.mock import patch
+
         from transformers import convert_slow_tokenizer as convert_slow_tokenizer_module
-        
+
 
         with tempfile.NamedTemporaryFile(suffix=".model", delete=False) as f:
             f.write(b"irrelevant content, extractor is mocked below")
