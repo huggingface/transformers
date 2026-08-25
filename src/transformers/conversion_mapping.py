@@ -1786,22 +1786,21 @@ def _build_checkpoint_conversion_mapping():
             target_patterns="self_attn.conv1d.weight",
             operations=[Concatenate(dim=0)],
         ),
-
         # Rename MoEs so they have the same prefix as the MLPs
         WeightRenaming(source_patterns=r"\.block_sparse_moe\.", target_patterns=r"\.mlp\."),
         # Concatenate w1 (gate) and w3 (up) weights into a single weight and merge across experts
         WeightConverter(
             source_patterns=[
-                "mlp.experts.*.w1.weight",
-                "mlp.experts.*.w3.weight",
+                r"\.experts.*.w1.weight",
+                r"\.experts.*.w3.weight",
             ],
-            target_patterns="mlp.experts.gate_up_proj",
+            target_patterns=r"\.experts.gate_up_proj",
             operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
         ),
         # Merge w2 (down) weights across experts
         WeightConverter(
-            source_patterns="mlp.experts.*.w2.weight",
-            target_patterns="mlp.experts.down_proj",
+            source_patterns=r"\.experts.*.w2.weight",
+            target_patterns=r"\.experts.down_proj",
             operations=[MergeModulelist(dim=0)],
         ),
     ]

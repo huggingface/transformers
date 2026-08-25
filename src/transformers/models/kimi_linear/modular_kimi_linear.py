@@ -27,6 +27,7 @@ from ...integrations import (
     use_kernel_func_from_hub_with_fallback,
     use_kernelized_func,
 )
+from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import MoeModelOutputWithPast
@@ -445,7 +446,7 @@ def torch_recurrent_kda(
 
 
 @use_kernelized_func([torch_recurrent_kda, torch_chunk_kda, causal_conv1d_fn, causal_conv1d_update])
-class KimiLinearDeltaAttention(nn.Module):  # TODO: can we try to inherit from qwen ? or something? 
+class KimiLinearDeltaAttention(nn.Module):  # TODO: can we try to inherit from qwen ? or something?
     # Annotations to make ty happy
     chunk_kda: Callable[..., tuple[torch.Tensor, torch.Tensor | None]]
     recurrent_kda: Callable[..., tuple[torch.Tensor, torch.Tensor | None]]
@@ -497,6 +498,7 @@ class KimiLinearDeltaAttention(nn.Module):  # TODO: can we try to inherit from q
         self.o_norm = KimiLinearRMSNormGated(self.head_v_dim, eps=config.rms_norm_eps, activation="sigmoid")
         self.o_proj = nn.Linear(self.projection_v_size, self.hidden_size, bias=False)
 
+    @force_accelerate_hooks("conv1d")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -658,18 +660,13 @@ class KimiLinearPreTrainedModel(PreTrainedModel):
         if isinstance(module, KimiLinearDeltaAttention):
             init.ones_(module.dt_bias)
             # Lower bound kept away from 0 so log(A) never becomes -inf
-            init.copy_(
-                module.A_log, torch.empty(module.num_v_heads, device=module.A_log.device).uniform_(0.01, 16).log_()
-            )
-        # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
-        elif isinstance(module, KimiLinearRMSNorm):
-            init.zeros_(module.weight)
+            init.copy_(module.A_log, torch.empty_like(module.A_log).uniform_(0.01, 16).log_())
         elif isinstance(module, KimiLinearExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, KimiLinearMoE):
-            init.normal_(module.gate.weight, mean=0.0, std=self.config.initializer_range)
-
+        elif isinstance(module, KimiLinearTopkRouter):
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            init.zeros_(module.e_score_correction_bias)
         # TODO: check what we keep in this
         # elif isinstance(module, nn.Embedding):
         #     module.weight.data.normal_(mean=0.0, std=std)
