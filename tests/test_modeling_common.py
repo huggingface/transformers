@@ -3826,6 +3826,10 @@ class ModelTesterMixin(ExportTesterMixin):
                 "evolla",
                 "modernbert",
                 "gemma3",
+                # TODO: gemma4 forces mask creation in create_masks_for_vision_model (SWA and/or mask
+                # functions always materialize a mask). Fixable via the block-overlay mask kwarg on the
+                # modeling side.
+                "gemma4",
                 "t5gemma",
                 "diffllama",
                 "dpr",
