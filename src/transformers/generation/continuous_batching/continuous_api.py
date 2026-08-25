@@ -932,8 +932,8 @@ class ContinuousBatchingManager:
             self.current_batch = 0
 
             # If using the async API, we bootstrap the first batch w/out update. The manager may have been
-            # started before the first request was submitted: wait for one (with the same stop conditions as
-            # the main loop below) instead of crashing.
+            # started before the first request was submitted: wait for one, with the same stop conditions as
+            # the main loop below.
             if batch_processor.use_async_batching:
                 while True:
                     if batch_processor.prepare_next_batch():
