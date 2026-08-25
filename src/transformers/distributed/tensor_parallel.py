@@ -533,12 +533,14 @@ class MoEParamShard(TensorParallelLayer):
         if meta is None:
             return
         if self.shards_expert_dim and hasattr(module, "num_experts"):
-            if meta.shape[0] % mesh.size() != 0:
+            global_num_experts = meta.shape[0]
+            expert_parallel_size = mesh.size()
+            if global_num_experts % expert_parallel_size != 0:
                 raise ValueError(
-                    f"Global number of experts must be divisible by number of devices: "
-                    f"{meta.shape[0]} % {mesh.size()} != 0"
+                    f"Cannot evenly shard {global_num_experts} experts across "
+                    f"{expert_parallel_size} expert-parallel ranks."
                 )
-            module.num_experts = meta.shape[0] // mesh.size()
+            module.num_experts = global_num_experts // expert_parallel_size
         module._parameters[param] = torch.nn.Parameter(
             distribute_tensor(meta, mesh, [self.placement], src_data_rank=None),
             requires_grad=meta.requires_grad,
