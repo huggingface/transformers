@@ -219,12 +219,13 @@ class TorchvisionBackend(BaseImageProcessor):
                 interpolation = resample
         else:
             interpolation = tvF.InterpolationMode.BILINEAR
-        if interpolation == tvF.InterpolationMode.LANCZOS and not is_torchvision_greater_or_equal("0.27"):
+        if interpolation == tvF.InterpolationMode.LANCZOS and (
+            not is_torchvision_greater_or_equal("0.27") or image.device.type != "cpu"
+        ):
             logger.warning_once(
-                "You have used a torchvision backend image processor with LANCZOS resample which is not supported "
-                "for torch.Tensor with torchvision < 0.27. BICUBIC resample will be used as an alternative. "
-                "Please upgrade torchvision to 0.27+ or fall back to a pil backend image processor if you "
-                "want full consistency with the original model."
+                "LANCZOS resample requires torchvision >= 0.27 and processing on CPU; it is not supported on CUDA or for "
+                "torchvision < 0.27. Falling back to BICUBIC which approximates LANCZOS. To match the original model exactly"
+                ", upgrade torchvision and move the tensors to CPU before resizing, or use a PIL backend image processor instead."
             )
             interpolation = tvF.InterpolationMode.BICUBIC
 
