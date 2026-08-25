@@ -17,6 +17,7 @@ and simplicity/ease of use.
 """
 
 import copy
+import functools
 import inspect
 import os
 import re
@@ -932,6 +933,7 @@ def force_accelerate_hooks(child_module_names: str | list[str]) -> Callable:
         child_module_names = [child_module_names]
 
     def decorator(forward_func: Callable) -> Callable:
+        @functools.wraps(forward_func)
         def wrapped(self, *args, **kwargs):
             hooked_modules = []
             for child_module_name in child_module_names:
