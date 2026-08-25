@@ -66,6 +66,8 @@ _kernels_enabled = _TRANSFORMERS_USE_HUB_KERNELS in ENV_VARS_TRUE_VALUES
 _KERNELS_INTERNAL_PATH_MAPPINGS = {
     "chunk_gated_delta_rule": "ops.gated_delta_rule",
     "recurrent_gated_delta_rule": "ops.gated_delta_rule",
+    "chunk_kda": "ops.kda",
+    "fused_recurrent_kda": "ops.kda",
     "mamba_split_conv1d_scan_combined": "ops.triton.ssd_combined",
     "selective_state_update": "ops.triton.selective_state_update",
     "mamba_chunk_scan_combined": "ops.triton.ssd_combined",

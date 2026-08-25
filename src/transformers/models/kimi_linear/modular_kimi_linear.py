@@ -53,7 +53,6 @@ from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..bamba.modeling_bamba import apply_mask_to_padding_states
-from .configuration_kimi_linear import KimiLinearConfig
 
 
 @auto_docstring(checkpoint="moonshotai/Kimi-Linear-48B-A3B-Base")
@@ -150,6 +149,8 @@ class KimiLinearRMSNorm(LlamaRMSNorm):
     pass
 
 
+# NOTE: The `fla` referefence stays in fp32 until after the gate is applied, but the qwen norm does not. This is not an
+# issue right now, but if it ever becomes one, change the parent or override `forward`.
 class KimiLinearRMSNormGated(Qwen3NextRMSNormGated):
     def __init__(self, hidden_size, eps=1e-6, **kwargs):
         super().__init__(hidden_size, eps=eps, **kwargs)
@@ -710,8 +711,8 @@ class KimiLinearModel(Qwen3NextModel):
 
         if position_ids is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            position_ids: torch.LongTensor = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
-            position_ids = position_ids.unsqueeze(0)
+            position_ids: torch.LongTensor = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device)
+            position_ids = (position_ids + past_seen_tokens).unsqueeze(0)
 
         if not isinstance(causal_mask_mapping := attention_mask, dict):
             # Prepare mask arguments

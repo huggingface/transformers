@@ -931,10 +931,8 @@ class KimiLinearModel(KimiLinearPreTrainedModel):
 
         if position_ids is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            position_ids: torch.LongTensor = (
-                torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
-            )
-            position_ids = position_ids.unsqueeze(0)
+            position_ids: torch.LongTensor = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device)
+            position_ids = (position_ids + past_seen_tokens).unsqueeze(0)
 
         if not isinstance(causal_mask_mapping := attention_mask, dict):
             # Prepare mask arguments
