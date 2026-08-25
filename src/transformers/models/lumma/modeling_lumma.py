@@ -403,21 +403,21 @@ class LummaModel(LummaPreTrainedModel):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
-        # CODEPATH: FrontiersMind/Lumma-0.6B-Base uses factorized_embedding=True
         self.embed_tokens = nn.Embedding(
             config.vocab_size,
+            # CODEPATH: FrontiersMind/Lumma-0.6B-Base uses factorized_embedding=True; no released checkpoint uses factorized_embedding=False.
             config.embedding_rank if config.factorized_embedding else config.hidden_size,
             self.padding_idx,
         )
-        # CODEPATH: FrontiersMind/Lumma-0.6B-Base uses factorized_embedding=True
         self.embedding_proj = (
+            # CODEPATH: FrontiersMind/Lumma-0.6B-Base uses factorized_embedding=True; no released checkpoint uses factorized_embedding=False.
             nn.Linear(config.embedding_rank, config.hidden_size, bias=False) if config.factorized_embedding else None
         )
         self.layers = nn.ModuleList(
             [
                 LummaDecoderLayer(config, layer_idx)
-                # CODEPATH: FrontiersMind/Lumma-0.6B-Base uses layer_sharing=False (default), so repeats=1 and num_hidden_layers unique layers are used
                 for layer_idx in range(
+                    # CODEPATH: FrontiersMind/Lumma-0.6B-Base uses layer_sharing=False (default), so repeats=1; no released checkpoint sets layer_sharing=True.
                     config.num_hidden_layers // (config.layer_sharing_repeats if config.layer_sharing else 1)
                 )
             ]
@@ -512,14 +512,14 @@ class LummaForCausalLM(LummaPreTrainedModel, GenerationMixin):
         super().__init__(config)
         self.model = LummaModel(config)
         self.vocab_size = config.vocab_size
-        # CODEPATH: FrontiersMind/Lumma-0.6B-Base uses factorized_embedding=True
         self.lm_head = nn.Linear(
+            # CODEPATH: FrontiersMind/Lumma-0.6B-Base uses factorized_embedding=True; no released checkpoint uses factorized_embedding=False.
             config.embedding_rank if config.factorized_embedding else config.hidden_size,
             config.vocab_size,
             bias=False,
         )
-        # CODEPATH: FrontiersMind/Lumma-0.6B-Base uses factorized_embedding=True
         self.lm_head_proj = (
+            # CODEPATH: FrontiersMind/Lumma-0.6B-Base uses factorized_embedding=True; no released checkpoint uses factorized_embedding=False.
             nn.Linear(config.hidden_size, config.embedding_rank, bias=False) if config.factorized_embedding else None
         )
 
