@@ -122,7 +122,7 @@ class Chunk(ConversionOps):
         self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
     ) -> dict[str, torch.Tensor]:
         if len(input_dict) > 1:
-            raise ValueError(f"Undefined Operation encountered")
+            raise ValueError("Undefined Operation encountered")
         tensors = next(iter(input_dict.values()))
         tensor = tensors[0] if isinstance(tensors, list) else tensors
         targets = self.get_target_patterns(target_patterns, **kwargs)
@@ -136,7 +136,7 @@ class Chunk(ConversionOps):
         # In this case we need to use the config to know how many chunks to create
         else:
             if len(target_patterns) > 1:
-                raise ValueError(f"Undefined Operation encountered")
+                raise ValueError("Undefined Operation encountered")
             subconfig = kwargs["config"].get_text_config()
             num_shards = getattr(subconfig, self.num_shards_attribute)
             target_patterns = [target_patterns[0].replace(r"\d+", i) for i in range(num_shards)]
@@ -1711,7 +1711,8 @@ def convert_and_load_state_dict_in_model(
             # The ple embedding of Qwen4Next is so big (~96 GiB) that we need to perform Concatenation on "cpu" if using a device_map.
             # When using a tp_plan, we need to defer the sharding, as otherwise we pre-shard each shard incorrectly
             if isinstance(mapping, WeightConverter) and any(
-                isinstance(operation, Concatenate) and operation.num_shards_attribute is not None for operation in mapping.operations
+                isinstance(operation, Concatenate) and operation.num_shards_attribute is not None
+                for operation in mapping.operations
             ):
                 mapping._deferred_load_placement = (sharding_op, materialize_device, _dtype)
                 materialize_device, sharding_op = "cpu", None
