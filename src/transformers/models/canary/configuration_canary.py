@@ -81,7 +81,7 @@ class CanaryConfig(PreTrainedConfig):
     sub_configs = {"encoder_config": AutoConfig, "decoder_config": CanaryDecoderConfig}
 
     encoder_config: dict | PreTrainedConfig | None = None
-    decoder_config: CanaryDecoderConfig | dict | None = None
+    decoder_config: dict | PreTrainedConfig | None = None
     use_cache: bool = True
     is_encoder_decoder: bool = True
     tie_word_embeddings: bool = True
