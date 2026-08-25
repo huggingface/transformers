@@ -353,19 +353,6 @@ class BaseAudioProcessor(AudioProcessingMixin):
             mask[i, start:end] = 1
         return mask
 
-    def _masked_mean_var_normalize(self, features, feature_lengths, epsilon=1e-5):
-        """NeMo/Cohere-style per-utterance mean/variance normalization over the first
-        `feature_lengths` frames of `features` (batch, frames, feature_dim), zeroing padded
-        frames. `feature_lengths` is a CPU sequence/array of float32-representable counts."""
-        xp = _array_namespace(features)
-        lengths = self._astype(self._as_backend_array(np.asarray(feature_lengths)), "float32")
-        mask = (xp.arange(features.shape[1])[None, :] < lengths[:, None])[..., None]
-        masked = features * mask
-        mean = (masked.sum(axis=1) / lengths[:, None])[:, None, :]
-        variance = (((masked - mean) ** 2) * mask).sum(axis=1) / (lengths - 1)[:, None]
-        std = xp.sqrt(variance)[:, None, :]
-        return (features - mean) / (std + epsilon) * mask
-
     # ── Spectrogram core ─────────────────────────────────────────────────
 
     def extract_spectrogram(self, audio, *, spectrogram_config: SpectrogramConfig | None = None, **kwargs):
