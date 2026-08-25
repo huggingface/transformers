@@ -397,7 +397,9 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
     ) -> torch.Tensor:
         batch_size, seq_length, _ = hidden_states.shape
         hidden_shape = (batch_size, seq_length, -1, self.index_head_dim)
-        cos, sin = position_embeddings
+        # The cos/sin here are the full positions for the keys, so we need to slice to get only the current positions for the queries
+        full_cos, full_sin = position_embeddings
+        current_cos, current_sin = full_cos[:, -seq_length:, :], full_sin[:, -seq_length:, :]
 
         qk = self.index_qk_proj(hidden_states)
         q, token_k = torch.split(
@@ -407,8 +409,7 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
         )
         q, raw_keys = q.reshape(*hidden_shape), token_k.reshape(*hidden_shape).squeeze(2)
         q = self.q_layernorm(q)
-        # The cos/sin are the full positions, so we need to slice to get current q positions
-        q = apply_rotary_pos_emb(q, cos=cos[:, -seq_length:, :], sin=sin[:, -seq_length:, :], unsqueeze_dim=2)
+        q = apply_rotary_pos_emb(q, cos=current_cos, sin=current_sin, unsqueeze_dim=2)
 
         if past_key_values is not None:
             raw_keys = past_key_values.update_indexer(raw_keys, self.layer_idx)
@@ -442,8 +443,8 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
                     group_starts = block_token_indices[:, 0]
                     block_key_states = apply_rotary_pos_emb(
                         pooled_keys.unsqueeze(1),
-                        cos=cos[batch_idx].index_select(0, group_starts),
-                        sin=sin[batch_idx].index_select(0, group_starts),
+                        cos=full_cos[batch_idx].index_select(0, group_starts),
+                        sin=full_sin[batch_idx].index_select(0, group_starts),
                     ).squeeze(1)
 
                     scores = torch.matmul(
