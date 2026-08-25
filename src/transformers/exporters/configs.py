@@ -184,10 +184,7 @@ class ExecutorchConfig(DynamoConfig):
             - `"qnn"` — on-SoC accelerator inference via the Qualcomm QNN backend. QNN serves several
               accelerators (HTP/NPU, LPAI, the Adreno GPU); this integration currently targets the HTP.
               Requires the Qualcomm AI Engine Direct SDK; pair with a `QnnQuantizer` via `quantizer`
-              for int8/16 (else fp16). For generative exports, deploy the multi-token `decode` program
-              alone — it serves the prefill step too, and each exported program carries its own full
-              weight copy (programs don't share a QNN context binary), so shipping a separate prefill
-              would double the deployed size.
+              for int8/16 (else fp16).
         alloc_graph_input (`bool`, *optional*, defaults to `True`):
             Whether the memory-planning pass reserves arena memory for graph inputs. When `False`,
             the runtime uses the caller-provided input buffers directly instead of copying into the
