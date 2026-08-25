@@ -54,15 +54,6 @@ class Ministral3ModelTest(CausalLMModelTest, unittest.TestCase):
     model_split_percents = [0.5, 0.6]
     model_tester_class = Ministral3ModelTester
 
-    def test_attention_causality_follows_config(self):
-        config = self.model_tester.get_config()
-        model = Ministral3Model(config)
-        self.assertTrue(all(layer.self_attn.is_causal for layer in model.layers))
-
-        config.is_causal = False
-        model = Ministral3Model(config)
-        self.assertTrue(all(not layer.self_attn.is_causal for layer in model.layers))
-
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
     def is_pipeline_test_to_skip(
         self,

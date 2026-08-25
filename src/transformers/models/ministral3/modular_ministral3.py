@@ -21,7 +21,6 @@ from ..mistral.modeling_mistral import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
-from .configuration_ministral3 import Ministral3Config
 
 
 logger = logging.get_logger(__name__)
@@ -33,10 +32,6 @@ def get_llama_4_attn_scale(positions_ids: torch.Tensor, beta: float, max_positio
 
 
 class Ministral3Attention(MistralAttention):
-    def __init__(self, config: Ministral3Config, layer_idx: int):
-        super().__init__(config, layer_idx)
-        self.is_causal = getattr(config, "is_causal", True)
-
     def forward(
         self,
         hidden_states: torch.Tensor,
