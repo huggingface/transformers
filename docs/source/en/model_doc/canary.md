@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was published in HF papers on 2025-09-17 and contributed to Hugging Face Transformers on 2026-08-04.*
+*This model was published in HF papers on 2025-09-17 and contributed to Hugging Face Transformers on 2026-08-25.*
 
 <div class="flex flex-wrap space-x-1">
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
@@ -34,6 +34,9 @@ Canary reuses the [Fast Conformer](https://huggingface.co/papers/2305.05084) enc
 The original implementation can be found in [NVIDIA NeMo](https://github.com/NVIDIA/NeMo). A model checkpoint is available at [harshaljanjani/canary-1b-v2-hf](https://huggingface.co/harshaljanjani/canary-1b-v2-hf).
 
 This model was contributed by [Harshal Janjani](https://huggingface.co/harshaljanjani).
+
+> [!NOTE]
+> Segment-level timestamps for Canary-1B-v2 are produced by the external NeMo Forced Aligner (NFA) with an auxiliary CTC model, not by the decoder, so they are not part of the `generate` output.
 
 ## Usage
 
@@ -61,6 +64,8 @@ print(processor.decode(generated_ids, skip_special_tokens=True)[0])
 Set `target_language` to a different language than `source_language` for speech-to-text translation.
 
 ```python
+...
+
 inputs = processor.apply_transcription_request(
     audio=ds[0]["audio"]["array"], source_language="en", target_language="de"
 ).to(model.device)
@@ -73,7 +78,10 @@ print(processor.decode(generated_ids, skip_special_tokens=True)[0])
 Pass a list of audios and, optionally, a list of `source_language` / `target_language`.
 
 ```python
+...
+
 audios = [ds[0]["audio"]["array"], ds[1]["audio"]["array"]]
+# single entries get broadcasted to list
 inputs = processor.apply_transcription_request(
     audio=audios, source_language="en", target_language=["en", "de"]
 ).to(model.device)
@@ -87,6 +95,8 @@ for text in processor.decode(generated_ids, skip_special_tokens=True):
 For autoregressive transcription, `torch.compile` accelerates the per-token forward passes inside `generate` by providing a `CompileConfig` object.
 
 ```python
+...
+
 from transformers import CompileConfig
 
 inputs = processor.apply_transcription_request(audio=ds[0]["audio"]["array"], source_language="en").to(model.device)
@@ -106,6 +116,8 @@ print(processor.decode(generated_ids, skip_special_tokens=True)[0])
 Canary can be trained with the loss outputted by the model. Put the target transcript in the assistant turn and pass `output_labels=True`. Padding positions are masked automatically.
 
 ```python
+...
+
 model.train()
 transcription = "mister Quilter is the apostle of the middle classes, and we are glad to welcome his gospel."
 
@@ -132,9 +144,6 @@ inputs = processor.apply_chat_template(
 outputs = model(**inputs)
 outputs.loss.backward()
 ```
-
-> [!NOTE]
-> Segment-level timestamps for Canary-1B-v2 are produced by the external NeMo Forced Aligner (NFA) with an auxiliary CTC model, not by the decoder, so they are not part of the `generate` output.
 
 ## CanaryConfig
 
