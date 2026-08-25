@@ -139,7 +139,7 @@ class Chunk(ConversionOps):
                 raise ValueError("Undefined Operation encountered")
             subconfig = kwargs["config"].get_text_config()
             num_shards = getattr(subconfig, self.num_shards_attribute)
-            target_patterns = [target_patterns[0].replace(r"\d+", i) for i in range(num_shards)]
+            target_patterns = [target_patterns[0].replace(r"\d+", str(i)) for i in range(num_shards)]
             return target_patterns
 
     @property
