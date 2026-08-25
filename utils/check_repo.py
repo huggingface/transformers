@@ -583,6 +583,7 @@ DOC_MODEL_NAMES_NOT_IN_AUTO = {
     "phobert",
     "herbert",
     "lasr",
+    "granite_speech5",
     "mluke",
     "xlsr_wav2vec2",
     "xls_r",
