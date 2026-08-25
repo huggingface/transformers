@@ -354,10 +354,30 @@ jobs:
           echo "=== Memory ===" && free -h
           echo "=== Disk ===" && df -h
 
+      - name: Prepare HF memory budget plugin
+        run: |
+          cat > /tmp/hf_ci_memory.py << 'EOF'
+          import psutil
+          try:
+              from transformers.testing_utils import get_ci_cpu_memory_budget_gib, patch_psutil_cpu_memory
+              before = psutil.virtual_memory().total / 1024**3
+              budget = get_ci_cpu_memory_budget_gib()
+              if budget is not None:
+                  patch_psutil_cpu_memory(int(budget * 1024**3))
+                  after = psutil.virtual_memory().total / 1024**3
+                  print(f"[HF memory patch] before={before:.1f} GiB  budget={budget:.1f} GiB  after={after:.1f} GiB", flush=True)
+              else:
+                  print(f"[HF memory patch] No budget set, psutil reports {before:.1f} GiB", flush=True)
+          except Exception as e:
+              print(f"[HF memory patch] Skipped: {e}", flush=True)
+          EOF
+
       - name: "Test: test_transformers (shard ${{ matrix.shard }} / 4)"
         working-directory: vllm
+        env:
+          PYTHONPATH: /tmp
         run: |
-          pytest -v -s tests/models/transformers/ \
+          pytest -p hf_ci_memory -v -s tests/models/transformers/ \
             --num-shards=4 --shard-id=$SHARD_ID
 
   # NOTE: This job was created to verify that the two mamba_mixer CPU bugs patched in
