@@ -50,7 +50,7 @@ MODEL_DOC_ROOT = REPO_ROOT / "docs" / "source" / "en" / "model_doc"
 # Some cards use unicode dashes, so dates are matched after normalising them.
 _CONTRIBUTED_RE = re.compile(r"contributed to Hugging Face Transformers on (\d{4}-\d{2}-\d{2})")
 _RELEASED_RE = re.compile(r"was released on (\d{4}-\d{2}-\d{2})")
-_DASHES = str.maketrans({c: "-" for c in "\u2010\u2011\u2012\u2013\u2014\u2015"})
+_DASHES = str.maketrans(dict.fromkeys("‐‑‒–—―", "-"))
 
 # Module-level helpers worth fingerprinting: high copy count, low semantic variation.
 TRACKED_HELPERS = ("repeat_kv", "rotate_half", "apply_rotary_pos_emb", "eager_attention_forward")
@@ -112,7 +112,15 @@ def _git_first_commit_date(model: str) -> str | None:
     """Fallback for models with no dated card: when their directory first appeared in git."""
     try:
         out = subprocess.run(
-            ["git", "log", "--diff-filter=A", "--format=%ad", "--date=short", "--", f"src/transformers/models/{model}"],
+            [
+                "git",
+                "log",
+                "--diff-filter=A",
+                "--format=%ad",
+                "--date=short",
+                "--",
+                f"src/transformers/models/{model}",
+            ],
             capture_output=True,
             text=True,
             cwd=REPO_ROOT,
@@ -151,6 +159,62 @@ def build_date_data() -> dict[str, str]:
             if found:
                 dates[model_dir.name] = found
     return dates
+
+
+# --------------------------------------------------------------------------------------------------
+# Config-declared facts
+# --------------------------------------------------------------------------------------------------
+CONFIG_ATTENTION_KEYS = ("sliding_window", "attention_chunk_size", "layer_types")
+
+
+@cache
+def config_flags(model: str) -> frozenset[str]:
+    """
+    Which attention-pattern keys the model's config actually declares with a non-`None` default.
+
+    This cannot be read off the attention class. Nearly every Llama descendant threads a
+    `getattr(config, "sliding_window", None)` through `forward`, so the class body mentions sliding
+    whether or not the architecture slides -- `OlmoeAttention` does, and olmoe's config has no
+    `sliding_window` at all. Trusting the class body made a non-sliding model the canonical owner of
+    the sliding variant, which is precisely the wrong-parent bug this tool exists to find.
+    """
+    model_dir = MODELS_ROOT / model
+    found: set[str] = set()
+    for path in sorted(model_dir.glob("configuration_*.py")):
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except (OSError, SyntaxError):
+            continue
+        for node in ast.walk(tree):
+            # Modern configs declare `sliding_window: int | None = 4096` in the class body; older
+            # ones take it as an `__init__` keyword.
+            if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+                name, default = node.target.id, node.value
+            elif isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+                name, default = node.targets[0].id, node.value
+            elif isinstance(node, ast.FunctionDef) and node.name == "__init__":
+                for arg, arg_default in zip(
+                    node.args.args[len(node.args.args) - len(node.args.defaults) :], node.args.defaults
+                ):
+                    if arg.arg in CONFIG_ATTENTION_KEYS and not (
+                        isinstance(arg_default, ast.Constant) and arg_default.value is None
+                    ):
+                        found.add(arg.arg)
+                continue
+            else:
+                continue
+            if name in CONFIG_ATTENTION_KEYS and not (isinstance(default, ast.Constant) and default.value is None):
+                found.add(name)
+    # `layer_types` defaults to None and is filled in by `__post_init__`; its mere presence means
+    # the architecture mixes patterns, so treat a declaration as meaningful.
+    for path in sorted(model_dir.glob("configuration_*.py")):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if "layer_types" in text:
+            found.add("layer_types")
+    return frozenset(found)
 
 
 # --------------------------------------------------------------------------------------------------
@@ -212,7 +276,7 @@ def is_container(src: str) -> bool:
     return not _has(src, "nn.Linear", "nn.Parameter", "Conv1D", "nn.Conv1d", "nn.Embedding")
 
 
-def _attention_facets(src: str) -> tuple[dict, dict]:
+def _attention_facets(src: str, flags: frozenset[str] = frozenset()) -> tuple[dict, dict]:
     if _has(src, "sampling_offsets"):
         # Deformable attention samples a few learned offsets instead of scoring all keys. It is a
         # different mixing type, not a projection layout, so it never has a qkv triple.
@@ -254,13 +318,14 @@ def _attention_facets(src: str) -> tuple[dict, dict]:
     else:
         qk_norm = "none"
 
-    # The window axis speaks `config.layer_types`' own vocabulary.
+    # The window axis speaks `config.layer_types`' own vocabulary, and is decided by what the
+    # config declares -- not by what the class body happens to mention.
     patterns = layer_pattern_vocabulary()
     window = "full_attention"
-    for candidate in ("chunked_attention", "sliding_attention"):
-        marker = {"chunked_attention": "attention_chunk_size", "sliding_attention": "sliding_window"}[candidate]
-        if candidate in patterns and _has(src, marker):
-            window = candidate
+    if "attention_chunk_size" in flags and "chunked_attention" in patterns:
+        window = "chunked_attention"
+    elif ("sliding_window" in flags or "layer_types" in flags) and "sliding_attention" in patterns:
+        window = "sliding_attention" if _has(src, "sliding_window") else "full_attention"
 
     if _has(src, "alibi"):
         rope = "alibi"
@@ -281,11 +346,21 @@ def _attention_facets(src: str) -> tuple[dict, dict]:
         if present
     )
 
-    tier1 = {"mix": mix, "qkv": qkv, "qk_norm": qk_norm, "window": window, "rope": rope, "extras": "+".join(extras) or "plain"}
+    tier1 = {
+        "mix": mix,
+        "qkv": qkv,
+        "qk_norm": qk_norm,
+        "window": window,
+        "rope": rope,
+        "extras": "+".join(extras) or "plain",
+    }
     tier2 = {
         "bias": _bias_source(src),
         "head_dim": "config" if _has(src, "config.head_dim") else "derived",
         "dropout": "yes" if _has(src, "attention_dropout", "attn_pdrop") else "no",
+        # The forward threads a window through but the architecture never sets one: inheritable
+        # either way, worth knowing when comparing against a model that does slide.
+        "sliding_capable": "yes" if _has(src, "sliding_window") and window == "full_attention" else "no",
     }
     return tier1, tier2
 
@@ -300,9 +375,27 @@ def _mlp_facets(src: str) -> tuple[dict, dict]:
         gating = "gated"
     elif _has(
         src,
-        "fc1", "c_fc", "dense_h_to_4h", "up_proj", "wi", "fc_in", "linear_in", "in_proj", "w_in", "w_1",
-        "intermediate_dense", "proj_in", "linear1", "lin1", "layer1", "ffw_layer_1", "linear_start", "linear_1",
-        "self.layers", "self.intermediate", "self.mlp",
+        "fc1",
+        "c_fc",
+        "dense_h_to_4h",
+        "up_proj",
+        "wi",
+        "fc_in",
+        "linear_in",
+        "in_proj",
+        "w_in",
+        "w_1",
+        "intermediate_dense",
+        "proj_in",
+        "linear1",
+        "lin1",
+        "layer1",
+        "ffw_layer_1",
+        "linear_start",
+        "linear_1",
+        "self.layers",
+        "self.intermediate",
+        "self.mlp",
     ):
         gating = "ungated"
     else:
@@ -408,16 +501,49 @@ def forward_topology(class_node: ast.ClassDef, file_source: str) -> str | None:
 # Helper canonicalisation (module-level functions such as `repeat_kv`)
 # --------------------------------------------------------------------------------------------------
 def canonical_source(node: ast.AST) -> str:
-    """Unparse `node` with docstrings and the symbol's own name removed, for body-hash comparison."""
+    """
+    Unparse `node` with docstrings and the symbol's own name removed, for body-hash comparison.
+
+    Equality here is *conservative*: an equal hash proves two bodies behave identically, but two
+    bodies that behave identically can still hash differently (`x.reshape(...).unbind()` versus
+    `x[..., 0::2]` compute the same interleaved rotation). The linter is therefore allowed to miss a
+    duplicate but can never claim two different implementations are the same, which is the safe
+    direction for something that tells people to delete code.
+    """
     node = ast.parse(ast.unparse(node)).body[0]
     for sub in ast.walk(node):
         body = getattr(sub, "body", None)
-        if isinstance(body, list) and body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant):
+        if (
+            isinstance(body, list)
+            and body
+            and isinstance(body[0], ast.Expr)
+            and isinstance(body[0].value, ast.Constant)
+        ):
             if isinstance(body[0].value.value, str):
                 sub.body = body[1:] or [ast.Pass()]
     if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
         node.name = "_"
     return ast.unparse(node)
+
+
+def canonical_method(class_node: ast.ClassDef, file_source: str, model: str, method: str = "forward") -> str | None:
+    """
+    The named method of a class, canonicalised for cross-model comparison.
+
+    Model-specific identifiers are replaced with a placeholder so `Qwen3Attention.forward` and
+    `LlamaAttention.forward` compare on structure rather than on naming.
+    """
+    node = next((n for n in class_node.body if isinstance(n, ast.FunctionDef) and n.name == method), None)
+    if node is None:
+        return None
+    try:
+        body = canonical_source(node)
+    except (SyntaxError, ValueError):
+        return None
+    # `gpt_neox` -> `GptNeox`, `Gpt_Neox`, `GPTNeoX`-ish. Strip the squashed forms case-insensitively
+    # rather than trying to reproduce each model's exact capitalisation.
+    squashed = model.replace("_", "")
+    return re.sub(rf"\b{re.escape(squashed)}", "X", body, flags=re.IGNORECASE)
 
 
 # --------------------------------------------------------------------------------------------------
@@ -494,6 +620,8 @@ def scan_file(path: Path, model: str) -> tuple[list[Block], list[Helper]]:
             if topology is None:
                 continue
             tier1, tier2 = {"topology": topology}, {}
+        elif kind == "attention":
+            tier1, tier2 = _attention_facets(class_source, config_flags(model))
         elif kind in _FACET_EXTRACTORS:
             tier1, tier2 = _FACET_EXTRACTORS[kind](class_source)
         else:
@@ -618,6 +746,15 @@ def _selfcheck() -> None:
     qwen3 = next(b for b in by_model_kind[("qwen3", "attention")] if b.class_name == "Qwen3Attention")
     assert qwen3.tier1["qk_norm"] == "rms", qwen3.tier1
 
+    # olmoe threads `getattr(config, "sliding_window", None)` but declares no window anywhere, so
+    # it must not be classified as -- let alone become the canonical owner of -- a sliding variant.
+    assert "sliding_window" not in config_flags("olmoe"), config_flags("olmoe")
+    olmoe = next(b for b in by_model_kind[("olmoe", "attention")] if b.class_name == "OlmoeAttention")
+    assert olmoe.tier1["window"] == "full_attention", olmoe.tier1
+    assert olmoe.tier2["sliding_capable"] == "yes", olmoe.tier2
+    mistral = next(b for b in by_model_kind[("mistral", "attention")] if b.class_name == "MistralAttention")
+    assert mistral.tier1["window"] == "sliding_attention", mistral.tier1
+
     gemma2_layer = next(b for b in by_model_kind[("gemma2", "layer")])
     assert gemma2_layer.tier1["topology"].count("N") == 4, gemma2_layer.tier1
 
@@ -637,6 +774,38 @@ def _selfcheck() -> None:
     # Bespoke layouts are legitimate but rare. If this ratio climbs, a real facet is being missed
     # and blocks that differ are being merged under one tag.
     assert bespoke / len(blocks) < 0.03, f"{bespoke}/{len(blocks)} blocks fell through to a bespoke value"
+
+    # 5 textual bodies covering 3 behaviours: the half-split rotation (146 models), the interleaved
+    # one written three different ways (8 + 6 + 1), and nanochat's flipped sign convention. Merging
+    # the three interleaved spellings needs temp-variable inlining and list/tuple equivalence, which
+    # is not worth it while equality stays conservative. This bound catches a regression that splits
+    # them further.
+    rotate_half = {h.variant for h in helpers if h.name == "rotate_half"}
+    assert len(rotate_half) <= 5, f"rotate_half should collapse to at most 5 bodies, got {len(rotate_half)}"
+    assert len({h.variant for h in helpers if h.name == "repeat_kv"}) == 1
+
+    # Every axis must draw from a closed vocabulary. This is the real guard against the extractor
+    # splitting a variant on cosmetics: a new spelling shows up as an unexpected value here rather
+    # than quietly inflating the variant count.
+    expected = {
+        ("attention", "mix"): {"mha", "gqa", "mla", "deformable"},
+        ("attention", "qkv"): {"split", "fused_qkv", "fused_kv", "latent", "sampled", "other"},
+        ("attention", "qk_norm"): {"none", "rms", "layernorm"},
+        ("attention", "window"): set(layer_pattern_vocabulary()),
+        ("attention", "rope"): {"none", "half_split", "interleaved", "alibi"},
+        ("mlp", "gating"): {"gated", "ungated", "fused_gate_up", "conv", "projector"},
+        ("moe", "router"): {"softmax", "sigmoid", "unknown"},
+        ("norm", "norm_kind"): {"rms", "rms_one_plus_weight", "layernorm"},
+        ("rotary", "rope_kind"): {"standard", "per_layer_type", "longrope_buffers"},
+    }
+    for block in blocks:
+        for axis, value in block.tier1.items():
+            allowed = expected.get((block.kind, axis))
+            if allowed is None:
+                continue
+            # `mix` carries an optional "+cross" suffix.
+            base = value.split("+")[0] if axis == "mix" else value
+            assert base in allowed, f"{block.model}/{block.class_name}: {axis}={value!r} is outside {sorted(allowed)}"
 
     print(f"selfcheck ok: {len(blocks)} blocks, {len(helpers)} helpers, {len(build_variants(blocks))} variants")
 
