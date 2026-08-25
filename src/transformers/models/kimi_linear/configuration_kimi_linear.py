@@ -108,7 +108,6 @@ class KimiLinearConfig(PreTrainedConfig):
     mlp_layer_types: list[str] | None = None
     layer_types: list[str] | None = None
 
-    head_dim: int = 72
     linear_key_head_dim: int = 128
     linear_num_key_heads: int = 32
     linear_conv_kernel_dim: int = 4

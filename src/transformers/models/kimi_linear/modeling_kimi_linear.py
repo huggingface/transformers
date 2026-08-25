@@ -645,7 +645,7 @@ class KimiLinearDeltaAttention(nn.Module):  # TODO: can we try to inherit from q
                 raise ValueError(
                     f"Mask must be a 0-1 matrix of shape [batch_size, seq_len] but got {attention_mask.shape = }",
                 )
-            apply_mask_to_padding_states(hidden_states, attention_mask)
+            hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
 
         # Apply projections
         batch_size, seq_len = hidden_states.shape[:2]
