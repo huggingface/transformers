@@ -1,5 +1,0 @@
-{
-  "attention": ["mha_cross|no_extras|no_pos_emb|qkv_split|no_qk_norm|full_attention", "mha|no_extras|no_pos_emb|qkv_split|no_qk_norm|full_attention"],
-  "layer": ["attn-norm-cross_attn-norm-mlp-norm", "attn-norm-mlp-norm"],
-  "mlp": "ungated_mlp"
-}

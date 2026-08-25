@@ -1,5 +1,0 @@
-{
-  "mixer": "ssm",
-  "layer_other": "norm-attn-residual",
-  "norm": "rmsnorm"
-}

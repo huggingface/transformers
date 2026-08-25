@@ -1,8 +1,0 @@
-{
-  "attention": "mla|attn_sink|rope_half|kv_latent|no_qk_norm|sliding_attention",
-  "layer": "norm-attn-norm-mlp",
-  "mlp": "gated_mlp",
-  "moe": "sigmoid_router|router_bias|no_norm_topk|shared_expert|grouped_expert_weights|grouped_routing",
-  "rotary": "rope_per_layer_type",
-  "norm": "rmsnorm"
-}

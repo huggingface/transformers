@@ -1,7 +1,0 @@
-{
-  "attention": "gqa|no_extras|no_pos_emb|qkv_split|qk_rmsnorm|sliding_attention",
-  "layer": ["norm", "norm-attn-residual-norm-mlp-residual"],
-  "mlp": "gated_mlp",
-  "moe": "sigmoid_router|router_bias|no_norm_topk|shared_expert|grouped_expert_weights|flat_routing",
-  "norm": "rmsnorm"
-}

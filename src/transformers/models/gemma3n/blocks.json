@@ -1,8 +1,0 @@
-{
-  "attention": ["gqa|no_extras|rope_half|qkv_split|qk_rmsnorm|sliding_attention", "mha|logit_softcap|no_pos_emb|qkv_split|no_qk_norm|full_attention", "mha|no_extras|no_pos_emb|qkv_custom|no_qk_norm|full_attention"],
-  "layer": "norm-attn-norm-norm-mlp-norm-norm",
-  "layer_other": ["attn-norm", "norm"],
-  "mlp": ["gated_mlp", "ungated_mlp"],
-  "rotary": "rope_per_layer_type",
-  "norm": "rmsnorm"
-}

@@ -1,5 +1,0 @@
-{
-  "attention": "mha_cross|no_extras|no_pos_emb|qkv_split|no_qk_norm|full_attention",
-  "moe": "softmax_router|router_bias|no_norm_topk|no_shared_expert|grouped_expert_weights|flat_routing",
-  "norm": "rmsnorm"
-}

@@ -33,7 +33,7 @@ import argparse
 import itertools
 import statistics
 import sys
-from collections import defaultdict
+from collections import Counter, defaultdict
 from pathlib import Path
 
 
@@ -49,6 +49,7 @@ from blocks_facets import (  # noqa: E402
     forwards_match,
     generates_modeling,
     measure_axis_costs,
+    modular_overrides,
     modular_parents,
     scan_file,
     scan_repo,
@@ -300,36 +301,53 @@ def cmd_lint(args: argparse.Namespace) -> int:
                 )
             )
 
-    # R3: the variant is inherited, but from a model younger than the one that introduced it.
+    # R3: the block inherits its variant from a model younger than the one that introduced it, so
+    # the lineage records copy order rather than history. Judged on the class's *declared* base --
+    # using the model's parent set instead flagged classes already based on the canonical owner,
+    # merely because some other parent of that model was younger.
     if "R3" in rules:
+        all_overrides = list(modular_overrides())
+        declared = {(o.child_model, o.child_class): o for o in all_overrides}
+        # How many blocks each model takes from each base. A base that supplies several blocks is an
+        # established family relationship, and sourcing one more from it is right: Gemma3 taking its
+        # MLP from Gemma2 is descent, not drift, even though llama introduced `gated_mlp`. Only a
+        # base that supplies exactly one block is a one-off reach into an unrelated model -- which is
+        # the "Qwen VLM's text stack defined via GLM via Phi" problem worth reporting.
+        reach = Counter((o.child_model, o.parent_model) for o in all_overrides)
         for variant in variants.values():
             if variant.kind not in OVERRIDE_COST or OVERRIDE_COST[variant.kind] < args.min_cost:
                 continue
             canonical = variant.canonical
+            canonical_block = next((b for b in variant.blocks if b.model == canonical), None)
+            if canonical_block is None:
+                continue
             for block in variant.blocks:
                 if only and block.model not in only:
                     continue
-                if block.model == canonical:
+                if block.model == canonical or not forwards_match(block, canonical_block):
                     continue
-                canonical_block = next((b for b in variant.blocks if b.model == canonical), None)
-                if canonical_block is None or not forwards_match(block, canonical_block):
+                override = declared.get((block.model, block.class_name))
+                if override is None or override.parent_model == canonical:
                     continue
-                inherited_from = [p for p in parents.get(block.model, ()) if p in variant.owners]
-                younger = [
-                    p for p in inherited_from if dates.get(p, "0000") > dates.get(canonical or "", "9999-99-99")
-                ]
-                if younger:
-                    findings.append(
-                        (
-                            OVERRIDE_COST[variant.kind] // 2,
-                            "R3",
-                            block,
-                            f"{block.model}/{block.class_name} takes {variant.tag} from "
-                            f"{','.join(younger)} ({dates.get(younger[0], '?')}) but it was introduced by "
-                            f"{canonical} ({dates.get(canonical or '', '?')})",
-                            {},
-                        )
+                # Only interesting when the base predates nothing: the canonical owner is older, so
+                # the same code could have come from further up the real lineage.
+                if dates.get(override.parent_model, "0000") <= dates.get(canonical or "", "9999-99-99"):
+                    continue
+                if reach[(block.model, override.parent_model)] > 1:
+                    continue
+                findings.append(
+                    (
+                        OVERRIDE_COST[variant.kind] // 2,
+                        "R3",
+                        block,
+                        f"{block.model}/{block.class_name} reaches into "
+                        f"{override.parent_model}.{override.parent_class} "
+                        f"({dates.get(override.parent_model, '?')}) for {variant.tag} and takes "
+                        f"nothing else from it; {canonical} ({dates.get(canonical or '', '?')}) "
+                        f"introduced that variant",
+                        block.tier2_delta(canonical_block),
                     )
+                )
 
     # Helper-level R1: the highest-count, lowest-risk duplication in the library.
     if "R1" in rules:

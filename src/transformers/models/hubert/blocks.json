@@ -1,7 +1,0 @@
-{
-  "attention": "mha_cross|no_extras|no_pos_emb|qkv_split|no_qk_norm|full_attention",
-  "layer": "attn-residual-norm-mlp-norm",
-  "layer_other": "norm",
-  "mlp": "ungated_mlp",
-  "norm": "layernorm"
-}

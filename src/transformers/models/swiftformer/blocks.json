@@ -1,4 +1,0 @@
-{
-  "attention": "mha|no_extras|no_pos_emb|qkv_custom|no_qk_norm|full_attention",
-  "layer_other": "attn"
-}

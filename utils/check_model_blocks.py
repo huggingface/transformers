@@ -50,7 +50,7 @@ CHECKER_CONFIG = {
         "src/transformers/models/**/configuration_*.py",
         "src/transformers/models/**/modular_*.py",
         "docs/source/en/model_doc/**/*.md",
-        "src/transformers/models/**/blocks.json",
+        "utils/model_blocks.json",
     ],
     "check_args": [],
     "fix_args": ["--fix_and_overwrite"],
@@ -75,16 +75,13 @@ def main() -> int:
     parser.add_argument("--all", action="store_true", help="lint every model, not just the diff")
     args = parser.parse_args()
 
-    # Per-model manifests: 400+ committed generated files, so they need the same treatment as the
-    # catalog or they drift the moment a facet changes.
+    # The manifest is generated and committed, so it needs the same treatment as the catalog.
     stale = export_all(check_only=not args.fix_and_overwrite)
     if args.fix_and_overwrite:
-        print(f"wrote {len(stale)} blocks.json manifests")
+        print("wrote utils/model_blocks.json" if stale else "utils/model_blocks.json already current")
     elif stale:
         print(
-            f"{len(stale)} blocks.json manifests are out of date "
-            f"(e.g. {', '.join(str(p.parent.name) for p in stale[:5])}). "
-            "Run `python utils/check_model_blocks.py --fix_and_overwrite`.",
+            "utils/model_blocks.json is out of date. Run `python utils/check_model_blocks.py --fix_and_overwrite`.",
             file=sys.stderr,
         )
         return 1

@@ -1,7 +1,0 @@
-{
-  "attention": ["gqa_cross|logit_softcap|no_pos_emb|qkv_split|no_qk_norm|sliding_attention", "gqa|logit_softcap|rope_half|qkv_split|no_qk_norm|sliding_attention"],
-  "layer": ["norm-attn-norm-residual-norm-cross_attn-norm-residual-norm-mlp-norm-residual", "norm-attn-norm-residual-norm-mlp-norm-residual"],
-  "mlp": "gated_mlp",
-  "rotary": "standard_rope",
-  "norm": "rmsnorm_one_plus_weight"
-}

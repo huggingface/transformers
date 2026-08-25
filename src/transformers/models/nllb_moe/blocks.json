@@ -1,5 +1,0 @@
-{
-  "attention": "mha_cross|no_extras|no_pos_emb|qkv_split|no_qk_norm|full_attention",
-  "layer": ["norm-attn-residual-norm-cross_attn-residual-norm-mlp-mlp-residual", "norm-attn-residual-norm-mlp-mlp-residual"],
-  "moe": "softmax_router|router_bias|no_norm_topk|no_shared_expert|expert_module_list|flat_routing"
-}

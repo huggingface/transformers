@@ -1,7 +1,0 @@
-{
-  "attention": "gqa|no_extras|rope_half|qkv_split|qk_rmsnorm|full_attention",
-  "layer": "attn-norm-residual-mlp-norm-residual",
-  "mlp": "gated_mlp",
-  "rotary": "standard_rope",
-  "norm": "rmsnorm"
-}

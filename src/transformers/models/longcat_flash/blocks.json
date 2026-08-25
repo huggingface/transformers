@@ -1,7 +1,0 @@
-{
-  "layer": "residual-mlp-residual-residual-residual",
-  "mlp": "gated_mlp",
-  "moe": "softmax_router|router_bias|no_norm_topk|no_shared_expert|grouped_expert_weights|flat_routing",
-  "rotary": "standard_rope",
-  "norm": "rmsnorm"
-}

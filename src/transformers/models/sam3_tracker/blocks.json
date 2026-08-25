@@ -1,6 +1,0 @@
-{
-  "attention": "mha|no_extras|no_pos_emb|qkv_split|no_qk_norm|full_attention",
-  "layer_other": "attn-attn-norm-norm-mlp-norm-norm",
-  "mlp": "ungated_mlp",
-  "norm": "layernorm"
-}
