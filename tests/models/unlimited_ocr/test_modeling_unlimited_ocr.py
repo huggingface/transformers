@@ -254,7 +254,7 @@ class UnlimitedOcrModelTest(VLMModelTest, unittest.TestCase):
     def test_manual_forward_dynamic_cache(self):
         self._check_manual_forward_cache(cache_implementation="dynamic")
 
-    def test_manual_forward_loop_static_cache(self):
+    def test_manual_forward_static_cache(self):
         self._check_manual_forward_cache(cache_implementation="static")
 
     def test_generate_cache_chunked_prefill(self):

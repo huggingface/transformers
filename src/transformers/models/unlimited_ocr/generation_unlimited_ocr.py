@@ -98,6 +98,7 @@ class UnlimitedOcrGenerationMixin(GenerationMixin):
         negative_prompt_ids: torch.Tensor | None = None,
         negative_prompt_attention_mask: torch.Tensor | None = None,
     ) -> LogitsProcessorList:
+        # Save original config value as we'll have to override it temporarily in this method.
         no_repeat_ngram_size = generation_config.no_repeat_ngram_size
         no_repeat_ngram_window_size = getattr(generation_config, "no_repeat_ngram_window_size", None)
         use_sliding_window_processor = False
@@ -115,6 +116,7 @@ class UnlimitedOcrGenerationMixin(GenerationMixin):
             generation_config.no_repeat_ngram_size = None
 
         try:
+            # try/finally to make sure we revert temporary config modification
             processors = super()._get_logits_processor(
                 generation_config=generation_config,
                 input_ids_seq_length=input_ids_seq_length,

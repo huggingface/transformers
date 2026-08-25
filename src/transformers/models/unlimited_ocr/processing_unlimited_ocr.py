@@ -37,6 +37,7 @@ class UnlimitedOcrProcessorKwargs(ProcessingKwargs, total=False):
 @auto_docstring
 class UnlimitedOcrProcessor(ProcessorMixin):
     valid_processor_kwargs = UnlimitedOcrProcessorKwargs
+    skip_tensor_conversion = [*ProcessorMixin.skip_tensor_conversion, "num_local_patches", "patches_grid"]
 
     def __init__(
         self,
@@ -58,6 +59,10 @@ class UnlimitedOcrProcessor(ProcessorMixin):
         self.downsample_ratio = downsample_ratio
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
+        self.detections_pattern = re.compile(
+            r"<\|det\|>(\S+) \[(\d+), (\d+), (\d+), (\d+)\]<\|/det\|>(.*?)(?=<\|det\|>|<PAGE>|\Z)",
+            flags=re.DOTALL,
+        )
 
     def prepare_inputs_layout(self, images=None, text=None, videos=None, audio=None, **kwargs):
         images, text, videos, audio = super().prepare_inputs_layout(
@@ -136,11 +141,7 @@ class UnlimitedOcrProcessor(ProcessorMixin):
         return decoded
 
     def _parse_detections(self, decoded: str) -> list[dict]:
-        matches = re.findall(
-            r"<\|det\|>(\S+) \[(\d+), (\d+), (\d+), (\d+)\]<\|/det\|>(.*?)(?=<\|det\|>|<PAGE>|\Z)",
-            decoded,
-            flags=re.DOTALL,
-        )
+        matches = self.detections_pattern.findall(decoded)
         detections = []
         for region_type, x1, y1, x2, y2, text in matches:
             detections.append(

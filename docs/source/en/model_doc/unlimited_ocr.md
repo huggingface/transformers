@@ -65,7 +65,7 @@ inputs = processor.apply_chat_template(
 
 output = model.generate(
     **inputs,
-    max_new_tokens=32768,
+    max_new_tokens=512,
     no_repeat_ngram_size=35,
     no_repeat_ngram_window_size=128,
 )

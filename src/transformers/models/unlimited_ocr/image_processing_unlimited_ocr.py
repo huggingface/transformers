@@ -44,13 +44,13 @@ class UnlimitedOcrImageProcessorKwargs(ImagesKwargs, total=False):
         set to `True`. Can be overridden by the `max_patches` parameter in the `preprocess` method.
     tile_size (`int`, *optional*, defaults to `640`):
         The size of each local tile. Must match the model's query embedding size.
+    background_color (`list[int]`, *optional*, defaults to `[127, 127, 127]`):
+        The background color for padding.
     maximum_pad_value (`int`, *optional*, defaults to `640`):
         If `crop_to_patches` is `False` and `max(size.height, size.width)` is smaller than or equal to this
         value, the image is resized directly to a square of `max(size.height, size.width)` without preserving
         the aspect ratio. Otherwise, the image is resized while preserving the aspect ratio and then padded to
         a square with `background_color`.
-    background_color (`list[int]`, *optional*, defaults to `[127, 127, 127]`):
-        The background color for padding.
     """
 
     crop_to_patches: bool
@@ -155,6 +155,7 @@ class UnlimitedOcrImageProcessor(TorchvisionBackend):
     background_color = [127, 127, 127]
     model_input_names = ["pixel_values", "num_local_patches", "patches_grid"]
     maximum_pad_value = 640
+    skip_tensor_conversion = ["num_local_patches", "patches_grid"]
 
     def __init__(self, **kwargs: Unpack[UnlimitedOcrImageProcessorKwargs]):
         super().__init__(**kwargs)
@@ -302,6 +303,7 @@ class UnlimitedOcrImageProcessor(TorchvisionBackend):
         return BatchFeature(
             data=data,
             tensor_type=return_tensors,
+            skip_tensor_conversion=self.skip_tensor_conversion,
         )
 
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:

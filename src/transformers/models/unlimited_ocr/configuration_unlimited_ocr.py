@@ -308,7 +308,8 @@ class UnlimitedOcrConfig(PreTrainedConfig):
             self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
 
         if self.text_config is None:
-            # The reference implementation defines the text config values on the main config
+            # For backward compatibility. The reference implementation defines the text config values
+            # on the main config
             self.text_config = self.sub_configs["text_config"](**kwargs)
         elif isinstance(self.text_config, dict):
             self.text_config = self.sub_configs["text_config"](**self.text_config)

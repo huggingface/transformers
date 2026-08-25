@@ -556,14 +556,14 @@ class DeepseekOcr2VisionConfig(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         if self.sam_config is None:
-            self.sam_config = DeepseekOcr2SamVisionConfig()
+            self.sam_config = self.sub_configs["sam_config"]()
         elif isinstance(self.sam_config, dict):
-            self.sam_config = DeepseekOcr2SamVisionConfig(**self.sam_config)
+            self.sam_config = self.sub_configs["sam_config"](**self.sam_config)
 
         if self.encoder_config is None:
-            self.encoder_config = DeepseekOcr2VisionEncoderConfig()
+            self.encoder_config = self.sub_configs["encoder_config"]()
         elif isinstance(self.encoder_config, dict):
-            self.encoder_config = DeepseekOcr2VisionEncoderConfig(**self.encoder_config)
+            self.encoder_config = self.sub_configs["encoder_config"](**self.encoder_config)
 
         super().__post_init__(**kwargs)
 
