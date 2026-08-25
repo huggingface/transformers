@@ -13,7 +13,6 @@
 # limitations under the License.
 import copy
 import glob
-import inspect
 import json
 import os
 import os.path
@@ -72,6 +71,7 @@ from transformers.testing_utils import (
     hub_retry,
     is_staging_test,
     require_accelerate,
+    require_kernels,
     require_non_hpu,
     require_torch,
     require_torch_accelerator,
@@ -2541,6 +2541,25 @@ class ModelUtilsTest(TestCasePlus):
         self.assertEqual(output_text1, output_text2)
         self.assertEqual(output_text1, EXPECTED_TEXT)
 
+    @require_kernels
+    def test_force_accelerate_hooks_does_not_hide_the_signature_it_wraps(self):
+        """
+        `kernels` refuses to swap in a layer whose forward signature does not match the one it replaces. The
+        `force_accelerate_hooks` wrapper must therefore keep the signature of the forward it decorates, otherwise
+        every mixer carrying it looks like `(self, *args, **kwargs)` and can never be kernelized.
+        """
+        from kernels.layer.layer import _validate_layer
+
+        from transformers.models.qwen3_5.modeling_qwen3_5 import Qwen3_5GatedDeltaNet
+
+        # Stands in for a hub kernel layer: same forward signature as the class it would replace
+        class KernelGatedDeltaNet(torch.nn.Module):
+            def forward(self, hidden_states, cache_params=None, attention_mask=None, **kwargs):
+                return hidden_states
+
+        # Raises `TypeError: ... different number of arguments` if the decorator hides the signature
+        _validate_layer(check_cls=Qwen3_5GatedDeltaNet, cls=KernelGatedDeltaNet, repo="dummy-repo")
+
 
 @slow
 @require_torch
@@ -3796,39 +3815,6 @@ class DisableMmapLoadingTest(unittest.TestCase):
         self.assertEqual(set(loaded_mmap.keys()), set(loaded_no_mmap.keys()))
         for k in loaded_mmap:
             torch.testing.assert_close(loaded_mmap[k], loaded_no_mmap[k])
-
-
-@require_torch
-class ForceAccelerateHooksTest(unittest.TestCase):
-    """Tests for the `force_accelerate_hooks` decorator in `integrations.accelerate`."""
-
-    def test_decorator_preserves_signature(self):
-        # Downstream tools introspect the decorated method with `inspect.signature(...).bind(*args, **kwargs)`
-        # to replay captured inputs, so the decorator must not hide the real signature behind `(*args, **kwargs)`.
-        from transformers.integrations.accelerate import force_accelerate_hooks
-
-        class Mixer(torch.nn.Module):
-            def __init__(self):
-                super().__init__()
-                self.conv1d = torch.nn.Conv1d(1, 1, 1)
-
-            @force_accelerate_hooks("conv1d")
-            def forward(self, hidden_states, cache_params=None, attention_mask=None, **kwargs):
-                """Mixer forward."""
-                return hidden_states
-
-        module = Mixer()
-        signature = inspect.signature(module.forward)
-        self.assertEqual(list(signature.parameters), ["hidden_states", "cache_params", "attention_mask", "kwargs"])
-
-        bound = signature.bind(torch.zeros(1, 1, 1), attention_mask=None)
-        self.assertEqual(list(bound.arguments), ["hidden_states", "attention_mask"])
-
-        self.assertEqual(Mixer.forward.__name__, "forward")
-        self.assertEqual(Mixer.forward.__doc__, "Mixer forward.")
-
-        # and the wrapper still runs the underlying forward
-        torch.testing.assert_close(module(torch.ones(1, 1, 1)), torch.ones(1, 1, 1))
 
 
 @require_torch
