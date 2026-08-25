@@ -395,8 +395,8 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
         attention_mask: torch.Tensor,
         past_key_values: Cache | None,
     ) -> torch.Tensor:
-        batch_size, sequence_length, _ = hidden_states.shape
-        hidden_shape = (batch_size, sequence_length, -1, self.index_head_dim)
+        batch_size, seq_length, _ = hidden_states.shape
+        hidden_shape = (batch_size, seq_length, -1, self.index_head_dim)
         cos, sin = position_embeddings
 
         qk = self.index_qk_proj(hidden_states)
@@ -405,29 +405,26 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
             [self.index_n_heads * self.index_head_dim, self.index_kv_heads * self.index_head_dim],
             dim=-1,
         )
-        q, token_k = q.reshape(*hidden_shape), token_k.reshape(*hidden_shape).squeeze(2)
+        q, raw_keys = q.reshape(*hidden_shape), token_k.reshape(*hidden_shape).squeeze(2)
         q = self.q_layernorm(q)
-        q = apply_rotary_pos_emb(q, cos=cos, sin=sin, unsqueeze_dim=2)
+        # The cos/sin are the full positions, so we need to slice to get current q positions
+        q = apply_rotary_pos_emb(q, cos=cos[:, -seq_length:, :], sin=sin[:, -seq_length:, :], unsqueeze_dim=2)
 
-        indexer_states = torch.cat([token_k, cos.to(token_k.dtype), sin.to(token_k.dtype)], dim=-1)
         if past_key_values is not None:
-            indexer_states = past_key_values.update_indexer(indexer_states, self.layer_idx)
-
-        rotary_dim = cos.shape[-1]
-        raw_keys, key_cos, key_sin = torch.split(indexer_states, [self.index_head_dim, rotary_dim, rotary_dim], dim=-1)
+            raw_keys = past_key_values.update_indexer(raw_keys, self.layer_idx)
 
         # Note that the mask is never None here as we only allow eager and sdpa, and we do not allow sdpa's mask skip
         # It's always 4D with either bool (sdpa) or float (eager) and already gives us the valid indices
         visible_token_indices = attention_mask if attention_mask.dtype == torch.bool else attention_mask == 0
 
         selected_token_indices = torch.full(
-            (batch_size, sequence_length, self.token_budget + self.compress_ratio - 1),
+            (batch_size, seq_length, self.token_budget + self.compress_ratio - 1),
             -1,
             dtype=torch.int32,
             device=hidden_states.device,
         )
         for batch_idx in range(batch_size):
-            for query_idx in range(sequence_length):
+            for query_idx in range(seq_length):
                 local_visible_indices = torch.nonzero(
                     visible_token_indices[batch_idx, 0, query_idx], as_tuple=False
                 ).flatten()
@@ -445,8 +442,8 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
                     group_starts = block_token_indices[:, 0]
                     block_key_states = apply_rotary_pos_emb(
                         pooled_keys.unsqueeze(1),
-                        cos=key_cos[batch_idx].index_select(0, group_starts),
-                        sin=key_sin[batch_idx].index_select(0, group_starts),
+                        cos=cos[batch_idx].index_select(0, group_starts),
+                        sin=sin[batch_idx].index_select(0, group_starts),
                     ).squeeze(1)
 
                     scores = torch.matmul(
@@ -500,6 +497,9 @@ class Qwen4ExpTextAttention(Qwen3_5Attention):
             attention_mask = attention_mask + selected_token_mask
         else:
             attention_mask = attention_mask & selected_token_mask
+
+        # The cos/sin are the full positions here due to the indexer, so we need to slice to get current positions
+        position_embeddings = (x[:, -hidden_states.shape[1] :, :] for x in position_embeddings)
 
         return super().forward(
             hidden_states=hidden_states,
@@ -977,7 +977,7 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
                 "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
                 "past_key_values": past_key_values,
-                "position_ids": text_position_ids,
+                "position_ids": text_position_ids[..., -inputs_embeds.shape[1] :],
                 # Due to the indexer, we always want to create a mask to then simply overlay the indexer mask in each layer - otherwise
                 # we may have to recreate it in each layer if it gets skipped
                 "allow_is_causal_skip": False,
@@ -1139,6 +1139,12 @@ class Qwen4ExpModel(Qwen3_5MoeModel):
 
 @auto_docstring
 class Qwen4ExpForConditionalGeneration(Qwen3_5MoeForConditionalGeneration):
+    def prepare_inputs_for_generation(self, input_ids, **kwargs):
+        model_inputs = super().prepare_inputs_for_generation(input_ids, **kwargs)
+        # We overwrite them here as we want the FULL position, not the sliced positions
+        model_inputs["position_ids"] = kwargs.get("position_ids")
+        return model_inputs
+
     @staticmethod
     def create_masks_for_generate(
         config: PreTrainedConfig,
