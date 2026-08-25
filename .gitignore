@@ -172,6 +172,7 @@ tags
 
 # checkers cache
 utils/.checkers_cache.json
+utils/.checkers_requirements.json
 
 # modular conversion
 *.modular_backup

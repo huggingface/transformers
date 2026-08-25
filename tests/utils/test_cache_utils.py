@@ -66,7 +66,7 @@ if is_torch_available():
         LinearAttentionLayer,
         StaticLayer,
     )
-    from transformers.integrations.executorch import export_with_dynamic_cache
+    from transformers.integrations.executorch import export_with_dynamic_cache, register_dynamic_cache_export_support
 
 
 # FIXME: offloaded cache is skipped becase it needs `offload_only_non_sliding=False`
@@ -685,6 +685,50 @@ class CacheHardIntegrationTest(unittest.TestCase):
         )[0]["generated_token_ids"][-10:]
         EXPECTED_OUTPUT = [879, 175, 39, 141, 1000, 975, 951, 991, 683, 441]
         self.assertListEqual(out, EXPECTED_OUTPUT)
+
+
+@require_torch
+class DynamicCacheExportPytreeTest(unittest.TestCase):
+    @pytest.mark.torch_export_test
+    def test_export_preserves_sliding_cache_behavior(self):
+        # Update both layer types so export must preserve their different cache behavior.
+        class CacheUpdateModule(torch.nn.Module):
+            def forward(self, new_states, past_key_values):
+                past_key_values.update(new_states, new_states, layer_idx=0)
+                past_key_values.update(new_states, new_states, layer_idx=1)
+                return past_key_values
+
+        # Exceed the retained cache length so sliding and unbounded updates produce different outputs.
+        new_states = torch.arange(10.0).reshape(1, 1, 5, 2)
+        cache_config = LlamaConfig(
+            num_hidden_layers=2,
+            sliding_window=4,
+            layer_types=["sliding_attention", "full_attention"],
+        )
+
+        register_dynamic_cache_export_support()
+
+        exported_program = torch.export.export(
+            CacheUpdateModule(),
+            (),
+            {"new_states": new_states, "past_key_values": DynamicCache(config=cache_config)},
+            strict=False,
+        )
+        exported_cache = exported_program.module()(
+            new_states=new_states, past_key_values=DynamicCache(config=cache_config)
+        )
+        eager_cache = CacheUpdateModule()(new_states, DynamicCache(config=cache_config))
+
+        self.assertEqual(len(exported_cache.layers), 2)
+        self.assertIs(type(exported_cache.layers[0]), DynamicSlidingWindowLayer)
+        self.assertEqual(exported_cache.layers[0].sliding_window, 4)
+        self.assertEqual(exported_cache.layers[0].get_seq_length(), cache_config.sliding_window - 1)
+        torch.testing.assert_close(exported_cache.layers[0].keys, eager_cache.layers[0].keys)
+        torch.testing.assert_close(exported_cache.layers[0].values, eager_cache.layers[0].values)
+        self.assertIs(type(exported_cache.layers[1]), DynamicLayer)
+        self.assertEqual(exported_cache.layers[1].get_seq_length(), new_states.shape[-2])
+        torch.testing.assert_close(exported_cache.layers[1].keys, eager_cache.layers[1].keys)
+        torch.testing.assert_close(exported_cache.layers[1].values, eager_cache.layers[1].values)
 
 
 @require_torch
