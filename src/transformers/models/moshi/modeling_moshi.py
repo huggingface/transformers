@@ -792,7 +792,7 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
             loss=loss,
             logits=logits,
             past_key_values=past_key_values,
-            hidden_states=past_key_values,
+            hidden_states=all_hidden_states,
             attentions=all_self_attns,
         )
 
@@ -1115,7 +1115,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         kwargs_audio_encoder = {
-            argument[len("audio_encoder_")]: value
+            argument[len("audio_encoder_") :]: value
             for argument, value in kwargs.items()
             if argument.startswith("audio_encoder_")
         }
@@ -1227,9 +1227,9 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
             attentions=decoder_outputs.attentions,
             depth_loss=None if depth_decoder_outputs is None else depth_decoder_outputs.loss,
             audio_logits=None if depth_decoder_outputs is None else depth_decoder_outputs.logits,
-            depth_past_key_values=None if decoder_outputs is None else decoder_outputs.past_key_values,
-            depth_hidden_states=None if decoder_outputs is None else decoder_outputs.hidden_states,
-            depth_attentions=None if decoder_outputs is None else decoder_outputs.attentions,
+            depth_past_key_values=None if depth_decoder_outputs is None else depth_decoder_outputs.past_key_values,
+            depth_hidden_states=None if depth_decoder_outputs is None else depth_decoder_outputs.hidden_states,
+            depth_attentions=None if depth_decoder_outputs is None else depth_decoder_outputs.attentions,
         )
 
     def _prepare_attention_mask_for_generation(
@@ -1334,7 +1334,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
             elif user_audio_codes is not None:
                 audio_codes = user_audio_codes
                 audio_inputs_embeds = sum(
-                    self.embed_tokens[codebook](audio_codes[:, codebook + self.num_codebooks])
+                    self.embed_tokens[codebook + self.num_codebooks](audio_codes[:, codebook])
                     for codebook in range(audio_codes.shape[1])
                 )
 
