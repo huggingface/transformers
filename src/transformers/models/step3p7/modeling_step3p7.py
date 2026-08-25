@@ -49,6 +49,7 @@ from ...vision_utils import get_vision_position_ids
 from .configuration_step3p7 import Step3p7Config, Step3p7TextConfig, Step3p7VisionConfig
 
 
+# Adapted from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl.Qwen2_5_VLVisionRotaryEmbedding
 class Step3p7VisionRotaryEmbedding(nn.Module):
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Step3p7VisionConfig, device=None):
@@ -83,11 +84,6 @@ class Step3p7VisionRotaryEmbedding(nn.Module):
         """
         base = config.rope_parameters["rope_theta"]
         dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-
-        # The reference implementation computes RoPE frequencies INDEPENDENTLY
-        # for each spatial dimension using the partitioned head_dim (head_dim // ndim),
-        # so both x and y dimensions get identical frequency ranges.
-        # This is different from splitting the global inv_freq between dimensions.
         spatial_dim = dim // 2
 
         attention_factor = 1.0  # Unused in this type of RoPE
@@ -105,7 +101,7 @@ class Step3p7VisionRotaryEmbedding(nn.Module):
         return cos, sin
 
     def recomposition_to_2d(self, freq):
-        # in contrast to pixtral, interleave grids as H-H-W-W
+        # in contrast to other 2D rope modules, interleave grids as H-H-W-W
         freq_h, freq_w = freq[:, 0], freq[:, 1]
         return torch.cat([freq_h, freq_h, freq_w, freq_w], dim=-1)[None, ...]
 
