@@ -80,7 +80,6 @@ class TestBatchGeneration(unittest.TestCase):
             ("paged|flex_attention", 64, 128, 64),
         ]
     )
-
     @require_deterministic_for_xpu
     def test_generate_batch_consistency(self, attn_impl, num_blocks, block_size, max_batch_tokens):
         self.model.config.attn_implementation = attn_impl

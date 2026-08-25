@@ -100,7 +100,6 @@ class BlockLedger:
         return evicted_blocks
 
 
-
 class CacheAllocator(ABC):
     """Base class for cache allocators. A cache allocator receives cache sectors from the PagedAttentionCache and
     allocates them to the requests that need them. A single cache allocator takes care of all layers with a given

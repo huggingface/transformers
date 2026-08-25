@@ -310,6 +310,4 @@ def update_cb_config_after_cache_creation(
 def check_cb_values_bounds(cb_config: ContinuousBatchingConfig) -> None:
     """Checks the bounds on some values of the continuous batching config."""
     if cb_config.page_size < BOUNDS["page_size"][0]:
-        raise ValueError(
-            f"page_size must be at least {BOUNDS['page_size'][0]} but got {cb_config.page_size = }"
-        )
+        raise ValueError(f"page_size must be at least {BOUNDS['page_size'][0]} but got {cb_config.page_size = }")

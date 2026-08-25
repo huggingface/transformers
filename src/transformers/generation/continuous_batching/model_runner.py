@@ -27,18 +27,18 @@ from .utils import create_warmup_future_states, get_cuda_pools, mem_pool_ctx, pa
 
 
 def infer_max_single_request_tokens(cache: PagedAttentionCache) -> int:
-        """Returns the largest total length a single request can have on an empty cache, i.e. the largest length for
-        which all allocators can be served enough sectors at the same time."""
-        dummy_state = RequestState(request_id="", initial_tokens=[])
-        # Solve using dichotomy
-        low, high = 0, cache.max_tokens_read
-        while low < high:
-            mid = (low + high + 1) // 2
-            if cache.can_store_request_tokens(dummy_state, mid, dry_run=True):
-                low = mid
-            else:
-                high = mid - 1
-        return low
+    """Returns the largest total length a single request can have on an empty cache, i.e. the largest length for
+    which all allocators can be served enough sectors at the same time."""
+    dummy_state = RequestState(request_id="", initial_tokens=[])
+    # Solve using dichotomy
+    low, high = 0, cache.max_tokens_read
+    while low < high:
+        mid = (low + high + 1) // 2
+        if cache.can_store_request_tokens(dummy_state, mid, dry_run=True):
+            low = mid
+        else:
+            high = mid - 1
+    return low
 
 
 class ModelRunner:

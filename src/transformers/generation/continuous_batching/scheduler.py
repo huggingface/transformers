@@ -217,7 +217,6 @@ class Scheduler(ABC):
         in_safety_margin = self._try_to_meet_safety_margin()
 
         for state in candidates:
-
             # If we are outside the safety margin, we only accept decoding requests or the first prefill request
             if not in_safety_margin and scheduled_requests and state.status != RequestStatus.DECODING:
                 break

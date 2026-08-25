@@ -1732,9 +1732,8 @@ class ContinuousBatchingConfig:
             Deprecated in 5.13: maximum number of graph is no longer an issue.
     """
 
-
     # The number of tokens stored inside a (full attention) page. A block storing the cache of N layers has N pages, one
-    # per layer. Since different page types can hold different number of tokens, this is for a full attention page. 
+    # per layer. Since different page types can hold different number of tokens, this is for a full attention page.
     # Default is 256. Must be at least 4 (for an efficient cache, it should be well above that)
     page_size: int = 256
 

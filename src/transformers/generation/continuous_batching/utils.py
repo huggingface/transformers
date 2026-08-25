@@ -19,8 +19,6 @@ from typing import Any
 
 import torch
 
-from transformers.configuration_utils import PretrainedConfig
-
 from ...configuration_utils import PreTrainedConfig
 from .requests import FutureRequestState, RequestState, RequestStatus
 

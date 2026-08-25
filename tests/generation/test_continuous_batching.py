@@ -392,6 +392,7 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         """Tests the allocation check on a hybrid full + sliding cache: the sliding allocator caps its need at the
         window, zero new tokens always fit, and a dry run leaves the pool untouched while a real allocation
         consumes it."""
+
         def make_cache(num_sectors: int) -> PagedAttentionCache:
             common: dict[str, Any] = {"head_dim": 2, "num_kv_heads": 1, "page_size": 4, "allow_block_sharing": False}
             full = _make_allocator(FullAttentionCacheAllocator, **common)
@@ -506,7 +507,11 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         """Test SlidingAttentionCacheAllocator.get_read_indices and get_write_indices place the cache, sentinel and
         write trash indices correctly, including for small block sizes and rolling-buffer wrap-around."""
         allocator = _make_allocator(
-            SlidingAttentionCacheAllocator, head_dim=8, num_kv_heads=2, page_size=block_size, sliding_window=sliding_window
+            SlidingAttentionCacheAllocator,
+            head_dim=8,
+            num_kv_heads=2,
+            page_size=block_size,
+            sliding_window=sliding_window,
         )
         allocator.block_table["req"] = block_table
 
