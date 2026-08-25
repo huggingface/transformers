@@ -229,9 +229,9 @@ inputs = tokenizer(
     ```py
     # pip install -U flash-attn --no-build-isolation
 
-    from transformers import SiglipModel
+    from transformers import Siglip2Model
 
-    model = SiglipModel.from_pretrained(
+    model = Siglip2Model.from_pretrained(
         "google/siglip2-so400m-patch14-384",
         attn_implementation="flash_attention_2",
         device_map="auto",
