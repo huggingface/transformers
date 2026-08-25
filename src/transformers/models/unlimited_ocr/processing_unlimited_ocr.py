@@ -92,10 +92,9 @@ class UnlimitedOcrProcessor(ProcessorMixin):
         num_queries_global = math.ceil(size // self.patch_size / self.downsample_ratio)
         num_queries_local = math.ceil(tile_size // self.patch_size / self.downsample_ratio)
 
-        num_columns = int(image_inputs["patches_grid"][image_idx][0])
-        num_rows = int(image_inputs["patches_grid"][image_idx][1])
+        num_columns, num_rows = image_inputs["patches_grid"][image_idx]
         num_tokens = num_queries_global * (num_queries_global + 1) + 1
-        if int(image_inputs["num_local_patches"][image_idx]) > 0:
+        if image_inputs["num_local_patches"][image_idx] > 0:
             num_tokens += (num_rows * num_queries_local) * (num_columns * num_queries_local + 1)
         return self.image_token * num_tokens
 
