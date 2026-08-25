@@ -398,6 +398,12 @@ class MlaKvAProjParallel(TensorParallelLayer):
     """
 
     def transform_output_post_forward(self, module, output, mesh):
+        if not hasattr(module.config, "qk_rope_head_dim"):
+            raise AttributeError(
+                f"Config for {type(module).__name__} does not have `qk_rope_head_dim`. "
+                "MlaKvAProjParallel requires `qk_rope_head_dim` to be defined in the model config. "
+                "Please add it to the model's config or update the TP plan mapping."
+            )
         rope_dim = module.config.qk_rope_head_dim
         pass_output, rope_output = output.split([output.shape[-1] - rope_dim, rope_dim], dim=-1)
         rope_output = _AllReduceBackward.apply(rope_output, mesh.get_group())
@@ -527,6 +533,11 @@ class MoEParamShard(TensorParallelLayer):
         if meta is None:
             return
         if self.shards_expert_dim and hasattr(module, "num_experts"):
+            if meta.shape[0] % mesh.size() != 0:
+                raise ValueError(
+                    f"Global number of experts must be divisible by number of devices: "
+                    f"{meta.shape[0]} % {mesh.size()} != 0"
+                )
             module.num_experts = meta.shape[0] // mesh.size()
         module._parameters[param] = torch.nn.Parameter(
             distribute_tensor(meta, mesh, [self.placement], src_data_rank=None),
@@ -774,6 +785,13 @@ ALL_PARALLEL_STYLES: ParallelInterface = ParallelInterface()
 
 def apply_tensor_parallelism(model, tp_mesh):
     """DTensor backend: shard params as placeholders and install TP forward hooks."""
+
+    for layer_pattern, style in (model.tp_plan or {}).items():
+        if style not in ALL_PARALLEL_STYLES:
+            raise ValueError(
+                f"Unsupported tensor parallel style '{style}' for layer '{layer_pattern}'. "
+                f"Supported styles are {list(ALL_PARALLEL_STYLES.keys())}"
+            )
 
     for name, module in model.named_modules():
         # Create DTensor placeholders so the loader knows which shard belongs to this rank.
