@@ -931,12 +931,30 @@ class ContinuousBatchingManager:
             self.batch_processor = batch_processor  # register the batch processor for main thread access
             self.current_batch = 0
 
-            # If using the async API, we bootstrap the first batch w/out update
+            # If using the async API, we bootstrap the first batch w/out update. The manager may have been
+            # started before the first request was submitted: wait for one (with the same stop conditions as
+            # the main loop below) instead of crashing.
             if batch_processor.use_async_batching:
-                if not batch_processor.prepare_next_batch():
-                    raise RuntimeError("Failed to bootstrap the first batch.")
-                self._generation_step()
-                self.current_batch += 1
+                while True:
+                    if batch_processor.prepare_next_batch():
+                        self._generation_step()
+                        self.current_batch += 1
+                        break
+
+                    # Stop waiting if the TP group is hard-stopping
+                    elif self.background_thread_status.tp_status == BackgroundThreadStatus.HARD_STOP:
+                        break
+                    # Stop waiting if the TP group is flushing and there are no pending requests
+                    elif (
+                        self.background_thread_status.tp_status == BackgroundThreadStatus.FLUSH_AND_STOP
+                        and not batch_processor.has_pending_requests()
+                    ):
+                        break
+
+                    # Otherwise, we wait for new requests and retry
+                    else:
+                        self._has_new_requests.wait(timeout=0.1)  # wait for new requests instead of busy-spinning.
+                        self._has_new_requests.clear()
 
             # The loop continues until a stop signal has been broadcasted in the TP group
             while True:
