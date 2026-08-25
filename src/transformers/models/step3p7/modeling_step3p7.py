@@ -91,19 +91,24 @@ class Step3p7VisionRotaryEmbedding(nn.Module):
         return inv_freq.to(device), attention_factor
 
     @torch.no_grad()
-    def forward(self, x: torch.Tensor, position_ids: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def forward(self, x, position_ids):
+        inv_freq_expanded = self.inv_freq[None, ...].float()
+        position_ids = position_ids[..., None].float()
+
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = (position_ids[..., None].float() * self.inv_freq.to(x.device)).flatten(-2)
-        emb = torch.cat((freqs, freqs), dim=-1)
-        cos = (emb.cos() * self.attention_scaling).to(dtype=x.dtype)
-        sin = (emb.sin() * self.attention_scaling).to(dtype=x.dtype)
-        return cos, sin
+            freqs = position_ids @ inv_freq_expanded
+            cos = freqs.cos() * self.attention_scaling
+            sin = freqs.sin() * self.attention_scaling
+
+        cos = self.recomposition_to_2d(cos)
+        sin = self.recomposition_to_2d(sin)
+        return cos.to(x.dtype), sin.to(x.dtype)
 
     def recomposition_to_2d(self, freq):
-        # in contrast to other 2D rope modules, interleave grids as H-H-W-W
-        freq_h, freq_w = freq[:, 0], freq[:, 1]
-        return torch.cat([freq_h, freq_h, freq_w, freq_w], dim=-1)[None, ...]
+        freq = freq.flatten(-2)
+        return torch.cat((freq, freq), dim=-1)
 
 
 class Step3p7VisionMLP(nn.Module):
