@@ -15,18 +15,16 @@
 
 import unittest
 
-import pytest
 from huggingface_hub.errors import StrictDataclassClassValidationError
-from parameterized import parameterized
 
 from transformers import LummaConfig, is_torch_available
 from transformers.testing_utils import require_torch, torch_device
+
 
 if is_torch_available():
     import torch
 
     from transformers import LummaForCausalLM, LummaModel
-    from transformers.models.lumma.modeling_lumma import LummaAttention
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...test_modeling_common import ids_tensor
@@ -64,7 +62,7 @@ class LummaModelTester(CausalLMModelTester):
         self.layer_sharing_repeats = 1
 
         self.q_norm = True
-        self.qk_norm = False     
+        self.qk_norm = False
 
         self.shared_kv = True
         self.kv_cache_mode = "shared"
@@ -165,7 +163,7 @@ class LummaModelTest(CausalLMModelTest, unittest.TestCase):
     def test_static_cache_no_recompile_with_smaller_length(self):
         pass
 
-    #  Generic-test overrides needed for layer-sharing awareness 
+    #  Generic-test overrides needed for layer-sharing awareness
 
     def test_attention_outputs(self):
         """
@@ -179,7 +177,7 @@ class LummaModelTest(CausalLMModelTest, unittest.TestCase):
         seq_len = self.model_tester.seq_length
 
         for model_class in self.all_model_classes:
-        
+
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             model = model_class._from_config(config, attn_implementation="eager")
@@ -769,9 +767,9 @@ class LummaModelTest(CausalLMModelTest, unittest.TestCase):
         base_config = self.model_tester.get_config()
 
         configs = {
-            "q_only":  dict(q_norm=True,  qk_norm=False),
-            "qk_both": dict(q_norm=False, qk_norm=True),
-            "none":    dict(q_norm=False, qk_norm=False),
+            "q_only": {"q_norm": True, "qk_norm": False},
+            "qk_both": {"q_norm": False, "qk_norm": True},
+            "none": {"q_norm": False, "qk_norm": False},
         }
         logits = {}
         input_ids = ids_tensor([1, 5], base_config.vocab_size)
@@ -807,7 +805,6 @@ class LummaModelTest(CausalLMModelTest, unittest.TestCase):
             self.assertEqual(attn.q_norm.weight.shape[0], config.head_dim)
             self.assertEqual(attn.k_norm.weight.shape[0], config.head_dim)
 
-  
     def test_rope_position_slice_shared_kv_cache_mode(self):
         """
         In kv_cache_mode='shared', queries use only the last q_len positions
@@ -1158,4 +1155,3 @@ class LummaModelTest(CausalLMModelTest, unittest.TestCase):
         with torch.no_grad():
             output = model(input_ids)
         self.assertEqual(output.logits.shape, (2, 4, config.vocab_size))
-        
