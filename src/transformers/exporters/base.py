@@ -16,16 +16,18 @@
 
 from __future__ import annotations
 
+import functools
 from abc import ABC, abstractmethod
 from collections.abc import MutableMapping
 from typing import TYPE_CHECKING
 
+import torch
 from packaging import version
 
 from ..utils import logging
 from ..utils.import_utils import _is_package_available, is_torch_available
 from .configs import ExportConfigMixin
-from .utils import decompose_for_generation
+from .utils import EXPORT_METADATA_KEY, ExportMetadata, decompose_for_generation
 
 
 logger = logging.get_logger(__name__)
@@ -203,3 +205,148 @@ class HfExporter(ABC):
                 ) from e
 
         return exported
+
+
+class ModelRunner(ABC):
+    """Wraps one exported artifact so it forwards like the module it was exported from:
+    `runner(**kwargs) -> {name: tensor}`, torch tensors in and out.
+
+    `kwargs` are the exported forward's kwargs — including `past_key_values` as a `Cache` object for a
+    decode graph; each backend adapts it to however its graph carries the cache (flattened `input.<name>`
+    tensors, positional buffers, or the pytree itself). The returned dict maps output leaf names
+    (`logits`, `past_key_values.…`) to tensors, so callers read outputs the same way for every backend.
+
+    `input_names` lists the graph's declared inputs — a caller feeds only what the graph takes;
+    `text_input` and `mask_inputs` are derived from it so a generation loop can key its feed. `device` /
+    `dtype` are where the backend lands its output tensors — the generator reads them off the decode
+    runner, so nobody has to pass them in.
+    """
+
+    # What the exporter recorded about this graph (`build_export_metadata`), parsed — the trace's own
+    # account of itself, and what every accessor below reads. Empty for an artifact written without it;
+    # those runners assign the fields they can answer themselves.
+    export_metadata: ExportMetadata = ExportMetadata()
+    device: torch.device | str = "cpu"
+
+    @functools.cached_property
+    def mask_dict_ranks(self) -> dict[str, int] | None:
+        """`{attention type: rank}` when the graph took a *dict* of masks instead of one (mixed full/sliding
+        attention), which a model builds inside its forward — so the runtime has to hand one in.
+
+        Recorded at export. A backend whose handle can still recover it for an artifact written before that
+        overrides this — and they do not all read the same place: dynamo takes the dict as one kwarg and keeps
+        the per-type keys in its pytree child spec, while ONNX and ExecuTorch flatten it to one input per
+        type."""
+        return self.export_metadata.mask_ranks
+
+    @functools.cached_property
+    def input_names(self) -> tuple[str, ...]:
+        """What this graph takes, in the flat order it takes them, as recorded at export.
+
+        A runner whose handle names them itself assigns `self.input_names` instead, which seeds this: ONNX
+        exposes a mutated input under the name `generate` uses rather than the `input.`-prefixed one its
+        session declares, and a dynamo module is the program, so its own input spec is the record."""
+        return self.export_metadata.input_names
+
+    @functools.cached_property
+    def input_shapes(self) -> dict[str, tuple[int | None, ...]]:
+        """Shape per input, `None` per symbolic axis — the shapes the *trace* saw, as recorded.
+
+        A runner assigns `self.input_shapes` instead when what its handle *declares* is the load-bearing
+        fact: ONNX sizes a not-yet-created cache entry from the declared shape, and only the session says
+        which axes it left symbolic."""
+        return self.export_metadata.shapes
+
+    @functools.cached_property
+    def dtype(self) -> torch.dtype:
+        """Precision the graph computes at, as recorded at export.
+
+        The generation layer sizes the cache it feeds from this, and a half-precision export (a grouped-mm
+        MoE, a varlen-attention VLM) takes half-precision cache leaves — hand it the fp32 default and the
+        feed is refused when the artifact binds its inputs. An artifact carrying no metadata cannot say, so
+        it says so rather than sniffing whichever of its tensors happens to be floating point. A runner whose
+        handle knows better assigns `self.dtype` instead, which seeds this."""
+        if dtype := self.export_metadata.dtype:
+            return dtype
+        logger.warning_once(
+            f"This artifact carries no `{EXPORT_METADATA_KEY}`, so the precision it was exported at is "
+            f"unknown; assuming {torch.float32}. Re-export it to record the precision."
+        )
+        return torch.float32
+
+    @functools.cached_property
+    def cache_inputs(self) -> tuple[str, ...]:
+        """Every kwarg this graph takes a cache under, in the order the trace recorded them.
+
+        Usually one, but a model that caches its *encoder* separately declares two — voxtral_realtime's
+        decode takes `past_key_values` and `encoder_past_key_values` — and a backend that has to expand
+        each cache's leaves by name needs all of them, not just the first (leaving the second unfilled is
+        a `KeyError` on an input the method declares).
+
+        Read off the recorded kwargs when the artifact carries metadata — the ones traced as a cache
+        container, whatever they are called. Otherwise matched across each backend's naming of the same
+        thing: dynamo takes the whole pytree under the bare name, ONNX flattens it to
+        `input.<kwarg>.<path>` inputs, ExecuTorch to `<kwarg>_<leaf index>`."""
+        recorded = self.export_metadata.kwargs
+        if recorded:
+            containers = tuple(name for name, spec in recorded.items() if spec.get("container") == "cache")
+            # A model-specific state class (xlstm's `cache_params`) records its own class name rather than
+            # "cache", so an empty answer here means "not recorded as a cache", not "no cache" — fall through
+            # to the name scan the way an artifact without metadata does.
+            if containers:
+                return containers
+        return tuple(
+            kwarg
+            for kwarg in ("cache_params", "past_key_values")
+            if any(name.removeprefix("input.").startswith(kwarg) for name in self.input_names)
+        )
+
+    @functools.cached_property
+    def cache_input(self) -> str | None:
+        """The kwarg this graph takes its *primary* cache under — `"cache_params"` for a recurrent model
+        (fixed-size conv / recurrent state), `"past_key_values"` otherwise, `None` for a graph with no
+        cache. This is the one the generation loop grows and feeds each step; see `cache_inputs` for the
+        rest.
+
+        Cached: the metadata and the declared names are both fixed once the runner is built, and the
+        generation loop asks for this on every step."""
+        return self.cache_inputs[0] if self.cache_inputs else None
+
+    @functools.cached_property
+    def text_input(self) -> str:
+        """The graph's text input: `"decoder_input_ids"` (encoder-decoder decode), `"inputs_embeds"`
+        (multi-modal decode) or `"input_ids"`."""
+        return next((n for n in ("decoder_input_ids", "inputs_embeds") if n in self.input_names), "input_ids")
+
+    @functools.cached_property
+    def mask_inputs(self) -> tuple[str, ...]:
+        """The graph's attention-mask input name(s) — several for mixed full/sliding attention."""
+        return tuple(
+            n
+            for n in self.input_names
+            if n == "attention_mask" or n.startswith(("attention_mask.", "attention_mask_"))
+        )
+
+    @functools.cached_property
+    def decoder_mask_input(self) -> str | None:
+        """`"decoder_attention_mask"` when the graph declares one. An encoder-decoder splits the two masks:
+        `attention_mask` covers the *encoder's* sequence (what cross-attention reads) while this one covers
+        the decoder's own — so the causal mask belongs here, and `generate` does not hand it over (the eager
+        model builds it inside the forward the graph starts after)."""
+        return "decoder_attention_mask" if "decoder_attention_mask" in self.input_names else None
+
+    @functools.cached_property
+    def mask_rank(self) -> int | None:
+        """The rank the graph's `attention_mask` was traced with, `None` when it takes none.
+
+        `generate` upgrades a 2D padding mask to the 4D causal mask for any compileable cache, assuming the
+        model's forward wants one — but an exported graph starts *after* whatever mask building its model
+        does, so only the trace can say which it took. An alibi model (bloom) reads the 2D padding mask
+        directly and compares its width to the cache length, so a 4D mask fails a guard rather than
+        mismatching a shape."""
+        shape = self.input_shapes.get("attention_mask")
+        return len(shape) if shape is not None else None
+
+    @abstractmethod
+    def __call__(self, **kwargs) -> dict[str, torch.Tensor]:
+        """Run the graph on `kwargs`; return its outputs as `{leaf_name: tensor}`."""

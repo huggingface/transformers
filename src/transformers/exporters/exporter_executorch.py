@@ -38,6 +38,7 @@ edge deployment. The export pipeline runs:
 
 from __future__ import annotations
 
+import contextlib
 import json
 import math
 import operator
@@ -143,6 +144,7 @@ class ExecutorchExporter(DynamoExporter):
             raise ValueError(f"Unsupported backend {config.backend} for ExecuTorch export")
 
         model, sample_inputs, partitioner = prepare_for_backend(model, sample_inputs)
+        partitioner = partitioner if config.partition else []
 
         with (
             apply_patches("executorch"),
@@ -150,30 +152,95 @@ class ExecutorchExporter(DynamoExporter):
         ):
             exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
             apply_fx_program_fixes("executorch", exported_program)
-            apply_fx_node_fixes("executorch", exported_program.graph_module)
-            edge_program_manager: EdgeProgramManager = to_edge_transform_and_lower(
-                exported_program,
-                partitioner=partitioner,
-                compile_config=_get_edge_compile_config(),
-                # A `.pte` binds its inputs positionally and reports only counts and shapes, so what
-                # the graph *is* rides along as one constant method — the same schema the ONNX exporter
-                # writes into `metadata_props` (`build_export_metadata`).
-                constant_methods={
-                    EXPORT_METADATA_KEY: [
-                        json.dumps(
-                            build_export_metadata(model, sample_inputs, exported_program, self.required_packages)
-                        )
-                    ]
-                },
-            )
-            executorch_programs_manager: ExecutorchProgramManager = edge_program_manager.to_executorch(
-                config=_get_backend_config(config)
-            )
+
+            with keep_backed_symbols_symbolic(exported_program):
+                apply_fx_node_fixes("executorch", exported_program.graph_module)
+                edge_program_manager: EdgeProgramManager = to_edge_transform_and_lower(
+                    exported_program,
+                    partitioner=partitioner,
+                    compile_config=_get_edge_compile_config(exported_program),
+                    # A `.pte` binds its inputs positionally and reports only counts and shapes, so what
+                    # the graph *is* rides along as one constant method — the same schema the ONNX
+                    # exporter writes into `metadata_props` (`build_export_metadata`).
+                    constant_methods={
+                        EXPORT_METADATA_KEY: [
+                            json.dumps(
+                                build_export_metadata(model, sample_inputs, exported_program, self.required_packages)
+                            )
+                        ]
+                    },
+                )
+                executorch_programs_manager = edge_program_manager.to_executorch(config=_get_backend_config(config))
 
         return executorch_programs_manager
 
 
-def _get_edge_compile_config() -> EdgeCompileConfig:
+@contextlib.contextmanager
+def keep_backed_symbols_symbolic(exported_program: ExportedProgram):
+    """Selective: keep *backed* symbols symbolic through the lowering, let everything else proceed.
+
+    The lowering's passes re-execute ops on the program's live fake tensors, and each shape relation those
+    re-executions evaluate against the trace hints ends in `ShapeEnv.set_replacement` — refining a
+    declared-dynamic axis down to its hint (`s70 = 2`), which the memory plan then bakes in ("Attempted to
+    resize a static tensor", 0x12). But wholesale guard suppression breaks the models that carry *unbacked*
+    symbols (bart's data-dependent sizes): those are legitimately resolved during lowering by the very same
+    replacement machinery, and blocking it leaves a later pass guarding on an unresolvable expression
+    (`GuardOnDataDependentSymNode`). So filter exactly the harmful case: a symbol the trace *hinted* (backed,
+    present in `var_to_val`) being replaced by a *constant*. Unbacked resolution and symbol-to-symbol
+    unification pass through untouched.
+    """
+    shape_env = next(
+        (
+            val.fake_mode.shape_env
+            for node in exported_program.graph_module.graph.nodes
+            if isinstance(val := node.meta.get("val"), torch.Tensor) and hasattr(val, "fake_mode")
+        ),
+        None,
+    )
+    if shape_env is None:
+        yield
+        return
+    original = shape_env._set_replacement
+
+    # `var_to_val` was renamed `backed_var_to_val` (the old name warns); both hold exactly the backed
+    # symbols, which is the distinction this wrapper turns on.
+    backed_values = getattr(shape_env, "backed_var_to_val", None)
+    if backed_values is None:
+        backed_values = shape_env.var_to_val
+
+    def selective(symbol, replacement, *args, **kwargs):
+        if symbol in backed_values and getattr(replacement, "is_number", False):
+            return None
+        return original(symbol, replacement, *args, **kwargs)
+
+    shape_env._set_replacement = selective
+    try:
+        yield
+    finally:
+        del shape_env._set_replacement
+
+
+def _uses_channels_last(exported_program: ExportedProgram) -> bool:
+    """Whether any tensor in the graph carries a channels-last layout — the case the `dim_order_ops` variants
+    exist to represent, and the one graph shape that cannot be lowered without them.
+
+    Deliberately *only* channels-last, not every non-contiguous tensor: a transpose-derived view (the rotary
+    pattern, dozens per audio tower) is also a non-standard dim order, and keeping the dim-order ops for
+    those graphs was measured to fix nothing while re-freezing the symbolic-size buffers the plain schemas
+    keep dynamic (musicflamingo/qwen3_asr stayed red, deepseek_v3's merged decode broke)."""
+    for node in exported_program.graph_module.graph.nodes:
+        val = node.meta.get("val")
+        tensors = val if isinstance(val, (tuple, list)) else [val]
+        for tensor in tensors:
+            if not isinstance(tensor, torch.Tensor) or tensor.dim() not in (4, 5):
+                continue
+            layout = torch.channels_last if tensor.dim() == 4 else torch.channels_last_3d
+            if tensor.is_contiguous(memory_format=layout) and not tensor.is_contiguous():
+                return True
+    return False
+
+
+def _get_edge_compile_config(exported_program: ExportedProgram) -> EdgeCompileConfig:
     """Build the ``EdgeCompileConfig`` used for ``to_edge_transform_and_lower``.
 
     Adds non-core ATen ops to ``_core_aten_ops_exception_list`` so torch.export
@@ -184,6 +251,17 @@ def _get_edge_compile_config() -> EdgeCompileConfig:
     runtime; XNNPACK leaves them in the non-delegated CPU portion of the graph.
     """
     return EdgeCompileConfig(
+        # Keep the plain ATen ops instead of the `dim_order_ops` variants wherever the graph allows it:
+        # `_empty_dim_order` declares its size as `int[]` where `aten.empty`'s is `SymInt[]`, so dispatch
+        # coerces every symbolic size to its trace hint and the fake kernel cannot produce a symbolic val —
+        # freezing the buffer (and everything downstream) at the traced shape, which the memory plan then
+        # enforces at runtime ("Attempted to resize a static tensor", 0x12). With the plain schema the
+        # symbols survive to the spec pass and the buffers plan at their bounds. The one graph shape that
+        # *needs* the dim-order variants is a channels-last tensor — the emitter refuses the layout without
+        # them ("Tensor has a memory_format that is unsupported") — so those graphs keep them.
+        # ET-version-sensitive, like every internals patch here: revisit when the dim-order schemas learn
+        # `SymInt[]`.
+        _skip_dim_order=not _uses_channels_last(exported_program),
         _core_aten_ops_exception_list=[
             torch.ops.aten._embedding_bag_forward_only.default,
             torch.ops.aten._fft_c2c.default,
@@ -485,6 +563,73 @@ def _patch_searchsorted(original):
         result = below.sum(dim=-1)
         result = result.to(torch.int32) if out_int32 else result
         return out.copy_(result) if out is not None else result
+
+    return patch
+
+
+@register_patch("executorch", "torch.nn.functional.pad")
+def _patch_pad(original):
+    """Split a negative pad into the crop it means plus the non-negative remainder — torch treats a negative
+    amount as trimming that edge, and ExecuTorch's portable kernel refuses it outright ("Padding values must
+    be non-negative", execute 0x12; longt5's local-attention blocking and rwkv's shifted state both pad
+    negatively)."""
+
+    def patch(input, pad, mode="constant", value=None):
+        # Only a provably non-negative pad goes through untouched: under a dynamic export the amounts are
+        # SymInts (`block_len - seq`) whose sign is not knowable here, so those take the general form too.
+        if all(isinstance(amount, int) and amount >= 0 for amount in pad):
+            return original(input, pad, mode, value)
+        output = original(input, [torch.sym_max(amount, 0) for amount in pad], mode, value)
+        # Pad and crop act on opposite edges independently, so clamping first and trimming after is the
+        # same tensor as torch's crop-then-pad — and it needs no branch on a symbolic sign.
+        for i in range(len(pad) // 2):
+            left, right, dim = pad[2 * i], pad[2 * i + 1], input.dim() - 1 - i
+            start = torch.sym_max(-left, 0)
+            stop = output.size(dim) - torch.sym_max(-right, 0)
+            output = output.narrow(dim, start, stop - start)
+        return output
+
+    return patch
+
+
+@register_patch("executorch", "torch.nn.functional.conv3d")
+def _patch_conv3d(original):
+    """Decompose conv3d into a sum of conv2d's over the kernel's depth — ExecuTorch's portable convolution
+    kernel takes 3-D/4-D inputs only ("Expect input tensor to be 3-D or 4-D, but got, 5", execute 0x12), and
+    a video/temporal vision tower's patch embedding is a Conv3d (glm4v and family, cosmos3_omni,
+    cohere_compass).
+
+    For each depth offset `kt`, the matching strided temporal slice contributes one conv2d over `(H, W)`:
+    the output frames fold into the batch axis, the 2-D geometry (stride/padding/dilation/groups) applies
+    unchanged, and the contributions sum. Bias is added once at the end.
+    """
+
+    def patch(input, weight, bias=None, stride=1, padding=0, dilation=1, groups=1):
+        def triple(value):
+            return (value, value, value) if isinstance(value, int) else tuple(value)
+
+        (stride_t, stride_h, stride_w) = triple(stride)
+        (pad_t, pad_h, pad_w) = triple(padding)
+        (dil_t, dil_h, dil_w) = triple(dilation)
+        batch, _, frames, height, width = input.shape
+        out_channels, _, kernel_t, _, _ = weight.shape
+        if pad_t:
+            input = torch.nn.functional.pad(input, (0, 0, 0, 0, pad_t, pad_t))
+            frames = frames + 2 * pad_t
+        out_frames = (frames - dil_t * (kernel_t - 1) - 1) // stride_t + 1
+        output = None
+        for kt in range(kernel_t):
+            start = kt * dil_t
+            frame_slice = input[:, :, start : start + (out_frames - 1) * stride_t + 1 : stride_t]
+            folded = frame_slice.transpose(1, 2).reshape(batch * out_frames, input.shape[1], height, width)
+            planes = torch.nn.functional.conv2d(
+                folded, weight[:, :, kt], None, (stride_h, stride_w), (pad_h, pad_w), (dil_h, dil_w), groups
+            )
+            contribution = planes.reshape(batch, out_frames, out_channels, *planes.shape[2:]).transpose(1, 2)
+            output = contribution if output is None else output + contribution
+        if bias is not None:
+            output = output + bias.reshape(1, -1, 1, 1, 1)
+        return output
 
     return patch
 
@@ -1247,6 +1392,47 @@ def _as_int(x, default: int = 0) -> int:
 
 
 @register_fx_program_fix("executorch")
+def _fix_constant_dim_orders(exported_program: ExportedProgram) -> None:
+    """Make every constant tensor contiguous — a weight stored channels-last (an audio tower's conv kernels)
+    keeps those strides through serialization, invisible to any scan of the graph's activation vals, and at
+    runtime feeds a portable kernel whose planned output is contiguous ("2 input tensors have different dim
+    orders", `slice_copy`/`squeeze_copy` refusing 0x12). The values are unchanged; only the layout is."""
+    for holder in (exported_program.state_dict, exported_program.constants):
+        for name, tensor in holder.items():
+            if isinstance(tensor, torch.Tensor) and not tensor.is_contiguous():
+                holder[name] = tensor.contiguous()
+
+
+def _query_axis_symbols(exported_program: ExportedProgram, var_to_val: dict) -> tuple[set, int]:
+    """The symbols on the token axis of the graph's text inputs, and the sequence scale to bound them by:
+    the larger of their own hint and the cache's length hint (the prompt a merged decode was captured after).
+    """
+
+    def hint(dim) -> int:
+        return dim if isinstance(dim, int) else _as_int(var_to_val.get(dim.node.expr), 0)
+
+    placeholders = {
+        node.name: node.meta.get("val")
+        for node in exported_program.graph_module.graph.nodes
+        if node.op == "placeholder"
+    }
+    symbols, sequence_hint = set(), 0
+    for name, axis in (("input_ids", 1), ("inputs_embeds", 1), ("decoder_input_ids", 1), ("position_ids", -1)):
+        value = placeholders.get(name)
+        if isinstance(value, torch.Tensor) and value.dim() >= 2 and not isinstance(value.shape[axis], int):
+            symbols.add(value.shape[axis].node.expr)
+            sequence_hint = max(sequence_hint, hint(value.shape[axis]))
+    for name, value in placeholders.items():
+        if (
+            name.startswith(("past_key_values", "cache_params"))
+            and isinstance(value, torch.Tensor)
+            and value.dim() == 4
+        ):
+            sequence_hint = max(sequence_hint, hint(value.shape[2]))
+    return symbols, sequence_hint
+
+
+@register_fx_program_fix("executorch")
 def _fix_range_constraints(exported_program: ExportedProgram) -> None:
     """Cap ``int_oo`` upper bounds for ExecuTorch compatibility.
 
@@ -1263,10 +1449,21 @@ def _fix_range_constraints(exported_program: ExportedProgram) -> None:
         if isinstance(val, torch.Tensor) and hasattr(val, "fake_mode"):
             shape_env = val.fake_mode.shape_env
             range_dicts.append(shape_env.var_to_range)
-            var_to_val = getattr(shape_env, "backed_var_to_val", None) or shape_env.var_to_val
+            # `is None`, not `or`: an empty backed mapping is falsy and would fall through to the
+            # deprecated name.
+            var_to_val = getattr(shape_env, "backed_var_to_val", None)
+            if var_to_val is None:
+                var_to_val = shape_env.var_to_val
             break  # all nodes share the same shape_env, so we only need one
 
     floor = _dim_floor(len({sym for rd in range_dicts for sym, vr in rd.items() if isinstance(vr.upper, IntInfinity)}))
+
+    # The query axis is bounded from the *sequence* scale the graph was traced at, not from its own hint: a
+    # merged multi-token decode is captured at two tokens yet serves the whole prompt (a multi-modal export
+    # has no separate prefill graph), and its cache already carries that prompt's length — so the query
+    # symbols take `max(query hint, cache-length hint)`. Traced at two, a 64-token bound refused a 71-token
+    # prompt ("Attempted to resize a bounded tensor with a maximum capacity of 512 elements to 568").
+    query_symbols, sequence_hint = _query_axis_symbols(exported_program, var_to_val)
 
     unbounded = []
     for rd in range_dicts:
@@ -1274,6 +1471,8 @@ def _fix_range_constraints(exported_program: ExportedProgram) -> None:
             if isinstance(vr.upper, IntInfinity):
                 lower = _as_int(vr.lower, 2)
                 trace_val = _as_int(var_to_val.get(sym), 0)
+                if sym in query_symbols:
+                    trace_val = max(trace_val, sequence_hint)
                 upper = max(lower * _MAX_DIM_MULTIPLIER, trace_val * _MAX_DIM_MULTIPLIER, floor)
                 rd[sym] = ValueRanges(vr.lower, upper)
                 unbounded.append((str(sym), lower, upper))
@@ -1384,6 +1583,58 @@ def _fix_missing_placeholder_vals(exported_program: ExportedProgram) -> None:
 # `@register_fx_node_fix("executorch")` on `(gm, node) -> bool` per-node fixers,
 # applied in place by ``apply_fx_node_fixes("executorch", gm)`` right after the
 # program fixes. Return ``True`` to consume the node; DCE runs at the end of the walk.
+
+
+# `a % b` and the ops that rebuild it, per level: symbolic ints go through `operator`, tensors through the
+# aten schemas `torch.export` records for `tensor % int`.
+_FLOORED_MOD_OPS = {
+    operator.mod: (operator.add, operator.mod),
+    torch.ops.aten.remainder.Scalar: (torch.ops.aten.add.Tensor, torch.ops.aten.remainder.Scalar),
+}
+
+
+@register_fx_node_fix("executorch")
+def _fix_floored_mod(gm, node) -> bool:
+    """Rewrite `a % b` (positive literal `b`) as `((a % b) + b) % b` — the same value under floored *and*
+    truncated modulo.
+
+    torch computes Python's floored modulo (`-9 % 4 = 3`), ExecuTorch C's truncated one (`-9 % 4 = -1`), and
+    both its symbolic evaluator and its `remainder` kernel take the C answer. Symbolically, a pad amount like
+    longt5's `-seq % block` arrives negative and the kernel refuses it ("Padding values must be non-negative").
+    On tensors the disagreement is silent and worse: `(-5) % 16` returns `-5`, so timesfm's
+    `(idx_range - indices) % num_seq` produces negative indices and the `gather` that consumes them fails
+    bounds-checking (`0x12` at `aten::gather.out`) — for a positive `indices` the values were simply wrong.
+
+    The double-mod form is a graph-level identity no simplifier removes, and evaluates identically either way:
+    under flooring the inner result is already in `[0, b)` so the outer mod is a no-op, and under truncation
+    `(trunc + b)` lands in `(0, 2b)` and the outer mod brings it back.
+    """
+    add_op, mod_op = _FLOORED_MOD_OPS.get(node.target, (None, None))
+    if node.op != "call_function" or add_op is None:
+        return False
+    divisor = node.args[1]
+    if not isinstance(divisor, int) or divisor <= 0:
+        return False
+    # Already the wrapped form (its operand is the `+ divisor` this fix inserts) — the node list iteration
+    # reaches freshly inserted nodes, so without this the rewrap would wrap itself forever.
+    operand = node.args[0]
+    if (
+        getattr(operand, "op", None) == "call_function"
+        and operand.target is add_op
+        and len(operand.args) == 2
+        and operand.args[1] == divisor
+    ):
+        return False
+    graph = gm.graph
+    with graph.inserting_after(node):
+        shifted = graph.call_function(add_op, (node, divisor))
+    with graph.inserting_after(shifted):
+        rewrapped = graph.call_function(mod_op, (shifted, divisor))
+    rewrapped.meta = dict(node.meta)
+    node.replace_all_uses_with(rewrapped)
+    # `replace_all_uses_with` also rewired the chain itself — point it back at the original.
+    shifted.update_arg(0, node)
+    return True
 
 
 @register_fx_node_fix("executorch")
@@ -1540,3 +1791,53 @@ def _fix_negative_slice_start(gm: torch.fx.GraphModule, node: torch.fx.Node) -> 
     node.args = (*node.args[:2], add_node, *node.args[3:])
     node.meta.pop("unbacked_bindings", None)
     return True
+
+
+@register_patch("executorch", "torch._subclasses.fake_impls.op_implementations_dict")
+def _patch_nonzero_fake_layout(original):
+    """Report `nonzero`'s result as contiguous, matching the layout ExecuTorch's kernel actually writes.
+
+    ATen's CPU `nonzero` fills a `(ndim, nnz)` buffer and returns its transpose, and the fake kernel is
+    faithful to it: `new_empty_strided((nnz, ndim), (1, nnz))`. ExecuTorch's planner turns those strides into
+    a dim order of `(1, 0)`, but its `nonzero.out` kernel writes the tensor row-major — so the label
+    contradicts the bytes, and reading it back scrambles the values. For `[[1, -1, 1], [-1, 1, -1]]` the
+    program returns `[[0, 2], [0, 1], [0, 1]]` where eager gives `[[0, 0], [0, 2], [1, 1]]` (row-major bytes
+    `[0, 0, 0, 2, 1, 1]` re-read with stride `(1, 3)`). Consumers that assert
+    `tensors_have_same_dim_order(in, out)` against their contiguous, planner-allocated output refuse the call
+    instead — `0x12` at `aten::slice_copy.Tensor_out` for musicflamingo's audio-token positions
+    (`torch.where(diff == 1)`) and `aten::squeeze_copy.dims_out` for qwen3_asr's (`.nonzero().squeeze(-1)`).
+
+    Fixed at the fake kernel because that is the only place it holds: `to_edge_transform_and_lower` and
+    `to_executorch` each re-run it, so a rewritten stride on either graph is recomputed, and the emitted
+    program is already serialized by the time it can be edited. Swapping the registry dict for a copy leaves
+    the key set intact, so the membership check that `register_op_impl` bound to the original dict still
+    agrees with this lookup (`dispatch_to_op_implementations_dict` reads the module attribute).
+    """
+    inner = original.get(torch.ops.aten.nonzero.default)
+    if inner is None:
+        return original
+
+    def contiguous_nonzero(fake_mode, func, arg):
+        result = inner(fake_mode, func, arg)
+        return result.new_empty(result.shape) if isinstance(result, torch.Tensor) else result
+
+    return {**original, torch.ops.aten.nonzero.default: contiguous_nonzero}
+
+
+@register_patch("executorch", "torch.nn.functional.one_hot")
+def _patch_one_hot(original):
+    """Build the one-hot matrix by comparison against `arange` instead of calling `aten.one_hot`.
+
+    `one_hot`'s fake kernel has to know `num_classes` to give the result a shape, and raises
+    `DynamicOutputShapeException` when it cannot — which includes a symbolic count, as in longt5's
+    transient-global attention (`one_hot(block_ids, global_seq_len + 1)`, where the global length comes from
+    the input's block count). `arange` takes a `SymInt` happily, and broadcasting the comparison gives the
+    same matrix with a shape expressed in that symbol.
+    """
+
+    def patch(input, num_classes=-1):
+        if isinstance(num_classes, int) and num_classes < 0:
+            return original(input, num_classes)
+        return (input.unsqueeze(-1) == torch.arange(num_classes, device=input.device)).to(torch.long)
+
+    return patch

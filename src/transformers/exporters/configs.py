@@ -175,11 +175,17 @@ class ExecutorchConfig(DynamoConfig):
         alloc_mutable_buffers (`bool`, *optional*, defaults to `True`):
             Whether the memory-planning pass reserves arena memory for mutable buffers (model-resident
             state). Passed through to the `MemoryPlanningPass`.
+        partition (`bool`, *optional*, defaults to `True`):
+            Whether to hand eligible subgraphs to the backend's partitioner. When `False` the whole graph
+            lowers to the portable kernels — slower, and the way past a backend whose compiler refuses a
+            partition its own partitioner claimed (XNNPACK does this at method load, so the refusal only
+            shows up when the program is run).
     """
 
     export_format: ExportFormat = ExportFormat.EXECUTORCH
 
     backend: str = "xnnpack"
+    partition: bool = True
     alloc_graph_input: bool = True
     alloc_graph_output: bool = True
     alloc_mutable_buffers: bool = True

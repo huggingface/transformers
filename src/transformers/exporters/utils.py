@@ -42,8 +42,10 @@ import enum
 import functools
 import importlib
 import inspect
+import json
 from collections.abc import Iterable, Mapping, MutableMapping
-from typing import Any
+from dataclasses import dataclass, field
+from typing import Any, NamedTuple
 
 from .. import __version__
 from ..utils import logging
@@ -384,6 +386,123 @@ def _traced_kv_geometry(module) -> dict[int, tuple[int, int, int]]:
     return geometry
 
 
+@dataclass(frozen=True)
+class ExportMetadata:
+    """What the exporter recorded about one graph (`build_export_metadata`), parsed.
+
+    The artifact itself only says what its inputs are *called* and what shape they were traced at; this is
+    the trace's own account of what they mean, and it is what every runner accessor reads. Build it from
+    whatever the backend carries the payload as — JSON text for ONNX (a `metadata_props` entry) and
+    ExecuTorch (a constant method), the dict itself for a dynamo program, which *is* the program.
+
+    Empty for an artifact written before the metadata existed, or by another tool: every accessor then
+    answers `None`/empty and each runner falls back to what its declared tensors say, which is what all of
+    them used to do.
+    """
+
+    raw: Mapping[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_json(cls, payload: str | None) -> ExportMetadata:
+        """Parse a text payload, tolerating anything unreadable — a corrupt or foreign entry under our key
+        is not worth failing an otherwise loadable artifact over."""
+        if not payload:
+            return cls()
+        try:
+            metadata = json.loads(payload)
+        except json.JSONDecodeError:
+            logger.warning_once(f"Ignoring an unreadable `{EXPORT_METADATA_KEY}`; falling back to inference.")
+            return cls()
+        return cls.from_dict(metadata)
+
+    @classmethod
+    def from_dict(cls, metadata: Any) -> ExportMetadata:
+        return cls(metadata) if isinstance(metadata, Mapping) else cls()
+
+    def __bool__(self) -> bool:
+        return bool(self.raw)
+
+    @property
+    def schema_version(self) -> int | None:
+        """Version of the payload's own schema, so a reader can tell what to expect of it."""
+        version = self.raw.get("schema_version")
+        return version if isinstance(version, int) else None
+
+    @property
+    def architecture(self) -> str | None:
+        """What was exported. Provenance only — nothing reads it to decide behaviour."""
+        return self.raw.get("architecture")
+
+    @property
+    def input_names(self) -> tuple[str, ...]:
+        """What the graph takes, in the flat order it takes them."""
+        return tuple(self.raw.get("input_names", ()))
+
+    @property
+    def output_names(self) -> tuple[str, ...]:
+        """What the graph returns, in the flat order it returns them."""
+        return tuple(self.raw.get("output_names", ()))
+
+    @property
+    def num_user_outputs(self) -> int | None:
+        """How many of the returned leaves are the model's own, before a backend appended its mutated
+        inputs — `None` when unrecorded, which leaves the runner to ask its own handle."""
+        count = self.raw.get("num_user_outputs")
+        return count if isinstance(count, int) else None
+
+    @property
+    def shapes(self) -> dict[str, tuple[int | None, ...]]:
+        """Shape per input, `None` per symbolic axis — the shapes the *trace* saw."""
+        return {name: tuple(shape) for name, shape in self.raw.get("shapes", {}).items()}
+
+    @property
+    def dtype(self) -> torch.dtype | None:
+        """The precision the graph was exported at — not sniffed off whichever tensor is float."""
+        dtype = getattr(torch, self.raw.get("dtype") or "", None)
+        return dtype if isinstance(dtype, torch.dtype) else None
+
+    @property
+    def constant_inputs(self) -> dict[str, Any]:
+        """Declared inputs that carry no tensor, and the value each holds — a `None` mask slot the trace kept
+        (see `input_names`). A positional backend fills these rather than skipping them."""
+        constants = self.raw.get("constant_inputs")
+        return constants if isinstance(constants, dict) else {}
+
+    @property
+    def kwargs(self) -> dict[str, dict]:
+        """The kwargs the graph was traced with, under the names the model's forward uses — before each
+        backend mangled them into its own input names."""
+        kwargs = self.raw.get("kwargs")
+        return kwargs if isinstance(kwargs, dict) else {}
+
+    @property
+    def mask_ranks(self) -> dict[str, int | None] | None:
+        """`{attention type: rank}` when the graph was traced with a *dict* of masks, else `None`.
+
+        A single plain mask is recorded as one tensor rather than a mapping, and the generation layer keys on
+        the dict form only — so that case stays `None`, as does an artifact carrying no metadata.
+
+        Every entry the trace declared is kept, with rank `None` for one it held no mask in (a
+        linear-attention slot the model never built a mask for). Dropping those would feed the graph a
+        *shorter* dict than it was traced with: `None` is a pytree leaf, so the slot counts toward the input
+        spec either way."""
+        leaves = self.kwargs.get("attention_mask", {}).get("leaves")
+        return {name: leaf.get("rank") for name, leaf in leaves.items()} if leaves else None
+
+    @property
+    def kv_geometry(self) -> dict[int, tuple[int, int, int]]:
+        """`{layer index: (num_kv_heads, key_head_dim, value_head_dim)}` from the recorded cache layout.
+
+        A layer whose state is not keys-and-values (a recurrent layer's conv / SSM buffers) has no geometry
+        and is absent, which is what the caller checks."""
+        layers = (self.raw.get("cache") or {}).get("layers") or []
+        return {
+            index: (layer["heads"], layer["key_dim"], layer["value_dim"])
+            for index, layer in enumerate(layers)
+            if {"heads", "key_dim", "value_dim"} <= layer.keys()
+        }
+
+
 def build_export_metadata(
     model, inputs: Mapping[str, Any], exported_program, packages: Iterable[str] = ()
 ) -> dict[str, Any]:
@@ -427,7 +546,17 @@ def build_export_metadata(
     # own (a lowering emits its mutated-input copies first), and the cache's per-layer geometry, which no
     # artifact states — shapes alone don't say which leaf is a layer's keys.
     graph_signature = exported_program.graph_signature
-    metadata["input_names"] = [name for name in graph_signature.user_inputs if isinstance(name, str)]
+    # Every user input, in the order the program binds them, including the ones carrying no tensor: a `None`
+    # kwarg the trace kept as a slot (a mask *dict* whose `full_attention` entry was `None` — `None` is a
+    # pytree leaf, so the slot counts) is a `ConstantArgument`, which `graph_signature.user_inputs` reports as
+    # `None` rather than a name. Read the specs instead, which name every argument kind: drop one and a
+    # positional backend binds every later input a slot early.
+    user_inputs = [spec.arg for spec in graph_signature.input_specs if spec.kind.name == "USER_INPUT"]
+    metadata["input_names"] = [arg.name for arg in user_inputs]
+    # What those valueless slots hold, so a positional backend can fill them rather than skip them.
+    metadata["constant_inputs"] = {
+        arg.name: arg.value for arg in user_inputs if type(arg).__name__ == "ConstantArgument"
+    }
     metadata["output_names"] = traced_output_names(exported_program)
     metadata["num_user_outputs"] = sum(spec.kind.name == "USER_OUTPUT" for spec in graph_signature.output_specs)
     try:
@@ -953,7 +1082,7 @@ def _capture_forward(module: torch.nn.Module):
             del module.__dict__["forward"]
 
 
-def _merge_decode_calls(decode_calls: list[dict]) -> dict:
+def _merge_decode_calls(decode_calls: list[dict], streamed: str | None = None) -> dict:
     """Merge consecutive single-token decode captures into one multi-token decode input.
 
     Each `model.generate` decode step feeds a single new token, so `torch.export` (with `Dim.AUTO`)
@@ -996,6 +1125,12 @@ def _merge_decode_calls(decode_calls: list[dict]) -> dict:
     # `token_type_ids` is per-token too, and left at one step it specializes the merged graph's query axis
     # back to 1 (`Guard failed: token_type_ids.size()[1] == 1`) — defeating the whole point of the merge.
     concat_along("token_type_ids", -1)
+    # A streamed modality's window (`_STREAMING_EMBEDDERS`) is per-token as well, just at its own stride:
+    # each step carries the rows its one token spans, so concatenating the steps rebuilds the window the
+    # merged query needs. Left at one step, the graph bakes the ratio (`encoder_inputs_embeds.size()[1] //
+    # 4 == 1`) and no multi-token step can satisfy it.
+    if streamed is not None:
+        concat_along(streamed, 1)
 
     # `attention_mask` is either a 2D padding mask `[batch, kv]` (a growing `DynamicCache`: the model
     # rebuilds the causal mask from `position_ids` / `cache_position` internally, so the last step's
@@ -1284,6 +1419,8 @@ def decompose_prefill_decode(
     # Encoder-decoder decoding is single-token from an (almost) empty self-attention cache: the first
     # decode step runs at cache length 1, which 0/1 specialization would freeze into the graph — capture
     # from the SECOND decode step (cache length 2, symbolic) instead.
+    spec = streaming_embedder_spec(model.config)
+    streamed_kwarg = spec.produces if spec is not None else None
     first_decode = 2 if getattr(model.config, "is_encoder_decoder", False) else 1
     num_new_tokens = first_decode + (2 if multi_token_decode else 1)
     capture_config = copy.deepcopy(generation_config if generation_config is not None else model.generation_config)
@@ -1329,7 +1466,9 @@ def decompose_prefill_decode(
     # symbolic (continuation-from-past, or a plain prefill when the cache is empty, and it still covers seq == 1).
     prefill_inputs = calls[0]
     decode_inputs = (
-        _merge_decode_calls(calls[first_decode:num_new_tokens]) if multi_token_decode else calls[first_decode]
+        _merge_decode_calls(calls[first_decode:num_new_tokens], streamed=streamed_kwarg)
+        if multi_token_decode
+        else calls[first_decode]
     )
     # `generate` built this cache itself, so its layers carry the model's real geometry — the one thing
     # that can tell us whether the geometry the exporter derives (and materializes for the prefill capture
@@ -1369,6 +1508,16 @@ def _find_multimodal_submodules(model: PreTrainedModel) -> dict[str, torch.nn.Mo
         if encoder is not None and encoder is not model:
             found[f"{modality}_encoder"] = encoder
             has_encoder = True
+
+    # A model can compose a modality without naming one encoder for it: vibevoice_asr runs two co-equal
+    # audio encoders (acoustic + semantic) and so reports none, yet it has the `get_<modality>_features`
+    # getter the split actually exports from. Take that as the same evidence — the modality components come
+    # from the getters either way, and the encoder modules found above are not read out of this mapping
+    # (only `text_decoder` is). Without it such a model is declared single-modal and its whole audio path,
+    # data-dependent asserts and all, stays inside the text prefill graph.
+    has_encoder = has_encoder or any(
+        _modality_owner(model, getter) is not None for _name, getter, *_ in _MODALITY_SPECS
+    )
 
     decoder = model.get_decoder()
     if decoder is not None and decoder is not model:
@@ -1549,6 +1698,56 @@ if is_torch_available():
 # its input is passed.
 # The input kwarg is a tuple: a model may name the same modality differently (video_llava splits images
 # and videos, so its images arrive as `pixel_values_images`). The first name present is the one used.
+# A modality the model embeds once *before* the decode loop, handing each step a window of the result: its
+# `generate` runs the embedder in `_prepare_model_inputs` and `prepare_inputs_for_generation` then slices the
+# output by `past_seen_tokens * <stride>`, so the audio advances with the text. The decode graph therefore
+# takes the *window* rather than the raw features, and the runtime needs the embedder as a graph of its own —
+# no modality component fits, because there are no placeholder rows to scatter into (the model sums its
+# features into the prompt). `(component, submodule path under the base model, source kwarg, the kwarg it
+# produces, stride config field)`, keyed by model type.
+# Suffixes that mark a modality input as *aux* rather than the features themselves: a grid, a scatter mask,
+# a per-sample padding mask, an image-size table. Presence checks and feature routing both skip these —
+# `generate` may keep one after dropping the features it described, and routing one onto a tower's feature
+# input would feed it a mask where it wants pixels.
+_MODALITY_AUX_SUFFIXES = ("_grid_thw", "_position_mask", "_attention_mask", "_sizes", "padding_mask", "_indices")
+
+
+class StreamingEmbedderSpec(NamedTuple):
+    """How one model streams a modality alongside its text — see `_STREAMING_EMBEDDERS`."""
+
+    component: str
+    """Component name the embedder graph is exported under."""
+    path: str
+    """Submodule path to the embedder, under the base model."""
+    source: str
+    """The kwarg it consumes (the raw features)."""
+    produces: str
+    """The kwarg the decode graph takes a window of its output under."""
+    stride: str
+    """Config field: how many embedded rows one token spans."""
+    encoder_config: str
+    """Config field holding the sub-config of the encoder whose cache the decode graph takes, so the runtime
+    can build one shaped the way the trace saw it."""
+
+
+_STREAMING_EMBEDDERS = {
+    "voxtral_realtime": StreamingEmbedderSpec(
+        "audio_embedder",
+        "audio_tower.embedder",
+        "input_features",
+        "encoder_inputs_embeds",
+        "downsample_factor",
+        "audio_config",
+    ),
+}
+
+
+def streaming_embedder_spec(config) -> StreamingEmbedderSpec | None:
+    """This config's `_STREAMING_EMBEDDERS` entry, or `None` for a model that carries its modality in the
+    prompt like every other."""
+    return _STREAMING_EMBEDDERS.get(getattr(config, "model_type", None))
+
+
 _MODALITY_SPECS = (
     (
         "image_encoder",
@@ -1561,6 +1760,10 @@ _MODALITY_SPECS = (
             "pixel_values",
             "pixel_values_images",
             "flattened_patches",
+            # fuyu hands its patches straight to the getter's `pixel_values` parameter under its own name,
+            # with `image_patches_indices` alongside as the aux index tensor.
+            "image_patches",
+            "image_patches_indices",
             "image_embeds_position_mask",
             "pixel_attention_mask",
             "target_sizes",
@@ -1575,9 +1778,17 @@ _MODALITY_SPECS = (
         "video_grid_thw",
         "video_token_id",
     ),
-    # `audio_input_ids` (inkling) is the same slot as `input_features` — the tensor whose presence means
-    # this call carries audio — just named for a getter that takes discrete codes rather than a spectrogram.
-    ("audio_encoder", "get_audio_features", ("input_features", "audio_input_ids"), None, "audio_token_id"),
+    # `audio_input_ids` (inkling) and `input_values` (vibevoice_asr, a raw waveform rather than a
+    # spectrogram) are the same slot as `input_features` — the tensor whose presence means this call carries
+    # audio — just named for what their own getter takes. `padding_mask` rides along with the waveform as its
+    # per-sample mask, so it is an aux key (`_MODALITY_AUX_SUFFIXES`), never the feature itself.
+    (
+        "audio_encoder",
+        "get_audio_features",
+        ("input_features", "audio_input_ids", "input_values", "padding_mask"),
+        None,
+        "audio_token_id",
+    ),
 )
 
 
@@ -1877,6 +2088,17 @@ def decompose_for_generation(
         return stages
 
     components = decompose_multimodal(prefill_model, prefill_inputs, recorded_features, inputs.get("input_ids"))
+    # The pre-loop embedder, for a model whose modality advances with the text (`_STREAMING_EMBEDDERS`): the
+    # decode graph takes a window of its output, so without this graph nothing turns the raw features into
+    # one and the runtime is handed a feature kwarg no graph declares.
+    if (spec := streaming_embedder_spec(model.config)) is not None and inputs.get(spec.source) is not None:
+        module = model.base_model
+        for attribute in spec.path.split("."):
+            module = getattr(module, attribute, None)
+            if module is None:
+                break
+        if module is not None:
+            components[spec.component] = (module, {spec.source: inputs[spec.source]})
     # The multi-modal split rebuilds the component set from the prefill, so carry over the stages that
     # belong to the model as a whole — an encoder-decoder's `encoder` runs once outside the decode loop and
     # is captured above, and dropping it leaves the runtime with a decode graph asking for `encoder_outputs`
@@ -1910,6 +2132,22 @@ def decompose_for_generation(
     # - a *hybrid* text stack (conv / linear-attention layers, lfm2_vl, qwen3_5, minimax_m3_vl, …): a graph
     #   traced mid-generation bakes its step-regime python branches (the conv path's mask-width comparison,
     #   lightning attention's chunk boundary), which a prompt on a fresh cache cannot satisfy.
+    # - a model whose modality *streams* alongside the text (`_STREAMING_EMBEDDERS`): its merged decode
+    #   unifies the audio token count with the query length and then bakes a query-length branch, so that
+    #   one graph cannot serve the single-token steps `generate` makes. Keeping the prefill lets the runtime
+    #   pair it with a decode traced at length 1, which is what the other variants already do.
+    elif streaming_embedder_spec(model.config) is not None:
+        if (cache := prefill_inputs.get("past_key_values")) is not None:
+            batch_size = next(t for t in prefill_inputs.values() if isinstance(t, torch.Tensor)).shape[0]
+            materialize_cache_layers(
+                cache,
+                batch_size,
+                model.config,
+                module_dtype(model),
+                module_device(model),
+                kv_geometry=kv_geometry_of(stages["decode"][1].get("past_key_values")),
+            )
+        components["prefill"] = stages["prefill"]
     elif any(
         hasattr(layer, "conv_states")
         or hasattr(layer, "recurrent_states")

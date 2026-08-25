@@ -13,16 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from .auto import AutoExportConfig, AutoHfExporter, get_hf_exporter, register_export_config, register_exporter
-from .base import HfExporter
+from .base import HfExporter, ModelRunner
 from .configs import DynamoConfig, ExecutorchConfig, ExportConfigMixin, ExportFormat, OnnxConfig
 from .exporter_dynamo import DynamoExporter
 from .exporter_executorch import ExecutorchExporter
 from .exporter_onnx import OnnxExporter
-from .runtime_utils import (
-    DynamoModelRunner,
-    ExecutorchModelRunner,
-    ExportedGenerator,
-    Modality,
-    ModelRunner,
-    OnnxModelRunner,
-)
+from .runtime_dynamo import DynamoModelRunner
+from .runtime_executorch import ExecutorchModelRunner
+from .runtime_onnx import OnnxModelRunner
+from .runtime_utils import ExportedGenerator, Modality

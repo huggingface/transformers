@@ -17,6 +17,7 @@ import functools
 import inspect
 import itertools
 import re
+import warnings
 from contextlib import contextmanager
 
 import pytest
@@ -247,42 +248,28 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "`cache_input`/`forward` the `state` kwarg, or port RWKV onto a `Cache` subclass."
         ),
     },
-    # Generate path, multi-token decode capture only — the two decode steps merged by
-    # `_merge_decode_calls` into one graph whose query axis stays symbolic, so a single graph serves both
-    # the prompt and every decode step. Backend-agnostic. The single-token capture, which exports prefill
-    # and decode as separate graphs with their own fixed query lengths, still runs.
-    # Scoped to the one configuration that *checks* the invariant, which is not the same as the only one it
-    # is violated in — see the entry.
-    "dynamo.generate.runtime.dynamic": {
-        "VibeVoiceAsrForConditionalGeneration": (
-            "Keeps two co-equal audio encoders (`acoustic_tokenizer_encoder`, `semantic_tokenizer_encoder`) "
-            'and so has no single `get_encoder(modality="audio")` to report; without that the model is not '
-            "detected as multi-modal and never splits, leaving the audio path — and its data-dependent "
-            "relation between the placeholder-token count and the waveform length — inside the text prefill "
-            "graph, whose deferred assert then fires on the runtime's own feed (`Runtime assertion failed "
-            "for expression Eq(u0, (s2//2))`). Splitting it needs the model to name an audio encoder, not "
-            "the exporter to guess one.\n"
-            "Measured with this entry lifted: 16 of 18 generate variants drive fine, the two dynamic dynamo "
-            "ones fail. Do not read that as the other backends serving this model — dynamo is the only one "
-            "that still *has* the assert to fail. ONNX erases assertion nodes (`_fix_assertion`) and "
-            "ExecuTorch drops them before lowering (`_drop_runtime_asserts`), both by design, and a static "
-            "trace folds the comparison at fixed sizes; none of those check the relation, so their passing "
-            "says nothing about whether it holds. Narrow the scope only because that is where the failure is "
-            "observable, and revisit the other backends' silence if the audio path is ever split properly."
+    # The runtime drives these, but not from a *merged* decode — every other variant is served.
+    "dynamo.generate.runtime.multi_token": {
+        "VoxtralRealtimeForConditionalGeneration": (
+            "Streams its audio alongside the text — `generate` embeds `input_features` once outside the loop "
+            "and hands each step the window its own tokens span — so the runtime drives it through the "
+            "embedder component and a `past_seen * downsample_factor` slice (`_STREAMING_EMBEDDERS`). That "
+            "works for every variant but the merged decode, which folds `downsample_factor` audio rows into "
+            "the feature axis: reshaping a symbolic-length axis into `(n, k)` makes torch decide view-vs-copy "
+            "on whether `n` is 1, so the trace bakes `Ne(frames//4, 1)` and the single-token steps `generate` "
+            "makes violate it (`Guard failed: encoder_inputs_embeds.size()[1] // 4 != 1`). The graph exports "
+            "fine; only the drive trips.\n"
+            "Dynamo only, and not because the other backends serve it better: the guard is a torch-level "
+            "shape assertion that lives in the `ExportedProgram`, and ONNX's lowered graph reshapes from the "
+            "runtime shape instead — measured, its merged decode drives and matches ids. Two fixes were tried "
+            "and measured not to help: making the `inputs_embeds += audio_embeds` broadcast explicit, and "
+            "spelling the reshape's sizes out instead of `-1` (the branch is in "
+            "`_reshape_view_helper_core_alg`, not in how the size is written). The non-merged variants do "
+            "drive, because the split keeps a `prefill` graph whose decode is traced at length 1."
         ),
     },
     # The runtime drives these, but not from a *merged* decode — every other variant is served.
-    "generate.runtime.multi_token": {
-        "PerceptionLMForConditionalGeneration": (
-            "Routes videos through a *second* `get_image_features` call (`pixel_values=pixel_values_videos`), "
-            "and the decomposition models one modality per getter — so the video kwarg reaches no graph and "
-            "`generate` refuses it (`The following model_kwargs are not used by the model: "
-            "['pixel_values_videos']`). Only the merged decode is affected: a multi-modal model exports no "
-            "standalone prefill, so that one graph serves the prompt and is where the video kwarg would land. "
-            "Measured with this entry lifted: 14 of 18 generate variants drive fine, the 4 merged-decode ones "
-            "fail. TODO: let a modality spec share another's runner."
-        ),
-    },
+    "generate.runtime.multi_token": {},
     "generate.multi_token": {
         "ZayaForCausalLM": (
             "Its merged decode graph specializes the query axis instead of keeping it symbolic, which is the "
@@ -457,6 +444,27 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
     },
     "executorch.generate": {},
     "executorch.dynamic": {
+        # Timeouts, not lowering defects: windowed-attention vision stacks re-partition every window on a
+        # symbolic H/W, and the lowering alone outruns the test budget. Measured in the ExecuTorch sweep of
+        # 2026-08-25 (maskformer at the 1000s mark); the rest of the Swin family, `efficientnet` and
+        # `hrm_text` timed out in the sweep before it and share the shape. Skipped rather than re-measured —
+        # a run that only ever ends in a timeout costs the whole budget to tell us nothing.
+        "MaskFormerSwinModel": "Lowering exceeds the test timeout under dynamic shapes.",
+        "MaskFormerSwinBackbone": "Same `timeout` failure as `MaskFormerSwinModel`.",
+        "SwinModel": "Same `timeout` failure as `MaskFormerSwinModel`.",
+        "SwinBackbone": "Same `timeout` failure as `MaskFormerSwinModel`.",
+        "SwinForImageClassification": "Same `timeout` failure as `MaskFormerSwinModel`.",
+        "SwinForMaskedImageModeling": "Same `timeout` failure as `MaskFormerSwinModel`.",
+        "Swinv2Model": "Same `timeout` failure as `MaskFormerSwinModel`.",
+        "Swinv2Backbone": "Same `timeout` failure as `MaskFormerSwinModel`.",
+        "Swinv2ForImageClassification": "Same `timeout` failure as `MaskFormerSwinModel`.",
+        "Swinv2ForMaskedImageModeling": "Same `timeout` failure as `MaskFormerSwinModel`.",
+        "DonutSwinModel": "Same `timeout` failure as `MaskFormerSwinModel`.",
+        "DonutSwinForImageClassification": "Same `timeout` failure as `MaskFormerSwinModel`.",
+        "EfficientNetModel": "Same `timeout` failure as `MaskFormerSwinModel`.",
+        "EfficientNetForImageClassification": "Same `timeout` failure as `MaskFormerSwinModel`.",
+        "HrmTextModel": "Same `timeout` failure as `MaskFormerSwinModel`.",
+        "HrmTextForCausalLM": "Same `timeout` failure as `MaskFormerSwinModel`.",
         "Mask2FormerModel": ("Lowering exceeds the 10-minute test timeout under dynamic shapes."),
         "Mask2FormerForUniversalSegmentation": "Same `timeout` failure as `Mask2FormerModel`.",
         "BigBirdModel": "Same `timeout` failure as `Mask2FormerModel`.",
@@ -519,6 +527,38 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
 # ──────────────────────────── ONNX optimization toggles ────────────────────────────
 # Not "skips" — these select whether `onnxscript` optimisation runs for a given model.
 # Same scope-keyed shape as ``EXPORT_SKIPS`` for symmetry.
+
+
+# Model classes whose ExecuTorch export must skip the backend partitioner
+# (`ExecutorchConfig(partition=False)`), keyed by scope like `EXPORT_SKIPS`. XNNPACK's partitioner can claim
+# subgraphs its own compiler then refuses at *method load*, which reads as an unrelated `0x21`/`0x14` when
+# the program is run. An entry here says "this graph lowers, but only to the portable kernels" — the model
+# is still exported and still run, just without delegation, so it keeps real coverage instead of a
+# tolerated load failure.
+#
+# A candidate belongs here only once lowering it undelegated is shown to *run*. The test passing is not
+# enough on its own: a tolerated load failure passes too, so check that the class's
+# `ExecuTorch runtime limitation tolerated` warning is gone as well. An XNNPACK refusal alone proves
+# nothing — the ModernVBert family's vision encoder and sam3_lite_text fail to load with `0x21` whether
+# delegated or not (that code is an arena the plan cannot allocate, not a refusal), and sam3_lite_text goes
+# on to fail at execute with `0x12` once undelegated.
+EXECUTORCH_DISABLE_PARTITION: dict[str, dict[str, str]] = {
+    # Static shapes only — the dynamic variants lower and run delegated.
+    "static": {
+        "Qwen3_5Model": (
+            "XNNPACK's own compiler rejects the partition its partitioner claimed — "
+            "`XNNCompiler::compileModel failed: 0x1` at method load, on the GatedDeltaNet layers' "
+            "conv-state tensors. The portable kernels serve the same graph."
+        ),
+        "Qwen3_5ForConditionalGeneration": "Same GatedDeltaNet backbone as `Qwen3_5Model`.",
+        "Qwen3_5ForSequenceClassification": "Same GatedDeltaNet backbone as `Qwen3_5Model`.",
+        "Qwen3_5ForTokenClassification": "Same GatedDeltaNet backbone as `Qwen3_5Model`.",
+        # The text-only tester drives its own classes, which carry the same layers.
+        "Qwen3_5TextModel": "Same GatedDeltaNet backbone as `Qwen3_5Model`.",
+        "Qwen3_5ForCausalLM": "Same GatedDeltaNet backbone as `Qwen3_5Model`.",
+        "Qwen3_5TextForSequenceClassification": "Same GatedDeltaNet backbone as `Qwen3_5Model`.",
+    },
+}
 
 
 ONNX_DISABLE_OPTIMIZE: dict[str, dict[str, str]] = {
@@ -694,41 +734,51 @@ def _runner_for(backend, artifact):
 
 
 @contextmanager
-def _tolerating_executorch_limits():
-    """Swallow the failures that mean "ExecuTorch cannot service this program", skipping the checks inside.
+def _tolerating_executorch_limits(label: str):
+    """Swallow only the failures where ExecuTorch itself refuses to run an otherwise valid program — a named
+    code from the *load* or *execute* phase, or a `bad_alloc` (`_is_executorch_runtime_limit`). A transformers
+    export defect surfaces earlier as a `torch.export` error, or later as an output mismatch.
 
-    Two kinds, neither a transformers export defect:
-    - the export is valid but ExecuTorch's own runtime can't run it — a missing portable kernel (``0x14``),
-      an oversized arena (``0x21`` / ``bad_alloc``), or a portable-kernel / XNNPACK-delegate failure at
-      execute (``0x12`` / ``0x1``);
-    - the graph declares an input these eager kwargs don't carry, so there is nothing faithful to feed it.
-
-    A `set_inputs` failure is *our* side of the contract everywhere else — the runner handing the method
-    something it never declared — and stays visible in the generation drive; here it only means this
-    component's kwargs don't reconstruct its feed, which is the same skip.
+    Anything about how *we* fed the method stays visible: `set_inputs` fails when we hand it something it
+    never declared, and a missing input means the decomposition produced a component we cannot feed. A model
+    that genuinely needs an exception belongs in `EXPORT_SKIPS`, argued, where it can be seen.
     """
     try:
         yield
-    except KeyError:
-        pass
     except (RuntimeError, MemoryError) as error:
-        if not (_is_executorch_runtime_limit(error) or "set_inputs" in str(error)):
+        if not _is_executorch_runtime_limit(error):
             raise
+        # A tolerated failure still reports the test as passed, so say so — otherwise a green run is
+        # indistinguishable from one where the program actually ran.
+        warnings.warn(
+            f"{label}: ExecuTorch runtime limitation tolerated; this test passes without running the "
+            f"program — add it to `EXECUTORCH_DISABLE_PARTITION` if lowering it undelegated runs instead: "
+            f"{str(error).strip().splitlines()[0]}",
+            stacklevel=2,
+        )
 
 
 # ExecuTorch runtime error codes that mean "the export is valid (it produced a loadable program) but
 # ExecuTorch's own portable runtime / XNNPACK backend can't service it" — a runtime limitation, not a
 # transformers export defect (which surfaces earlier as a `torch.export` error or later as an output
-# mismatch). Load: 0x14 missing portable kernel, 0x21 arena can't be allocated, 0x1 XNNPACK partition
-# won't compile (`xnn_status_unsupported_parameter`). Execute: 0x12 portable-kernel InvalidArgument
-# (constant_pad_nd/convolution/upsample_aa out-tensor sizing), 0x1 XNNPACK delegate failure, 0x10
-# XNNPACK delegate can't resize a static tensor to the runtime shape. Only failures from `execute()`
-# itself count: the same codes also come out of `set_inputs()`, but binding the runtime inputs is *our*
-# side of the contract — it fails when we hand the method something it never declared (feeding an fp32
-# cache to a half-precision program did exactly that, and reading it as a backend limitation hid the bug
-# across every MoE model), so those have to stay visible.
-_ET_LOAD_LIMIT_CODES = {"0x1", "0x14", "0x21"}
-_ET_EXECUTE_LIMIT_CODES = {"0x1", "0x10", "0x12"}
+# mismatch). Each is a code whose own definition (`runtime/core/error.h`) attributes it to the runtime:
+# load 0x14 `OperatorMissing` (the registry has no kernel for an op the program needs) and 0x21
+# `MemoryAllocationFailed` (the arena cannot be allocated); execute 0x10 `NotSupported` (the backend
+# declines the operation in this context — XNNPACK cannot resize a static tensor to the runtime shape).
+# 0x1 `Internal` is generic ("an internal error occurred"), so it counts at *execute* only: by then
+# `set_inputs` has accepted the feed, and XNNExecutor reports a delegate refusal this way — the exception
+# carries only the code (the `xnn_status_*` detail goes to ExecuTorch's own log), so the phase is the whole
+# signal. At *load* the same code is as easily a malformed program of ours, so it does not count there.
+# 0x12 `InvalidArgument` never counts. It shows up as a kernel refusing to resize its own output ("Attempted
+# to resize a static tensor. Expected shape (2, 2, 32), but received (2, 1, 32)" from `tensor_impl.cpp`, via
+# `aten::embedding.out`), which happens when a dynamic axis reaches lowering without the bound that would let
+# the planner size it for the largest shape. That is a fixable defect on our side of the export, not a
+# platform ceiling, so it stays visible. Only failures from `execute()` itself count: the same codes also come out of
+# `set_inputs()`, but binding the runtime inputs is *our* side of the contract — it fails when we hand the
+# method something it never declared (feeding an fp32 cache to a half-precision program did exactly that,
+# and reading it as a backend limitation hid the bug across every MoE model), so those have to stay visible.
+_ET_LOAD_LIMIT_CODES = {"0x14", "0x21"}
+_ET_EXECUTE_LIMIT_CODES = {"0x1", "0x10"}
 
 
 def _is_executorch_runtime_limit(exc):
@@ -752,6 +802,17 @@ def _onnx_optimize_enabled(model_class, dynamic: bool) -> bool:
     name = model_class.__name__
     scopes = ["all"] + (["dynamic"] if dynamic else [])
     return not any(name in ONNX_DISABLE_OPTIMIZE.get(scope, {}) for scope in scopes)
+
+
+def _executorch_partition_enabled(model_class, dynamic: bool) -> bool:
+    """Return whether the ExecuTorch export may hand subgraphs to the backend's partitioner.
+
+    Mirrors ``_onnx_optimize_enabled``'s scope walk on ``EXECUTORCH_DISABLE_PARTITION`` — ``"all"``
+    always applies; ``"dynamic"`` / ``"static"`` add the entries for that shape variant.
+    """
+    name = model_class.__name__
+    scopes = ["all", "dynamic" if dynamic else "static"]
+    return not any(name in EXECUTORCH_DISABLE_PARTITION.get(scope, {}) for scope in scopes)
 
 
 def needs_half_precision_export(model) -> bool:
@@ -845,7 +906,18 @@ class ExportTesterMixin:
         scopes.append("dynamic" if dynamic else "static")
         if backend:
             scopes += [backend] + [f"{backend}.{scope}" for scope in scopes if scope != "all"]
-        return any(name in EXPORT_SKIPS.get(scope, {}) for scope in scopes)
+        matched = next(
+            ((scope, EXPORT_SKIPS[scope][name]) for scope in scopes if name in EXPORT_SKIPS.get(scope, {})), None
+        )
+        if matched is None:
+            return False
+        # A gated entry reports as passed rather than skipped (the test returns early), so name it and its
+        # argued reason in the run's warning summary.
+        warnings.warn(
+            f"{name} is gated by EXPORT_SKIPS[{matched[0]!r}]; this test passes without exporting: {matched[1]}",
+            stacklevel=2,
+        )
+        return True
 
     def _prepare_export_model_and_inputs(self, model_class, backend, device=torch_device):
         """Create model and forward inputs ready for export.
@@ -914,7 +986,7 @@ class ExportTesterMixin:
         no standalone prefill graph; their multi-token `decode` serves both, exercising the single-graph
         path (dynamic shapes only)."""
         from transformers.exporters import ExportedGenerator
-        from transformers.exporters.utils import _MODALITY_SPECS
+        from transformers.exporters.utils import _MODALITY_SPECS, _STREAMING_EMBEDDERS
 
         model = components["decode"][0]
         if not dynamic and "embed_tokens" in components:
@@ -924,7 +996,14 @@ class ExportTesterMixin:
             # exports themselves are still asserted above; driving them needs a length-generic embedder.
             return
 
-        wanted = {"decode", "prefill", "encoder", "embed_tokens", *(spec[0] for spec in _MODALITY_SPECS)}
+        wanted = {
+            "decode",
+            "prefill",
+            "encoder",
+            "embed_tokens",
+            *(spec[0] for spec in _MODALITY_SPECS),
+            *(spec[0] for spec in _STREAMING_EMBEDDERS.values()),
+        }
         runners = {name: _runner_for(backend, exported[name]) for name in components if name in wanted}
         runtime = ExportedGenerator.from_runners(runners, model.config, model.generation_config)
         device = runtime.device
@@ -1134,11 +1213,13 @@ class ExportTesterMixin:
 
         self._skip_if_not_exportable()
         exporter = ExecutorchExporter()
-        config = ExecutorchConfig(dynamic=dynamic)
 
         for model_class in self.all_model_classes:
             if self._should_skip(model_class, dynamic=dynamic, backend="executorch"):
                 continue
+
+            # Per class: a graph whose delegate refuses its own partitioner's claim lowers undelegated.
+            config = ExecutorchConfig(dynamic=dynamic, partition=_executorch_partition_enabled(model_class, dynamic))
 
             # Trace on CPU: XNNPACK targets CPU, and CPU tracing yields device-consistent graphs.
             # Tracing on CUDA surfaces per-model device bugs — models create in-`forward` tensors
@@ -1151,8 +1232,11 @@ class ExportTesterMixin:
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
                     program = exporter.export(model, inputs, config=config)
-                    with _tolerating_executorch_limits():
-                        outputs = _runner_for("executorch", program)(**inputs)
+                    # Building the runner stays *inside* the tolerance: loading the method is where
+                    # ExecuTorch reports a missing kernel or an oversized arena.
+                    with _tolerating_executorch_limits(f"{model_class.__name__}/{name}"):
+                        runner = _runner_for("executorch", program)
+                        outputs = runner(**inputs)
                         tensors = [t for t in outputs.values() if isinstance(t, torch.Tensor)]
                         self.assertEqual(len(tensors), len(eager_outputs[name]))
 
@@ -1361,7 +1445,6 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
 
         self._skip_if_not_exportable()
         exporter = ExecutorchExporter()
-        config = ExecutorchConfig(dynamic=dynamic)
 
         for model_class in self.all_generative_model_classes:
             if self._should_skip(
@@ -1373,6 +1456,9 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                 generation_config=generation_config,
             ):
                 continue
+
+            # Per class: a graph whose delegate refuses its own partitioner's claim lowers undelegated.
+            config = ExecutorchConfig(dynamic=dynamic, partition=_executorch_partition_enabled(model_class, dynamic))
 
             components = self._prepare_export_generate_model_and_inputs(
                 model_class,
@@ -1387,8 +1473,11 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
                     program = exporter.export(model, inputs, config=config)
-                    with _tolerating_executorch_limits():
-                        outputs = _runner_for("executorch", program)(**inputs)
+                    # Building the runner stays *inside* the tolerance: loading the method is where
+                    # ExecuTorch reports a missing kernel or an oversized arena.
+                    with _tolerating_executorch_limits(f"{model_class.__name__}/{name}"):
+                        runner = _runner_for("executorch", program)
+                        outputs = runner(**inputs)
                         tensors = [t for t in outputs.values() if isinstance(t, torch.Tensor)]
                         self.assertEqual(len(tensors), len(eager_outputs[name]))
                         # Only a component that ran is handed to the generate drive below.
