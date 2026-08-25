@@ -49,7 +49,6 @@ from ...vision_utils import get_vision_position_ids
 from .configuration_step3p7 import Step3p7Config, Step3p7TextConfig, Step3p7VisionConfig
 
 
-# Adapted from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl.Qwen2_5_VLVisionRotaryEmbedding
 class Step3p7VisionRotaryEmbedding(nn.Module):
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Step3p7VisionConfig, device=None):
@@ -106,6 +105,7 @@ class Step3p7VisionRotaryEmbedding(nn.Module):
         sin = self.recomposition_to_2d(sin)
         return cos.to(x.dtype), sin.to(x.dtype)
 
+    # Ignore copy
     def recomposition_to_2d(self, freq):
         freq = freq.flatten(-2)
         return torch.cat((freq, freq), dim=-1)

@@ -24,6 +24,7 @@ from ...modeling_outputs import BaseModelOutput
 from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
+from ...vision_utils import get_vision_position_ids
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
@@ -34,37 +35,26 @@ from .configuration_pixtral import PixtralVisionConfig
 logger = logging.get_logger(__name__)
 
 
-def position_ids_in_meshgrid(patch_embeds_list, max_width):
-    positions = []
-    for patch in patch_embeds_list:
-        height, width = patch.shape[-2:]
-        mesh = torch.meshgrid(torch.arange(height), torch.arange(width), indexing="ij")
-        h_grid, v_grid = torch.stack(mesh, dim=-1).reshape(-1, 2).chunk(2, -1)
-        ids = torch.stack([h_grid, v_grid], dim=-1)
-        positions.append(ids)
-    return torch.cat(positions)
-
-
-# Adapted from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl.Qwen2_5_VLVisionRotaryEmbedding
+# Copied from transformers.models.gemma4.modeling_gemma4.Gemma4VisionRotaryEmbedding with Gemma4->Pixtral
 class PixtralVisionRotaryEmbedding(nn.Module):
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: PixtralVisionConfig, device=None):
         super().__init__()
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+
         self.config = config
 
         self.rope_type = self.config.rope_parameters["rope_type"]
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
-            raise ValueError(
-                f"{self.__class__.__name__} does not support non-default RoPE, but got `rope_type={self.rope_type}`"
-            )
-
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
-        self.max_patches_per_side = config.image_size // config.patch_size
 
+    # Ignore copy
     @staticmethod
     @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(config, device=None, **kwargs) -> tuple[torch.Tensor, float]:
@@ -82,7 +72,6 @@ class PixtralVisionRotaryEmbedding(nn.Module):
 
         attention_factor = 1.0  # Unused in this type of RoPE
 
-        # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         inv_freq_2d = torch.cat([inv_freq[0::2], inv_freq[1::2]])
 
@@ -91,20 +80,20 @@ class PixtralVisionRotaryEmbedding(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        # Pixtral uses axial 2D rope with interleaved HW grids
         inv_freq_expanded = self.inv_freq[None, ...].float()
-        position_ids_expanded = position_ids.permute(0, 2, 1).float()  # shape (positions, 2, 1)
+        position_ids = position_ids[..., None].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = position_ids_expanded @ inv_freq_expanded
+        with maybe_autocast(device_type=device_type, enabled=False):
+            freqs = position_ids @ inv_freq_expanded
             cos = freqs.cos() * self.attention_scaling
             sin = freqs.sin() * self.attention_scaling
 
         cos = self.recomposition_to_2d(cos)
         sin = self.recomposition_to_2d(sin)
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+        return cos.to(x.dtype), sin.to(x.dtype)
 
+    # Ignore copy
     def recomposition_to_2d(self, freq):
         # block-concat grids as H-W-H-W
         freq_h, freq_w = (m[:, i % 2] for i, m in enumerate(freq.chunk(2, dim=-1)))
@@ -438,12 +427,9 @@ class PixtralVisionModel(PixtralPreTrainedModel):
         patch_embeds = torch.cat([p.flatten(1).T for p in patch_embeds_list], dim=0).unsqueeze(0)
         patch_embeds = self.ln_pre(patch_embeds)
 
-        # positional embeddings
-        position_ids = position_ids_in_meshgrid(
-            patch_embeds_list, max_width=self.config.image_size // self.config.patch_size
-        ).to(patch_embeds.device, non_blocking=True)
+        grid_thw = torch.tensor([[1, *patch.shape[-2:]] for patch in patch_embeds_list], device=patch_embeds.device)
+        position_ids = get_vision_position_ids(grid_thw, spatial_merge_size=1, kwargs=kwargs)
         kwargs["position_ids"] = position_ids
-
         position_embeddings = self.patch_positional_embedding(patch_embeds, position_ids)
 
         if is_flash_attention_requested(self.config):

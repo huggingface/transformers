@@ -406,7 +406,7 @@ class Sam3Attention(nn.Module):
         return attn_output, attn_weights
 
 
-# Adapted from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl.Qwen2_5_VLVisionRotaryEmbedding
+# Copied from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl.Qwen2_5_VLVisionRotaryEmbedding with Qwen2_5_VLVision->Sam3ViT
 class Sam3ViTRotaryEmbedding(nn.Module):
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Sam3ViTConfig, device=None):
@@ -448,6 +448,7 @@ class Sam3ViTRotaryEmbedding(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
+        # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):
             freqs = position_ids[..., None].float() * self.inv_freq
@@ -458,6 +459,7 @@ class Sam3ViTRotaryEmbedding(nn.Module):
         sin = self.recomposition_to_2d(sin)
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
+    # Ignore copy
     def recomposition_to_2d(self, freq):
         # take each grid's (N, D), the full frequency range
         freq_h, freq_w = freq[:, 0], freq[:, 1]
