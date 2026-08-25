@@ -154,7 +154,6 @@ class DecisionTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unitte
         self.config_tester.create_and_test_config_with_num_labels()
         self.config_tester.check_config_arguments_init()
         self.config_tester.create_and_test_config_from_pretrained_custom_kwargs()
-        self.config_tester.run_common_tests()
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

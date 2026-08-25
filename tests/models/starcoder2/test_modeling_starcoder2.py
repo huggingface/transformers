@@ -45,6 +45,11 @@ class Starcoder2ModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = Starcoder2Model
 
+
+@require_torch
+class Starcoder2ModelTest(CausalLMModelTest, unittest.TestCase):
+    model_tester_class = Starcoder2ModelTester
+
     def test_config(self):
         # Config can't be init without params, raises warning on incoherent defaults
         self.config_tester.create_and_test_config_common_properties()
@@ -56,11 +61,6 @@ class Starcoder2ModelTester(CausalLMModelTester):
         self.config_tester.create_and_test_config_with_num_labels()
         self.config_tester.check_config_arguments_init()
         self.config_tester.create_and_test_config_from_pretrained_custom_kwargs()
-
-
-@require_torch
-class Starcoder2ModelTest(CausalLMModelTest, unittest.TestCase):
-    model_tester_class = Starcoder2ModelTester
 
     @unittest.skip("Float8 quantization + TP numerical noise exceeds match threshold")
     def test_tp_generation_quantized(self):

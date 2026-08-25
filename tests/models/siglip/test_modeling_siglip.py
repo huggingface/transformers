@@ -351,7 +351,6 @@ class SiglipTextModelTest(SiglipModelTesterMixin, unittest.TestCase):
         self.model_tester = SiglipTextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=SiglipTextConfig, hidden_size=32)
 
-    # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.test_config
     def test_config(self):
         # Config can't be init without params, raises warning on incoherent defaults
         self.config_tester.create_and_test_config_common_properties()
