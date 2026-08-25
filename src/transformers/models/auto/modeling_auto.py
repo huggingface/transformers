@@ -628,7 +628,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("llava_onevision", "LlavaOnevisionForConditionalGeneration"),
         ("longformer", "LongformerForMaskedLM"),
         ("luke", "LukeForMaskedLM"),
-        ("lumma", "LummaForCausalLM")
+        ("lumma", "LummaForCausalLM"),
         ("lxmert", "LxmertForPreTraining"),
         ("mamba", "MambaForCausalLM"),
         ("mamba2", "Mamba2ForCausalLM"),

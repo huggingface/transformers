@@ -403,17 +403,20 @@ class LummaModel(LummaPreTrainedModel):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
+        # CODEPATH: FrontiersMind/Lumma-0.6B-Base uses factorized_embedding=True
         self.embed_tokens = nn.Embedding(
             config.vocab_size,
             config.embedding_rank if config.factorized_embedding else config.hidden_size,
             self.padding_idx,
         )
+        # CODEPATH: FrontiersMind/Lumma-0.6B-Base uses factorized_embedding=True
         self.embedding_proj = (
             nn.Linear(config.embedding_rank, config.hidden_size, bias=False) if config.factorized_embedding else None
         )
         self.layers = nn.ModuleList(
             [
                 LummaDecoderLayer(config, layer_idx)
+                # CODEPATH: FrontiersMind/Lumma-0.6B-Base uses layer_sharing=False (default), so repeats=1 and num_hidden_layers unique layers are used
                 for layer_idx in range(
                     config.num_hidden_layers // (config.layer_sharing_repeats if config.layer_sharing else 1)
                 )
@@ -446,7 +449,7 @@ class LummaModel(LummaPreTrainedModel):
 
         if self.embedding_proj is not None:
             inputs_embeds = self.embedding_proj(inputs_embeds)
-
+        # CODEPATH: FrontiersMind/Lumma-0.6B-Base uses layer_sharing=False (default), so the forward loop runs each layer once.
         repeats = self.config.layer_sharing_repeats if self.config.layer_sharing else 1
         actual_layers = len(self.layers)
 
@@ -509,11 +512,13 @@ class LummaForCausalLM(LummaPreTrainedModel, GenerationMixin):
         super().__init__(config)
         self.model = LummaModel(config)
         self.vocab_size = config.vocab_size
+        # CODEPATH: FrontiersMind/Lumma-0.6B-Base uses factorized_embedding=True
         self.lm_head = nn.Linear(
             config.embedding_rank if config.factorized_embedding else config.hidden_size,
             config.vocab_size,
             bias=False,
         )
+        # CODEPATH: FrontiersMind/Lumma-0.6B-Base uses factorized_embedding=True
         self.lm_head_proj = (
             nn.Linear(config.hidden_size, config.embedding_rank, bias=False) if config.factorized_embedding else None
         )

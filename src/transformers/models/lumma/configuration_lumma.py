@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -66,7 +65,6 @@ class LummaConfig(PreTrainedConfig):
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
@@ -98,7 +96,7 @@ class LummaConfig(PreTrainedConfig):
     attention_bias: bool = False
     attention_dropout: float = 0.0
     mlp_bias: bool = False
-    head_dim: int | None = 90
+    head_dim: int | None = None
 
     # Lumma-specific parameters
     factorized_embedding: bool = True
@@ -115,7 +113,8 @@ class LummaConfig(PreTrainedConfig):
             self.rope_parameters = {"rope_theta": 1_000_000.0}
         if not self.layer_sharing:
             self.layer_sharing_repeats = 1
-        self.layer_sharing_repeats = int(self.layer_sharing_repeats or 1)
+        else:
+            self.layer_sharing_repeats = int(self.layer_sharing_repeats)
         if self.head_dim is None:
             self.head_dim = self.hidden_size // self.num_attention_heads
         if self.num_key_value_heads is None:

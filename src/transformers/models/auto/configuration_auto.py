@@ -414,6 +414,9 @@ class AutoConfig:
                     "Detected mistral model with layer_types, treating as ministral for alternating attention compatibility. "
                 )
                 config_dict["model_type"] = "ministral"
+            # FrontiersMind/Lumma-0.6B-Base ships model_type="Lumma"; native integration uses "lumma".
+            if config_dict["model_type"] == "Lumma":
+                config_dict["model_type"] = "lumma"
 
             try:
                 config_class = CONFIG_MAPPING[config_dict["model_type"]]

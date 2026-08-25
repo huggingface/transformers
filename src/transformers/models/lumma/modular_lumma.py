@@ -20,6 +20,7 @@ from huggingface_hub.dataclasses import strict
 
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -81,7 +82,6 @@ class LummaConfig(LlamaConfig):
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
@@ -94,7 +94,7 @@ class LummaConfig(LlamaConfig):
     num_hidden_layers: int = 30
     num_attention_heads: int = 16
     num_key_value_heads: int | None = 8
-    head_dim: int | None = 90
+    head_dim: int | None = None
     hidden_act: str = "silu"
     max_position_embeddings: int = 12288
     initializer_range: float = 0.02
@@ -125,7 +125,12 @@ class LummaConfig(LlamaConfig):
             self.rope_parameters = {"rope_theta": 1_000_000.0}
         if not self.layer_sharing:
             self.layer_sharing_repeats = 1
-        self.layer_sharing_repeats = int(self.layer_sharing_repeats or 1)
+        else:
+            self.layer_sharing_repeats = int(self.layer_sharing_repeats)
+        if self.head_dim is None:
+            self.head_dim = self.hidden_size // self.num_attention_heads
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
 
         super().__post_init__(**kwargs)
 
@@ -278,9 +283,9 @@ class LummaAttention(LlamaAttention):
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 
-class LummaDecoderLayer(LlamaDecoderLayer):
+class LummaDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: LummaConfig, layer_idx: int):
-        super().__init__(config, layer_idx)
+        super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = LummaAttention(config=config, layer_idx=layer_idx)
         self.mlp = LummaMLP(config)
@@ -341,11 +346,13 @@ class LummaModel(LummaPreTrainedModel):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
+        # CODEPATH: FrontiersMind/Lumma-0.6B-Base uses factorized_embedding=True
         self.embed_tokens = nn.Embedding(
             config.vocab_size,
             config.embedding_rank if config.factorized_embedding else config.hidden_size,
             self.padding_idx,
         )
+        # CODEPATH: FrontiersMind/Lumma-0.6B-Base uses factorized_embedding=True
         self.embedding_proj = (
             nn.Linear(config.embedding_rank, config.hidden_size, bias=False)
             if config.factorized_embedding
@@ -354,9 +361,9 @@ class LummaModel(LummaPreTrainedModel):
         self.layers = nn.ModuleList(
             [
                 LummaDecoderLayer(config, layer_idx)
+                # CODEPATH: FrontiersMind/Lumma-0.6B-Base uses layer_sharing=False (default), so repeats=1 and num_hidden_layers unique layers are used
                 for layer_idx in range(
-                    config.num_hidden_layers
-                    // (config.layer_sharing_repeats if config.layer_sharing else 1)
+                    config.num_hidden_layers // (config.layer_sharing_repeats if config.layer_sharing else 1)
                 )
             ]
         )
@@ -386,7 +393,7 @@ class LummaModel(LummaPreTrainedModel):
 
         if self.embedding_proj is not None:
             inputs_embeds = self.embedding_proj(inputs_embeds)
-
+        # CODEPATH: FrontiersMind/Lumma-0.6B-Base uses layer_sharing=False (default), so the forward loop runs each layer once.
         repeats = self.config.layer_sharing_repeats if self.config.layer_sharing else 1
         actual_layers = len(self.layers)
 
@@ -452,9 +459,11 @@ class LummaForCausalLM(LlamaForCausalLM):
         super().__init__(config)
         self.model = LummaModel(config)
         self.vocab_size = config.vocab_size
+        # CODEPATH: FrontiersMind/Lumma-0.6B-Base uses factorized_embedding=True
         self.lm_head_proj = (
             nn.Linear(config.hidden_size, config.embedding_rank, bias=False) if config.factorized_embedding else None
         )
+        # CODEPATH: FrontiersMind/Lumma-0.6B-Base uses factorized_embedding=True
         self.lm_head = nn.Linear(
             config.embedding_rank if config.factorized_embedding else config.hidden_size,
             config.vocab_size,
