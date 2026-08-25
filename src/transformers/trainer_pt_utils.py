@@ -41,7 +41,6 @@ from torch.utils.data import Dataset, IterableDataset, RandomSampler, Sampler
 from torch.utils.data.distributed import DistributedSampler
 
 from .integrations.deepspeed import is_deepspeed_zero3_enabled
-from .tokenization_utils_base import BatchEncoding
 from .utils import (
     is_sagemaker_mp_enabled,
     is_torch_available,
@@ -448,7 +447,7 @@ class LabelSmoother:
     epsilon: float = 0.1
     ignore_index: int = -100
 
-    def __call__(self, model_output, labels, shift_labels=False):
+    def __call__(self, model_output, labels, shift_labels=False, num_items_in_batch=None):
         logits = model_output["logits"] if isinstance(model_output, dict) else model_output[0]
         if shift_labels:
             logits = logits[..., :-1, :].contiguous()
@@ -469,10 +468,17 @@ class LabelSmoother:
         nll_loss.masked_fill_(padding_mask, 0.0)
         smoothed_loss.masked_fill_(padding_mask, 0.0)
 
-        # Take the mean over the label dimensions, then divide by the number of active elements (i.e. not-padded):
-        num_active_elements = padding_mask.numel() - padding_mask.long().sum()
-        nll_loss = nll_loss.sum() / num_active_elements
-        smoothed_loss = smoothed_loss.sum() / (num_active_elements * log_probs.shape[-1])
+        # The Trainer passes num_items_in_batch when the loss is normalized over the full batch;
+        # otherwise reduce over this micro-batch's active (non-padded) tokens.
+        if num_items_in_batch is None:
+            denominator = padding_mask.numel() - padding_mask.long().sum()
+        elif torch.is_tensor(num_items_in_batch):
+            # The count may be on another device.
+            denominator = num_items_in_batch.to(nll_loss.device)
+        else:
+            denominator = num_items_in_batch
+        nll_loss = nll_loss.sum() / denominator
+        smoothed_loss = smoothed_loss.sum() / (denominator * log_probs.shape[-1])
         return (1 - self.epsilon) * nll_loss + self.epsilon * smoothed_loss
 
 
@@ -531,7 +537,7 @@ class LengthGroupedSampler(Sampler):
         self.batch_size = batch_size
         if lengths is None:
             model_input_name = model_input_name if model_input_name is not None else "input_ids"
-            if not isinstance(dataset[0], (dict, BatchEncoding)) or model_input_name not in dataset[0]:
+            if not isinstance(dataset[0], Mapping) or model_input_name not in dataset[0]:
                 raise ValueError(
                     "Can only automatically infer lengths for datasets whose items are dictionaries with an "
                     f"'{model_input_name}' key."
@@ -591,7 +597,7 @@ class DistributedLengthGroupedSampler(DistributedSampler):
 
         if lengths is None:
             model_input_name = model_input_name if model_input_name is not None else "input_ids"
-            if not isinstance(dataset[0], (dict, BatchEncoding)) or model_input_name not in dataset[0]:
+            if not isinstance(dataset[0], Mapping) or model_input_name not in dataset[0]:
                 raise ValueError(
                     "Can only automatically infer lengths for datasets whose items are dictionaries with an "
                     f"'{model_input_name}' key."

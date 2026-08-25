@@ -13,7 +13,7 @@
 # limitations under the License.
 import unittest
 
-from transformers import AutoProcessor, AutoTokenizer, Qwen2AudioProcessor
+from transformers import AutoTokenizer, Qwen2AudioProcessor
 from transformers.testing_utils import require_torch, require_torchaudio
 
 from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
@@ -23,6 +23,7 @@ from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 @require_torchaudio
 class Qwen2AudioProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Qwen2AudioProcessor
+    tiny_model_id = "hf-internal-testing/tiny-processor-qwen2_audio"
     model_id = "Qwen/Qwen2-Audio-7B-Instruct"
 
     @classmethod
@@ -30,13 +31,13 @@ class Qwen2AudioProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         cls.audio_token = processor.audio_token
 
     def test_can_load_various_tokenizers(self):
-        processor = Qwen2AudioProcessor.from_pretrained(self.model_id)
-        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+        processor = Qwen2AudioProcessor.from_pretrained(self.tmpdirname)
+        tokenizer = AutoTokenizer.from_pretrained(self.tmpdirname)
         self.assertEqual(processor.tokenizer.__class__, tokenizer.__class__)
 
     def test_tokenizer_integration(self):
-        slow_tokenizer = AutoTokenizer.from_pretrained(self.model_id, use_fast=False)
-        fast_tokenizer = AutoTokenizer.from_pretrained(self.model_id, from_slow=True, legacy=False)
+        slow_tokenizer = AutoTokenizer.from_pretrained(self.full_tmpdirname, use_fast=False)
+        fast_tokenizer = AutoTokenizer.from_pretrained(self.full_tmpdirname, from_slow=True, legacy=False)
 
         prompt = "<|im_start|>system\nAnswer the questions.<|im_end|><|im_start|>user\n<|audio_bos|><|AUDIO|><|audio_eos|>\nWhat is it in this audio?<|im_end|><|im_start|>assistant\n"
         EXPECTED_OUTPUT = [
@@ -72,7 +73,7 @@ class Qwen2AudioProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(fast_tokenizer.tokenize(prompt), EXPECTED_OUTPUT)
 
     def test_chat_template(self):
-        processor = AutoProcessor.from_pretrained(self.model_id)
+        processor = self.get_processor(use_tiny_ckpt=False)
         expected_prompt = "<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\nAudio 1: <|audio_bos|><|AUDIO|><|audio_eos|>\nWhat's that sound?<|im_end|>\n<|im_start|>assistant\nIt is the sound of glass shattering.<|im_end|>\n<|im_start|>user\nAudio 2: <|audio_bos|><|AUDIO|><|audio_eos|>\nHow about this one?<|im_end|>\n<|im_start|>assistant\n"
 
         messages = [

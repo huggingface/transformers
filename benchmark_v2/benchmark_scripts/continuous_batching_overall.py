@@ -25,6 +25,7 @@ from lighteval.tasks.requests import Doc
 from tabulate import tabulate
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, ContinuousBatchingConfig, GenerationConfig
+from transformers.distributed import DistributedConfig
 from transformers.utils.logging import disable_progress_bar
 
 
@@ -191,9 +192,9 @@ class BenchmarkResults:
 
     def _get_model(self) -> Any:
         self.cleanup()
-        # tp_plan and device_map are mutually exclusive — TP uses its own placement.
+        # distributed_config and device_map are mutually exclusive — TP uses its own placement.
         if self.tp_size > 1:
-            placement = {"tp_plan": "auto"}
+            placement = {"distributed_config": DistributedConfig(tp_size=self.tp_size)}
         elif self.dp_size > 1:
             placement = {"device_map": self.local_rank}
         else:

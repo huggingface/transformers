@@ -522,7 +522,7 @@ class SegformerPreTrainedModel(ViTPreTrainedModel):
     }
 
     def _init_weights(self, module):
-        raise NotImplementedError("No need to override this method")
+        raise AttributeError("No need to override this method")
 
 
 @auto_docstring

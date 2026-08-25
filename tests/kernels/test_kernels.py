@@ -17,11 +17,13 @@
 
 import copy
 import os
+import sys
 import tempfile
 import types
 from unittest.mock import MagicMock, patch
 
 import torch
+from huggingface_hub import snapshot_download
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, KernelConfig
 from transformers.integrations.hub_kernels import (
@@ -30,6 +32,7 @@ from transformers.integrations.hub_kernels import (
     is_kernel,
     lazy_load_kernel,
     load_and_register_attn_kernel,
+    use_kernel_func_from_hub_with_fallback,
 )
 from transformers.masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -44,10 +47,11 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils.import_utils import is_kernels_available
+from transformers.utils.kernel_config import add_to_mapping_local
 
 
 if is_kernels_available():
-    from kernels import Device, Mode, kernelize
+    from kernels import Device, LocalLayerRepository, Mode, kernelize
 
     import transformers.integrations.hub_kernels as hub_kernels_pkg
 
@@ -509,6 +513,40 @@ class TestKernelUtilities(TestCasePlus):
             self.assertIs(mod2, sentinel_mod)
             self.assertEqual(call_count["n"], 1)
 
+    def _make_fallback_func(self, torch_function):
+        """Decorate `torch_function` with a fake original package installed, as if e.g. `fla` were available."""
+        package_name = "fake_kernel_package"
+        package = types.ModuleType(package_name)
+        # Same name as the torch reference, but a different (recognisable) result and an extra kernel-only kwarg.
+        package.fake_op = lambda hidden_states, weight, cu_seqlens=None: hidden_states * weight * 10
+
+        with patch.dict(sys.modules, {package_name: package}):
+            return use_kernel_func_from_hub_with_fallback("fake_op", package_name)(torch_function)
+
+    def test_export_falls_back_to_torch_implementation(self):
+        """Tests if a function decorated with use_kernel_func_from_hub_with_fallback is traced by `torch.export` as the
+        original torch function and not the installed package's function, since the latter is generally not exportable.
+        """
+
+        def fake_op(hidden_states, weight, **kwargs):
+            return hidden_states + weight
+
+        decorated = self._make_fallback_func(fake_op)
+
+        class Wrapper(torch.nn.Module):
+            def forward(self, hidden_states, weight):
+                return decorated(hidden_states, weight)
+
+        inputs = (torch.ones(4), torch.full((4,), 3.0))
+        package_result, torch_result = torch.full((4,), 30.0), torch.full((4,), 4.0)
+
+        # Eager and `torch.compile` keep the package implementation ...
+        self.assertTrue(torch.equal(decorated(*inputs), package_result))
+        self.assertTrue(torch.equal(torch.compile(Wrapper(), fullgraph=True)(*inputs), package_result))
+        # ... only `torch.export` swaps in the torch one.
+        exported = torch.export.export(Wrapper(), inputs)
+        self.assertTrue(torch.equal(exported.module()(*inputs), torch_result))
+
 
 @require_kernels
 class TestAttentionKernelRegistration(TestCasePlus):
@@ -586,6 +624,32 @@ class TestAttentionKernelRegistration(TestCasePlus):
                 ALL_MASK_ATTENTION_FUNCTIONS.pop(attn_impl, None)
             except Exception as e:
                 print(f"Could not clean up `ALL_MASK_ATTENTION_FUNCTIONS`: {e}")
+
+    def test_add_to_mapping_local(self):
+        repo_path = "/abs/path/kernel"
+        compatible_mapping = {}
+        add_to_mapping_local("RMSNorm", "cuda", f"{repo_path}:LlamaRMSNorm", Mode.INFERENCE, compatible_mapping)
+
+        repo = compatible_mapping["RMSNorm"]["cuda"][Mode.INFERENCE]
+        self.assertIsInstance(repo, LocalLayerRepository)
+        self.assertEqual(repo.layer_name, "LlamaRMSNorm")
+
+        with self.assertRaisesRegex(ValueError, "Only cuda, rocm, xpu, npu, neuron and tpu devices supported"):
+            add_to_mapping_local("RMSNorm", "cpu", f"{repo_path}:LlamaRMSNorm", Mode.INFERENCE, compatible_mapping)
+
+    @slow
+    @require_torch_accelerator
+    def test_add_to_mapping_local_then_load(self):
+        repo_path = snapshot_download("kernels-community/layer-norm")
+        compatible_mapping = {}
+        add_to_mapping_local("RMSNorm", "cuda", f"{repo_path}:LlamaRMSNorm", Mode.INFERENCE, compatible_mapping)
+
+        repo = compatible_mapping["RMSNorm"]["cuda"][Mode.INFERENCE]
+        self.assertIsInstance(repo, LocalLayerRepository)
+        self.assertEqual(repo.layer_name, "LlamaRMSNorm")
+
+        layer_cls = repo.load()
+        self.assertTrue(issubclass(layer_cls, torch.nn.Module))
 
 
 @require_kernels

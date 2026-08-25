@@ -27,23 +27,25 @@ from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 if is_vision_available():
     from transformers import LlavaOnevisionVideoProcessor, VideoPrismProcessor, VideoPrismTokenizer
 
-TENNIS_VIDEO_URL = "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"
+TENNIS_VIDEO_URL = "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/tennis_320x240.mp4"
 NUM_FRAMES = 16
 FRAME_SIZE = 288
 
 # torchvision >= 0.27 supports native Lanczos; older versions fall back to BICUBIC in TorchvisionBackend.resize.
+# Golden values computed from tennis_320x240.mp4 (320x240, 16 frames) resized to 288x288.
 EXPECTED_TENNIS_PIXEL_SLICE_LANCZOS = torch.tensor(
     [
-        [0.0470588281750679, 0.03921568766236305, 0.32156863808631897],
-        [0.04313725605607033, 0.05098039656877518, 0.32549020648002625],
-        [0.06666667014360428, 0.0470588281750679, 0.3019607961177826],
+        [0.0784, 0.0902, 0.2471],
+        [0.0627, 0.0902, 0.2627],
+        [0.0588, 0.0902, 0.2627],
     ]
 )
+# BICUBIC values are approximate; only LANCZOS path is tested on torchvision >= 0.27.
 EXPECTED_TENNIS_PIXEL_SLICE_BICUBIC = torch.tensor(
     [
-        [0.05882353335618973, 0.0470588281750679, 0.3137255012989044],
-        [0.05098039656877518, 0.05882353335618973, 0.3137255012989044],
-        [0.06666667014360428, 0.062745101749897, 0.3019607961177826],
+        [0.0863, 0.0941, 0.2353],
+        [0.0627, 0.0902, 0.2431],
+        [0.0784, 0.1098, 0.2667],
     ]
 )
 

@@ -19,6 +19,7 @@ import tempfile
 import unittest
 
 import pytest
+from parameterized import parameterized
 
 from transformers.models.dia import DiaConfig, DiaDecoderConfig, DiaEncoderConfig
 from transformers.testing_utils import (
@@ -230,6 +231,10 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         # Skipping `has_text_modality` but manually testing down below
         self.config_tester = ConfigTester(self, has_text_modality=False, config_class=DiaConfig)
         self.skip_non_greedy_generate()
+
+    @unittest.skip(reason="Dia flattens codebook channels into the batch dim; logits do not match 2D `labels`")
+    def test_encoder_decoder_loss_no_double_shift(self):
+        pass
 
     def prepare_config_and_inputs_for_generate(self, batch_size=2):
         # DIA should not have a `None` eos token id because it uses certain LogitsProcessors
@@ -521,6 +526,13 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
     @unittest.skip(reason="Encoder-Decoder cache can not be initialized.")
     def test_multi_gpu_data_parallel_forward(self):
+        pass
+
+    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
+    @unittest.skip(
+        "Model expects decoder inputs to be of certain shape and thus we cannot test scaling with long inputs"
+    )
+    def test_model_rope_scaling_from_config(self, scaling_type):
         pass
 
 

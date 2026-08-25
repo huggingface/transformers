@@ -195,9 +195,8 @@ class NemotronAsrStreamingForRNNTIntegrationTest(unittest.TestCase):
     @classmethod
     def setUp(cls):
         cls.checkpoint_name = "nvidia/nemotron-speech-streaming-en-0.6b"
-        cls.revision = "refs/pr/17"
         cls.dtype = torch.float32
-        cls.processor = AutoProcessor.from_pretrained(cls.checkpoint_name, revision=cls.revision)
+        cls.processor = AutoProcessor.from_pretrained(cls.checkpoint_name)
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
@@ -244,9 +243,7 @@ class NemotronAsrStreamingForRNNTIntegrationTest(unittest.TestCase):
             EXPECTED_TRANSCRIPTIONS = json.load(f)["transcriptions"]
 
         samples = self._load_datasamples(len(EXPECTED_TRANSCRIPTIONS))
-        model = NemotronAsrStreamingForRNNT.from_pretrained(
-            self.checkpoint_name, revision=self.revision, dtype=self.dtype, device_map="auto"
-        )
+        model = NemotronAsrStreamingForRNNT.from_pretrained(self.checkpoint_name, dtype=self.dtype, device_map="auto")
 
         inputs = self.processor(samples, sampling_rate=self.processor.feature_extractor.sampling_rate)
         inputs.to(model.device, dtype=model.dtype)
@@ -263,9 +260,7 @@ class NemotronAsrStreamingForRNNTIntegrationTest(unittest.TestCase):
             EXPECTED_TRANSCRIPTIONS = json.load(f)["transcriptions"]
 
         samples = self._load_datasamples(len(EXPECTED_TRANSCRIPTIONS))
-        model = NemotronAsrStreamingForRNNT.from_pretrained(
-            self.checkpoint_name, revision=self.revision, dtype=self.dtype, device_map="auto"
-        )
+        model = NemotronAsrStreamingForRNNT.from_pretrained(self.checkpoint_name, dtype=self.dtype, device_map="auto")
 
         inputs = self.processor(samples, sampling_rate=self.processor.feature_extractor.sampling_rate)
         inputs.to(model.device, dtype=model.dtype)
@@ -298,9 +293,7 @@ class NemotronAsrStreamingForRNNTIntegrationTest(unittest.TestCase):
             "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama_first_45_secs.mp3",
             sampling_rate=sampling_rate,
         )
-        model = NemotronAsrStreamingForRNNT.from_pretrained(
-            self.checkpoint_name, revision=self.revision, dtype=self.dtype, device_map="auto"
-        )
+        model = NemotronAsrStreamingForRNNT.from_pretrained(self.checkpoint_name, dtype=self.dtype, device_map="auto")
 
         # Select the streaming right attention context (lookahead, in subsampled encoder frames). This sizes
         # the audio/mel chunks the processor emits and must reach `generate` so the forward matches; it travels

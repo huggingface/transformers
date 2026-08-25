@@ -115,10 +115,10 @@ class CLIPTokenizer(TokenizersBackend):
         )
 
         self._tokenizer.post_processor = processors.RobertaProcessing(
-            sep=(str(eos_token), self.eos_token_id),
-            cls=(str(bos_token), self.bos_token_id),
-            add_prefix_space=False,
-            trim_offsets=False,
+            (str(eos_token), self.eos_token_id),
+            (str(bos_token), self.bos_token_id),
+            False,  # trim_offsets
+            False,  # add_prefix_space
         )
 
         # Very ugly hack to enable padding to have a correct decoding see https://github.com/huggingface/tokenizers/issues/872

@@ -324,10 +324,9 @@ class UnivNetLvcResidualBlock(nn.Module):
         # Apply local convolution kernel to hidden_states.
         output_hidden_states = torch.einsum("bildsk,biokl->bolsd", hidden_states, kernel)
 
-        output_hidden_states = output_hidden_states.to(memory_format=torch.channels_last_3d)
-        bias = bias.unsqueeze(-1).unsqueeze(-1).to(memory_format=torch.channels_last_3d)
+        bias = bias.unsqueeze(-1).unsqueeze(-1)
         output_hidden_states = output_hidden_states + bias
-        output_hidden_states = output_hidden_states.contiguous().view(batch, out_channels, -1)
+        output_hidden_states = output_hidden_states.view(batch, out_channels, -1)
 
         return output_hidden_states
 

@@ -59,12 +59,12 @@ class MiniCPMV4_6VisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("patch_size", 8)
         kwargs.setdefault("num_image_tokens", 1)
         kwargs.setdefault("vocab_size", 256)
-        kwargs.setdefault("hidden_size", 32)
+        kwargs.setdefault("hidden_size", 64)
         kwargs.setdefault("intermediate_size", 37)
         kwargs.setdefault("num_hidden_layers", 2)
         kwargs.setdefault("num_attention_heads", 4)
         kwargs.setdefault("num_key_value_heads", 2)
-        kwargs.setdefault("head_dim", 8)
+        kwargs.setdefault("head_dim", 16)
         kwargs.setdefault("hidden_act", "silu")
         kwargs.setdefault("max_position_embeddings", 512)
         kwargs.setdefault("rope_parameters", {"rope_type": "default"})
@@ -98,7 +98,7 @@ class MiniCPMV4_6VisionText2TextModelTester(VLMModelTester):
     def _target_sizes(self, batch_size):
         h_patches = self.image_size // self.patch_size
         w_patches = self.image_size // self.patch_size
-        return torch.tensor([[h_patches, w_patches]] * batch_size, dtype=torch.int32)
+        return torch.tensor([[h_patches, w_patches]] * batch_size, dtype=torch.int32, device=torch_device)
 
     def create_pixel_values(self):
         return self._navit_pixel_values(self.batch_size)

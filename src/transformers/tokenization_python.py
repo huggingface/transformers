@@ -930,7 +930,6 @@ class PythonBackend(PreTrainedTokenizerBase):
                     f"are not defined (bos_token_id={self.bos_token_id}; eos_token_id={self.eos_token_id})"
                     "Set the required special tokens in tokenizer or update `tokenizer.special_tokens_pattern`"
                 )
-                return token_ids_0 if token_ids_1 is None else token_ids_0 + token_ids_1
 
             if token_ids_1 is None:
                 return [self.bos_token_id] + token_ids_0 + [self.eos_token_id]

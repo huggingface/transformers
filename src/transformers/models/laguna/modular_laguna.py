@@ -14,7 +14,7 @@
 """PyTorch Laguna model."""
 
 from collections.abc import Callable
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 import torch
 import torch.nn.functional as F
@@ -49,12 +49,12 @@ logger = logging.get_logger(__name__)
 @strict
 class LagunaConfig(Qwen2MoeConfig):
     r"""
-    num_attention_heads_per_layer (`list[int]`, *optional*):
-        Per-layer override for ``num_attention_heads``. Length must equal ``num_hidden_layers``.
     gating (`bool` or `str`, *optional*, defaults to `True`):
         Softplus output-gate granularity. ``True`` or ``"per-head"`` applies one gate per head,
         broadcast across ``head_dim``; ``"per-element"`` applies one gate per ``(head, head_dim)``
         channel.
+    num_attention_heads_per_layer (`list[int]`, *optional*):
+        Per-layer override for ``num_attention_heads``. Length must equal ``num_hidden_layers``.
     mlp_layer_types (`list[str]`, *optional*):
         Per-layer MLP type — ``"dense"`` or ``"sparse"``. Length must equal
         ``num_hidden_layers``. Defaults to first layer dense, rest sparse.
@@ -185,25 +185,17 @@ class LagunaRMSNorm(Qwen2MoeRMSNorm):
 
 
 class LagunaRotaryEmbedding(Gemma3RotaryEmbedding):
-    def __init__(self, config: LagunaConfig):
+    def __init__(self, config: LagunaConfig, device=None):
         super().__init__(config)
 
-    @staticmethod
     def compute_default_rope_parameters(
-        config: LagunaConfig | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-        layer_type: str | None = None,
-    ) -> tuple["torch.Tensor", float]:
+        config: LagunaConfig, device=None, layer_type: str | None = None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
             config ([`~transformers.PreTrainedConfig`]):
                 The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
             layer_type (`str`, *optional*):
                 The current layer type if the model has different RoPE parameters per type.
                 Should not be used unless `config.layer_types is not None`
@@ -220,10 +212,8 @@ class LagunaRotaryEmbedding(Gemma3RotaryEmbedding):
         attention_factor = 1.0  # Unused in this type of RoPE
 
         # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
-        return inv_freq, attention_factor
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        return inv_freq.to(device), attention_factor
 
 
 class LagunaMLP(Qwen2MoeMLP):

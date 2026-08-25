@@ -24,6 +24,7 @@ from functools import cached_property
 from typing import Any, Literal
 
 from .debug_utils import DebugOption
+from .distributed.utils import _is_torch_distributed_initialized
 from .trainer_utils import (
     FSDPOption,
     HubStrategy,
@@ -200,7 +201,9 @@ class TrainingArguments:
         max_steps (`int`, *optional*, defaults to -1):
             Overrides `num_train_epochs`. If set to a positive number, the total number of training steps to perform.
             For a finite dataset, training is reiterated through the dataset (if all data is exhausted) until
-            `max_steps` is reached.
+            `max_steps` is reached. It must be set to a positive value when the training dataset does not implement
+            `__len__` (e.g. a streaming dataset), since the total number of steps cannot then be inferred and is
+            required to bound the training loop and configure the learning rate scheduler.
 
         > Learning Rate & Scheduler
 
@@ -605,6 +608,16 @@ class TrainingArguments:
         dataloader_prefetch_factor (`int`, *optional*):
             Number of batches loaded in advance by each worker.
             2 means there will be a total of 2 * num_workers batches prefetched across all workers.
+        dataloader_multiprocessing_context (`str`, *optional*):
+            The multiprocessing start method to use for data loading workers (`"fork"`, `"spawn"`, or
+            `"forkserver"`). Defaults to PyTorch's default start method, except on MPS with
+            `dataloader_num_workers > 1`, where it defaults to `"fork"`. Use `"spawn"` when streaming from sources
+            whose objects are not fork-safe (e.g. HDFS via `pyarrow`). Under `"spawn"`, any custom `collate_fn` or
+            dataset code must be importable at module level (no lambdas/closures).
+        dataloader_in_order (`bool`, *optional*, defaults to `True`):
+            If `True`, the data loader yields batches in the order workers were dispatched. Set to `False` to yield
+            batches as soon as they are ready, which can reduce tail latency for `IterableDataset` streaming
+            workloads. Requires PyTorch >= 2.6.
         remove_unused_columns (`bool`, *optional*, defaults to `True`):
             Whether or not to automatically remove the columns unused by the model forward method.
         label_names (`list[str]`, *optional*):
@@ -756,7 +769,7 @@ class TrainingArguments:
     max_steps: int = field(
         default=-1,
         metadata={
-            "help": "Overrides `num_train_epochs`. If set to a positive number, the total number of training steps to perform."
+            "help": "Overrides `num_train_epochs`. If set to a positive number, the total number of training steps to perform. Must be set when the training dataset does not implement `__len__` (e.g. a streaming dataset)."
         },
     )
 
@@ -1302,6 +1315,29 @@ class TrainingArguments:
             )
         },
     )
+    dataloader_multiprocessing_context: str | None = field(
+        default=None,
+        metadata={
+            "help": (
+                "The multiprocessing start method to use for data loading workers ('fork', 'spawn', or "
+                "'forkserver'). Defaults to PyTorch's default, except on MPS with dataloader_num_workers > 1, where "
+                "it defaults to 'fork'. Use 'spawn' when streaming from sources whose objects are not fork-safe "
+                "(e.g. HDFS via pyarrow). Under 'spawn', any custom collate_fn / dataset code must be importable at "
+                "module level (no lambdas/closures)."
+            ),
+            "choices": ["fork", "spawn", "forkserver"],
+        },
+    )
+    dataloader_in_order: bool = field(
+        default=True,
+        metadata={
+            "help": (
+                "If True (default), the data loader yields batches in the order workers were dispatched. Set to "
+                "False to yield batches as soon as they are ready, reducing tail latency for IterableDataset "
+                "streaming workloads. Requires PyTorch >= 2.6."
+            )
+        },
+    )
     remove_unused_columns: bool = field(
         default=True,
         metadata={"help": "Whether or not to automatically remove the columns unused by the model forward method."},
@@ -1437,19 +1473,6 @@ class TrainingArguments:
         },
     )
 
-    # --- Deprecated / Internal ---
-    warmup_ratio: float | None = field(
-        default=None,
-        metadata={
-            "help": "This argument is deprecated and will be removed in v5.2. Use `warmup_steps` instead as it also works with float values."
-        },
-    )
-    logging_dir: str | None = field(
-        default=None,
-        metadata={
-            "help": "Deprecated and will be removed in v5.2. Set env var `TENSORBOARD_LOGGING_DIR` instead. TensorBoard log directory."
-        },
-    )
     local_rank: int = field(
         default=-1,
         metadata={
@@ -1481,15 +1504,6 @@ class TrainingArguments:
 
         if self.disable_tqdm is None:
             self.disable_tqdm = logger.getEffectiveLevel() > logging.WARN
-
-        if self.warmup_ratio is not None:
-            logger.warning("warmup_ratio is deprecated and will be removed in v5.2. Use `warmup_steps` instead.")
-            self.warmup_steps = self.warmup_ratio
-
-        if self.logging_dir is not None:
-            logger.warning(
-                "`logging_dir` is deprecated and will be removed in v5.2. Please set `TENSORBOARD_LOGGING_DIR` instead."
-            )
 
         if isinstance(self.include_num_input_tokens_seen, bool):
             self.include_num_input_tokens_seen = "all" if self.include_num_input_tokens_seen else "no"
@@ -1563,6 +1577,8 @@ class TrainingArguments:
         if self.torch_compile and self.torch_compile_backend is None:
             if not self.use_cpu and is_torch_hpu_available():
                 self.torch_compile_backend = "hpu_backend"
+            elif not self.use_cpu and is_torch_neuron_available():
+                self.torch_compile_backend = "neuron"
             else:
                 self.torch_compile_backend = "inductor"
 
@@ -1626,6 +1642,14 @@ class TrainingArguments:
         # ── 10. Hardware Overrides ──
         if self.use_cpu:
             self.dataloader_pin_memory = False
+
+        # MPS requires forking if multiple workers are specified; a user-specified start method takes precedence.
+        if (
+            self.dataloader_multiprocessing_context is None
+            and self.dataloader_num_workers > 1
+            and is_torch_mps_available()
+        ):
+            self.dataloader_multiprocessing_context = "fork"
 
         # ── 11. FSDP ──
         # Store args only (not the plugin itself) to avoid pickle issues
@@ -1833,7 +1857,7 @@ class TrainingArguments:
                 del os.environ["ACCELERATE_USE_DEEPSPEED"]
         if not is_sagemaker_mp_enabled():
             device = self.distributed_state.device
-        if dist.is_available() and dist.is_initialized() and self.parallel_mode != ParallelMode.DISTRIBUTED:
+        if _is_torch_distributed_initialized() and self.parallel_mode != ParallelMode.DISTRIBUTED:
             logger.warning(
                 "torch.distributed process group is initialized, but parallel_mode != ParallelMode.DISTRIBUTED. "
                 "In order to use Torch DDP, launch your script with `python -m torch.distributed.launch"
@@ -2186,7 +2210,9 @@ class TrainingArguments:
             max_steps (`int`, *optional*, defaults to -1):
                 If set to a positive number, the total number of training steps to perform. Overrides `num_train_epochs`.
                 For a finite dataset, training is reiterated through the dataset (if all data is exhausted) until
-                `max_steps` is reached.
+                `max_steps` is reached. It must be set to a positive value when the training dataset does not
+                implement `__len__` (e.g. a streaming dataset), since the total number of steps cannot then be
+                inferred and is required to bound the training loop and configure the learning rate scheduler.
             gradient_accumulation_steps (`int`, *optional*, defaults to 1):
                 Number of updates steps to accumulate the gradients for, before performing a backward/update pass.
 
@@ -2573,7 +2599,6 @@ class TrainingArguments:
         num_epochs: float = 3.0,
         max_steps: int = -1,
         warmup_steps: float = 0,
-        warmup_ratio: float | None = None,
     ):
         """
         A method that regroups all arguments linked to the learning rate scheduler and its hyperparameters.
@@ -2587,7 +2612,9 @@ class TrainingArguments:
             max_steps (`int`, *optional*, defaults to -1):
                 If set to a positive number, the total number of training steps to perform. Overrides `num_train_epochs`.
                 For a finite dataset, training is reiterated through the dataset (if all data is exhausted) until
-                `max_steps` is reached.
+                `max_steps` is reached. It must be set to a positive value when the training dataset does not
+                implement `__len__` (e.g. a streaming dataset), since the total number of steps cannot then be
+                inferred and is required to bound the training loop and configure the learning rate scheduler.
             warmup_steps (`float`, *optional*, defaults to 0):
                 Number of steps used for a linear warmup from 0 to `learning_rate`.  Should be an integer or a float in range `[0,1)`.
                 If smaller than 1, will be interpreted as ratio of steps used for a linear warmup from 0 to `learning_rate`.
@@ -2603,10 +2630,6 @@ class TrainingArguments:
         0.05
         ```
         """
-        if warmup_ratio is not None:
-            logger.warning("warmup_ratio is deprecated and will be removed in v5.2 . Use `warmup_steps` instead.")
-            warmup_steps = warmup_ratio
-
         self.lr_scheduler_type = SchedulerType(name)
         self.num_train_epochs = num_epochs
         self.max_steps = max_steps
@@ -2622,6 +2645,8 @@ class TrainingArguments:
         pin_memory: bool = True,
         persistent_workers: bool = False,
         prefetch_factor: int | None = None,
+        multiprocessing_context: str | None = None,
+        in_order: bool = True,
         auto_find_batch_size: bool = False,
         ignore_data_skip: bool = False,
         sampler_seed: int | None = None,
@@ -2645,6 +2670,15 @@ class TrainingArguments:
             prefetch_factor (`int`, *optional*):
                 Number of batches loaded in advance by each worker.
                 2 means there will be a total of 2 * num_workers batches prefetched across all workers.
+            multiprocessing_context (`str`, *optional*):
+                The multiprocessing start method to use for data loading workers (`"fork"`, `"spawn"`, or
+                `"forkserver"`). Defaults to PyTorch's default start method. Use `"spawn"` when streaming from
+                sources whose objects are not fork-safe (e.g. HDFS via `pyarrow`). Under `"spawn"`, any custom
+                `collate_fn` or dataset code must be importable at module level (no lambdas/closures).
+            in_order (`bool`, *optional*, defaults to `True`):
+                If `True`, the data loader yields batches in the order workers were dispatched. Set to `False` to
+                yield batches as soon as they are ready, which can reduce tail latency for `IterableDataset`
+                streaming workloads. Requires PyTorch >= 2.6.
             auto_find_batch_size (`bool`, *optional*, defaults to `False`)
                 Whether to find a batch size that will fit into memory automatically through exponential decay,
                 avoiding CUDA Out-of-Memory errors. Requires accelerate to be installed (`pip install accelerate`)
@@ -2676,6 +2710,8 @@ class TrainingArguments:
         self.dataloader_pin_memory = pin_memory
         self.dataloader_persistent_workers = persistent_workers
         self.dataloader_prefetch_factor = prefetch_factor
+        self.dataloader_multiprocessing_context = multiprocessing_context
+        self.dataloader_in_order = in_order
         self.auto_find_batch_size = auto_find_batch_size
         self.ignore_data_skip = ignore_data_skip
         self.data_seed = sampler_seed

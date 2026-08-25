@@ -66,6 +66,12 @@ class Glm4vMoeTextConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    base_model_ep_plan = {
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_tp_experts",
+    }
     attribute_map = {
         "num_local_experts": "n_routed_experts",
     }
@@ -199,6 +205,12 @@ class Glm4vMoeConfig(PreTrainedConfig):
             self.text_config = self.sub_configs["text_config"](**self.text_config)
         elif self.text_config is None:
             self.text_config = self.sub_configs["text_config"](**kwargs)
+
+        # BC: pre-v5 saves placed `tie_word_embeddings` inside text_config. Forward it to the outer
+        # config (where v5's tying logic looks) when the root value is the default. Checked after
+        # text_config init so it also covers a text config passed as an already-initialized instance.
+        if not self.tie_word_embeddings and getattr(self.text_config, "tie_word_embeddings", False):
+            self.tie_word_embeddings = True
 
         super().__post_init__(**kwargs)
 

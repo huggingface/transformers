@@ -23,22 +23,8 @@ from ...test_processing_common import ProcessorTesterMixin
 @require_vision
 class LlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = LlavaProcessor
-
-    @classmethod
-    def _setup_image_processor(cls):
-        image_processor_class = cls._get_component_class_from_processor("image_processor")
-        return image_processor_class()
-
-    @classmethod
-    def _setup_tokenizer(cls):
-        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
-        tokenizer = tokenizer_class.from_pretrained("huggyllama/llama-7b")
-        tokenizer.add_special_tokens({"additional_special_tokens": ["<image>"]})
-        if not tokenizer.pad_token:
-            tokenizer.pad_token = "[PAD]"
-            if tokenizer.pad_token_id is None:
-                tokenizer.pad_token_id = 0
-        return tokenizer
+    # Tiny processor created with make_tiny_processor.py from "llava-hf/llava-1.5-7b-hf"
+    tiny_model_id = "hf-internal-testing/tiny-processor-llava"
 
     @classmethod
     def _setup_test_attributes(cls, processor):
@@ -49,7 +35,8 @@ class LlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         return {
             "chat_template": "{% for message in messages %}{% if message['role'] != 'system' %}{{ message['role'].upper() + ': '}}{% endif %}{# Render all images first #}{% for content in message['content'] | selectattr('type', 'equalto', 'image') %}{{ '<image>\n' }}{% endfor %}{# Render all text next #}{% if message['role'] != 'assistant' %}{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}{{ content['text'] + ' '}}{% endfor %}{% else %}{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}{% generation %}{{ content['text'] + ' '}}{% endgeneration %}{% endfor %}{% endif %}{% endfor %}{% if add_generation_prompt %}{{ 'ASSISTANT:' }}{% endif %}",
             "patch_size": 128,
-            "vision_feature_select_strategy": "default"
+            "vision_feature_select_strategy": "default",
+            "num_additional_image_tokens": 1  # must match processor_config.json from the Hub repo
         }  # fmt: skip
 
     def test_get_num_vision_tokens(self):
@@ -76,7 +63,11 @@ class LlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertTrue(processor_loaded.chat_template == processor_dict.get("chat_template", None))
 
     def test_can_load_various_tokenizers(self):
-        for checkpoint in ["Intel/llava-gemma-2b", "llava-hf/llava-1.5-7b-hf"]:
+        # Use tiny repos to avoid loading full 256k-vocab Gemma and 32k-vocab LLaMA tokenizers
+        for checkpoint in [
+            "hf-internal-testing/tiny-processor-llava-gemma",
+            "hf-internal-testing/tiny-processor-llava",
+        ]:
             processor = LlavaProcessor.from_pretrained(checkpoint)
             tokenizer = AutoTokenizer.from_pretrained(checkpoint)
             self.assertEqual(processor.tokenizer.__class__, tokenizer.__class__)
@@ -84,7 +75,7 @@ class LlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_special_mm_token_truncation(self):
         """Tests that special vision tokens do not get truncated when `truncation=True` is set."""
 
-        processor = LlavaProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf")
+        processor = LlavaProcessor.from_pretrained("hf-internal-testing/tiny-processor-llava")
 
         input_str = self.prepare_text_inputs(batch_size=2, modalities="image")
         image_input = self.prepare_image_inputs(batch_size=2)
