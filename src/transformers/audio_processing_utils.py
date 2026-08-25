@@ -45,7 +45,6 @@ class BaseAudioProcessor(AudioProcessingMixin):
     padding_side = "right"
     padding_value = 0.0
     return_padding_mask = True
-    mask_level = None
     do_batch_spectrogram = True
     model_input_names = ["audio"]
     dither: float = 0.0
@@ -199,9 +198,8 @@ class BaseAudioProcessor(AudioProcessingMixin):
             output = {"audio_values": batched}
 
         if self.return_padding_mask:
-            # Features live on the frame axis: map audio ranges → feature ranges via hop_length,
-            # unless ``mask_level="audio"`` forces an audio-sample-level mask.
-            if do_extract_spectrogram and self.mask_level != "audio":
+            # Features live on the frame axis: map audio ranges → feature ranges via hop_length.
+            if do_extract_spectrogram:
                 spec_cfg = spectrogram_config or self.spectrogram_config
                 audio_lengths = np.array([end - start for start, end in audio_ranges])
                 feature_lengths = self._get_valid_feature_lengths(audio_lengths, spec_cfg)

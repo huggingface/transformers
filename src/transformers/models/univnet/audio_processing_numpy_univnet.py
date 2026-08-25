@@ -24,7 +24,6 @@ class UnivNetAudioProcessorNumpy(NumpyAudioBackend):
 
     sampling_rate = 24000
     force_mono = True
-    mask_level = "audio"
     mel_floor = 1e-9
     compression_clip_val = 1e-5
     compression_factor = 1.0
@@ -56,6 +55,14 @@ class UnivNetAudioProcessorNumpy(NumpyAudioBackend):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.num_max_samples = self.max_length_s * self.sampling_rate
+
+    # The reflect pad in `_stft` widens the STFT input by `n_fft - hop_length`, so the
+    # non-centred framing collapses to `length // hop_length` frames.
+    def _get_mask_width(self, padded_length, spectrogram_config) -> int:
+        return int(padded_length // spectrogram_config.stft_config.hop_length)
+
+    def _get_valid_feature_lengths(self, audio_lengths, spectrogram_config):
+        return audio_lengths // spectrogram_config.stft_config.hop_length
 
     def _stft(self, audio, *, spectrogram_config, **kwargs):
         # UnivNet uses reflect padding with (n_fft - hop_length) / 2 instead of center padding

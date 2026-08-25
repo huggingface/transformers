@@ -26,7 +26,9 @@ class ClvpAudioProcessorNumpy(NumpyAudioBackend):
     force_mono = True
     max_length = 132300  # 6 seconds at 22050 Hz
     truncation = True
-    mask_level = "audio"
+    # The model feeds `audio_features` straight into the conditioning encoder's `mel_conv`
+    # and never masks it (the legacy FE defaulted to `return_attention_mask=False` too).
+    return_padding_mask = False
 
     spectrogram_config = SpectrogramConfig(
         stft_config=StftConfig(
