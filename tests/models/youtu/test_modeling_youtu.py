@@ -19,6 +19,7 @@ import pytest
 
 from transformers import AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
     require_deterministic_for_xpu,
     require_torch,
@@ -80,10 +81,18 @@ class YoutuIntegrationTest(unittest.TestCase):
     @require_torch_accelerator
     def test_dynamic_cache(self):
         NUM_TOKENS_TO_GENERATE = 40
-        EXPECTED_TEXT_COMPLETION = [
-            "Simply put, the theory of relativity states that , time is relative. It is the speed of light is constant in all reference frames. This means that if you are moving at a certain speed, you will experience time differently than someone who is stationary",
-            "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on burgers, hot dogs, and even on my fries. I also love it on my french fries. I love it on my french fries. I love",
-        ]
+        EXPECTED_TEXT_COMPLETION = Expectations(
+            {
+                (None, None): [
+                    "Simply put, the theory of relativity states that , time is relative. It is the speed of light is constant in all reference frames. This means that if you are moving at a certain speed, you will experience time differently than someone who is stationary",
+                    "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on burgers, hot dogs, and even on my fries. I also love it on my french fries. I love it on my french fries. I love",
+                ],
+                ("cuda", 8): [
+                    "Simply put, the theory of relativity states that , time is relative. It is the speed of light is constant in all reference frames. This means that if you are moving at a certain speed, you will experience time differently than someone who is stationary",
+                    "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on burgers, fries, and even on my pizza. I also love it on my french fries. I love it on my french fries. I love it",
+                ],
+            }
+        ).get_expectation()  # fmt: skip
 
         prompts = [
             "Simply put, the theory of relativity states that ",
@@ -104,10 +113,18 @@ class YoutuIntegrationTest(unittest.TestCase):
     @require_torch_accelerator
     def test_static_cache(self):
         NUM_TOKENS_TO_GENERATE = 40
-        EXPECTED_TEXT_COMPLETION = [
-            "Simply put, the theory of relativity states that , time is relative. It is the speed of light is constant in all reference frames. This means that if you are moving at a certain speed, you will experience time differently than someone who is stationary",
-            "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on burgers, hot dogs, and even on my fries. I also love it on my french fries. I love it on my french fries. I love",
-        ]
+        EXPECTED_TEXT_COMPLETION = Expectations(
+            {
+                (None, None): [
+                    "Simply put, the theory of relativity states that , time is relative. It is the speed of light is constant in all reference frames. This means that if you are moving at a certain speed, you will experience time differently than someone who is stationary",
+                    "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on burgers, hot dogs, and even on my fries. I also love it on my french fries. I love it on my french fries. I love",
+                ],
+                ("cuda", 8): [
+                    "Simply put, the theory of relativity states that , time is relative. It is the speed of light is constant in all reference frames. This means that if you are moving at a certain speed, you will experience time differently than someone who is stationary",
+                    "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on burgers, fries, and even on my pizza. I also love it on my french fries. I love it on my french fries. I love it",
+                ],
+            }
+        ).get_expectation()  # fmt: skip
 
         prompts = [
             "Simply put, the theory of relativity states that ",
