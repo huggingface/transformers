@@ -14,8 +14,10 @@
 import json
 import os
 import tempfile
+from unittest.mock import MagicMock, patch
 
 from transformers.cli.chat import (
+    RichInterface,
     get_service_root_url,
     new_chat_history,
     parse_generate_flags,
@@ -57,3 +59,20 @@ def test_get_service_root_url():
     assert get_service_root_url("http://localhost:8000") == "http://localhost:8000"
     assert get_service_root_url("http://localhost:8000/") == "http://localhost:8000"
     assert get_service_root_url("https://example.com/proxy/v1") == "https://example.com/proxy"
+
+
+def test_print_model_load():
+    mock_resp = MagicMock()
+    mock_resp.iter_lines.return_value = [
+        "data: " + json.dumps({"status": "loading", "stage": "processor"}),
+        "data: " + json.dumps({"status": "ready", "cached": True}),
+    ]
+    mock_stream = MagicMock()
+    mock_stream.__enter__.return_value = mock_resp
+    mock_stream.__exit__.return_value = None
+
+    with patch("httpx.stream", return_value=mock_stream) as stream_mock:
+        client = RichInterface(model_id="dummy-model", user_id="user", base_url="http://localhost:8000/v1")
+        client.print_model_load("dummy-model")
+
+    stream_mock.assert_called_once_with("POST", "http://localhost:8000/load_model", json={"model": "dummy-model"})
