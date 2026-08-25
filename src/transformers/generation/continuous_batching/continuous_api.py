@@ -619,8 +619,10 @@ class ContinuousBatchingManager:
         )
 
         # Fully resolve the continuous batching config now that we have the model, the config and the logit processor
+        # Note: composite configs (e.g. vision-language models) keep the decoder attributes (num_key_value_heads,
+        # num_hidden_layers, ...) on their text config, so always resolve against it (no-op for text-only configs)
         self.continuous_batching_config = resolve_continuous_batching_config(
-            config=self.model.config,
+            config=self.model.config.get_text_config(),
             cb_config=continuous_batching_config,
             workload_hints=workload_hints,
             has_logit_processors=self.logit_processor.do_processing,
@@ -999,7 +1001,7 @@ class ContinuousBatchingManager:
 
         # Create the PagedAttentionCache
         paged_attention_cache = PagedAttentionCache(
-            config=self.model.config,
+            config=self.model.config.get_text_config(),
             continuous_batching_config=self.continuous_batching_config,
             device=self.model.device,
             distributed_helper=self.distributed_helper,
@@ -1036,7 +1038,7 @@ class ContinuousBatchingManager:
         # Create the batch processor
         batch_processor = ContinuousBatchProcessor(
             cache=paged_attention_cache,
-            config=self.model.config,
+            config=self.model.config.get_text_config(),
             generation_config=self.generation_config,
             continuous_batching_config=self.continuous_batching_config,
             logit_processor=self.logit_processor,
