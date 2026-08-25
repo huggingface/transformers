@@ -130,7 +130,7 @@ class Chunk(ConversionOps):
         chunks = tuple(chunk.contiguous() for chunk in torch.chunk(tensor, num_shards, dim=self.dim))
         return dict(zip(targets, chunks))
 
-    def get_target_patterns(self, target_patterns: list[str], **kwargs) -> str:
+    def get_target_patterns(self, target_patterns: list[str], **kwargs) -> list[str]:
         if self.num_shards_attribute is None:
             return target_patterns
         # In this case we need to use the config to know how many chunks to create
@@ -139,7 +139,12 @@ class Chunk(ConversionOps):
                 raise ValueError("Undefined Operation encountered")
             subconfig = kwargs["config"].get_text_config()
             num_shards = getattr(subconfig, self.num_shards_attribute)
-            target_patterns = [target_patterns[0].replace(r"\d+", str(i)) for i in range(num_shards)]
+            target_pattern = target_patterns[0]
+            # recover the  prefix before expanding shard indices, otherwise the saved keys lose their layer scope.
+            full_layer_name = kwargs.get("full_layer_name", target_pattern)
+            if target_pattern in full_layer_name:
+                target_pattern = full_layer_name
+            target_patterns = [target_pattern.replace(r"\d+", str(i)) for i in range(num_shards)]
             return target_patterns
 
     @property
