@@ -40,7 +40,7 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from .configuration_param2moe import Param2Config, Param2MoeConfig
+from .configuration_param2moe import Param2MoeConfig
 
 
 class Param2MoeMLP(nn.Module):
@@ -242,27 +242,6 @@ class Param2MoeMoE(nn.Module):
         return hidden_states
 
 
-@use_kernel_forward_from_hub("RMSNorm")
-class Param2RMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
-        """
-        Param2RMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
-
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
@@ -337,7 +316,7 @@ def eager_attention_forward(
 class Param2MoeAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: Param2Config, layer_idx: int):
+    def __init__(self, config: Param2MoeConfig, layer_idx: int):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -359,8 +338,10 @@ class Param2MoeAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        self.q_norm = Param2RMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
-        self.k_norm = Param2RMSNorm(self.head_dim, eps=config.rms_norm_eps)  # thus post q_norm does not need reshape
+        self.q_norm = Param2MoeRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
+        self.k_norm = Param2MoeRMSNorm(
+            self.head_dim, eps=config.rms_norm_eps
+        )  # thus post q_norm does not need reshape
         self.sliding_window = getattr(config, "sliding_window", None)
 
     def forward(
@@ -594,8 +575,8 @@ class Param2MoeForCausalLM(Param2MoePreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import AutoTokenizer, Param2MoeForCausalLM
 
-        >>> model = Param2MoeForCausalLM.from_pretrained("meta-param2_moe/Param2Moe-2-7b-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("meta-param2_moe/Param2Moe-2-7b-hf")
+        >>> model = Param2MoeForCausalLM.from_pretrained("meta-param2moe/Param2Moe-2-7b-hf")
+        >>> tokenizer = AutoTokenizer.from_pretrained("meta-param2moe/Param2Moe-2-7b-hf")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
