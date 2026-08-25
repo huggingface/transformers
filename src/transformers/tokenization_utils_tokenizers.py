@@ -47,6 +47,7 @@ from .tokenization_utils_base import (
     TextInput,
     TruncationStrategy,
     generate_merges,
+    import_protobuf_decode_error,
 )
 from .utils import PaddingStrategy, add_end_docstrings, hf_api, logging
 
@@ -270,7 +271,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                         if proto_spec.unk_id >= 0:
                             local_kwargs.setdefault("unk_token", proto_spec.unk_piece or "<unk>")
 
-            except Exception as e:  # TODO only catch deserialization error here!
+            except import_protobuf_decode_error() as e:
                 logger.warning(
                     f"Could not extract SentencePiece model from {vocab_file} using sentencepiece library due to {e}. "
                     "Falling back to TikToken extractor."
