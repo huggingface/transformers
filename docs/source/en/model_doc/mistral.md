@@ -32,6 +32,8 @@ You can find all the original Mistral checkpoints under the [Mistral AI_](https:
 
 > [!TIP]
 > Click on the Mistral models in the right sidebar for more examples of how to apply Mistral to different language tasks.
+>
+> Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Refer to [Loading kernels](../kernel_doc/loading_kernels) to learn more.
 
 The example below demonstrates how to chat with [`Pipeline`] or the [`AutoModel`], and from the command line.
 
