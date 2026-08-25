@@ -1012,12 +1012,9 @@ class MLukeTokenizer(TokenizersBackend):
 
             # add special tokens to input ids
             entity_token_start, entity_token_end = first_entity_token_spans[0]
-            first_ids = (
-                first_ids[:entity_token_end] + [self.extra_special_tokens_ids[0]] + first_ids[entity_token_end:]
-            )
-            first_ids = (
-                first_ids[:entity_token_start] + [self.extra_special_tokens_ids[0]] + first_ids[entity_token_start:]
-            )
+            ent_id = self.convert_tokens_to_ids("<ent>")
+            first_ids = first_ids[:entity_token_end] + [ent_id] + first_ids[entity_token_end:]
+            first_ids = first_ids[:entity_token_start] + [ent_id] + first_ids[entity_token_start:]
             first_entity_token_spans = [(entity_token_start, entity_token_end + 2)]
 
         elif self.task == "entity_pair_classification":
@@ -1037,9 +1034,11 @@ class MLukeTokenizer(TokenizersBackend):
             first_ids, first_entity_token_spans = get_input_ids_and_entity_token_spans(text, entity_spans)
 
             head_token_span, tail_token_span = first_entity_token_spans
+            ent_id = self.convert_tokens_to_ids("<ent>")
+            ent2_id = self.convert_tokens_to_ids("<ent2>")
             token_span_with_special_token_ids = [
-                (head_token_span, self.extra_special_tokens_ids[0]),
-                (tail_token_span, self.extra_special_tokens_ids[1]),
+                (head_token_span, ent_id),
+                (tail_token_span, ent2_id),
             ]
             if head_token_span[0] < tail_token_span[0]:
                 first_entity_token_spans[0] = (head_token_span[0], head_token_span[1] + 2)
