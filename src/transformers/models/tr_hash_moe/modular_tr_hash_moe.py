@@ -23,6 +23,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -252,7 +253,7 @@ class TRHashRMSNorm(Qwen3RMSNorm):
     pass
 
 
-class TRHashDecoderLayer(Qwen3DecoderLayer):
+class TRHashDecoderLayer(Qwen3DecoderLayer, GradientCheckpointingLayer):
     def __init__(self, config: TRHashConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.mlp = TRHashMLP(config, layer_idx)
@@ -301,10 +302,10 @@ class TRHashPreTrainedModel(Qwen3PreTrainedModel):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, TRHashRouter):
             route_table = _build_multi_hash_route_table(module.config, module.layer_idx)
-            module.route_table.copy_(route_table.to(module.route_table.device))
+            init.copy_(module.route_table, route_table.to(module.route_table.device))
             remaining_weight = (1.0 - module.config.top_k_primary_weight) / (module.top_k - 1)
             route_weights = (module.config.top_k_primary_weight, *((remaining_weight,) * (module.top_k - 1)))
-            module.route_weights.copy_(torch.tensor(route_weights, device=module.route_weights.device))
+            init.copy_(module.route_weights, torch.tensor(route_weights, device=module.route_weights.device))
         elif isinstance(module, TRHashExperts):
             for parameter in (module.gate_up_proj, module.down_proj):
                 init.normal_(parameter, mean=0.0, std=self.config.initializer_range)
