@@ -436,7 +436,6 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             model,
             state_dict,
             load_config,
-            tp_plan=None,
         )
 
         self.assertEqual(
@@ -553,7 +552,6 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             model,
             state_dict,
             load_config,
-            tp_plan=None,
         )
         self.assertTrue(len(loading_info.missing_keys) == 0)
         self.assertTrue(len(loading_info.unexpected_keys) == 0)
@@ -653,7 +651,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             )
         ]
         load_config = LoadStateDictConfig(weight_mapping=weight_mapping, hf_quantizer=quantizer)
-        loading_info, _ = convert_and_load_state_dict_in_model(model, state_dict, load_config, tp_plan=None)
+        loading_info, _ = convert_and_load_state_dict_in_model(model, state_dict, load_config)
 
         self.assertEqual(loading_info.missing_keys, set())
         self.assertEqual(loading_info.unexpected_keys, set())
@@ -774,7 +772,6 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             model,
             checkpoint,
             LoadStateDictConfig(weight_mapping=[scoped_rename]),
-            tp_plan=None,
         )
 
         # Sibling and parent keys must be unmatched.
@@ -819,7 +816,6 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             model,
             checkpoint,
             LoadStateDictConfig(weight_mapping=[scoped_rename]),
-            tp_plan=None,
         )
 
         self.assertEqual(loading_info.missing_keys, set())
@@ -865,7 +861,6 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             model,
             checkpoint,
             LoadStateDictConfig(weight_mapping=[scoped_rename]),
-            tp_plan=None,
         )
 
         self.assertEqual(loading_info.missing_keys, set())
@@ -906,7 +901,6 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             model,
             checkpoint,
             LoadStateDictConfig(weight_mapping=[scoped_rename]),
-            tp_plan=None,
         )
         self.assertEqual(loading_info.missing_keys, set())
         self.assertEqual(loading_info.unexpected_keys, set())
@@ -978,7 +972,6 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             model,
             checkpoint,
             LoadStateDictConfig(weight_mapping=weight_mapping),
-            tp_plan=None,
         )
 
         self.assertEqual(loading_info.missing_keys, set())
@@ -1054,7 +1047,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             WeightRenaming("mlp.w2.weight", "mlp.down_proj.weight"),
         ]
         loading_info, _ = convert_and_load_state_dict_in_model(
-            model, state_dict, LoadStateDictConfig(weight_mapping=weight_mapping), tp_plan=None
+            model, state_dict, LoadStateDictConfig(weight_mapping=weight_mapping)
         )
 
         self.assertEqual(loading_info.missing_keys, set())
@@ -1177,7 +1170,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
 
         # Use the mapping to load
         loading_info, _ = convert_and_load_state_dict_in_model(
-            model, state_dict, LoadStateDictConfig(weight_mapping=weight_mapping), tp_plan=None
+            model, state_dict, LoadStateDictConfig(weight_mapping=weight_mapping)
         )
         self.assertTrue(len(loading_info.missing_keys) == 0)
         self.assertTrue(len(loading_info.unexpected_keys) == 0)
@@ -1254,7 +1247,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             )
         ]
         load_config = LoadStateDictConfig(weight_mapping=weight_mapping)
-        loading_info, _ = convert_and_load_state_dict_in_model(model, state_dict_fused, load_config, tp_plan=None)
+        loading_info, _ = convert_and_load_state_dict_in_model(model, state_dict_fused, load_config)
 
         self.assertEqual(loading_info.missing_keys, set())
         self.assertEqual(loading_info.unexpected_keys, set())
@@ -1286,9 +1279,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             )
         ]
         load_config = LoadStateDictConfig(weight_mapping=weight_mapping)
-        loading_info, _ = convert_and_load_state_dict_in_model(
-            model_fused, state_dict_unfused, load_config, tp_plan=None
-        )
+        loading_info, _ = convert_and_load_state_dict_in_model(model_fused, state_dict_unfused, load_config)
 
         self.assertEqual(loading_info.missing_keys, set())
         self.assertEqual(loading_info.unexpected_keys, set())
@@ -1317,7 +1308,6 @@ class TestConversionMapping(unittest.TestCase):
             model,
             bad_serialized_checkpoints,
             LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
-            tp_plan=None,
         )
 
         # Assert we can load without issues
@@ -1339,7 +1329,6 @@ class TestConversionMapping(unittest.TestCase):
             model,
             good_serialized_checkpoints,
             LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
-            tp_plan=None,
         )
 
         # Assert we can load without issues
@@ -1422,7 +1411,6 @@ class TestConversionMapping(unittest.TestCase):
             model,
             bad_serialized_checkpoints,
             LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
-            tp_plan=None,
         )
 
         # Assert we can load without issues
@@ -1444,7 +1432,6 @@ class TestConversionMapping(unittest.TestCase):
             model,
             good_serialized_checkpoints,
             LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
-            tp_plan=None,
         )
 
         # Assert we can load without issues
@@ -1481,7 +1468,6 @@ class TestConversionMapping(unittest.TestCase):
             model,
             bad_serialized_checkpoints,
             LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
-            tp_plan=None,
         )
 
         # Assert we can load without issues
@@ -1503,7 +1489,6 @@ class TestConversionMapping(unittest.TestCase):
             model,
             good_serialized_checkpoints,
             LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
-            tp_plan=None,
         )
 
         # Assert we can load without issues
@@ -1541,7 +1526,6 @@ class TestConversionMapping(unittest.TestCase):
             model,
             bad_serialized_checkpoints,
             LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
-            tp_plan=None,
         )
 
         # Assert we can load without issues
@@ -1563,7 +1547,6 @@ class TestConversionMapping(unittest.TestCase):
             model,
             good_serialized_checkpoints,
             LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
-            tp_plan=None,
         )
 
         # Assert we can load without issues
@@ -1600,7 +1583,6 @@ class TestConversionMapping(unittest.TestCase):
             model,
             bad_serialized_checkpoints,
             LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
-            tp_plan=None,
         )
 
         # Assert we can load without issues
@@ -1622,7 +1604,6 @@ class TestConversionMapping(unittest.TestCase):
             model,
             good_serialized_checkpoints,
             LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
-            tp_plan=None,
         )
 
         # Assert we can load without issues
