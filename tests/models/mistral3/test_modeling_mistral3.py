@@ -51,6 +51,7 @@ if is_torch_available():
         Mistral3ForSequenceClassification,
         Mistral3Model,
     )
+    from transformers.modeling_outputs import BaseModelOutputWithPast
 
 
 class Mistral3VisionText2TextModelTester:
@@ -200,8 +201,6 @@ class Mistral3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         self.config_tester.run_common_tests()
 
     def test_sequence_classification_pooling(self):
-        from transformers.modeling_outputs import BaseModelOutputWithPast
-
         class StaticBackbone(torch.nn.Module):
             def __init__(self, hidden_states):
                 super().__init__()
@@ -229,8 +228,6 @@ class Mistral3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
             torch.testing.assert_close(output.logits, expected)
 
     def test_sequence_classification_mean_pooling_precedes_score_projection(self):
-        from transformers.modeling_outputs import BaseModelOutputWithPast
-
         config = self.model_tester.get_config()
         config.num_labels = 1
         config.pooling = "mean"
