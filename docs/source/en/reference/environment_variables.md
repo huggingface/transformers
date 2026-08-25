@@ -16,7 +16,13 @@ rendered properly in your Markdown viewer.
 
 # Environment variables
 
-Boolean variables accept `1`, `on`, `yes`, or `true` in any capitalization. Anything else, including unset, is false. Set them before importing Transformers.
+Boolean variables accept `1`, `on`, `yes`, or `true` in any capitalization. Anything else, including unset, is false.
+
+Most of these variables are read once, when Transformers is imported. Set them in your shell before launching Python, or with [os.environ](https://docs.python.org/3/library/os.html#os.environ) before the import. Changing them afterwards has no effect.
+
+```bash
+TRANSFORMERS_VERBOSITY=info python run.py
+```
 
 Caching and Hub access are configured by the `HF_*` variables [huggingface_hub](https://huggingface.co/docs/huggingface_hub/package_reference/environment_variables) owns, such as `HF_HOME` and `HF_HUB_OFFLINE`. See [Installation](../installation#offline-mode) for the offline workflow.
 
