@@ -1,0 +1,9 @@
+{
+  "attention": ["gqa|no_extras|rope_half|qkv_split|qk_rmsnorm|chunked_attention", "mha|logit_softcap|rope_half|qkv_split|no_qk_norm|chunked_attention"],
+  "layer": ["norm-attn-norm-residual-norm-mlp-norm-norm-norm-norm-residual-norm-residual", "norm-attn-norm-residual-norm-mlp-norm-residual"],
+  "layer_other": ["norm", "norm-attn-norm-norm"],
+  "mlp": "gated_mlp",
+  "moe": "softmax_router|no_router_bias|no_norm_topk|no_shared_expert|grouped_expert_weights|grouped_routing",
+  "rotary": ["rope_per_layer_type", "standard_rope"],
+  "norm": "rmsnorm"
+}

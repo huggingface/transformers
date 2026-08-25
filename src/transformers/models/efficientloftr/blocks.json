@@ -1,0 +1,6 @@
+{
+  "attention": "gqa_cross|no_extras|rope_half|qkv_split|no_qk_norm|full_attention",
+  "layer_other": ["attn-cross_attn-cross_attn", "norm", "norm-norm"],
+  "mlp": "ungated_mlp",
+  "rotary": "standard_rope"
+}

@@ -1,0 +1,5 @@
+{
+  "attention": "mha|no_extras|no_pos_emb|qkv_split|no_qk_norm|full_attention",
+  "layer_other": ["norm", "norm-attn-norm-mlp"],
+  "mlp": ["linear_projector", "ungated_mlp"]
+}

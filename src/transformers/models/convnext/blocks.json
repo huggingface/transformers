@@ -1,0 +1,4 @@
+{
+  "layer_other": "norm-residual",
+  "norm": "layernorm"
+}

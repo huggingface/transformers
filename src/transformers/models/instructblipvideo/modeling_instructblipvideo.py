@@ -56,6 +56,223 @@ from .configuration_instructblipvideo import (
 logger = logging.get_logger(__name__)
 
 
+# Adapted from transformers.models.siglip.modeling_siglip.eager_attention_forward -> BLIP doesn't cast attn weights to fp32
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
+class InstructBlipVideoAttention(nn.Module):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.embed_dim = config.hidden_size
+        self.num_heads = config.num_attention_heads
+        self.head_dim = self.embed_dim // self.num_heads
+        if self.head_dim * self.num_heads != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
+                f" {self.num_heads})."
+            )
+        self.scale = self.head_dim**-0.5
+        self.is_causal = False
+        self.attention_dropout = config.attention_dropout
+
+        # small tweak here compared to CLIP, no bias here
+        self.qkv = nn.Linear(self.embed_dim, 3 * self.embed_dim, bias=False)
+
+        if config.qkv_bias:
+            q_bias = nn.Parameter(torch.zeros(self.embed_dim))
+            v_bias = nn.Parameter(torch.zeros(self.embed_dim))
+        else:
+            q_bias = None
+            v_bias = None
+
+        if q_bias is not None:
+            qkv_bias = torch.cat((q_bias, torch.zeros_like(v_bias, requires_grad=False), v_bias))
+            self.qkv.bias = nn.Parameter(qkv_bias)
+
+        self.projection = nn.Linear(self.embed_dim, self.embed_dim)
+
+    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
+        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        **kwargs,
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
+        """Input shape: Batch x Time x Channel"""
+
+        bsz, tgt_len, embed_dim = hidden_states.size()
+
+        mixed_qkv = self.qkv(hidden_states)
+
+        mixed_qkv = mixed_qkv.reshape(bsz, tgt_len, 3, self.num_heads, embed_dim // self.num_heads).permute(
+            2, 0, 3, 1, 4
+        )
+        query_states, key_states, value_states = mixed_qkv[0], mixed_qkv[1], mixed_qkv[2]
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask=None,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scale,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
+        attn_output = self.projection(attn_output)
+
+        return attn_output, attn_weights
+
+
+class InstructBlipVideoMLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.activation_fn = ACT2FN[config.hidden_act]
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        return hidden_states
+
+
+class InstructBlipVideoEncoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: InstructBlipVideoConfig):
+        super().__init__()
+        self.embed_dim = config.hidden_size
+        self.self_attn = InstructBlipVideoAttention(config)
+        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.mlp = InstructBlipVideoMLP(config)
+        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+
+    @auto_docstring
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.FloatTensor:
+        residual = hidden_states
+
+        hidden_states = self.layer_norm1(hidden_states)
+        hidden_states, _ = self.self_attn(
+            hidden_states=hidden_states,
+            **kwargs,
+        )
+        hidden_states = hidden_states + residual
+        residual = hidden_states
+        hidden_states = self.layer_norm2(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+
+        hidden_states = hidden_states + residual
+
+        return hidden_states
+
+
+class InstructBlipVideoQFormerMultiHeadAttention(nn.Module):
+    def __init__(self, config, is_cross_attention=False):
+        super().__init__()
+        self.config = config
+        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
+            raise ValueError(
+                "The hidden size (%d) is not a multiple of the number of attention heads (%d)"
+                % (config.hidden_size, config.num_attention_heads)
+            )
+
+        self.num_attention_heads = config.num_attention_heads
+        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
+        self.all_head_size = self.num_attention_heads * self.attention_head_size
+        self.scaling = self.attention_head_size**-0.5
+        self.is_causal = False
+        self.attention_dropout = config.attention_probs_dropout_prob
+
+        self.query = nn.Linear(config.hidden_size, self.all_head_size)
+        if is_cross_attention:
+            self.key = nn.Linear(config.encoder_hidden_size, self.all_head_size)
+            self.value = nn.Linear(config.encoder_hidden_size, self.all_head_size)
+        else:
+            self.key = nn.Linear(config.hidden_size, self.all_head_size)
+            self.value = nn.Linear(config.hidden_size, self.all_head_size)
+
+    def forward(
+        self,
+        hidden_states,
+        attention_mask=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        **kwargs: Unpack[TransformersKwargs],
+    ):
+        # If this is instantiated as a cross-attention module, the keys
+        # and values come from an encoder; the attention mask needs to be
+        # such that the encoder's padding tokens are not attended to.
+        is_cross_attention = encoder_hidden_states is not None
+
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.attention_head_size)
+
+        if is_cross_attention:
+            current_states = encoder_hidden_states
+            attention_mask = encoder_attention_mask
+        else:
+            current_states = hidden_states
+
+        kv_shape = (*current_states.shape[:-1], -1, self.attention_head_size)
+        query_layer = self.query(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_layer = self.key(current_states).view(kv_shape).transpose(1, 2)
+        value_layer = self.value(current_states).view(kv_shape).transpose(1, 2)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_layer,
+            key_layer,
+            value_layer,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
+
+        # NOTE: KV has a different bsz than Q so we take the broadcasted shapes instead of the input shape
+        attn_output = attn_output.reshape(*attn_output.shape[:2], -1).contiguous()
+        return attn_output, attn_weights
+
+
 class InstructBlipVideoVisionEmbeddings(nn.Module):
     def __init__(self, config: InstructBlipVideoVisionConfig):
         super().__init__()
@@ -214,151 +431,6 @@ class InstructBlipVideoPreTrainedModel(PreTrainedModel):
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
 
-# Adapted from transformers.models.siglip.modeling_siglip.eager_attention_forward -> InstructBlipVideo doesn't cast attn weights to fp32
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs,
-):
-    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
-    if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-
-    attn_output = torch.matmul(attn_weights, value)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
-
-
-class InstructBlipVideoAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
-
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.embed_dim = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.head_dim = self.embed_dim // self.num_heads
-        if self.head_dim * self.num_heads != self.embed_dim:
-            raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
-                f" {self.num_heads})."
-            )
-        self.scale = self.head_dim**-0.5
-        self.is_causal = False
-        self.attention_dropout = config.attention_dropout
-
-        # small tweak here compared to CLIP, no bias here
-        self.qkv = nn.Linear(self.embed_dim, 3 * self.embed_dim, bias=False)
-
-        if config.qkv_bias:
-            q_bias = nn.Parameter(torch.zeros(self.embed_dim))
-            v_bias = nn.Parameter(torch.zeros(self.embed_dim))
-        else:
-            q_bias = None
-            v_bias = None
-
-        if q_bias is not None:
-            qkv_bias = torch.cat((q_bias, torch.zeros_like(v_bias, requires_grad=False), v_bias))
-            self.qkv.bias = nn.Parameter(qkv_bias)
-
-        self.projection = nn.Linear(self.embed_dim, self.embed_dim)
-
-    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        **kwargs,
-    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
-        """Input shape: Batch x Time x Channel"""
-
-        bsz, tgt_len, embed_dim = hidden_states.size()
-
-        mixed_qkv = self.qkv(hidden_states)
-
-        mixed_qkv = mixed_qkv.reshape(bsz, tgt_len, 3, self.num_heads, embed_dim // self.num_heads).permute(
-            2, 0, 3, 1, 4
-        )
-        query_states, key_states, value_states = mixed_qkv[0], mixed_qkv[1], mixed_qkv[2]
-
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask=None,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scale,
-            **kwargs,
-        )
-
-        attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
-        attn_output = self.projection(attn_output)
-
-        return attn_output, attn_weights
-
-
-class InstructBlipVideoMLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-        return hidden_states
-
-
-class InstructBlipVideoEncoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: InstructBlipVideoConfig):
-        super().__init__()
-        self.embed_dim = config.hidden_size
-        self.self_attn = InstructBlipVideoAttention(config)
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
-        self.mlp = InstructBlipVideoMLP(config)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
-
-    @auto_docstring
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
-        residual = hidden_states
-
-        hidden_states = self.layer_norm1(hidden_states)
-        hidden_states, _ = self.self_attn(
-            hidden_states=hidden_states,
-            **kwargs,
-        )
-        hidden_states = hidden_states + residual
-        residual = hidden_states
-        hidden_states = self.layer_norm2(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-
-        hidden_states = hidden_states + residual
-
-        return hidden_states
-
-
 class InstructBlipVideoEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
@@ -443,78 +515,6 @@ class InstructBlipVideoVisionModel(InstructBlipVideoPreTrainedModel):
 
     def get_input_embeddings(self):
         return self.embeddings
-
-
-class InstructBlipVideoQFormerMultiHeadAttention(nn.Module):
-    def __init__(self, config, is_cross_attention=False):
-        super().__init__()
-        self.config = config
-        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
-            raise ValueError(
-                "The hidden size (%d) is not a multiple of the number of attention heads (%d)"
-                % (config.hidden_size, config.num_attention_heads)
-            )
-
-        self.num_attention_heads = config.num_attention_heads
-        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
-        self.all_head_size = self.num_attention_heads * self.attention_head_size
-        self.scaling = self.attention_head_size**-0.5
-        self.is_causal = False
-        self.attention_dropout = config.attention_probs_dropout_prob
-
-        self.query = nn.Linear(config.hidden_size, self.all_head_size)
-        if is_cross_attention:
-            self.key = nn.Linear(config.encoder_hidden_size, self.all_head_size)
-            self.value = nn.Linear(config.encoder_hidden_size, self.all_head_size)
-        else:
-            self.key = nn.Linear(config.hidden_size, self.all_head_size)
-            self.value = nn.Linear(config.hidden_size, self.all_head_size)
-
-    def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        **kwargs: Unpack[TransformersKwargs],
-    ):
-        # If this is instantiated as a cross-attention module, the keys
-        # and values come from an encoder; the attention mask needs to be
-        # such that the encoder's padding tokens are not attended to.
-        is_cross_attention = encoder_hidden_states is not None
-
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.attention_head_size)
-
-        if is_cross_attention:
-            current_states = encoder_hidden_states
-            attention_mask = encoder_attention_mask
-        else:
-            current_states = hidden_states
-
-        kv_shape = (*current_states.shape[:-1], -1, self.attention_head_size)
-        query_layer = self.query(hidden_states).view(hidden_shape).transpose(1, 2)
-        key_layer = self.key(current_states).view(kv_shape).transpose(1, 2)
-        value_layer = self.value(current_states).view(kv_shape).transpose(1, 2)
-
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_layer,
-            key_layer,
-            value_layer,
-            attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            **kwargs,
-        )
-
-        # NOTE: KV has a different bsz than Q so we take the broadcasted shapes instead of the input shape
-        attn_output = attn_output.reshape(*attn_output.shape[:2], -1).contiguous()
-        return attn_output, attn_weights
 
 
 class InstructBlipVideoQFormerSelfOutput(nn.Module):

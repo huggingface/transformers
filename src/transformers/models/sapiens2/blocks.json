@@ -1,0 +1,6 @@
+{
+  "attention": "gqa|no_extras|rope_half|qkv_split|qk_rmsnorm|full_attention",
+  "layer_other": ["norm", "norm-attn-residual-norm-mlp-residual"],
+  "mlp": ["gated_mlp", "ungated_mlp"],
+  "norm": "rmsnorm"
+}

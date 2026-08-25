@@ -1,0 +1,5 @@
+{
+  "attention": "mha|no_extras|no_pos_emb|qkv_split|no_qk_norm|full_attention",
+  "layer": ["attn-residual-norm-mlp-residual-norm", "norm-attn-residual-norm-mlp-residual"],
+  "mlp": "ungated_mlp"
+}

@@ -36,6 +36,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent))
 
 from blocks_cli import _render_markdown, cmd_lint  # noqa: E402
+from blocks_export import export_all  # noqa: E402
 from blocks_facets import build_date_data, build_variants, scan_repo  # noqa: E402
 
 
@@ -49,6 +50,7 @@ CHECKER_CONFIG = {
         "src/transformers/models/**/configuration_*.py",
         "src/transformers/models/**/modular_*.py",
         "docs/source/en/model_doc/**/*.md",
+        "src/transformers/models/**/blocks.json",
     ],
     "check_args": [],
     "fix_args": ["--fix_and_overwrite"],
@@ -72,6 +74,20 @@ def main() -> int:
     parser.add_argument("--strict", action="store_true", help="fail when changed models have findings")
     parser.add_argument("--all", action="store_true", help="lint every model, not just the diff")
     args = parser.parse_args()
+
+    # Per-model manifests: 400+ committed generated files, so they need the same treatment as the
+    # catalog or they drift the moment a facet changes.
+    stale = export_all(check_only=not args.fix_and_overwrite)
+    if args.fix_and_overwrite:
+        print(f"wrote {len(stale)} blocks.json manifests")
+    elif stale:
+        print(
+            f"{len(stale)} blocks.json manifests are out of date "
+            f"(e.g. {', '.join(str(p.parent.name) for p in stale[:5])}). "
+            "Run `python utils/check_model_blocks.py --fix_and_overwrite`.",
+            file=sys.stderr,
+        )
+        return 1
 
     expected = _catalog_text()
     if args.fix_and_overwrite:
@@ -99,7 +115,12 @@ def main() -> int:
         print(f"block-reuse report for models in the diff: {models}\n")
 
     lint_args = argparse.Namespace(
-        rules=None, models=models, limit=40, min_cost=10, strict=args.strict and not args.fix_and_overwrite
+        rules=None,
+        models=models,
+        limit=40,
+        min_cost=10,
+        fixable=False,
+        strict=args.strict and not args.fix_and_overwrite,
     )
     return cmd_lint(lint_args)
 

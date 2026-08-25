@@ -1,0 +1,8 @@
+{
+  "attention": "gqa|no_extras|rope_half|qkv_split|qk_rmsnorm|full_attention",
+  "layer": "norm-attn-residual-norm-mlp-residual",
+  "mlp": "gated_mlp",
+  "moe": "sigmoid_router|router_bias|norm_topk|shared_expert|grouped_expert_weights|grouped_routing",
+  "rotary": "standard_rope",
+  "norm": "rmsnorm"
+}

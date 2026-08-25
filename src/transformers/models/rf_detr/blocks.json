@@ -1,0 +1,7 @@
+{
+  "attention": ["deformable_cross|no_extras|rope_half|qkv_custom|no_qk_norm|full_attention", "mha|no_extras|no_pos_emb|qkv_split|no_qk_norm|full_attention", "mha|no_extras|rope_half|qkv_split|no_qk_norm|full_attention"],
+  "layer": "attn-norm-cross_attn-norm-mlp-norm",
+  "layer_other": ["norm", "norm-attn-residual-norm-mlp-residual", "norm-mlp-residual", "norm-residual"],
+  "mlp": "ungated_mlp",
+  "norm": "layernorm"
+}

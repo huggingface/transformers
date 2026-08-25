@@ -1,0 +1,8 @@
+{
+  "attention": "gqa|no_extras|no_pos_emb|qkv_split|no_qk_norm|full_attention",
+  "mixer": "ssm",
+  "layer_other": "norm-attn-attn-attn-residual",
+  "mlp": "ungated_mlp",
+  "moe": "sigmoid_router|router_bias|norm_topk|shared_expert|grouped_expert_weights|grouped_routing",
+  "norm": "rmsnorm"
+}

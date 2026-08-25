@@ -1,0 +1,5 @@
+{
+  "attention": "mha|no_extras|no_pos_emb|qkv_split|no_qk_norm|full_attention",
+  "layer": "attn-norm-norm",
+  "layer_other": "norm-norm-residual"
+}

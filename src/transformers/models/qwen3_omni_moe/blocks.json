@@ -1,0 +1,9 @@
+{
+  "attention": ["gqa|no_extras|rope_half|qkv_split|qk_layernorm|sliding_attention", "gqa|no_extras|rope_half|qkv_split|qk_rmsnorm|sliding_attention", "mha|no_extras|no_pos_emb|qkv_split|no_qk_norm|full_attention", "mha|no_extras|rope_half|qkv_fused|no_qk_norm|full_attention"],
+  "layer": ["norm-attn-residual-norm-mlp-residual", "norm-attn-residual-norm-residual"],
+  "layer_other": ["attn-norm-norm-mlp", "norm", "norm-attn-residual-norm-mlp-residual"],
+  "mlp": ["gated_mlp", "ungated_mlp"],
+  "moe": "sigmoid_router|no_router_bias|norm_topk|shared_expert|grouped_expert_weights|flat_routing",
+  "rotary": "standard_rope",
+  "norm": "rmsnorm"
+}

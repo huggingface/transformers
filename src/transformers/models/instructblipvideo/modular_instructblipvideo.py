@@ -16,6 +16,12 @@
 import torch
 from huggingface_hub.dataclasses import strict
 
+from transformers.models.blip.modeling_blip import BlipEncoderLayer
+from transformers.models.blip_2.modeling_blip_2 import (
+    Blip2Attention,
+    Blip2MLP,
+    Blip2QFormerMultiHeadAttention,
+)
 from transformers.models.instructblip.configuration_instructblip import (
     InstructBlipConfig,
     InstructBlipQFormerConfig,
@@ -123,6 +129,22 @@ class InstructBlipVideoConfig(InstructBlipConfig):
     attribute_map = {"video_token_id": "video_token_index"}
     video_token_index: int | None = None
     image_token_index = AttributeError()
+
+
+class InstructBlipVideoAttention(Blip2Attention):
+    pass
+
+
+class InstructBlipVideoMLP(Blip2MLP):
+    pass
+
+
+class InstructBlipVideoEncoderLayer(BlipEncoderLayer):
+    pass
+
+
+class InstructBlipVideoQFormerMultiHeadAttention(Blip2QFormerMultiHeadAttention):
+    pass
 
 
 class InstructBlipVideoPreTrainedModel(InstructBlipPreTrainedModel):

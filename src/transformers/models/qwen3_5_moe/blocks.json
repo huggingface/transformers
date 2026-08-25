@@ -1,0 +1,10 @@
+{
+  "attention": ["gqa|no_extras|rope_half|qkv_split|qk_rmsnorm|full_attention", "mha|no_extras|rope_half|qkv_fused|no_qk_norm|full_attention"],
+  "mixer": "ssm",
+  "layer": "norm-attn-attn-residual-norm-mlp-residual",
+  "layer_other": "attn-norm-norm-mlp",
+  "mlp": ["gated_mlp", "ungated_mlp"],
+  "moe": "sigmoid_router|no_router_bias|no_norm_topk|shared_expert|grouped_expert_weights|flat_routing",
+  "rotary": "standard_rope",
+  "norm": "rmsnorm_one_plus_weight"
+}

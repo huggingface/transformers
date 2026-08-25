@@ -1,0 +1,5 @@
+{
+  "attention": "mha|no_extras|alibi|qkv_fused|no_qk_norm|full_attention",
+  "layer_other": "norm-attn-norm-mlp",
+  "mlp": "ungated_mlp"
+}

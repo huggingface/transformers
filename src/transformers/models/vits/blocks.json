@@ -1,0 +1,6 @@
+{
+  "attention": "mha_cross|no_extras|no_pos_emb|qkv_split|no_qk_norm|full_attention",
+  "layer": "attn-norm-residual-mlp-norm-residual",
+  "layer_other": "residual",
+  "mlp": "linear_projector"
+}

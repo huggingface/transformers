@@ -30,6 +30,7 @@ files with `ast` rather than imported, so they cannot drift and cost nothing.
 """
 
 import ast
+import difflib
 import hashlib
 import re
 import statistics
@@ -56,13 +57,24 @@ _DASHES = str.maketrans(dict.fromkeys("‐‑‒–—―", "-"))
 # Module-level helpers worth fingerprinting: high copy count, low semantic variation.
 TRACKED_HELPERS = ("repeat_kv", "rotate_half", "apply_rotary_pos_emb", "eager_attention_forward")
 
-# Axis order == the "transformers format". Ordered by override cost, expensive first.
-# `blocks compile --fit-order` re-derives this from real modular override sizes.
-ATTENTION_AXES = ("mix", "qkv", "qk_norm", "window", "rope", "extras")
+# Axis order == the "transformers format". Ordered by override cost, expensive first, so that
+# picking a parent by longest common prefix forces agreement on the expensive axes and leaves any
+# divergence in the cheap tail.
+#
+# Fitted, not guessed: `blocks_cli.py fit-order` measures each axis's cost as the median size of a
+# real modular override that differs on that axis alone, then scores all 720 permutations. Measured
+# costs (LoC): mix 72, extras 62, rope 58, qkv 52, qk_norm 50, window 50. This descending-cost order
+# scores 26 591 against the exhaustive optimum's 26 584 -- 8 LoC apart, i.e. noise -- while the
+# hand-picked order it replaced scored 30 571, 15% worse.
+ATTENTION_AXES = ("mix", "extras", "rope", "qkv", "qk_norm", "window")
 MLP_AXES = ("gating",)
+# Left in semantic order on purpose: every MoE axis had fewer than 3 single-axis overrides to
+# measure, so `fit-order` falls back to the kind median for all six and its "best" permutation is
+# fitting noise. Revisit once more MoE models land.
 MOE_AXES = ("router", "router_bias", "topk_norm", "shared", "weights", "grouping")
 NORM_AXES = ("norm_kind",)
 ROTARY_AXES = ("rope_kind",)
+MIXER_AXES = ("mechanism",)
 
 TIER1_AXES = {
     "attention": ATTENTION_AXES,
@@ -70,6 +82,7 @@ TIER1_AXES = {
     "moe": MOE_AXES,
     "norm": NORM_AXES,
     "rotary": ROTARY_AXES,
+    "mixer": MIXER_AXES,
     "layer": ("topology",),
 }
 
@@ -224,7 +237,13 @@ def config_flags(model: str) -> frozenset[str]:
 # Order matters: the first pattern that matches wins. Mixer families are checked before
 # `*Attention` because a linear-attention mixer is a different block, not an attention variant.
 _KIND_PATTERNS = (
-    ("mixer", r"(Mixer|Mamba|SSM|DeltaNet|LinearAttention|Recurrent|RWKV|Retention|Lightning)$"),
+    # Mechanism names only, and anchored. A bare substring match over-captures model *names*:
+    # `Recurrent` hits `RecurrentGemmaAttention` and `Mixer` hits `PatchTSMixerBlock`, which silently
+    # removed mamba, mamba2, falcon_mamba, recurrent_gemma and patchtsmixer from the census entirely.
+    # The `*Attention`-suffixed forms are listed explicitly because they are linear/recurrent mixers
+    # wearing an attention name (`MiniMaxLightningAttention`).
+    ("mixer", r"(Mixer|Mamba|SSM|DeltaNet|RWKV|Retention)$"),
+    ("mixer", r"(Lightning|Linear|GatedDelta|Delta|SSM|Mamba)Attention$"),
     ("moe", r"(SparseMoeBlock|MoeBlock|MoE|Moe|Experts|Expert)$"),
     ("attention", r"Attention$"),
     ("layer", r"(DecoderLayer|EncoderLayer)$"),
@@ -255,12 +274,12 @@ _re = lambda src, pattern: bool(re.search(pattern, src))  # noqa: E731
 def _bias_source(src: str) -> str:
     """Where a block's bias comes from. Tier 2: it never blocks inheriting `forward`."""
     if _has(src, *(f"config.{flag}" for flag in BIAS_FLAGS)) or _has(src, *BIAS_FLAGS):
-        return "config"
+        return "bias_from_config"
     if _re(src, r"bias\s*=\s*True"):
-        return "true"
+        return "bias_true"
     if _re(src, r"bias\s*=\s*False"):
-        return "false"
-    return "unknown"
+        return "bias_false"
+    return "bias_unknown"
 
 
 # --------------------------------------------------------------------------------------------------
@@ -289,35 +308,35 @@ def _attention_facets(src: str, flags: frozenset[str] = frozenset()) -> tuple[di
     else:
         mix = "mha"
     if _has(src, "encoder_hidden_states", "is_cross_attention", "key_value_states"):
-        mix += "+cross"
+        mix += "_cross"
 
     if mix.startswith("mla"):
         # MLA's projection set *is* the latent layout; its names vary per model (`q_a_proj`,
         # `q_lora_rank`, `kv_b_proj`) and carry no extra information once mix is known.
-        qkv = "latent"
+        qkv = "kv_latent"
     elif mix == "deformable":
-        qkv = "sampled"
+        qkv = "qkv_sampled"
     elif _has(src, "qkv_proj", "query_key_value", "c_attn", "in_proj_weight", "Wqkv") or _re(src, r"self\.qkv\s*="):
-        qkv = "fused_qkv"
+        qkv = "qkv_fused"
     elif _has(src, "kv_proj"):
-        qkv = "fused_kv"
+        qkv = "kv_fused"
     # Vision and audio models spell the same three projections a dozen ways; anchor on `= ` so
     # `self.q` does not also match `self.qkv`.
     elif _has(src, "q_proj", "self.query") or _re(src, r"self\.(q|to_q|linear_q|query_proj|q_lin|q_content_proj)\s*="):
-        qkv = "split"
+        qkv = "qkv_split"
     elif _has(src, "MultiheadAttention"):
-        qkv = "fused_qkv"
+        qkv = "qkv_fused"
     else:
         # A bespoke projection layout (mostly detection heads with positional/content splits).
         # Named rather than "unknown" so it groups honestly instead of merging unrelated blocks.
-        qkv = "other"
+        qkv = "qkv_custom"
 
     if _re(src, r"self\.(q_norm|query_norm)\s*=\s*\w*RMSNorm"):
-        qk_norm = "rms"
+        qk_norm = "qk_rmsnorm"
     elif _re(src, r"self\.(q_norm|q_layernorm|query_layernorm|query_norm)\s*="):
-        qk_norm = "layernorm"
+        qk_norm = "qk_layernorm"
     else:
-        qk_norm = "none"
+        qk_norm = "no_qk_norm"
 
     # The window axis speaks `config.layer_types`' own vocabulary, and is decided by what the
     # config declares -- not by what the class body happens to mention.
@@ -331,17 +350,17 @@ def _attention_facets(src: str, flags: frozenset[str] = frozenset()) -> tuple[di
     if _has(src, "alibi"):
         rope = "alibi"
     elif _has(src, "rotate_every_two", "apply_rotary_emb_interleaved") or _re(src, r"\[\.\.\., 0::2\]"):
-        rope = "interleaved"
+        rope = "rope_interleaved"
     elif _has(src, "rotate_half", "apply_rotary_pos_emb", "position_embeddings", "rotary_emb"):
-        rope = "half_split"
+        rope = "rope_half"
     else:
-        rope = "none"
+        rope = "no_pos_emb"
 
     extras = tuple(
         name
         for name, present in (
-            ("sink", _has(src, "sink")),
-            ("softcap", _has(src, "softcap", "logit_capping")),
+            ("attn_sink", _has(src, "sink")),
+            ("logit_softcap", _has(src, "softcap", "logit_capping")),
             ("out_gate", _re(src, r"self\.(out_gate|attn_gate|g_proj|q_gate_proj)\s*=")),
         )
         if present
@@ -353,15 +372,17 @@ def _attention_facets(src: str, flags: frozenset[str] = frozenset()) -> tuple[di
         "qk_norm": qk_norm,
         "window": window,
         "rope": rope,
-        "extras": "+".join(extras) or "plain",
+        "extras": "+".join(extras) or "no_extras",
     }
     tier2 = {
         "bias": _bias_source(src),
-        "head_dim": "config" if _has(src, "config.head_dim") else "derived",
-        "dropout": "yes" if _has(src, "attention_dropout", "attn_pdrop") else "no",
+        "head_dim": "head_dim_from_config" if _has(src, "config.head_dim") else "head_dim_derived",
+        "dropout": "attn_dropout" if _has(src, "attention_dropout", "attn_pdrop") else "no_attn_dropout",
         # The forward threads a window through but the architecture never sets one: inheritable
         # either way, worth knowing when comparing against a model that does slide.
-        "sliding_capable": "yes" if _has(src, "sliding_window") and window == "full_attention" else "no",
+        "sliding_capable": "sliding_capable"
+        if _has(src, "sliding_window") and window == "full_attention"
+        else "not_sliding_capable",
     }
     return tier1, tier2
 
@@ -369,11 +390,11 @@ def _attention_facets(src: str, flags: frozenset[str] = frozenset()) -> tuple[di
 def _mlp_facets(src: str) -> tuple[dict, dict]:
     if _has(src, "pointwise_conv", "depthwise_conv"):
         # Conformer-style convolutional feed-forward: not a linear MLP at all.
-        gating = "conv"
+        gating = "conv_ffn"
     elif _has(src, "gate_up_proj"):
-        gating = "fused_gate_up"
+        gating = "fused_gate_up_mlp"
     elif _has(src, "gate_proj") or (_has(src, "self.w1") and _has(src, "self.w3")):
-        gating = "gated"
+        gating = "gated_mlp"
     elif _has(
         src,
         "fc1",
@@ -398,49 +419,71 @@ def _mlp_facets(src: str) -> tuple[dict, dict]:
         "self.intermediate",
         "self.mlp",
     ):
-        gating = "ungated"
+        gating = "ungated_mlp"
     else:
         # A single projection plus a norm: a multimodal connector, not a transformer FFN.
-        gating = "projector"
-    tier2 = {"act": "config" if _has(src, "ACT2FN") else "literal", "bias": _bias_source(src)}
+        gating = "linear_projector"
+    tier2 = {"act": "act_from_config" if _has(src, "ACT2FN") else "act_literal", "bias": _bias_source(src)}
     return {"gating": gating}, tier2
 
 
 def _moe_facets(src: str) -> tuple[dict, dict]:
     tier1 = {
-        "router": "sigmoid" if _has(src, "sigmoid") else "softmax" if _has(src, "softmax") else "unknown",
-        "router_bias": "yes" if _has(src, "e_score_correction_bias", "router_bias", "expert_bias") else "no",
-        "topk_norm": "yes" if _has(src, "norm_topk_prob", "renormalize") else "no",
-        "shared": "yes" if _has(src, "shared_expert") else "no",
-        "weights": "grouped_3d" if _has(src, "nn.Parameter") else "module_list",
-        "grouping": "grouped" if _has(src, "n_group", "topk_group", "expert_group") else "flat",
+        "router": "sigmoid_router"
+        if _has(src, "sigmoid")
+        else "softmax_router"
+        if _has(src, "softmax")
+        else "unknown",
+        "router_bias": "router_bias"
+        if _has(src, "e_score_correction_bias", "router_bias", "expert_bias")
+        else "no_router_bias",
+        "topk_norm": "norm_topk" if _has(src, "norm_topk_prob", "renormalize") else "no_norm_topk",
+        "shared": "shared_expert" if _has(src, "shared_expert") else "no_shared_expert",
+        "weights": "grouped_expert_weights" if _has(src, "nn.Parameter") else "expert_module_list",
+        "grouping": "grouped_routing" if _has(src, "n_group", "topk_group", "expert_group") else "flat_routing",
     }
     tier2 = {
-        "aux_loss": "yes" if _has(src, "router_aux_loss", "load_balancing") else "no",
-        "jitter": "yes" if _has(src, "jitter") else "no",
+        "aux_loss": "aux_loss" if _has(src, "router_aux_loss", "load_balancing") else "no_aux_loss",
+        "jitter": "jitter" if _has(src, "jitter") else "no_jitter",
     }
     return tier1, tier2
 
 
 def _norm_facets(src: str) -> tuple[dict, dict]:
     if _re(src, r"\(1\.?0?\s*\+\s*self\.weight") or _re(src, r"self\.weight\s*\+\s*1"):
-        kind = "rms_one_plus_weight"
+        kind = "rmsnorm_one_plus_weight"
     elif _has(src, "rsqrt", "pow(2)", "variance"):
-        kind = "rms"
+        kind = "rmsnorm"
     else:
         kind = "layernorm"
-    return {"norm_kind": kind}, {"eps": "config" if _has(src, "config.") else "literal"}
+    return {"norm_kind": kind}, {"eps": "eps_from_config" if _has(src, "config.") else "eps_literal"}
+
+
+def _mixer_facets(src: str) -> tuple[dict, dict]:
+    """
+    Linear / recurrent token mixers. Coarse on purpose: these are the frontier of the library and a
+    detailed facet set would be guesswork. Recording the mechanism beats dropping the block.
+    """
+    if _has(src, "A_log", "dt_bias", "ssm_state"):
+        mechanism = "ssm"
+    elif _has(src, "beta", "g_norm", "gated_delta"):
+        mechanism = "gated_delta"
+    elif _has(src, "decay", "slope_rate"):
+        mechanism = "decay_linear"
+    else:
+        mechanism = "custom_mixer"
+    return {"mechanism": mechanism}, {"conv": "depthwise_conv" if _has(src, "conv1d") else "no_conv"}
 
 
 def _rotary_facets(src: str) -> tuple[dict, dict]:
     if _has(src, "layer_types"):
-        kind = "per_layer_type"
+        kind = "rope_per_layer_type"
     elif _has(src, "long_factor", "short_factor"):
         kind = "longrope_buffers"
     else:
-        kind = "standard"
+        kind = "standard_rope"
     scalings = [s for s in rope_scaling_vocabulary() if s != "default" and s in src]
-    return {"rope_kind": kind}, {"scalings": "+".join(sorted(scalings)) or "default"}
+    return {"rope_kind": kind}, {"scalings": "+".join(sorted(scalings)) or "default_rope_scaling"}
 
 
 _FACET_EXTRACTORS = {
@@ -449,17 +492,20 @@ _FACET_EXTRACTORS = {
     "moe": _moe_facets,
     "norm": _norm_facets,
     "rotary": _rotary_facets,
+    "mixer": _mixer_facets,
 }
 
 
 # --------------------------------------------------------------------------------------------------
 # Layer topology: the forward event string
 # --------------------------------------------------------------------------------------------------
+# Spelled out rather than initialled: `norm-attn-residual-norm-mlp-residual` says what it is,
+# where `N A R N M R` needed a legend.
 _EVENT_PATTERNS = (
-    ("N", r"self\.\w*(norm|_ln|ln_)\w*\s*\("),
-    ("X", r"self\.(cross_attn|encoder_attn|crossattention|cross_attention)\s*\("),
-    ("A", r"self\.(self_attn|self_attention|attention|attn|mixer|token_mixer|temporal_block|linear_attn)\s*\("),
-    ("M", r"self\.(mlp|feed_forward|ffn|block_sparse_moe|moe|feedforward|mlp_block|channel_mixer)\s*\("),
+    ("norm", r"self\.\w*(norm|_ln|ln_)\w*\s*\("),
+    ("cross_attn", r"self\.(cross_attn|encoder_attn|crossattention|cross_attention)\s*\("),
+    ("attn", r"self\.(self_attn|self_attention|attention|attn|mixer|token_mixer|temporal_block|linear_attn)\s*\("),
+    ("mlp", r"self\.(mlp|feed_forward|ffn|block_sparse_moe|moe|feedforward|mlp_block|channel_mixer)\s*\("),
 )
 _SCALED_RESIDUAL_RE = re.compile(r"residual\s*\*|\*\s*residual|residual_multiplier|residual_scale")
 _RESIDUAL_RE = re.compile(r"residual\s*\+|\+\s*residual")
@@ -467,12 +513,13 @@ _RESIDUAL_RE = re.compile(r"residual\s*\+|\+\s*residual")
 
 def forward_topology(class_node: ast.ClassDef, file_source: str) -> str | None:
     """
-    Summarise a layer's `forward` as an event string: `N` norm, `A` self-attention, `X`
-    cross-attention, `M` mlp/moe, `R` residual add, `R*` scaled residual add.
+    Summarise a layer's `forward` as the sequence of things it does, joined by `-`.
 
-    `N A R N M R` is classic pre-norm; `N A N R N M N R` is a Gemma2 sandwich; `N A R* N M R*`
-    carries a residual multiplier. One token captures sandwich-vs-not and residual scaling, which
-    is why this is the layer's whole tier-1 identity.
+    `norm-attn-residual-norm-mlp-residual` is classic pre-norm;
+    `norm-attn-norm-residual-norm-mlp-norm-residual` is a Gemma2 sandwich;
+    `norm-attn-scaled_residual-norm-mlp-scaled_residual` carries a residual multiplier. One string
+    captures sandwich-vs-not and residual scaling, which is why it is the layer's whole tier-1
+    identity.
     """
     forward = next((n for n in class_node.body if isinstance(n, ast.FunctionDef) and n.name == "forward"), None)
     if forward is None:
@@ -484,18 +531,18 @@ def forward_topology(class_node: ast.ClassDef, file_source: str) -> str | None:
         # A norm and a call can share a line (`self.mlp(self.norm(x))`), so these are not exclusive;
         # attention vs cross-attention are, since the cross pattern is the more specific one.
         if re.search(_EVENT_PATTERNS[0][1], line):
-            events.append("N")
+            events.append("norm")
         if re.search(_EVENT_PATTERNS[1][1], line):
-            events.append("X")
+            events.append("cross_attn")
         elif re.search(_EVENT_PATTERNS[2][1], line):
-            events.append("A")
+            events.append("attn")
         if re.search(_EVENT_PATTERNS[3][1], line):
-            events.append("M")
+            events.append("mlp")
         if "residual" in line and _SCALED_RESIDUAL_RE.search(line):
-            events.append("R*")
+            events.append("scaled_residual")
         elif _RESIDUAL_RE.search(line):
-            events.append("R")
-    return " ".join(events) or None
+            events.append("residual")
+    return "-".join(events) or None
 
 
 # --------------------------------------------------------------------------------------------------
@@ -561,6 +608,10 @@ class Block:
     tier1: dict = field(default_factory=dict)
     tier2: dict = field(default_factory=dict)
     lineno: int = 0
+    # The canonicalised `forward`. Facets are a *lossy* summary: `DebertaV2DisentangledSelfAttention`
+    # and `LlamaAttention` reduce to the same facet vector but compute entirely different things. So
+    # facets only generate candidates, and this body is what confirms a match.
+    forward: str | None = None
 
     @property
     def variant(self) -> str:
@@ -627,7 +678,9 @@ def scan_file(path: Path, model: str) -> tuple[list[Block], list[Helper]]:
             tier1, tier2 = _FACET_EXTRACTORS[kind](class_source)
         else:
             continue
-        blocks.append(Block(model, path, node.name, kind, tier1, tier2, node.lineno))
+        blocks.append(
+            Block(model, path, node.name, kind, tier1, tier2, node.lineno, canonical_method(node, source, model))
+        )
 
     if moe_nodes:
         # Facets come from the whole file so the router is visible; the block is named after the
@@ -638,7 +691,18 @@ def scan_file(path: Path, model: str) -> tuple[list[Block], list[Helper]]:
             (n for n, _ in moe_nodes if re.search(r"(SparseMoeBlock|MoeBlock|MoE|Moe)$", n.name)), moe_nodes[0][0]
         )
         tier1, tier2 = _moe_facets(source)
-        blocks.append(Block(model, path, primary.name, "moe", tier1, tier2, primary.lineno))
+        blocks.append(
+            Block(
+                model,
+                path,
+                primary.name,
+                "moe",
+                tier1,
+                tier2,
+                primary.lineno,
+                canonical_method(primary, source, model),
+            )
+        )
     return blocks, helpers
 
 
@@ -657,6 +721,57 @@ def scan_repo(models_root: Path = MODELS_ROOT) -> tuple[list[Block], list[Helper
 # --------------------------------------------------------------------------------------------------
 # The modular DAG, for "is this model already an ancestor of that one"
 # --------------------------------------------------------------------------------------------------
+# The banner the modular converter stamps into every file it writes.
+_GENERATED_MARKER = "This file was automatically generated from"
+
+
+@cache
+def generates_modeling(model: str, models_root: Path = MODELS_ROOT) -> bool:
+    """
+    Whether this model's `modeling_*.py` is produced by its modular file.
+
+    Having a `modular_*.py` is not enough: `modular_yolos.py` declares only image-processor classes,
+    so `modeling_yolos.py` is hand-written. Adding a block subclass to that modular makes the
+    converter emit a modeling file containing *only* that block -- it deleted 565 of 655 lines when
+    tried. A finding on such a model cannot be applied by editing the modular, and saying so up
+    front is the difference between a one-line fix and a wasted afternoon.
+    """
+    for path in (models_root / model).glob("modeling_*.py"):
+        try:
+            if _GENERATED_MARKER in path.read_text(encoding="utf-8")[:2000]:
+                return True
+        except OSError:
+            continue
+    return False
+
+
+def tier2_mismatch(a: Block, b: Block) -> int:
+    """How many init-only facets differ. Used to prefer the candidate needing the smallest `__init__`."""
+    return sum(1 for k, v in a.tier2.items() if b.tier2.get(k) != v)
+
+
+def parent_from_module(module: str | None) -> str | None:
+    """
+    The model a modular import refers to, e.g. `llama` for `..llama.modeling_llama`.
+
+    Two spellings exist. Almost every modular file uses the level-2 form
+    `from ..llama.modeling_llama import ...`, whose module is `llama.modeling_llama`. A couple use
+    the level-3 form `from ...models.jamba.modeling_jamba import ...`, whose module is
+    `models.jamba.modeling_jamba` -- and naively taking the first segment there yields `models`,
+    a model that does not exist. That silently emptied those files' ancestry, so every block they
+    already inherited correctly was reported as duplicated. Strip the `models.` prefix instead of
+    normalising the source files, so both spellings resolve.
+    """
+    if not module:
+        return None
+    parts = module.split(".")
+    # Strip whatever prefix the spelling carries: `models.jamba.modeling_jamba` (level 3) and
+    # `transformers.models.aya_vision...` (absolute) both hide the real model further along.
+    while parts and parts[0] in ("transformers", "models", "src"):
+        parts = parts[1:]
+    return parts[0] if parts else None
+
+
 @cache
 def modular_parents(models_root: Path = MODELS_ROOT) -> dict[str, frozenset[str]]:
     """`{model: direct modular parents}`, from the `from ..parent.modeling_parent import X` lines."""
@@ -668,8 +783,8 @@ def modular_parents(models_root: Path = MODELS_ROOT) -> dict[str, frozenset[str]
     for model_dir in sorted(p for p in models_root.iterdir() if p.is_dir()):
         for path in sorted(model_dir.glob("modular_*.py")):
             for module in extract_model_imports_from_file(path):
-                parent = module.split(".")[0]
-                if parent != model_dir.name:
+                parent = parent_from_module(module)
+                if parent and parent != model_dir.name:
                     parents[model_dir.name].add(parent)
     return {model: frozenset(found) for model, found in parents.items()}
 
@@ -712,13 +827,17 @@ def modular_overrides(models_root: Path = MODELS_ROOT) -> list[Override]:
                 tree = ast.parse(path.read_text(encoding="utf-8"))
             except (OSError, SyntaxError):
                 continue
-            # `from ..llama.modeling_llama import LlamaAttention` -> {"LlamaAttention": "llama"}
+            # `from ..llama.modeling_llama import LlamaAttention` -> {"LlamaAttention": "llama"}.
+            # Levels 2 and 3 both occur; see `parent_from_module`.
             owner: dict[str, str] = {}
             for node in ast.walk(tree):
-                if isinstance(node, ast.ImportFrom) and node.level == 2 and node.module:
-                    parent = node.module.split(".")[0]
-                    for alias in node.names:
-                        owner[alias.asname or alias.name] = parent
+                if not isinstance(node, ast.ImportFrom) or node.level not in (2, 3) or not node.module:
+                    continue
+                parent = parent_from_module(node.module)
+                if parent is None or parent == model_dir.name:
+                    continue
+                for alias in node.names:
+                    owner[alias.asname or alias.name] = parent
             for node in tree.body:
                 if not isinstance(node, ast.ClassDef) or not node.bases:
                     continue
@@ -743,6 +862,27 @@ def modular_overrides(models_root: Path = MODELS_ROOT) -> list[Override]:
 
 
 MIN_SAMPLES_PER_AXIS = 3
+
+
+def forward_similarity(a: Block, b: Block) -> float:
+    """How alike two blocks' canonicalised `forward` bodies are, in [0, 1]. 0 if either is missing."""
+    if not a.forward or not b.forward:
+        return 0.0
+    return difflib.SequenceMatcher(None, a.forward, b.forward).ratio()
+
+
+def forwards_match(a: Block, b: Block) -> bool:
+    """
+    Whether `a` could inherit `b`'s `forward` without overriding it.
+
+    Requires the canonicalised bodies to be **identical**, and that threshold is measured rather
+    than chosen: across 489 real modular overrides where the child shares the parent's variant and
+    spends <=5 lines (i.e. reuse that actually happened and was reviewed), forward similarity is
+    1.000 at the 5th percentile -- every single one. Overrides that had to be written instead sit at
+    a median of 0.832 and reach 0.988, so anything short of equality is a block someone would have
+    had to rewrite. Facets only nominate candidates; this is what decides.
+    """
+    return bool(a.forward) and a.forward == b.forward
 
 
 def measure_axis_costs(blocks: list[Block]) -> tuple[dict[tuple[str, str], float], dict[str, list[int]]]:
@@ -839,25 +979,35 @@ def _selfcheck() -> None:
 
     llama = next(b for b in by_model_kind[("llama", "attention")] if b.class_name == "LlamaAttention")
     assert llama.tier1["mix"] == "gqa", llama.tier1
-    assert llama.tier1["qk_norm"] == "none", llama.tier1
+    assert llama.tier1["qk_norm"] == "no_qk_norm", llama.tier1
     assert llama.tier1["window"] == "full_attention", llama.tier1
-    assert llama.tier1["rope"] == "half_split", llama.tier1
-    assert llama.tier2["bias"] == "config", llama.tier2
+    assert llama.tier1["rope"] == "rope_half", llama.tier1
+    assert llama.tier2["bias"] == "bias_from_config", llama.tier2
 
     qwen3 = next(b for b in by_model_kind[("qwen3", "attention")] if b.class_name == "Qwen3Attention")
-    assert qwen3.tier1["qk_norm"] == "rms", qwen3.tier1
+    assert qwen3.tier1["qk_norm"] == "qk_rmsnorm", qwen3.tier1
 
     # olmoe threads `getattr(config, "sliding_window", None)` but declares no window anywhere, so
     # it must not be classified as -- let alone become the canonical owner of -- a sliding variant.
     assert "sliding_window" not in config_flags("olmoe"), config_flags("olmoe")
     olmoe = next(b for b in by_model_kind[("olmoe", "attention")] if b.class_name == "OlmoeAttention")
     assert olmoe.tier1["window"] == "full_attention", olmoe.tier1
-    assert olmoe.tier2["sliding_capable"] == "yes", olmoe.tier2
+    assert olmoe.tier2["sliding_capable"] == "sliding_capable", olmoe.tier2
     mistral = next(b for b in by_model_kind[("mistral", "attention")] if b.class_name == "MistralAttention")
     assert mistral.tier1["window"] == "sliding_attention", mistral.tier1
 
+    # No model may resolve to a parent that is not a real model directory. `nemotron_h` uses the
+    # level-3 `...models.jamba.modeling_jamba` import form and used to resolve to a phantom
+    # "models" parent, which emptied its ancestry and reported every correctly inherited block as a
+    # duplicate.
+    real = {p.name for p in MODELS_ROOT.iterdir() if p.is_dir()}
+    for model, found in modular_parents().items():
+        bogus = found - real
+        assert not bogus, f"{model} resolves to non-existent parents {sorted(bogus)}"
+    assert "jamba" in modular_parents()["nemotron_h"], modular_parents()["nemotron_h"]
+
     gemma2_layer = next(b for b in by_model_kind[("gemma2", "layer")])
-    assert gemma2_layer.tier1["topology"].count("N") == 4, gemma2_layer.tier1
+    assert gemma2_layer.tier1["topology"].split("-").count("norm") == 4, gemma2_layer.tier1
 
     # Every facet must resolve: an "unknown" either merges variants that differ or splits one
     # that does not, and both corrupt the tag.
@@ -867,7 +1017,7 @@ def _selfcheck() -> None:
         for axis, value in block.tier1.items():
             if value == "unknown":
                 unknown[f"{block.kind}.{axis}"].add(f"{block.model}/{block.class_name}")
-            elif value in ("other", "projector"):
+            elif value in ("qkv_custom", "linear_projector"):
                 bespoke += 1
     assert not unknown, "unresolved facets: " + "; ".join(
         f"{axis}={len(models)} ({sorted(models)[:3]})" for axis, models in sorted(unknown.items())
@@ -890,14 +1040,20 @@ def _selfcheck() -> None:
     # than quietly inflating the variant count.
     expected = {
         ("attention", "mix"): {"mha", "gqa", "mla", "deformable"},
-        ("attention", "qkv"): {"split", "fused_qkv", "fused_kv", "latent", "sampled", "other"},
-        ("attention", "qk_norm"): {"none", "rms", "layernorm"},
+        ("attention", "qkv"): {"qkv_split", "qkv_fused", "kv_fused", "kv_latent", "qkv_sampled", "qkv_custom"},
+        ("attention", "qk_norm"): {"no_qk_norm", "qk_rmsnorm", "qk_layernorm"},
         ("attention", "window"): set(layer_pattern_vocabulary()),
-        ("attention", "rope"): {"none", "half_split", "interleaved", "alibi"},
-        ("mlp", "gating"): {"gated", "ungated", "fused_gate_up", "conv", "projector"},
-        ("moe", "router"): {"softmax", "sigmoid", "unknown"},
-        ("norm", "norm_kind"): {"rms", "rms_one_plus_weight", "layernorm"},
-        ("rotary", "rope_kind"): {"standard", "per_layer_type", "longrope_buffers"},
+        ("attention", "rope"): {"no_pos_emb", "rope_half", "rope_interleaved", "alibi"},
+        ("mlp", "gating"): {"gated_mlp", "ungated_mlp", "fused_gate_up_mlp", "conv_ffn", "linear_projector"},
+        ("moe", "router"): {"softmax_router", "sigmoid_router", "unknown"},
+        ("moe", "router_bias"): {"router_bias", "no_router_bias"},
+        ("moe", "topk_norm"): {"norm_topk", "no_norm_topk"},
+        ("moe", "shared"): {"shared_expert", "no_shared_expert"},
+        ("moe", "weights"): {"grouped_expert_weights", "expert_module_list"},
+        ("moe", "grouping"): {"grouped_routing", "flat_routing"},
+        ("mixer", "mechanism"): {"ssm", "gated_delta", "decay_linear", "custom_mixer"},
+        ("norm", "norm_kind"): {"rmsnorm", "rmsnorm_one_plus_weight", "layernorm"},
+        ("rotary", "rope_kind"): {"standard_rope", "rope_per_layer_type", "longrope_buffers"},
     }
     for block in blocks:
         for axis, value in block.tier1.items():
@@ -905,7 +1061,7 @@ def _selfcheck() -> None:
             if allowed is None:
                 continue
             # `mix` carries an optional "+cross" suffix.
-            base = value.split("+")[0] if axis == "mix" else value
+            base = value.split("_cross")[0] if axis == "mix" else value
             assert base in allowed, f"{block.model}/{block.class_name}: {axis}={value!r} is outside {sorted(allowed)}"
 
     print(f"selfcheck ok: {len(blocks)} blocks, {len(helpers)} helpers, {len(build_variants(blocks))} variants")

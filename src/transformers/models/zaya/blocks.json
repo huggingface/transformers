@@ -1,0 +1,8 @@
+{
+  "attention": "gqa|no_extras|rope_half|qkv_fused|no_qk_norm|sliding_attention",
+  "layer": "norm-attn-scaled_residual-norm-mlp-scaled_residual",
+  "mlp": "ungated_mlp",
+  "moe": "softmax_router|no_router_bias|no_norm_topk|no_shared_expert|grouped_expert_weights|flat_routing",
+  "rotary": "rope_per_layer_type",
+  "norm": "rmsnorm"
+}

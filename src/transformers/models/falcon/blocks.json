@@ -1,0 +1,4 @@
+{
+  "layer": "norm-norm-norm-attn-norm-mlp",
+  "rotary": "standard_rope"
+}

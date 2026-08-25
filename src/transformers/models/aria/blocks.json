@@ -1,0 +1,8 @@
+{
+  "attention": ["gqa|no_extras|rope_half|qkv_split|no_qk_norm|full_attention", "mha_cross|no_extras|no_pos_emb|qkv_split|no_qk_norm|full_attention"],
+  "layer": "norm-attn-residual-norm-mlp-residual",
+  "mlp": ["gated_mlp", "ungated_mlp"],
+  "moe": "softmax_router|no_router_bias|no_norm_topk|shared_expert|grouped_expert_weights|flat_routing",
+  "rotary": "standard_rope",
+  "norm": "rmsnorm"
+}

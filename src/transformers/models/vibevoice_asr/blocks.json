@@ -1,0 +1,5 @@
+{
+  "layer_other": "norm-attn-residual-norm-mlp-residual",
+  "mlp": "ungated_mlp",
+  "norm": "rmsnorm"
+}

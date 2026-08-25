@@ -1,0 +1,6 @@
+{
+  "attention": "gqa|no_extras|rope_half|qkv_fused|no_qk_norm|full_attention",
+  "layer_other": "norm-mlp",
+  "moe": "softmax_router|no_router_bias|no_norm_topk|no_shared_expert|grouped_expert_weights|flat_routing",
+  "rotary": "standard_rope"
+}

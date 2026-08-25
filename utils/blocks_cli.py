@@ -46,10 +46,13 @@ from blocks_facets import (  # noqa: E402
     ancestors,
     build_date_data,
     build_variants,
+    forwards_match,
+    generates_modeling,
     measure_axis_costs,
     modular_parents,
     scan_file,
     scan_repo,
+    tier2_mismatch,
 )
 
 
@@ -183,13 +186,34 @@ def _best_match(block: Block, variant_blocks: list[Block], model_dates) -> Block
     -- a model correctly inheriting the variant from `qwen2` would still get flagged because
     `llama` happens to be older and also holds it.
     """
-    candidates = [b for b in variant_blocks if b.model != block.model]
+    holders = [b for b in variant_blocks if b.model != block.model]
+    if not holders:
+        return None
+    # Ancestry is checked against *every* holder, before any filtering: if the variant is already
+    # reachable through inheritance the reuse is in place, whatever role that ancestor plays.
+    related = ancestors(block.model)
+    if any(b.model in related or block.model in ancestors(b.model) for b in holders):
+        return None
+    # You cannot inherit from a model that did not exist yet. Without this the suggestions come out
+    # circular -- gpt_oss told to use granite_swa and granite_swa told to use gpt_oss.
+    my_date = model_dates.get(block.model, "9999-99-99")
+    candidates = [
+        b
+        for b in holders
+        if model_dates.get(b.model, "9999-99-99") < my_date
+        # Facets nominated this candidate; only an identical forward confirms it.
+        and forwards_match(block, b)
+    ]
     if not candidates:
         return None
-    related = ancestors(block.model)
-    if any(b.model in related or block.model in ancestors(b.model) for b in candidates):
-        return None
-    return min(candidates, key=lambda b: (model_dates.get(b.model, "9999-99-99"), b.model))
+    # Prefer the candidate whose `__init__` also matches, then the oldest. Sorting by date alone
+    # suggested `vit.ViTMLP` (2020) over `blip_2.Blip2MLP` (2023) for instructblipvideo: both have
+    # the same forward, but only blip_2 matches the init too, so only blip_2 gives a diff-neutral
+    # refactor. Oldest-first still decides among equally close candidates, keeping lineage historic.
+    return min(
+        candidates,
+        key=lambda b: (tier2_mismatch(block, b), model_dates.get(b.model, "9999-99-99"), b.model),
+    )
 
 
 def cmd_lint(args: argparse.Namespace) -> int:
@@ -253,7 +277,11 @@ def cmd_lint(args: argparse.Namespace) -> int:
             better = [
                 b.model
                 for b in variants[block.tag].blocks
-                if b.model != model and b.model not in ancestors(model) and model not in ancestors(b.model)
+                if b.model != model
+                and b.model not in ancestors(model)
+                and model not in ancestors(b.model)
+                and dates.get(b.model, "9999-99-99") < dates.get(model, "9999-99-99")
+                and forwards_match(block, b)
             ]
             if not better:
                 continue
@@ -282,6 +310,9 @@ def cmd_lint(args: argparse.Namespace) -> int:
                 if only and block.model not in only:
                     continue
                 if block.model == canonical:
+                    continue
+                canonical_block = next((b for b in variant.blocks if b.model == canonical), None)
+                if canonical_block is None or not forwards_match(block, canonical_block):
                     continue
                 inherited_from = [p for p in parents.get(block.model, ()) if p in variant.owners]
                 younger = [
@@ -330,11 +361,16 @@ def cmd_lint(args: argparse.Namespace) -> int:
                     )
                 )
 
+    if args.fixable:
+        findings = [f for f in findings if f[2] is None or generates_modeling(f[2].model)]
     findings.sort(key=lambda f: -f[0])
     shown = findings[: args.limit]
     for cost, rule, block, message, delta in shown:
         location = f"{block.path}:{block.lineno}" if block is not None else ""
-        print(f"[{rule}] ~{cost} LoC  {message}")
+        applicable = ""
+        if block is not None and not generates_modeling(block.model):
+            applicable = "  [not modular-generated: needs a standalone rewrite, not a base swap]"
+        print(f"[{rule}] ~{cost} LoC  {message}{applicable}")
         if delta:
             print(f"          init differs on: {', '.join(f'{k}: {a} vs {b}' for k, (a, b) in sorted(delta.items()))}")
         if location:
@@ -449,6 +485,11 @@ def main() -> int:
         "--min-cost", type=int, default=DEFAULT_MIN_COST, help="skip block kinds cheaper than this to override"
     )
     p_lint.add_argument("--strict", action="store_true", help="exit non-zero when there are findings")
+    p_lint.add_argument(
+        "--fixable",
+        action="store_true",
+        help="only findings on models whose modeling file the modular actually generates",
+    )
     p_lint.set_defaults(func=cmd_lint)
 
     args = parser.parse_args()

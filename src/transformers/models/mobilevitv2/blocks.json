@@ -1,0 +1,3 @@
+{
+  "layer_other": ["norm", "norm-attn-norm-mlp"]
+}
