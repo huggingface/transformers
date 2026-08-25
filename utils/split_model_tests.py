@@ -42,11 +42,8 @@ import ast
 import os
 
 
-# Directories under `tests` (other than `models`) that a dedicated daily CI job already covers in full:
-#   - `pipelines`:    `run_pipelines_torch_gpu` runs `tests/pipelines` on both machine types.
-#   - `quantization`: `run_quantization_torch_gpu` runs every `tests/quantization/<method>`
-# Any workflow calling this script must define both jobs, or they loses that coverage entirely.
-COVERED_BY_DEDICATED_JOB = ["pipelines", "quantization"]
+# Directories under `tests` (other than `models`) that a dedicated daily CI job already covers in full
+COVERED_BY_DEDICATED_JOB = ["pipelines", "quantization", "trainer"]
 
 # Directories under `tests` holding no test file at all, so a job for them collects nothing.
 NO_TEST_FILES = ["fixtures"]
