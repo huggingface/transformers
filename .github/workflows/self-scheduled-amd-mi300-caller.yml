@@ -68,7 +68,7 @@ jobs:
       ci_event: Scheduled CI (AMD) - mi300
       report_repo_id: optimum-amd/transformers_daily_ci
       env_file: /etc/podinfo/gha-gpu-isolation-settings
-      commit_sha: ${{ github.sha }}
+      commit_sha: ${{ github.event.workflow_run.head_sha || github.sha }}
     secrets: inherit
 
   torch-pipeline:
@@ -82,7 +82,7 @@ jobs:
       ci_event: Scheduled CI (AMD) - mi300
       report_repo_id: optimum-amd/transformers_daily_ci
       env_file: /etc/podinfo/gha-gpu-isolation-settings
-      commit_sha: ${{ github.sha }}
+      commit_sha: ${{ github.event.workflow_run.head_sha || github.sha }}
     secrets: inherit
 
   example-ci:
@@ -96,7 +96,7 @@ jobs:
       ci_event: Scheduled CI (AMD) - mi300
       report_repo_id: optimum-amd/transformers_daily_ci
       env_file: /etc/podinfo/gha-gpu-isolation-settings
-      commit_sha: ${{ github.sha }}
+      commit_sha: ${{ github.event.workflow_run.head_sha || github.sha }}
     secrets: inherit
 
   deepspeed-ci:
@@ -110,5 +110,5 @@ jobs:
       ci_event: Scheduled CI (AMD) - mi300
       report_repo_id: optimum-amd/transformers_daily_ci
       env_file: /etc/podinfo/gha-gpu-isolation-settings
-      commit_sha: ${{ github.sha }}
+      commit_sha: ${{ github.event.workflow_run.head_sha || github.sha }}
     secrets: inherit
