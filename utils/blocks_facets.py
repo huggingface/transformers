@@ -726,23 +726,22 @@ _GENERATED_MARKER = "This file was automatically generated from"
 
 
 @cache
-def generates_modeling(model: str, models_root: Path = MODELS_ROOT) -> bool:
+def generates_modeling(path: Path) -> bool:
     """
-    Whether this model's `modeling_*.py` is produced by its modular file.
+    Whether this specific `modeling_*.py` is produced by a modular file.
 
-    Having a `modular_*.py` is not enough: `modular_yolos.py` declares only image-processor classes,
-    so `modeling_yolos.py` is hand-written. Adding a block subclass to that modular makes the
-    converter emit a modeling file containing *only* that block -- it deleted 565 of 655 lines when
-    tried. A finding on such a model cannot be applied by editing the modular, and saying so up
-    front is the difference between a one-line fix and a wasted afternoon.
+    Judged per *file*, not per directory. Having a `modular_*.py` in the directory is not enough:
+    `modular_yolos.py` declares only image-processor classes, so `modeling_yolos.py` is hand-written,
+    and adding a block subclass to that modular made the converter emit a modeling file containing
+    only that block -- 565 of 655 lines gone. Nor is one generated file enough: `data2vec` ships
+    audio, text and vision modeling files and they are not all generated. A finding on a
+    hand-written file cannot be applied by editing a modular, and saying so up front is the
+    difference between a one-line fix and a wasted afternoon.
     """
-    for path in (models_root / model).glob("modeling_*.py"):
-        try:
-            if _GENERATED_MARKER in path.read_text(encoding="utf-8")[:2000]:
-                return True
-        except OSError:
-            continue
-    return False
+    try:
+        return _GENERATED_MARKER in path.read_text(encoding="utf-8")[:2000]
+    except OSError:
+        return False
 
 
 def tier2_mismatch(a: Block, b: Block) -> int:
@@ -859,6 +858,42 @@ def modular_overrides(models_root: Path = MODELS_ROOT) -> list[Override]:
                     )
                 )
     return found
+
+
+# `# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->BlenderbotSmall`
+_COPIED_FROM_RE = re.compile(r"#\s*Copied from transformers\.models\.(\w+)\.\w+\.(\w+)")
+
+
+@cache
+def copied_from_sources(models_root: Path = MODELS_ROOT) -> dict[tuple[str, str], str]:
+    """
+    `{(model, symbol): source model}` for every `# Copied from` marker in the library.
+
+    This is the library's *third* reuse mechanism, alongside modular inheritance and plain
+    duplication, and `utils/check_copies.py` keeps it consistent in CI. A block carrying a marker is
+    therefore already managed reuse: `BlenderbotSmallAttention` is copied from `BartAttention` on
+    purpose, and reporting it as unmanaged duplication would send someone to author a modular file
+    for a model that already tracks its source.
+    """
+    sources: dict[tuple[str, str], str] = {}
+    for model_dir in sorted(p for p in models_root.iterdir() if p.is_dir()):
+        for path in sorted(model_dir.glob("modeling_*.py")):
+            try:
+                lines = path.read_text(encoding="utf-8").splitlines()
+            except OSError:
+                continue
+            pending: str | None = None
+            for line in lines:
+                marker = _COPIED_FROM_RE.search(line)
+                if marker:
+                    pending = marker.group(1)
+                    continue
+                declared = re.match(r"(?:class|def)\s+(\w+)", line)
+                if declared:
+                    if pending:
+                        sources[(model_dir.name, declared.group(1))] = pending
+                    pending = None
+    return sources
 
 
 @cache

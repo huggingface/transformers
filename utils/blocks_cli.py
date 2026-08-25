@@ -46,6 +46,7 @@ from blocks_facets import (  # noqa: E402
     ancestors,
     build_date_data,
     build_variants,
+    copied_from_sources,
     forwards_match,
     generates_modeling,
     measure_axis_costs,
@@ -366,7 +367,13 @@ def cmd_lint(args: argparse.Namespace) -> int:
                 if len({h.model for h in group}) < 2:
                     continue
                 oldest = min((dates.get(h.model, "9999-99-99"), h.model) for h in group)[1]
-                unrelated = [h for h in group if h.model != oldest and oldest not in ancestors(h.model)]
+                owners = {h.model for h in group}
+                # The reuse is in place if *any* holder of this exact body is already an ancestor:
+                # the converter inlined it from there. Testing only the canonical owner reported
+                # every Llama descendant for `rotate_half`, whose oldest holder is gpt_neox.
+                # A `# Copied from` marker does NOT count -- that is the legacy mechanism being
+                # migrated away from, so a marker makes a finding easier to act on, not exempt.
+                unrelated = [h for h in group if h.model != oldest and not (ancestors(h.model) & owners)]
                 if only:
                     unrelated = [h for h in unrelated if h.model in only]
                 if not unrelated:
@@ -387,14 +394,20 @@ def cmd_lint(args: argparse.Namespace) -> int:
                 )
 
     if args.fixable:
-        findings = [f for f in findings if f[2] is None or generates_modeling(f[2].model)]
+        findings = [f for f in findings if f[2] is None or generates_modeling(f[2].path)]
     findings.sort(key=lambda f: -f[0])
     shown = findings[: args.limit]
     for cost, rule, block, message, delta in shown:
         location = f"{block.path}:{block.lineno}" if block is not None else ""
         applicable = ""
-        if block is not None and not generates_modeling(block.model):
-            applicable = "  [not modular-generated: needs a standalone rewrite, not a base swap]"
+        if block is not None:
+            copied = copied_from_sources().get((block.model, block.class_name))
+            if copied:
+                # The legacy mechanism already names the source, so this is a known-safe conversion
+                # to modular rather than a discovery -- the easiest kind of finding to act on.
+                applicable += f"  [legacy `# Copied from {copied}`: convert to modular]"
+            if not generates_modeling(block.path):
+                applicable += "  [no modular yet: needs one authored, not a base swap]"
         print(f"[{rule}] ~{cost} LoC  {message}{applicable}")
         if delta:
             print(f"          init differs on: {', '.join(f'{k}: {a} vs {b}' for k, (a, b) in sorted(delta.items()))}")
