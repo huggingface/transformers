@@ -1372,7 +1372,7 @@ class Qwen4ExpTextModel(Qwen4ExpPreTrainedModel):
                 full_position_ids = position_ids.new_zeros((batch_size, full_length))
                 full_position_ids[:, -current_seq_length:] = position_ids
                 for i in range(batch_size):
-                    first_pos = position_ids[i, 0].item()
+                    first_pos = position_ids[i, 0].item()  # trf-ignore: TRF056
                     full_position_ids[i, -current_seq_length - first_pos : -current_seq_length] = torch.arange(
                         first_pos, device=position_ids.device
                     )
