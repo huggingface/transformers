@@ -206,14 +206,88 @@ class BaseVideoProcessorTester(unittest.TestCase):
             self.assertEqual(cropped_video.shape, (8, 3, *expected_size))
 
     def test_convert_to_rgb(self):
+        from transformers.image_utils import ChannelDimension
+        from transformers.video_utils import convert_to_rgb
+
         video_processor = BaseVideoProcessor(model_init_kwargs=VideosKwargs)
         video = get_random_video(20, 20, return_torch=True)
 
         rgb_video = video_processor.convert_to_rgb(video[:, :1])
         self.assertEqual(rgb_video.shape, (8, 3, 20, 20))
 
-        rgb_video = video_processor.convert_to_rgb(torch.cat([video, video[:, :1]], dim=1))
-        self.assertEqual(rgb_video.shape, (8, 3, 20, 20))
+        # Test torch tensor with alpha channel (transparent, opaque, fully transparent)
+        # Transparent (alpha=128)
+        video_torch_transparent = torch.tensor(
+            [[[[255.0]], [[0.0]], [[0.0]], [[128.0]]]],
+            dtype=torch.float32,
+        )
+        rgb_video = video_processor.convert_to_rgb(video_torch_transparent)
+        self.assertEqual(rgb_video.shape, (1, 3, 1, 1))
+        torch.testing.assert_close(
+            rgb_video[0, :, 0, 0],
+            torch.tensor([255.0, 127.0, 127.0]),
+            atol=1.0,
+            rtol=1e-3,
+        )
+
+        # Opaque (alpha=255)
+        video_torch_opaque = torch.tensor(
+            [[[[255.0]], [[0.0]], [[0.0]], [[255.0]]]],
+            dtype=torch.float32,
+        )
+        rgb_video = video_processor.convert_to_rgb(video_torch_opaque)
+        self.assertEqual(rgb_video.shape, (1, 3, 1, 1))
+        torch.testing.assert_close(
+            rgb_video[0, :, 0, 0],
+            torch.tensor([255.0, 0.0, 0.0]),
+        )
+
+        # Fully transparent (alpha=0) -> blended with white background gives [255.0, 255.0, 255.0]
+        video_torch_zero_alpha = torch.tensor(
+            [[[[255.0]], [[0.0]], [[0.0]], [[0.0]]]],
+            dtype=torch.float32,
+        )
+        rgb_video = video_processor.convert_to_rgb(video_torch_zero_alpha)
+        self.assertEqual(rgb_video.shape, (1, 3, 1, 1))
+        torch.testing.assert_close(
+            rgb_video[0, :, 0, 0],
+            torch.tensor([255.0, 255.0, 255.0]),
+        )
+
+        # Test numpy video with alpha channel (transparent, opaque, fully transparent)
+        video_np_transparent = np.array(
+            [
+                [[[255, 0, 0, 128]]],
+                [[[0, 255, 0, 64]]],
+            ],
+            dtype=np.uint8,
+        )
+        rgb_video = convert_to_rgb(video_np_transparent, input_data_format=ChannelDimension.LAST)
+        self.assertEqual(rgb_video.shape, (2, 3, 1, 1))
+        # Red with alpha=128 over white: (1 - 128/255)*255 + (128/255)*255 = 255 for R, ~127.5 for G and B
+        np.testing.assert_allclose(rgb_video[0, :, 0, 0], [255.0, 127.0, 127.0], atol=1.0)
+
+        video_np_opaque = np.array(
+            [
+                [[[255, 0, 0, 255]]],
+                [[[0, 255, 0, 255]]],
+            ],
+            dtype=np.uint8,
+        )
+        rgb_video = convert_to_rgb(video_np_opaque, input_data_format=ChannelDimension.LAST)
+        self.assertEqual(rgb_video.shape, (2, 3, 1, 1))
+        np.testing.assert_array_equal(rgb_video[0, :, 0, 0], [255, 0, 0])
+
+        # Fully transparent (alpha=0)
+        video_np_zero_alpha = np.array(
+            [
+                [[[255, 0, 0, 0]]],
+            ],
+            dtype=np.uint8,
+        )
+        rgb_video = convert_to_rgb(video_np_zero_alpha, input_data_format=ChannelDimension.LAST)
+        self.assertEqual(rgb_video.shape, (1, 3, 1, 1))
+        np.testing.assert_array_equal(rgb_video[0, :, 0, 0], [255, 255, 255])
 
     def test_group_and_reorder_videos(self):
         """Tests that videos can be grouped by frame size and number of frames"""
@@ -387,3 +461,10 @@ class LoadVideoTester(unittest.TestCase):
                 fps=1,
                 num_frames=10,
             )
+
+    def test_load_video_num_frames_exceeds_total(self):
+        video_file_path = hf_hub_download(
+            repo_id="raushan-testing-hf/videos-test", filename="sample_demo_1.mp4", repo_type="dataset"
+        )
+        with self.assertRaisesRegex(ValueError, "exceeds total_num_frames"):
+            load_video(video_file_path, num_frames=300)
