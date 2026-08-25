@@ -423,8 +423,7 @@ TOKENIZER_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TOKENIZER_MAPPING_NAM
 CONFIG_TO_TYPE = {v: k for k, v in CONFIG_MAPPING_NAMES.items()}
 
 MODEL_IDS_TO_TOKENIZERS_BACKEND = [
-    "deepseek-ai/deepseek-r1-distill-*",
-    "deepseek-ai/deepseek-coder-*",
+    "deepseek-ai/deepseek-*",
     "allenai/dolma2-tokenizer",
     "google/umt5-small",
     "salesforce/blip2-opt-*",
