@@ -29,9 +29,6 @@ if is_torch_available():
         Qwen3OmniMoeThinkerConfig,
         Qwen3VLConfig,
     )
-    from transformers.modeling_multimodal_utils import (
-        get_mrope_text_positions,
-    )
     from transformers.models.ernie4_5_vl_moe.modeling_ernie4_5_vl_moe import Ernie4_5_VLMoeModel
     from transformers.models.hunyuan_vl.modeling_hunyuan_vl import get_rope_index as hunyuan_get_rope_index
     from transformers.models.qwen2_5_omni.modeling_qwen2_5_omni import get_rope_index as qwen2_5_omni_get_rope_index
@@ -332,8 +329,11 @@ class GetRopeIndexTest(unittest.TestCase):
         self.assertEqual(deltas.tolist(), [[16]])
 
     def test_text_only_positions_count_up(self):
+        # No vision grids: the layout falls back to plain 1D positions on every axis.
         attention_mask = torch.tensor([[0, 0, 1, 1, 1]])
-        position_ids, deltas = get_mrope_text_positions(attention_mask)
+        position_ids, deltas = qwen2_5_omni_get_rope_index(
+            self.omni_config(Qwen2_5OmniThinkerConfig()), None, None, attention_mask=attention_mask
+        )
         # padded slots keep position 1, the rest count up from 0
         self.assertEqual(position_ids.tolist(), [[[1, 1, 0, 1, 2]]] * 3)
         self.assertEqual(deltas.tolist(), [[0]])

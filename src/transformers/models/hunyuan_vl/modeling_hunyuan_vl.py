@@ -32,7 +32,7 @@ from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_multimodal_utils import MultiModalPreTrainedModelMixin, _mrope_place_positions
+from ...modeling_multimodal_utils import MultiModalPreTrainedModelMixin
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -901,12 +901,26 @@ def get_rope_index(
     grid_iter = iter(image_grid_thw) if image_grid_thw is not None else None
     image_index = 0
 
-    def positions_for_sequence(token_ids, token_types):
-        nonlocal image_index
+    position_ids = torch.full(
+        (num_axes, input_ids.shape[0], input_ids.shape[1]), 0, dtype=input_ids.dtype, device=input_ids.device
+    )
+    rope_deltas = []
+    for batch_idx, token_ids in enumerate(input_ids):
+        token_types = mm_token_type_ids[batch_idx]
+        valid_tokens = None
+        if attention_mask is not None:
+            valid_tokens = attention_mask[batch_idx].bool()
+            token_ids, token_types = token_ids[valid_tokens], token_types[valid_tokens]
+
         current_position_ids = torch.arange(token_ids.shape[-1], dtype=input_ids.dtype, device=token_ids.device)
         current_position_ids = current_position_ids.view(1, -1).expand(num_axes, -1).clone()
         if grid_iter is None:
-            return current_position_ids
+            if valid_tokens is not None:
+                position_ids[:, batch_idx, valid_tokens] = current_position_ids
+            else:
+                position_ids[:, batch_idx] = current_position_ids
+            rope_deltas.append(current_position_ids.max() + 1 - len(token_ids))
+            continue
 
         for modality_type, group in itertools.groupby(enumerate(token_types.tolist()), lambda x: x[1]):
             if modality_type != 1:  # image == 1; this layout has no video/audio modality
@@ -940,11 +954,13 @@ def get_rope_index(
             )
             current_position_ids[offset + 2, grid_start:grid_end] = image_index
             image_index += 1
-        return current_position_ids
+        if valid_tokens is not None:
+            position_ids[:, batch_idx, valid_tokens] = current_position_ids
+        else:
+            position_ids[:, batch_idx] = current_position_ids
+        rope_deltas.append(current_position_ids.max() + 1 - len(token_ids))
 
-    position_ids, rope_deltas = _mrope_place_positions(
-        input_ids, mm_token_type_ids, num_axes, attention_mask, positions_for_sequence
-    )
+    rope_deltas = torch.tensor(rope_deltas, device=input_ids.device).unsqueeze(1)
     if image_grid_thw is not None and image_index != len(image_grid_thw):
         raise ValueError(
             "Number of image placeholder spans does not match `image_grid_thw`: "

@@ -27,7 +27,6 @@ from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...generation import GenerationMixin
 from ...image_utils import ImageInput
-from ...modeling_multimodal_utils import get_mrope_vision_positions
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import ImagesKwargs, ProcessorMixin, Unpack
@@ -588,9 +587,13 @@ class GlmImageModel(Glm4vModel):
                 # For an image with height H and width W:
                 # - position_width cycles [0, 1, ..., W-1] for each row, repeated H times
                 # - position_height stays constant per row, [0]*W, [1]*W, ..., [H-1]*W
-                vision_position_ids = get_mrope_vision_positions(
-                    start_position=current_pos, grid_thw=curr_grids[img_idx], device=device
-                )
+                grid_thw = curr_grids[img_idx]
+                grid_t, grid_h, grid_w = (int(grid_thw[0]), int(grid_thw[1]), int(grid_thw[2]))
+                temporal = torch.arange(grid_t, device=device) + current_pos
+                height = torch.arange(grid_h, device=device) + current_pos
+                width = torch.arange(grid_w, device=device) + current_pos
+                axes = torch.meshgrid(temporal, height, width, indexing="ij")
+                vision_position_ids = torch.stack(axes, dim=0).reshape(3, -1)
                 current_pos += max(curr_grids[img_idx][1], curr_grids[img_idx][2])
 
                 prev_image_end = end

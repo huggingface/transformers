@@ -35,11 +35,7 @@ from ...integrations import use_experts_implementation, use_kernel_forward_from_
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_multimodal_utils import (
-    MultiModalGenerationMixin,
-    MultiModalPreTrainedModelMixin,
-    get_mrope_vision_positions,
-)
+from ...modeling_multimodal_utils import MultiModalGenerationMixin, MultiModalPreTrainedModelMixin
 from ...modeling_outputs import BaseModelOutputWithPooling, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -1141,9 +1137,14 @@ def get_rope_index(
             else:
                 grid_thw = next(grid_iters[modality_type])
                 t_merge_size = 1 if modality_type == 1 else temporal_merge_size
-                vision_position_ids = get_mrope_vision_positions(
-                    current_pos, grid_thw, t_merge_size, spatial_merge_size, device=input_ids.device
-                )
+                grid_t = grid_thw[0].item() // t_merge_size
+                grid_h = grid_thw[1].item() // spatial_merge_size
+                grid_w = grid_thw[2].item() // spatial_merge_size
+                temporal = torch.arange(grid_t, device=input_ids.device) + current_pos
+                height = torch.arange(grid_h, device=input_ids.device) + current_pos
+                width = torch.arange(grid_w, device=input_ids.device) + current_pos
+                axes = torch.meshgrid(temporal, height, width, indexing="ij")
+                vision_position_ids = torch.stack(axes, dim=0).reshape(3, -1)
                 llm_pos_ids_list.append(vision_position_ids)
                 current_pos += max(grid_thw[1], grid_thw[2]) // spatial_merge_size
         llm_positions = torch.cat(llm_pos_ids_list, dim=1).reshape(3, -1)

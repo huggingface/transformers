@@ -34,11 +34,6 @@ from ...generation import GenerationMixin
 from ...image_utils import ImageInput
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_multimodal_utils import (
-    _mrope_place_positions,
-    get_mrope_text_positions,
-    get_mrope_vision_positions,
-)
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
@@ -247,7 +242,12 @@ def get_rope_index(
     merged onto the same clock rather than chunk-interleaved. Temporal positions are fractional (float).
     """
     if input_ids is None or (image_grid_thw is None and video_grid_thw is None):
-        return get_mrope_text_positions(attention_mask, dtype=torch.float)
+        # No vision span to lay out: every token counts up on all three axes, padded slots keeping 1.
+        text_positions = attention_mask.to(torch.float).cumsum(-1) - 1
+        text_positions.masked_fill_(attention_mask == 0, 1)
+        text_positions = text_positions.unsqueeze(0).expand(3, -1, -1)
+        highest = text_positions.max(0, keepdim=False)[0].max(-1, keepdim=True)[0]
+        return text_positions, highest + 1 - attention_mask.sum(dim=-1, keepdim=True)
     spatial_merge_size = config.vision_config.spatial_merge_size
     image_token_id = config.image_token_id
     video_token_id = config.video_token_id
@@ -275,6 +275,18 @@ def get_rope_index(
         def block(length, start_position):
             positions = torch.arange(start_position, start_position + length, dtype=torch.float, device=device)
             return positions.expand(3, -1)
+
+        def vision_positions(start_position, grid_thw, time_interval):
+            """`(3, tokens)` `(temporal, height, width)` positions for one grid, the temporal axis counting
+            `time_interval` per grid step. Fractional, so it stays float."""
+            grid_t = grid_thw[0].item()
+            grid_h = grid_thw[1].item() // spatial_merge_size
+            grid_w = grid_thw[2].item() // spatial_merge_size
+            temporal = torch.arange(grid_t, dtype=torch.float, device=device) * time_interval + start_position
+            height = torch.arange(grid_h, dtype=torch.float, device=device) + start_position
+            width = torch.arange(grid_w, dtype=torch.float, device=device) + start_position
+            axes = torch.meshgrid(temporal, height, width, indexing="ij")
+            return torch.stack(axes, dim=0).reshape(3, -1)
 
         vision_start_indices = torch.argwhere(token_ids == vision_start_token_id).squeeze(1)
         vision_tokens = token_ids[vision_start_indices + 1]
@@ -324,16 +336,7 @@ def get_rope_index(
 
             elif min_ed == ed_vision_start and token_ids[ed_vision_start + 1] == image_token_id:
                 grid_thw = image_grid_thw[image_idx]
-                blocks.append(
-                    get_mrope_vision_positions(
-                        start_position,
-                        grid_thw,
-                        spatial_merge_size=spatial_merge_size,
-                        time_interval=position_id_per_seconds,
-                        dtype=torch.float,
-                        device=device,
-                    )
-                )
+                blocks.append(vision_positions(start_position, grid_thw, position_id_per_seconds))
                 st += int(text_len + bos_len + grid_thw.prod() // (spatial_merge_size**2) + eos_len)
                 image_idx += 1
                 remain_images -= 1
@@ -341,13 +344,8 @@ def get_rope_index(
             elif min_ed == ed_vision_start and token_ids[ed_vision_start + 1] == video_token_id:
                 grid_thw = video_grid_thw[video_idx]
                 blocks.append(
-                    get_mrope_vision_positions(
-                        start_position,
-                        grid_thw,
-                        spatial_merge_size=spatial_merge_size,
-                        time_interval=float(second_per_grid_ts[video_idx]) * position_id_per_seconds,
-                        dtype=torch.float,
-                        device=device,
+                    vision_positions(
+                        start_position, grid_thw, float(second_per_grid_ts[video_idx]) * position_id_per_seconds
                     )
                 )
                 st += int(text_len + bos_len + grid_thw.prod() // (spatial_merge_size**2) + eos_len)
@@ -358,13 +356,8 @@ def get_rope_index(
                 grid_thw = video_grid_thw[video_idx]
                 audio_len = _audio_length_windowed(audio_seqlens[audio_idx])
                 audio_positions = block(audio_len, start_position)
-                video_positions = get_mrope_vision_positions(
-                    start_position,
-                    grid_thw,
-                    spatial_merge_size=spatial_merge_size,
-                    time_interval=float(second_per_grid_ts[video_idx]) * position_id_per_seconds,
-                    dtype=torch.float,
-                    device=device,
+                video_positions = vision_positions(
+                    start_position, grid_thw, float(second_per_grid_ts[video_idx]) * position_id_per_seconds
                 )
                 # merge the two streams by temporal position, one token at a time, video first on a tie
                 video_pos, audio_pos = 0, 0
@@ -392,9 +385,23 @@ def get_rope_index(
             blocks.append(block(len(input_tokens) - st, blocks[-1].max() + 1 if blocks else 0))
         return torch.cat(blocks, dim=1).reshape(3, -1)
 
-    return _mrope_place_positions(
-        input_ids, mm_token_type_ids, 3, attention_mask, positions_for_sequence, dtype=torch.float
+    position_ids = torch.full(
+        (3, input_ids.shape[0], input_ids.shape[1]), 0, dtype=torch.float, device=input_ids.device
     )
+    rope_deltas = []
+    for batch_idx, token_ids in enumerate(input_ids):
+        valid_tokens = None
+        if attention_mask is not None:
+            valid_tokens = attention_mask[batch_idx].bool()
+            token_ids = token_ids[valid_tokens]
+
+        positions = positions_for_sequence(token_ids, None).to(device=position_ids.device, dtype=torch.float)
+        if valid_tokens is not None:
+            position_ids[:, batch_idx, valid_tokens] = positions
+        else:
+            position_ids[:, batch_idx] = positions
+        rope_deltas.append(positions.max() + 1 - len(token_ids))
+    return position_ids, torch.tensor(rope_deltas, device=input_ids.device).unsqueeze(1)
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-Omni-30B-A3B-Instruct")

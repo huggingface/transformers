@@ -32,11 +32,6 @@ from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
-from ...modeling_multimodal_utils import (
-    _mrope_place_positions,
-    get_mrope_text_positions,
-    get_mrope_vision_positions,
-)
 from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast, ModelOutput
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -858,7 +853,12 @@ def get_rope_index(
     share one span, interleaved in `seconds_per_chunk` chunks.
     """
     if input_ids is None or (image_grid_thw is None and video_grid_thw is None):
-        return get_mrope_text_positions(attention_mask)
+        # No vision span to lay out: every token just counts up on all three axes, padded slots keeping 1.
+        text_positions = attention_mask.cumsum(-1) - 1
+        text_positions.masked_fill_(attention_mask == 0, 1)
+        text_positions = text_positions.unsqueeze(0).expand(3, -1, -1)
+        highest = text_positions.max(0, keepdim=False)[0].max(-1, keepdim=True)[0]
+        return text_positions, highest + 1 - attention_mask.sum(dim=-1, keepdim=True)
     spatial_merge_size = config.vision_config.spatial_merge_size
     image_token_id = config.image_token_id
     video_token_id = config.video_token_id
@@ -877,6 +877,18 @@ def get_rope_index(
 
         def next_position():
             return blocks[-1].max() + 1 if blocks else 0
+
+        def vision_positions(start_position, grid_thw, time_interval=1):
+            """`(3, tokens)` `(temporal, height, width)` positions for one grid, the temporal axis counting
+            `time_interval` per grid step."""
+            grid_t = grid_thw[0].item()
+            grid_h = grid_thw[1].item() // spatial_merge_size
+            grid_w = grid_thw[2].item() // spatial_merge_size
+            temporal = (torch.arange(grid_t, device=device) * time_interval).to(torch.long) + start_position
+            height = torch.arange(grid_h, device=device) + start_position
+            width = torch.arange(grid_w, device=device) + start_position
+            axes = torch.meshgrid(temporal, height, width, indexing="ij")
+            return torch.stack(axes, dim=0).reshape(3, -1)
 
         def block(length, start_position=None):
             start_position = next_position() if start_position is None else start_position
@@ -933,15 +945,7 @@ def get_rope_index(
             elif min_ed == ed_image:
                 blocks.append(block(bos_len))
                 grid_thw = image_grid_thw[image_idx]
-                blocks.append(
-                    get_mrope_vision_positions(
-                        next_position(),
-                        grid_thw,
-                        spatial_merge_size=spatial_merge_size,
-                        time_interval=position_id_per_seconds,
-                        device=device,
-                    )
-                )
+                blocks.append(vision_positions(next_position(), grid_thw, position_id_per_seconds))
                 image_len = grid_thw.prod() // (spatial_merge_size**2)
                 blocks.append(block(eos_len))
                 st += int(text_len + bos_len + image_len + eos_len)
@@ -952,12 +956,8 @@ def get_rope_index(
                 blocks.append(block(bos_len))
                 grid_thw = video_grid_thw[video_idx]
                 blocks.append(
-                    get_mrope_vision_positions(
-                        next_position(),
-                        grid_thw,
-                        spatial_merge_size=spatial_merge_size,
-                        time_interval=float(second_per_grid_ts[video_idx]) * position_id_per_seconds,
-                        device=device,
+                    vision_positions(
+                        next_position(), grid_thw, float(second_per_grid_ts[video_idx]) * position_id_per_seconds
                     )
                 )
                 video_len = grid_thw.prod() // (spatial_merge_size**2)
@@ -975,12 +975,8 @@ def get_rope_index(
                 grid_thw = video_grid_thw[video_idx]
                 audio_len = _mrope_audio_length_pooled(audio_seqlens[audio_idx])
                 audio_positions = block(audio_len, span_start)
-                video_positions = get_mrope_vision_positions(
-                    span_start,
-                    grid_thw,
-                    spatial_merge_size=spatial_merge_size,
-                    time_interval=float(second_per_grid_ts[video_idx]) * position_id_per_seconds,
-                    device=device,
+                video_positions = vision_positions(
+                    span_start, grid_thw, float(second_per_grid_ts[video_idx]) * position_id_per_seconds
                 )
                 positions_per_chunk = int(position_id_per_seconds * seconds_per_chunk)
                 video_chunks = _mrope_temporal_chunks(video_positions[0], positions_per_chunk, span_start)
@@ -1005,9 +1001,25 @@ def get_rope_index(
             blocks.append(block(len(input_tokens) - st))
         return torch.cat(blocks, dim=1).reshape(3, -1)
 
-    return _mrope_place_positions(
-        input_ids, mm_token_type_ids, 3, attention_mask, positions_for_sequence, padded_position=1
+    # Padded slots keep position 1, matching this family's text-only fallback above.
+    position_ids = torch.full(
+        (3, input_ids.shape[0], input_ids.shape[1]), 1, dtype=input_ids.dtype, device=input_ids.device
     )
+    rope_deltas = []
+    for batch_idx, token_ids in enumerate(input_ids):
+        valid_tokens = None
+        if attention_mask is not None:
+            valid_tokens = attention_mask[batch_idx].bool()
+            token_ids = token_ids[valid_tokens]
+
+        positions = positions_for_sequence(token_ids, None)
+        positions = positions.to(device=position_ids.device, dtype=position_ids.dtype)
+        if valid_tokens is not None:
+            position_ids[:, batch_idx, valid_tokens] = positions
+        else:
+            position_ids[:, batch_idx] = positions
+        rope_deltas.append(positions.max() + 1 - len(token_ids))
+    return position_ids, torch.tensor(rope_deltas, device=input_ids.device).unsqueeze(1)
 
 
 @auto_docstring
@@ -1019,7 +1031,7 @@ class Qwen2_5OmniThinkerCausalLMOutputWithPast(CausalLMOutputWithPast):
     grouping `mm_token_type_ids` (which this family does not produce): at each step the *nearest* upcoming
     image/video/audio placeholder wins, and its span contributes a one-position `bos` block, the modality's
     own positions, and a one-position `eos` block, each starting one past the previous block's maximum.
-    Audio is 1D in time, images and videos are 3D (see [`get_mrope_vision_positions`]), and the temporal axis
+    Audio is 1D in time, images and videos are 3D, and the temporal axis
     counts `position_id_per_seconds` positions per second of media. With `use_audio_in_video`, a video and
     its soundtrack share one span: both are cut into `seconds_per_chunk` chunks by
     [`_mrope_temporal_chunks`] and emitted video-chunk-then-audio-chunk, wrapped in doubled bos/eos blocks.
