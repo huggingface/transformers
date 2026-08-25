@@ -376,6 +376,7 @@ class CohereCompassVideoProcessor(BaseVideoProcessor):
         Returns:
             `Tuple(int, int)`: Number of placeholder tokens required and number of patches per image.
         """
+        videos_kwargs = videos_kwargs if videos_kwargs is not None else {}
         min_pixels = videos_kwargs.get("min_pixels", None) or self.size["shortest_edge"]
         max_pixels = videos_kwargs.get("max_pixels", None) or self.size["longest_edge"]
         patch_size = videos_kwargs.get("patch_size", None) or self.patch_size
@@ -383,8 +384,22 @@ class CohereCompassVideoProcessor(BaseVideoProcessor):
         temporal_patch_size = videos_kwargs.get("temporal_patch_size", None) or self.temporal_patch_size
 
         factor = patch_size * merge_size
+        cap_pixels_per_frame = videos_kwargs.get("cap_pixels_per_frame", None)
+        if cap_pixels_per_frame is None:
+            cap_pixels_per_frame = bool(self.cap_pixels_per_frame)
+        if cap_pixels_per_frame:
+            # Keep the count in sync with `resize` when the per-frame cap is active.
+            frame_cap = self.max_video_tokens * factor * factor
+            pixels_per_frame = max(min(frame_cap, max_pixels // num_frames), int(min_pixels * 1.05))
+            max_pixels = pixels_per_frame * num_frames
         resized_height, resized_width = smart_resize(
-            height, width, factor, min_pixels=min_pixels, max_pixels=max_pixels
+            num_frames,
+            height,
+            width,
+            temporal_factor=temporal_patch_size,
+            factor=factor,
+            min_pixels=min_pixels,
+            max_pixels=max_pixels,
         )
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
         grid_t = num_frames // temporal_patch_size
