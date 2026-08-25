@@ -29,21 +29,21 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernelized_func
-from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
+from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
-from ...utils.output_capturing import OutputRecorder, capture_outputs
-from .configuration_param2moe import Param2MoEConfig
+from ...utils.output_capturing import capture_outputs
+from .configuration_param2moe import Param2Config, Param2MoeConfig
 
 
-class Param2MoEMLP(nn.Module):
+class Param2MoeMLP(nn.Module):
     def __init__(self, config, intermediate_size=None):
         super().__init__()
         self.config = config
@@ -60,10 +60,10 @@ class Param2MoEMLP(nn.Module):
 
 
 @use_kernel_forward_from_hub("RMSNorm")
-class Param2MoERMSNorm(nn.Module):
+class Param2MoeRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
-        Param2MoERMSNorm is equivalent to T5LayerNorm
+        Param2MoeRMSNorm is equivalent to T5LayerNorm
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
@@ -80,9 +80,9 @@ class Param2MoERMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class Param2MoERotaryEmbedding(nn.Module):
+class Param2MoeRotaryEmbedding(nn.Module):
     @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config: Param2MoEConfig, device=None):
+    def __init__(self, config: Param2MoeConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -100,7 +100,7 @@ class Param2MoERotaryEmbedding(nn.Module):
 
     @staticmethod
     @deprecate_kwarg("device", version="5.18")
-    def compute_default_rope_parameters(config: Param2MoEConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
+    def compute_default_rope_parameters(config: Param2MoeConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -138,7 +138,7 @@ class Param2MoERotaryEmbedding(nn.Module):
 
 
 @use_experts_implementation
-class Param2MoEExperts(nn.Module):
+class Param2MoeExperts(nn.Module):
     """Collection of expert weights stored as 3D tensors."""
 
     def __init__(self, config):
@@ -177,7 +177,7 @@ class Param2MoEExperts(nn.Module):
         return final_hidden_states
 
 
-class Param2MoETopkRouter(nn.Module):
+class Param2MoeTopkRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
@@ -218,17 +218,17 @@ class Param2MoETopkRouter(nn.Module):
         return router_logits, topk_weights, topk_indices
 
 
-class Param2MoESparseMoeBlock(nn.Module):
+class Param2MoeMoE(nn.Module):
     """
     A mixed expert module containing shared experts.
     """
 
-    def __init__(self, config: Param2MoEConfig):
+    def __init__(self, config: Param2MoeConfig):
         super().__init__()
         self.config = config
-        self.experts = Param2MoEExperts(config)
-        self.gate = Param2MoETopkRouter(config)
-        self.shared_experts = Param2MoEMLP(
+        self.experts = Param2MoeExperts(config)
+        self.gate = Param2MoeTopkRouter(config)
+        self.shared_experts = Param2MoeMLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
 
@@ -240,6 +240,27 @@ class Param2MoESparseMoeBlock(nn.Module):
         hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
         hidden_states = hidden_states + self.shared_experts(residuals)
         return hidden_states
+
+
+@use_kernel_forward_from_hub("RMSNorm")
+class Param2RMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
+        """
+        Param2RMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
 def rotate_half(x):
@@ -313,10 +334,10 @@ def eager_attention_forward(
 
 
 @use_kernelized_func(apply_rotary_pos_emb)
-class Param2MoEAttention(nn.Module):
+class Param2MoeAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: Param2MoEConfig, layer_idx: int):
+    def __init__(self, config: Param2Config, layer_idx: int):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -338,10 +359,8 @@ class Param2MoEAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        self.q_norm = Param2MoERMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
-        self.k_norm = Param2MoERMSNorm(
-            self.head_dim, eps=config.rms_norm_eps
-        )  # thus post q_norm does not need reshape
+        self.q_norm = Param2RMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
+        self.k_norm = Param2RMSNorm(self.head_dim, eps=config.rms_norm_eps)  # thus post q_norm does not need reshape
         self.sliding_window = getattr(config, "sliding_window", None)
 
     def forward(
@@ -386,20 +405,20 @@ class Param2MoEAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class Param2MoEDecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: Param2MoEConfig, layer_idx: int):
+class Param2MoeDecoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: Param2MoeConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        self.self_attn = Param2MoEAttention(config=config, layer_idx=layer_idx)
-        self.mlp = (
-            # CODEPATH: bharatgenai/Param2-17B-A2.4B-Thinking sets first_k_dense_replace=1,
-            # so layer 0 is a dense Param2MoEMLP and all subsequent layers use the MoE block.
-            Param2MoESparseMoeBlock(config) if layer_idx >= config.first_k_dense_replace else Param2MoEMLP(config)
-        )
+        self.self_attn = Param2MoeAttention(config=config, layer_idx=layer_idx)
 
-        self.input_layernorm = Param2MoERMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = Param2MoERMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        if layer_idx >= config.first_k_dense_replace:
+            self.mlp = Param2MoeMoE(config)
+        else:
+            self.mlp = Param2MoeMLP(config)
+
+        self.input_layernorm = Param2MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = Param2MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -434,11 +453,11 @@ class Param2MoEDecoderLayer(GradientCheckpointingLayer):
 
 
 @auto_docstring
-class Param2MoEPreTrainedModel(PreTrainedModel):
-    config: Param2MoEConfig
+class Param2MoePreTrainedModel(PreTrainedModel):
+    config: Param2MoeConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Param2MoEDecoderLayer"]
+    _no_split_modules = ["Param2MoeDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -446,39 +465,38 @@ class Param2MoEPreTrainedModel(PreTrainedModel):
 
     _can_compile_fullgraph = True
     _supports_attention_backend = True
-
     _can_record_outputs = {
-        "router_logits": OutputRecorder(Param2MoETopkRouter, index=0),
-        "hidden_states": Param2MoEDecoderLayer,
-        "attentions": Param2MoEAttention,
+        "hidden_states": Param2MoeDecoderLayer,
+        "attentions": Param2MoeAttention,
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
+    # DeepseekV3 ignores its own `layers.61`; Param2Moe has 21 layers.
+    _keys_to_ignore_on_load_unexpected = None
 
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        std = self.config.initializer_range
-        if isinstance(module, Param2MoEExperts):
-            init.normal_(module.gate_up_proj, mean=0.0, std=std)
-            init.normal_(module.down_proj, mean=0.0, std=std)
-        elif isinstance(module, Param2MoETopkRouter):
-            init.normal_(module.weight, mean=0.0, std=std)
+        if isinstance(module, Param2MoeTopkRouter):
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.e_score_correction_bias)
+        elif isinstance(module, Param2MoeExperts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
 
 
 @auto_docstring
-class Param2MoEModel(Param2MoEPreTrainedModel):
-    def __init__(self, config: Param2MoEConfig):
+class Param2MoeModel(Param2MoePreTrainedModel):
+    def __init__(self, config: Param2MoeConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
-            [Param2MoEDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [Param2MoeDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.norm = Param2MoERMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = Param2MoERotaryEmbedding(config=config)
+        self.norm = Param2MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = Param2MoeRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -496,23 +514,22 @@ class Param2MoEModel(Param2MoEPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> MoeModelOutputWithPast:
+    ) -> BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
+        if inputs_embeds is None:
+            inputs_embeds: torch.Tensor = self.embed_tokens(input_ids)
+
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
-
-        if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids)
 
         if position_ids is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        mask_function = create_causal_mask if self.config.sliding_window is None else create_sliding_window_causal_mask
-        causal_mask = mask_function(
+        causal_mask = create_causal_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
@@ -527,105 +544,22 @@ class Param2MoEModel(Param2MoEPreTrainedModel):
             hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask,
+                position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                position_embeddings=position_embeddings,
                 **kwargs,
             )
 
         hidden_states = self.norm(hidden_states)
-
-        return MoeModelOutputWithPast(  # only diff with Mistral is the output type, we need MoE
+        return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
 
 
-def load_balancing_loss_func(
-    gate_logits: torch.Tensor | tuple[torch.Tensor] | None,
-    num_experts: int | None = None,
-    top_k=2,
-    attention_mask: torch.Tensor | None = None,
-) -> torch.Tensor | int:
-    r"""
-    Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
-
-    See Switch Transformer (https://huggingface.co/papers/2101.03961) for more details. This function implements the loss
-    function presented in equations (4) - (6) of the paper. It aims at penalizing cases where the routing between
-    experts is too unbalanced.
-
-    Args:
-        gate_logits:
-            Logits from the `gate`, should be a tuple of model.config.num_hidden_layers tensors of
-            shape [batch_size X sequence_length, num_experts].
-        num_experts:
-            Number of experts
-        top_k:
-            The number of experts to route per-token, can be also interpreted as the `top-k` routing
-            parameter.
-        attention_mask (`torch.Tensor`, *optional*):
-            The attention_mask used in forward function
-            shape [batch_size X sequence_length] if not None.
-
-    Returns:
-        The auxiliary loss.
-    """
-    if gate_logits is None or not isinstance(gate_logits, tuple):
-        return 0
-
-    if isinstance(gate_logits, tuple):
-        compute_device = gate_logits[0].device
-        concatenated_gate_logits = torch.cat([layer_gate.to(compute_device) for layer_gate in gate_logits], dim=0)
-
-    routing_weights = torch.nn.functional.softmax(concatenated_gate_logits, dim=-1)
-
-    _, selected_experts = torch.topk(routing_weights, top_k, dim=-1)
-
-    expert_mask = torch.nn.functional.one_hot(selected_experts, num_experts)
-
-    if attention_mask is None:
-        # Compute the percentage of tokens routed to each experts
-        tokens_per_expert = torch.mean(expert_mask.float(), dim=0)
-
-        # Compute the average probability of routing to these experts
-        router_prob_per_expert = torch.mean(routing_weights, dim=0)
-    else:
-        batch_size, sequence_length = attention_mask.shape
-        num_hidden_layers = concatenated_gate_logits.shape[0] // (batch_size * sequence_length)
-
-        # Compute the mask that masks all padding tokens as 0 with the same shape of expert_mask
-        expert_attention_mask = (
-            attention_mask[None, :, :, None, None]
-            .expand((num_hidden_layers, batch_size, sequence_length, top_k, num_experts))
-            .reshape(-1, top_k, num_experts)
-            .to(compute_device)
-        )
-
-        # Compute the percentage of tokens routed to each experts
-        tokens_per_expert = torch.sum(expert_mask.float() * expert_attention_mask, dim=0) / torch.sum(
-            expert_attention_mask, dim=0
-        )
-
-        # Compute the mask that masks all padding tokens as 0 with the same shape of tokens_per_expert
-        router_per_expert_attention_mask = (
-            attention_mask[None, :, :, None]
-            .expand((num_hidden_layers, batch_size, sequence_length, num_experts))
-            .reshape(-1, num_experts)
-            .to(compute_device)
-        )
-
-        # Compute the average probability of routing to these experts
-        router_prob_per_expert = torch.sum(routing_weights * router_per_expert_attention_mask, dim=0) / torch.sum(
-            router_per_expert_attention_mask, dim=0
-        )
-
-    overall_loss = torch.sum(tokens_per_expert * router_prob_per_expert.unsqueeze(0))
-    return overall_loss * num_experts
-
-
 @auto_docstring
-class Param2MoEForCausalLM(Param2MoEPreTrainedModel, GenerationMixin):
+class Param2MoeForCausalLM(Param2MoePreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
@@ -633,12 +567,9 @@ class Param2MoEForCausalLM(Param2MoEPreTrainedModel, GenerationMixin):
 
     def __init__(self, config):
         super().__init__(config)
-        self.model = Param2MoEModel(config)
+        self.model = Param2MoeModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        self.router_aux_loss_coef = config.router_aux_loss_coef
-        self.num_experts = config.num_local_experts
-        self.num_experts_per_tok = config.num_experts_per_tok
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -654,23 +585,17 @@ class Param2MoEForCausalLM(Param2MoEPreTrainedModel, GenerationMixin):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_router_logits: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> MoeCausalLMOutputWithPast:
+    ) -> CausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, Param2MoEForCausalLM
+        >>> from transformers import AutoTokenizer, Param2MoeForCausalLM
 
-        >>> model = Param2MoEForCausalLM.from_pretrained("mistralai/Param2MoE-8x7B-v0.1")
-        >>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Param2MoE-8x7B-v0.1")
+        >>> model = Param2MoeForCausalLM.from_pretrained("meta-param2_moe/Param2Moe-2-7b-hf")
+        >>> tokenizer = AutoTokenizer.from_pretrained("meta-param2_moe/Param2Moe-2-7b-hf")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
@@ -680,20 +605,13 @@ class Param2MoEForCausalLM(Param2MoEPreTrainedModel, GenerationMixin):
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
-
-        output_router_logits = (
-            output_router_logits if output_router_logits is not None else self.config.output_router_logits
-        )
-
-        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
-        outputs: MoeModelOutputWithPast = self.model(
+        outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_router_logits=output_router_logits,
             **kwargs,
         )
 
@@ -704,28 +622,15 @@ class Param2MoEForCausalLM(Param2MoEPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
-        aux_loss = None
-        if output_router_logits:
-            aux_loss = load_balancing_loss_func(
-                outputs.router_logits,
-                self.num_experts,
-                self.num_experts_per_tok,
-                attention_mask,
-            )
-            if labels is not None:
-                loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
-
-        return MoeCausalLMOutputWithPast(
+        return CausalLMOutputWithPast(
             loss=loss,
-            aux_loss=aux_loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            router_logits=outputs.router_logits,
         )
 
 
-__all__ = ["Param2MoEPreTrainedModel", "Param2MoEModel", "Param2MoEForCausalLM"]
+__all__ = ["Param2MoePreTrainedModel", "Param2MoeModel", "Param2MoeForCausalLM"]

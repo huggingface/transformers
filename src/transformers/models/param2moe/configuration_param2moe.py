@@ -27,36 +27,27 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="bharatgenai/Param2-17B-A2.4B-Thinking")
 @strict
-class Param2MoEConfig(PreTrainedConfig):
+class Param2MoeConfig(PreTrainedConfig):
     r"""
     first_k_dense_replace (`int`, *optional*, defaults to 1):
         Number of dense layers in the shallow layers before switching to MoE layers.
     n_group (`int`, *optional*, defaults to 1):
         Number of groups for routed experts.
-    router_dtype (`str`, *optional*, defaults to `"fp32"`):
-        Data type used for router weight computation. Using float32 improves numerical
-        stability of the routing scores.
     partial_rotary_factor (`float`, *optional*, defaults to 1.0):
         Fraction of each attention head's dimension to apply rotary position embeddings
         to. A value of 1.0 applies RoPE to the full head dimension.
     rope_theta (`float`, *optional*, defaults to 1000000.0):
         Base period (theta) for rotary position embeddings. Larger values extend
         the effective context length.
-    scoring_func (`str`, *optional*, defaults to `"sigmoid"`):
-        Activation function used to convert router logits to routing scores.
-        `"sigmoid"` gives independent per-expert probabilities; `"softmax"` applies
-        competitive normalization across all experts.
-    torch_dtype (`str`, *optional*, defaults to `"bfloat16"`):
-        Default torch dtype for model weights when loading with `from_pretrained`.
 
     Example:
 
     ```python
-    >>> from transformers import Param2MoEModel, Param2MoEConfig
-    >>> # Initializing a Param2MoE style configuration
-    >>> configuration = Param2MoEConfig()
+    >>> from transformers import Param2MoeModel, Param2MoeConfig
+    >>> # Initializing a Param2Moe style configuration
+    >>> configuration = Param2MoeConfig()
     >>> # Accessing the model configuration
-    >>> model = Param2MoEModel(configuration)
+    >>> model = Param2MoeModel(configuration)
     >>> print(model.config)
     ```
     """
@@ -124,15 +115,8 @@ class Param2MoEConfig(PreTrainedConfig):
     num_experts_per_tok: int | None = 6
     moe_intermediate_size: int = 2048
     rope_parameters: RopeParameters | dict | None = None
-    router_aux_loss_coef: float = 0.0
-    router_dtype: str = "fp32"
     partial_rotary_factor: float = 1.0
-    max_window_layers: int = 20
-    output_router_logits: bool = False
-    sliding_window: int | None = None
     rope_theta: float = 1000000.0
-    scoring_func: str = "sigmoid"
-    torch_dtype: str = "bfloat16"
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
@@ -143,4 +127,4 @@ class Param2MoEConfig(PreTrainedConfig):
             )
 
 
-__all__ = ["Param2MoEConfig"]
+__all__ = ["Param2MoeConfig"]

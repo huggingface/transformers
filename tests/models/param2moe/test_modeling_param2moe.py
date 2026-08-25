@@ -158,7 +158,6 @@ class Param2MoEModelTester(CausalLMModelTester):
             rope_parameters={"rope_type": "default", "rope_theta": 10000.0},
             rope_theta=10000.0,
         )
-        )
 
 
 @require_torch
