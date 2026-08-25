@@ -1454,6 +1454,32 @@ def rename_source_key(
     return renamed_key, converter_source_pattern
 
 
+def _add_unmatched_checkpoint_key(
+    key: str,
+    model: PreTrainedModel,
+    loading_info: LoadStateDictInfo,
+) -> None:
+    """Classify a checkpoint key that does not match the current model state dict.
+
+    During pipeline-parallel loading, each stage receives keys for the entire model even though its local state dict
+    contains only that stage's parameters. A key owned by another stage is therefore recorded as intentionally skipped
+    instead of unexpected. Without the key, it would be considered unexpected.
+    """
+    stage = getattr(model, "_pp_stage", None)
+    if stage is None:
+        loading_info.unexpected_keys.add(key)
+        return
+
+    base_model = getattr(model, model.base_model_prefix)
+    owner_rank = stage.find_rank_for_key(key, len(base_model.layers), model.base_model_prefix)
+    owned_by_another_stage = owner_rank is not None and owner_rank != stage.pp_rank
+
+    if owned_by_another_stage:
+        loading_info.skipped_pp_keys.add(key)
+    else:
+        loading_info.unexpected_keys.add(key)
+
+
 def convert_and_load_state_dict_in_model(
     model: PreTrainedModel,
     state_dict: dict[str, Any],
@@ -1564,6 +1590,7 @@ def convert_and_load_state_dict_in_model(
         mismatched_keys=set(),
         conversion_errors={},
         error_msgs=[],
+        skipped_pp_keys=set(),
     )
 
     # We use threading by default, if not explicitly deactivated via env variable. If we have to offload,
@@ -1679,9 +1706,13 @@ def convert_and_load_state_dict_in_model(
         elif source_pattern is not None:  # add all target keys as unexpected
             mapping = pattern_to_converter[source_pattern]
             for k in mapping.target_patterns:
-                loading_info.unexpected_keys.add(renamed_key.replace(mapping.target_patterns[0], k))
+                _add_unmatched_checkpoint_key(
+                    renamed_key.replace(mapping.target_patterns[0], k),
+                    model,
+                    loading_info,
+                )
         else:
-            loading_info.unexpected_keys.add(renamed_key)
+            _add_unmatched_checkpoint_key(renamed_key, model, loading_info)
 
     try:
         for first_param_name, mapping in tqdm(param_name_to_load.items(), desc="Loading weights"):
