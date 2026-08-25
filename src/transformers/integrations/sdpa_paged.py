@@ -1,6 +1,7 @@
 import torch
 
 from ..generation.continuous_batching.cache import PagedAttentionCache
+from .sdpa_attention import sdpa_attention_forward
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -27,17 +28,23 @@ def sdpa_attention_paged_forward(
 ) -> tuple[torch.Tensor, None]:
     # Add KV cache to the key and value tensors
     cache: PagedAttentionCache | None = kwargs.pop("cache", None)
-    if cache is not None:
-        # This changes the shape of k and v from [1, num_kv_heads, seqlen_kv, head_dim] to [-1, num_kv_heads, head_dim]
-        key, value = cache.update(
-            key_states=key,
-            value_states=value,
-            layer_idx=module.layer_idx,
-            read_index=kwargs["read_index"],
-            write_index=kwargs["write_index"],
+    # Without a paged cache, this is not a continuous batching call: behave like the base sdpa implementation.
+    # This happens when a standard forward runs on a model whose attention was switched to a paged implementation,
+    # e.g. a training forward on the same weights a continuous batching manager generates with.
+    if cache is None:
+        return sdpa_attention_forward(
+            module, query, key, value, attention_mask, dropout=dropout, scaling=scaling, **kwargs
         )
-        key = key.transpose(0, 1).unsqueeze(0)
-        value = value.transpose(0, 1).unsqueeze(0)
+    # This changes the shape of k and v from [1, num_kv_heads, seqlen_kv, head_dim] to [-1, num_kv_heads, head_dim]
+    key, value = cache.update(
+        key_states=key,
+        value_states=value,
+        layer_idx=module.layer_idx,
+        read_index=kwargs["read_index"],
+        write_index=kwargs["write_index"],
+    )
+    key = key.transpose(0, 1).unsqueeze(0)
+    value = value.transpose(0, 1).unsqueeze(0)
 
     # Repeat the key and value tensors for each group of key-value heads
     if hasattr(module, "num_key_value_groups"):
