@@ -60,17 +60,16 @@ from ..bamba.modeling_bamba import apply_mask_to_padding_states
 @strict
 class KimiLinearConfig(DeepseekV3Config):
     r"""
-    linear_num_key_heads (`int`, *optional*):
-        Number of key heads for the linear attention layers. Defaults to 32.
-    linear_key_head_dim (`int`, *optional*):
-        Dimension of each key head in linear attention layers. Defaults to 128.
-    linear_conv_kernel_dim (`int`, *optional*, defaults to 4):
-        Kernel size for the short convolution applied to queries, keys, and values in linear attention layers.
-
-    mlp_layer_types (`list[str]`, *optional*):
-        List of layer types for the MLP or MoE layers. Defaults to None.
     n_group (`int`, *optional*, defaults to 8):
         Number of groups for routed experts.
+    mlp_layer_types (`list[str]`, *optional*):
+        List of layer types for the MLP or MoE layers. Defaults to None.
+    linear_key_head_dim (`int`, *optional*):
+        Dimension of each key head in linear attention layers. Defaults to 128.
+    linear_num_key_heads (`int`, *optional*):
+        Number of key heads for the linear attention layers. Defaults to 32.
+    linear_conv_kernel_dim (`int`, *optional*, defaults to 4):
+        Kernel size for the short convolution applied to queries, keys, and values in linear attention layers.
     """
 
     model_type = "kimi_linear"
@@ -635,6 +634,7 @@ class KimiLinearDecoderLayer(DeepseekV3DecoderLayer):
         self.post_attention_layernorm = KimiLinearRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
 
+@auto_docstring
 class KimiLinearPreTrainedModel(PreTrainedModel):
     config: KimiLinearConfig
     base_model_prefix = "model"
@@ -666,6 +666,7 @@ class KimiLinearPreTrainedModel(PreTrainedModel):
             init.zeros_(module.e_score_correction_bias)
 
 
+@auto_docstring
 class KimiLinearModel(Qwen3NextModel):
     def __init__(self, config: KimiLinearConfig):
         super().__init__(config)

@@ -854,6 +854,7 @@ class KimiLinearDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+@auto_docstring
 class KimiLinearPreTrainedModel(PreTrainedModel):
     config: KimiLinearConfig
     base_model_prefix = "model"
@@ -885,6 +886,7 @@ class KimiLinearPreTrainedModel(PreTrainedModel):
             init.zeros_(module.e_score_correction_bias)
 
 
+@auto_docstring
 class KimiLinearModel(KimiLinearPreTrainedModel):
     def __init__(self, config: KimiLinearConfig):
         super().__init__(config)

@@ -277,7 +277,7 @@ class Reshape(ConversionOps):
         source_patterns: list[str],
         target_patterns: list[str],
         config: PretrainedConfig,
-        **kwargs
+        **kwargs,
     ) -> dict[str, torch.Tensor]:
         # Replace any attribute name with the actual value from the config
         initial_shape = [getattr(config, x) if isinstance(x, str) else x for x in self.initial_shape]
@@ -316,6 +316,7 @@ class Reshape(ConversionOps):
     @property
     def reverse_op(self) -> ConversionOps:
         return Reshape(self.final_shape, self.initial_shape)
+
 
 class SplitModulelist(ConversionOps):
     """Inverse of `MergeModulelist` using explicit split sizes per group."""
