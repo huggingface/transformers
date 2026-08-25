@@ -94,7 +94,7 @@ class CohereAsrAudioProcessorMixin:
         mean = (masked.sum(axis=1) / lengths[:, None])[:, None, :]
         variance = (((masked - mean) ** 2) * mask).sum(axis=1) / (lengths - 1)[:, None]
         std = xp.sqrt(variance)[:, None, :]
-        audio_features = (features - mean) / (std + epsilon) * mask
+        audio_features = (features - mean) / (std + 1e-5) * mask
 
         output["audio_features"] = audio_features
         return output
