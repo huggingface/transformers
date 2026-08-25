@@ -883,9 +883,8 @@ class MuseGlimmerVisionModel(MuseGlimmerPreTrainedModel):
             The temporal, height and width patch-grid dimensions for each packed image or video.
         """
 
-        cu_seqlens = get_vision_cu_seqlens(
-            grid_thw, merge_temporal=self.config.merge_temporal_attention, kwargs=kwargs
-        )
+        # This encoder attends per frame rather than over the whole clip, unlike kimi_k25's.
+        cu_seqlens = get_vision_cu_seqlens(grid_thw, merge_temporal=False, kwargs=kwargs)
         # assumes pos_emb_height==pos_emb_width, adapt to non-square if needed
         window_index, cu_window_seqlens = get_vision_window_index(
             grid_thw,

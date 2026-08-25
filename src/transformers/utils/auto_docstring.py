@@ -1711,13 +1711,6 @@ class ConfigArgs:
     """,
     }
 
-    merge_temporal_attention = {
-        "description": """
-    Whether packed vision attention spans all frames of a clip jointly, rather than treating each frame as
-    its own attention segment.
-    """,
-    }
-
     vision_start_token_id = {
         "description": """
     Token ID that marks the start of a visual segment in the multimodal input sequence.

@@ -18,7 +18,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import itertools
 import warnings
+from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -34,7 +36,11 @@ from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_multimodal_utils import MultiModalPreTrainedModelMixin
+from ...modeling_multimodal_utils import (
+    MultiModalPreTrainedModelMixin,
+    _mrope_place_positions,
+    get_mrope_vision_positions,
+)
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -891,12 +897,96 @@ class GlmImageTextModel(GlmImagePreTrainedModel):
         )
 
 
+def get_rope_index(
+    config,
+    input_ids: torch.LongTensor,
+    mm_token_type_ids: torch.IntTensor,
+    *,
+    attention_mask: torch.Tensor | None = None,
+    image_grid_thw: torch.LongTensor | None = None,
+    video_grid_thw: torch.LongTensor | None = None,
+    second_per_grid_ts: torch.Tensor | None = None,
+    position_block: Callable | None = None,
+    split_video_frames: bool = False,
+    **unused,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """M-RoPE for a sequence of interleaved text and vision runs — the layout most families use.
+
+    Per batch row, walk `mm_token_type_ids` span by span (0=text, 1=image, 2=video): a text span counts 1D
+    positions on every axis, a vision span lays a `(temporal, height, width)` grid and advances the text
+    position by its largest spatial extent. A video's temporal axis is scaled by
+    `tokens_per_second * second_per_grid_ts` when the model declares a clock.
+
+    `position_block` overrides how one span is laid out, for a family that differs only there; everything
+    else about the walk stays shared.
+    """
+    if split_video_frames and video_grid_thw is not None:
+        # A processor that separates video frames with timestamp text makes each frame its own visual span,
+        # so the grids are expanded to one `T=1` row per frame before the spans are laid out.
+        video_grid_thw = torch.repeat_interleave(video_grid_thw, video_grid_thw[:, 0], dim=0)
+        video_grid_thw[:, 0] = 1
+    vision_config = getattr(config, "vision_config", config)
+    spatial_merge_size = vision_config.spatial_merge_size
+    # Three axes, always: this layout's vision block is a `(temporal, height, width)` grid, so the text runs
+    # have to match it. `mrope_section` is the per-axis *head* split and is not the axis count — a family
+    # whose layout has a different number of axes writes its own function (hunyuan_vl does).
+    num_axes = 3
+    tokens_per_second = getattr(vision_config, "tokens_per_second", None)
+    video_temporal_merge_size = getattr(vision_config, "temporal_merge_size", None) or 1
+    grids = {1: image_grid_thw, 2: video_grid_thw}
+
+    def block_for_span(modality_type, start_idx, end_idx, current_position, grid_thw, counter, device):
+        if position_block is not None:
+            return position_block(
+                modality_type,
+                start_idx,
+                end_idx,
+                current_position,
+                grid_thw=grid_thw,
+                second_per_grid_ts=second_per_grid_ts,
+                modality_counter=counter,
+                device=device,
+            )
+        if modality_type == 0:
+            length = end_idx - start_idx
+            positions = torch.arange(current_position, current_position + length, device=device)
+            return positions.expand(num_axes, length), current_position + length
+        time_interval = 1
+        if modality_type == 2 and tokens_per_second is not None and second_per_grid_ts is not None:
+            time_interval = tokens_per_second * int(second_per_grid_ts[counter[modality_type]])
+        block = get_mrope_vision_positions(
+            current_position,
+            grid_thw,
+            temporal_merge_size=video_temporal_merge_size if modality_type == 2 else 1,
+            spatial_merge_size=spatial_merge_size,
+            time_interval=time_interval,
+            device=device,
+        )
+        return block, current_position + int(max(grid_thw[1], grid_thw[2])) // spatial_merge_size
+
+    def positions_for_sequence(token_ids, token_types):
+        counter = defaultdict(int)
+        current_position = 0
+        blocks = []
+        for modality_type, group in itertools.groupby(enumerate(token_types.tolist()), lambda x: x[1]):
+            group = list(group)
+            start_idx, end_idx = group[0][0], group[-1][0] + 1
+            grid_thw = None if modality_type == 0 else grids[modality_type][counter[modality_type]]
+            block, current_position = block_for_span(
+                modality_type, start_idx, end_idx, current_position, grid_thw, counter, token_ids.device
+            )
+            counter[modality_type] += 1
+            blocks.append(block)
+        return torch.cat(blocks, dim=1)
+
+    return _mrope_place_positions(input_ids, mm_token_type_ids, num_axes, attention_mask, positions_for_sequence)
+
+
 @auto_docstring
 class GlmImageModel(GlmImagePreTrainedModel, MultiModalPreTrainedModelMixin):
     base_model_prefix = "model"
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
-
     _no_split_modules = ["GlmImageTextDecoderLayer", "GlmImageVisionBlock"]
 
     def __init__(self, config):
@@ -913,6 +1003,175 @@ class GlmImageModel(GlmImagePreTrainedModel, MultiModalPreTrainedModelMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def get_rope_index(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
+        images_per_sample: torch.LongTensor | None = None,
+        attention_mask: torch.LongTensor | None = None,
+        **kwargs,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Calculate the 3D rope index for image generation task with full batch support.
+
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary.
+            image_grid_thw (`torch.LongTensor` of shape `(total_images_in_batch, 3)`, *optional*):
+                The temporal, height and width of feature shape of each image.
+                Images are packed across all samples in the batch.
+            images_per_sample (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+                Number of images (including target grids) for each sample in the batch.
+                Used to split image_grid_thw by sample.
+            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on padding token indices.
+
+        Returns:
+            position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`):
+                Position IDs for temporal, height, and width dimensions.
+            mrope_position_deltas (`torch.Tensor` of shape `(batch_size, 1)`):
+                Position deltas for multi-modal rotary position embedding.
+        """
+        batch_size, seq_len = input_ids.shape
+        device = input_ids.device
+        dtype = input_ids.dtype
+
+        image_start_token_id = self.config.image_start_token_id
+        image_end_token_id = self.config.image_end_token_id
+
+        position_ids = torch.ones(3, batch_size, seq_len, dtype=dtype, device=device)
+        text_positions = torch.arange(seq_len, device=device)[None, :].repeat(3, 1)
+
+        # Split image_grid_thw by sample if images_per_sample is provided
+        if image_grid_thw is not None and images_per_sample is not None:
+            grids_per_sample = torch.split(image_grid_thw, images_per_sample.tolist())
+        elif image_grid_thw is not None:
+            # Fallback: assume all grids belong to first sample (batch_size=1)
+            grids_per_sample = [image_grid_thw] * batch_size
+        else:
+            grids_per_sample = [None] * batch_size
+
+        # Per-sample caches for decode stage
+        all_decode_position_ids = []
+
+        for batch_idx in range(batch_size):
+            curr_input_ids = input_ids[batch_idx]
+            curr_grids = grids_per_sample[batch_idx]
+
+            if attention_mask is not None and attention_mask.shape[1] == seq_len:
+                valid_mask = attention_mask[batch_idx] == 1
+                curr_input_ids_valid = curr_input_ids[valid_mask]
+            else:
+                # attention_mask may have different length during assisted decoding
+                curr_input_ids_valid = curr_input_ids
+                valid_mask = None
+
+            # Find image boundaries in this sample
+            image_end_positions = torch.where(curr_input_ids_valid == image_end_token_id)[0]
+            image_start_positions = torch.where(curr_input_ids_valid == image_start_token_id)[0] + 1
+            num_complete_images = len(image_end_positions)
+
+            current_pos = 0
+            prev_image_end = 0
+            curr_position_ids = []
+
+            # Process complete images (source images in image-to-image task)
+            for img_idx, (start, end) in enumerate(zip(image_start_positions, image_end_positions)):
+                if curr_grids is None or img_idx >= len(curr_grids):
+                    break
+
+                # Text tokens before this image
+                llm_pos_length = start - prev_image_end
+                llm_position_ids = text_positions[:, current_pos : current_pos + llm_pos_length].to(device=device)
+                current_pos += llm_position_ids.shape[-1]
+
+                # Image tokens with 2D spatial encoding
+                # For an image with height H and width W:
+                # - position_width cycles [0, 1, ..., W-1] for each row, repeated H times
+                # - position_height stays constant per row, [0]*W, [1]*W, ..., [H-1]*W
+                vision_position_ids = get_mrope_vision_positions(
+                    start_position=current_pos, grid_thw=curr_grids[img_idx], device=device
+                )
+                current_pos += max(curr_grids[img_idx][1], curr_grids[img_idx][2])
+
+                prev_image_end = end
+                curr_position_ids.append(torch.cat([llm_position_ids, vision_position_ids], dim=-1))
+
+            # Remaining text tokens (including the final image_start token for generation)
+            end_position = len(curr_input_ids_valid) - prev_image_end
+            llm_position_ids = text_positions[:, current_pos : current_pos + end_position].to(device=device)
+            current_pos += llm_position_ids.shape[-1]
+            curr_position_ids.append(llm_position_ids)
+
+            # Concatenate all position ids for this sample
+            curr_position_ids = torch.cat(curr_position_ids, dim=-1)
+
+            # Store in the main position_ids tensor
+            if valid_mask is not None:
+                position_ids[:, batch_idx, valid_mask] = curr_position_ids
+            else:
+                position_ids[:, batch_idx, :] = curr_position_ids
+
+            # Build decode position ids for this sample
+            if curr_grids is not None and len(curr_grids) > 0:
+                num_decode_grids = len(curr_grids) - num_complete_images
+                num_decode_grids = max(num_decode_grids, 0)
+                decode_pos = current_pos
+
+                decode_temporal_list = []
+                decode_height_list = []
+                decode_width_list = []
+
+                curr_grids_list = curr_grids.tolist()
+                for i in range(1, num_decode_grids + 1):
+                    grid_idx = -i
+                    h = curr_grids_list[grid_idx][1]
+                    w = curr_grids_list[grid_idx][2]
+                    total_tokens = h * w
+
+                    h_indices = torch.arange(h, device=device).unsqueeze(1).expand(h, w).flatten()
+                    w_indices = torch.arange(w, device=device).unsqueeze(0).expand(h, w).flatten()
+
+                    decode_temporal_list.append(
+                        torch.full((total_tokens,), decode_pos, device=device, dtype=torch.long)
+                    )
+                    decode_height_list.append(decode_pos + h_indices)
+                    decode_width_list.append(decode_pos + w_indices)
+                    decode_pos = decode_pos + max(h, w)
+
+                # End marker
+                decode_temporal_list.append(torch.tensor([decode_pos], device=device, dtype=torch.long))
+                decode_height_list.append(torch.tensor([decode_pos], device=device, dtype=torch.long))
+                decode_width_list.append(torch.tensor([decode_pos], device=device, dtype=torch.long))
+
+                sample_decode_pos_ids = torch.stack(
+                    [
+                        torch.cat(decode_temporal_list, dim=0),
+                        torch.cat(decode_height_list, dim=0),
+                        torch.cat(decode_width_list, dim=0),
+                    ],
+                    dim=0,
+                )
+                all_decode_position_ids.append(sample_decode_pos_ids)
+
+        # Store prefill length (same for all samples since input_ids is padded to same length)
+        self._prefill_len = seq_len
+
+        # Pad decode position ids to same length and stack
+        if all_decode_position_ids:
+            max_decode_len = max(x.shape[1] for x in all_decode_position_ids)
+            padded_decode_pos_ids = [
+                F.pad(pos_ids, (0, max_decode_len - pos_ids.shape[1]), mode="replicate")
+                for pos_ids in all_decode_position_ids
+            ]
+            self._cached_decode_position_ids = torch.stack(padded_decode_pos_ids, dim=0)  # [batch, 3, max_decode_len]
+        else:
+            self._cached_decode_position_ids = None
+
+        mrope_position_deltas = torch.zeros([batch_size, 1], dtype=dtype, device=device)
+
+        return position_ids, mrope_position_deltas
 
     @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
@@ -1057,175 +1316,6 @@ class GlmImageModel(GlmImagePreTrainedModel, MultiModalPreTrainedModelMixin):
             attentions=outputs.attentions,
             rope_deltas=self.rope_deltas,
         )
-
-    def get_rope_index(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        image_grid_thw: torch.LongTensor | None = None,
-        images_per_sample: torch.LongTensor | None = None,
-        attention_mask: torch.LongTensor | None = None,
-        **kwargs,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Calculate the 3D rope index for image generation task with full batch support.
-
-        Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary.
-            image_grid_thw (`torch.LongTensor` of shape `(total_images_in_batch, 3)`, *optional*):
-                The temporal, height and width of feature shape of each image.
-                Images are packed across all samples in the batch.
-            images_per_sample (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-                Number of images (including target grids) for each sample in the batch.
-                Used to split image_grid_thw by sample.
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding token indices.
-
-        Returns:
-            position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`):
-                Position IDs for temporal, height, and width dimensions.
-            mrope_position_deltas (`torch.Tensor` of shape `(batch_size, 1)`):
-                Position deltas for multi-modal rotary position embedding.
-        """
-        batch_size, seq_len = input_ids.shape
-        device = input_ids.device
-        dtype = input_ids.dtype
-
-        image_start_token_id = self.config.image_start_token_id
-        image_end_token_id = self.config.image_end_token_id
-
-        position_ids = torch.ones(3, batch_size, seq_len, dtype=dtype, device=device)
-        text_positions = torch.arange(seq_len, device=device)[None, :].repeat(3, 1)
-
-        # Split image_grid_thw by sample if images_per_sample is provided
-        if image_grid_thw is not None and images_per_sample is not None:
-            grids_per_sample = torch.split(image_grid_thw, images_per_sample.tolist())
-        elif image_grid_thw is not None:
-            # Fallback: assume all grids belong to first sample (batch_size=1)
-            grids_per_sample = [image_grid_thw] * batch_size
-        else:
-            grids_per_sample = [None] * batch_size
-
-        # Per-sample caches for decode stage
-        all_decode_position_ids = []
-
-        for batch_idx in range(batch_size):
-            curr_input_ids = input_ids[batch_idx]
-            curr_grids = grids_per_sample[batch_idx]
-
-            if attention_mask is not None and attention_mask.shape[1] == seq_len:
-                valid_mask = attention_mask[batch_idx] == 1
-                curr_input_ids_valid = curr_input_ids[valid_mask]
-            else:
-                # attention_mask may have different length during assisted decoding
-                curr_input_ids_valid = curr_input_ids
-                valid_mask = None
-
-            # Find image boundaries in this sample
-            image_end_positions = torch.where(curr_input_ids_valid == image_end_token_id)[0]
-            image_start_positions = torch.where(curr_input_ids_valid == image_start_token_id)[0] + 1
-            num_complete_images = len(image_end_positions)
-
-            current_pos = 0
-            prev_image_end = 0
-            curr_position_ids = []
-
-            # Process complete images (source images in image-to-image task)
-            for img_idx, (start, end) in enumerate(zip(image_start_positions, image_end_positions)):
-                if curr_grids is None or img_idx >= len(curr_grids):
-                    break
-
-                # Text tokens before this image
-                llm_pos_length = start - prev_image_end
-                llm_position_ids = text_positions[:, current_pos : current_pos + llm_pos_length].to(device=device)
-                current_pos += llm_position_ids.shape[-1]
-
-                # Image tokens with 2D spatial encoding
-                # For an image with height H and width W:
-                # - position_width cycles [0, 1, ..., W-1] for each row, repeated H times
-                # - position_height stays constant per row, [0]*W, [1]*W, ..., [H-1]*W
-                vision_position_ids = self.get_vision_position_ids(
-                    start_position=current_pos, grid_thw=curr_grids[img_idx], device=device
-                )
-                current_pos += max(curr_grids[img_idx][1], curr_grids[img_idx][2])
-
-                prev_image_end = end
-                curr_position_ids.append(torch.cat([llm_position_ids, vision_position_ids], dim=-1))
-
-            # Remaining text tokens (including the final image_start token for generation)
-            end_position = len(curr_input_ids_valid) - prev_image_end
-            llm_position_ids = text_positions[:, current_pos : current_pos + end_position].to(device=device)
-            current_pos += llm_position_ids.shape[-1]
-            curr_position_ids.append(llm_position_ids)
-
-            # Concatenate all position ids for this sample
-            curr_position_ids = torch.cat(curr_position_ids, dim=-1)
-
-            # Store in the main position_ids tensor
-            if valid_mask is not None:
-                position_ids[:, batch_idx, valid_mask] = curr_position_ids
-            else:
-                position_ids[:, batch_idx, :] = curr_position_ids
-
-            # Build decode position ids for this sample
-            if curr_grids is not None and len(curr_grids) > 0:
-                num_decode_grids = len(curr_grids) - num_complete_images
-                num_decode_grids = max(num_decode_grids, 0)
-                decode_pos = current_pos
-
-                decode_temporal_list = []
-                decode_height_list = []
-                decode_width_list = []
-
-                curr_grids_list = curr_grids.tolist()
-                for i in range(1, num_decode_grids + 1):
-                    grid_idx = -i
-                    h = curr_grids_list[grid_idx][1]
-                    w = curr_grids_list[grid_idx][2]
-                    total_tokens = h * w
-
-                    h_indices = torch.arange(h, device=device).unsqueeze(1).expand(h, w).flatten()
-                    w_indices = torch.arange(w, device=device).unsqueeze(0).expand(h, w).flatten()
-
-                    decode_temporal_list.append(
-                        torch.full((total_tokens,), decode_pos, device=device, dtype=torch.long)
-                    )
-                    decode_height_list.append(decode_pos + h_indices)
-                    decode_width_list.append(decode_pos + w_indices)
-                    decode_pos = decode_pos + max(h, w)
-
-                # End marker
-                decode_temporal_list.append(torch.tensor([decode_pos], device=device, dtype=torch.long))
-                decode_height_list.append(torch.tensor([decode_pos], device=device, dtype=torch.long))
-                decode_width_list.append(torch.tensor([decode_pos], device=device, dtype=torch.long))
-
-                sample_decode_pos_ids = torch.stack(
-                    [
-                        torch.cat(decode_temporal_list, dim=0),
-                        torch.cat(decode_height_list, dim=0),
-                        torch.cat(decode_width_list, dim=0),
-                    ],
-                    dim=0,
-                )
-                all_decode_position_ids.append(sample_decode_pos_ids)
-
-        # Store prefill length (same for all samples since input_ids is padded to same length)
-        self._prefill_len = seq_len
-
-        # Pad decode position ids to same length and stack
-        if all_decode_position_ids:
-            max_decode_len = max(x.shape[1] for x in all_decode_position_ids)
-            padded_decode_pos_ids = [
-                F.pad(pos_ids, (0, max_decode_len - pos_ids.shape[1]), mode="replicate")
-                for pos_ids in all_decode_position_ids
-            ]
-            self._cached_decode_position_ids = torch.stack(padded_decode_pos_ids, dim=0)  # [batch, 3, max_decode_len]
-        else:
-            self._cached_decode_position_ids = None
-
-        mrope_position_deltas = torch.zeros([batch_size, 1], dtype=dtype, device=device)
-
-        return position_ids, mrope_position_deltas
 
     def get_image_tokens(
         self,

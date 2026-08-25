@@ -29,7 +29,6 @@ from ...image_utils import (
     IMAGENET_STANDARD_STD,
 )
 from ...masking_utils import create_causal_mask
-from ...modeling_multimodal_utils import MultiModalPreTrainedModelMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
@@ -70,6 +69,7 @@ from ..qwen2_vl.modeling_qwen2_vl import (
     Qwen2VLModel,
     Qwen2VLPreTrainedModel,
     TransformersKwargs,
+    get_rope_index,
 )
 from ..qwen3_5_moe.modeling_qwen3_5_moe import Qwen3_5MoeVisionPatchMerger
 from ..qwen3_vl.processing_qwen3_vl import Qwen3VLProcessor
@@ -610,19 +610,6 @@ class Cosmos3EdgePatchMerger(Qwen3_5MoeVisionPatchMerger):
 
 
 class Cosmos3EdgeModel(Qwen2VLModel, Cosmos3EdgePreTrainedModel):
-    def get_rope_index(self, input_ids, mm_token_type_ids, image_grid_thw=None, video_grid_thw=None, **kwargs):
-        # The processor separates video frames with timestamp text, so each frame is its own visual span:
-        # lay a video out one `T=1` frame grid at a time.
-        if video_grid_thw is not None:
-            video_grid_thw = torch.repeat_interleave(video_grid_thw, video_grid_thw[:, 0], dim=0)
-            video_grid_thw[:, 0] = 1
-        return MultiModalPreTrainedModelMixin.get_rope_index(
-            self, input_ids, mm_token_type_ids, image_grid_thw=image_grid_thw, video_grid_thw=video_grid_thw, **kwargs
-        )
-
-    config_class = Cosmos3EdgeConfig
-    accepts_loss_kwargs = False
-
     def __init__(self, config: Cosmos3EdgeConfig):
         # Qwen2VLModel's constructor instantiates its Qwen-specific submodels. Cosmos3 Edge uses the same
         # multimodal API, but its checkpoint has distinct packed vision and Llama-derived text components.
@@ -632,6 +619,17 @@ class Cosmos3EdgeModel(Qwen2VLModel, Cosmos3EdgePreTrainedModel):
         self.language_model = Cosmos3EdgeTextModel._from_config(config.text_config)
         self.rope_deltas = None
         self.post_init()
+
+    def get_rope_index(self, input_ids, mm_token_type_ids, image_grid_thw=None, video_grid_thw=None, **kwargs):
+        return get_rope_index(
+            self.config,
+            input_ids,
+            mm_token_type_ids,
+            image_grid_thw=image_grid_thw,
+            video_grid_thw=video_grid_thw,
+            split_video_frames=True,
+            **kwargs,
+        )
 
     def get_image_features(
         self,

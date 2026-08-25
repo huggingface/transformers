@@ -36,7 +36,6 @@ from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_multimodal_utils import (
     _mrope_place_positions,
-    _mrope_positions_block,
     get_mrope_text_positions,
     get_mrope_vision_positions,
 )
@@ -230,18 +229,11 @@ class BaseModelOutputWithDeepstackFeatures(BaseModelOutputWithPooling):
     deepstack_features: list[torch.FloatTensor] | None = None
 
 
-def _mrope_index_audio_merged(
+def get_rope_index(
+    config,
     input_ids: torch.LongTensor,
     mm_token_type_ids: torch.IntTensor | None = None,
     *,
-    spatial_merge_size: int,
-    image_token_id: int,
-    video_token_id: int,
-    audio_token_id: int,
-    vision_start_token_id: int,
-    audio_start_token_id: int,
-    position_id_per_seconds: float,
-    audio_window_size: int,
     attention_mask: torch.Tensor | None = None,
     image_grid_thw: torch.LongTensor | None = None,
     video_grid_thw: torch.LongTensor | None = None,
@@ -254,6 +246,16 @@ def _mrope_index_audio_merged(
     (`audio_window_size`), and an audio-in-video span emits the video whole with the audio positions
     merged onto the same clock rather than chunk-interleaved. Temporal positions are fractional (float).
     """
+    if input_ids is None or (image_grid_thw is None and video_grid_thw is None):
+        return get_mrope_text_positions(attention_mask, dtype=torch.float)
+    spatial_merge_size = config.vision_config.spatial_merge_size
+    image_token_id = config.image_token_id
+    video_token_id = config.video_token_id
+    audio_token_id = config.audio_token_id
+    vision_start_token_id = config.vision_start_token_id
+    audio_start_token_id = config.audio_start_token_id
+    position_id_per_seconds = config.position_id_per_seconds
+    audio_window_size = config.audio_config.n_window
 
     def _audio_length_windowed(audio_seqlen):
         # Decoder tokens one audio takes: three stride-2 convs over fixed-size windows, each full
@@ -271,7 +273,8 @@ def _mrope_index_audio_merged(
         blocks = []
 
         def block(length, start_position):
-            return _mrope_positions_block(length, start_position, dtype=torch.float, device=device)
+            positions = torch.arange(start_position, start_position + length, dtype=torch.float, device=device)
+            return positions.expand(3, -1)
 
         vision_start_indices = torch.argwhere(token_ids == vision_start_token_id).squeeze(1)
         vision_tokens = token_ids[vision_start_indices + 1]
@@ -895,51 +898,15 @@ class Qwen3OmniMoePreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedM
         audio_seqlens: torch.LongTensor | None = None,
         second_per_grids: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Calculate the 3D rope index for a `vision + audio + text` sequence: vision spans use 3D RoPE
-        (temporal, height, width) and audio spans are laid out along the temporal axis, merged position by
-        position with the video they belong to when `use_audio_in_video` (see
-        `_mrope_index_audio_merged`). A sequence with no vision falls back to plain 1D positions
-        on all three axes.
-
-        Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary.
-            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-                The temporal, height and width of feature shape of each image in LLM.
-            video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-                The temporal, height and width of feature shape of each video in LLM.
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding token indices.
-            use_audio_in_video (`bool`, *optional*):
-                If set to `True`, use the audio in video.
-            audio_seqlens (`torch.LongTensor` of shape `(num_audios)`, *optional*):
-                The length of feature shape of each audio in LLM.
-            second_per_grids (`torch.LongTensor` of shape `(num_videos)`, *optional*):
-                The time interval (in seconds) for each grid along the temporal dimension in the 3D position IDs.
-
-        Returns:
-            position_ids (`torch.FloatTensor` of shape `(3, batch_size, sequence_length)`)
-            mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
-        """
-        if input_ids is None or (image_grid_thw is None and video_grid_thw is None):
-            return get_mrope_text_positions(attention_mask, dtype=torch.float)
-        return _mrope_index_audio_merged(
+        return get_rope_index(
+            self.config,
             input_ids,
-            spatial_merge_size=self.config.vision_config.spatial_merge_size,
-            image_token_id=self.config.image_token_id,
-            video_token_id=self.config.video_token_id,
-            audio_token_id=self.config.audio_token_id,
-            vision_start_token_id=self.config.vision_start_token_id,
-            audio_start_token_id=self.config.audio_start_token_id,
-            position_id_per_seconds=self.config.position_id_per_seconds,
-            audio_window_size=self.config.audio_config.n_window,
             attention_mask=attention_mask,
             image_grid_thw=image_grid_thw,
             video_grid_thw=video_grid_thw,
-            second_per_grid_ts=second_per_grids,
             audio_seqlens=audio_seqlens,
             use_audio_in_video=use_audio_in_video,
+            second_per_grid_ts=second_per_grids,
         )
 
 
@@ -1681,24 +1648,15 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3MoeForCausalLM):
         audio_seqlens: torch.LongTensor | None = None,
         second_per_grids: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        if input_ids is None or (image_grid_thw is None and video_grid_thw is None):
-            return get_mrope_text_positions(attention_mask, dtype=torch.float)
-        return _mrope_index_audio_merged(
+        return get_rope_index(
+            self.config,
             input_ids,
-            spatial_merge_size=self.config.vision_config.spatial_merge_size,
-            image_token_id=self.config.image_token_id,
-            video_token_id=self.config.video_token_id,
-            audio_token_id=self.config.audio_token_id,
-            vision_start_token_id=self.config.vision_start_token_id,
-            audio_start_token_id=self.config.audio_start_token_id,
-            position_id_per_seconds=self.config.position_id_per_seconds,
-            audio_window_size=self.config.audio_config.n_window,
             attention_mask=attention_mask,
             image_grid_thw=image_grid_thw,
             video_grid_thw=video_grid_thw,
-            second_per_grid_ts=second_per_grids,
             audio_seqlens=audio_seqlens,
             use_audio_in_video=use_audio_in_video,
+            second_per_grid_ts=second_per_grids,
         )
 
     def get_input_embeddings(self):

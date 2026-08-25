@@ -40,12 +40,7 @@ from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_multimodal_utils import (
-    _mrope_place_positions,
-    _mrope_positions_block,
-    get_mrope_text_positions,
-    get_mrope_vision_positions,
-)
+from ...modeling_multimodal_utils import _mrope_place_positions, get_mrope_text_positions, get_mrope_vision_positions
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
@@ -190,18 +185,11 @@ def _mrope_temporal_chunks(
     return chunks
 
 
-def _mrope_index_audio_chunked(
+def get_rope_index(
+    config,
     input_ids: torch.LongTensor,
     mm_token_type_ids: torch.IntTensor | None = None,
     *,
-    spatial_merge_size: int,
-    image_token_id: int,
-    video_token_id: int,
-    audio_token_id: int,
-    vision_start_token_id: int,
-    audio_start_token_id: int,
-    position_id_per_seconds: float,
-    seconds_per_chunk: float,
     attention_mask: torch.Tensor | None = None,
     image_grid_thw: torch.LongTensor | None = None,
     video_grid_thw: torch.LongTensor | None = None,
@@ -215,6 +203,16 @@ def _mrope_index_audio_chunked(
     `position_id_per_seconds` per second of media. With `use_audio_in_video`, a video and its soundtrack
     share one span, interleaved in `seconds_per_chunk` chunks.
     """
+    if input_ids is None or (image_grid_thw is None and video_grid_thw is None):
+        return get_mrope_text_positions(attention_mask)
+    spatial_merge_size = config.vision_config.spatial_merge_size
+    image_token_id = config.image_token_id
+    video_token_id = config.video_token_id
+    audio_token_id = config.audio_token_id
+    vision_start_token_id = config.vision_start_token_id
+    audio_start_token_id = config.audio_start_token_id
+    position_id_per_seconds = config.position_id_per_seconds
+    seconds_per_chunk = config.seconds_per_chunk
     image_idx, video_idx, audio_idx = 0, 0, 0
 
     def positions_for_sequence(token_ids, _token_types):
@@ -228,7 +226,8 @@ def _mrope_index_audio_chunked(
 
         def block(length, start_position=None):
             start_position = next_position() if start_position is None else start_position
-            return _mrope_positions_block(length, start_position, device=device)
+            positions = torch.arange(start_position, start_position + length, device=device)
+            return positions.expand(3, -1)
 
         vision_start_indices = torch.argwhere(token_ids == vision_start_token_id).squeeze(1)
         vision_tokens = token_ids[vision_start_indices + 1]
@@ -370,50 +369,15 @@ class Qwen2_5OmniPreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedMo
         audio_seqlens: torch.LongTensor | None = None,
         second_per_grids: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Calculate the 3D rope index for a `vision + audio + text` sequence: vision spans use 3D RoPE
-        (temporal, height, width) and audio spans are laid out along the temporal axis, interleaved with the
-        video they belong to when `use_audio_in_video` (`_mrope_index_audio_chunked`). A
-        sequence with no vision falls back to plain 1D positions on all three axes.
-
-        Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary.
-            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-                The temporal, height and width of feature shape of each image in LLM.
-            video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-                The temporal, height and width of feature shape of each video in LLM.
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding token indices.
-            use_audio_in_video (`bool`, *optional*):
-                If set to `True`, use the audio in video.
-            audio_seqlens (`torch.LongTensor` of shape `(num_audios)`, *optional*):
-                The length of feature shape of each audio in LLM.
-            second_per_grids (`torch.LongTensor` of shape `(num_videos)`, *optional*):
-                The time interval (in seconds) for each grid along the temporal dimension in the 3D position IDs.
-
-        Returns:
-            position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
-            mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
-        """
-        if input_ids is None or (image_grid_thw is None and video_grid_thw is None):
-            return get_mrope_text_positions(attention_mask)
-        return _mrope_index_audio_chunked(
+        return get_rope_index(
+            self.config,
             input_ids,
-            spatial_merge_size=self.config.vision_config.spatial_merge_size,
-            image_token_id=self.config.image_token_id,
-            video_token_id=self.config.video_token_id,
-            audio_token_id=self.config.audio_token_id,
-            vision_start_token_id=self.config.vision_start_token_id,
-            audio_start_token_id=self.config.audio_start_token_id,
-            position_id_per_seconds=self.config.position_id_per_seconds,
-            seconds_per_chunk=self.config.seconds_per_chunk,
             attention_mask=attention_mask,
             image_grid_thw=image_grid_thw,
             video_grid_thw=video_grid_thw,
-            second_per_grid_ts=second_per_grids,
             audio_seqlens=audio_seqlens,
             use_audio_in_video=use_audio_in_video,
+            second_per_grid_ts=second_per_grids,
         )
 
 

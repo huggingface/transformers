@@ -877,19 +877,24 @@ def get_mrope_image_positions(
     return torch.stack([position_width.flatten(), position_height.flatten()], dim=0)
 
 
-def _mrope_index_indexed_images(
+def get_rope_index(
+    config,
     input_ids: torch.LongTensor,
     mm_token_type_ids: torch.IntTensor,
     *,
-    num_axes: int,
-    spatial_merge_size: int,
     attention_mask: torch.Tensor | None = None,
     image_grid_thw: torch.LongTensor | None = None,
     **unused,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """HunYuanVL's M-RoPE: every token keeps plain 1D positions, and each image span overwrites its slice
     with `(width, height, image_index)` on the last three of `mrope_section`'s axes.
+
+    `rope_parameters["mrope_section"]` sets both the number and the order of the axes: each entry is the
+    half-rotary dimensions for that axis, and the last three are `(width, height, image_index)`.
     """
+    rope_parameters = config.get_text_config().rope_parameters or {}
+    num_axes = len(rope_parameters.get("mrope_section", []))
+    spatial_merge_size = config.vision_config.spatial_merge_size
     if num_axes < 3:
         raise ValueError(f"An indexed-image M-RoPE layout needs at least 3 axes, got {num_axes}.")
 
@@ -966,6 +971,23 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel, MultiModalPreTrainedModelMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def get_rope_index(
+        self,
+        input_ids: torch.LongTensor,
+        mm_token_type_ids: torch.IntTensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+    ) -> tuple[torch.LongTensor, torch.LongTensor]:
+        """M-RoPE decoder position ids: `(position_ids, rope_deltas)`, laid out span by span over
+        `mm_token_type_ids` by [`get_rope_index`] above."""
+        return get_rope_index(
+            self.config,
+            input_ids,
+            mm_token_type_ids,
+            image_grid_thw=image_grid_thw,
+            attention_mask=attention_mask,
+        )
 
     @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
@@ -1065,38 +1087,6 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel, MultiModalPreTrainedModelMixin):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=image_embeds if pixel_values is not None else None,
-        )
-
-    def get_rope_index(
-        self,
-        input_ids: torch.LongTensor,
-        mm_token_type_ids: torch.IntTensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-    ) -> tuple[torch.LongTensor, torch.LongTensor]:
-        """
-        Build HunYuanVL multimodal RoPE position ids.
-
-        `rope_parameters["mrope_section"]` controls both the number and order of multimodal RoPE axes. Each section
-        value is the number of half-rotary dimensions assigned to the corresponding axis, and the sections must sum to
-        `head_dim // 2`.
-
-        This method returns only the multimodal rotary axes consumed by the text backbone. The last three axes are
-        `(width, height, image_index)`; any preceding axes keep their default 1D sequence positions.
-
-        `width` and `height` index the pooled visual grid inside one image. `image_index` is the ordinal of the
-        image/frame in the input sequence, so all visual tokens from the first image get `0`, the second image get
-        `1`, and so on. Text-only 1D positions for the causal mask are inferred by the text backbone and are not part
-        of this return value.
-        """
-        rope_parameters = self.config.get_text_config().rope_parameters or {}
-        return _mrope_index_indexed_images(
-            input_ids,
-            mm_token_type_ids,
-            spatial_merge_size=self.config.vision_config.spatial_merge_size,
-            num_axes=len(rope_parameters.get("mrope_section", [])),
-            image_grid_thw=image_grid_thw,
-            attention_mask=attention_mask,
         )
 
     def compute_3d_position_ids(

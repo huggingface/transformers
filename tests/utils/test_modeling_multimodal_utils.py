@@ -20,25 +20,35 @@ from transformers.testing_utils import is_torch_available, require_torch
 if is_torch_available():
     import torch
 
-    from transformers import Ernie4_5_VLMoeConfig, Qwen2_5_VLConfig, Qwen2VLConfig, Qwen3VLConfig
+    from transformers import (
+        Ernie4_5_VLMoeConfig,
+        HunYuanVLConfig,
+        Qwen2_5_VLConfig,
+        Qwen2_5OmniThinkerConfig,
+        Qwen2VLConfig,
+        Qwen3OmniMoeThinkerConfig,
+        Qwen3VLConfig,
+    )
     from transformers.modeling_multimodal_utils import (
         get_mrope_text_positions,
     )
     from transformers.models.ernie4_5_vl_moe.modeling_ernie4_5_vl_moe import Ernie4_5_VLMoeModel
-    from transformers.models.hunyuan_vl.modeling_hunyuan_vl import _mrope_index_indexed_images
-    from transformers.models.qwen2_5_omni.modeling_qwen2_5_omni import _mrope_index_audio_chunked
+    from transformers.models.hunyuan_vl.modeling_hunyuan_vl import get_rope_index as hunyuan_get_rope_index
+    from transformers.models.qwen2_5_omni.modeling_qwen2_5_omni import get_rope_index as qwen2_5_omni_get_rope_index
     from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLModel
     from transformers.models.qwen2_vl.modeling_qwen2_vl import Qwen2VLModel
-    from transformers.models.qwen3_omni_moe.modeling_qwen3_omni_moe import _mrope_index_audio_merged
+    from transformers.models.qwen3_omni_moe.modeling_qwen3_omni_moe import get_rope_index as qwen3_omni_get_rope_index
     from transformers.models.qwen3_vl.modeling_qwen3_vl import Qwen3VLModel
 
 
-# NOTE: expected positions below were produced by the per-model `get_rope_index` implementations each
-# layout was ported from (the Qwen2-VL family for `interleaved_runs`, HunYuanVL for `indexed_images`,
-# Qwen2.5-Omni for `audio_chunked`, Qwen3-Omni for `audio_merged`), on the same inputs. The layouts are pure
-# functions, so they are driven directly here — see their docstrings for what each block of positions is.
+# NOTE: expected positions below were produced by each model's own `get_rope_index` on the same inputs.
+# Every family defines that as a module-level function in its own `modeling_*.py`, pure in `(config, inputs)`,
+# so the tests call it directly rather than through a model — see each one's docstring for what the blocks of
+# positions mean.
+
+
 @require_torch
-class MRopeLayoutTest(unittest.TestCase):
+class GetRopeIndexTest(unittest.TestCase):
     # a tiny token vocabulary standing in for the omni configs' placeholder/opening tokens
     TOKEN_IDS = {
         "image_token_id": 2,
@@ -49,6 +59,21 @@ class MRopeLayoutTest(unittest.TestCase):
     }
     TEXT, VISION_END, AUDIO_END = 20, 8, 5
 
+    def hunyuan_config(self, num_axes=3):
+        """A real `HunYuanVLConfig`, with the two values this layout reads set for the tiny test grids."""
+        config = HunYuanVLConfig()
+        config.vision_config.spatial_merge_size = 1
+        text_config = config.get_text_config()
+        text_config.rope_parameters = {**(text_config.rope_parameters or {}), "mrope_section": [1] * num_axes}
+        return config
+
+    def omni_config(self, config, **knobs):
+        """A real thinker config, with the placeholder ids swapped for this file's tiny vocabulary."""
+        config.vision_config.spatial_merge_size = 1
+        for key, value in {**self.TOKEN_IDS, **knobs}.items():
+            setattr(config, key, value)
+        return config
+
     def modality_runs(self, runs):
         """`(input_ids, mm_token_type_ids)` for a list of `(modality, length)` runs (0=text, 1=image, 2=video)."""
         token_types = []
@@ -57,7 +82,7 @@ class MRopeLayoutTest(unittest.TestCase):
         input_ids = torch.arange(10, 10 + len(token_types)).view(1, -1)
         return input_ids, torch.tensor([token_types])
 
-    def test_interleaved_runs_image(self):
+    def test_qwen2_vl_image(self):
         input_ids, token_types = self.modality_runs([(0, 2), (1, 4), (0, 1)])
         # meta device: the default config is production-sized and `get_rope_index` reads no weights
         with torch.device("meta"):
@@ -71,7 +96,7 @@ class MRopeLayoutTest(unittest.TestCase):
         )
         self.assertEqual(deltas.tolist(), [[-2]])
 
-    def test_interleaved_runs_video_temporal_scaling(self):
+    def test_qwen2_vl_video_temporal_scaling(self):
         input_ids, token_types = self.modality_runs([(0, 1), (2, 8), (0, 1)])
         # meta device: the default config is production-sized and `get_rope_index` reads no weights
         with torch.device("meta"):
@@ -94,7 +119,7 @@ class MRopeLayoutTest(unittest.TestCase):
         )
         self.assertEqual(deltas.tolist(), [[-4]])
 
-    def test_interleaved_runs_split_video_frames(self):
+    def test_qwen2_vl_split_video_frames(self):
         # processors that separate frames with timestamps emit one visual run per frame, so the single
         # `T=2` grid is expanded to two `T=1` grids, one per run
         input_ids, token_types = self.modality_runs([(0, 1), (2, 4), (0, 1), (2, 4), (0, 1)])
@@ -121,7 +146,7 @@ class MRopeLayoutTest(unittest.TestCase):
         )
         self.assertEqual(deltas.tolist(), [[-4]])
 
-    def test_interleaved_runs_video_temporal_merge(self):
+    def test_qwen2_vl_video_temporal_merge(self):
         # ernie's temporal backbone merge: a `T=2` grid collapses to one temporal position (4 tokens)
         input_ids, token_types = self.modality_runs([(0, 1), (2, 4), (0, 1)])
         # meta device: the default config is production-sized and `get_rope_index` reads no weights
@@ -140,7 +165,7 @@ class MRopeLayoutTest(unittest.TestCase):
         )
         self.assertEqual(deltas.tolist(), [[-2]])
 
-    def test_interleaved_runs_ignores_padding(self):
+    def test_qwen2_vl_ignores_padding(self):
         input_ids, token_types = self.modality_runs([(0, 2), (1, 4), (0, 1)])
         attention_mask = torch.ones_like(input_ids)
         attention_mask[:, :2] = 0
@@ -161,12 +186,15 @@ class MRopeLayoutTest(unittest.TestCase):
         )
         self.assertEqual(deltas.tolist(), [[-2]])
 
-    def test_indexed_images_span_with_boundary_tokens(self):
+    def test_hunyuan_vl_span_with_boundary_tokens(self):
         # 8 image-span tokens for a 6-token grid (2 rows x (2 width + 1 newline)): the span carries the two
         # image-boundary tokens, which keep their 1D positions
         input_ids, token_types = self.modality_runs([(0, 1), (1, 8), (0, 1)])
-        position_ids, deltas = _mrope_index_indexed_images(
-            input_ids, token_types, num_axes=3, spatial_merge_size=1, image_grid_thw=torch.tensor([[1, 2, 2]])
+        position_ids, deltas = hunyuan_get_rope_index(
+            self.hunyuan_config(),
+            input_ids,
+            token_types,
+            image_grid_thw=torch.tensor([[1, 2, 2]]),
         )
         self.assertEqual(
             position_ids.tolist(),
@@ -178,15 +206,14 @@ class MRopeLayoutTest(unittest.TestCase):
         )
         self.assertEqual(deltas.tolist(), [[0]])
 
-    def test_indexed_images_extra_axis_keeps_1d_positions(self):
+    def test_hunyuan_vl_extra_axis_keeps_1d_positions(self):
         # with 4 axes only the last three are replaced; two bare spans consume both grids and the ordinal
         # counts up per image
         input_ids, token_types = self.modality_runs([(0, 1), (1, 6), (0, 1), (1, 6)])
-        position_ids, deltas = _mrope_index_indexed_images(
+        position_ids, deltas = hunyuan_get_rope_index(
+            self.hunyuan_config(num_axes=4),
             input_ids,
             token_types,
-            num_axes=4,
-            spatial_merge_size=1,
             image_grid_thw=torch.tensor([[1, 2, 2], [1, 2, 2]]),
         )
         self.assertEqual(
@@ -200,11 +227,14 @@ class MRopeLayoutTest(unittest.TestCase):
         )
         self.assertEqual(deltas.tolist(), [[0]])
 
-    def test_indexed_images_rejects_span_grid_mismatch(self):
+    def test_hunyuan_vl_rejects_span_grid_mismatch(self):
         input_ids, token_types = self.modality_runs([(0, 1), (1, 5)])
         with self.assertRaises(ValueError):
-            _mrope_index_indexed_images(
-                input_ids, token_types, num_axes=3, spatial_merge_size=1, image_grid_thw=torch.tensor([[1, 2, 2]])
+            hunyuan_get_rope_index(
+                self.hunyuan_config(),
+                input_ids,
+                token_types,
+                image_grid_thw=torch.tensor([[1, 2, 2]]),
             )
 
     def audio_then_image_ids(self):
@@ -217,17 +247,14 @@ class MRopeLayoutTest(unittest.TestCase):
         text, audio_end, vision_end = self.TEXT, self.AUDIO_END, self.VISION_END
         return torch.tensor([[text, 7, 4, 3, 3, 3, 3, 3, 3, 3, 3, 1, 1, 1, audio_end, vision_end, text]])
 
-    def test_audio_chunked_audio_then_image(self):
+    def test_qwen2_5_omni_audio_then_image(self):
         input_ids = self.audio_then_image_ids()
-        position_ids, deltas = _mrope_index_audio_chunked(
+        position_ids, deltas = qwen2_5_omni_get_rope_index(
+            self.omni_config(Qwen2_5OmniThinkerConfig(), position_id_per_seconds=25, seconds_per_chunk=2),
             input_ids,
-            spatial_merge_size=1,
-            position_id_per_seconds=25,
-            seconds_per_chunk=2,
             image_grid_thw=torch.tensor([[1, 2, 2]]),
             audio_seqlens=torch.tensor([12]),
             attention_mask=torch.ones_like(input_ids),
-            **self.TOKEN_IDS,
         )
         self.assertEqual(
             position_ids.tolist(),
@@ -239,19 +266,16 @@ class MRopeLayoutTest(unittest.TestCase):
         )
         self.assertEqual(deltas.tolist(), [[-2]])
 
-    def test_audio_chunked_audio_in_video(self):
+    def test_qwen2_5_omni_audio_in_video(self):
         input_ids = self.audio_in_video_ids()
-        position_ids, deltas = _mrope_index_audio_chunked(
+        position_ids, deltas = qwen2_5_omni_get_rope_index(
+            self.omni_config(Qwen2_5OmniThinkerConfig(), position_id_per_seconds=25, seconds_per_chunk=2),
             input_ids,
-            spatial_merge_size=1,
-            position_id_per_seconds=25,
-            seconds_per_chunk=2,
             video_grid_thw=torch.tensor([[2, 2, 2]]),
             second_per_grid_ts=torch.tensor([1.0]),
             audio_seqlens=torch.tensor([12]),
             use_audio_in_video=True,
             attention_mask=torch.ones_like(input_ids),
-            **self.TOKEN_IDS,
         )
         # the video's two temporal grids are 25 positions apart, and the audio track follows the video
         # inside the single time chunk both fit in
@@ -265,17 +289,14 @@ class MRopeLayoutTest(unittest.TestCase):
         )
         self.assertEqual(deltas.tolist(), [[11]])
 
-    def test_audio_merged_audio_then_image(self):
+    def test_qwen3_omni_audio_then_image(self):
         input_ids = self.audio_then_image_ids()
-        position_ids, deltas = _mrope_index_audio_merged(
+        position_ids, deltas = qwen3_omni_get_rope_index(
+            self.omni_config(Qwen3OmniMoeThinkerConfig(), position_id_per_seconds=25),
             input_ids,
-            spatial_merge_size=1,
-            position_id_per_seconds=25,
-            audio_window_size=100,
             image_grid_thw=torch.tensor([[1, 2, 2]]),
             audio_seqlens=torch.tensor([12]),
             attention_mask=torch.ones_like(input_ids),
-            **self.TOKEN_IDS,
         )
         self.assertEqual(position_ids.dtype, torch.float)
         self.assertEqual(
@@ -288,19 +309,16 @@ class MRopeLayoutTest(unittest.TestCase):
         )
         self.assertEqual(deltas.tolist(), [[-2]])
 
-    def test_audio_merged_audio_in_video(self):
+    def test_qwen3_omni_audio_in_video(self):
         input_ids = self.audio_in_video_ids()
-        position_ids, deltas = _mrope_index_audio_merged(
+        position_ids, deltas = qwen3_omni_get_rope_index(
+            self.omni_config(Qwen3OmniMoeThinkerConfig(), position_id_per_seconds=25),
             input_ids,
-            spatial_merge_size=1,
-            position_id_per_seconds=25,
-            audio_window_size=100,
             video_grid_thw=torch.tensor([[2, 2, 2]]),
             second_per_grid_ts=torch.tensor([1.0]),
             audio_seqlens=torch.tensor([12]),
             use_audio_in_video=True,
             attention_mask=torch.ones_like(input_ids),
-            **self.TOKEN_IDS,
         )
         # the audio tokens (positions 3, 4) merge in ahead of the video's second temporal grid (28)
         self.assertEqual(

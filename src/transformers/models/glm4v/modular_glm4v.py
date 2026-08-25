@@ -28,7 +28,6 @@ from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_multimodal_utils import MultiModalPreTrainedModelMixin
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -60,6 +59,7 @@ from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VLTextModel,
     Qwen2_5_VLVisionAttention,
     Qwen2_5_VLVisionBlock,
+    get_rope_index,
 )
 from ..qwen2_vl.modeling_qwen2_vl import Qwen2VLModel
 from ..qwen2_vl.processing_qwen2_vl import (
@@ -778,21 +778,22 @@ class Glm4vTextModel(Qwen2_5_VLTextModel):
 
 
 class Glm4vModel(Qwen2VLModel):
-    def get_rope_index(self, input_ids, mm_token_type_ids, image_grid_thw=None, video_grid_thw=None, **kwargs):
-        # The processor separates video frames with timestamp text, so each frame is its own visual span:
-        # lay a video out one `T=1` frame grid at a time.
-        if video_grid_thw is not None:
-            video_grid_thw = torch.repeat_interleave(video_grid_thw, video_grid_thw[:, 0], dim=0)
-            video_grid_thw[:, 0] = 1
-        return MultiModalPreTrainedModelMixin.get_rope_index(
-            self, input_ids, mm_token_type_ids, image_grid_thw=image_grid_thw, video_grid_thw=video_grid_thw, **kwargs
-        )
-
     _no_split_modules = ["Glm4vTextDecoderLayer", "Glm4vVisionBlock"]
 
     def __init__(self, config):
         super().__init__(config)
         self.visual = Glm4vVisionModel._from_config(config.vision_config)
+
+    def get_rope_index(self, input_ids, mm_token_type_ids, image_grid_thw=None, video_grid_thw=None, **kwargs):
+        return get_rope_index(
+            self.config,
+            input_ids,
+            mm_token_type_ids,
+            image_grid_thw=image_grid_thw,
+            video_grid_thw=video_grid_thw,
+            split_video_frames=True,
+            **kwargs,
+        )
 
     @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple

@@ -53,9 +53,6 @@ class Kimi_K25VisionConfig(PreTrainedConfig):
     # See `Qwen3VLVisionConfig` — the same knobs, for this family's own resampling settings
     interpolation_mode: str = "bicubic"
     interpolation_align_corners: bool = False
-    # Packed vision attention spans all frames of a clip jointly rather than one segment per frame
-    # (`vision_utils.get_vision_cu_seqlens(..., merge_temporal=...)`)
-    merge_temporal_attention: bool = True
 
     @property
     def num_grid_per_side(self) -> int:

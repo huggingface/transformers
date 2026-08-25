@@ -670,20 +670,21 @@ class Qwen3VLTextModel(Qwen3VLPreTrainedModel, Qwen3Model):
 
 @auto_docstring
 class Qwen3VLModel(Qwen2VLModel):
-    def get_rope_index(self, input_ids, mm_token_type_ids, image_grid_thw=None, video_grid_thw=None, **kwargs):
-        # The processor separates video frames with timestamp text, so each frame is its own visual span:
-        # lay a video out one `T=1` frame grid at a time.
-        if video_grid_thw is not None:
-            video_grid_thw = torch.repeat_interleave(video_grid_thw, video_grid_thw[:, 0], dim=0)
-            video_grid_thw[:, 0] = 1
-        return MultiModalPreTrainedModelMixin.get_rope_index(
-            self, input_ids, mm_token_type_ids, image_grid_thw=image_grid_thw, video_grid_thw=video_grid_thw, **kwargs
-        )
-
     def __init__(self, config):
         super().__init__(config)
         self.visual = AutoModel.from_config(config.vision_config)
         self.language_model = AutoModel.from_config(config.text_config)
+
+    def get_rope_index(self, input_ids, mm_token_type_ids, image_grid_thw=None, video_grid_thw=None, **kwargs):
+        return get_rope_index(
+            self.config,
+            input_ids,
+            mm_token_type_ids,
+            image_grid_thw=image_grid_thw,
+            video_grid_thw=video_grid_thw,
+            split_video_frames=True,
+            **kwargs,
+        )
 
     def get_image_features(
         self,

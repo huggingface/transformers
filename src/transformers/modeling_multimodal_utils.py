@@ -21,9 +21,6 @@ override them where a family genuinely differs.
 
 from __future__ import annotations
 
-import itertools
-from collections import defaultdict
-
 import torch
 
 
@@ -40,159 +37,6 @@ class MultiModalPreTrainedModelMixin:
     `super()`), exactly as it would for any inherited method.
     """
 
-    def get_vision_position_ids(
-        self,
-        start_position: int,
-        grid_thw: list[int] | torch.Tensor,
-        temp_merge_size: int = 1,
-        spatial_merge_size: int = 1,
-        time_interval: int = 1,
-        device: str | torch.device | None = None,
-    ) -> torch.Tensor:
-        """3D positions (temporal, height, width) for one image/video grid in the decoder sequence.
-
-        Thin method form of [`~modeling_rope_utils.get_mrope_vision_positions`] — see it for the semantics.
-
-        Args:
-            start_position (`int`):
-                Offset added to all computed positional indices.
-            grid_thw (`Sequence[int]` or `torch.Tensor` of shape `(3,)`):
-                The (T, H, W) grid representing the feature layout of the current image or video after patch
-                embedding.
-            temp_merge_size (`int`, *optional*):
-                Factor by which the temporal dimension is reduced in the backbone. Defaults to 1.
-            spatial_merge_size (`int`, *optional*):
-                Factor by which the spatial dimensions (H and W) are reduced in the backbone. Defaults to 1.
-            time_interval (`int`, *optional*):
-                Spacing factor applied between consecutive temporal position indices. Defaults to 1.
-            device (`str` or `torch.device`, *optional*):
-                Device on which the resulting tensor is allocated.
-
-        Returns:
-            `torch.LongTensor` of shape `(3, sequence_length)`: temporal/height/width positions, flattened
-            into sequence form and offset by `start_position`.
-        """
-        return get_mrope_vision_positions(
-            start_position,
-            grid_thw,
-            temporal_merge_size=temp_merge_size,
-            spatial_merge_size=spatial_merge_size,
-            time_interval=time_interval,
-            device=device,
-        )
-
-    def get_rope_index(
-        self,
-        input_ids: torch.LongTensor,
-        mm_token_type_ids: torch.IntTensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        video_grid_thw: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        second_per_grid_ts: torch.Tensor | None = None,
-        **kwargs,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """M-RoPE decoder position ids for a `vision + text` sequence: `(position_ids, rope_deltas)`.
-
-        The skeleton every M-RoPE family shares: per batch row, walk `mm_token_type_ids` span by span
-        (0=text, 1=image, 2=video) and ask [`get_mrope_position_block`] for each span's `(num_axes, length)`
-        positions — which is where families differ, so a model overrides the block (or this whole method for
-        a layout that is not span-by-span at all) rather than copying the walk.
-
-        Implementations (overrides included) must stay pure functions of `(self.config, the arguments)` —
-        no weights, buffers or devices off `self` — so positions can be computed without a real model: a
-        bare object carrying only `config` serves as `self` (how the unit tests drive this, and how the
-        exporters rebuild positions for an exported model from its saved config).
-
-        Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary.
-            mm_token_type_ids (`torch.IntTensor` of shape `(batch_size, sequence_length)`):
-                Per-token modality marker (0 for text, 1 for image, 2 for video), returned by the processor.
-            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-                The temporal, height and width of feature shape of each image in LLM.
-            video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-                The temporal, height and width of feature shape of each video in LLM.
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Padding mask; positions are placed on the unpadded tokens.
-            second_per_grid_ts (`torch.Tensor` of shape `(num_videos,)`, *optional*):
-                Per-video seconds covered by one temporal grid step, for time-scaled video positions.
-            kwargs:
-                Ignored, so that callers which forward the whole set of model kwargs (generation does) do not
-                have to filter it. A family whose blocks take extra inputs names them in its own override.
-
-        Returns:
-            position_ids (`torch.LongTensor` of shape `(num_axes, batch_size, sequence_length)`)
-            rope_deltas (`torch.Tensor` of shape `(batch_size, 1)`)
-        """
-        grids = {1: image_grid_thw, 2: video_grid_thw}
-
-        def positions_for_sequence(token_ids, token_types):
-            modality_counter = defaultdict(int)
-            current_position = 0
-            blocks = []
-            for modality_type, group in itertools.groupby(enumerate(token_types.tolist()), lambda x: x[1]):
-                group = list(group)
-                start_idx, end_idx = group[0][0], group[-1][0] + 1
-                grid_thw = None
-                if modality_type != 0:
-                    grid_thw = grids[modality_type][modality_counter[modality_type]]
-                block, current_position = self.get_mrope_position_block(
-                    modality_type,
-                    start_idx,
-                    end_idx,
-                    current_position,
-                    grid_thw=grid_thw,
-                    second_per_grid_ts=second_per_grid_ts,
-                    modality_counter=modality_counter,
-                    device=token_ids.device,
-                )
-                modality_counter[modality_type] += 1
-                blocks.append(block)
-            return torch.cat(blocks, dim=1)
-
-        return _mrope_place_positions(input_ids, mm_token_type_ids, 3, attention_mask, positions_for_sequence)
-
-    def get_mrope_position_block(
-        self,
-        modality_type: int,
-        start_idx: int,
-        end_idx: int,
-        current_position: int,
-        grid_thw: torch.Tensor | None = None,
-        second_per_grid_ts: torch.Tensor | None = None,
-        modality_counter: dict | None = None,
-        device: torch.device | None = None,
-    ) -> tuple[torch.Tensor, int]:
-        """One modality span's M-RoPE positions: `((num_axes, length) block, next start position)`.
-
-        The default covers the common family: a text span counts 1D positions on every axis; an image or
-        video span lays a 3D (temporal, height, width) grid, temporally scaled by
-        `tokens_per_second * second_per_grid_ts` when the config declares a clock, and advances the text
-        position by the span's largest spatial extent. A family whose spans differ overrides only this — the
-        walk in [`get_rope_index`] stays shared.
-        """
-        if modality_type == 0:
-            length = end_idx - start_idx
-            return _mrope_positions_block(length, current_position, device=device), current_position + length
-        vision_config = getattr(self.config, "vision_config", self.config)
-        time_interval = 1
-        if modality_type == 2:
-            tokens_per_second = getattr(vision_config, "tokens_per_second", None)
-            if tokens_per_second is not None and second_per_grid_ts is not None:
-                time_interval = tokens_per_second * int(second_per_grid_ts[modality_counter[modality_type]])
-        block = get_mrope_vision_positions(
-            current_position,
-            grid_thw,
-            temporal_merge_size=(getattr(vision_config, "temporal_merge_size", None) or 1)
-            if modality_type == 2
-            else 1,
-            spatial_merge_size=vision_config.spatial_merge_size,
-            time_interval=time_interval,
-            device=device,
-        )
-        spatial_merge_size = vision_config.spatial_merge_size
-        return block, current_position + int(max(grid_thw[1], grid_thw[2])) // spatial_merge_size
-
     def compute_3d_position_ids(
         self,
         input_ids: torch.Tensor | None,
@@ -202,12 +46,16 @@ class MultiModalPreTrainedModelMixin:
         attention_mask: torch.Tensor | None = None,
         past_key_values: torch.Tensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
+        **kwargs,
     ) -> torch.Tensor | None:
         """Position ids for one forward pass, laying out vision spans when there are any.
 
         Computes them from scratch on a prefill (and caches `rope_deltas` on the model), shifts the cached
         deltas onto plain 1D positions while decoding, and returns `None` when neither is possible so the
         text model infers positions itself.
+
+        Extra kwargs are forwarded to [`get_rope_index`], so a family whose layout takes another input
+        (`second_per_grid_ts` and the like) needs no override here.
         """
         if not uses_mrope(self.config):
             # Multimodal, but keeping 1D text positions (no `mrope_section` in its rope parameters): there is
@@ -231,6 +79,7 @@ class MultiModalPreTrainedModelMixin:
                 video_grid_thw=video_grid_thw,
                 attention_mask=attention_mask,
                 mm_token_type_ids=mm_token_type_ids,
+                **kwargs,
             )
             self.rope_deltas = rope_deltas
         # Use pre-calculated rope-deltas to infer correct 3D position ids during incremental
@@ -434,18 +283,3 @@ def _mrope_place_positions(
             position_ids[:, batch_idx] = positions
         rope_deltas.append(positions.max() + 1 - len(token_ids))
     return position_ids, torch.tensor(rope_deltas, device=input_ids.device).unsqueeze(1)
-
-
-def _mrope_positions_block(
-    length: int | torch.Tensor,
-    start_position: int | torch.Tensor,
-    num_axes: int = 3,
-    dtype: torch.dtype | None = None,
-    device: str | torch.device | None = None,
-) -> torch.Tensor:
-    """`(num_axes, length)` block of consecutive positions from `start_position`, the same on every axis.
-
-    What a text run — or an audio span, which is 1D in time — contributes to a multi-axis layout.
-    """
-    dtype = dtype if dtype is not None else torch.long
-    return torch.arange(int(length), dtype=dtype, device=device).view(1, -1).expand(num_axes, -1) + start_position

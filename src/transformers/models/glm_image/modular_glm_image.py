@@ -27,6 +27,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...generation import GenerationMixin
 from ...image_utils import ImageInput
+from ...modeling_multimodal_utils import get_mrope_vision_positions
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import ImagesKwargs, ProcessorMixin, Unpack
@@ -587,7 +588,7 @@ class GlmImageModel(Glm4vModel):
                 # For an image with height H and width W:
                 # - position_width cycles [0, 1, ..., W-1] for each row, repeated H times
                 # - position_height stays constant per row, [0]*W, [1]*W, ..., [H-1]*W
-                vision_position_ids = self.get_vision_position_ids(
+                vision_position_ids = get_mrope_vision_positions(
                     start_position=current_pos, grid_thw=curr_grids[img_idx], device=device
                 )
                 current_pos += max(curr_grids[img_idx][1], curr_grids[img_idx][2])

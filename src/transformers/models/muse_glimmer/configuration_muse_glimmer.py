@@ -55,14 +55,14 @@ class MuseGlimmerVisionConfig(PreTrainedConfig):
     hidden_act: str = "gelu"
     interpolation_mode: str = "bilinear"
     interpolation_align_corners: bool = False
-    # unlike kimi_k25, this encoder attends per frame rather than over the whole clip
-    merge_temporal_attention: bool = False
 
     rope_parameters: dict | None = None  # defaults set by `RopeConfigMixin`
     max_position_embeddings: int = 32 * 32  # == `pos_h * pos_w`
     patch_temporal: int = 2
     merge_size: int = 2
     interpolation_padding: str = "zeros"
+    # unlike kimi_k25, this encoder attends per frame rather than over the whole clip
+    attribute_map = {"spatial_merge_size": "merge_size"}
     layer_norm_eps: float = 1e-05
     layer_types: list[str] | None = None
 
@@ -74,11 +74,12 @@ class MuseGlimmerVisionConfig(PreTrainedConfig):
     @property
     def spatial_merge_size(self) -> int:
         """Spatial merge factor under the name every other vision config uses for it."""
-        return self.merge_size
+        return self.merge_kernel_size[0]
 
     @property
     def window_size(self) -> int:
-        """Attention window in pixels, as the vision module derives it from the position grid."""
+        """Attention window in pixels. On the config because input preparation needs it without a model:
+        `exporters.utils` reads it to precompute this encoder's window index."""
         return self.pos_emb_height * self.patch_size
 
     def __post_init__(self, **kwargs):

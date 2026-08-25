@@ -243,6 +243,9 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel, Qwen2VLModel):
         self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()
 
+    def get_rope_index(self, **kwargs):
+        raise AttributeError("Exaone4.5 doesn't use 3D positions")
+
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

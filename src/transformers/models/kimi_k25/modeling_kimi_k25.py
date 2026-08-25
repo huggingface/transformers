@@ -541,7 +541,11 @@ class Kimi_K25VisionModel(Kimi_K25PreTrainedModel):
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(
-            grid_thw, self.config, merge_temporal=self.config.merge_temporal_attention, kwargs=kwargs
+            # Packed vision attention spans all frames of a clip jointly, not one segment per frame.
+            grid_thw,
+            self.config,
+            merge_temporal=True,
+            kwargs=kwargs,
         )
 
         for block in self.layers:

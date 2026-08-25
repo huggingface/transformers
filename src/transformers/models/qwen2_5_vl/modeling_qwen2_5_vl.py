@@ -23,7 +23,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import itertools
 import warnings
+from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -39,7 +41,12 @@ from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_multimodal_utils import MultiModalGenerationMixin, MultiModalPreTrainedModelMixin
+from ...modeling_multimodal_utils import (
+    MultiModalGenerationMixin,
+    MultiModalPreTrainedModelMixin,
+    _mrope_place_positions,
+    get_mrope_vision_positions,
+)
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -872,6 +879,91 @@ class Qwen2_5_VLTextModel(Qwen2_5_VLPreTrainedModel):
         )
 
 
+def get_rope_index(
+    config,
+    input_ids: torch.LongTensor,
+    mm_token_type_ids: torch.IntTensor,
+    *,
+    attention_mask: torch.Tensor | None = None,
+    image_grid_thw: torch.LongTensor | None = None,
+    video_grid_thw: torch.LongTensor | None = None,
+    second_per_grid_ts: torch.Tensor | None = None,
+    position_block: Callable | None = None,
+    split_video_frames: bool = False,
+    **unused,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """M-RoPE for a sequence of interleaved text and vision runs — the layout most families use.
+
+    Per batch row, walk `mm_token_type_ids` span by span (0=text, 1=image, 2=video): a text span counts 1D
+    positions on every axis, a vision span lays a `(temporal, height, width)` grid and advances the text
+    position by its largest spatial extent. A video's temporal axis is scaled by
+    `tokens_per_second * second_per_grid_ts` when the model declares a clock.
+
+    `position_block` overrides how one span is laid out, for a family that differs only there; everything
+    else about the walk stays shared.
+    """
+    if split_video_frames and video_grid_thw is not None:
+        # A processor that separates video frames with timestamp text makes each frame its own visual span,
+        # so the grids are expanded to one `T=1` row per frame before the spans are laid out.
+        video_grid_thw = torch.repeat_interleave(video_grid_thw, video_grid_thw[:, 0], dim=0)
+        video_grid_thw[:, 0] = 1
+    vision_config = getattr(config, "vision_config", config)
+    spatial_merge_size = vision_config.spatial_merge_size
+    # Three axes, always: this layout's vision block is a `(temporal, height, width)` grid, so the text runs
+    # have to match it. `mrope_section` is the per-axis *head* split and is not the axis count — a family
+    # whose layout has a different number of axes writes its own function (hunyuan_vl does).
+    num_axes = 3
+    tokens_per_second = getattr(vision_config, "tokens_per_second", None)
+    video_temporal_merge_size = getattr(vision_config, "temporal_merge_size", None) or 1
+    grids = {1: image_grid_thw, 2: video_grid_thw}
+
+    def block_for_span(modality_type, start_idx, end_idx, current_position, grid_thw, counter, device):
+        if position_block is not None:
+            return position_block(
+                modality_type,
+                start_idx,
+                end_idx,
+                current_position,
+                grid_thw=grid_thw,
+                second_per_grid_ts=second_per_grid_ts,
+                modality_counter=counter,
+                device=device,
+            )
+        if modality_type == 0:
+            length = end_idx - start_idx
+            positions = torch.arange(current_position, current_position + length, device=device)
+            return positions.expand(num_axes, length), current_position + length
+        time_interval = 1
+        if modality_type == 2 and tokens_per_second is not None and second_per_grid_ts is not None:
+            time_interval = tokens_per_second * int(second_per_grid_ts[counter[modality_type]])
+        block = get_mrope_vision_positions(
+            current_position,
+            grid_thw,
+            temporal_merge_size=video_temporal_merge_size if modality_type == 2 else 1,
+            spatial_merge_size=spatial_merge_size,
+            time_interval=time_interval,
+            device=device,
+        )
+        return block, current_position + int(max(grid_thw[1], grid_thw[2])) // spatial_merge_size
+
+    def positions_for_sequence(token_ids, token_types):
+        counter = defaultdict(int)
+        current_position = 0
+        blocks = []
+        for modality_type, group in itertools.groupby(enumerate(token_types.tolist()), lambda x: x[1]):
+            group = list(group)
+            start_idx, end_idx = group[0][0], group[-1][0] + 1
+            grid_thw = None if modality_type == 0 else grids[modality_type][counter[modality_type]]
+            block, current_position = block_for_span(
+                modality_type, start_idx, end_idx, current_position, grid_thw, counter, token_ids.device
+            )
+            counter[modality_type] += 1
+            blocks.append(block)
+        return torch.cat(blocks, dim=1)
+
+    return _mrope_place_positions(input_ids, mm_token_type_ids, num_axes, attention_mask, positions_for_sequence)
+
+
 @auto_docstring
 class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel, MultiModalPreTrainedModelMixin):
     base_model_prefix = "model"
@@ -888,6 +980,68 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel, MultiModalPreTrainedModelMixin)
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def get_rope_index(
+        self,
+        input_ids: torch.LongTensor,
+        mm_token_type_ids: torch.IntTensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        second_per_grid_ts: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Calculate the 3D rope index based on image and video's sizes. The utility expects a `vision + text`
+        sequence and will error out otherwise. For pure text sequence, please rely on model's auto-inferred
+        position ids. In a mixed vision + text sequence, vision tokens use 3D RoPE (temporal, height, width)
+        while text tokens use standard 1D RoPE.
+
+        Example:
+            Temporal patches: 3; Height patches: 2; Width patches: 2
+            Each vision input results in (temporal x height × width) positions. Here: 3 x 2 × 2 = 12 positions total.
+
+            Temporal position IDs are spaced by:
+                `interval = tokens_per_second * temporal_patch_size / fps`
+
+                If fps = 1; tokens_per_second = 25; temporal_patch_size = 2, temporal IDs increase by 50 for each temporal patch:
+                `[0, 0, 0, 0, 50, 50, 50, 50, 100, 100, 100, 100]`
+
+            Height IDs repeat per row: `[0, 0, 1, 1, ...]`
+            Width IDs alternate per column: `[0, 1, 0, 1, ...]`
+            Text tokens follow standard 1D RoPE and the position IDs grow consequently with a step of `1`
+
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+                it.
+            mm_token_type_ids (`torch.IntTensor` of shape `(batch_size, sequence_length)`):
+                Token type ids matching each modality to a different value in the input sequence, i.e. text (0), image (1), video (2).
+            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+                The temporal, height and width of feature shape of each image in LLM.
+            video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+                The temporal, height and width of feature shape of each video in LLM.
+            second_per_grid_ts (`torch.Tensor` of shape `(num_videos)`, *optional*):
+                The time interval (in seconds) for each grid along the temporal dimension in the 3D position IDs.
+            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+
+        Returns:
+            position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
+            mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
+        """
+        return get_rope_index(
+            self.config,
+            input_ids,
+            mm_token_type_ids,
+            image_grid_thw=image_grid_thw,
+            video_grid_thw=video_grid_thw,
+            attention_mask=attention_mask,
+            second_per_grid_ts=second_per_grid_ts,
+        )
 
     @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
@@ -1036,67 +1190,6 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel, MultiModalPreTrainedModelMixin)
             rope_deltas=self.rope_deltas,
         )
 
-    def get_rope_index(
-        self,
-        input_ids: torch.LongTensor,
-        mm_token_type_ids: torch.IntTensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        video_grid_thw: torch.LongTensor | None = None,
-        second_per_grid_ts: torch.Tensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        **kwargs,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Calculate the 3D rope index based on image and video's sizes. The utility expects a `vision + text`
-        sequence and will error out otherwise. For pure text sequence, please rely on model's auto-inferred
-        position ids. In a mixed vision + text sequence, vision tokens use 3D RoPE (temporal, height, width)
-        while text tokens use standard 1D RoPE.
-
-        Example:
-            Temporal patches: 3; Height patches: 2; Width patches: 2
-            Each vision input results in (temporal x height × width) positions. Here: 3 x 2 × 2 = 12 positions total.
-
-            Temporal position IDs are spaced by:
-                `interval = tokens_per_second * temporal_patch_size / fps`
-
-                If fps = 1; tokens_per_second = 25; temporal_patch_size = 2, temporal IDs increase by 50 for each temporal patch:
-                `[0, 0, 0, 0, 50, 50, 50, 50, 100, 100, 100, 100]`
-
-            Height IDs repeat per row: `[0, 0, 1, 1, ...]`
-            Width IDs alternate per column: `[0, 1, 0, 1, ...]`
-            Text tokens follow standard 1D RoPE and the position IDs grow consequently with a step of `1`
-
-        Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-                it.
-            mm_token_type_ids (`torch.IntTensor` of shape `(batch_size, sequence_length)`):
-                Token type ids matching each modality to a different value in the input sequence, i.e. text (0), image (1), video (2).
-            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-                The temporal, height and width of feature shape of each image in LLM.
-            video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-                The temporal, height and width of feature shape of each video in LLM.
-            second_per_grid_ts (`torch.Tensor` of shape `(num_videos)`, *optional*):
-                The time interval (in seconds) for each grid along the temporal dimension in the 3D position IDs.
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-        Returns:
-            position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
-            mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
-        """
-        return super().get_rope_index(
-            input_ids,
-            mm_token_type_ids,
-            image_grid_thw=image_grid_thw,
-            video_grid_thw=video_grid_thw,
-            attention_mask=attention_mask,
-            second_per_grid_ts=second_per_grid_ts,
-        )
-
     def compute_3d_position_ids(
         self,
         input_ids: torch.Tensor | None,
@@ -1108,6 +1201,9 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel, MultiModalPreTrainedModelMixin)
         second_per_grid_ts: torch.Tensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
     ) -> torch.Tensor | None:
+        # Kept rather than inherited: this model falls back to 1D positions when `mm_token_type_ids` is
+        # missing, where the mixin raises. Callers pass grids without it (`test_video_forward`), so
+        # inheriting would be a breaking change for them.
         past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
         can_compute_mrope = (
             input_ids is not None

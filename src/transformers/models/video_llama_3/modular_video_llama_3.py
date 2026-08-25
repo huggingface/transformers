@@ -467,6 +467,9 @@ class VideoLlama3Model(Qwen2VLModel):
 
         self.post_init()
 
+    def get_rope_index(self):
+        raise AttributeError("Not needed for VideoLLaMA3")
+
     def get_video_features(
         self,
         pixel_values_videos: torch.FloatTensor,

@@ -375,8 +375,8 @@ class Qwen2_5_VLModel(Qwen2VLModel):
             position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
             mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
         """
-        return MultiModalPreTrainedModelMixin.get_rope_index(
-            self,
+        return get_rope_index(
+            self.config,
             input_ids,
             mm_token_type_ids,
             image_grid_thw=image_grid_thw,
@@ -396,6 +396,9 @@ class Qwen2_5_VLModel(Qwen2VLModel):
         second_per_grid_ts: torch.Tensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
     ) -> torch.Tensor | None:
+        # Kept rather than inherited: this model falls back to 1D positions when `mm_token_type_ids` is
+        # missing, where the mixin raises. Callers pass grids without it (`test_video_forward`), so
+        # inheriting would be a breaking change for them.
         past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
         can_compute_mrope = (
             input_ids is not None
