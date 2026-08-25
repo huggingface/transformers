@@ -20,7 +20,7 @@ import unittest
 from pathlib import Path
 
 from transformers import CanaryConfig, CanaryDecoderConfig, ParakeetEncoderConfig, is_torch_available
-from transformers.testing_utils import is_flaky, require_torch, slow, torch_device
+from transformers.testing_utils import is_flaky, require_torch, require_torch_accelerator, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -47,6 +47,8 @@ class CanaryModelTester:
         intermediate_size=32,
         num_hidden_layers=2,
         num_attention_heads=2,
+        num_key_value_heads=2,
+        head_dim=8,
         subsampling_factor=8,
         subsampling_conv_channels=16,
         decoder_seq_length=4,
@@ -69,6 +71,8 @@ class CanaryModelTester:
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
+        self.num_key_value_heads = num_key_value_heads
+        self.head_dim = head_dim
         self.subsampling_factor = subsampling_factor
         self.subsampling_conv_channels = subsampling_conv_channels
         self.vocab_size = vocab_size
@@ -95,12 +99,15 @@ class CanaryModelTester:
             intermediate_size=self.intermediate_size,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
+            num_key_value_heads=self.num_key_value_heads,
+            head_dim=self.head_dim,
             max_position_embeddings=self.max_position_embeddings,
             pad_token_id=self.pad_token_id,
         )
         return CanaryConfig(
             encoder_config=encoder_config,
             decoder_config=decoder_config,
+            vocab_size=self.vocab_size,
             decoder_start_token_id=self.decoder_start_token_id,
             pad_token_id=self.pad_token_id,
             bos_token_id=self.bos_token_id,
@@ -144,9 +151,6 @@ class CanaryModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         else {}
     )
     is_encoder_decoder = True
-    test_pruning = False
-    test_resize_embeddings = True
-    test_headmasking = False
 
     def setUp(self):
         self.model_tester = CanaryModelTester(self)
@@ -391,13 +395,14 @@ class CanaryModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_generate_without_input_ids(self):
         pass
 
+    @require_torch_accelerator
+    @slow
+    def test_sdpa_can_dispatch_on_flash(self):
+        self.skipTest("Canary automatically adds an attention_mask input")
+
     @is_flaky(description="Large difference with A10. Still flaky after setting larger tolerance")
     def test_generate_continue_from_past_key_values(self):
         super().test_generate_continue_from_past_key_values()
-
-    @unittest.skip(reason="Decoder can't keep attention grads")
-    def test_retain_grad_hidden_states_attentions(self):
-        pass
 
     # Overridden because the head count comes from the decoder sub-config (mirrors `DiaModelTest`).
     def _check_attentions_for_generate(

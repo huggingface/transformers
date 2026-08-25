@@ -67,11 +67,11 @@ class CanaryPositionalEmbedding(nn.Module):
         log_timescale_increment = np.log(self.max_timescale) / (self.channels // 2 - 1)
         inv_timescales = torch.exp(-log_timescale_increment * torch.arange(self.channels // 2).float())
         scaled_time = torch.arange(self.length)[:, np.newaxis] * inv_timescales[np.newaxis, :]
-        emb = torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=1) / math.sqrt(self.channels)
+        emb = torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=1)
         return emb.to(torch.get_default_dtype())
 
     def forward(self, position_ids: torch.Tensor) -> torch.Tensor:
-        return self.positional_embedding[position_ids]
+        return self.positional_embedding[position_ids] / math.sqrt(self.channels)
 
 
 @auto_docstring

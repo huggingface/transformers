@@ -28,7 +28,6 @@ from ...utils.import_utils import requires
 logger = logging.get_logger(__name__)
 
 
-# fmt: off
 # Languages supported by Canary. See https://huggingface.co/nvidia/canary-1b-v2 for details.
 LANGUAGE_CODE_TO_NAME = {
     "bg": "Bulgarian",
@@ -57,13 +56,15 @@ LANGUAGE_CODE_TO_NAME = {
     "ru": "Russian",
     "uk": "Ukrainian",
 }
-# fmt: on
 
 
 class CanaryProcessorKwargs(ProcessingKwargs, total=False):  # trf-ignore: TRF019
     _defaults = {
         "audio_kwargs": {
             "sampling_rate": 16000,
+        },
+        "common_kwargs": {
+            "return_tensors": "pt",
         },
     }
 
@@ -95,7 +96,6 @@ class CanaryProcessor(ProcessorMixin):
             raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
 
         model_inputs = super().__call__(audio=audio, text=text, **kwargs)
-        model_inputs = BatchFeature(data=model_inputs, tensor_type="pt")
         if text is not None:
             input_ids = model_inputs.pop("input_ids")
             if output_labels:
@@ -106,7 +106,7 @@ class CanaryProcessor(ProcessorMixin):
                 model_inputs["labels"] = labels
             else:
                 model_inputs["decoder_input_ids"] = input_ids
-        return model_inputs
+        return BatchFeature(data=model_inputs, tensor_type="pt")
 
     def apply_transcription_request(
         self,
