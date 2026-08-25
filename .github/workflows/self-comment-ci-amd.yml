@@ -27,27 +27,6 @@ env:
 
 
 jobs:
-  # Workaround for a known issue in the official actions/download-artifact action:
-  # when only one artifact exists in a workflow run, it extracts files directly to
-  # the workspace root instead of into a named subdirectory (artifacts.length === 1
-  # branch in the source). This breaks notification_service.py's
-  # retrieve_available_artifacts(), which scans for *_test_reports directories.
-  # Note: this is NOT a bug introduced by our ydshieh/download-artifact fork —
-  # the same behavior exists in the upstream actions/download-artifact action.
-  # The Nvidia PR comment CI avoids this because daily-ci_reusable.yml always runs
-  # run_extract_warnings (which uploads warnings_in_ci), ensuring 2+ artifacts exist.
-  # AMD has no equivalent yet, so we upload a dummy artifact here as a temporary
-  # workaround until a proper solution is implemented on the reusable workflow side.
-  upload_dummy_artifact:
-    name: Upload dummy artifact
-    runs-on: ubuntu-22.04
-    steps:
-      - run: mkdir dummy_artifact && echo "placeholder" > dummy_artifact/placeholder.txt
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
-        with:
-          name: dummy_artifact
-          path: dummy_artifact
-
   get-pr-number:
     name: Get PR number
     # TODO: restore `if:` condition before merge (removed to allow pull_request-triggered test runs)
@@ -187,12 +166,35 @@ jobs:
             "repos/${github_repository}/statuses/${pr_head_sha}" \
             -f "target_url=$GITHUB_RUN_URL" -f "state=pending" -f "description=Slow CI job (AMD)" -f "context=pytest/custom-tests-amd"
 
+  # Workaround for a known issue in the official actions/download-artifact action:
+  # when only one artifact exists in a workflow run, it extracts files directly to
+  # the workspace root instead of into a named subdirectory (artifacts.length === 1
+  # branch in the source). This breaks notification_service.py's
+  # retrieve_available_artifacts(), which scans for *_test_reports directories.
+  # Note: this is NOT a bug introduced by our ydshieh/download-artifact fork —
+  # the same behavior exists in the upstream actions/download-artifact action.
+  # The Nvidia PR comment CI avoids this because daily-ci_reusable.yml always runs
+  # run_extract_warnings (which uploads warnings_in_ci), ensuring 2+ artifacts exist.
+  # AMD has no equivalent yet, so we upload a dummy artifact here as a temporary
+  # workaround until a proper solution is implemented on the reusable workflow side.
+  upload_dummy_artifact:
+    name: Upload dummy artifact
+    if: ${{ needs.get-tests.outputs.models != '[]' }}
+    needs: [get-tests]
+    runs-on: ubuntu-22.04
+    steps:
+      - run: mkdir dummy_artifact && echo "placeholder" > dummy_artifact/placeholder.txt
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: dummy_artifact
+          path: dummy_artifact
+
   model-ci:
     name: Model CI
     if: ${{ needs.get-tests.outputs.models != '[]' }}
     # TODO: revert to @main before merge
     uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled_arc_scale_set.yaml@pr-ci-amd
-    needs: [get-pr-number, check-timestamps, get-tests, create_run]
+    needs: [upload_dummy_artifact, get-pr-number, check-timestamps, get-tests, create_run]
     with:
       job: run_models_gpu
       slack_report_channel: "#amd-transformers-pr-ci"
