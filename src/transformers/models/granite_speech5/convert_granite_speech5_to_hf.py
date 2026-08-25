@@ -173,11 +173,12 @@ def convert_and_write_model(input_path: str, output_path: str, run_sanity_check:
     # materialize the (non-persistent, hence still on the meta device) relative distances buffer
     model.encoder.attention_dists = torch.nn.Buffer(model.encoder.compute_attention_dists(), persistent=False)
 
-    tokenizer = ParakeetTokenizer(
-        tokenizer_file=cached_file(input_path, "tokenizer.json"),
-        pad_token="<|blank|>",
-        padding=True,
-    )
+    # the CTC blank is id 0 of the vocabulary, whatever the checkpoint happens to call it
+    tokenizer_file = cached_file(input_path, "tokenizer.json")
+    with open(tokenizer_file) as f:
+        vocabulary = json.load(f)["model"]["vocab"]
+    blank_token = next(token for token, index in vocabulary.items() if index == 0)
+    tokenizer = ParakeetTokenizer(tokenizer_file=tokenizer_file, pad_token=blank_token, padding=True)
     feature_extractor = convert_feature_extractor(original_config)
     processor = GraniteSpeech5Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
