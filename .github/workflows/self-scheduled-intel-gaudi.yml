@@ -39,7 +39,7 @@ jobs:
     outputs:
       slice_ids: ${{ steps.set-matrix.outputs.slice_ids }}
       folder_slices: ${{ steps.set-matrix.outputs.folder_slices }}
-      quantization_matrix: ${{ steps.set-matrix.outputs.quantization_matrix }}
+      quantization_matrix: ${{ steps.set-matrix-quantization.outputs.quantization_matrix }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
