@@ -33,7 +33,10 @@ if is_torch_available():
         StopStringCriteria,
         validate_stopping_criteria,
     )
-    from transformers.generation.stopping_criteria import STOP_STRING_EMBEDDING_CACHE
+    from transformers.generation.stopping_criteria import (
+        STOP_STRING_EMBEDDING_CACHE,
+        STOP_STRING_UNUSUAL_CHARACTERS_ERROR,
+    )
 
 
 @require_torch
@@ -307,6 +310,24 @@ class StoppingCriteriaTestCase(unittest.TestCase):
 
         # This should not raise an error and should return False since no stop string is matched
         self.assertFalse(criteria(input_ids, scores))
+
+    def test_stop_string_criteria_vocab_cannot_round_trip_probe(self):
+        """Test that a vocab which cannot round-trip the validation probe raises the intended diagnostic."""
+        from tokenizers import Tokenizer
+        from tokenizers.models import WordLevel
+        from tokenizers.pre_tokenizers import Whitespace
+
+        from transformers import PreTrainedTokenizerFast
+
+        # A word-level vocab with no Latin tokens decodes the ASCII probe prefix to `<unk>`, so the prefix
+        # cannot be located in (and stripped from) the decoded token string.
+        backend_tokenizer = Tokenizer(WordLevel(vocab={"你": 0, "好": 1, "<unk>": 2}, unk_token="<unk>"))
+        backend_tokenizer.pre_tokenizer = Whitespace()
+        tokenizer = PreTrainedTokenizerFast(tokenizer_object=backend_tokenizer, unk_token="<unk>")
+
+        with self.assertRaises(ValueError) as cm:
+            StopStringCriteria(tokenizer=tokenizer, stop_strings=["你好"])
+        self.assertEqual(str(cm.exception), STOP_STRING_UNUSUAL_CHARACTERS_ERROR)
 
     def test_stop_string_matching_positions(self):
         stop_string = "stop"

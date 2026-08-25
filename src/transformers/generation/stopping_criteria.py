@@ -17,6 +17,12 @@ logger = logging.get_logger(__name__)
 # We maintain a module-level cache of the embedding vectors for the stop string criterion
 # because they are slow to compute
 STOP_STRING_EMBEDDING_CACHE = OrderedDict()
+# Raised when the tokenizer vocabulary cannot be reconciled with the supplied stop string(s)
+STOP_STRING_UNUSUAL_CHARACTERS_ERROR = (
+    "Stop string preprocessing was unable to identify tokens matching one or more of the "
+    "supplied stop string(s). This is most often caused by the stop "
+    "strings containing unusual characters that are not in the tokenizer vocabulary."
+)
 
 
 STOPPING_CRITERIA_INPUTS_DOCSTRING = r"""
@@ -370,7 +376,13 @@ class StopStringCriteria(StoppingCriteria):
             token_string = StopStringCriteria._token_to_bytes(token, stop_string_matching_mode, byte_decoder)
             if token_string is None:
                 token_string = tokenizer.convert_tokens_to_string(tokens_base + [token])
-                token_string = token_string[token_string.index(static_prefix) + len(static_prefix) :]
+                try:
+                    prefix_end = token_string.index(static_prefix) + len(static_prefix)
+                except ValueError:
+                    # The vocabulary cannot round-trip the static prefix (e.g. word-level vocabularies that
+                    # map it to unknown tokens), so the string yielded by each token cannot be recovered.
+                    raise ValueError(STOP_STRING_UNUSUAL_CHARACTERS_ERROR) from None
+                token_string = token_string[prefix_end:]
                 if stop_string_matching_mode is not None:
                     token_string = token_string.encode("utf-8")
             clean_token_list.append(token_string)
@@ -433,11 +445,7 @@ class StopStringCriteria(StoppingCriteria):
         # There should always be at least one valid end_len, however, so no fallback needed here
         valid_end_lens = [len(val) for positions in token_end_overlaps.values() for val in positions.values()]
         if not valid_end_lens:
-            raise ValueError(
-                "Stop string preprocessing was unable to identify tokens matching one or more of the "
-                "supplied stop string(s). This is most often caused by the stop "
-                "strings containing unusual characters that are not in the tokenizer vocabulary."
-            )
+            raise ValueError(STOP_STRING_UNUSUAL_CHARACTERS_ERROR)
         max_valid_end_lens = max(valid_end_lens)
         vec_size = len(stop_strings) * (max_valid_positions + max_valid_end_lens) + 1
         # We use +2 instead of +1 so we can have a dummy entry at the end. We will clamp all token values
