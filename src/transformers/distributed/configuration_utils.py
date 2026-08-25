@@ -40,6 +40,8 @@ class DistributedConfig:
             Whether to enable CPU offloading for FSDP2.
         fsdp_mixed_precision (`bool`, *optional*, defaults to `False`):
             Whether to enable mixed precision for FSDP2.
+        pp_size (`int`, *optional*):
+            Number of devices for pipeline parallelism. If `None` and another parallel mode is set, defaults to 1.
     """
 
     tp_size: int | None = None
