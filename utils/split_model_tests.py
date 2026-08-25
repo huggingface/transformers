@@ -18,6 +18,10 @@ The main use case is a GitHub Actions workflow file calling this script to get t
 to split the list of jobs to run into multiple slices each containing a smaller number of jobs. This way, we can bypass
 the maximum of 256 jobs in a matrix.
 
+The other directories under `tests` are appended to the list too, except for the ones a dedicated job in the same
+workflow already runs in full (see `COVERED_BY_DEDICATED_JOB`) and the ones holding no test file at all (see
+`NO_TEST_FILES`): a folder in both lists would have its tests run twice per CI run, on every machine type.
+
 See the `setup` and `run_models_gpu` jobs defined in the reusable workflow file
 `.github/workflows/daily-ci_reusable.yml` in the `huggingface/transformers-ci` repository (called from
 `.github/workflows/self-scheduled-caller.yml` here) for more details.
@@ -36,6 +40,16 @@ python ../utils/split_model_tests.py --num_splits 64
 import argparse
 import ast
 import os
+
+
+# Directories under `tests` (other than `models`) that a dedicated daily CI job already covers in full:
+#   - `pipelines`:    `run_pipelines_torch_gpu` runs `tests/pipelines` on both machine types.
+#   - `quantization`: `run_quantization_torch_gpu` runs every `tests/quantization/<method>`
+# Any workflow calling this script must define both jobs, or they loses that coverage entirely.
+COVERED_BY_DEDICATED_JOB = ["pipelines", "quantization"]
+
+# Directories under `tests` holding no test file at all, so a job for them collects nothing.
+NO_TEST_FILES = ["fixtures"]
 
 
 if __name__ == "__main__":
@@ -59,6 +73,9 @@ if __name__ == "__main__":
     d1 = sorted(filter(os.path.isdir, os.listdir(tests)))
     d2 = sorted(filter(os.path.isdir, [f"models/{x}" for x in model_tests]))
     d1.remove("models")
+    # Only for the auto-discovered directories: an explicit `--subdirs` request below is honored as-is.
+    skipped = set(COVERED_BY_DEDICATED_JOB) | set(NO_TEST_FILES)
+    d1 = [x for x in d1 if x not in skipped]
     d = d2 + d1
 
     if args.subdirs != "":
