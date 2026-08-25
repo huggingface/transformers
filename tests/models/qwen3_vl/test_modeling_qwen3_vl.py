@@ -409,10 +409,10 @@ class Qwen3VLTextModelPositionIdsTest(unittest.TestCase):
             num_hidden_layers=2,
             num_attention_heads=4,
             num_key_value_heads=2,
-            head_dim=8,
+            head_dim=16,
             hidden_act="silu",
             max_position_embeddings=512,
-            rope_parameters={"rope_type": "default", "mrope_section": [16, 8, 8], "mrope_interleaved": True},
+            rope_parameters={"rope_type": "default", "mrope_section": [2, 3, 3], "mrope_interleaved": True},
         )
 
     def _make_vision_position_ids(self, batch_size, seq_len):

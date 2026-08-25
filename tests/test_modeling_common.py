@@ -5901,6 +5901,11 @@ class ModelTesterMixin(ExportTesterMixin):
         if not _config_supports_rope_scaling(text_config):
             self.skipTest("This model does not support RoPE scaling")
 
+        if text_config.max_position_embeddings is None:
+            self.skipTest(
+                "Config has no `max_position_embedding` set, can't test scaling without knowing maximum length"
+            )
+
         # Retrieves the RoPE layer class from the base model class. Uses `.named_modules()` to avoid hardcoding the
         # named location of the RoPE layer class.
         base_model = base_model_class(config)
