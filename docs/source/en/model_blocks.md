@@ -177,8 +177,8 @@ Axes: `norm_kind`
 
 | models | canonical | since | variant | owners |
 |---|---|---|---|---|
-| 155 | `deberta` | 2020-11-16 | `rmsnorm` | afmoe, aimv2, apertus, arcee, aria, axk1, axk2, bamba, bitnet, blt, chameleon, clvp (+143) |
-| 33 | `squeezebert` | 2020-11-16 | `layernorm` | axk2, chameleon, convnext, convnextv2, deepseek_ocr2, deepseek_vl_hybrid, dinov3_convnext, edgetam, edgetam_video, esm, esmc, esmfold2 (+21) |
+| 150 | `t5` | 2020-11-16 | `rmsnorm` | afmoe, aimv2, apertus, arcee, aria, axk1, axk2, bamba, bitnet, blt, chameleon, clvp (+138) |
+| 39 | `deberta` | 2020-11-16 | `layernorm` | axk2, chameleon, cohere, cohere2, cohere2_moe, cohere_compass, convnext, convnextv2, deberta, deepseek_ocr2, deepseek_vl_hybrid, dinov3_convnext (+27) |
 | 14 | `gemma` | 2024-02-21 | `rmsnorm_one_plus_weight` | gemma, gemma2, gemma3, minimax_m3_vl, muse_glimmer, qwen3_5, qwen3_5_moe, qwen3_next, recurrent_gemma, step3p7, t5gemma, t5gemma2 (+2) |
 
 ## mixer

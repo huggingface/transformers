@@ -19,8 +19,16 @@ Every model's block variants, one model per line, in a single file:
     python utils/blocks_export.py                 # write it
     python utils/blocks_export.py --check-only     # exit 1 if stale
 
-One line per model so it stays greppable in both directions: `grep '"qwen3":'` gives that model's
-whole architecture at a glance, and `grep sliding_attention` gives every model that slides.
+Two sections. `variants` defines each variant once, keyed by the model that introduced it.
+`models` then names, per block kind, which of those a model matches -- a pointer, never a repeated
+tag:
+
+    "variants": {"attention": {"qwen3": "gqa|no_extras|rope_half|qkv_split|qk_rmsnorm|sliding_attention"}}
+    "models":   {"afmoe": {"attention": "qwen3", "mlp": "llama", "moe": "afmoe"}}
+
+So `afmoe`'s attention *is* qwen3's, said once. One line per model keeps it greppable in both
+directions: `grep '"afmoe":'` gives that model's whole architecture, and `grep '"attention": "qwen3"'`
+gives every model sharing qwen3's attention. A model that introduced a variant points at itself.
 
 Architecture only. No class names (`Qwen3Attention` adds nothing to the `qwen3` key), no helper
 hashes, no dates, no lineage. Every value is self-describing: `no_qk_norm` rather than `none`,
@@ -41,7 +49,7 @@ from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent))
 
-from blocks_facets import REPO_ROOT, scan_repo  # noqa: E402
+from blocks_facets import REPO_ROOT, build_variants, scan_repo  # noqa: E402
 
 
 MANIFEST_PATH = REPO_ROOT / "utils" / "model_blocks.json"
@@ -50,29 +58,57 @@ KIND_ORDER = ("attention", "mixer", "layer", "layer_other", "mlp", "moe", "rotar
 
 
 def build_manifest(blocks: list) -> dict[str, dict]:
-    """`{model: {kind: tag}}` for every model that has at least one block."""
+    """`{"variants": {kind: {owner: tag}}, "models": {model: {kind: owner}}}`."""
+    variants = build_variants(blocks)
+    # Each variant is defined once, under the model that introduced it.
+    owner_of: dict[str, str] = {}
+    definitions: dict[str, dict[str, str]] = defaultdict(dict)
+    for variant in variants.values():
+        owner = variant.canonical
+        if owner is None:
+            continue
+        owner_of[variant.tag] = owner
+        definitions[variant.kind][owner] = variant.variant
+
     per_model: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
     for block in blocks:
-        per_model[block.model][block.kind].add(block.variant)
+        owner = owner_of.get(block.tag)
+        if owner:
+            per_model[block.model][block.kind].add(owner)
 
-    manifest: dict[str, dict] = {}
+    models: dict[str, dict] = {}
     for model in sorted(per_model):
         entry: dict[str, str | list[str]] = {}
         for kind in KIND_ORDER:
-            tags = sorted(per_model[model].get(kind, ()))
-            if not tags:
+            owners = sorted(per_model[model].get(kind, ()))
+            if not owners:
                 continue
             # A bare string when there is one variant, a list when a model has several towers.
-            entry[kind] = tags[0] if len(tags) == 1 else tags
+            entry[kind] = owners[0] if len(owners) == 1 else owners
         if entry:
-            manifest[model] = entry
-    return manifest
+            models[model] = entry
+    return {
+        "variants": {kind: dict(sorted(definitions[kind].items())) for kind in KIND_ORDER if definitions.get(kind)},
+        "models": models,
+    }
 
 
-def render(manifest: dict[str, dict]) -> str:
-    """One line per model. `json.dumps(indent=2)` would spend six lines on six tags."""
-    lines = [f"  {json.dumps(model)}: {json.dumps(entry)}" for model, entry in manifest.items()]
-    return "{\n" + ",\n".join(lines) + "\n}\n"
+def render(manifest: dict) -> str:
+    """One line per variant and per model. `json.dumps(indent=2)` would spend six lines on six tags."""
+    out = ["{", '  "variants": {']
+    kinds = list(manifest["variants"])
+    for i, kind in enumerate(kinds):
+        out.append(f"    {json.dumps(kind)}: {{")
+        items = list(manifest["variants"][kind].items())
+        for j, (owner, tag) in enumerate(items):
+            out.append(f"      {json.dumps(owner)}: {json.dumps(tag)}" + ("," if j < len(items) - 1 else ""))
+        out.append("    }" + ("," if i < len(kinds) - 1 else ""))
+    out += ["  },", '  "models": {']
+    models = list(manifest["models"].items())
+    for i, (model, entry) in enumerate(models):
+        out.append(f"    {json.dumps(model)}: {json.dumps(entry)}" + ("," if i < len(models) - 1 else ""))
+    out += ["  }", "}"]
+    return "\n".join(out) + "\n"
 
 
 def export_all(check_only: bool = False) -> list[Path]:
@@ -96,7 +132,11 @@ def main() -> int:
         print(f"{MANIFEST_PATH.name} is " + ("STALE" if stale else "up to date"))
         return 1 if stale else 0
     manifest = build_manifest(scan_repo()[0])
-    print(f"wrote {MANIFEST_PATH} ({len(manifest)} models, {MANIFEST_PATH.stat().st_size} bytes)")
+    n_variants = sum(len(v) for v in manifest["variants"].values())
+    print(
+        f"wrote {MANIFEST_PATH} ({len(manifest['models'])} models, "
+        f"{n_variants} variants, {MANIFEST_PATH.stat().st_size} bytes)"
+    )
     return 0
 
 

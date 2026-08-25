@@ -450,9 +450,15 @@ def _moe_facets(src: str) -> tuple[dict, dict]:
 
 
 def _norm_facets(src: str) -> tuple[dict, dict]:
+    # RMSNorm is distinguished from LayerNorm by what it does *not* do: no mean subtraction and no
+    # bias. Matching on `variance`/`pow(2)` alone called `DebertaLayerNorm` an RMSNorm -- it computes
+    # a variance but subtracts the mean and adds a bias -- which made deberta (2020) the canonical
+    # owner of `rmsnorm` for 155 models.
+    centred = _re(src, r"-\s*mean") or _re(src, r"mean\s*=\s*\w+\.mean\(")
+    biased = _has(src, "self.bias")
     if _re(src, r"\(1\.?0?\s*\+\s*self\.weight") or _re(src, r"self\.weight\s*\+\s*1"):
         kind = "rmsnorm_one_plus_weight"
-    elif _has(src, "rsqrt", "pow(2)", "variance"):
+    elif _has(src, "rsqrt", "pow(2)", "variance") and not centred and not biased:
         kind = "rmsnorm"
     else:
         kind = "layernorm"
@@ -1064,6 +1070,12 @@ def _selfcheck() -> None:
     olmoe = next(b for b in by_model_kind[("olmoe", "attention")] if b.class_name == "OlmoeAttention")
     assert olmoe.tier1["window"] == "full_attention", olmoe.tier1
     assert olmoe.tier2["sliding_capable"] == "sliding_capable", olmoe.tier2
+    # DebertaLayerNorm computes a variance but centres and biases: it is a LayerNorm.
+    deberta_norm = next(b for b in by_model_kind[("deberta", "norm")] if b.class_name == "DebertaLayerNorm")
+    assert deberta_norm.tier1["norm_kind"] == "layernorm", deberta_norm.tier1
+    llama_norm = next(b for b in by_model_kind[("llama", "norm")] if b.class_name == "LlamaRMSNorm")
+    assert llama_norm.tier1["norm_kind"] == "rmsnorm", llama_norm.tier1
+
     mistral = next(b for b in by_model_kind[("mistral", "attention")] if b.class_name == "MistralAttention")
     assert mistral.tier1["window"] == "sliding_attention", mistral.tier1
 
