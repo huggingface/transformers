@@ -350,6 +350,12 @@ class LukeTokenizer(TokenizersBackend):
 
         kwargs["extra_special_tokens"] = extra_tokens
 
+        # `entity_token_1`/`entity_token_2` do not end with `_token`, so they are not auto-promoted,
+        # register them as model-specific special tokens.
+        model_specific = dict(kwargs.pop("model_specific_special_tokens", None) or {})
+        model_specific["entity_token_1"] = str(entity_token_1)
+        model_specific["entity_token_2"] = str(entity_token_2)
+
         # Configure default special token behaviors to match LUKE formatting
         token_type_ids_pattern = kwargs.setdefault("token_type_ids_pattern", "all_zeros")
         special_tokens_pattern = kwargs.setdefault("special_tokens_pattern", "cls_double_sep")
@@ -381,6 +387,7 @@ class LukeTokenizer(TokenizersBackend):
             entity_mask_token=entity_mask_token,
             entity_mask2_token=entity_mask2_token,
             entity_vocab=entity_vocab if entity_vocab_file is None else None,  # Only store if it was passed as data
+            model_specific_special_tokens=model_specific,
             **kwargs,
         )
 
@@ -974,12 +981,8 @@ class LukeTokenizer(TokenizersBackend):
 
             # add special tokens to input ids
             entity_token_start, entity_token_end = first_entity_token_spans[0]
-            first_ids = (
-                first_ids[:entity_token_end] + [self.extra_special_tokens_ids[0]] + first_ids[entity_token_end:]
-            )
-            first_ids = (
-                first_ids[:entity_token_start] + [self.extra_special_tokens_ids[0]] + first_ids[entity_token_start:]
-            )
+            first_ids = first_ids[:entity_token_end] + [self.entity_token_1_id] + first_ids[entity_token_end:]
+            first_ids = first_ids[:entity_token_start] + [self.entity_token_1_id] + first_ids[entity_token_start:]
             first_entity_token_spans = [(entity_token_start, entity_token_end + 2)]
 
         elif self.task == "entity_pair_classification":
@@ -1000,8 +1003,8 @@ class LukeTokenizer(TokenizersBackend):
 
             head_token_span, tail_token_span = first_entity_token_spans
             token_span_with_special_token_ids = [
-                (head_token_span, self.extra_special_tokens_ids[0]),
-                (tail_token_span, self.extra_special_tokens_ids[1]),
+                (head_token_span, self.entity_token_1_id),
+                (tail_token_span, self.entity_token_2_id),
             ]
             if head_token_span[0] < tail_token_span[0]:
                 first_entity_token_spans[0] = (head_token_span[0], head_token_span[1] + 2)

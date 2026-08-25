@@ -145,6 +145,56 @@ class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         return super().test_pad_token_initialization()
 
 
+class MLukeEntityMarkerRegressionTest(unittest.TestCase):
+    """Regression for #48225: entity markers must not use positional extra_special_tokens_ids."""
+
+    def _get_tokenizer(self, task, **kwargs):
+        vocab = [
+            ("<unk>", 0.0),
+            ("▁", -1.0),
+            ("▁Beyonce", -2.0),
+            ("▁lives", -3.0),
+            ("▁in", -4.0),
+            ("▁Los", -5.0),
+            ("▁Angeles", -6.0),
+            (".", -7.0),
+        ]
+        entity_vocab = {"[UNK]": 0, "[PAD]": 1, "[MASK]": 2, "[MASK2]": 3}
+        return MLukeTokenizer(
+            vocab=vocab,
+            entity_vocab=entity_vocab,
+            task=task,
+            # Put non-entity specials first so positional indexing would pick the wrong ids.
+            extra_special_tokens=["<s>", "</s>", "<ent>", "<ent2>", "[UNK]", "[PAD]", "[MASK]", "[MASK2]"],
+            **kwargs,
+        )
+
+    def test_entity_classification_markers_ignore_extra_special_token_order(self):
+        tokenizer = self._get_tokenizer("entity_classification")
+        self.assertEqual(tokenizer.entity_token_1, "<ent>")
+        self.assertEqual(tokenizer.entity_token_2, "<ent2>")
+        self.assertEqual(tokenizer.special_tokens_map["entity_token_1"], "<ent>")
+        self.assertEqual(tokenizer.entity_token_1_id, tokenizer.convert_tokens_to_ids("<ent>"))
+        self.assertNotEqual(tokenizer.extra_special_tokens_ids[0], tokenizer.entity_token_1_id)
+
+        encoding = tokenizer("Beyonce lives in Los Angeles.", entity_spans=[(0, 7)])
+        tokens = tokenizer.convert_ids_to_tokens(encoding["input_ids"])
+        self.assertEqual(tokens.count("<ent>"), 2)
+        self.assertEqual(tokens[1], "<ent>")
+
+    def test_entity_pair_classification_markers_ignore_extra_special_token_order(self):
+        tokenizer = self._get_tokenizer("entity_pair_classification")
+        self.assertEqual(tokenizer.entity_token_1_id, tokenizer.convert_tokens_to_ids("<ent>"))
+        self.assertEqual(tokenizer.entity_token_2_id, tokenizer.convert_tokens_to_ids("<ent2>"))
+        self.assertNotEqual(tokenizer.extra_special_tokens_ids[0], tokenizer.entity_token_1_id)
+        self.assertNotEqual(tokenizer.extra_special_tokens_ids[1], tokenizer.entity_token_2_id)
+
+        encoding = tokenizer("Beyonce lives in Los Angeles.", entity_spans=[(0, 7), (16, 27)])
+        tokens = tokenizer.convert_ids_to_tokens(encoding["input_ids"])
+        self.assertEqual(tokens.count("<ent>"), 2)
+        self.assertEqual(tokens.count("<ent2>"), 2)
+
+
 @slow
 @require_torch
 class MLukeTokenizerIntegrationTests(unittest.TestCase):
