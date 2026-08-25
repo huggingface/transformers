@@ -747,14 +747,18 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         chronological order. Reads and writes are only consistent with each other if both agree on where a given
         logical position lives, so this catches off-by-one errors that the two index computations would otherwise hide
         from each other."""
-        allocator = SlidingAttentionCacheAllocator(
-            index=0,
-            block_size=block_size,
+        allocator = _make_allocator(
+            SlidingAttentionCacheAllocator,
+            head_dim=8,
+            num_kv_heads=2,
+            page_size=block_size,
             sliding_window=sliding_window,
-            sentinel_index=-1,
-            write_trash_index=-2,
         )
         allocator.block_table["req"] = block_table
+        # Special indices are normally set when registering the cache tensor, which we skip here. Physical indices are
+        # always non-negative, so negative sentinels cannot collide with them.
+        allocator.sentinel_index = -1
+        allocator.write_trash_index = -2
 
         slot_to_token: dict[int, int] = {}  # physical slot -> logical position currently stored there
         past_length = 0
@@ -2043,7 +2047,7 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
         # 2) GPU memory check, which accounts for the CUDA caching allocator's rounding up of allocations.
         if baseline > 0:
             self.skipTest(f"CUDA allocator already holds {baseline} bytes: the memory delta check would be polluted")
-        max_cuda_overhead = num_allocations * 512 + large_alloc_rounding
+        max_accelerator_overhead = num_allocations * 512 + large_alloc_rounding
         self.assertLessEqual(
             abs(actual_accelerator - predicted),
             max_accelerator_overhead,

@@ -39,9 +39,13 @@ T = TypeVar("T")
 class DistributedHelper:
     """A helper class to handle distributed-related operations. Notably, it does not crash when distributed is off."""
 
-    def __init__(self, device_mesh: DeviceMesh | None, cpu_group_timeout: float | None) -> None:
+    def __init__(
+        self, device_mesh: DeviceMesh | None, cpu_group_timeout: float | None, tp_plan: dict[str, str] | None = None
+    ) -> None:
         self.dist_on = _is_torch_distributed_initialized()
         self.device_mesh = device_mesh
+        # The model's TP plan, used to check whether the KV heads are sharded (see `are_kv_heads_tp_ed`)
+        self.tp_plan = tp_plan if tp_plan is not None else {}
 
         # Check validity of the device mesh
         self.check_device_mesh_for_cb(self.device_mesh)
