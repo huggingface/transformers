@@ -54,6 +54,7 @@ from ...vision_utils import get_vision_attention_seqlens
 from ..clip.modeling_clip import CLIPMLP
 from ..glm4v.image_processing_glm4v import Glm4vImageProcessor, Glm4vImageProcessorKwargs
 from ..glm4v.image_processing_pil_glm4v import Glm4vImageProcessorPil
+from ..glm4v.modeling_glm4v import get_rope_index
 from ..glm4v.video_processing_glm4v import Glm4vVideoProcessor
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
@@ -69,7 +70,6 @@ from ..qwen2_vl.modeling_qwen2_vl import (
     Qwen2VLModel,
     Qwen2VLPreTrainedModel,
     TransformersKwargs,
-    get_rope_index,
 )
 from ..qwen3_5_moe.modeling_qwen3_5_moe import Qwen3_5MoeVisionPatchMerger
 from ..qwen3_vl.processing_qwen3_vl import Qwen3VLProcessor
@@ -627,7 +627,6 @@ class Cosmos3EdgeModel(Qwen2VLModel, Cosmos3EdgePreTrainedModel):
             mm_token_type_ids,
             image_grid_thw=image_grid_thw,
             video_grid_thw=video_grid_thw,
-            split_video_frames=True,
             **kwargs,
         )
 

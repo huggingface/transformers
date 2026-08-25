@@ -165,8 +165,8 @@ class MultiModalGenerationMixin:
 
 
 # ── Multimodal (M-RoPE) decoder positions ────────────────────────────────────────────────────────────
-# Shared building blocks for the mixin's `get_rope_index` walk and for models that lay their own spans
-# out (`get_mrope_position_block` overrides, or a fully custom `get_rope_index`).
+# The pieces every layout shares. Each model's own `get_rope_index` — a module-level function in its
+# `modeling_*.py`, pure in `(config, inputs)` — builds its spans out of these.
 
 
 def get_mrope_vision_positions(

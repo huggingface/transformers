@@ -11,7 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import itertools
 import warnings
+from collections import defaultdict
 from collections.abc import Callable
 
 import numpy as np
@@ -59,7 +61,6 @@ from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VLTextModel,
     Qwen2_5_VLVisionAttention,
     Qwen2_5_VLVisionBlock,
-    get_rope_index,
 )
 from ..qwen2_vl.modeling_qwen2_vl import Qwen2VLModel
 from ..qwen2_vl.processing_qwen2_vl import (
@@ -69,6 +70,74 @@ from ..qwen2_vl.processing_qwen2_vl import (
 
 
 logger = logging.get_logger(__name__)
+
+
+def get_rope_index(
+    config,
+    input_ids: torch.LongTensor,
+    mm_token_type_ids: torch.IntTensor,
+    *,
+    attention_mask: torch.Tensor | None = None,
+    image_grid_thw: torch.LongTensor | None = None,
+    video_grid_thw: torch.LongTensor | None = None,
+    **unused,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """M-RoPE decoder positions for a sequence of interleaved text and vision runs.
+
+    This family's processor separates video frames with timestamp text, so each frame is its own visual
+    span: the video grids are expanded to one `T=1` row per frame first.
+
+    Per batch row, over the unpadded tokens, walk `mm_token_type_ids` span by span (0=text, 1=image,
+    2=video): a text run counts 1D positions on all three axes, and a vision span lays a
+    `(temporal, height, width)` grid then advances the text position by its largest spatial extent.
+    Returns `(position_ids, rope_deltas)`, the deltas being what `generate` advances decode positions by.
+    """
+    vision_config = getattr(config, "vision_config", config)
+    spatial_merge_size = vision_config.spatial_merge_size
+    temporal_merge_size = getattr(vision_config, "temporal_merge_size", None) or 1
+    if video_grid_thw is not None:
+        video_grid_thw = torch.repeat_interleave(video_grid_thw, video_grid_thw[:, 0], dim=0)
+        video_grid_thw[:, 0] = 1
+    grids = {1: image_grid_thw, 2: video_grid_thw}
+
+    position_ids = torch.full(
+        (3, input_ids.shape[0], input_ids.shape[1]), 0, dtype=input_ids.dtype, device=input_ids.device
+    )
+    rope_deltas = []
+    for batch_idx, token_ids in enumerate(input_ids):
+        token_types = mm_token_type_ids[batch_idx]
+        valid_tokens = None
+        if attention_mask is not None:
+            valid_tokens = attention_mask[batch_idx].bool()
+            token_ids, token_types = token_ids[valid_tokens], token_types[valid_tokens]
+
+        counter, current_position, blocks = defaultdict(int), 0, []
+        for modality_type, group in itertools.groupby(enumerate(token_types.tolist()), lambda x: x[1]):
+            length = len(list(group))
+            if modality_type == 0:
+                positions = torch.arange(current_position, current_position + length, device=token_ids.device)
+                blocks.append(positions.expand(3, length))
+                current_position += length
+                continue
+
+            grid_thw = grids[modality_type][counter[modality_type]]
+            counter[modality_type] += 1
+            grid_t = grid_thw[0].item() // (temporal_merge_size if modality_type == 2 else 1)
+            grid_h, grid_w = grid_thw[1].item() // spatial_merge_size, grid_thw[2].item() // spatial_merge_size
+            temporal = torch.arange(grid_t, device=token_ids.device) + current_position
+            height = torch.arange(grid_h, device=token_ids.device) + current_position
+            width = torch.arange(grid_w, device=token_ids.device) + current_position
+            axes = torch.meshgrid(temporal, height, width, indexing="ij")
+            blocks.append(torch.stack(axes, dim=0).reshape(3, -1))
+            current_position += int(max(grid_thw[1], grid_thw[2])) // spatial_merge_size
+
+        positions = torch.cat(blocks, dim=1).to(device=position_ids.device, dtype=position_ids.dtype)
+        if valid_tokens is not None:
+            position_ids[:, batch_idx, valid_tokens] = positions
+        else:
+            position_ids[:, batch_idx] = positions
+        rope_deltas.append(positions.max() + 1 - len(token_ids))
+    return position_ids, torch.tensor(rope_deltas, device=input_ids.device).unsqueeze(1)
 
 
 @auto_docstring(checkpoint="zai-org/GLM-4.1V-9B-Thinking")
@@ -791,7 +860,6 @@ class Glm4vModel(Qwen2VLModel):
             mm_token_type_ids,
             image_grid_thw=image_grid_thw,
             video_grid_thw=video_grid_thw,
-            split_video_frames=True,
             **kwargs,
         )
 

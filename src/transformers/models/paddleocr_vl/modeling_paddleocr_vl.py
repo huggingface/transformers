@@ -995,8 +995,6 @@ def get_rope_index(
     image_grid_thw: torch.LongTensor | None = None,
     video_grid_thw: torch.LongTensor | None = None,
     second_per_grid_ts: torch.Tensor | None = None,
-    position_block: Callable | None = None,
-    split_video_frames: bool = False,
     **unused,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """M-RoPE for a sequence of interleaved text and vision runs — the layout most families use.
@@ -1006,14 +1004,7 @@ def get_rope_index(
     position by its largest spatial extent. A video's temporal axis is scaled by
     `tokens_per_second * second_per_grid_ts` when the model declares a clock.
 
-    `position_block` overrides how one span is laid out, for a family that differs only there; everything
-    else about the walk stays shared.
     """
-    if split_video_frames and video_grid_thw is not None:
-        # A processor that separates video frames with timestamp text makes each frame its own visual span,
-        # so the grids are expanded to one `T=1` row per frame before the spans are laid out.
-        video_grid_thw = torch.repeat_interleave(video_grid_thw, video_grid_thw[:, 0], dim=0)
-        video_grid_thw[:, 0] = 1
     vision_config = getattr(config, "vision_config", config)
     spatial_merge_size = vision_config.spatial_merge_size
     # Three axes, always: this layout's vision block is a `(temporal, height, width)` grid, so the text runs
@@ -1024,20 +1015,8 @@ def get_rope_index(
     video_temporal_merge_size = getattr(vision_config, "temporal_merge_size", None) or 1
     grids = {1: image_grid_thw, 2: video_grid_thw}
 
-    def block_for_span(modality_type, start_idx, end_idx, current_position, grid_thw, counter, device):
-        if position_block is not None:
-            return position_block(
-                modality_type,
-                start_idx,
-                end_idx,
-                current_position,
-                grid_thw=grid_thw,
-                second_per_grid_ts=second_per_grid_ts,
-                modality_counter=counter,
-                device=device,
-            )
+    def block_for_span(modality_type, length, current_position, grid_thw, counter, device):
         if modality_type == 0:
-            length = end_idx - start_idx
             positions = torch.arange(current_position, current_position + length, device=device)
             return positions.expand(num_axes, length), current_position + length
         time_interval = 1
@@ -1058,11 +1037,10 @@ def get_rope_index(
         current_position = 0
         blocks = []
         for modality_type, group in itertools.groupby(enumerate(token_types.tolist()), lambda x: x[1]):
-            group = list(group)
-            start_idx, end_idx = group[0][0], group[-1][0] + 1
+            length = len(list(group))
             grid_thw = None if modality_type == 0 else grids[modality_type][counter[modality_type]]
             block, current_position = block_for_span(
-                modality_type, start_idx, end_idx, current_position, grid_thw, counter, token_ids.device
+                modality_type, length, current_position, grid_thw, counter, token_ids.device
             )
             counter[modality_type] += 1
             blocks.append(block)
@@ -1108,7 +1086,6 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel, MultiModalPreTrainedModelMixi
             image_grid_thw=image_grid_thw,
             video_grid_thw=video_grid_thw,
             second_per_grid_ts=second_per_grid_ts,
-            position_block=getattr(self, "get_mrope_position_block", None),
         )
 
     @accepts_precomputed_kwargs(modality="image")
