@@ -26,7 +26,7 @@ from transformers.utils.import_utils import is_mistral_common_available
 from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...modeling_gguf_pytorch_utils import load_gguf_checkpoint
-from ...tokenization_utils_base import TOKENIZER_CONFIG_FILE
+from ...tokenization_utils_base import FULL_TOKENIZER_FILE, TOKENIZER_CONFIG_FILE
 from ...utils import (
     extract_commit_hash,
     is_g2p_en_available,
@@ -635,6 +635,45 @@ def get_tokenizer_config(
     return result
 
 
+def _tokenizer_json_has_byte_level(
+    pretrained_model_name_or_path: str | os.PathLike[str],
+    cache_dir: str | os.PathLike[str] | None = None,
+    force_download: bool = False,
+    proxies: dict[str, str] | None = None,
+    token: bool | str | None = None,
+    revision: str | None = None,
+    local_files_only: bool = False,
+    subfolder: str = "",
+    **kwargs,
+) -> bool:
+    """Return whether `tokenizer.json` declares a ByteLevel pre_tokenizer or decoder.
+
+    Used when Hub `tokenizer_class` is `LlamaTokenizer` but the serialized tokenizer is
+    byte-level, so AutoTokenizer can load `TokenizersBackend` instead.
+    """
+    resolved_file = cached_file(
+        pretrained_model_name_or_path,
+        FULL_TOKENIZER_FILE,
+        cache_dir=cache_dir,
+        force_download=force_download,
+        proxies=proxies,
+        token=token,
+        revision=revision,
+        local_files_only=local_files_only,
+        subfolder=subfolder,
+        _raise_exceptions_for_gated_repo=False,
+        _raise_exceptions_for_missing_entries=False,
+        _raise_exceptions_for_connection_errors=False,
+        _commit_hash=kwargs.get("_commit_hash"),
+    )
+    if resolved_file is None:
+        return False
+    with open(resolved_file, encoding="utf-8") as reader:
+        tokenizer_json = json.load(reader)
+    pipeline = (tokenizer_json.get("pre_tokenizer"), tokenizer_json.get("decoder"))
+    return "ByteLevel" in str(pipeline)
+
+
 class AutoTokenizer:
     r"""
     This is a generic tokenizer class that will be instantiated as one of the tokenizer classes of the library when
@@ -800,6 +839,23 @@ class AutoTokenizer:
             and TokenizersBackend is not None
             and any(fnmatch.fnmatch(_config_name_or_path, p) for p in MODEL_IDS_TO_TOKENIZERS_BACKEND)
         ):
+            return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+
+        # Hub repos that declare this but ship ByteLevel (Llama3 style) must use TokenizersBackend 
+        # because LlamaTokenizer hardcodes Metaspace.
+        _hub_declared_class = tokenizer_config_class or getattr(config, "tokenizer_class", None)
+        if (
+            tokenizer_auto_map is None
+            and TokenizersBackend is not None
+            and _hub_declared_class is not None
+            and _hub_declared_class.removesuffix("Fast") == "LlamaTokenizer"
+            and _tokenizer_json_has_byte_level(pretrained_model_name_or_path, **kwargs)
+        ):
+            logger.warning_once(
+                f"`tokenizer_class` is `{_hub_declared_class}` but `tokenizer.json` is ByteLevel; "
+                "loading `TokenizersBackend`. Set `tokenizer_class` to `TokenizersBackend` in "
+                "`tokenizer_config.json`."
+            )
             return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
         # if there is a config, we can check that the tokenizer class != than model class.

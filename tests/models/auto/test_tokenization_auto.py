@@ -87,6 +87,26 @@ class AutoTokenizerTest(unittest.TestCase):
     def setUp(self):
         transformers.dynamic_module_utils.TIME_OUT_REMOTE_CODE = 0
 
+    # Byte-level tokenizer.json + Hub tokenizer_class LlamaTokenizer/Fast
+    BYTE_LEVEL_LLAMA_TOKENIZER_CLASS_CHECKPOINTS = [
+        "deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
+        "deepseek-ai/deepseek-llm-7b-base",
+        "Salesforce/xLAM-1b-fc-r",
+        "microsoft/wavecoder-ultra-6.7b",
+        "LSX-UniWue/LLaMmlein_1B_prerelease",
+        "AI-MO/NuminaMath-7B-TIR",
+    ]
+
+    @slow
+    @require_tokenizers
+    @parameterized.expand(BYTE_LEVEL_LLAMA_TOKENIZER_CLASS_CHECKPOINTS)
+    def test_byte_level_llama_tokenizer_class_uses_tokenizers_backend(self, repo_id):
+        text = "Hello world. I'm an AI."
+        tokenizer = AutoTokenizer.from_pretrained(repo_id)
+        # exact type: LlamaTokenizer subclasses TokenizersBackend
+        self.assertIs(type(tokenizer), TokenizersBackend)
+        self.assertEqual(tokenizer.decode(tokenizer.encode(text, add_special_tokens=False)), text)
+
     @slow
     def test_tokenizer_from_pretrained(self):
         for model_name in ("google-bert/bert-base-uncased", "google-bert/bert-base-cased"):
