@@ -1360,32 +1360,27 @@ class Qwen4ExpTextModel(Qwen4ExpPreTrainedModel):
             past_key_values = DynamicCache(config=self.config)
 
         # position_ids are the full position_ids here, as the indexer needs full position_embeddings
-        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
         if position_ids is None:
-            position_ids = torch.arange(inputs_embeds.shape[1] + past_seen_tokens, device=inputs_embeds.device)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.view(1, 1, -1).expand(4, inputs_embeds.shape[0], -1)
         elif position_ids.ndim == 2:
-            batch_size, current_seq_length = inputs_embeds.shape[:2]
-            full_length = past_seen_tokens + current_seq_length
-            # User passed sliced position_ids explicitly: expand them to full positions
-            if position_ids.shape[-1] < full_length:
-                full_position_ids = position_ids.new_zeros((batch_size, full_length))
-                full_position_ids[:, -current_seq_length:] = position_ids
-                for i in range(batch_size):
-                    first_pos = position_ids[i, 0].item()  # trf-ignore: TRF056
-                    full_position_ids[i, -current_seq_length - first_pos : -current_seq_length] = torch.arange(
-                        first_pos, device=position_ids.device
-                    )
-                position_ids = full_position_ids
-            # Expand to 3d
             position_ids = position_ids[None, ...].expand(4, position_ids.shape[0], -1)
 
         if position_ids.ndim == 3 and position_ids.shape[0] == 4:
             # Slice to current positionms for the text ids
-            text_position_ids = position_ids[0][..., -inputs_embeds.shape[1] :]
+            text_position_ids = position_ids[0]
             position_ids = position_ids[1:]
         else:
             text_position_ids = None
+
+        # We need the full position_ids in the indexer, not just the current ones, so bind them to the cache if any (as they
+        # are 3D, it's otherwise not easy to compute them back from only current positions)
+        if past_key_values is not None:
+            if hasattr(past_key_values, "position_ids"):
+                previous_positions = past_key_values.position_ids
+                position_ids = torch.cat([previous_positions, position_ids], dim=-1)
+            past_key_values.position_ids = position_ids
 
         if not isinstance(causal_mask_mapping := attention_mask, dict):
             mask_kwargs = {
@@ -1653,12 +1648,6 @@ class Qwen4ExpForCausalLM(Qwen4ExpPreTrainedModel, GenerationMixin):
             "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
         }
         return causal_mask_mapping
-
-    def prepare_inputs_for_generation(self, input_ids, **kwargs):
-        model_inputs = super().prepare_inputs_for_generation(input_ids, **kwargs)
-        # We overwrite them here as we want the FULL position, not the sliced positions
-        model_inputs["position_ids"] = kwargs.get("position_ids")
-        return model_inputs
 
 
 class Qwen4ExpVisionRotaryEmbedding(nn.Module):
@@ -2673,12 +2662,6 @@ class Qwen4ExpForConditionalGeneration(Qwen4ExpPreTrainedModel, GenerationMixin)
             model_kwargs["encoder_outputs"] = _expand_dict_for_generation(model_kwargs["encoder_outputs"])
 
         return input_ids, model_kwargs
-
-    def prepare_inputs_for_generation(self, input_ids, **kwargs):
-        model_inputs = super().prepare_inputs_for_generation(input_ids, **kwargs)
-        # We overwrite them here as we want the FULL position, not the sliced positions
-        model_inputs["position_ids"] = kwargs.get("position_ids")
-        return model_inputs
 
     @staticmethod
     def create_masks_for_generate(
