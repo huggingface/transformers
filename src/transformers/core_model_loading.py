@@ -1708,9 +1708,11 @@ def convert_and_load_state_dict_in_model(
             if is_dtensor(empty_param):
                 sharding_op = DtensorShardOperation(empty_param)
 
-            if isinstance(mapping, WeightConverter) and "ple.ple_embedding.ngram_embedding." in renamed_key:
-                # ConcatenateShards represents pieces of one global parameter. Materialize its sources unsharded on
-                # CPU, then place/shard the converted global tensor exactly once.
+            # The ple embedding of Qwen4Next is so big (~96 GiB) that we need to perform Concatenation on "cpu" if using a device_map.
+            # When using a tp_plan, we need to defer the sharding, as otherwise we pre-shard each shard incorrectly
+            if isinstance(mapping, WeightConverter) and any(
+                isinstance(operation, Concatenate) and operation.num_shards_attribute is not None for operation in mapping.operations
+            ):
                 mapping._deferred_load_placement = (sharding_op, materialize_device, _dtype)
                 materialize_device, sharding_op = "cpu", None
 

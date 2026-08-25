@@ -29,7 +29,6 @@ from transformers.conversion_mapping import (
 from transformers.core_model_loading import (
     Chunk,
     Concatenate,
-    ConcatenateShards,
     Conv3dToLinear,
     ErnieFuseAndSplitTextVisionExperts,
     GroupWeightRename,
@@ -265,7 +264,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         converter = WeightConverter(
             r"piece-\d+\.weight",
             "weight",
-            operations=[ConcatenateShards(dim=0, num_shards_attribute="num_shards")],
+            operations=[Concatenate(dim=0, num_shards_attribute="num_shards")],
         )
         shard_op = _make_dtensor_shard_op(
             FakeMesh(shape=(2,), rank=0),
@@ -287,7 +286,6 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
                 model,
                 checkpoint,
                 LoadStateDictConfig(weight_mapping=[converter]),
-                tp_plan=None,
             )
 
         torch.testing.assert_close(captured["weight"], full_weight[:3])
