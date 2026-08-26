@@ -3693,10 +3693,14 @@ def patch_psutil_cpu_memory(limit_bytes: int):
 
     import psutil
 
-    _original_virtual_memory = psutil.virtual_memory
-    # Keep the honest reader reachable: the cap above is a `device_map="auto"` planning budget, but a guard that
-    # asks "will this OOM-kill the container?" needs the machine's real RAM. See `get_physical_cpu_ram_gib`.
-    if _UNPATCHED_VIRTUAL_MEMORY is None:
+    # Keep the honest reader reachable: the cap described in the docstring is a `device_map="auto"` planning budget,
+    # but a guard that asks "will this OOM-kill the container?" needs the machine's real RAM.
+    # See `get_physical_cpu_ram_gib`.
+    # If already patched, always use the stored original so a second call doesn't chain patches on top of each other.
+    if _UNPATCHED_VIRTUAL_MEMORY is not None:
+        _original_virtual_memory = _UNPATCHED_VIRTUAL_MEMORY
+    else:
+        _original_virtual_memory = psutil.virtual_memory
         _UNPATCHED_VIRTUAL_MEMORY = _original_virtual_memory
 
     def _capped_virtual_memory():
