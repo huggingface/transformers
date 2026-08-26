@@ -15,16 +15,10 @@
 import numpy as np
 
 from ...audio_processing_backends import NumpyAudioBackend
+from .audio_processing_wav2vec2 import Wav2Vec2AudioProcessorMixin
 
 
-class Wav2Vec2AudioProcessorNumpy(NumpyAudioBackend):
-    """NumPy sibling of [`Wav2Vec2AudioProcessor`]. Bit-exact to the torch sibling within
-    the float32 noise floor (ADR 0001)."""
-
-    sampling_rate = 16000
-    force_mono = True
-    do_normalize = True
-
+class Wav2Vec2AudioProcessorNumpy(Wav2Vec2AudioProcessorMixin, NumpyAudioBackend):
     def _process_audio(self, audio_el):
         audio_el = super()._process_audio(audio_el)
         if self.do_normalize:

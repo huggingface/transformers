@@ -13,14 +13,11 @@
 # limitations under the License.
 
 from ...audio_processing_backends import NumpyAudioBackend
+from .audio_processing_encodec import EncodecAudioProcessorMixin
 
 
-class EncodecAudioProcessorNumpy(NumpyAudioBackend):
-    """NumPy sibling of [`EncodecAudioProcessor`]. Bit-exact to the torch sibling (ADR 0001)."""
-
-    sampling_rate = 24000
-    force_mono = True
-    add_channel_dim = True
+class EncodecAudioProcessorNumpy(EncodecAudioProcessorMixin, NumpyAudioBackend):
+    pass
 
 
 __all__ = ["EncodecAudioProcessorNumpy"]

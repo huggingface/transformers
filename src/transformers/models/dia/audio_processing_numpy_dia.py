@@ -13,15 +13,11 @@
 # limitations under the License.
 
 from ...audio_processing_backends import NumpyAudioBackend
+from .audio_processing_dia import DiaAudioProcessorMixin
 
 
-class DiaAudioProcessorNumpy(NumpyAudioBackend):
-    """NumPy sibling of [`DiaAudioProcessor`]. Bit-exact to the torch sibling (ADR 0001)."""
-
-    sampling_rate = 44100
-    force_mono = True
-    add_channel_dim = True
-    pad_to_multiple_of = 512
+class DiaAudioProcessorNumpy(DiaAudioProcessorMixin, NumpyAudioBackend):
+    pass
 
 
 __all__ = ["DiaAudioProcessorNumpy"]

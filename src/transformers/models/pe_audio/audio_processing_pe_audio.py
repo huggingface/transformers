@@ -15,9 +15,13 @@
 from ...audio_processing_backends import TorchAudioBackend
 
 
-class PeAudioAudioProcessor(TorchAudioBackend):
-    sampling_rate = 16000
+class PeAudioAudioProcessorMixin:
     force_mono = True
+    sampling_rate = 16000
+
+
+class PeAudioAudioProcessor(PeAudioAudioProcessorMixin, TorchAudioBackend):
+    pass
 
 
 __all__ = ["PeAudioAudioProcessor"]

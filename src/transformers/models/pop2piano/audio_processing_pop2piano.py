@@ -12,20 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# NOTE: Full Pop2Piano feature extraction requires the Essentia library for
-# beat detection (RhythmExtractor2013) and scipy for beat interpolation.
-# This audio processor provides the basic mel spectrogram configuration but
-# does not implement the complete beat-aligned segmentation pipeline.
-
 from ...audio_processing_backends import TorchAudioBackend
-from .audio_processing_numpy_pop2piano import Pop2PianoAudioProcessorNumpy
+from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
-class Pop2PianoAudioProcessor(TorchAudioBackend):
-    sampling_rate = 22050
+class Pop2PianoAudioProcessorMixin:
     force_mono = True
+    sampling_rate = 22050
+    spectrogram_config = SpectrogramConfig(
+        stft_config=StftConfig(n_fft=4096, hop_length=1024, power=2.0),
+        mel_scale_config=MelScaleConfig(n_mels=512, f_min=10.0, mel_scale="htk"),
+        log_mode="log10",
+    )
 
-    spectrogram_config = Pop2PianoAudioProcessorNumpy.spectrogram_config
+
+class Pop2PianoAudioProcessor(Pop2PianoAudioProcessorMixin, TorchAudioBackend):
+    pass
 
 
 __all__ = ["Pop2PianoAudioProcessor"]

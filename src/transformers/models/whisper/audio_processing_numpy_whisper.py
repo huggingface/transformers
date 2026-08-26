@@ -15,40 +15,10 @@
 import numpy as np
 
 from ...audio_processing_backends import NumpyAudioBackend
-from ...audio_processing_base import legacy_chunk_length_to_max_length
-from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
+from .audio_processing_whisper import WhisperAudioProcessorMixin
 
 
-class WhisperAudioProcessorNumpy(NumpyAudioBackend):
-    sampling_rate = 16000
-    force_mono = True
-    return_padding_mask = False
-    truncation = True
-    max_length = 480000  # 30 seconds at 16000 Hz
-
-    spectrogram_config = SpectrogramConfig(
-        stft_config=StftConfig(
-            n_fft=400,
-            hop_length=160,
-            power=2.0,
-        ),
-        mel_scale_config=MelScaleConfig(
-            n_mels=80,
-            mel_scale="slaney",
-            norm="slaney",
-            computation_dtype="float64",
-        ),
-        log_mode="log10",
-        skip_last_frame=True,
-        clip_max_offset=8.0,
-        post_log_shift=4.0,
-        post_log_scale=0.25,
-    )
-
-    legacy_field_mapping = {
-        "chunk_length": legacy_chunk_length_to_max_length,
-    }
-
+class WhisperAudioProcessorNumpy(WhisperAudioProcessorMixin, NumpyAudioBackend):
     def _apply_mel_scale(self, features, *, spectrogram_config, **kwargs):
         return np.maximum(spectrogram_config.mel_floor, np.matmul(self.mel_filters.T, features))
 

@@ -15,19 +15,41 @@
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
-from .audio_processing_numpy_parakeet import ParakeetAudioProcessorNumpy
+from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
-class ParakeetAudioProcessor(TorchAudioBackend):
-    sampling_rate = 16000
+class ParakeetAudioProcessorMixin:
     force_mono = True
+    sampling_rate = 16000
+    spectrogram_config = SpectrogramConfig(
+        stft_config=StftConfig(
+            n_fft=512,
+            hop_length=160,
+            win_length=400,
+            window_fn="hann_window",
+            power=2.0,
+            pad_mode="constant",
+            periodic=False,
+            magnitude_mode="sqrt_sum_squares",
+        ),
+        mel_scale_config=MelScaleConfig(
+            n_mels=80,
+            f_min=0.0,
+            norm="slaney",
+            mel_scale="slaney",
+            matmul_order="filters_first_matmul",
+            bank_rounding="librosa",
+        ),
+        preemphasis=0.97,
+        preemphasis_mode="waveform",
+        log_mode="log",
+        mel_floor=0.0,
+        pre_log_offset=2**-24,
+        transpose_features=True,
+    )
 
-    spectrogram_config = ParakeetAudioProcessorNumpy.spectrogram_config
 
-    # The legacy FE's numerics are fully described by `spectrogram_config`: librosa filter
-    # rounding, the `mel_filters @ magnitudes` matmul, the `view_as_real` magnitude form and
-    # the (batch, frames, mels) layout are all base-class knobs.
-
+class ParakeetAudioProcessor(ParakeetAudioProcessorMixin, TorchAudioBackend):
     def _postprocess_output(self, output, audio_ranges=None, **kwargs):
         if audio_ranges is None or "audio_features" not in output:
             return output

@@ -15,83 +15,12 @@
 import numpy as np
 
 from ...audio_processing_backends import NumpyAudioBackend
-from ...audio_processing_base import legacy_chunk_length_to_max_length
-from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
-from ...processing_utils import AudioKwargs
+from .audio_processing_qwen3_asr import Qwen3ASRAudioProcessorMixin
 
 
-class Qwen3ASRAudioKwargs(AudioKwargs, total=False):
-    n_window: int | None
-
-
-class Qwen3ASRAudioProcessorNumpy(NumpyAudioBackend):
-    sampling_rate = 16000
-    force_mono = True
-    padding = "max_length"
-    max_length = 480000  # 30 seconds at 16000 Hz
-    min_length = 8000
-    n_window = 50
-    valid_kwargs = Qwen3ASRAudioKwargs
-
-    spectrogram_config = SpectrogramConfig(
-        stft_config=StftConfig(
-            n_fft=400,
-            hop_length=160,
-            power=2.0,
-        ),
-        mel_scale_config=MelScaleConfig(
-            n_mels=128,
-            mel_scale="slaney",
-            norm="slaney",
-            computation_dtype="float64",
-        ),
-        log_mode="log10",
-        clip_max_offset=8.0,
-        post_log_shift=4.0,
-        post_log_scale=0.25,
-        # legacy masks by striding the sample mask -> boundary-straddling frames count as valid
-        count_partial_frames=True,
-    )
-
-    legacy_field_mapping = {
-        "chunk_length": legacy_chunk_length_to_max_length,
-    }
-
-    def _process_audio(self, audio_el):
-        audio_el = super()._process_audio(audio_el)
-        if self.min_length and audio_el.shape[-1] < self.min_length:
-            audio_el = self._pad_single(audio_el, self.min_length)
-        return audio_el
-
-    def _extract_spectrogram(self, audio, *, spectrogram_config, **kwargs):
-        features = super()._extract_spectrogram(audio, spectrogram_config=spectrogram_config, **kwargs)
-        # drop the trailing center frame before the mel projection
-        return features[..., :-1]
-
+class Qwen3ASRAudioProcessorNumpy(Qwen3ASRAudioProcessorMixin, NumpyAudioBackend):
     def _apply_mel_scale(self, features, *, spectrogram_config, **kwargs):
         return np.maximum(spectrogram_config.mel_floor, np.matmul(self.mel_filters.T, features))
-
-    def _get_mask_width(self, padded_length, spectrogram_config) -> int:
-        # The legacy FE strides the sample-level mask by hop_length and trims the tail column
-        # when it doesn't divide evenly, so the feature width is `padded_length // hop_length`
-        # (this model drops its trailing frame pre-mel rather than via `skip_last_frame`).
-        return int(padded_length // spectrogram_config.stft_config.hop_length)
-
-    def _postprocess_output(self, output, audio_ranges=None, n_window=None, **kwargs):
-        # Right-pad the mel time axis (features and mask) to a multiple of `2 * n_window`
-        # (needed by `Qwen3ASREncoder`). `n_window=0` disables this padding.
-        if n_window is None:
-            n_window = self.n_window
-        multiple = 2 * n_window if n_window else 0
-        if multiple > 1:
-            features = output["audio_features"]
-            remainder = features.shape[-1] % multiple
-            if remainder:
-                padded_length = features.shape[-1] + multiple - remainder
-                output["audio_features"] = self._pad_single(features, padded_length)
-                if "audio_features_mask" in output:
-                    output["audio_features_mask"] = self._pad_single(output["audio_features_mask"], padded_length)
-        return output
 
 
 __all__ = ["Qwen3ASRAudioProcessorNumpy"]

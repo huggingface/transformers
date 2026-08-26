@@ -13,18 +13,44 @@
 # limitations under the License.
 
 from ...audio_processing_backends import TorchAudioBackend
-from .audio_processing_numpy_gemma3n import Gemma3nAudioProcessorNumpy
+from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
-class Gemma3nAudioProcessor(TorchAudioBackend):
-    sampling_rate = 16000
+class Gemma3nAudioProcessorMixin:
     force_mono = True
-    max_length = 480000  # 30 seconds
-    truncation = True
+    max_length = 480000
     pad_to_multiple_of = 128
+    sampling_rate = 16000
+    spectrogram_config = SpectrogramConfig(
+        stft_config=StftConfig(
+            n_fft=1024,
+            win_length=512,
+            hop_length=160,
+            power=1.0,
+            center=False,
+            window_fn="hann_window_f32",
+            frame_extension=1,
+            fft_dtype="float64",
+        ),
+        mel_scale_config=MelScaleConfig(
+            n_mels=128,
+            f_min=125.0,
+            f_max=7600.0,
+            mel_scale="htk",
+            matmul_order="features_first",
+        ),
+        mel_floor=1e-5,
+        log_mode="log",
+        preemphasis=0.97,
+        preemphasis_mode="htk_per_frame",
+        count_partial_frames=True,
+        computation_dtype="float64",
+    )
+    truncation = True
 
-    spectrogram_config = Gemma3nAudioProcessorNumpy.spectrogram_config
-    legacy_field_mapping = Gemma3nAudioProcessorNumpy.legacy_field_mapping
+
+class Gemma3nAudioProcessor(Gemma3nAudioProcessorMixin, TorchAudioBackend):
+    pass
 
 
 __all__ = ["Gemma3nAudioProcessor"]

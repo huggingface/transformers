@@ -15,29 +15,26 @@
 import numpy as np
 
 from ...audio_processing_backends import NumpyAudioBackend
+from .audio_processing_kyutai_speech_to_text import KyutaiSpeechToTextAudioProcessorMixin
 
 
-class KyutaiSpeechToTextAudioProcessorNumpy(NumpyAudioBackend):
-    """NumPy sibling of [`KyutaiSpeechToTextAudioProcessor`]. Raw-audio passthrough with
-    a silence prefix / delay suffix applied in `_postprocess_output` (ADR 0001)."""
-
-    sampling_rate = 24000
-    force_mono = True
-    add_channel_dim = True
-    audio_delay_seconds = 2.5
-    audio_silence_prefix_seconds = 1.0
-
+class KyutaiSpeechToTextAudioProcessorNumpy(KyutaiSpeechToTextAudioProcessorMixin, NumpyAudioBackend):
     def _postprocess_output(self, output, **kwargs):
-        # Add silence prefix (left) and delay (right) padding
         pad_left = int(self.audio_silence_prefix_seconds * self.sampling_rate)
         pad_right = int((self.audio_delay_seconds + 1.0) * self.sampling_rate)
 
         if pad_left > 0 or pad_right > 0:
             output["audio_values"] = np.pad(
-                output["audio_values"], [(0, 0), (0, 0), (pad_left, pad_right)], mode="constant", constant_values=0.0,
+                output["audio_values"],
+                [(0, 0), (0, 0), (pad_left, pad_right)],
+                mode="constant",
+                constant_values=0.0,
             )
             output["audio_values_mask"] = np.pad(
-                output["audio_values_mask"], [(0, 0), (pad_left, pad_right)], mode="constant", constant_values=0,
+                output["audio_values_mask"],
+                [(0, 0), (pad_left, pad_right)],
+                mode="constant",
+                constant_values=0,
             )
 
         return output

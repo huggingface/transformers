@@ -16,29 +16,49 @@ import numpy as np
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
-from .audio_processing_numpy_speech_to_text import SpeechToTextAudioProcessorNumpy
+from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
-class SpeechToTextAudioProcessor(TorchAudioBackend):
-    """Torch sibling of [`SpeechToTextAudioProcessorNumpy`]. Per-waveform kaldi fbank features
-    followed by per-utterance CMVN on the padded batch."""
-
-    sampling_rate = 16000
-    force_mono = True
+class SpeechToTextAudioProcessorMixin:
     do_batch_spectrogram = False
-
-
-    spectrogram_config = SpeechToTextAudioProcessorNumpy.spectrogram_config
+    force_mono = True
+    sampling_rate = 16000
+    spectrogram_config = SpectrogramConfig(
+        stft_config=StftConfig(
+            n_fft=512,
+            win_length=400,
+            hop_length=160,
+            window_fn="povey",
+            power=2.0,
+            center=False,
+            periodic=False,
+            left_align_fft=True,
+        ),
+        mel_scale_config=MelScaleConfig(
+            n_mels=80,
+            f_min=20.0,
+            f_max=8000.0,
+            mel_scale="kaldi",
+            triangularize_in_mel_space=True,
+        ),
+        log_mode="log",
+        preemphasis=0.97,
+        remove_dc_offset=True,
+        mel_floor=1.192092955078125e-07,
+        waveform_scale=32768.0,
+        transpose_features=True,  # kaldi's (time, n_mels) orientation
+    )
 
     def __init__(self, normalize_means=True, normalize_vars=True, **kwargs):
         super().__init__(**kwargs)
         self.normalize_means = normalize_means
         self.normalize_vars = normalize_vars
 
+
+class SpeechToTextAudioProcessor(SpeechToTextAudioProcessorMixin, TorchAudioBackend):
     @staticmethod
     def utterance_cmvn(x, input_length, normalize_means=True, normalize_vars=True, padding_value=0.0):
         # CMVN is computed in numpy to stay bit-exact with the legacy feature extractor
-        # and the numpy sibling: numpy reductions use pairwise summation, whose
         # accumulation order differs from torch's `mean`/`std` (~1e-5 drift in float32).
         x = x.detach().cpu().numpy()
         if normalize_means:
@@ -49,13 +69,12 @@ class SpeechToTextAudioProcessor(TorchAudioBackend):
             x = np.divide(x, std)
         if input_length < x.shape[0]:
             if not (normalize_means or normalize_vars):
-                x = x.copy()  # don't mutate the caller's tensor through the numpy view
+                x = x.copy()
             x[input_length:] = padding_value
         return torch.from_numpy(x.astype(np.float32))
 
     def _postprocess_output(self, output, feature_ranges=None, **kwargs):
-        # Apply utterance CMVN normalization on the padded, stacked features
-        features = output["audio_features"]  # (batch, time, n_mels)
+        features = output["audio_features"]
         normalized = []
         for i, (start, end) in enumerate(feature_ranges):
             length = end - start

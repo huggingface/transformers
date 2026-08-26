@@ -15,35 +15,67 @@
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
-from .audio_processing_numpy_xcodec2 import Xcodec2AudioProcessorNumpy
+from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
-class Xcodec2AudioProcessor(TorchAudioBackend):
-    sampling_rate = 16000
-    force_mono = True
-    model_input_names = ["audio_features", "audio_features_mask", "audio_values", "audio_values_mask"]
+class Xcodec2AudioProcessorMixin:
     add_channel_dim = True
-    hop_length = 320
-    pad_to_multiple_of = 320
-    stride = 2
-    feature_padding_value = 1.0
     do_extract_spectrogram = False
+    # Mel frames are padded with 1.0 (the legacy FE's `padding_value`), unlike the raw audio
+    feature_padding_value = 1.0
+    force_mono = True
+    hop_length = 320
+    # Legacy hub configs describe the fbank geometry with flat keys that are fixed
+    # in the legacy config is the *mel* padding value; the raw audio is padded with 0.0.
+    legacy_field_mapping = {
+        "feature_size": None,
+        "frame_length": None,
+        "frame_shift": None,
+        "num_mel_bins": None,
+        "hop_length": None,
+        "padding_value": "feature_padding_value",
+    }
+    model_input_names = ["audio_features", "audio_features_mask", "audio_values", "audio_values_mask"]
+    pad_to_multiple_of = 320
+    sampling_rate = 16000
+    spectrogram_config = SpectrogramConfig(
+        stft_config=StftConfig(
+            n_fft=512,
+            win_length=400,
+            hop_length=160,
+            window_fn="povey",
+            power=2.0,
+            center=False,
+            periodic=False,
+            left_align_fft=True,
+        ),
+        mel_scale_config=MelScaleConfig(
+            n_mels=80,
+            f_min=20.0,
+            f_max=8000.0,
+            mel_scale="kaldi",
+            triangularize_in_mel_space=True,
+        ),
+        log_mode="log",
+        preemphasis=0.97,
+        remove_dc_offset=True,
+        mel_floor=1.192092955078125e-07,
+        waveform_scale=32768.0,
+    )
+    stride = 2
 
-    spectrogram_config = Xcodec2AudioProcessorNumpy.spectrogram_config
-    legacy_field_mapping = Xcodec2AudioProcessorNumpy.legacy_field_mapping
 
+class Xcodec2AudioProcessor(Xcodec2AudioProcessorMixin, TorchAudioBackend):
     def _process_audio(self, audio_el):
         # The legacy FE appends one zero sample to every waveform before padding
         audio_el = super()._process_audio(audio_el)
         return torch.nn.functional.pad(audio_el, (0, 1))
 
     def _postprocess_output(self, output, audio_ranges=None, **kwargs):
-        audio_values = output["audio_values"]  # (batch, 1, padded_length)
+        audio_values = output["audio_values"]
         padded_length = audio_values.shape[-1]
         half_hop = self.hop_length // 2
 
-        # Per-utterance fbank on the valid (hop-aligned) slice of the padded audio,
-        # normalized with per-utterance mean/variance before mel-frame padding
         features = []
         for i, (start, end) in enumerate(audio_ranges):
             orig_length = end - start
@@ -53,7 +85,6 @@ class Xcodec2AudioProcessor(TorchAudioBackend):
             f = (f - f.mean(0)) / torch.sqrt(f.var(0, unbiased=True) + 1e-7)
             features.append(f)
 
-        # Pad mel frames to the longest utterance (aligned to `stride`) with `feature_padding_value`
         frame_lengths = [f.shape[0] for f in features]
         max_frames = max(frame_lengths)
         if max_frames % self.stride:
@@ -66,7 +97,6 @@ class Xcodec2AudioProcessor(TorchAudioBackend):
         )
         mask = self._get_mask([(0, length) for length in frame_lengths], max_frames)
 
-        # Stride concatenation: (batch, frames, n_mels) -> (batch, frames // stride, n_mels * stride)
         batch_size, num_frames, num_mel_bins = batch.shape
         output["audio_features"] = batch.reshape(batch_size, num_frames // self.stride, num_mel_bins * self.stride)
         output["audio_features_mask"] = (

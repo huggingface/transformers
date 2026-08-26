@@ -15,45 +15,10 @@
 import numpy as np
 
 from ...audio_processing_backends import NumpyAudioBackend
-from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
+from .audio_processing_clvp import ClvpAudioProcessorMixin
 
 
-class ClvpAudioProcessorNumpy(NumpyAudioBackend):
-    """NumPy sibling of [`ClvpAudioProcessor`]. Bit-exact to the legacy `ClvpFeatureExtractor`
-    via float64 log + per-mel-norm division before float32 cast (ADR 0001)."""
-
-    sampling_rate = 22050
-    force_mono = True
-    max_length = 132300  # 6 seconds at 22050 Hz
-    truncation = True
-    # The model feeds `audio_features` straight into the conditioning encoder's `mel_conv`
-    # and never masks it (the legacy FE defaulted to `return_attention_mask=False` too).
-    return_padding_mask = False
-
-    spectrogram_config = SpectrogramConfig(
-        stft_config=StftConfig(
-            n_fft=1024,
-            hop_length=256,
-            window_fn="hann_window",
-            power=2.0,
-        ),
-        mel_scale_config=MelScaleConfig(
-            n_mels=80,
-            f_min=0.0,
-            f_max=8000.0,
-            norm="slaney",
-            mel_scale="htk",
-            frequency_bin_mode="linspace",
-        ),
-        log_mode="log",
-        mel_floor=1e-5,
-        computation_dtype="float64",
-    )
-
-    def __init__(self, mel_norms=None, **kwargs):
-        super().__init__(**kwargs)
-        self.mel_norms = mel_norms
-
+class ClvpAudioProcessorNumpy(ClvpAudioProcessorMixin, NumpyAudioBackend):
     def _normalize_magnitude(self, features, *, spectrogram_config, **kwargs):
         # Compute log and mel_norms division in float64 before casting to float32
         # to match the legacy feature extractor's precision

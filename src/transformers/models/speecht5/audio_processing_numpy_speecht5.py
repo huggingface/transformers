@@ -13,14 +13,11 @@
 # limitations under the License.
 
 from ...audio_processing_backends import NumpyAudioBackend
+from .audio_processing_speecht5 import SpeechT5AudioProcessorMixin
 
 
-class SpeechT5AudioProcessorNumpy(NumpyAudioBackend):
-    """NumPy sibling of [`SpeechT5AudioProcessor`]. Bit-exact to the torch sibling within
-    the float32 noise floor (ADR 0001)."""
-
-    sampling_rate = 16000
-    force_mono = True
+class SpeechT5AudioProcessorNumpy(SpeechT5AudioProcessorMixin, NumpyAudioBackend):
+    pass
 
 
 __all__ = ["SpeechT5AudioProcessorNumpy"]

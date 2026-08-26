@@ -70,9 +70,9 @@ class GraniteSpeechAudioProcessor(TorchAudioBackend):
             audio_embed_sizes.append(projector_length)
 
         # Build input_features_mask matching the FE
-        input_features_mask = torch.arange(max(audio_embed_sizes)).view(1, -1) < torch.tensor(
-            audio_embed_sizes
-        ).view(-1, 1)
+        input_features_mask = torch.arange(max(audio_embed_sizes)).view(1, -1) < torch.tensor(audio_embed_sizes).view(
+            -1, 1
+        )
 
         output["audio_embed_sizes"] = audio_embed_sizes
         output["audio_features_mask"] = input_features_mask

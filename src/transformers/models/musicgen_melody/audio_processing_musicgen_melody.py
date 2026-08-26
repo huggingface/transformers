@@ -55,8 +55,13 @@ class MusicgenMelodyAudioProcessor(TorchAudioBackend):
 
         # Power spectrogram (normalized)
         spec_transform = torchaudio.transforms.Spectrogram(
-            n_fft=self.n_fft, win_length=self.n_fft, hop_length=self.hop_length,
-            power=2, center=True, pad=0, normalized=True,
+            n_fft=self.n_fft,
+            win_length=self.n_fft,
+            hop_length=self.hop_length,
+            power=2,
+            center=True,
+            pad=0,
+            normalized=True,
         ).to(device)
         spec = spec_transform(waveform).squeeze(1)
 

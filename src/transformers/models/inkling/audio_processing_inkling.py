@@ -21,15 +21,6 @@ from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
 class InklingAudioProcessor(TorchAudioBackend):
-    """Audio processor for Inkling.
-
-    Produces log10 mel-filterbank features (mel energies in log10 space). Uses the base
-    `_standard_mel_banks` (slaney norm + slaney mel scale — no librosa), a magnitude (not power)
-    spectrogram, and Inkling's fixed framing: `center=False` with a left pad of `n_fft - hop`
-    and a right pad up to a multiple of `hop`. Downstream dMel quantization is done by
-    `InklingProcessor`, not here.
-    """
-
     sampling_rate = 16000
     force_mono = True
     model_input_names = ["input_features", "input_features_mask"]
@@ -73,9 +64,6 @@ class InklingAudioProcessor(TorchAudioBackend):
         if power != 1.0:
             magnitudes = magnitudes.pow(power)
         return magnitudes
-
-    # Pointwise log10 (ADR 0005) and the (batch, frames, mels) layout are the base
-    # `log_mode="log10"` / `transpose_features` path; no `_normalize_magnitude` override needed.
 
     def _get_mask_width(self, padded_length, spectrogram_config) -> int:
         # Inkling right-pads to a whole number of hops, so it emits ceil(length / hop) frames.

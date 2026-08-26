@@ -13,37 +13,59 @@
 # limitations under the License.
 
 from ...audio_processing_backends import TorchAudioBackend
-from .audio_processing_numpy_audio_spectrogram_transformer import AudioSpectrogramTransformerAudioProcessorNumpy
+from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
-class AudioSpectrogramTransformerAudioProcessor(TorchAudioBackend):
-    sampling_rate = 16000
-    force_mono = True
-    model_input_names = ["audio_values"]
-    return_padding_mask = False
-    do_batch_spectrogram = False
-
-    max_length_frames = 1024
-    do_normalize = True
-
-    # AudioSet normalization constants
+class AudioSpectrogramTransformerAudioProcessorMixin:
     ast_mean = -4.2677393
     ast_std = 4.5689974
-
-    spectrogram_config = AudioSpectrogramTransformerAudioProcessorNumpy.spectrogram_config
-    legacy_field_mapping = AudioSpectrogramTransformerAudioProcessorNumpy.legacy_field_mapping
+    do_batch_spectrogram = False
+    do_normalize = True
+    force_mono = True
+    # The legacy FE saved `feature_size=1` (a raw-audio default) and kept the real mel count in
+    legacy_field_mapping = {"feature_size": None}
+    max_length_frames = 1024
+    model_input_names = ["audio_values"]
+    return_padding_mask = False
+    sampling_rate = 16000
+    spectrogram_config = SpectrogramConfig(
+        stft_config=StftConfig(
+            n_fft=512,
+            win_length=400,
+            hop_length=160,
+            window_fn="hann_window",
+            power=2.0,
+            center=False,
+            periodic=False,
+            left_align_fft=True,
+        ),
+        mel_scale_config=MelScaleConfig(
+            n_mels=128,
+            f_min=20.0,
+            f_max=8000.0,
+            mel_scale="kaldi",
+            triangularize_in_mel_space=True,
+        ),
+        log_mode="log",
+        preemphasis=0.97,
+        remove_dc_offset=True,
+        mel_floor=1.192092955078125e-07,
+        transpose_features=True,  # kaldi's (time, num_mel_bins) orientation
+    )
 
     def _pad_features(self, features, padding, max_length, truncation, pad_to_multiple_of):
-        # Always pad/truncate to max_length_frames regardless of caller's padding args
         return super()._pad_features(features, "max_length", self.max_length_frames, True, pad_to_multiple_of)
 
     def _postprocess_output(self, output, **kwargs):
-        # Rename to audio_values (AST convention) and apply AudioSet normalization
         features = output.pop("audio_features")
         if self.do_normalize:
             features = (features - self.ast_mean) / (self.ast_std * 2)
         output["audio_values"] = features
         return output
+
+
+class AudioSpectrogramTransformerAudioProcessor(AudioSpectrogramTransformerAudioProcessorMixin, TorchAudioBackend):
+    pass
 
 
 __all__ = ["AudioSpectrogramTransformerAudioProcessor"]

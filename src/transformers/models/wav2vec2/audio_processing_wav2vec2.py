@@ -17,11 +17,13 @@ import torch
 from ...audio_processing_backends import TorchAudioBackend
 
 
-class Wav2Vec2AudioProcessor(TorchAudioBackend):
-    sampling_rate = 16000
-    force_mono = True
+class Wav2Vec2AudioProcessorMixin:
     do_normalize = True
+    force_mono = True
+    sampling_rate = 16000
 
+
+class Wav2Vec2AudioProcessor(Wav2Vec2AudioProcessorMixin, TorchAudioBackend):
     def _process_audio(self, audio_el):
         audio_el = super()._process_audio(audio_el)
 

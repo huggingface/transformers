@@ -13,13 +13,11 @@
 # limitations under the License.
 
 from ...audio_processing_backends import NumpyAudioBackend
+from .audio_processing_pe_audio import PeAudioAudioProcessorMixin
 
 
-class PeAudioAudioProcessorNumpy(NumpyAudioBackend):
-    """NumPy sibling of [`PeAudioAudioProcessor`] (ADR 0001)."""
-
-    sampling_rate = 16000
-    force_mono = True
+class PeAudioAudioProcessorNumpy(PeAudioAudioProcessorMixin, NumpyAudioBackend):
+    pass
 
 
 __all__ = ["PeAudioAudioProcessorNumpy"]

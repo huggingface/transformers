@@ -15,31 +15,42 @@
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
-from .audio_processing_numpy_clvp import ClvpAudioProcessorNumpy
+from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
-class ClvpAudioProcessor(TorchAudioBackend):
-    """Torch sibling of [`ClvpAudioProcessorNumpy`]. Applies log compression and an optional
-    per-mel-bin normalization (``mel_norms`` ~ per-bin stddev with implicit zero mean)."""
-
-    sampling_rate = 22050
+class ClvpAudioProcessorMixin:
     force_mono = True
-    max_length = 132300  # 6 seconds at 22050 Hz
-    truncation = True
-    # The model feeds `audio_features` straight into the conditioning encoder's `mel_conv`
+    max_length = 132300
     # and never masks it (the legacy FE defaulted to `return_attention_mask=False` too).
     return_padding_mask = False
-
-    spectrogram_config = ClvpAudioProcessorNumpy.spectrogram_config
+    sampling_rate = 22050
+    spectrogram_config = SpectrogramConfig(
+        stft_config=StftConfig(
+            n_fft=1024,
+            hop_length=256,
+            window_fn="hann_window",
+            power=2.0,
+        ),
+        mel_scale_config=MelScaleConfig(
+            n_mels=80,
+            f_min=0.0,
+            f_max=8000.0,
+            norm="slaney",
+            mel_scale="htk",
+            frequency_bin_mode="linspace",
+        ),
+        log_mode="log",
+        mel_floor=1e-5,
+        computation_dtype="float64",
+    )
+    truncation = True
 
     def __init__(self, mel_norms=None, **kwargs):
         super().__init__(**kwargs)
         self.mel_norms = mel_norms
 
-    # Mel filters: the base dispatcher resolves the top-level `computation_dtype="float64"`
-    # into float64 torch-native filters (matching the legacy FE's float64 numpy build
-    # within ~1e-16), kept float64 for the mel matmul below.
 
+class ClvpAudioProcessor(ClvpAudioProcessorMixin, TorchAudioBackend):
     def _compute_magnitudes(self, stft_out, power, spectrogram_config=None):
         # The legacy FE stores the STFT in a complex64 buffer before taking float64 magnitudes
         # (`np.abs(spectrogram, dtype=np.float64) ** power`). Replicate that rounding step so the
@@ -57,7 +68,9 @@ class ClvpAudioProcessor(TorchAudioBackend):
         # Compute log and mel_norms division in float64 before casting to float32
         # to match the legacy feature extractor's precision (same recipe as the numpy sibling).
         mel_floor = spectrogram_config.mel_floor
-        features = torch.log(torch.maximum(torch.tensor(mel_floor, dtype=features.dtype, device=features.device), features))
+        features = torch.log(
+            torch.maximum(torch.tensor(mel_floor, dtype=features.dtype, device=features.device), features)
+        )
         if self.mel_norms is not None:
             mel_norms = torch.as_tensor(self.mel_norms, dtype=features.dtype, device=features.device)[:, None]
             features = features / mel_norms

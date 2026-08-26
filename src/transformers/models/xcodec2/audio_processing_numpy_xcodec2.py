@@ -15,63 +15,11 @@
 import numpy as np
 
 from ...audio_processing_backends import NumpyAudioBackend
-from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
+from .audio_processing_xcodec2 import Xcodec2AudioProcessorMixin
 
 
-class Xcodec2AudioProcessorNumpy(NumpyAudioBackend):
-    sampling_rate = 16000
-    force_mono = True
-    model_input_names = ["audio_features", "audio_features_mask", "audio_values", "audio_values_mask"]
-    add_channel_dim = True
+class Xcodec2AudioProcessorNumpy(Xcodec2AudioProcessorMixin, NumpyAudioBackend):
     padding_value = 0.0
-    # One acoustic-encoder frame = `hop_length` audio samples (product of downsampling ratios)
-    hop_length = 320
-    pad_to_multiple_of = 320
-    # Semantic features: pairs of consecutive fbank frames are concatenated (stride 2)
-    stride = 2
-    # Mel frames are padded with 1.0 (the legacy FE's `padding_value`), unlike the raw audio
-    feature_padding_value = 1.0
-    # Semantic features are derived from the padded audio in `_postprocess_output`, not via
-    # the base spectrogram path
-    do_extract_spectrogram = False
-
-    spectrogram_config = SpectrogramConfig(
-        stft_config=StftConfig(
-            n_fft=512,
-            win_length=400,
-            hop_length=160,
-            window_fn="povey",
-            power=2.0,
-            center=False,
-            periodic=False,
-            left_align_fft=True,
-        ),
-        mel_scale_config=MelScaleConfig(
-            n_mels=80,
-            f_min=20.0,
-            f_max=8000.0,
-            mel_scale="kaldi",
-            triangularize_in_mel_space=True,
-        ),
-        log_mode="log",
-        preemphasis=0.97,
-        remove_dc_offset=True,
-        mel_floor=1.192092955078125e-07,
-        waveform_scale=32768.0,
-    )
-
-    # Legacy hub configs describe the fbank geometry with flat keys that are fixed
-    # architecture constants already baked into `spectrogram_config` — drop them rather than
-    # letting the base mapping rebuild a partial (and wrong) nested config. `padding_value`
-    # in the legacy config is the *mel* padding value; the raw audio is padded with 0.0.
-    legacy_field_mapping = {
-        "feature_size": None,
-        "frame_length": None,
-        "frame_shift": None,
-        "num_mel_bins": None,
-        "hop_length": None,
-        "padding_value": "feature_padding_value",
-    }
 
     def _process_audio(self, audio_el):
         # The legacy FE appends one zero sample to every waveform before padding
@@ -79,12 +27,10 @@ class Xcodec2AudioProcessorNumpy(NumpyAudioBackend):
         return np.pad(audio_el, (0, 1))
 
     def _postprocess_output(self, output, audio_ranges=None, **kwargs):
-        audio_values = output["audio_values"]  # (batch, 1, padded_length)
+        audio_values = output["audio_values"]
         padded_length = audio_values.shape[-1]
         half_hop = self.hop_length // 2
 
-        # Per-utterance fbank on the valid (hop-aligned) slice of the padded audio,
-        # normalized with per-utterance mean/variance before mel-frame padding
         features = []
         for i, (start, end) in enumerate(audio_ranges):
             orig_length = end - start
@@ -94,7 +40,6 @@ class Xcodec2AudioProcessorNumpy(NumpyAudioBackend):
             f = (f - f.mean(axis=0)) / np.sqrt(f.var(axis=0, ddof=1) + 1e-7)
             features.append(f)
 
-        # Pad mel frames to the longest utterance (aligned to `stride`) with `feature_padding_value`
         frame_lengths = [f.shape[0] for f in features]
         max_frames = max(frame_lengths)
         if max_frames % self.stride:
@@ -107,7 +52,6 @@ class Xcodec2AudioProcessorNumpy(NumpyAudioBackend):
         )
         mask = self._get_mask([(0, length) for length in frame_lengths], max_frames)
 
-        # Stride concatenation: (batch, frames, n_mels) -> (batch, frames // stride, n_mels * stride)
         batch_size, num_frames, num_mel_bins = batch.shape
         output["audio_features"] = batch.reshape(batch_size, num_frames // self.stride, num_mel_bins * self.stride)
         output["audio_features_mask"] = mask.reshape(batch_size, num_frames // self.stride, self.stride).min(axis=-1)

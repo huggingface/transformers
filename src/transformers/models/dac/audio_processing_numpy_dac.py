@@ -13,15 +13,11 @@
 # limitations under the License.
 
 from ...audio_processing_backends import NumpyAudioBackend
+from .audio_processing_dac import DacAudioProcessorMixin
 
 
-class DacAudioProcessorNumpy(NumpyAudioBackend):
-    """NumPy sibling of [`DacAudioProcessor`]. Pure-config: no spectrogram extraction, just
-    raw-audio passthrough with mono coercion and a leading channel axis (ADR 0001)."""
-
-    sampling_rate = 16000
-    force_mono = True
-    add_channel_dim = True
+class DacAudioProcessorNumpy(DacAudioProcessorMixin, NumpyAudioBackend):
+    pass
 
 
 __all__ = ["DacAudioProcessorNumpy"]

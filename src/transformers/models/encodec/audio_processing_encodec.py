@@ -15,10 +15,14 @@
 from ...audio_processing_backends import TorchAudioBackend
 
 
-class EncodecAudioProcessor(TorchAudioBackend):
-    sampling_rate = 24000
-    force_mono = True
+class EncodecAudioProcessorMixin:
     add_channel_dim = True
+    force_mono = True
+    sampling_rate = 24000
+
+
+class EncodecAudioProcessor(EncodecAudioProcessorMixin, TorchAudioBackend):
+    pass
 
 
 __all__ = ["EncodecAudioProcessor"]

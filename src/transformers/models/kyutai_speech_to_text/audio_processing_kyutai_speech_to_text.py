@@ -17,24 +17,31 @@ import torch
 from ...audio_processing_backends import TorchAudioBackend
 
 
-class KyutaiSpeechToTextAudioProcessor(TorchAudioBackend):
-    sampling_rate = 24000
-    force_mono = True
+class KyutaiSpeechToTextAudioProcessorMixin:
     add_channel_dim = True
     audio_delay_seconds = 2.5
     audio_silence_prefix_seconds = 1.0
+    force_mono = True
+    sampling_rate = 24000
 
+
+class KyutaiSpeechToTextAudioProcessor(KyutaiSpeechToTextAudioProcessorMixin, TorchAudioBackend):
     def _postprocess_output(self, output, **kwargs):
-        # Add silence prefix (left) and delay (right) padding
         pad_left = int(self.audio_silence_prefix_seconds * self.sampling_rate)
         pad_right = int((self.audio_delay_seconds + 1.0) * self.sampling_rate)
 
         if pad_left > 0 or pad_right > 0:
             output["audio_values"] = torch.nn.functional.pad(
-                output["audio_values"], (pad_left, pad_right), mode="constant", value=0.0,
+                output["audio_values"],
+                (pad_left, pad_right),
+                mode="constant",
+                value=0.0,
             )
             output["audio_values_mask"] = torch.nn.functional.pad(
-                output["audio_values_mask"], (pad_left, pad_right), mode="constant", value=0,
+                output["audio_values_mask"],
+                (pad_left, pad_right),
+                mode="constant",
+                value=0,
             )
 
         return output

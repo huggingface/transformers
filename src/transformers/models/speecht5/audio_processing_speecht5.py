@@ -15,9 +15,13 @@
 from ...audio_processing_backends import TorchAudioBackend
 
 
-class SpeechT5AudioProcessor(TorchAudioBackend):
-    sampling_rate = 16000
+class SpeechT5AudioProcessorMixin:
     force_mono = True
+    sampling_rate = 16000
+
+
+class SpeechT5AudioProcessor(SpeechT5AudioProcessorMixin, TorchAudioBackend):
+    pass
 
 
 __all__ = ["SpeechT5AudioProcessor"]

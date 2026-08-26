@@ -15,45 +15,10 @@
 import numpy as np
 
 from ...audio_processing_backends import NumpyAudioBackend
-from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
+from .audio_processing_parakeet import ParakeetAudioProcessorMixin
 
 
-class ParakeetAudioProcessorNumpy(NumpyAudioBackend):
-    """NumPy sibling of [`ParakeetAudioProcessor`]. Bit-exact to the torch sibling within
-    the float32 noise floor (ADR 0001)."""
-
-    sampling_rate = 16000
-    force_mono = True
-    spectrogram_config = SpectrogramConfig(
-        stft_config=StftConfig(
-            n_fft=512,
-            hop_length=160,
-            win_length=400,
-            window_fn="hann_window",
-            power=2.0,
-            pad_mode="constant",
-            periodic=False,
-            magnitude_mode="sqrt_sum_squares",
-        ),
-        mel_scale_config=MelScaleConfig(
-            n_mels=80,
-            f_min=0.0,
-            norm="slaney",
-            mel_scale="slaney",
-            matmul_order="filters_first_matmul",
-            bank_rounding="librosa",
-        ),
-        preemphasis=0.97,
-        preemphasis_mode="waveform",
-        log_mode="log",
-        mel_floor=0.0,  # base clamp is a no-op; the log guard is pre_log_offset
-        pre_log_offset=2**-24,
-        transpose_features=True,
-    )
-
-    # The base numpy backend already builds librosa's per-band float32 filters and applies
-    # the mel matmul / magnitude / `log(x + pre_log_offset)` forms this model needs.
-
+class ParakeetAudioProcessorNumpy(ParakeetAudioProcessorMixin, NumpyAudioBackend):
     def _postprocess_output(self, output, audio_ranges=None, **kwargs):
         if audio_ranges is None or "audio_features" not in output:
             return output
@@ -71,9 +36,7 @@ class ParakeetAudioProcessorNumpy(NumpyAudioBackend):
         features_lengths_f = features_lengths.astype(features.dtype)
         mel_masked = features * mask
         mean = np.expand_dims(mel_masked.sum(axis=1) / np.expand_dims(features_lengths_f, axis=-1), axis=1)
-        variance = ((mel_masked - mean) ** 2 * mask).sum(axis=1) / np.expand_dims(
-            features_lengths_f - 1, axis=-1
-        )
+        variance = ((mel_masked - mean) ** 2 * mask).sum(axis=1) / np.expand_dims(features_lengths_f - 1, axis=-1)
         std = np.expand_dims(np.sqrt(variance), axis=1)
         output["audio_features"] = (features - mean) / (std + 1e-5) * mask
         return output

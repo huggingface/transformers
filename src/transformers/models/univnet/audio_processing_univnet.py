@@ -15,13 +15,10 @@
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
-from .audio_processing_numpy_univnet import UnivNetAudioProcessorNumpy
+from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
-class UnivNetAudioProcessor(TorchAudioBackend):
-    """Torch sibling of [`UnivNetAudioProcessorNumpy`]. Reflect-padded STFT with mel_floor
-    added inside the magnitude sqrt, no mel-floor clamp, and a `(frames, n_mels)` output layout."""
-
+class UnivNetAudioProcessorMixin:
     sampling_rate = 24000
     force_mono = True
     mel_floor = 1e-9
@@ -31,16 +28,36 @@ class UnivNetAudioProcessor(TorchAudioBackend):
     normalize_min = -11.512925148010254
     normalize_max = 2.3143386840820312
     max_length_s = 10
+    # The legacy FE saved `feature_size=1` (a raw-audio default) and kept the real mel count in
+    # `num_mel_bins`, so the base mapping of `feature_size` must not apply here.
+    legacy_field_mapping = {"feature_size": None}
 
-    spectrogram_config = UnivNetAudioProcessorNumpy.spectrogram_config
-    legacy_field_mapping = UnivNetAudioProcessorNumpy.legacy_field_mapping
+    spectrogram_config = SpectrogramConfig(
+        stft_config=StftConfig(
+            n_fft=1024,
+            hop_length=256,
+            center=False,
+            window_fn="hann",
+            periodic=True,
+            power=1.0,
+        ),
+        mel_scale_config=MelScaleConfig(
+            n_mels=100,
+            f_min=0.0,
+            f_max=12000.0,
+            mel_scale="slaney",
+            norm="slaney",
+        ),
+        log_mode="log",
+        mel_floor=1e-5,
+        computation_dtype="float64",
+        transpose_features=True,  # UnivNet consumes (frames, n_mels)
+    )
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.num_max_samples = self.max_length_s * self.sampling_rate
 
-    # The reflect pad in `_stft` widens the STFT input by `n_fft - hop_length`, so the
-    # non-centred framing collapses to `length // hop_length` frames.
     def _get_mask_width(self, padded_length, spectrogram_config) -> int:
         return int(padded_length // spectrogram_config.stft_config.hop_length)
 
@@ -48,33 +65,11 @@ class UnivNetAudioProcessor(TorchAudioBackend):
         return audio_lengths // spectrogram_config.stft_config.hop_length
 
     def _stft(self, audio, *, spectrogram_config, **kwargs):
-        # UnivNet uses reflect padding with (n_fft - hop_length) / 2 instead of center padding
+        # UnivNet reflect-pads by (n_fft - hop_length) / 2 instead of centring the frames
         stft_cfg = spectrogram_config.stft_config
         pad_amount = int((stft_cfg.n_fft - stft_cfg.hop_length) / 2)
-        # `torch.nn.functional.pad` reflects on the last dim by default; works for 1D or 2D.
-        audio = torch.nn.functional.pad(audio, (pad_amount, pad_amount), mode="reflect")
+        audio = self._reflect_pad(audio, pad_amount)
         return super()._stft(audio, spectrogram_config=spectrogram_config, **kwargs)
-
-    # Mel filters: the base dispatcher resolves the top-level `computation_dtype="float64"`
-    # into float64 torch-native filters (matching the legacy FE's float64 numpy build
-    # within ~1e-16), kept float64 for the mel matmul below.
-
-    def _compute_magnitudes(self, stft_out, power, spectrogram_config=None):
-        # UnivNet adds mel_floor inside the sqrt: sqrt(real² + imag² + mel_floor).
-        # The legacy FE stores the STFT in a complex64 buffer and takes the sqrt in float32
-        # (mirrors the numpy sibling's complex64 cast). torch's float32 sqrt is not correctly
-        # rounded on all platforms, so round via a float64 sqrt (bit-identical to np.sqrt on
-        # float32 inputs), then promote back to float64 for the mel matmul the way numpy's
-        # float32 x float64 matmul promotion does.
-        stft_out = stft_out.to(torch.complex64)
-        presqrt = stft_out.real**2 + stft_out.imag**2 + self.mel_floor
-        return presqrt.double().sqrt().float().double()
-
-    def _apply_mel_scale(self, features, *, spectrogram_config, **kwargs):
-        # UnivNet applies mel filterbank without a floor.
-        # `mel_filters` is shape `(n_freq, n_mels)`; transposing gives `(n_mels, n_freq)`.
-        mel_filters = self.mel_filters.to(device=features.device, dtype=features.dtype)
-        return torch.matmul(mel_filters.T, features)
 
     def _normalize_magnitude(self, features, *, spectrogram_config, **kwargs):
         features = super()._normalize_magnitude(features, spectrogram_config=spectrogram_config, **kwargs)
@@ -82,12 +77,26 @@ class UnivNetAudioProcessor(TorchAudioBackend):
             features = 2 * ((features - self.normalize_min) / (self.normalize_max - self.normalize_min)) - 1
         return features
 
-    def extract_spectrogram(self, audio, *, spectrogram_config, **kwargs):
-        features = super().extract_spectrogram(audio, spectrogram_config=spectrogram_config, **kwargs)
-        # Transpose from (..., n_mels, frames) to (..., frames, n_mels)
-        if isinstance(features, list):
-            return [f.transpose(-2, -1) for f in features]
-        return features.transpose(-2, -1)
+
+class UnivNetAudioProcessor(UnivNetAudioProcessorMixin, TorchAudioBackend):
+    def _reflect_pad(self, audio, pad_amount):
+        # torch reflect-pads the last axis only from a batched input, unlike `np.pad`
+        if audio.ndim == 1:
+            return torch.nn.functional.pad(audio[None], (pad_amount, pad_amount), mode="reflect")[0]
+        return torch.nn.functional.pad(audio, (pad_amount, pad_amount), mode="reflect")
+
+    def _compute_magnitudes(self, stft_out, power, spectrogram_config=None):
+        # round-trip through complex64/float32 like the legacy FE, so the float64 magnitudes
+        # match bit-exactly (the numpy sibling stays in float64 throughout)
+        stft_out = stft_out.to(torch.complex64)
+        presqrt = stft_out.real**2 + stft_out.imag**2 + self.mel_floor
+        return presqrt.double().sqrt().float().double()
+
+    def _apply_mel_scale(self, features, *, spectrogram_config, **kwargs):
+        # No mel_floor clamp, as in the numpy sibling. Match the filters to the feature dtype:
+        # unlike numpy, `torch.matmul` refuses mixed dtypes rather than promoting.
+        mel_filters = self.mel_filters.to(device=features.device, dtype=features.dtype)
+        return torch.matmul(mel_filters.T, features)
 
 
 __all__ = ["UnivNetAudioProcessor"]

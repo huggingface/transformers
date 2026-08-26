@@ -13,71 +13,13 @@
 # limitations under the License.
 
 from ...audio_processing_backends import NumpyAudioBackend
-from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
+from .audio_processing_audio_spectrogram_transformer import AudioSpectrogramTransformerAudioProcessorMixin
 
 
-class AudioSpectrogramTransformerAudioProcessorNumpy(NumpyAudioBackend):
-    """NumPy sibling of [`AudioSpectrogramTransformerAudioProcessor`]. Runs the native
-    kaldi-style pipeline described by `spectrogram_config` — no torchaudio dependency.
-
-    The legacy FE calls `torchaudio.compliance.kaldi.fbank`, so bit-exactness with it is a
-    torch-only property (the torch sibling has it). numpy's FFT and window differ from torch's
-    in the last float32 ulp, which `log` amplifies in near-silent mel bins: typical |diff| is
-    ~3e-6, worst case ~1e-3 over a [-16, 10] value range."""
-
-    sampling_rate = 16000
-    force_mono = True
-    model_input_names = ["audio_values"]
-    return_padding_mask = False
-    do_batch_spectrogram = False
-
-    max_length_frames = 1024
-    do_normalize = True
-
-    # AudioSet normalization constants
-    ast_mean = -4.2677393
-    ast_std = 4.5689974
-
-    # The legacy FE saved `feature_size=1` (a raw-audio default) and kept the real mel count in
-    # `num_mel_bins`, so the base mapping of `feature_size` must not apply here.
-    legacy_field_mapping = {"feature_size": None}
-
-    spectrogram_config = SpectrogramConfig(
-        stft_config=StftConfig(
-            n_fft=512,
-            win_length=400,
-            hop_length=160,
-            window_fn="hann_window",
-            power=2.0,
-            center=False,
-            periodic=False,
-            left_align_fft=True,
-        ),
-        mel_scale_config=MelScaleConfig(
-            n_mels=128,
-            f_min=20.0,
-            f_max=8000.0,
-            mel_scale="kaldi",
-            triangularize_in_mel_space=True,
-        ),
-        log_mode="log",
-        preemphasis=0.97,
-        remove_dc_offset=True,
-        mel_floor=1.192092955078125e-07,
-        transpose_features=True,  # kaldi's (time, num_mel_bins) orientation
-    )
-
-    def _pad_features(self, features, padding, max_length, truncation, pad_to_multiple_of):
-        # Always pad/truncate to max_length_frames regardless of caller's padding args
-        return super()._pad_features(features, "max_length", self.max_length_frames, True, pad_to_multiple_of)
-
-    def _postprocess_output(self, output, **kwargs):
-        # Rename to audio_values (AST convention) and apply AudioSet normalization
-        features = output.pop("audio_features")
-        if self.do_normalize:
-            features = (features - self.ast_mean) / (self.ast_std * 2)
-        output["audio_values"] = features
-        return output
+class AudioSpectrogramTransformerAudioProcessorNumpy(
+    AudioSpectrogramTransformerAudioProcessorMixin, NumpyAudioBackend
+):
+    pass
 
 
 __all__ = ["AudioSpectrogramTransformerAudioProcessorNumpy"]
