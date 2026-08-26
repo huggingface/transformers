@@ -453,6 +453,85 @@ class MiniMaxM2TensorProcessor(TensorProcessor):
             out.copy_(torch_weights)
 
 
+class DeepseekV3TensorProcessor(TensorProcessor):
+    # NOTE: handles the DeepSeek-V3 (GGUF arch `deepseek2`) tensors that do not map one-to-one via `gguf`:
+    # per-projection routed experts fused into `mlp.experts.gate_up_proj`/`down_proj`, the router bias
+    # stored as `exp_probs_b.bias`, and `kv_b_proj` reassembled from the llama.cpp MLA split
+    # (`attn_k_b` transposed + `attn_v_b`, see DeepseekV2Model.modify_tensors in llama.cpp).
+
+    HF_EXPERT_RENAME_PATTERN = re.compile(r"mlp\.experts\.\d+\.")
+    HF_MOE_W13_PATTERN = re.compile(r"(?:model\.)?layers\.(?P<bid>\d+)\.mlp\.experts\.gate_up_proj")
+    GGUF_MOE_WEIGHTS_PATTERN = re.compile(r"(?P<name>.*\.ffn_(?P<w>gate|down|up)_exps)\.weight$")
+    HF_BIAS_PATTERN = re.compile(r"(?:model\.)?layers\.(?P<bid>\d+)\.mlp\.gate\.e_score_correction_bias")
+    GGUF_MLA_KV_PATTERN = re.compile(r"blk\.(?P<bid>\d+)\.attn_(?P<w>k|v)_b\.weight$")
+
+    def __init__(self, config=None):
+        super().__init__(config=config)
+        self._mla_kv_b: dict[str, dict[str, np.ndarray]] = {}
+
+    def preprocess_name(self, hf_name: str) -> str:
+        return re.sub(self.HF_EXPERT_RENAME_PATTERN, "mlp.experts.", hf_name)
+
+    def perform_fallback_tensor_mapping(
+        self, gguf_to_hf_name_map: dict[str, str], suffix: str, qual_name: str, hf_name: str
+    ):
+        if m := re.fullmatch(self.HF_MOE_W13_PATTERN, hf_name):
+            full_hf_name = qual_name + hf_name
+            gguf_to_hf_name_map[f"blk.{m['bid']}.ffn_gate_exps{suffix}"] = full_hf_name
+            gguf_to_hf_name_map[f"blk.{m['bid']}.ffn_up_exps{suffix}"] = full_hf_name
+        elif m := re.fullmatch(self.HF_BIAS_PATTERN, hf_name):
+            gguf_to_hf_name_map[f"blk.{m['bid']}.exp_probs_b.bias"] = qual_name + hf_name
+
+    def process(self, weights, name: str, **kwargs):
+        if m := re.fullmatch(self.GGUF_MOE_WEIGHTS_PATTERN, name):
+            tensor_key_mapping = kwargs.get("tensor_key_mapping")
+            parsed_parameters = kwargs.get("parsed_parameters")
+            if tensor_key_mapping:
+                self._set_moe_expert_tensor(weights, parsed_parameters, tensor_key_mapping[m["name"]], m["w"])
+            return GGUFTensor(weights, None, {})
+        if m := re.fullmatch(self.GGUF_MLA_KV_PATTERN, name):
+            tensor_key_mapping = kwargs.get("tensor_key_mapping")
+            parsed_parameters = kwargs.get("parsed_parameters")
+            # The kv_b_proj HF name is registered under the combined attn_kv_b gguf name by the name map.
+            kv_b_name = tensor_key_mapping.get(f"blk.{m['bid']}.attn_kv_b.weight") if tensor_key_mapping else None
+            if kv_b_name is not None:
+                self._set_mla_kv_b_tensor(weights, parsed_parameters, kv_b_name, m["bid"], m["w"])
+                return GGUFTensor(weights, None, {})
+        return GGUFTensor(weights, name, {})
+
+    def _set_mla_kv_b_tensor(
+        self, weights: np.ndarray, parsed_parameters: dict[str, dict], hf_name: str, bid: str, w: str
+    ):
+        buffers = self._mla_kv_b.setdefault(bid, {})
+        buffers[w] = np.copy(weights)
+        if "k" not in buffers or "v" not in buffers:
+            return
+        num_heads = self.config["num_attention_heads"]
+        k_b = torch.from_numpy(buffers.pop("k")).transpose(1, 2)  # [n_head, qk_nope, kv_lora]
+        v_b = torch.from_numpy(buffers.pop("v"))  # [n_head, v_head_dim, kv_lora]
+        kv_b = torch.cat([k_b, v_b], dim=1).reshape(num_heads * (k_b.shape[1] + v_b.shape[1]), -1)
+        parsed_parameters["tensors"][hf_name] = kv_b
+
+    def _set_moe_expert_tensor(self, weights: np.ndarray, parsed_parameters: dict[str, dict], hf_name: str, w: str):
+        torch_weights = torch.from_numpy(np.copy(weights))
+        if w == "down":
+            parsed_parameters["tensors"][hf_name] = torch_weights
+        else:
+            # Merge gate and up into gate_up_proj [num_experts, 2*intermediate, hidden]
+            shape = list(weights.shape)
+            shard_dim = 1
+            shard_size = shape[shard_dim]
+            shape[shard_dim] = shard_size * 2
+            if hf_name not in parsed_parameters["tensors"]:
+                parsed_parameters["tensors"][hf_name] = torch.zeros(shape, dtype=torch_weights.dtype)
+            out: torch.Tensor = parsed_parameters["tensors"][hf_name]
+            if w == "gate":
+                out = out.narrow(shard_dim, 0, shard_size)
+            else:  # w == "up"
+                out = out.narrow(shard_dim, shard_size, shard_size)
+            out.copy_(torch_weights)
+
+
 TENSOR_PROCESSORS = {
     "llama": LlamaTensorProcessor,
     "qwen2moe": Qwen2MoeTensorProcessor,
@@ -468,6 +547,7 @@ TENSOR_PROCESSORS = {
     "gemma3": Gemma2TensorProcessor,
     "lfm2": Lfm2TensorProcessor,
     "minimax-m2": MiniMaxM2TensorProcessor,
+    "deepseek2": DeepseekV3TensorProcessor,
 }
 
 
@@ -522,6 +602,8 @@ def get_gguf_hf_weights_map(
         model_type = "minimax-m2"
     elif model_type == "gpt_oss":
         model_type = "gpt-oss"
+    elif model_type == "deepseek_v3":
+        model_type = "deepseek2"
     arch = None
     for key, value in MODEL_ARCH_NAMES.items():
         if value == model_type:
@@ -704,6 +786,37 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
         # EOG tokens to match generation_config.json: <eos>(1),
         # <|tool_response>(50), <turn|>(106).
         parsed_parameters["config"]["eos_token_id"] = [1, 106, 50]
+
+    # DeepSeek-V3 shares the GGUF architecture name "deepseek2" with DeepSeek-V2. We resolve it to the
+    # transformers `deepseek_v3` model_type and fix up the MLA config values that GGUF stores differently.
+    if parsed_parameters["config"]["model_type"] == "deepseek2":
+        config = parsed_parameters["config"]
+        # DeepSeek-V2 checkpoints use softmax expert gating (expert_gating_func == 1, or the key is absent
+        # in old conversions) and lack the `e_score_correction_bias` tensor; the transformers DeepSeek-V3
+        # model hardcodes sigmoid gating with that bias, so those checkpoints cannot be loaded here.
+        gating_func = read_field(reader, "deepseek2.expert_gating_func")
+        if not gating_func or gating_func[0] != 2:  # 2 == sigmoid
+            raise ValueError(
+                "This DeepSeek GGUF checkpoint does not use sigmoid expert gating, which indicates a "
+                "DeepSeek-V2 family model. Only DeepSeek-V3 family GGUF checkpoints are supported."
+            )
+        # llama.cpp stores the MLA head dims in `*_mla` keys; derive qk_nope_head_dim = key_length_mla - qk_rope.
+        # Conversions predating the MLA split store the full head dim in `attention.key_length` instead.
+        key_length_mla = read_field(reader, "deepseek2.attention.key_length_mla") or read_field(
+            reader, "deepseek2.attention.key_length"
+        )
+        qk_rope_head_dim = config.get("qk_rope_head_dim")
+        if key_length_mla and qk_rope_head_dim is not None:
+            config["qk_nope_head_dim"] = key_length_mla[0] - qk_rope_head_dim
+        # Same for `attention.value_length_mla` (mapped to v_head_dim): conversions predating the MLA
+        # split store the value head dim in `attention.value_length` directly.
+        if "v_head_dim" not in config:
+            value_length = read_field(reader, "deepseek2.attention.value_length")
+            if value_length:
+                config["v_head_dim"] = value_length[0]
+        # MLA is exported as MQA (head_count_kv == 1), but the transformers model expects the full head count.
+        config["num_key_value_heads"] = config["num_attention_heads"]
+        config["model_type"] = "deepseek_v3"
 
     # MiniMax-M2: convert expert_gating_func integer to scoring_func string
     if parsed_parameters["config"].get("model_type") == "minimax_m2":
