@@ -23,23 +23,17 @@ limitations under the License.
 
 ## Overview
 
-The GLM-5.3-Flash model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+The **GLM-5.3-Flash** model use this class. The implementation in transformers does not include an MTP layer.
 
-The abstract from the paper is the following:
 
-<INSERT PAPER ABSTRACT HERE>
+### GLM-5.3-Flash
 
-Tips:
 
-<INSERT TIPS ABOUT MODEL HERE>
+GLM-5.3-Flash, the first **natively multimodal model** in the GLM-5 series. With 320B total parameters and just 18B active parameters, it outperforms GLM-5.2 across benchmarks and real-world workloads at one-tenth the price, while approaching Claude Opus 4.8 on coding and agentic benchmarks.
 
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+GLM-5.3-Flash starts from a newly trained base model, with its architecture and training recipe redesigned around capability and efficiency. For the first time in the GLM series, we introduce a hybrid architecture combining sparse and linear attention, sharply reducing long-context serving costs while preserving precise long-context capabilities. The model also adopts Manifold-Constrained Hyper-Connections (mHC) to further improve scaling efficiency. Together with our latest **30T-token** multimodal pre-training corpus, these changes enable GLM-5.3-Flash to deliver more intelligence with less compute.
 
-## Usage examples
-
-<INSERT SOME NICE EXAMPLES HERE>
+![bench_53](https://raw.githubusercontent.com/zai-org/GLM-5/refs/heads/main/resources/bench_53.png)
 
 ## Glm5NextConfig
 
