@@ -62,17 +62,17 @@ state_dict["shared.weight"] = official_weights["state_dict"]["transformer.shared
 # load each encoder blocks
 for i in range(cfg.num_layers):
     # layer 0
-    state_dict[f"encoder.block.{i}.layer.0.SelfAttention.q.weight"] = official_weights["state_dict"][
-        f"transformer.encoder.block.{i}.layer.0.SelfAttention.q.weight"
+    state_dict[f"encoder.block.{i}.layer.0.SelfAttention.q_proj.weight"] = official_weights["state_dict"][
+        f"transformer.encoder.block.{i}.layer.0.SelfAttention.q_proj.weight"
     ]
-    state_dict[f"encoder.block.{i}.layer.0.SelfAttention.k.weight"] = official_weights["state_dict"][
-        f"transformer.encoder.block.{i}.layer.0.SelfAttention.k.weight"
+    state_dict[f"encoder.block.{i}.layer.0.SelfAttention.k_proj.weight"] = official_weights["state_dict"][
+        f"transformer.encoder.block.{i}.layer.0.SelfAttention.k_proj.weight"
     ]
-    state_dict[f"encoder.block.{i}.layer.0.SelfAttention.v.weight"] = official_weights["state_dict"][
-        f"transformer.encoder.block.{i}.layer.0.SelfAttention.v.weight"
+    state_dict[f"encoder.block.{i}.layer.0.SelfAttention.v_proj.weight"] = official_weights["state_dict"][
+        f"transformer.encoder.block.{i}.layer.0.SelfAttention.v_proj.weight"
     ]
-    state_dict[f"encoder.block.{i}.layer.0.SelfAttention.o.weight"] = official_weights["state_dict"][
-        f"transformer.encoder.block.{i}.layer.0.SelfAttention.o.weight"
+    state_dict[f"encoder.block.{i}.layer.0.SelfAttention.o_proj.weight"] = official_weights["state_dict"][
+        f"transformer.encoder.block.{i}.layer.0.SelfAttention.o_proj.weight"
     ]
     state_dict[f"encoder.block.{i}.layer.0.layer_norm.weight"] = official_weights["state_dict"][
         f"transformer.encoder.block.{i}.layer.0.layer_norm.weight"
@@ -95,34 +95,34 @@ for i in range(cfg.num_layers):
 # load each decoder blocks
 for i in range(6):
     # layer 0
-    state_dict[f"decoder.block.{i}.layer.0.SelfAttention.q.weight"] = official_weights["state_dict"][
-        f"transformer.decoder.block.{i}.layer.0.SelfAttention.q.weight"
+    state_dict[f"decoder.block.{i}.layer.0.SelfAttention.q_proj.weight"] = official_weights["state_dict"][
+        f"transformer.decoder.block.{i}.layer.0.SelfAttention.q_proj.weight"
     ]
-    state_dict[f"decoder.block.{i}.layer.0.SelfAttention.k.weight"] = official_weights["state_dict"][
-        f"transformer.decoder.block.{i}.layer.0.SelfAttention.k.weight"
+    state_dict[f"decoder.block.{i}.layer.0.SelfAttention.k_proj.weight"] = official_weights["state_dict"][
+        f"transformer.decoder.block.{i}.layer.0.SelfAttention.k_proj.weight"
     ]
-    state_dict[f"decoder.block.{i}.layer.0.SelfAttention.v.weight"] = official_weights["state_dict"][
-        f"transformer.decoder.block.{i}.layer.0.SelfAttention.v.weight"
+    state_dict[f"decoder.block.{i}.layer.0.SelfAttention.v_proj.weight"] = official_weights["state_dict"][
+        f"transformer.decoder.block.{i}.layer.0.SelfAttention.v_proj.weight"
     ]
-    state_dict[f"decoder.block.{i}.layer.0.SelfAttention.o.weight"] = official_weights["state_dict"][
-        f"transformer.decoder.block.{i}.layer.0.SelfAttention.o.weight"
+    state_dict[f"decoder.block.{i}.layer.0.SelfAttention.o_proj.weight"] = official_weights["state_dict"][
+        f"transformer.decoder.block.{i}.layer.0.SelfAttention.o_proj.weight"
     ]
     state_dict[f"decoder.block.{i}.layer.0.layer_norm.weight"] = official_weights["state_dict"][
         f"transformer.decoder.block.{i}.layer.0.layer_norm.weight"
     ]
 
     # layer 1
-    state_dict[f"decoder.block.{i}.layer.1.EncDecAttention.q.weight"] = official_weights["state_dict"][
-        f"transformer.decoder.block.{i}.layer.1.EncDecAttention.q.weight"
+    state_dict[f"decoder.block.{i}.layer.1.EncDecAttention.q_proj.weight"] = official_weights["state_dict"][
+        f"transformer.decoder.block.{i}.layer.1.EncDecAttention.q_proj.weight"
     ]
-    state_dict[f"decoder.block.{i}.layer.1.EncDecAttention.k.weight"] = official_weights["state_dict"][
-        f"transformer.decoder.block.{i}.layer.1.EncDecAttention.k.weight"
+    state_dict[f"decoder.block.{i}.layer.1.EncDecAttention.k_proj.weight"] = official_weights["state_dict"][
+        f"transformer.decoder.block.{i}.layer.1.EncDecAttention.k_proj.weight"
     ]
-    state_dict[f"decoder.block.{i}.layer.1.EncDecAttention.v.weight"] = official_weights["state_dict"][
-        f"transformer.decoder.block.{i}.layer.1.EncDecAttention.v.weight"
+    state_dict[f"decoder.block.{i}.layer.1.EncDecAttention.v_proj.weight"] = official_weights["state_dict"][
+        f"transformer.decoder.block.{i}.layer.1.EncDecAttention.v_proj.weight"
     ]
-    state_dict[f"decoder.block.{i}.layer.1.EncDecAttention.o.weight"] = official_weights["state_dict"][
-        f"transformer.decoder.block.{i}.layer.1.EncDecAttention.o.weight"
+    state_dict[f"decoder.block.{i}.layer.1.EncDecAttention.o_proj.weight"] = official_weights["state_dict"][
+        f"transformer.decoder.block.{i}.layer.1.EncDecAttention.o_proj.weight"
     ]
     state_dict[f"decoder.block.{i}.layer.1.layer_norm.weight"] = official_weights["state_dict"][
         f"transformer.decoder.block.{i}.layer.1.layer_norm.weight"

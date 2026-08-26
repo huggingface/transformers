@@ -87,6 +87,19 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "bert-generation": "bert",
     "data2vec-text": "bert",
     "chinese_clip_text_model": "bert",
+    # T5-shaped: `T5Attention` spelled its four projections `q`, `k`, `v`, `o`, and every model in
+    # the family copied that verbatim (mt5, umt5 and longt5 through `# Copied from`, pop2piano and
+    # udop as forks, switch_transformers through its modular). MPNet is not a T5 descendant but
+    # arrived at exactly the same four names, and the same four renames cover it, so it aliases here
+    # rather than carrying a duplicate list. Every pattern fires on real keys for all eight, which
+    # `test_reverse_loading_mapping` requires.
+    "mt5": "t5",
+    "umt5": "t5",
+    "longt5": "t5",
+    "pop2piano": "t5",
+    "udop": "t5",
+    "switch_transformers": "t5",
+    "mpnet": "t5",
     "rt_detr_v2": "rt_detr",
     "pp_doclayout_v2": "rt_detr",
     "pp_doclayout_v3": "rt_detr",
@@ -249,6 +262,28 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"\.intermediate\.dense\.", ".mlp.up_proj."),
             WeightRenaming(r"(?<!attention)\.output\.dense\.", ".mlp.down_proj."),
             WeightRenaming(r"(?<!encoder)\.LayerNorm\.", ".pre_feedforward_layernorm."),
+        ],
+        # T5 called its four attention projections `q`, `k`, `v` and `o`. Those are the same four
+        # projections every other model in the library spells `q_proj`/`k_proj`/`v_proj`/`o_proj`,
+        # so the names moved and published checkpoints stay loadable through these four renames:
+        # all 1:1, nothing split, merged or reordered. The module names above the leaf
+        # (`SelfAttention`, `EncDecAttention`, `DenseReluDense`) are untouched, so a key goes from
+        # `...block.0.layer.0.SelfAttention.q.weight` to `...SelfAttention.q_proj.weight`.
+        #
+        # The feed-forward is deliberately left alone. `wi`/`wo` and `wi_0`/`wi_1`/`wo` are the
+        # ungated and gated variants of the same module, selected by `config.is_gated_act`, and a
+        # single checkpoint only ever contains one of them. Renaming both `wi` and `wi_1` onto
+        # `up_proj` would make the reverse direction ambiguous -- saving walks the list backwards, so
+        # whichever rule sits later would claim every `up_proj` key -- and would serialize a
+        # non-gated T5 as `wi_1`. That rename needs a config-aware conversion, not a rename list.
+        #
+        # Nothing chains here: none of the four targets contains another rule's source, in either
+        # direction, so the order of these four is immaterial.
+        "t5": [
+            WeightRenaming(r"\.q\.", ".q_proj."),
+            WeightRenaming(r"\.k\.", ".k_proj."),
+            WeightRenaming(r"\.v\.", ".v_proj."),
+            WeightRenaming(r"\.o\.", ".o_proj."),
         ],
         # Cosmos3 Edge's composite checkpoint stores its dense reasoner text tower as conventional attention + MLP
         # blocks. The visual/projector tensors already use their native module names and intentionally need no mapping.

@@ -374,10 +374,10 @@ class SwitchTransformersPreTrainedModel(PreTrainedModel):
             d_model = self.config.d_model
             key_value_proj_dim = self.config.d_kv
             n_heads = self.config.num_heads
-            init.normal_(module.q.weight, mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
-            init.normal_(module.k.weight, mean=0.0, std=factor * (d_model**-0.5))
-            init.normal_(module.v.weight, mean=0.0, std=factor * (d_model**-0.5))
-            init.normal_(module.o.weight, mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
+            init.normal_(module.q_proj.weight, mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
+            init.normal_(module.k_proj.weight, mean=0.0, std=factor * (d_model**-0.5))
+            init.normal_(module.v_proj.weight, mean=0.0, std=factor * (d_model**-0.5))
+            init.normal_(module.o_proj.weight, mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
             if module.has_relative_attention_bias:
                 init.normal_(module.relative_attention_bias.weight, mean=0.0, std=factor * ((d_model) ** -0.5))
         elif isinstance(module, SwitchTransformersSparseMLP):
