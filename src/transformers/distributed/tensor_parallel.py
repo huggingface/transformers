@@ -398,6 +398,12 @@ class MlaKvAProjParallel(TensorParallelLayer):
     """
 
     def transform_output_post_forward(self, module, output, mesh):
+        if not hasattr(module.config, "qk_rope_head_dim"):
+            raise AttributeError(
+                f"Config for {type(module).__name__} does not have `qk_rope_head_dim`. "
+                "MlaKvAProjParallel requires `qk_rope_head_dim` to be defined in the model config. "
+                "Please add it to the model's config or update the TP plan mapping."
+            )
         rope_dim = module.config.qk_rope_head_dim
         pass_output, rope_output = output.split([output.shape[-1] - rope_dim, rope_dim], dim=-1)
         rope_output = _AllReduceBackward.apply(rope_output, mesh.get_group())
@@ -527,7 +533,14 @@ class MoEParamShard(TensorParallelLayer):
         if meta is None:
             return
         if self.shards_expert_dim and hasattr(module, "num_experts"):
-            module.num_experts = meta.shape[0] // mesh.size()
+            global_num_experts = meta.shape[0]
+            expert_parallel_size = mesh.size()
+            if global_num_experts % expert_parallel_size != 0:
+                raise ValueError(
+                    f"Cannot evenly shard {global_num_experts} experts across "
+                    f"{expert_parallel_size} expert-parallel ranks."
+                )
+            module.num_experts = global_num_experts // expert_parallel_size
         module._parameters[param] = torch.nn.Parameter(
             distribute_tensor(meta, mesh, [self.placement], src_data_rank=None),
             requires_grad=meta.requires_grad,
@@ -772,8 +785,19 @@ class ParallelInterface(GeneralInterface):
 ALL_PARALLEL_STYLES: ParallelInterface = ParallelInterface()
 
 
+def _validate_tp_plan_styles(tp_plan: dict[str, str] | None) -> None:
+    unsupported_styles = {style for style in (tp_plan or {}).values() if style not in ALL_PARALLEL_STYLES}
+    if unsupported_styles:
+        raise ValueError(
+            f"Unsupported tensor parallel styles: {unsupported_styles}. "
+            f"Supported styles are {list(ALL_PARALLEL_STYLES.keys())}"
+        )
+
+
 def apply_tensor_parallelism(model, tp_mesh):
     """DTensor backend: shard params as placeholders and install TP forward hooks."""
+
+    _validate_tp_plan_styles(model.tp_plan)
 
     for name, module in model.named_modules():
         # Create DTensor placeholders so the loader knows which shard belongs to this rank.
