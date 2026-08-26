@@ -672,6 +672,32 @@ class NeoMMEForRetrievalOutput(BaseModelOutput):
     dense_embeddings: torch.FloatTensor | None = None
 
 
+class NeoMMEMultiVectorHead(nn.Module):
+    def __init__(self, config: NeoMMEConfig):
+        super().__init__()
+        self.proj = nn.Linear(config.hidden_size, config.embedding_dim, bias=False)
+
+    def forward(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
+        embeddings = self.proj(hidden_states.to(self.proj.weight.dtype))
+        embeddings = F.normalize(embeddings, dim=-1)
+        # Use masked_fill because multiplying NaN or Inf by zero would leave padding non-finite.
+        return embeddings.masked_fill(~attention_mask.bool().unsqueeze(-1), 0.0)
+
+
+class NeoMMEDenseHead(nn.Module):
+    def forward(
+        self, hidden_states: torch.Tensor, attention_mask: torch.Tensor, dense_dim: int | None = None
+    ) -> torch.Tensor:
+        expanded_mask = attention_mask.unsqueeze(-1).expand(hidden_states.shape).to(hidden_states.dtype)
+        pooled = (hidden_states * expanded_mask).sum(1) / expanded_mask.sum(1).clamp_min(1e-9)
+        if dense_dim is None:
+            return F.normalize(pooled, dim=-1)
+
+        if not 0 < dense_dim <= pooled.shape[-1]:
+            raise ValueError(f"dense_dim must be in 1..{pooled.shape[-1]} (the pooled width), got {dense_dim}")
+        return F.normalize(pooled[..., :dense_dim], dim=-1)
+
+
 # FIXME: ask Tom if we need it, iiuc it is supported natively in ST from v6.0
 @auto_docstring(
     custom_intro="""
@@ -683,7 +709,8 @@ class NeoMMEForRetrieval(NeoMMEPreTrainedModel):
     def __init__(self, config: NeoMMEConfig):
         super().__init__(config)
         self.model = NeoMMEModel(config)
-        self.embedding_proj_layer = nn.Linear(config.hidden_size, config.embedding_dim, bias=False)
+        self.multi_vector_head = NeoMMEMultiVectorHead(config)
+        self.dense_head = NeoMMEDenseHead()
         self.post_init()
 
     @can_return_tuple
@@ -724,8 +751,8 @@ class NeoMMEForRetrieval(NeoMMEPreTrainedModel):
         if attention_mask is None:
             attention_mask = torch.ones(hidden_states.shape[:2], dtype=torch.bool, device=hidden_states.device)
 
-        embeddings = self._forward_late_head(hidden_states, attention_mask) if output_multivector else None
-        dense_embeddings = self._forward_dense_head(hidden_states, attention_mask, dense_dim) if output_dense else None
+        embeddings = self.multi_vector_head(hidden_states, attention_mask) if output_multivector else None
+        dense_embeddings = self.dense_head(hidden_states, attention_mask, dense_dim) if output_dense else None
         return NeoMMEForRetrievalOutput(
             embeddings=embeddings,
             dense_embeddings=dense_embeddings,
@@ -733,28 +760,6 @@ class NeoMMEForRetrieval(NeoMMEPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-    def _forward_late_head(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
-        """Project and normalize token embeddings, then zero padding positions."""
-        proj_dtype = self.embedding_proj_layer.weight.dtype
-        embeddings = self.embedding_proj_layer(hidden_states.to(proj_dtype))  # (batch, seq, embedding_dim)
-        embeddings = F.normalize(embeddings, dim=-1)
-        # Use masked_fill because multiplying NaN or Inf by zero would leave padding non-finite.
-        return embeddings.masked_fill(~attention_mask.bool().unsqueeze(-1), 0.0)
-
-    def _forward_dense_head(
-        self, hidden_states: torch.Tensor, attention_mask: torch.Tensor, dense_dim: int | None = None
-    ) -> torch.Tensor:
-        """Mean-pool non-padding states and normalize the requested Matryoshka prefix."""
-        expanded_mask = attention_mask.unsqueeze(-1).expand(hidden_states.shape).to(hidden_states.dtype)
-        pooled = (hidden_states * expanded_mask).sum(1) / expanded_mask.sum(1).clamp_min(1e-9)
-        if dense_dim is None:
-            return F.normalize(pooled, dim=-1)
-
-        # Validate explicitly because slicing accepts zero, negative, and oversized bounds.
-        if not 0 < dense_dim <= pooled.shape[-1]:
-            raise ValueError(f"dense_dim must be in 1..{pooled.shape[-1]} (the pooled width), got {dense_dim}")
-        return F.normalize(pooled[..., :dense_dim], dim=-1)
 
 
 __all__ = ["NeoMMEForMaskedLM", "NeoMMEForRetrieval", "NeoMMEModel", "NeoMMEPreTrainedModel"]

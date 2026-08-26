@@ -38,8 +38,10 @@ if is_torch_available():
     from transformers import initialization as init
     from transformers.models.neomme.modeling_neomme import (
         NeoMMEAttention,
+        NeoMMEDenseHead,
         NeoMMEEncoderLayer,
         NeoMMEMLP,
+        NeoMMEMultiVectorHead,
         NeoMMEPreTrainedModel,
         apply_rotary_pos_emb,
     )
@@ -660,6 +662,12 @@ class NeoMMEForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_for_retrieval(self):
         self.model_tester.create_and_check_for_retrieval(*self.model_tester.prepare_config_and_inputs())
+
+    def test_retrieval_head_modules(self):
+        config = self.model_tester.get_config()
+        model = NeoMMEForRetrieval(config)
+        self.assertIsInstance(model.multi_vector_head, NeoMMEMultiVectorHead)
+        self.assertIsInstance(model.dense_head, NeoMMEDenseHead)
 
     def test_multivector_padding_and_norm(self):
         config, input_ids, input_mask, _ = self.model_tester.prepare_config_and_inputs()
