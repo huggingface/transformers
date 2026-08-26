@@ -1760,7 +1760,7 @@ def _build_checkpoint_conversion_mapping():
     mapping["qwen4_exp_text"] = mapping["qwen3_5_moe_text"].copy()
     mapping["qwen4_exp_text"] += [
         WeightConverter(
-            source_patterns=r"ngram_embedding\.shard_\d+\.weight",
+            source_patterns="ngram_embedding.shard_*.weight",
             target_patterns="ngram_embedding.weight",
             operations=[Concatenate(dim=0, num_shards_attribute="split_ngram_parts")],
         ),

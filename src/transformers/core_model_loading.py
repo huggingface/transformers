@@ -139,12 +139,7 @@ class Chunk(ConversionOps):
                 raise ValueError("Undefined Operation encountered")
             subconfig = kwargs["config"].get_text_config()
             num_shards = getattr(subconfig, self.num_shards_attribute)
-            target_pattern = target_patterns[0]
-            # recover the  prefix before expanding shard indices, otherwise the saved keys lose their layer scope.
-            full_layer_name = kwargs.get("full_layer_name", target_pattern)
-            if target_pattern in full_layer_name:
-                target_pattern = full_layer_name
-            target_patterns = [target_pattern.replace(r"\d+", str(i)) for i in range(num_shards)]
+            target_patterns = [target_patterns[0].replace("*", str(i)) for i in range(num_shards)]
             return target_patterns
 
     @property
@@ -851,7 +846,7 @@ class WeightTransform:
         branches = []
         for i, source_pattern in enumerate(self.source_patterns):
             group_name = f"g{i}"
-            pattern = source_pattern.replace(".*.", r"\..*\.")
+            pattern = source_pattern.replace("*.", r".*\.")
             branches.append(f"(?P<{group_name}>{pattern})")
         self.compiled_sources = re.compile("|".join(branches))
 
@@ -1201,8 +1196,8 @@ class WeightConverter(WeightTransform):
         # Tensors are returned from ops with the target patterns, we need to expand them to full name.
         # This means we need to grab the prefix and suffix to add to every target key
         full_name = layer_name
-        if ".*." in layer_name:
-            full_name = layer_name.replace(".*.", ".0.")
+        if "*." in layer_name:
+            full_name = layer_name.replace("*.", "0.")
 
         try:
             prefix, _, suffix = next(full_name.partition(k) for k in collected_tensors.keys() if k in full_name)
