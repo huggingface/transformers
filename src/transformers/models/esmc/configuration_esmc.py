@@ -39,7 +39,7 @@ class EsmcConfig(PreTrainedConfig):
     ```python
     >>> from transformers import EsmcConfig, EsmcModel
 
-    >>> # Initializing an ESMC biohub/ESMC-6B style configuration
+    >>> # Initializing an ESMC biohub/ESMC-6B-hf style configuration
     >>> configuration = EsmcConfig()
 
     >>> # Initializing a model (with random weights) from the configuration
