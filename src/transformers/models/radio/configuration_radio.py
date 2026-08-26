@@ -74,7 +74,7 @@ class RadioConfig(PreTrainedConfig):
     max_img_size: int = 2048
     num_cls_tokens: int = 3
     num_registers: int = 7
-    video_temporal_patch_size: int = 2
+    video_temporal_patch_size: int | None = None
     summary_idxs: list[int] | None = None
     # input conditioner
     norm_mean: list[float] | tuple[float, float, float] = tuple(OPENAI_CLIP_MEAN)
