@@ -19,7 +19,6 @@ import gc
 import inspect
 import os
 import random
-import re
 import tempfile
 import unittest
 import warnings
@@ -90,6 +89,7 @@ if is_torch_available():
         QuantoQuantizedLayer,
         StaticCache,
     )
+    from transformers.conversion_mapping import get_mtp_conversion_mapping
     from transformers.generation import (
         CompileConfig,
         GenerateBeamDecoderOnlyOutput,
@@ -2487,12 +2487,15 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
 
             keys_to_ignore_unexpected = model_class._keys_to_ignore_on_load_unexpected or []
             # If we don't have any mtp patterns, skip
-            if not hasattr(config.get_text_config(), "num_mtp_layers") or not any(
-                "mtp" in x or re.search(r"layers\.\d+", x) is not None for x in keys_to_ignore_unexpected
-            ):
-                self.skipTest("No MTP keys registered")
+            text_config = config.get_text_config(decoder=True)
+            if not hasattr(text_config, "num_mtp_layers"):
+                self.skipTest("No `num_mtp_layers` in the config")
+            try:
+                get_mtp_conversion_mapping(text_config.model_type)
+            except ValueError:
+                self.skipTest(f"No MTP conversions registered for model_type `{text_config.model_type}`")
 
-            config.get_text_config().num_mtp_layers = 1
+            text_config.num_mtp_layers = 1
             model = model_class(config).to(torch_device).eval()
             mtp_model = MtpModel(model, num_mtp_layers=1)
             mtp_non_shared_state_dict = {
@@ -2527,8 +2530,9 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 weight_filename = os.path.join(tmpdirname, "model.safetensors")
                 saved_state_dict = load_file(weight_filename)
                 # add mtp weights and resave
+                num_hidden_layers = config.get_text_config().num_hidden_layers
                 layer_mapped_mtp_dict = {
-                    k.replace(".0.", f".{config.num_hidden_layers}.").replace(".mtp_block.", "."): v
+                    k.replace(".0.", f".{num_hidden_layers}.").replace(".mtp_block.", "."): v
                     for k, v in mtp_non_shared_state_dict.items()
                 }
                 saved_state_dict.update(
@@ -2539,7 +2543,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 with patch.object(
                     model_class,
                     "_keys_to_ignore_on_load_unexpected",
-                    keys_to_ignore_unexpected + [f"{model.base_model_prefix}.layers.{config.num_hidden_layers}"],
+                    keys_to_ignore_unexpected + [f"{model.base_model_prefix}.layers.{num_hidden_layers}"],
                 ):
                     # Reload model WITHOUT mtp
                     reloaded_model = model_class.from_pretrained(tmpdirname).to(torch_device)
