@@ -1286,21 +1286,23 @@ def spawn_materialize(
 
 
 def dot_natural_key(s: str):
-    """Sort key for state-dict names: split on `"."` and sort digits numerically
-    and strings alphabetically. We emit a tuple at each point to sort ints
-    first and strings second to avoid int-string comparison failures.
+    """
+    Sort key for state-dict names: split on `"."` and sort digits numerically and strings alphabetically. It emits a
+    tuple at each point to sort ints first and strings second to avoid int-string comparison failures.
     """
     parts = []
     for part in s.split("."):
         if part.isdigit():
             parts.append((0, int(part)))
         else:
-            prefix = part.rstrip("0123456789")
-            if prefix != part:
-                # Sort numeric suffixes numerically, so `shard_2` precedes `shard_11`.
-                parts.append((1, prefix, int(part[len(prefix) :])))
+            # This will remove all trailing digit characters, as `rstrip` actually considers it as a set of chars
+            text_part = part.rstrip("0123456789")
+            trailing_digits = part[len(text_part) :]
+            # Sort numeric suffixes numerically, so `shard_2` precedes `shard_11` for example
+            if trailing_digits != "":
+                parts.append((1, text_part, int(trailing_digits)))
             else:
-                parts.append((1, part))
+                parts.append((1, text_part))
     return parts
 
 
