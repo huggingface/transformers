@@ -217,6 +217,10 @@ class NeuCodecModelTest(ModelTesterMixin, unittest.TestCase):
 @slow
 @require_torch
 class NeuCodecIntegrationTest(unittest.TestCase):
+    """
+    Expected results for the integration tests can be created by running the script athttps://gist.github.com/harryjulian/b8f6b4b1fe47fdc5a9b7ac6c82b73399
+    """
+
     def setUp(self):
         self.fixtures_path = Path(__file__).parent.parent.parent / "fixtures/neucodec"
 
