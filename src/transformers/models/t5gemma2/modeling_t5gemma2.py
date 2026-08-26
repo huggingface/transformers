@@ -72,6 +72,7 @@ class T5Gemma2RMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.eps}"
 
 
+@use_kernel_forward_from_hub("GeGLUMLP")
 class T5Gemma2MLP(nn.Module):
     def __init__(self, config: T5Gemma2TextConfig):
         super().__init__()

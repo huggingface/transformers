@@ -702,6 +702,7 @@ class Qwen3_5MoeAttention(nn.Module):
         return attn_output, attn_weights
 
 
+@use_kernel_forward_from_hub("SwiGLUMLP")
 class Qwen3_5MoeMLP(nn.Module):
     def __init__(self, config: Qwen3_5MoeConfig, intermediate_size: int):
         super().__init__()

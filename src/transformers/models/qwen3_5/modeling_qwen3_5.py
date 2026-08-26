@@ -702,6 +702,7 @@ class Qwen3_5Attention(nn.Module):
         return attn_output, attn_weights
 
 
+@use_kernel_forward_from_hub("SwiGLUMLP")
 class Qwen3_5MLP(nn.Module):
     def __init__(self, config: Qwen3_5Config, intermediate_size: int):
         super().__init__()

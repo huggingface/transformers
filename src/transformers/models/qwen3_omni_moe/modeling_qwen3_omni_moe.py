@@ -1499,6 +1499,7 @@ class Qwen3OmniMoeThinkerTextAttention(nn.Module):
         return attn_output, attn_weights
 
 
+@use_kernel_forward_from_hub("SwiGLUMLP")
 class Qwen3OmniMoeThinkerTextMLP(nn.Module):
     def __init__(self, config, intermediate_size=None):
         super().__init__()
@@ -2402,6 +2403,7 @@ class Qwen3OmniMoeTalkerCodePredictorAttention(nn.Module):
         return attn_output, attn_weights
 
 
+@use_kernel_forward_from_hub("SwiGLUMLP")
 class Qwen3OmniMoeMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -2713,6 +2715,7 @@ class Qwen3OmniMoeTalkerRotaryEmbedding(Qwen3OmniMoeThinkerTextRotaryEmbedding):
     pass
 
 
+@use_kernel_forward_from_hub("SwiGLUMLP")
 class Qwen3OmniMoeTalkerTextMLP(nn.Module):
     def __init__(self, config, intermediate_size=None):
         super().__init__()
@@ -3417,6 +3420,7 @@ class Qwen3OmniMoeCode2WavAttention(nn.Module):
         return attn_output, attn_weights
 
 
+@use_kernel_forward_from_hub("SwiGLUMLP")
 class Qwen3OmniMoeCode2WavMlp(nn.Module):
     def __init__(self, config):
         super().__init__()

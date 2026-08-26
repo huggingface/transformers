@@ -699,6 +699,7 @@ class Qwen3NextGatedDeltaNet(nn.Module):
         return output
 
 
+@use_kernel_forward_from_hub("SwiGLUMLP")
 class Qwen3NextMLP(nn.Module):
     def __init__(self, config, intermediate_size=None):
         super().__init__()
