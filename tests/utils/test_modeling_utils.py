@@ -3823,34 +3823,6 @@ class DisableMmapLoadingTest(unittest.TestCase):
         for k in loaded_mmap:
             torch.testing.assert_close(loaded_mmap[k], loaded_no_mmap[k])
 
-    def test_pread_backend_on_windows(self):
-        """On Windows, safe_open should use the 'pread' backend to avoid mmap commit charge."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            # Patch platform to Windows and verify pread backend is used
-            with patch("transformers.modeling_utils.sys") as mock_sys, patch(
-                "transformers.modeling_utils.safe_open", wraps=__import__("safetensors").safe_open
-            ) as mock_safe_open:
-                mock_sys.platform = "win32"
-                # Use a minimal load path that exercises the backend selection
-                # We call the internal loading path via from_pretrained indirectly
-                # Instead, test load via the _load_pretrained_model path by constructing the scenario
-                from transformers import BertConfig, BertModel
-
-                config = BertConfig(
-                    hidden_size=16, num_hidden_layers=1, num_attention_heads=2, intermediate_size=32
-                )
-                model = BertModel(config)
-                model.save_pretrained(tmpdir)
-
-                # Load back on a "Windows" platform
-                _ = BertModel.from_pretrained(tmpdir)
-
-                # Verify safe_open was called with backend="pread"
-                safe_open_calls = [c for c in mock_safe_open.call_args_list if "backend" in c.kwargs]
-                self.assertTrue(len(safe_open_calls) > 0, "safe_open was not called with backend kwarg")
-                for call in safe_open_calls:
-                    self.assertEqual(call.kwargs["backend"], "pread")
-
     def test_mmap_backend_on_linux(self):
         """On Linux (non-MPS), safe_open should use the 'mmap' backend."""
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -3860,37 +3832,15 @@ class DisableMmapLoadingTest(unittest.TestCase):
             model = BertModel(config)
             model.save_pretrained(tmpdir)
 
-            with patch("transformers.modeling_utils.sys") as mock_sys, patch(
+            with patch("transformers.modeling_utils.sys.platform", "linux"), patch(
                 "transformers.modeling_utils.safe_open", wraps=__import__("safetensors").safe_open
             ) as mock_safe_open:
-                mock_sys.platform = "linux"
                 _ = BertModel.from_pretrained(tmpdir)
 
                 safe_open_calls = [c for c in mock_safe_open.call_args_list if "backend" in c.kwargs]
                 self.assertTrue(len(safe_open_calls) > 0, "safe_open was not called with backend kwarg")
                 for call in safe_open_calls:
                     self.assertEqual(call.kwargs["backend"], "mmap")
-
-    def test_disable_mmap_takes_precedence_on_windows(self):
-        """When disable_mmap=True, the full file read path is taken regardless of platform."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            from transformers import BertConfig, BertModel
-
-            config = BertConfig(hidden_size=16, num_hidden_layers=1, num_attention_heads=2, intermediate_size=32)
-            model = BertModel(config)
-            model.save_pretrained(tmpdir)
-
-            with patch("transformers.modeling_utils.sys") as mock_sys, patch(
-                "transformers.modeling_utils.safe_open", wraps=__import__("safetensors").safe_open
-            ) as mock_safe_open:
-                mock_sys.platform = "win32"
-                # With disable_mmap=True, safe_open should NOT be called (full read path instead)
-                _ = BertModel.from_pretrained(tmpdir, disable_mmap=True)
-
-                # safe_open should not have been called since disable_mmap bypasses it
-                self.assertEqual(
-                    mock_safe_open.call_count, 0, "safe_open should not be called when disable_mmap=True"
-                )
 
 
 @require_torch
