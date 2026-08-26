@@ -518,7 +518,7 @@ class Qwen2_5_VLRotaryEmbedding(nn.Module):
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
         # Ignore copy
-        self.mrope_section = self.config.rope_parameters["mrope_section"]
+        self.mrope_section = self.config.rope_parameters.get("mrope_section", [16, 24, 24])
 
     @staticmethod
     @deprecate_kwarg("device", version="5.18")

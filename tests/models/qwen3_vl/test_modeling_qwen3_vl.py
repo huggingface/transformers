@@ -533,7 +533,6 @@ class Qwen3VLIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=50, do_sample=False)
         EXPECTED_DECODED_TEXT = "user\nWhat kind of dog is this?\nassistant\nBased on the image, this appears to be a **Labrador Retriever**.\n\nHere’s why:\n\n- **Build and Size**: The dog has a large, muscular, and sturdy build, which is characteristic of Labradors.\n- **"
 
-        print([self.processor.decode(output[0], skip_special_tokens=True)])
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
