@@ -21,6 +21,7 @@ from parameterized import parameterized
 
 from transformers import StaticCache, is_torch_available
 from transformers.testing_utils import (
+    cap_psutil_cpu_memory,
     cleanup,
     require_torch,
     slow,
@@ -120,13 +121,17 @@ class PhimoeIntegrationTest(unittest.TestCase):
     def get_model(cls):
         if cls.model is None:
             cls.offload_dir = tempfile.TemporaryDirectory()
-            cls.model = PhimoeForCausalLM.from_pretrained(
-                "microsoft/Phi-3.5-MoE-instruct",
-                experts_implementation="eager",
-                dtype="auto",
-                device_map="auto",
-                offload_folder=cls.offload_dir.name,
-            )
+            # Cap CPU memory to 60 GiB during loading so device_map="auto" is forced to offload some
+            # layers to disk. Without the cap, device_map may assign too many layers to GPU+CPU and
+            # cause GPU OOM at inference time. The cap is restored after from_pretrained returns.
+            with cap_psutil_cpu_memory(60 * 1024**3):
+                cls.model = PhimoeForCausalLM.from_pretrained(
+                    "microsoft/Phi-3.5-MoE-instruct",
+                    experts_implementation="eager",
+                    dtype="auto",
+                    device_map="auto",
+                    offload_folder=cls.offload_dir.name,
+                )
         return cls.model
 
     @classmethod
