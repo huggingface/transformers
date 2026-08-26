@@ -37,6 +37,7 @@ from ..cohere_asr.modeling_cohere_asr import (
     CohereAsrModel,
     CohereAsrPreTrainedModel,
 )
+from ..llama.configuration_llama import LlamaConfig
 from ..qwen2_5_omni.modeling_qwen2_5_omni import SinusoidsPositionEmbedding
 
 
@@ -45,7 +46,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="harshaljanjani/canary-1b-v2-hf")
 @strict
-class CanaryDecoderConfig(PreTrainedConfig):
+class CanaryDecoderConfig(LlamaConfig):
     model_type = "canary_decoder"
 
     vocab_size: int = 16384
@@ -60,11 +61,16 @@ class CanaryDecoderConfig(PreTrainedConfig):
     eos_token_id: int | None = 3
     bos_token_id: int | None = 4
     is_encoder_decoder: bool = True
-    use_cache: bool = True
-    initializer_range: float = 0.02
-    attention_dropout: float | int = 0.0
     attention_bias: bool = True
     head_dim: int = 128
+
+    rms_norm_eps = AttributeError()
+    pretraining_tp = AttributeError()
+    rope_parameters = AttributeError()
+    mlp_bias = AttributeError()
+    tie_word_embeddings = AttributeError()
+    base_model_tp_plan = AttributeError()
+    base_model_pp_plan = AttributeError()
 
 
 @auto_docstring(checkpoint="harshaljanjani/canary-1b-v2-hf")
@@ -186,6 +192,7 @@ class CanaryDecoder(CohereAsrDecoder):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

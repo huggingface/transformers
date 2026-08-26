@@ -21,31 +21,63 @@ from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
+from ...utils.type_validators import interval
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="harshaljanjani/canary-1b-v2-hf")
 @strict
 class CanaryDecoderConfig(PreTrainedConfig):
+    r"""
+    ```python
+    >>> from transformers import CanaryDecoderModel, CanaryDecoderConfig
+
+    >>> # Initializing a CanaryDecoder canary_decoder-7b style configuration
+    >>> configuration = CanaryDecoderConfig()
+
+    >>> # Initializing a model from the canary_decoder-7b style configuration
+    >>> model = CanaryDecoderModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
     model_type = "canary_decoder"
+    keys_to_ignore_at_inference = ["past_key_values"]
 
     vocab_size: int = 16384
     hidden_size: int = 1024
+    intermediate_size: int = 4096
     num_hidden_layers: int = 8
     num_attention_heads: int = 8
     num_key_value_heads: int = 8
-    intermediate_size: int = 4096
     hidden_act: str = "relu"
     max_position_embeddings: int = 1024
-    pad_token_id: int | None = 2
-    eos_token_id: int | None = 3
-    bos_token_id: int | None = 4
-    is_encoder_decoder: bool = True
+    initializer_range: float = interval(min=0.0, max=1.0)(default=0.02)
     use_cache: bool = True
-    initializer_range: float = 0.02
-    attention_dropout: float | int = 0.0
+    pad_token_id: int | None = 2
+    bos_token_id: int | None = 4
+    eos_token_id: int | None = 3
     attention_bias: bool = True
+    attention_dropout: int | float | None = 0.0
     head_dim: int = 128
+    is_encoder_decoder: bool = True
+
+    def __post_init__(self, **kwargs):
+        if self.head_dim is None:
+            self.head_dim = self.hidden_size // self.num_attention_heads
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
+
+        super().__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if self.hidden_size % self.num_attention_heads != 0:
+            raise ValueError(
+                f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({self.num_attention_heads})."
+            )
 
 
 @auto_docstring(checkpoint="harshaljanjani/canary-1b-v2-hf")
