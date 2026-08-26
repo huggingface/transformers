@@ -261,7 +261,7 @@ Axes: `?`
 
 | definitions | variants | canonical | helper |
 |---|---|---|---|
-| 312 | 25 | `llama` | `eager_attention_forward` |
+| 348 | 25 | `llama` | `eager_attention_forward` |
 | 167 | 1 | `llama` | `repeat_kv` |
 | 162 | 5 | `gpt_neox` | `rotate_half` |
 | 162 | 23 | `llama` | `apply_rotary_pos_emb` |
