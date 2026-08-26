@@ -16,6 +16,7 @@ import gc
 import tempfile
 import unittest
 from contextlib import ExitStack, contextmanager
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from parameterized import parameterized
@@ -50,6 +51,17 @@ def _patch_no_accelerator():
                 patch("transformers.quantizers.quantizer_finegrained_fp8.is_torch_xpu_available", return_value=False)
             )
         yield
+
+
+class FineGrainedFP8TPPlanTest(unittest.TestCase):
+    def test_update_tp_plan_without_experts_implementation(self):
+        config = SimpleNamespace(base_model_tp_plan={"layers.*.mlp.experts": "grouped_gemm"})
+        quantizer = FineGrainedFP8HfQuantizer(FineGrainedFP8Config())
+
+        updated_config = quantizer.update_tp_plan(config)
+
+        self.assertEqual(updated_config.base_model_tp_plan["layers.*.mlp.experts"], "grouped_gemm")
+        self.assertEqual(updated_config.base_model_tp_plan["layers.*.mlp.experts_scale_inv"], "grouped_gemm")
 
 
 @require_torch_accelerator
