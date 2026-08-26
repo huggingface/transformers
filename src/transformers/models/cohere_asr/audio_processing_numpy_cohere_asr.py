@@ -30,10 +30,6 @@ class CohereAsrAudioProcessorMixin:
     # `(sample_idx, chunk_idx | None)` tuples; `None` must survive to `_reassemble_chunk_texts`
     skip_tensor_conversion = ["audio_chunk_index"]
 
-    legacy_field_mapping = {
-        "feature_size": "spectrogram_config.mel_scale_config.n_mels",
-    }
-
     spectrogram_config = SpectrogramConfig(
         stft_config=StftConfig(
             n_fft=512,
@@ -130,7 +126,9 @@ class CohereAsrAudioProcessorMixin:
         total = waveform.shape[0]
         chunks, start = [], 0
         while start + chunk_size < total:
-            split = self._find_split_point_energy(waveform, max(start, start + chunk_size - context), start + chunk_size)
+            split = self._find_split_point_energy(
+                waveform, max(start, start + chunk_size - context), start + chunk_size
+            )
             split = max(start + 1, min(split, total))
             chunks.append(waveform[start:split])
             start = split
@@ -153,6 +151,7 @@ class CohereAsrAudioProcessorMixin:
 
 class CohereAsrAudioProcessorNumpy(CohereAsrAudioProcessorMixin, NumpyAudioBackend):
     extra_model_input_names = ["audio_chunk_index"]
+
     def _seeded_noise(self, length, seed, like):
         return np.random.RandomState(seed).standard_normal(length).astype(like.dtype)
 

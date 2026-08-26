@@ -33,6 +33,7 @@ class UnivNetAudioProcessor(TorchAudioBackend):
     max_length_s = 10
 
     spectrogram_config = UnivNetAudioProcessorNumpy.spectrogram_config
+    legacy_field_mapping = UnivNetAudioProcessorNumpy.legacy_field_mapping
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -66,7 +67,7 @@ class UnivNetAudioProcessor(TorchAudioBackend):
         # float32 inputs), then promote back to float64 for the mel matmul the way numpy's
         # float32 x float64 matmul promotion does.
         stft_out = stft_out.to(torch.complex64)
-        presqrt = stft_out.real ** 2 + stft_out.imag ** 2 + self.mel_floor
+        presqrt = stft_out.real**2 + stft_out.imag**2 + self.mel_floor
         return presqrt.double().sqrt().float().double()
 
     def _apply_mel_scale(self, features, *, spectrogram_config, **kwargs):

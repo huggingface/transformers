@@ -53,15 +53,16 @@ class ClapAudioProcessorMixin:
     # trained on differently scaled mels and are not interchangeable.
     _fusion_mel_overrides = {"mel_scale": "htk", "norm": None}
 
-    # Legacy hub configs spell the mode as `truncation`. `top_db` only lines up with
-    # `clip_max_offset` because CLAP's `log_mode` is "dB" (Whisper's offset is in log10 units).
+    # `truncation` cannot be a base mapping: every modern config persists it as a bool, and
+    # only CLAP's legacy configs spell the mode there. `top_db` lines up with
+    # `clip_max_offset` only because CLAP's `log_mode` is "dB" (Whisper's is in log10 units).
     legacy_field_mapping = {
         "truncation": "truncation_mode",
-        "feature_size": "spectrogram_config.mel_scale_config.n_mels",
-        "fft_window_size": "spectrogram_config.stft_config.n_fft",
         "top_db": "spectrogram_config.clip_max_offset",
-        "nb_max_samples": "max_length",
-        "chunk_length_s": None,  # duplicates nb_max_samples
+        # Both duplicate nb_max_samples. Not base drops: encodec carries a real `chunk_length_s`
+        # and UnivNet still reads `max_length_s` off the instance.
+        "chunk_length_s": None,
+        "max_length_s": None,
     }
 
     def _set_attributes(self, **kwargs):

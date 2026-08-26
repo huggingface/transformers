@@ -30,8 +30,8 @@ class AudioSpectrogramTransformerAudioProcessor(TorchAudioBackend):
     ast_mean = -4.2677393
     ast_std = 4.5689974
 
-
     spectrogram_config = AudioSpectrogramTransformerAudioProcessorNumpy.spectrogram_config
+    legacy_field_mapping = AudioSpectrogramTransformerAudioProcessorNumpy.legacy_field_mapping
 
     def _pad_features(self, features, padding, max_length, truncation, pad_to_multiple_of):
         # Always pad/truncate to max_length_frames regardless of caller's padding args

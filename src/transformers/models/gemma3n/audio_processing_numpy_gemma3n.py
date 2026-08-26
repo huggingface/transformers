@@ -23,10 +23,6 @@ class Gemma3nAudioProcessorNumpy(NumpyAudioBackend):
     truncation = True
     pad_to_multiple_of = 128
 
-    legacy_field_mapping = {
-        "feature_size": "spectrogram_config.mel_scale_config.n_mels",
-    }
-
     spectrogram_config = SpectrogramConfig(
         stft_config=StftConfig(
             n_fft=1024,

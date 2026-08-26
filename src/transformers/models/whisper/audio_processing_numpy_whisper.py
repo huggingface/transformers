@@ -46,7 +46,6 @@ class WhisperAudioProcessorNumpy(NumpyAudioBackend):
     )
 
     legacy_field_mapping = {
-        "feature_size": "spectrogram_config.mel_scale_config.n_mels",
         "chunk_length": legacy_chunk_length_to_max_length,
     }
 

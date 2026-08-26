@@ -154,17 +154,24 @@ class AudioProcessingMixin(PreprocessingMixin):
         "return_attention_mask": "return_padding_mask",
         # Length keys, in samples.
         "n_samples": "max_length",
+        "nb_max_samples": "max_length",
         # Spectrogram-domain keys, skipped for models that declare no `spectrogram_config`
         # (see `_legacy_target_exists`). Several appear under more than one legacy spelling.
         "hop_length": "spectrogram_config.stft_config.hop_length",
         "n_fft": "spectrogram_config.stft_config.n_fft",
         "fft_length": "spectrogram_config.stft_config.n_fft",
+        "fft_window_size": "spectrogram_config.stft_config.n_fft",
         "win_length": "spectrogram_config.stft_config.win_length",
         "frame_length": "spectrogram_config.stft_config.win_length",
         "window_fn": "spectrogram_config.stft_config.window_fn",
         "power": "spectrogram_config.stft_config.power",
         "center": "spectrogram_config.stft_config.center",
         "pad_mode": "spectrogram_config.stft_config.pad_mode",
+        # `feature_size` is the mel count for the 17 spectrogram FEs that persisted it. The
+        # guard skips the raw-audio models whose configs also carry it (always as `1`); the
+        # three that produce mels *and* saved `feature_size=1` keep the count in
+        # `num_mel_bins` and opt out with `"feature_size": None`.
+        "feature_size": "spectrogram_config.mel_scale_config.n_mels",
         "num_mel_bins": "spectrogram_config.mel_scale_config.n_mels",
         "f_min": "spectrogram_config.mel_scale_config.f_min",
         "f_max": "spectrogram_config.mel_scale_config.f_max",
@@ -174,8 +181,8 @@ class AudioProcessingMixin(PreprocessingMixin):
         "frequency_max": "spectrogram_config.mel_scale_config.f_max",
         "preemphasis": "spectrogram_config.preemphasis",
         "mel_floor": "spectrogram_config.mel_floor",
-        # Derived from the keys above; the modern pipeline recomputes them.
-        "max_length_s": None,
+        # Derived from the keys above; the modern pipeline recomputes them. `max_length_s` is
+        # deliberately absent: UnivNet still reads it off the instance.
         "nb_max_frames": None,
         "nb_frequency_bins": None,
     }

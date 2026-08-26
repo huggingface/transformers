@@ -26,7 +26,7 @@ class Gemma4AudioProcessorNumpy(NumpyAudioBackend):
     pad_to_multiple_of = 128
 
     legacy_field_mapping = {
-        "feature_size": "spectrogram_config.mel_scale_config.n_mels",
+        # gemma4 applies its floor before the log, not as an STFT-domain clamp
         "mel_floor": "spectrogram_config.pre_log_offset",
     }
 

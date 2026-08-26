@@ -38,6 +38,10 @@ class AudioSpectrogramTransformerAudioProcessorNumpy(NumpyAudioBackend):
     ast_mean = -4.2677393
     ast_std = 4.5689974
 
+    # The legacy FE saved `feature_size=1` (a raw-audio default) and kept the real mel count in
+    # `num_mel_bins`, so the base mapping of `feature_size` must not apply here.
+    legacy_field_mapping = {"feature_size": None}
+
     spectrogram_config = SpectrogramConfig(
         stft_config=StftConfig(
             n_fft=512,

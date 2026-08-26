@@ -31,6 +31,10 @@ class UnivNetAudioProcessorNumpy(NumpyAudioBackend):
     normalize_min = -11.512925148010254
     normalize_max = 2.3143386840820312
     max_length_s = 10
+    # The legacy FE saved `feature_size=1` (a raw-audio default) and kept the real mel count in
+    # `num_mel_bins`, so the base mapping of `feature_size` must not apply here.
+    legacy_field_mapping = {"feature_size": None}
+
     spectrogram_config = SpectrogramConfig(
         stft_config=StftConfig(
             n_fft=1024,
