@@ -727,18 +727,25 @@ def _fix_sort_stable(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
     return True
 
 
-# Ops where torch 2.13 mishandles a Python float meeting an integral tensor. `sub`/`rsub` and `mul` are
-# what the affected models spell (`1.0 - attention_mask`, `mask * 2.0`); both overloads appear, since
-# decomposition rewrites `.Tensor` to `.Scalar` when the operand is a constant.
-_INTEGRAL_SCALAR_PROMOTION_OPS = frozenset(
-    {
-        torch.ops.aten.rsub.Scalar,
-        torch.ops.aten.sub.Scalar,
-        torch.ops.aten.sub.Tensor,
-        torch.ops.aten.mul.Scalar,
-        torch.ops.aten.mul.Tensor,
-    }
-)
+@functools.cache
+def _integral_scalar_promotion_ops() -> frozenset:
+    """Ops where torch 2.13 mishandles a Python float meeting an integral tensor.
+
+    `sub`/`rsub` and `mul` are what the affected models spell (`1.0 - attention_mask`, `mask * 2.0`); both
+    overloads appear, since decomposition rewrites `.Tensor` to `.Scalar` when the operand is a constant.
+
+    Resolved on first use rather than at import: this module is importable without torch, and naming an
+    `OpOverload` at module scope breaks that.
+    """
+    return frozenset(
+        {
+            torch.ops.aten.rsub.Scalar,
+            torch.ops.aten.sub.Scalar,
+            torch.ops.aten.sub.Tensor,
+            torch.ops.aten.mul.Scalar,
+            torch.ops.aten.mul.Tensor,
+        }
+    )
 
 
 @register_fx_node_fix("onnx")
@@ -761,7 +768,7 @@ def _fix_integral_tensor_float_scalar(gm: torch.fx.GraphModule, node: torch.fx.N
     Self-limiting: once the operand is floating point the predicate no longer matches, so the walk cannot
     revisit it.
     """
-    if node.target not in _INTEGRAL_SCALAR_PROMOTION_OPS:
+    if node.target not in _integral_scalar_promotion_ops():
         return False
     if len(node.args) < 2:
         return False
