@@ -14,27 +14,21 @@
 
 """Testing suite for the PyTorch PhiMoE model."""
 
-import logging
 import tempfile
 import unittest
 
-import psutil
+from parameterized import parameterized
 
 from transformers import StaticCache, is_torch_available
 from transformers.testing_utils import (
+    cap_psutil_cpu_memory,
     cleanup,
     require_torch,
     slow,
     torch_device,
 )
 
-logger = logging.getLogger(__name__)
-
-
-
-
-
-
+from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 if is_torch_available():
@@ -43,6 +37,7 @@ if is_torch_available():
     from transformers import (
         AutoTokenizer,
         PhimoeForCausalLM,
+        PhimoeModel,
     )
 
     end_of_text_token = 32000
@@ -90,6 +85,32 @@ if is_torch_available():
             return response_tokens
 
 
+class PhimoeModelTester(CausalLMModelTester):
+    if is_torch_available():
+        base_model_class = PhimoeModel
+
+
+@require_torch
+class PhimoeModelTest(CausalLMModelTest, unittest.TestCase):
+    test_all_params_have_gradient = False
+    model_tester_class = PhimoeModelTester
+
+    # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79292/workflows/fa2ba644-8953-44a6-8f67-ccd69ca6a476/jobs/1012905
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        return True
+
+    @unittest.skip("PhiMoE's RoPE has custom parameterization")
+    def test_model_rope_scaling_frequencies(self):
+        pass
+
+    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
+    @unittest.skip("PhiMoE's RoPE has custom parameterization")
+    def test_model_rope_scaling_from_config(self, scaling_type):
+        pass
+
+
 @slow
 @require_torch
 class PhimoeIntegrationTest(unittest.TestCase):
@@ -100,21 +121,26 @@ class PhimoeIntegrationTest(unittest.TestCase):
     def get_model(cls):
         if cls.model is None:
             cls.offload_dir = tempfile.TemporaryDirectory()
-            mem = psutil.virtual_memory()
-            logger.warning(
-                "psutil.virtual_memory() before from_pretrained: total=%.2f GiB, available=%.2f GiB",
-                mem.total / 1024**3,
-                mem.available / 1024**3,
-            )
-            cls.model = PhimoeForCausalLM.from_pretrained(
-                "microsoft/Phi-3.5-MoE-instruct",
-                experts_implementation="eager",
-                dtype="auto",
-                device_map="auto",
-                offload_folder=cls.offload_dir.name,
-                max_memory={"cpu": "60GiB"},
-            )
-            logger.warning("device_map=%s", cls.model.hf_device_map)
+            # Cap CPU memory to 60 GiB during loading so device_map="auto" is forced to offload
+            # some layers to disk. Without the cap, on K8S runners where psutil reports the full
+            # node RAM (~83 GiB after the session-wide patch), device_map may assign too many
+            # layers to GPU+CPU with nothing on disk, leading to GPU OOM at inference time.
+            #
+            # We use cap_psutil_cpu_memory rather than passing max_memory={"cpu": "60GiB"} to
+            # from_pretrained: the latter only caps CPU in the planning budget but leaves GPU
+            # unspecified, causing device_map="auto" to skip the GPU entirely and place all
+            # layers on CPU/disk, which produces wrong numerical results.
+            # Patching psutil gives device_map the correct overall memory view (GPU + capped CPU),
+            # so it distributes layers across GPU, CPU, and disk as intended.
+            # The cap is restored to the session-wide value after from_pretrained returns.
+            with cap_psutil_cpu_memory(60 * 1024**3):
+                cls.model = PhimoeForCausalLM.from_pretrained(
+                    "microsoft/Phi-3.5-MoE-instruct",
+                    experts_implementation="eager",
+                    dtype="auto",
+                    device_map="auto",
+                    offload_folder=cls.offload_dir.name,
+                )
         return cls.model
 
     @classmethod
@@ -148,3 +174,47 @@ class PhimoeIntegrationTest(unittest.TestCase):
         ).to(device=torch_device, dtype=output.dtype)  # fmt: skip
 
         torch.testing.assert_close(output[0, :2, :10], EXPECTED_OUTPUT, rtol=1e-4, atol=1e-4)
+
+    def test_phimoe_instruct_generation(self):
+        model = self.get_model()
+        tokenizer = AutoTokenizer.from_pretrained("microsoft/Phi-3.5-MoE-instruct")
+
+        messages = [
+            {
+                "role": "system",
+                "content": "You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user.",
+            },
+            {"role": "user", "content": "Can you provide ways to eat combinations of bananas and dragonfruits?"},
+        ]
+        inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt")
+
+        outputs = model.generate(**inputs, max_new_tokens=30)
+        output_text = tokenizer.batch_decode(outputs)
+
+        EXPECTED_OUTPUT = [
+            "<|system|> You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user.<|end|><|user|> Can you provide ways to eat combinations of bananas and dragonfruits?<|end|><|assistant|> Certainly! Bananas and dragonfruits are both delicious and nutritious fruits that can be combined in various ways to create",
+        ]
+        self.assertListEqual(output_text, EXPECTED_OUTPUT)
+
+    def test_phimoe_instruct_with_static_cache(self):
+        model = self.get_model()
+        tokenizer = AutoTokenizer.from_pretrained("microsoft/Phi-3.5-MoE-instruct")
+
+        messages = [
+            {
+                "role": "system",
+                "content": "You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user.",
+            },
+            {"role": "user", "content": "Can you provide ways to eat combinations of bananas and dragonfruits?"},
+        ]
+        inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt").to(
+            torch_device
+        )
+
+        response_tokens = PhimoeMiniWithStaticCache.generate(model, inputs["input_ids"], max_seq_len=30)
+        output_text = tokenizer.batch_decode(torch.tensor([response_tokens], dtype=torch.long, device=torch_device))
+
+        EXPECTED_OUTPUT = [
+            "<|system|> You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user.<|end|><|user|> Can you provide ways to eat combinations of bananas and dragonfruits?<|end|><|assistant|> C"
+        ]
+        self.assertListEqual(output_text, EXPECTED_OUTPUT)
