@@ -189,7 +189,7 @@ class EsmcModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 @require_torch
 class EsmcModelIntegrationTest(unittest.TestCase):
     # TEMP: revert to "biohub/ESMC-300M" once the regenerated config/tokenizer land on the BioHub repos.
-    checkpoint = "Rocketknight1/ESMC-300M-temp"
+    checkpoint = "biohub/ESMC-300M-hf"
     sequence = "MKTAYIAKQRQISFVKSHFSRQLEERLGLIEVQ"
 
     def test_inference_masked_lm(self):
