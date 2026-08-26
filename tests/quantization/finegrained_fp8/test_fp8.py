@@ -264,6 +264,51 @@ class FP8QuantizerTest(unittest.TestCase):
         self.assertEqual(weight_scale_inv.dtype, torch.float32)
         self.assertEqual(weight.shape, (weight_scale_inv.shape[0] * 128, weight_scale_inv.shape[1] * 128))
 
+    def test_on_the_fly_quantization_matches_quantizing_the_dense_weight(self):
+        """Quantizing on the fly must derive the scale from the checkpoint's dense weight.
+
+        The FP8 modules declare an FP8 weight container so a serialized checkpoint loads straight
+        into it. If the loader materialized into that same container when quantizing on the fly,
+        `Fp8Quantize` would see weights already rounded to FP8 *without* a scale, and the result
+        would no longer match quantizing the original dense tensor.
+        """
+        from transformers.integrations.finegrained_fp8 import Fp8Quantize
+
+        target = "model.layers.0.mlp.gate_proj.weight"
+        config = AutoConfig.for_model(
+            "llama",
+            vocab_size=64,
+            hidden_size=64,
+            intermediate_size=64,
+            num_hidden_layers=1,
+            num_attention_heads=4,
+            num_key_value_heads=4,
+            tie_word_embeddings=False,
+        )
+        torch.manual_seed(0)
+        model = AutoModelForCausalLM.from_config(config).to(torch.bfloat16)
+        dense_weight = dict(model.named_parameters())[target].detach().clone()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            model.save_pretrained(tmpdir)
+            del model
+            quantized_model = AutoModelForCausalLM.from_pretrained(
+                tmpdir,
+                device_map=torch_device,
+                dtype=torch.bfloat16,
+                quantization_config=FineGrainedFP8Config(weight_block_size=(32, 32)),
+            )
+
+        expected = Fp8Quantize(quantized_model.hf_quantizer).convert({target: dense_weight.to(quantized_model.device)})
+        proj = quantized_model.model.layers[0].mlp.gate_proj
+        torch.testing.assert_close(proj.weight.float(), expected[target].float(), atol=0, rtol=0)
+        torch.testing.assert_close(
+            proj.weight_scale_inv.float(),
+            expected[target.replace(".weight", ".weight_scale_inv")].float(),
+            atol=0,
+            rtol=0,
+        )
+
     def test_block_size(self):
         """
         Simple test that checks if the block size is working properly

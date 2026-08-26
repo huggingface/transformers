@@ -301,13 +301,14 @@ class FP8Linear(nn.Linear):
         activation_scheme: str = "dynamic",
         scale_fmt: str = "float",
         has_bias: bool = False,
+        dtype: torch.dtype | None = _FP8_DTYPE,
     ):
         super().__init__(in_features, out_features)
 
         self.has_bias = has_bias
         self.block_size = block_size
         self.activation_scheme = activation_scheme
-        self.weight = torch.nn.Parameter(torch.empty(out_features, in_features, dtype=_FP8_DTYPE))
+        self.weight = torch.nn.Parameter(torch.empty(out_features, in_features, dtype=dtype))
 
         if self.block_size is None:
             # If block size is None, it means that we are doing per-tensor quantization
@@ -367,6 +368,7 @@ class FP8GroupedLinear(FP8Linear):
         activation_scheme: str = "dynamic",
         scale_fmt: str = "float",
         has_bias: bool = False,
+        dtype: torch.dtype | None = _FP8_DTYPE,
     ):
         super().__init__(
             in_features=in_features_per_group,
@@ -375,6 +377,7 @@ class FP8GroupedLinear(FP8Linear):
             activation_scheme=activation_scheme,
             scale_fmt=scale_fmt,
             has_bias=has_bias,
+            dtype=dtype,
         )
         self.n_groups = n_groups
 
@@ -613,6 +616,7 @@ class FP8Experts(nn.Module):
         scale_fmt: str = "float",
         has_bias: bool = False,
         has_gate: bool = True,
+        dtype: torch.dtype | None = _FP8_DTYPE,
     ):
         super().__init__()
 
@@ -649,7 +653,7 @@ class FP8Experts(nn.Module):
             }
         else:
             alloc_kwargs = {
-                "weight_dtype": _FP8_DTYPE,
+                "weight_dtype": dtype,
                 "sf_dtype": sf_dtype,
                 "sf_gran_n": block_size[0] if block_size is not None else None,
                 "sf_gran_k": block_size[1] if block_size is not None else None,
@@ -814,6 +818,9 @@ def replace_with_fp8_linear(
     if quantization_config.dequantize:
         return model
 
+    # we need this to correctly materialize the weights during quantization
+    module_kwargs = {} if pre_quantized else {"dtype": None}
+
     has_been_replaced = False
     for module_name, module in model.named_modules():
         if not should_convert_module(module_name, modules_to_not_convert):
@@ -838,6 +845,7 @@ def replace_with_fp8_linear(
                     scale_fmt=quantization_config.scale_fmt,
                     has_bias=has_bias,
                     has_gate=has_gate,
+                    **module_kwargs,
                 )
             elif type(module) is nn.Linear:
                 # Vanilla `nn.Linear` → standard FP8Linear swap.
@@ -848,6 +856,7 @@ def replace_with_fp8_linear(
                     activation_scheme=quantization_config.activation_scheme,
                     scale_fmt=quantization_config.scale_fmt,
                     has_bias=module.bias is not None,
+                    **module_kwargs,
                 )
             elif isinstance(module, nn.Linear) and "GroupedLinear" in type(module).__name__:
                 # Block-diagonal grouped linear (e.g. DSv4's `DeepseekV4GroupedLinear`):
@@ -864,6 +873,7 @@ def replace_with_fp8_linear(
                     activation_scheme=quantization_config.activation_scheme,
                     scale_fmt=quantization_config.scale_fmt,
                     has_bias=module.bias is not None,
+                    **module_kwargs,
                 )
             if new_module is not None:
                 # TP must use local tensors because this quantization path does not support DTensor inputs or weights.
