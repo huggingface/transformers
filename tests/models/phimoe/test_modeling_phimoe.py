@@ -14,8 +14,11 @@
 
 """Testing suite for the PyTorch PhiMoE model."""
 
+import logging
 import tempfile
 import unittest
+
+import psutil
 
 from transformers import is_torch_available
 from transformers.testing_utils import (
@@ -24,6 +27,8 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+
+logger = logging.getLogger(__name__)
 
 
 
@@ -52,12 +57,19 @@ class PhimoeIntegrationTest(unittest.TestCase):
     def get_model(cls):
         if cls.model is None:
             cls.offload_dir = tempfile.TemporaryDirectory()
+            mem = psutil.virtual_memory()
+            logger.warning(
+                "psutil.virtual_memory() before from_pretrained: total=%.2f GiB, available=%.2f GiB",
+                mem.total / 1024**3,
+                mem.available / 1024**3,
+            )
             cls.model = PhimoeForCausalLM.from_pretrained(
                 "microsoft/Phi-3.5-MoE-instruct",
                 experts_implementation="eager",
                 dtype="auto",
                 device_map="auto",
                 offload_folder=cls.offload_dir.name,
+                max_memory={"cpu": "60GiB"},
             )
         return cls.model
 
