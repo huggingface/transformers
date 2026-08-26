@@ -148,7 +148,7 @@ inputs = image_processor(images=image, return_tensors="pt")
 with torch.no_grad():
     outputs = model(**inputs)
 
-# Post process model predictions 
+# Post process model predictions
 # this include conversion to Pascal VOC format and filtering non confident boxes
 width, height = image.size
 target_sizes = torch.tensor([height, width]).unsqueeze(0)  # add batch dim
@@ -156,15 +156,13 @@ results = image_processor.post_process_object_detection(outputs, threshold=0.5, 
 
 for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
     box = [round(i, 2) for i in box.tolist()]
-    print(
-        f"Detected {model.config.id2label[label.item()]} with confidence "
-        f"{round(score.item(), 3)} at location {box}"
-    )
+    print(f"Detected {model.config.id2label[label.item()]} with confidence {round(score.item(), 3)} at location {box}")
 ```
 
 And visualize with the following code:
 ```python
 from PIL import ImageDraw
+
 draw = ImageDraw.Draw(image)
 
 for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):

@@ -457,7 +457,15 @@ decoder_id = "facebook/bart-base"
 
 # load and save speech-encoder-decoder model
 # set some hyper-parameters for training and evaluation
-model = SpeechEncoderDecoderModel.from_encoder_decoder_pretrained(encoder_id, decoder_id, encoder_add_adapter=True, encoder_feat_proj_dropout=0.0, encoder_layerdrop=0.0, max_length=200, num_beams=5)
+model = SpeechEncoderDecoderModel.from_encoder_decoder_pretrained(
+    encoder_id,
+    decoder_id,
+    encoder_add_adapter=True,
+    encoder_feat_proj_dropout=0.0,
+    encoder_layerdrop=0.0,
+    max_length=200,
+    num_beams=5,
+)
 model.config.decoder_start_token_id = model.decoder.config.bos_token_id
 model.config.pad_token_id = model.decoder.config.pad_token_id
 model.config.eos_token_id = model.decoder.config.eos_token_id

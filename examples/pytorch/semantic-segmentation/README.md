@@ -47,23 +47,25 @@ label_paths_train = ["path/to/annotation_1.png", "path/to/annotation_2.png", ...
 # image_paths_validation = [...]
 # label_paths_validation = [...]
 
+
 def create_dataset(image_paths, label_paths):
-    dataset = Dataset.from_dict({"image": sorted(image_paths),
-                                "label": sorted(label_paths)})
+    dataset = Dataset.from_dict({"image": sorted(image_paths), "label": sorted(label_paths)})
     dataset = dataset.cast_column("image", Image())
     dataset = dataset.cast_column("label", Image())
 
     return dataset
+
 
 # step 1: create Dataset objects
 train_dataset = create_dataset(image_paths_train, label_paths_train)
 validation_dataset = create_dataset(image_paths_validation, label_paths_validation)
 
 # step 2: create DatasetDict
-dataset = DatasetDict({
-    "train": train_dataset,
-    "validation": validation_dataset,
-  }
+dataset = DatasetDict(
+    {
+        "train": train_dataset,
+        "validation": validation_dataset,
+    }
 )
 
 # step 3: push to hub (assumes you have ran the hf auth login command in a terminal/notebook)
@@ -81,9 +83,10 @@ Besides that, the script also assumes the existence of an `id2label.json` file i
 
 ```python
 import json
+
 # simple example
-id2label = {0: 'cat', 1: 'dog'}
-with open('id2label.json', 'w') as fp:
+id2label = {0: "cat", 1: "dog"}
+with open("id2label.json", "w") as fp:
     json.dump(id2label, fp)
 ```
 
@@ -190,10 +193,12 @@ with torch.no_grad():
     logits = outputs.logits
 
 # rescale logits to original image size
-logits = nn.functional.interpolate(outputs.logits.detach().cpu(),
-                                    size=image.size[::-1], # (height, width)
-                                    mode='bilinear',
-                                    align_corners=False)
+logits = nn.functional.interpolate(
+    outputs.logits.detach().cpu(),
+    size=image.size[::-1],  # (height, width)
+    mode="bilinear",
+    align_corners=False,
+)
 
 predicted = logits.argmax(1)
 ```

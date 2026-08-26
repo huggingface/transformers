@@ -56,12 +56,7 @@ The `VisionTextDualEncoderModel` class lets you load any vision and text encoder
 Here is an example of how to load the model using pre-trained vision and text models.
 
 ```python3
-from transformers import (
-    VisionTextDualEncoderModel,
-    VisionTextDualEncoderProcessor,
-    AutoTokenizer,
-    AutoImageProcessor
-)
+from transformers import VisionTextDualEncoderModel, VisionTextDualEncoderProcessor, AutoTokenizer, AutoImageProcessor
 
 model = VisionTextDualEncoderModel.from_vision_text_pretrained(
     "openai/clip-vit-base-patch32", "FacebookAI/roberta-base"

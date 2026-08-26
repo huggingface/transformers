@@ -62,12 +62,14 @@ tokenizer.pad_token = tokenizer.eos_token
 raw = load_dataset("w601sxs/simpleCoT", split="train[:5000]")
 eval_raw = load_dataset("w601sxs/simpleCoT", split="train[5000:5500]")
 
+
 def format_and_tokenize(examples):
     texts = [
         f"Question: {s}\nReasoning: {r}\nAnswer: {t}"
         for s, r, t in zip(examples["source"], examples["rationale"], examples["target"])
     ]
     return tokenizer(texts, truncation=True, max_length=512, padding=False)
+
 
 train_ds = raw.map(format_and_tokenize, batched=True, remove_columns=raw.column_names)
 eval_ds = eval_raw.map(format_and_tokenize, batched=True, remove_columns=eval_raw.column_names)
@@ -123,6 +125,7 @@ Training script (`pretrain_greedy.py`):
 
 ```python
 import os
+
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
 from transformers import (
