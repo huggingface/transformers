@@ -290,7 +290,7 @@ def _can_use_grouped_mm(input: torch.Tensor, weight: torch.Tensor, offs: torch.T
 
     # On CUDA, `grouped_mm` availability also depends on GPU compute capability:
     # `torch.nn.functional.grouped_mm` in torch>=2.10 and `torch._grouped_mm` in torch>=2.9 support SM80+
-    # but older `torch._grouped_mm` requires SM90+.
+    # but older `torch._grouped_mm` in torch<=2.8 is Hopper-only (SM90, compute capability 9.x).
     if weight.device.type == "cuda":
         if hasattr(torch.nn.functional, "grouped_mm"):
             return torch.cuda.get_device_capability(weight.device) >= (8, 0)
@@ -298,7 +298,7 @@ def _can_use_grouped_mm(input: torch.Tensor, weight: torch.Tensor, offs: torch.T
             if is_torch_greater_or_equal("2.9", accept_dev=True):
                 return torch.cuda.get_device_capability(weight.device) >= (8, 0)
             else:
-                return torch.cuda.get_device_capability(weight.device) >= (9, 0)
+                return torch.cuda.get_device_capability(weight.device)[0] == 9
 
         return False
 
@@ -333,7 +333,7 @@ def _grouped_mm(
         elif hasattr(torch, "_grouped_mm"):
             return torch._grouped_mm(input.to(weight.dtype), weight, offs=offs)
 
-    return torch.ops.transformers.grouped_mm_fallback(input, weight, offs=offs)
+    return torch.ops.transformers.grouped_mm_fallback(input.to(weight.dtype), weight, offs=offs)
 
 
 def _grouped_linear(
