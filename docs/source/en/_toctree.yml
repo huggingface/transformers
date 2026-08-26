@@ -291,6 +291,8 @@
       title: FP-Quant
     - local: quantization/mxfp4
       title: MXFP4
+    - local: quantization/nvfp4
+      title: NVFP4
     title: FP4 and FP8 formats
   - sections:
     - local: quantization/auto_round
@@ -617,6 +619,10 @@
         title: Ernie4_5_MoE
       - local: model_doc/esm
         title: ESM
+      - local: model_doc/esmc
+        title: ESMC
+      - local: model_doc/esmfold2
+        title: ESMFold2
       - local: model_doc/eurobert
         title: EuroBERT
       - local: model_doc/exaone4
@@ -897,6 +903,8 @@
         title: StableLm
       - local: model_doc/starcoder2
         title: Starcoder2
+      - local: model_doc/step3p7
+        title: Step3p7
       - local: model_doc/switch_transformers
         title: SwitchTransformers
       - local: model_doc/t5
@@ -1125,6 +1133,8 @@
         title: GLM-ASR
       - local: model_doc/granite_speech
         title: GraniteSpeech
+      - local: model_doc/granite_speech5
+        title: GraniteSpeech5
       - local: model_doc/granite_speech_plus
         title: GraniteSpeechPlus
       - local: model_doc/higgs_audio_v2

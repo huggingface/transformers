@@ -256,6 +256,11 @@ diff = '''
 [rules.TRF016]
 description = "do_* flags declared on a processor class must be referenced by overridden preprocess/_preprocess."
 default_enabled = true
+# Allowlist inherited unchanged from the base pin (0.1.2), so this PR changes no TRF001-TRF019 behavior.
+# Both entries are the same shape: `do_convert_rgb` is declared on the video processor
+# (`video_processing_kimi_k25.py:98`, `video_processing_minimax_m3_vl.py:45`) but never read by the
+# `_preprocess` override, so only the model owner can say whether the flag is dead or the override lost a
+# step. Left to the follow-ups with the two owners.
 allowlist_models = ["kimi_k25", "minimax_m3_vl"]
 
 [rules.TRF016.explanation]
@@ -308,6 +313,12 @@ diff = '''
 [rules.TRF018]
 description = "_init_weights overrides should call super()._init_weights(module), except modular-file sentinels."
 default_enabled = true
+# Allowlist inherited unchanged from the base pin (0.1.2). 15 of the 16 call the base implementation as
+# `PreTrainedModel._init_weights(module)` instead of `super()._init_weights(module)` -- the form a modular
+# file needs, since `super()` there resolves to the inherited model, not to `PreTrainedModel`. The rule only
+# recognizes the `super()` spelling (459 files use it, these 15 the other), reported upstream as
+# huggingface/transformers-mlinter#27. `radio` is the one real case: it never calls the base implementation.
+# Kept as-is so no pre-existing rule changes behavior in this PR.
 allowlist_models = ["cosmos3_omni", "diffusion_gemma", "eomt_dinov3", "exaone4_5", "gemma4", "higgs_audio_v2", "kimi_k25", "olmo3", "pp_formulanet", "pp_lcnet_v3", "radio", "sam3_lite_text", "sam3_tracker", "slanet", "voxtral_realtime", "xcodec2"]
 
 [rules.TRF018.explanation]
@@ -326,6 +337,10 @@ diff = '''
 [rules.TRF019]
 description = "A processor TypedDict class must not define `_defaults`, instead push them upstream to the hub (`processor_config.json`)."
 default_enabled = true
+# Allowlist inherited unchanged from the base pin (0.1.2). Three entries still fire -- `hunyuan_vl`,
+# `kosmos2`, `qwen3_asr` -- and each sets `_defaults` on its processor kwargs class; dropping it means
+# publishing those defaults in `processor_config.json` on the Hub repos first, which is on the checkpoint
+# owners. `blip_2`, `grounding_dino` and `omdet_turbo` are covered by `cutoff_date` and no longer fire.
 allowlist_models = ["blip_2", "grounding_dino", "hunyuan_vl", "kosmos2", "omdet_turbo", "qwen3_asr"]
 cutoff_date = "2026-06-20"
 
@@ -339,4 +354,735 @@ diff = '''
 -        "images_kwargs": {"return_tensors": "pt"},
 -    }
      images_kwargs: Gemma4ImageProcessorKwargs
+'''
+
+[rules.TRF020]
+description = "MLA models must isolate the KV LoRA expansion (kv_b_proj) in a dedicated method that forward() calls."
+default_enabled = true
+# `axk2`: false positive. `AXK2Attention.forward` does call `self.expand_kv(k_pass, k_rot)`
+# (`modular_axk2.py:348`), and `expand_kv` is inherited from `DeepseekV32Attention`, landing at
+# `modeling_axk2.py:568`. The rule resolves the base chain only inside the linted file, so the modular
+# file looks like it is missing the method. Same root cause as TRF034, upstream mlinter#27.
+allowlist_models = ["axk2"]
+
+[rules.TRF020.explanation]
+what_it_does = "In model directories whose configuration declares `kv_lora_rank` (Multi-head Latent Attention), checks the attention class that owns the KV LoRA expansion projection (conventionally `kv_b_proj`, or any `nn.Linear(config.kv_lora_rank, ...)`). The expansion must not be applied inside `forward()`; it must live in a dedicated method (e.g. `expand_kv`) that `forward()` calls."
+why_bad = "External backends (vLLM/SGLang) override the KV LoRA expansion so they can store and consume the compressed KV cache directly instead of the materialized key/value states. When the expansion is inlined in `forward()`, there is no single method to override and the backend is forced to materialize the full cache, losing the memory savings that MLA exists to provide."
+diff = '''
++    def expand_kv(self, k_nope, k_pe):
++        key_shape = (*k_nope.shape[:-1], -1, self.qk_nope_head_dim + self.v_head_dim)
++        k_nope = self.kv_b_proj(k_nope).view(key_shape).transpose(1, 2)
++        k_nope, value_states = torch.split(k_nope, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
++        k_pe = k_pe.expand(*k_nope.shape[:-1], -1)
++        key_states = torch.cat((k_nope, k_pe), dim=-1)
++        return key_states, value_states
++
+     def forward(self, hidden_states, ...):
+         ...
+-        k_nope = self.kv_b_proj(k_pass).view(key_shape).transpose(1, 2)
+-        k_nope, value_states = torch.split(k_nope, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
+-        k_pe = k_rot.expand(*k_nope.shape[:-1], -1)
+-        key_states = torch.cat((k_nope, k_pe), dim=-1)
++        key_states, value_states = self.expand_kv(k_pass, k_rot)
+'''
+
+[rules.TRF021]
+description = "Scalar tensors must be filled on-device with torch.full((), ...) instead of torch.tensor(..., device=...)."
+default_enabled = true
+allowlist_models = []
+
+[rules.TRF021.explanation]
+what_it_does = "In modeling_*.py and modular_*.py, checks calls to torch.tensor(<value>, ..., device=<non-cpu>) whose <value> provably evaluates to a Python scalar. Scalar-ness is resolved statically: numeric literals, arithmetic over them, torch.finfo/torch.iinfo fields, scalar-returning builtins and math.* calls, locals bound exactly once, self.<attr> assigned in the class body, and self.config.<field>/config.<field> whose annotation in the companion configuration file is int/float/bool (following attribute_map aliases). Fields that may also be sequences, such as `eos_token_id: int | list[int] | None`, and any expression that cannot be resolved are left alone. Construction-time methods (__init__, _init_weights, __post_init__, post_init) are exempt because they never run inside a capture region."
+why_bad = "torch.tensor(<python scalar>, device=<accelerator>) materialises the value on the host and then issues a host-to-device copy. CUDA graph capture forbids that copy, so the model cannot be captured. torch.full((), <value>, dtype=..., device=...) fills the same 0-d tensor directly on-device with a capturable kernel and no synchronisation."
+diff = '''
+ def get_placeholder_mask(self, input_ids, inputs_embeds):
+     special_image_mask = (
+         inputs_embeds
+         == self.get_input_embeddings()(
+-            torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
++            torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+         )
+     ).all(-1)
+'''
+
+[rules.TRF022]
+description = "_no_split_modules entries must name module classes that exist in the model."
+default_enabled = true
+allowlist_models = []
+
+[rules.TRF022.explanation]
+what_it_does = "Checks that every string in a `_no_split_modules` list on a class in a `modeling_*.py` or `modular_*.py` file names a class that is defined in that file, imported into it, or defined by a sibling module of the same model directory. Complements TRF005, which only validates the shape of the value."
+why_bad = "`device_map` resolves `_no_split_modules` by comparing the strings to `module.__class__.__name__` at runtime. A stale or misspelled name matches nothing and is silently ignored, so the module it was meant to keep together can still be split across devices. Entries naming another model's classes are also redundant and must be dropped rather than corrected: `post_init` already collects `_no_split_modules` from child submodels, so a submodel's layers are registered automatically."
+diff = '''
+ class VideoLlavaPreTrainedModel(PreTrainedModel):
+-    _no_split_modules = ["VideoLlavaVisionAttention"]
+'''
+
+[rules.TRF023]
+description = "Config fields must use canonical dimension names (hidden_size, intermediate_size, num_attention_heads, ...)."
+default_enabled = true
+# openai -> openai-gpt.md and kosmos2 -> kosmos-2.md cannot be derived from the directory name, so the
+# cutoff cannot grandfather them. qwen3_asr mirrors Whisper's encoder config, where d_model is public API.
+allowlist_models = ["kosmos2", "openai", "qwen3_asr"]
+cutoff_date = "2026-06-20"
+
+[rules.TRF023.explanation]
+what_it_does = "In configuration_*.py and modular_*.py, checks classes whose name ends in Config for fields declared under an upstream paper's abbreviation instead of the library's canonical name: d_model/n_embd (hidden_size), d_ff/d_inner/ffn_dim/ffn_hidden_size/expansion_ratio (intermediate_size), d_head (head_dim), n_head/n_heads (num_attention_heads), n_layer/n_layers/num_blocks (num_hidden_layers). Fields are collected from the class body and from __init__/__post_init__ assignments and signature defaults. Ambiguous names that are still idiomatic in parts of the library (num_heads, num_layers, embed_dim, mlp_ratio) are deliberately not flagged. Models contributed before cutoff_date keep their existing names."
+why_bad = "Every generic that reads a model's shape — device_map planning, tensor/pipeline parallel plans, quantization, PEFT, attention-backend selection, `attribute_map` consumers — looks up the canonical names. A config that spells the same quantity `d_model` silently opts out of all of it, and the mismatch has to be rediscovered by a reviewer on every single new model. Derive the checkpoint's own spelling in the conversion script instead."
+diff = '''
+ @strict(accept_kwargs=True)
+ class AcmeConfig(PreTrainedConfig):
+-    d_model: int = 1024
+-    d_ff: int = 4096
+-    n_heads: int = 16
+-    n_layers: int = 24
++    hidden_size: int = 1024
++    intermediate_size: int = 4096
++    num_attention_heads: int = 16
++    num_hidden_layers: int = 24
+'''
+
+[rules.TRF024]
+description = "Layer dimensions must come from the config, not from an integer literal in the modeling file."
+default_enabled = true
+allowlist_models = []
+cutoff_date = "2026-06-20"
+
+[rules.TRF024.explanation]
+what_it_does = "In modeling_*.py and modular_*.py, checks torch.nn layer constructors (Linear, Embedding, LayerNorm, RMSNorm, GroupNorm, BatchNorm*, InstanceNorm*, Conv*d, ConvTranspose*d, Bilinear, MultiheadAttention) for an integer literal greater than 8 in a dimension position, whether passed positionally or by keyword (in_features, out_features, in_channels, out_channels, num_embeddings, embedding_dim, embed_dim, normalized_shape, num_channels, hidden_size). Operator-shape arguments such as kernel_size, stride, padding and num_groups are ignored, and literals up to 8 are allowed so scalar heads, binary classifiers and RGB channel counts stay clean. Models contributed before cutoff_date are exempt."
+why_bad = "A hardcoded width silently pins the module to one checkpoint size: the same architecture at another scale loads with a shape mismatch, and `from_pretrained` cannot report which value is wrong because there is no config field to point at. It also splits the source of truth, so a config that is edited no longer describes the model that gets built."
+diff = '''
+ class AcmeAtomEmbedding(nn.Module):
+     def __init__(self, config):
+         super().__init__()
+-        self.proj = nn.Linear(768, 3072, bias=False)
+-        self.norm = nn.LayerNorm(3072)
++        self.proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
++        self.norm = nn.LayerNorm(config.intermediate_size)
+'''
+
+[rules.TRF025]
+description = "Attention masks must be built once in the model, not rebuilt inside a layer or attention module."
+default_enabled = true
+allowlist_models = []
+cutoff_date = "2026-06-20"
+
+[rules.TRF025.explanation]
+what_it_does = "In modeling_*.py and modular_*.py, checks calls to a mask factory (the masking_utils entry points create_causal_mask, create_bidirectional_mask, create_sliding_window_causal_mask, create_chunked_causal_mask, create_masks_for_generate, and any create_*_mask helper) that occur inside a class which does not inherit from PreTrainedModel. Top-level models and sub-models are where masks are meant to be created, so only plain nn.Module blocks — layers, attention modules, encoders — are in scope."
+why_bad = "Mask construction is O(sequence length squared) work that does not vary per layer. Building it inside the layer repeats that cost once per layer, and because each layer then owns its own mask, the attention backends can no longer be given a single prepared mask — which is how manual padding fixups and per-layer mask divergence get introduced. Create it once in the model and pass it down."
+diff = '''
+ class AcmeLayer(nn.Module):
+     def forward(self, hidden_states, attention_mask=None, **kwargs):
+-        attention_mask = create_causal_mask(
+-            config=self.config, input_embeds=hidden_states, attention_mask=attention_mask, ...
+-        )
+         return self.self_attn(hidden_states, attention_mask, **kwargs)
+
+ class AcmeModel(AcmePreTrainedModel):
+     def forward(self, input_ids=None, attention_mask=None, **kwargs):
++        causal_mask = create_causal_mask(
++            config=self.config, input_embeds=inputs_embeds, attention_mask=attention_mask, ...
++        )
+         for layer in self.layers:
+-            hidden_states = layer(hidden_states, attention_mask, **kwargs)
++            hidden_states = layer(hidden_states, causal_mask, **kwargs)
+'''
+
+[rules.TRF026]
+description = "A module whose forward only delegates to its single submodule adds nothing; inline it."
+default_enabled = true
+allowlist_models = []
+cutoff_date = "2026-06-20"
+
+[rules.TRF026.explanation]
+what_it_does = "In modeling_*.py and modular_*.py, flags a class that is not a PreTrainedModel subclass, defines only __init__ and forward, assigns exactly one self.<attr> in __init__, and whose forward body is exactly `return self.<attr>(...)` for that same attribute. A leading docstring is ignored. Classes with any other method, any additional attribute, or any statement before the return are left alone because they do work of their own."
+why_bad = "The wrapper adds a level to every weight name and to _no_split_modules, tensor-parallel and pipeline plans, and to every conversion mapping, while contributing no computation. Readers then have to open one more class to discover that nothing happens in it, which is the single most common structural review comment on new models. PreTrainedModel subclasses are exempt: those exist for from_pretrained and the auto classes even when the forward only delegates."
+diff = '''
+-class AcmeAtomTransformer(nn.Module):
+-    def __init__(self, config):
+-        super().__init__()
+-        self.encoder = AcmeEncoder(config)
+-
+-    def forward(self, hidden_states, **kwargs):
+-        return self.encoder(hidden_states, **kwargs)
+-
+ class AcmeModel(AcmePreTrainedModel):
+     def __init__(self, config):
+         super().__init__(config)
+-        self.atom_transformer = AcmeAtomTransformer(config)
++        self.encoder = AcmeEncoder(config)
+'''
+
+[rules.TRF027]
+description = "Model files must raise explicit errors instead of using bare `assert`."
+default_enabled = true
+allowlist_models = []
+cutoff_date = "2026-06-20"
+
+[rules.TRF027.explanation]
+what_it_does = "Flags any `assert` statement in modeling_*.py, modular_*.py and configuration_*.py."
+why_bad = "`python -O` strips assert statements, so a shape or config check written as an assert silently disappears in optimised runs. An assert also gives the user a bare AssertionError with no guidance, where a ValueError can name the offending value and what to do about it."
+diff = '''
+ def forward(self, hidden_states):
+-    assert hidden_states.dim() == 3
++    if hidden_states.dim() != 3:
++        raise ValueError(f"Expected a 3D tensor, got shape {tuple(hidden_states.shape)}.")
+'''
+
+[rules.TRF028]
+description = "Model files must carry a complete license header."
+default_enabled = true
+allowlist_models = []
+cutoff_date = "2026-06-20"
+
+[rules.TRF028.explanation]
+what_it_does = "Checks the first 25 lines of modeling_*.py, modular_*.py, configuration_*.py, processing_*.py, image_processing_*.py and video_processing_*.py for a `Licensed under the <name> License` line followed by every clause of the standard warranty paragraph, from `You may obtain a copy of the License at` through `limitations under the License.`. The lines are flattened and lowercased before matching, so wrapping and comment style do not matter. Neither the license name nor the copyright line is checked: BLIP is BSD-3-clause and Sapiens2 carries Meta's own license, and the copyright year and attribution vary per model."
+why_bad = "A new model file that ships without the header leaves its provenance ambiguous, and adding it later means touching a file that has already been released. Matching only the words `Apache License` would accept a header truncated mid-paragraph or mangled by a bad search-and-replace, which is what every header defect in the library actually looks like: bitnet loses the closing `limitations under the License.`, tvp and bridgetower have a stray `=` before every comma, and minimax_m3_vl stops after the URL."
+diff = '''
++# Copyright 2026 The HuggingFace Team. All rights reserved.
++#
++# Licensed under the Apache License, Version 2.0 (the "License");
++# ...
+ """PyTorch Acme model."""
+'''
+
+[rules.TRF029]
+description = "A module taking `config` must not also take arguments that live on the config."
+default_enabled = true
+allowlist_models = ["kosmos2"]
+cutoff_date = "2026-06-20"
+
+[rules.TRF029.explanation]
+what_it_does = "In modeling_*.py and modular_*.py, flags an `__init__` that accepts `config` alongside an argument whose name is unambiguously a config field (hidden_size, num_attention_heads, intermediate_size, head_dim, num_hidden_layers, embed_dim, dropout, eps, patch_size, rope_theta, ...). kosmos2 is allowlisted because its doc page (kosmos-2.md) cannot be derived from the directory name, so the cutoff cannot grandfather it."
+why_bad = "The same number now has two sources of truth and the caller decides which one wins, so editing the config no longer changes the model that gets built. It also makes every call site carry architecture knowledge that belongs inside the module, which is why reviewers ask for it on new models over and over."
+diff = '''
+ class AcmeAttention(nn.Module):
+-    def __init__(self, config, embed_dim, num_heads, dropout):
++    def __init__(self, config, layer_idx=None):
+         super().__init__()
+-        self.embed_dim = embed_dim
+-        self.num_heads = num_heads
++        self.embed_dim = config.hidden_size
++        self.num_heads = config.num_attention_heads
+'''
+
+[rules.TRF030]
+description = "Reaching more than two levels into the config means the module was handed the wrong config."
+default_enabled = true
+allowlist_models = []
+cutoff_date = "2026-06-20"
+
+[rules.TRF030.explanation]
+what_it_does = "In modeling_*.py and modular_*.py, flags attribute chains rooted at `config` or `self.config` that go three or more levels deep. `config.hidden_size` (one hop) and `config.text_config.hidden_size` (two hops, the normal sub-config access) are fine; one violation is reported per line."
+why_bad = "A module that walks `config.diffusion_config.atom_encoder_config.hidden_size` is coupled to the whole config hierarchy rather than to its own slice of it, so it cannot be reused, tested or given a different sub-config. Pass the relevant sub-config down and the chain collapses to one hop."
+diff = '''
+ class AcmeAtomEncoder(nn.Module):
+     def __init__(self, config):
+         super().__init__()
+-        self.norm = AcmeLayerNorm(config.diffusion_config.atom_encoder_config.hidden_size)
++        self.norm = AcmeLayerNorm(config.hidden_size)
+'''
+
+[rules.TRF031]
+description = "Dataclasses in modeling files must inherit ModelOutput."
+default_enabled = true
+allowlist_models = []
+cutoff_date = "2026-06-20"
+
+[rules.TRF031.explanation]
+what_it_does = "In modeling_*.py and modular_*.py, flags a top-level `@dataclass` class whose bases do not include something ending in `Output`."
+why_bad = "A plain dataclass does not index like a tuple, does not survive `return_dict=False`, and is invisible to @auto_docstring, so its fields never reach the generated API docs. Inheriting ModelOutput gets all three for free."
+diff = '''
+ @auto_docstring
+ @dataclass
+-class AcmeStructureOutput:
++class AcmeStructureOutput(ModelOutput):
+     positions: torch.Tensor
+     confidence: torch.Tensor
+'''
+
+[rules.TRF032]
+description = "Masked positions must be filled with torch.finfo(dtype).min, not a magic negative number."
+default_enabled = true
+allowlist_models = []
+cutoff_date = "2026-06-20"
+
+[rules.TRF032.explanation]
+what_it_does = "In modeling_*.py and modular_*.py, flags masked_fill, masked_fill_, full, full_like and new_full called with a negated numeric literal of magnitude 1e3 or more."
+why_bad = "A hardcoded -1e9 overflows to -inf in float16 and is not nearly the smallest value in float32, so the same mask behaves differently per dtype and can produce NaNs after softmax. `torch.finfo(dtype).min` is the smallest representable value in whatever dtype is actually running."
+diff = '''
+-attention_scores = attention_scores.masked_fill(~mask, -1e9)
++attention_scores = attention_scores.masked_fill(~mask, torch.finfo(attention_scores.dtype).min)
+'''
+
+[rules.TRF033]
+description = "Hyperparameters must be set on the config, not mutated through a set_* method."
+default_enabled = true
+allowlist_models = []
+cutoff_date = "2026-06-20"
+
+[rules.TRF033.explanation]
+what_it_does = "In modeling_*.py and modular_*.py, flags methods whose name starts with `set_`, except the PreTrainedModel contract methods set_input_embeddings, set_output_embeddings, set_decoder, set_encoder, set_attn_implementation and set_default_language."
+why_bad = "A setter makes the model's behaviour depend on call order: the value is not in the config, so it is not saved, not restored by from_pretrained, and not visible to anything planning device maps or parallelism. Users then have to know to call it, and forgetting is silent."
+diff = '''
+ class AcmeTriangleAttention(nn.Module):
+-    def set_chunk_size(self, chunk_size):
+-        self.chunk_size = chunk_size
++    def __init__(self, config):
++        super().__init__()
++        self.chunk_size = config.chunk_size
+'''
+
+[rules.TRF034]
+description = "Layer classes held in an nn.ModuleList must subclass GradientCheckpointingLayer."
+default_enabled = true
+# 24 findings over these 16 models, and they split in two.
+# False positive (13 models): the rule resolves a class's base chain only inside the file being linted, so
+# a `modular_*.py` layer inheriting another model's layer looks unpatched while the generated
+# `modeling_*.py` does subclass `GradientCheckpointingLayer` -- checked class by class for cohere_compass,
+# cosmos3_edge, granite_swa, granitemoe_swa, hunyuan_vl, kimi_k25, muse_glimmer, muse_glimmer_assistant,
+# radio, step3p7, tipsv2, x_clip (both encoder layers), xcodec2 (`Xcodec2DecoderLayer`), so gradient
+# checkpointing does work at runtime. Reported upstream as mlinter#27.
+# Real (5 models), left for a follow-up: `dinov3_convnext` (`DINOv3ConvNextLayer`), `openai` (`Block`),
+# `tipsv2_dpt` (3 DPT head layers), `x_clip` (`PromptGeneratorLayer`), `xcodec2` (`Xcodec2ResNetBlock`) --
+# x_clip and xcodec2 are in both groups, hence still listed.
+allowlist_models = ["cohere_compass", "cosmos3_edge", "dinov3_convnext", "granite_swa", "granitemoe_swa", "hunyuan_vl", "kimi_k25", "muse_glimmer", "muse_glimmer_assistant", "openai", "radio", "step3p7", "tipsv2", "tipsv2_dpt", "x_clip", "xcodec2"]
+cutoff_date = "2026-06-20"
+
+[rules.TRF034.explanation]
+what_it_does = "In modeling_*.py and modular_*.py, flags a locally-defined class whose name ends in `Layer` or `Block`, instantiated inside an `nn.ModuleList(...)`, that does not reach `GradientCheckpointingLayer` through its local base chain. One violation per layer class. ModuleLists of projections, heads or experts are out of scope because they are not checkpointing boundaries."
+why_bad = "`gradient_checkpointing_enable()` wraps layers by asking each one whether it is a GradientCheckpointingLayer. A plain nn.Module in the stack is skipped silently, so training appears to use checkpointing and still allocates full activations for those layers, and the OOM shows up far from the cause."
+diff = '''
+-class AcmeDecoderLayer(nn.Module):
++class AcmeDecoderLayer(GradientCheckpointingLayer):
+     def __init__(self, config, layer_idx):
+         super().__init__()
+'''
+
+[rules.TRF035]
+description = "Model files must not silence the linter with `# noqa`."
+default_enabled = true
+# 4 sites, one per model, and deleting the `# noqa` only moves the failure to ruff:
+#   `hunyuan_vl`      `modular_hunyuan_vl.py:53`       F401, `repeat_kv` re-exported for downstream tooling
+#   `step3p7`         `modular_step3p7.py:68`          F401, import that steers the converter to Qwen2-VL's
+#                                                      2-axis vision RoPE instead of MiniMax's 3-axis one
+#   `nemotron3_5_asr` `modular_nemotron3_5_asr.py:340` F821, quoted forward reference to a cache class
+#                                                      defined in another model
+#   `zaya`            `modular_zaya.py:287`            F821, `del op_size` drops a name that only exists in
+#                                                      the inherited parent body
+# The last three are modular-converter mechanics, so the fix belongs upstream, not in the model files.
+allowlist_models = ["hunyuan_vl", "nemotron3_5_asr", "step3p7", "zaya"]
+cutoff_date = "2026-06-20"
+
+[rules.TRF035.explanation]
+what_it_does = "Flags `# noqa` comments, with or without explicit codes, in modeling_*.py, modular_*.py and configuration_*.py."
+why_bad = "Model files are ordinary code held to the repo's lint rules; a suppression there means the underlying issue was left in place, and blanket `# noqa` also hides every future violation on that line. Reviewers spend threads deleting these on new models, and they cluster in machine-generated code where the generator silenced the linter rather than satisfying it."
+diff = '''
+-from ...modeling_utils import PreTrainedModel  # noqa: F401
++from ...modeling_utils import PreTrainedModel
+'''
+
+[rules.TRF036]
+description = "nn.Sequential hides the forward flow; declare the submodules explicitly."
+default_enabled = true
+allowlist_models = ["x_clip"]
+cutoff_date = "2026-06-20"
+
+[rules.TRF036.explanation]
+what_it_does = "In modeling_*.py and modular_*.py, flags any `nn.Sequential(...)` construction."
+why_bad = "Sequential names its children by position, so weights land at `mlp.0.weight` and `mlp.2.weight`; the conversion mapping, _tied_weights_keys and every parallelism plan then have to reference indices, and inserting a layer renames everything after it. It also hides the forward, so the dtype casts and residuals between the steps are not visible where they happen."
+diff = '''
+-        self.mlp = nn.Sequential(
+-            nn.Linear(config.hidden_size, config.intermediate_size),
+-            nn.GELU(),
+-            nn.Linear(config.intermediate_size, config.hidden_size),
+-        )
++        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
++        self.act = ACT2FN[config.hidden_act]
++        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+'''
+
+[rules.TRF037]
+description = "torch.einsum is hard to read; prefer explicit matmul/transpose operations."
+default_enabled = false
+allowlist_models = ["x_clip"]
+cutoff_date = "2026-06-20"
+
+[rules.TRF037.explanation]
+what_it_does = "In modeling_*.py and modular_*.py, flags calls to einsum and reports the equation string when it is a literal. Disabled by default: einsum is occasionally the clearest way to express a contraction, so this is opt-in rather than a hard convention."
+why_bad = "An einsum equation encodes the shapes in a notation the reader has to decode, and when the equation is built dynamically the reader cannot tell which contraction runs at all. Reviewers ask for einsums to be expanded on almost every model that introduces them, which is why it is worth having the check available even though it is not enforced."
+diff = '''
+-        pair_bias = torch.einsum("bqhc,bkhc->bhqk", query_states, key_states)
++        pair_bias = query_states.permute(0, 2, 1, 3) @ key_states.permute(0, 2, 3, 1)
+'''
+
+[rules.TRF038]
+description = "Every modeling-family source file needs a matching test file under tests/models/."
+default_enabled = true
+# 49 findings over 38 models. Verified during review: only `nougat` and `glmga` genuinely have no test.
+# For the rest the rule pairs each modeling-family source file with its own test file, so a family that
+# has a processor / feature extractor but no dedicated test for it is flagged even though the model itself
+# is tested. Agreed in review: enforce for new models, backfill the old families opportunistically, rather
+# than block this PR on ~30 test files. `sam2` no longer fires and was dropped.
+allowlist_models = ["bros", "cohere_asr", "emu3", "exaone4_5", "gemma4", "glm46v", "glm_image", "glmga", "granite_speech", "granite_speech5", "higgs_audio_v2", "inkling", "kyutai_speech_to_text", "lasr", "minimax_m3_vl", "moonshine_streaming", "nemotron_asr_streaming", "nemotron3_5_asr", "nougat", "paddleocr_vl", "pe_audio", "pe_video", "pe_audio_video", "pi0", "pp_formulanet", "rf_detr", "sam2_video", "sam3_tracker", "sam3_tracker_video", "sam3_video", "siglip", "siglip2", "tvp", "video_llava", "vilt", "vjepa2", "voxtral", "voxtral_realtime", "x_clip"]
+
+[rules.TRF038.explanation]
+what_it_does = "For each modeling_*.py, processing_*.py, image_processing_*.py, video_processing_*.py and feature_extraction_*.py file, checks that a corresponding tests/models/<model>/test_*.py file exists (e.g. modeling_acme.py -> tests/models/acme/test_modeling_acme.py). configuration_*.py is exempt since config classes are conventionally covered by ConfigTester inside the companion test_modeling_*.py file. modular_*.py files are handled separately: since a single modular file can define modeling, processing, image/video-processor and config classes together, the classes it defines are classified by name suffix (XxxModel/XxxPreTrainedModel/XxxForCausalLM -> modeling, XxxImageProcessor(Fast) -> image processing, XxxProcessor -> processing, XxxVideoProcessor -> video processing, XxxFeatureExtractor -> feature extraction, XxxConfig -> skipped), and one violation is reported per missing test file, not just one per source file. There is no `# trf-ignore: TRF038` support for this rule: use `allowlist_models` if a model genuinely cannot ship a test yet, so the exemption is visible in review."
+why_bad = "A source file with no test file has no regression coverage: a broken forward pass, a bad conversion mapping, or a processor bug can land and stay broken indefinitely. Every model can be exercised with a dummy config and randomly initialized weights, so 'nothing to test' is not a valid reason to skip this."
+diff = '''
+ src/transformers/models/acme/modeling_acme.py
++tests/models/acme/test_modeling_acme.py
+'''
+
+[rules.TRF039]
+description = "Imports guarded by is_*_available() must be removed once nothing in the file uses them."
+default_enabled = true
+allowlist_models = []
+
+[rules.TRF039.explanation]
+what_it_does = "Finds `if is_*_available(): import ...` blocks (including combinations like `is_vision_available() and is_torch_available()`) and checks whether the imported name is referenced anywhere else in the file, including inside string type hints and __all__. Flags the import if it is not."
+why_bad = "ruff's unused-import check does not clean these up, because the import is reachable and 'used' as far as static analysis of the block alone is concerned. When code is refactored to no longer need PIL.Image, torch, etc., the guarded import is easy to forget and lingers as dead weight and a misleading signal about the file's real dependencies."
+diff = '''
+ if is_vision_available():
+-    from PIL import Image
+'''
+
+[rules.TRF040]
+description = "@can_return_tuple must not be combined with @capture_outputs."
+default_enabled = true
+allowlist_models = []
+
+[rules.TRF040.explanation]
+what_it_does = "In modeling_*.py and modular_*.py, checks methods decorated with both @capture_outputs and @can_return_tuple. Complements TRF003, which covers manual return_dict branching in forward()."
+why_bad = "@capture_outputs and @can_return_tuple both pop return_dict, thus only the outermost decorator sees the true value. @capture_outputs already handles to_tuple conversion which makes @can_return_tuple redundant."
+diff = '''
+-@can_return_tuple
+ @merge_with_config_defaults
+ @capture_outputs
+ @auto_docstring
+ def forward(self, x):
+     return AcmeModelOutput(last_hidden_state=x)
+'''
+
+[rules.TRF041]
+description = "A config-gated branch must carry a `# CODEPATH:` note saying which checkpoints diverge."
+default_enabled = true
+# 35 findings over these 13 models: openai(11), dinov3_vit(4), inkling(4), kosmos2(3), axk2(2),
+# cohere_compass(2), timm_backbone(2), timm_wrapper(2), kimi_k25(1), muse_glimmer(1), tipsv2(1),
+# vitpose_backbone(1), x_clip(1). Every one needs its `# CODEPATH:` note to name the checkpoints that take
+# each path, which only the model owner knows -- guessing would be worse than the missing note -- so they
+# go out as per-model follow-ups. `mimo_v2_flash` no longer fires and was dropped.
+allowlist_models = ["axk2", "cohere_compass", "dinov3_vit", "inkling", "kimi_k25", "kosmos2", "muse_glimmer", "openai", "timm_backbone", "timm_wrapper", "tipsv2", "vitpose_backbone", "x_clip"]
+cutoff_date = "2026-06-20"
+
+[rules.TRF041.explanation]
+what_it_does = "In modeling_*.py and modular_*.py, flags every `if`/`elif` statement and every conditional expression whose condition reads a `config.*` or `self.config.*` attribute and that does not carry a `# CODEPATH:` comment. The comment is accepted on the branch line itself or anywhere in the contiguous comment block directly above it, so it can head a multi-line explanation. Deliberately broad: any config attribute in the condition counts, not only boolean feature flags, because a branch on a numeric or optional config field forks the graph exactly as much as a branch on a flag does. One shape is exempt outright, by structure rather than by name: `X if X is not None else fallback`, where the field under test is itself one of the two results. That yields the field when set and a default when not, which is `getattr(config, x, default)` spelled long, so it cannot fork the graph and there is no path to name. Merely mentioning None does not qualify — `config.vision_config is not None` selects a whole extra tower and still owes a note. A field that gates no checkpoint divergence at all, such as `problem_type` selecting a loss or `hidden_act` looking up an activation, can be exempted for a whole file with a module-level `# trf-ignore: TRF041 config.problem_type, config.hidden_act` directive at column 0, naming the fields comma- or space-separated; `self.config.x`, `config.x` and `x` all name the same field. The directive has to name at least one field, so a bare `# trf-ignore: TRF041` keeps its per-line meaning instead of muting the file. Exemption is per field, not per branch: a condition reading several config fields is skipped only when every one of them is exempt, so `if config.problem_type and config.use_cache` still has to explain itself when only `problem_type` is named."
+why_bad = "Every config-gated branch is a second architecture living in the same file, and the reader cannot tell from the code whether both halves are reachable. That is why reviewers ask \"is this ever used?\", \"are they all needed?\" and \"why are there so many cases?\" on almost every new model, and why dead experimental branches survive for releases. This rule does not forbid the branch; it borrows Rust's `// SAFETY:` discipline and makes the author write down the justification next to it. A branch nobody can name a checkpoint for is a branch to delete, and the note makes that obvious at review time instead of three rounds later."
+diff = '''
++        # CODEPATH: ESMC-6B ships pre-normalised embeddings, the 300M/600M checkpoints do not.
+         if config.use_embedding_norm:
+             hidden_states = self.embedding_norm(hidden_states)
+
+-        if config.msa_encoder_enabled:
+-            hidden_states = self.msa_encoder(hidden_states)
++        # no released checkpoint sets msa_encoder_enabled -> branch removed
+'''
+
+[rules.TRF042]
+description = "A tokenizer test must exercise the shared TokenizerTesterMixin suite."
+default_enabled = true
+allowlist_models = ["auto"]
+cutoff_date = "2026-06-20"
+
+[rules.TRF042.explanation]
+what_it_does = "In tests/models/*/test_tokenization_*.py, checks that the file defines a test class inheriting TokenizerTesterMixin. Only classes the test runner collects are considered — a `TestCase` base, or the `*Test` naming convention when the base is another model's test class — so files whose only classes are helpers are skipped, and a helper mixing in the suite does not satisfy the rule on a real test class's behalf. The violation is reported on the first test class that does not run the suite. Inheritance is followed through base classes defined in the same file and into another model's tokenizer test imported by name, so a class deriving from one that already carries the mixin is satisfied; a base the tests tree cannot resolve never counts as carrying it. `auto` is allowlisted because test_tokenization_auto.py tests AutoTokenizer resolution rather than one model's tokenizer. Ships with the file discovery widened to tests/models/**/test_tokenization_*.py, which affects which files the linter walks for every rule -- existing rules all gate on the file-name prefix, so none of them see these files."
+why_bad = "TokenizerTesterMixin is where encode/decode round-tripping, padding and truncation, special-token handling, added-token persistence, and save/load equivalence are actually checked. A tokenizer test that only asserts a couple of hand-written token id lists passes while the tokenizer is broken in every one of those dimensions, and the gap is invisible in review because the file looks like it has tests. Reviewers ask for the mixin by name on new tokenizers; five of the six tokenizer tests missing it predate 2026."
+diff = '''
+-class AcmeTokenizationTest(unittest.TestCase):
++class AcmeTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
++    tokenizer_class = AcmeTokenizer
++    test_slow_tokenizer = True
+'''
+
+[rules.TRF043]
+description = "Attention classes must not declare position_ids in their forward signature; it flows via **kwargs."
+default_enabled = true
+# This rule has no `cutoff_date`, so it fires across the pre-existing corpus: 21 attention classes, one
+# site each. 14 are legacy `modeling_*.py` (chameleon, clvp, codegen, falcon, gpt_neox_japanese, gptj,
+# idefics, idefics2, moshi, persimmon, prophetnet, qwen2_vl, recurrent_gemma, stablelm), 7 are modular
+# (axk2, deepseek_v32, deepseek_v4, gemma4, glm_moe_dsa, ministral3, mistral4). Dropping `position_ids`
+# from a public `forward` signature is a breaking change per model, so each is its own follow-up. Upstream:
+# a `cutoff_date` would express the legacy half better than a list this long.
+allowlist_models = ["axk2", "chameleon", "clvp", "codegen", "deepseek_v32", "deepseek_v4", "falcon", "gemma4", "glm_moe_dsa", "gpt_neox_japanese", "gptj", "idefics", "idefics2", "ministral3", "mistral4", "moshi", "persimmon", "prophetnet", "qwen2_vl", "recurrent_gemma", "stablelm"]
+
+[rules.TRF043.explanation]
+what_it_does = "Checks forward signatures of classes whose name ends in Attention for a declared position_ids parameter."
+why_bad = "position_ids is consumed downstream by flash-attention padding-free training and must flow through **kwargs. An attention class that names it in the signature swallows it before the attention interface can read it; the llama standard passes position_embeddings plus **kwargs."
+diff = '''
+ class AcmeAttention(nn.Module):
+     def forward(
+         self,
+         hidden_states,
+         position_embeddings,
+         attention_mask=None,
+-        position_ids=None,
+         **kwargs: Unpack[TransformersKwargs],
+     ):
+'''
+
+[rules.TRF044]
+description = "cache_position must not appear as a parameter in modeling code; it is removed framework surface."
+default_enabled = true
+allowlist_models = []
+
+[rules.TRF044.explanation]
+what_it_does = "Checks every function in modeling_*.py and modular_*.py for a parameter named cache_position."
+why_bad = "cache_position was removed from all models in v5. Code that reintroduces it (usually copied from pre-v5 sources) threads a dead argument through every layer; the cache update call is past_key_values.update(key_states, value_states, self.layer_idx) with no position threading."
+diff = '''
+ def forward(
+     self,
+     hidden_states,
+     past_key_values=None,
+-    cache_position=None,
+     **kwargs,
+ ):
+-    key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_position)
++    key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+'''
+
+[rules.TRF045]
+description = "forward must not declare output_attentions/output_hidden_states/return_dict; decorators own them."
+default_enabled = true
+# kosmos2 and openai have doc pages (kosmos-2.md, openai-gpt.md) whose names cannot be derived from the
+# model directory, and the timm wrappers have no contribution date line, so the cutoff cannot exempt them.
+allowlist_models = ["kosmos2", "openai", "timm_backbone", "timm_wrapper"]
+cutoff_date = "2026-06-20"
+
+[rules.TRF045.explanation]
+what_it_does = "Checks forward signatures in modeling_*.py and modular_*.py for the legacy output_attentions, output_hidden_states, and return_dict parameters. Models contributed before the cutoff date are exempt."
+why_bad = "The decorator stack owns output control: @capture_outputs resolves output_* flags against the config and records the tensors via _can_record_outputs, and @can_return_tuple handles return_dict. Declaring them in the signature reintroduces manual flag threading that drifts from the decorator behavior."
+diff = '''
++@capture_outputs
+ def forward(
+     self,
+     input_ids,
+-    output_attentions=None,
+-    output_hidden_states=None,
+-    return_dict=None,
+     **kwargs: Unpack[TransformersKwargs],
+ ):
+'''
+
+[rules.TRF046]
+description = "forward must not write module attributes; modules are stateless in forward."
+default_enabled = true
+# No `cutoff_date`: 26 findings over 13 pre-existing models, mostly rotary/position caches written into
+# `self` during `forward` (clvp, codegen, recurrent_gemma, seamless_m4t, udop, wav2vec2_conformer, ...).
+# 9 are legacy `modeling_*.py`, 4 modular (qwen2_5_omni, qwen3_omni_moe, switch_transformers,
+# wav2vec2_conformer). Making a module stateless changes runtime behavior, so each model needs its own PR
+# with its tests re-run.
+allowlist_models = ["clvp", "codegen", "ctrl", "fastspeech2_conformer", "nllb_moe", "qwen2_5_omni", "qwen3_omni_moe", "recurrent_gemma", "seamless_m4t", "switch_transformers", "trocr", "udop", "wav2vec2_conformer"]
+
+[rules.TRF046.explanation]
+what_it_does = "Checks forward methods in modeling_*.py and modular_*.py for assignments to self attributes."
+why_bad = "Hidden state written during forward breaks batching, torch.compile, and reasoning about the module. Carried state is passed explicitly (cache objects, the generate loop); values that depend only on config or static shapes belong in __init__."
+diff = '''
+ def forward(self, hidden_states):
+-    self.sequence_length = hidden_states.shape[1]
+-    embeddings = self.compute_embeddings(self.sequence_length)
++    embeddings = self.compute_embeddings(hidden_states.shape[1])
+'''
+
+[rules.TRF047]
+description = "Image/video processors are stateless: preprocess/_preprocess/post_process_* must not write self attributes."
+default_enabled = true
+allowlist_models = []
+
+[rules.TRF047.explanation]
+what_it_does = "Checks preprocess, _preprocess, __call__, and post_process* methods in image_processing_*.py and video_processing_*.py for assignments to self attributes."
+why_bad = "A processor that carries state between calls breaks preprocess-many-then-postprocess batching: the second preprocess overwrites the state the first postprocess needs. Return the value or pass it through the method chain."
+diff = '''
+ def _preprocess(self, images, **kwargs):
+-    self.original_sizes = [image.shape[-2:] for image in images]
++    original_sizes = [image.shape[-2:] for image in images]
+     ...
++    return BatchFeature(data={"pixel_values": pixel_values, "original_sizes": original_sizes})
+'''
+
+[rules.TRF048]
+description = "_tied_weights_keys must be a dict mapping target to source, not the pre-v5 list form."
+default_enabled = true
+allowlist_models = []
+
+[rules.TRF048.explanation]
+what_it_does = "Checks class-level _tied_weights_keys declarations for list/tuple/set literals."
+why_bad = "v5 changed _tied_weights_keys to a dict mapping the tied target parameter to its source. The list form no longer tells the loading code which parameter is the source, so tying, device_map computation, and saving misbehave silently."
+diff = '''
+ class AcmeForCausalLM(AcmePreTrainedModel):
+-    _tied_weights_keys = ["lm_head.weight"]
++    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+'''
+
+[rules.TRF049]
+description = "Weight initialization belongs in _init_weights, never in __init__ (meta-device init discards it)."
+default_enabled = true
+allowlist_models = ["convbert", "emu3", "esm", "granite_speech", "unispeech_sat"]
+
+[rules.TRF049.explanation]
+what_it_does = "Checks __init__ methods in modeling_*.py and modular_*.py for init calls: nn.init.* / init.* primitives and in-place initializers on own parameters (self.weight.data.normal_())."
+why_bad = "Models instantiate on the meta device, so tensor values written in __init__ are discarded before loading; a parameter initialized only there has random content when fine-tuning from scratch or after a meta-device reload. Allocate with torch.empty in __init__ and initialize in _init_weights."
+diff = '''
+ class AcmeEmbeddings(nn.Module):
+     def __init__(self, config):
+         super().__init__()
+         self.position_embedding = nn.Parameter(torch.empty(config.num_positions, config.hidden_size))
+-        nn.init.trunc_normal_(self.position_embedding, std=config.initializer_range)
+
+ class AcmePreTrainedModel(PreTrainedModel):
+     def _init_weights(self, module):
+         super()._init_weights(module)
++        if isinstance(module, AcmeEmbeddings):
++            init.trunc_normal_(module.position_embedding, std=self.config.initializer_range)
+'''
+
+[rules.TRF050]
+description = "One rotary module per model: attention classes must not instantiate their own rotary embedding."
+default_enabled = true
+allowlist_models = ["edgetam_video", "moshi", "recurrent_gemma", "sam2_video"]
+
+[rules.TRF050.explanation]
+what_it_does = "Checks __init__ methods of classes whose name ends in Attention for calls to a *RotaryEmbedding class."
+why_bad = "The Model owns a single rotary_emb, builds inv_freq once, and passes cos/sin down as position_embeddings. A rotary module per attention layer duplicates buffers, recomputes frequencies per layer, and diverges from the interface contract that attention receives position_embeddings."
+diff = '''
+ class AcmeAttention(nn.Module):
+     def __init__(self, config, layer_idx):
+         super().__init__()
+-        self.rotary_emb = AcmeRotaryEmbedding(config)
+
+ class AcmeModel(AcmePreTrainedModel):
+     def __init__(self, config):
+         super().__init__(config)
++        self.rotary_emb = AcmeRotaryEmbedding(config)
+'''
+
+[rules.TRF051]
+description = "Modeling code must not branch on _attn_implementation; the attention interface owns dispatch."
+default_enabled = true
+# No `cutoff_date`: 10 findings over 9 models, in two shapes that need a case-by-case call with the
+# attention-interface owner. Legacy dispatch in plain `modeling_*.py`: decision_transformer, falcon, gpt2.
+# Backend-conditional tensor handling in modular MLA/DSA-style models the interface cannot express yet:
+# axk2, deepseek_v32, diffusion_gemma, glm_moe_dsa, minimax_m3_vl, qwen2_5_omni. Follow-ups either way.
+allowlist_models = ["axk2", "decision_transformer", "deepseek_v32", "diffusion_gemma", "falcon", "glm_moe_dsa", "gpt2", "minimax_m3_vl", "qwen2_5_omni"]
+
+[rules.TRF051.explanation]
+what_it_does = "Checks modeling_*.py and modular_*.py for comparisons against a _attn_implementation attribute."
+why_bad = "Backend dispatch belongs to ALL_ATTENTION_FUNCTIONS.get_interface, and backend-conditional tensor munging (padding, reshaping) belongs in the shared wrappers under integrations/. Inline branching keeps the model body kernel-aware and breaks when new backends register."
+diff = '''
+-if self.config._attn_implementation == "flash_attention_2":
+-    attn_output = flash_path(query_states, key_states, value_states)
+-else:
+-    attn_output = eager_path(query_states, key_states, value_states)
++attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(self.config._attn_implementation, eager_attention_forward)
++attn_output, attn_weights = attention_interface(self, query_states, key_states, value_states, ...)
+'''
+
+[rules.TRF052]
+description = "No *_ATTENTION_CLASSES dispatch dicts; attention backends route through the attention interface."
+default_enabled = true
+allowlist_models = ["bark", "data2vec", "falcon", "git", "gpt_neo", "gptj", "sam", "superglue"]
+
+[rules.TRF052.explanation]
+what_it_does = "Checks modeling_*.py and modular_*.py for module-level assignments to names ending in _ATTENTION_CLASSES."
+why_bad = "Per-backend attention classes selected from a dict are the pre-interface idiom: three near-identical classes drift apart, and hub attention kernels registered into ALL_ATTENTION_FUNCTIONS never reach them. One attention class dispatching through the interface replaces the dict; do not propagate it from a legacy parent."
+diff = '''
+-ACME_ATTENTION_CLASSES = {
+-    "eager": AcmeAttention,
+-    "flash_attention_2": AcmeFlashAttention2,
+-    "sdpa": AcmeSdpaAttention,
+-}
++class AcmeAttention(nn.Module):
++    def forward(self, ...):
++        attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(self.config._attn_implementation, eager_attention_forward)
+'''
+
+[rules.TRF053]
+description = "No manual label shifting in modeling code; self.loss_function owns it."
+default_enabled = true
+# No `cutoff_date`: 37 findings over 15 pre-existing models that slice `shift_logits` / `shift_labels` by
+# hand, 12 of them in legacy `modeling_*.py` and 3 modular (csm, gemma3, modernbert_decoder). Each move to
+# `self.loss_function` has to be checked against that model's own loss -- encoder-decoder models pass
+# already-shifted labels -- so they go one model per PR.
+allowlist_models = ["blip_2", "clvp", "csm", "gemma3", "git", "gpt2", "granite_speech", "imagegpt", "llama4", "mamba", "modernbert_decoder", "moshi", "openai", "qwen2_audio", "xlstm"]
+
+[rules.TRF053.explanation]
+what_it_does = "Checks modeling_*.py and modular_*.py for assignments that build shift_logits/shift_labels (and shifted_ variants) by slicing, as in labels[..., 1:]. Receiving already-shifted labels (shift_labels = kwargs.pop(\"shift_labels\", labels)) is the correct idiom and is not flagged."
+why_bad = "self.loss_function shifts labels itself, so modeling code that pre-shifts trains on doubly-shifted targets or forces a bespoke loss path. Decoder-only models pass the raw labels and let the loss shift them. Encoder-decoder models are the mirror case: their labels are already shifted because the decoder input gets the decoder start token prepended, so they must pass shift_labels=labels to stop the loss from shifting again. Double-shift is the recurring training-loss bug (Git/Florence2/Moonshine family)."
+diff = '''
+ if labels is not None:
+-    shift_logits = logits[..., :-1, :].contiguous()
+-    shift_labels = labels[..., 1:].contiguous()
+-    loss = nn.functional.cross_entropy(shift_logits.view(-1, self.config.vocab_size), shift_labels.view(-1))
++    # decoder-only: labels are unshifted, the loss shifts them
++    loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size)
++    # encoder-decoder: labels are already shifted, hand them over as shift_labels
++    loss = self.loss_function(logits=logits, labels=labels, shift_labels=labels, vocab_size=self.config.vocab_size)
+'''
+
+[rules.TRF054]
+deprecated = true
+description = "Removed in 0.1.4: flagged self.<media>_token_id assignments in processor __init__, too noisy on legitimate processor code."
+
+[rules.TRF055]
+description = "`config` on a PreTrainedModel subclass must be an annotation (`config: SomeConfig`), not an assignment (`config = SomeConfig`)."
+default_enabled = true
+allowlist_models = []
+
+[rules.TRF055.explanation]
+what_it_does = "Checks that PreTrainedModel subclasses in modeling_*.py and modular_*.py do not assign `config = SomeConfig` as a class attribute."
+why_bad = "`PreTrainedModel.__init_subclass__` derives `config_class` by looking for a `config` **annotation** via `inspect.get_annotations(cls)`. An assignment (`config = SomeConfig`) is invisible to this mechanism: it creates a stray class attribute but `inspect.get_annotations` returns `None` for it, so the subclass falls back to inheriting the parent's `config_class` instead of picking up the intended config. A pure annotation (`config: SomeConfig`) has no runtime value and does not create an attribute, so it is correctly detected by `inspect.get_annotations` and sets `config_class` to the right class."
+diff = '''
+ class Gemma4VisionModel(Gemma4PreTrainedModel):
+     """The Gemma 4 Vision Encoder."""
+-    config = Gemma4VisionConfig
++    config: Gemma4VisionConfig
+'''
+
+[rules.TRF056]
+description = "forward() must not materialize tensors with .item() or .tolist()."
+default_enabled = true
+allowlist_models = ["hunyuan_vl", "kimi_k25"]
+cutoff_date = "2026-06-20"
+
+[rules.TRF056.explanation]
+what_it_does = "In modeling_*.py and modular_*.py, flags `.item()` and `.tolist()` calls inside any `forward`. A `.tolist()` whose result is the split-size argument of `split(...)`, is exempt as torch.split needs Python ints."
+why_bad = "Both calls read a tensor back to the host, so dynamo cannot trace them resulting in a graph break."
+diff = '''
+-        for grid, item in zip(grid_thw.tolist(), split_items):
+-            _, height, width = grid
+-            merged.append(self.patch_merger(item, size=(height, width)))
++        for grid, item in zip(grid_thw, split_items):
++            merged.append(self.patch_merger(item, size=(grid[1], grid[2])))
+'''
+
+[rules.TRF057]
+description = "Public model, config, output and processor classes and their public methods must be decorated with @auto_docstring."
+default_enabled = true
+# no contribution date
+allowlist_models = ["kosmos2", "timm_backbone", "timm_wrapper", "vitpose_backbone", "wav2vec2_with_lm", "x_clip"]
+cutoff_date = "2026-06-20"
+
+[rules.TRF057.explanation]
+what_it_does = "Checks `@auto_docstring` on the classes that need it: public `PreTrainedModel` subclasses (`<Model>PreTrainedModel`, `<Model>Model`, `<Model>For<Task>`, backbones), `PreTrainedConfig` subclasses, `ModelOutput` subclasses, image processors and `ProcessorMixin` subclasses, and on their public methods: `forward`, `get_image_features`, `get_video_features`, `get_audio_features`, `get_text_features`, `preprocess` and `__call__`. A class or method in a `modular_*.py` file is checked against the files generated from it."
+why_bad = "Without the decorator, a class ships with no intro and no parameter documentation, and a method with no argument documentation, no `Returns` section and no usage example, so the standard descriptions in `auto_docstring.py` have to be hand-written per model instead."
+diff = '''
++@auto_docstring
+ @dataclass
+ class AcmeModelOutputWithPast(ModelOutput):
+     logits: torch.FloatTensor | None = None
+
++@auto_docstring
+ class AcmeForConditionalGeneration(AcmePreTrainedModel):
++    @auto_docstring
+     def forward(self, input_ids, pixel_values=None, **kwargs):
+         ...
 '''
