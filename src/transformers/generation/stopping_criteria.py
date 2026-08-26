@@ -462,8 +462,9 @@ class StopStringCriteria(StoppingCriteria):
                     + max_valid_end_lens * i
                     + len(possible_end_lens),
                 ] = possible_end_lens
-            for token, token_idx in zip(token_list, token_indices):
-                gather_vec[token_idx, -1] = len(token)
+
+        for token, token_idx in zip(token_list, token_indices):
+            gather_vec[token_idx, -1] = len(token)
 
         gather_vec = torch.tensor(gather_vec, dtype=torch.int32)
 

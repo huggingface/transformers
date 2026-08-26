@@ -318,6 +318,7 @@ IGNORE_NON_TESTED = (
 # trigger the common tests.
 TEST_FILES_WITH_NO_COMMON_TESTS = [
     "models/decision_transformer/test_modeling_decision_transformer.py",
+    "models/esmfold2/test_modeling_esmfold2.py",
     "models/camembert/test_modeling_camembert.py",
     "models/mbart/test_modeling_mbart.py",
     "models/mt5/test_modeling_mt5.py",
@@ -375,6 +376,7 @@ IGNORE_NON_AUTO_CONFIGURED = (
         "CLIPSegVisionModel",
         "CLIPSegTextModel",
         "EsmForProteinFolding",
+        "EsmFold2Model",
         "GPTSanJapaneseModel",
         "TimeSeriesTransformerForPrediction",
         "InformerForPrediction",
@@ -581,6 +583,7 @@ DOC_MODEL_NAMES_NOT_IN_AUTO = {
     "phobert",
     "herbert",
     "lasr",
+    "granite_speech5",
     "mluke",
     "xlsr_wav2vec2",
     "xls_r",
