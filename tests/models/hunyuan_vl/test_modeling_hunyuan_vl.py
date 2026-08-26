@@ -246,31 +246,6 @@ class HunYuanVLModelTest(VLMModelTest, unittest.TestCase):
         self.assertEqual(text_config.rope_parameters["mrope_section"], [2, 2, 2, 2])
         self.assertNotIn("xdrope_section", text_config.rope_parameters)
 
-    def test_legacy_moe_keys_are_dropped(self):
-        # The public OCR checkpoints were exported from the Tencent MoE codebase and still carry its routing and MLA
-        # hyperparameters (notably a vestigial `num_experts=1`). This variant is dense-only, so they must not survive
-        # loading, nor be written back out by `save_pretrained`.
-        legacy_kwargs = {
-            "num_experts": 1,
-            "num_experts_per_tok": 1,
-            "moe_topk": 1,
-            "num_shared_experts": 1,
-            "use_mixed_mlp_moe": False,
-            "routed_scaling_factor": 1.0,
-            "use_mla": False,
-            "kv_lora_rank": 512,
-        }
-
-        text_config = HunYuanVLTextConfig(**legacy_kwargs)
-        config = HunYuanVLConfig(**legacy_kwargs, text_config=legacy_kwargs)
-
-        for key in legacy_kwargs:
-            self.assertFalse(hasattr(text_config, key), f"`{key}` should not be set on the text config")
-            self.assertFalse(hasattr(config, key), f"`{key}` should not be set on the config")
-            self.assertFalse(hasattr(config.text_config, key), f"`{key}` should not be set on the text config")
-            self.assertNotIn(key, config.to_dict())
-            self.assertNotIn(key, config.to_dict()["text_config"])
-
     def test_legacy_field_aliases_normalize_onto_canonical_fields(self):
         # `attention_head_dim` / `org_vocab_size` / `pad_id` are the names the Tencent codebase uses for `head_dim` /
         # `vocab_size` / `pad_token_id`; every public checkpoint stores both spellings with the same value. They must

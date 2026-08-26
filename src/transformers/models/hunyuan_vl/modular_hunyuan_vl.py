@@ -76,37 +76,6 @@ class HunYuanVLModelOutputWithPast(BaseModelOutputWithPast):
     image_hidden_states: torch.FloatTensor | None = None
 
 
-# The public HunYuanOCR checkpoints were exported from the Tencent MoE codebase and still persist its routing and
-# multi-head-latent-attention hyperparameters on disk (e.g. a vestigial `num_experts=1`). This variant is dense-only
-# and models none of them, so they would otherwise be re-attached as untyped attributes by
-# `PreTrainedConfig.__post_init__` and round-trip back out through `save_pretrained`.
-_LEGACY_MOE_MLA_KEYS = (
-    "expert_hidden_dim",
-    "first_k_dense_replace",
-    "group_limited_greedy",
-    "kv_lora_rank",
-    "moe_drop_tokens",
-    "moe_intermediate_size",
-    "moe_layer_num_skipped",
-    "moe_random_routing_dropped_token",
-    "moe_topk",
-    "n_group",
-    "norm_topk_prob",
-    "num_experts",
-    "num_experts_per_tok",
-    "num_shared_expert",
-    "num_shared_experts",
-    "q_lora_rank",
-    "qk_nope_head_dim",
-    "qk_rope_head_dim",
-    "routed_scaling_factor",
-    "topk_group",
-    "use_mixed_mlp_moe",
-    "use_mla",
-    "v_head_dim",
-)
-
-
 @auto_docstring(
     custom_intro="""
     Vision backbone configuration for the dense-only, image-text HunYuanVL open-source variant.
@@ -261,10 +230,7 @@ class HunYuanVLTextConfig(HunYuanDenseV1Config):
     def __post_init__(self, **kwargs):
         # Legacy aliases (`pad_id`, `attention_head_dim`, `org_vocab_size`) are normalized onto canonical fields by the
         # base `__setattr__` via `attribute_map`, so no manual translation is needed here -- every public Tencent
-        # checkpoint stores them with the same value as the canonical field. The MoE/MLA hyperparameters the OCR
-        # checkpoints inherited from the Tencent MoE codebase have no counterpart at all in this dense-only variant.
-        for key in _LEGACY_MOE_MLA_KEYS:
-            kwargs.pop(key, None)
+        # checkpoint stores them with the same value as the canonical field.
         super().__post_init__(**kwargs)
         rope_parameters = getattr(self, "rope_parameters", None)
         head_dim = self.head_dim if self.head_dim is not None else self.hidden_size // self.num_attention_heads
@@ -347,8 +313,6 @@ class HunYuanVLConfig(Qwen2VLConfig):
             | {"rope_scaling", "rope_theta"}
         )
         text_kwargs = {key: kwargs.pop(key) for key in list(kwargs) if key in text_keys}
-        for key in _LEGACY_MOE_MLA_KEYS:
-            kwargs.pop(key, None)
 
         if isinstance(self.vision_config, dict):
             self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
