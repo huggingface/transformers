@@ -133,6 +133,8 @@ class CapPsutilCpuMemoryTest(unittest.TestCase):
     def test_caps_and_restores_on_exit(self):
         import psutil
 
+        # `before` may already be conftest's session-wide cap, not the true original — that's fine,
+        # we only assert the context manager restores whatever it found on entry.
         before = psutil.virtual_memory
         with cap_psutil_cpu_memory(int(0.5 * GIB)):
             self.assertEqual(psutil.virtual_memory().total, int(0.5 * GIB))
