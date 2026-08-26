@@ -325,7 +325,11 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
                     loss.backward()
                     grad_expected_params = [(n, p) for n, p in model.named_parameters() if p.grad is not None]
                     normal_grad_sums = {n: p.grad.abs().sum().item() for n, p in grad_expected_params}
-                    non_zero_grads_normal = {n for n, s in normal_grad_sums.items() if s > 0}
+                    # Use a small epsilon to ignore near-zero gradients (~1e-8) that can appear due to
+                    # floating-point noise from GC recomputation (e.g. qa_outputs.bias), while still
+                    # catching real gradient differences (which are orders of magnitude larger, ~10-30).
+                    _grad_eps = 1e-6
+                    non_zero_grads_normal = {n for n, s in normal_grad_sums.items() if s > _grad_eps}
 
                     # reset all gradients to zero for the comparison with the gradient checkpointing run
                     optimizer.zero_grad()
@@ -351,7 +355,7 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
                     # check that all the parameters that had non-zero gradients before, have non-zero grads with gradient
                     # checkpointing. divergence indicates a different forward-pass environment that needs special handling.
                     gradcp_grad_sums = {n: p.grad.abs().sum().item() for n, p in grad_expected_params}
-                    non_zero_grads_gradcp = {n for n, s in gradcp_grad_sums.items() if s > 0}
+                    non_zero_grads_gradcp = {n for n, s in gradcp_grad_sums.items() if s > _grad_eps}
 
                     if non_zero_grads_gradcp != non_zero_grads_normal:
                         only_in_normal = non_zero_grads_normal - non_zero_grads_gradcp
