@@ -486,6 +486,52 @@ class TokenizersBackendTesterMixin:
                     # if the pretrained model is not loadable how could it pass locally :)
                     print(f"Could not load tokenizer model: {e}")
 
+    def test_convert_to_native_format_falls_back_to_tiktoken_on_corrupt_sp_model(self):
+        import importlib
+        from unittest.mock import patch
+
+        convert_slow_tokenizer_module = importlib.import_module("transformers.convert_slow_tokenizer")
+
+        with tempfile.NamedTemporaryFile(suffix=".model", delete=False) as f:
+            f.write(b"not a valid sentencepiece protobuf")
+            corrupt_model_path = f.name
+
+        try:
+            # fake TikTokenConverter so it doesn't actually run
+            with patch.object(convert_slow_tokenizer_module, "TikTokenConverter") as mock_tiktoken:
+                mock_tiktoken.return_value.converted.return_value = "fake_tokenizer_object"
+
+                result = TokenizersBackend.convert_to_native_format(vocab_file=corrupt_model_path)
+
+                self.assertEqual(result.get("tokenizer_object"), "fake_tokenizer_object")
+                mock_tiktoken.assert_called_once()
+        finally:
+            import os
+
+            os.remove(corrupt_model_path)
+
+    def test_convert_to_native_format_does_not_catch_unrelated_exception(self):
+        import importlib
+        from unittest.mock import patch
+
+        convert_slow_tokenizer_module = importlib.import_module("transformers.convert_slow_tokenizer")
+
+        with tempfile.NamedTemporaryFile(suffix=".model", delete=False) as f:
+            f.write(b"irrelevant content, extractor is mocked below")
+            model_path = f.name
+
+        try:
+            # KeyError here is just a random unrelated error
+            with patch.object(convert_slow_tokenizer_module, "SentencePieceExtractor") as mock_extractor:
+                mock_extractor.side_effect = KeyError("TEST_UNRELATED_ERROR")
+
+                with self.assertRaises(KeyError):
+                    TokenizersBackend.convert_to_native_format(vocab_file=model_path)
+        finally:
+            import os
+
+            os.remove(model_path)
+
 
 @slow
 @require_tokenizers
