@@ -188,7 +188,6 @@ class EsmcModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 @slow
 @require_torch
 class EsmcModelIntegrationTest(unittest.TestCase):
-    # TEMP: revert to "biohub/ESMC-300M" once the regenerated config/tokenizer land on the BioHub repos.
     checkpoint = "biohub/ESMC-300M-hf"
     sequence = "MKTAYIAKQRQISFVKSHFSRQLEERLGLIEVQ"
 

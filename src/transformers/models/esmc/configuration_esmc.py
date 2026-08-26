@@ -25,7 +25,7 @@ from ...utils import auto_docstring
 from ...utils.type_validators import interval
 
 
-@auto_docstring(checkpoint="biohub/ESMC-6B")
+@auto_docstring(checkpoint="biohub/ESMC-6B-hf")
 @strict
 class EsmcConfig(PreTrainedConfig):
     r"""
