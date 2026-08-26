@@ -290,16 +290,25 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_layer_types_validated(self):
         base = {"num_hidden_layers": 3}
-        with self.assertRaises(StrictDataclassClassValidationError):  # one entry short
-            NeoMMEConfig(**base, layer_types=["sliding_attention"] + ["full_attention"])
-        with self.assertRaises(StrictDataclassClassValidationError):  # not a known layer type
-            NeoMMEConfig(**base, layer_types=["sliding_attention", "gdn", "full_attention"])
-        with self.assertRaises(StrictDataclassClassValidationError):  # value embeddings require a full-attention layer
-            NeoMMEConfig(**base, layer_types=["sliding_attention"] * 3)
+        invalid_cases = (
+            ("too short", ["sliding_attention", "full_attention"], "must be equal"),
+            ("too long", ["sliding_attention"] * 3 + ["full_attention"], "must be equal"),
+            ("unknown", ["sliding_attention", "gdn", "full_attention"], "must be one of"),
+            (
+                "unsupported",
+                ["sliding_attention", "chunked_attention", "full_attention"],
+                "must be one of",
+            ),
+            ("no full attention", ["sliding_attention"] * 3, "must contain"),
+        )
+        for name, layer_types, error_pattern in invalid_cases:
+            with self.subTest(name=name), self.assertRaisesRegex(ValueError, error_pattern):
+                NeoMMEConfig(**base, layer_types=layer_types)
 
         pattern = ["sliding_attention", "sliding_attention", "full_attention"]
         config = NeoMMEConfig(num_hidden_layers=3, layer_types=pattern)
         self.assertEqual(config.layer_types, pattern)
+        self.assertEqual(set(config.rope_parameters), {"full_attention", "sliding_attention"})
 
     def test_default_per_layer_windows(self):
         config = NeoMMEConfig()

@@ -25,6 +25,8 @@ from ...utils.type_validators import positive_int_field
 
 logger = logging.get_logger(__name__)
 
+NEOMME_LAYER_TYPES = ("full_attention", "sliding_attention")
+
 
 @auto_docstring(checkpoint="Hcompany/NeoMME-260M")
 @strict
@@ -103,6 +105,8 @@ class NeoMMEConfig(PreTrainedConfig):
                 "full_attention" if (i + 1) % 6 == 0 or i == self.num_hidden_layers - 1 else "sliding_attention"
                 for i in range(self.num_hidden_layers)
             ]
+        self.validate_layer_type()
+
         if "per_layer_config" not in kwargs:
             sliding_idx = 0
             kwargs["per_layer_config"] = {}
@@ -151,7 +155,16 @@ class NeoMMEConfig(PreTrainedConfig):
         return kwargs
 
     def validate_layer_type(self) -> None:
-        super().validate_layer_type()
+        if len(self.layer_types) != self.num_hidden_layers:
+            raise ValueError(
+                f"`num_hidden_layers` ({self.num_hidden_layers}) must be equal to the number of "
+                f"`layer_types` ({len(self.layer_types)})"
+            )
+        invalid_layer_types = sorted(set(self.layer_types).difference(NEOMME_LAYER_TYPES))
+        if invalid_layer_types:
+            raise ValueError(
+                f"`layer_types` entries must be one of {NEOMME_LAYER_TYPES} for NeoMME, got {invalid_layer_types}."
+            )
         if "full_attention" not in self.layer_types:
             raise ValueError("layer_types must contain at least one full_attention layer.")
 
