@@ -1512,6 +1512,7 @@ LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING = {
     "heavily_compressed_attention": create_sliding_window_causal_mask,
     "minimax_m3_sparse": create_causal_mask,
     "deepseek_sparse_attention": create_causal_mask,
+    "qwen_sparse_attention": create_causal_mask,
     "linear_attention": create_recurrent_attention_mask,
     "conv": create_recurrent_attention_mask,
     "hybrid": {"full_attention": create_causal_mask, "linear_attention": create_recurrent_attention_mask},

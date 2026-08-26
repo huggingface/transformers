@@ -17,7 +17,6 @@ rendered properly in your Markdown viewer.
 
 # LayoutLMV2
 
-
 ## Overview
 
 The LayoutLMV2 model was proposed in [LayoutLMv2: Multi-modal Pre-training for Visually-Rich Document Understanding](https://huggingface.co/papers/2012.14740) by Yang Xu, Yiheng Xu, Tengchao Lv, Lei Cui, Furu Wei, Guoxin Wang, Yijuan Lu,
@@ -327,10 +326,6 @@ print(encoding.keys())
     - __call__
     - save_vocabulary
 
-## LayoutLMv2TokenizerFast
-
-[[autodoc]] LayoutLMv2TokenizerFast
-    - __call__
 
 ## LayoutLMv2Processor
 

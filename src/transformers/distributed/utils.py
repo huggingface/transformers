@@ -16,7 +16,10 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING, TypeGuard
 
-from ..utils import is_torch_available, is_torch_distributed_available, is_torch_greater_or_equal
+from ..utils import is_torch_available, is_torch_distributed_available, is_torch_greater_or_equal, logging
+
+
+logger = logging.get_logger(__name__)
 
 
 if TYPE_CHECKING:
@@ -67,6 +70,11 @@ def _ensure_torch_distributed(device_type: str | None = None):
     if not torch.distributed.is_initialized():
         if device_type is None:
             device_type = torch._C._get_accelerator().type
+        if device_type == "mps":
+            logger.warning_once(
+                "PyTorch's built-in DeviceMesh/DTensor stack does not support an MPS mesh. Falling back to CPU."
+            )
+            device_type = "cpu"
         try:
             rank = int(os.environ["RANK"])
             local_rank = int(os.environ["LOCAL_RANK"])
@@ -134,7 +142,10 @@ def initialize_tensor_parallelism(
         # Detect the accelerator on the machine. If no accelerator is available, it returns CPU.
         device_type = torch._C._get_accelerator().type
         if device_type == "mps":
-            raise RuntimeError("Tensor parallelism is not supported on MPS devices.")
+            logger.warning_once(
+                "PyTorch's built-in DeviceMesh/DTensor stack does not support an MPS mesh. Falling back to CPU."
+            )
+            device_type = "cpu"
         current_device = getattr(torch, device_type)
 
         if device_type != "cpu":
@@ -187,6 +198,33 @@ def initialize_fully_sharded_data_parallelism(distributed_config: DistributedCon
     # If N > 1, create a flattened sub-mesh so all-reduces across the world mesh ae done in one collective
     if len(dims) > 1:
         mesh._flatten("_".join(names))
+
+    return device_map, mesh
+
+
+def initialize_pipeline_parallelism(
+    distributed_config: DistributedConfig,
+):
+    if not is_torch_greater_or_equal("2.5"):
+        raise OSError("Pipeline parallelism with DistributedConfig requires `torch>=2.5`.")
+
+    device_type = torch._C._get_accelerator().type
+    _ensure_torch_distributed(device_type)
+
+    world_size = torch.distributed.get_world_size()
+    pp_size = distributed_config.pp_size
+    if world_size != pp_size:
+        raise RuntimeError(f"world_size ({world_size}) must be equal to pp_size ({pp_size})")
+
+    if device_type != "cpu":
+        local_rank = int(os.environ.get("LOCAL_RANK", 0))
+        getattr(torch, device_type).set_device(local_rank)
+        device_map = torch.device(device_type, local_rank)
+    else:
+        device_map = torch.device(device_type)
+
+    assert world_size == pp_size, f"world_size ({world_size}) must be equal to pp_size ({pp_size})"
+    mesh = torch.distributed.init_device_mesh(device_type, (pp_size,), mesh_dim_names=("pp",))
 
     return device_map, mesh
 

@@ -42,6 +42,8 @@ CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
 # Usually of small list of allowed attrs, but can be True to allow all
 SPECIAL_CASES_TO_ALLOW = {
+    # For consistency we keep head dim but it's not used as NoPE is applied
+    "Glm5NextTextConfig": ["head_dim"],
     # EP related refactor that also relies on correct naming for FP8/4 conventions
     "DeepseekV3Config": ["n_routed_experts"],
     "Glm4MoeConfig": ["n_routed_experts"],
@@ -66,6 +68,7 @@ SPECIAL_CASES_TO_ALLOW = {
         "mtp_mlp_layer_types",
     ],
     "OpenAIPrivacyFilterConfig": ["classifier_dropout", "output_router_logits", "router_aux_loss_coef"],
+    "Qwen4ExpTextConfig": ["split_ngram_parts"],  # Used by Concatenate during checkpoint conversion
     "HYV3Config": ["output_router_logits"],
     "NougatConfig": ["decoder", "encoder"],
     "PI0Config": ["vlm_projection_dim"],
