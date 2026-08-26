@@ -161,7 +161,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("ernie4_5_vl_moe", "Ernie4_5_VLMoeModel"),
         ("esm", "EsmModel"),
         ("esmc", "EsmcModel"),
-        ("esmfold2", "EsmFold2Model"),
         ("eurobert", "EuroBertModel"),
         ("evolla", "EvollaModel"),
         ("exaone4", "Exaone4Model"),
@@ -2048,13 +2047,6 @@ MODEL_FOR_POSE_ESTIMATION_MAPPING_NAMES = OrderedDict(
     ]
 )
 
-MODEL_FOR_PROTEIN_FOLDING_MAPPING_NAMES = OrderedDict(
-    [
-        ("esm", "EsmForProteinFolding"),
-        ("esmfold2", "EsmFold2Model"),
-    ]
-)
-
 
 MODEL_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_MAPPING_NAMES)
 MODEL_FOR_PRETRAINING_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_PRETRAINING_MAPPING_NAMES)
@@ -2177,7 +2169,6 @@ MODEL_FOR_POINTMAP_ESTIMATION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_POINTMAP_ESTIMATION_MAPPING_NAMES
 )
 MODEL_FOR_POSE_ESTIMATION_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_POSE_ESTIMATION_MAPPING_NAMES)
-MODEL_FOR_PROTEIN_FOLDING_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_PROTEIN_FOLDING_MAPPING_NAMES)
 
 
 class AutoModelForMaskGeneration(_BaseAutoModelClass):
@@ -2557,15 +2548,6 @@ class AutoModelForPoseEstimation(_BaseAutoModelClass):
 AutoModelForPoseEstimation = auto_class_update(AutoModelForPoseEstimation, head_doc="pose estimation")
 
 
-class AutoModelForProteinFolding(_BaseAutoModelClass):
-    _model_mapping = MODEL_FOR_PROTEIN_FOLDING_MAPPING
-
-
-AutoModelForProteinFolding = auto_class_update(
-    AutoModelForProteinFolding, checkpoint_for_example="facebook/esmfold_v1", head_doc="protein folding"
-)
-
-
 __all__ = [
     "MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING",
     "MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING",
@@ -2599,7 +2581,6 @@ __all__ = [
     "MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING",
     "MODEL_FOR_OBJECT_DETECTION_MAPPING",
     "MODEL_FOR_PRETRAINING_MAPPING",
-    "MODEL_FOR_PROTEIN_FOLDING_MAPPING",
     "MODEL_FOR_QUESTION_ANSWERING_MAPPING",
     "MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING",
     "MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING",
@@ -2671,5 +2652,4 @@ __all__ = [
     "AutoModelForNormalEstimation",
     "AutoModelForPointmapEstimation",
     "AutoModelForPoseEstimation",
-    "AutoModelForProteinFolding",
 ]
