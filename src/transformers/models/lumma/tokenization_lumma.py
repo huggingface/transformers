@@ -50,24 +50,24 @@ class LummaTokenizer(TokenizersBackend):
     is used when available.
 
     Args:
-        vocab_file (`str`, *optional*):
-            Path to the vocabulary file.
-        merges_file (`str`, *optional*):
-            Path to the merges file.
-        unk_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
-            The unknown token.
-        bos_token (`str`, *optional*, defaults to `"<|im_start|>"`):
-            The beginning of sequence token.
-        eos_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
-            The end of sequence token.
-        pad_token (`str`, *optional*, defaults to `"<|pad|>"`):
-            The padding token.
-        add_prefix_space (`bool`, *optional*):
-            Whether to add a prefix space for byte-level pretokenization.
-        vocab (`str` or `dict[str, int]`, *optional*):
-            Custom vocabulary dictionary used when building the tokenizer from scratch.
-        merges (`str` or `list[str]`, *optional*):
-            Custom BPE merges used when building the tokenizer from scratch.
+            vocab (`str` or `dict[str, int]`, *optional*):
+                Custom vocabulary dictionary used when building the tokenizer from scratch.
+            merges (`str` or `list[str]`, *optional*):
+                Custom BPE merges used when building the tokenizer from scratch.
+            vocab_file (`str`, *optional*):
+                Path to the vocabulary file.
+            merges_file (`str`, *optional*):
+                Path to the merges file.
+            unk_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
+                The unknown token.
+            bos_token (`str`, *optional*, defaults to `"<|im_start|>"`):
+                The beginning of sequence token.
+            eos_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
+                The end of sequence token.
+            pad_token (`str`, *optional*, defaults to `"<|pad|>"`):
+                The padding token.
+            add_prefix_space (`bool`, *optional*):
+                Whether to add a prefix space for byte-level pretokenization.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
