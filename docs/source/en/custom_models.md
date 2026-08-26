@@ -204,7 +204,7 @@ AutoModel.register(ResnetConfig, ResnetModel)
 AutoModelForImageClassification.register(ResnetConfig, ResnetModelForImageClassification)
 ```
 
-Your custom model code is now compatible with the [AutoClass](#autoclass) API. Users can load the model with the [AutoModel](./model_doc/auto#automodel) or [`AutoModelForImageClassification`] classes.
+Your custom model code is now compatible with the [AutoClass](#autoclass) API. Users can load the model with the [AutoModel](./model_doc/auto) or [`AutoModelForImageClassification`] classes.
 
 ## Upload
 
