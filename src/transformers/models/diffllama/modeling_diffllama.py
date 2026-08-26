@@ -49,6 +49,7 @@ from ...utils.output_capturing import capture_outputs
 from .configuration_diffllama import DiffLlamaConfig
 
 
+@use_kernel_forward_from_hub("SwiGLUMLP")
 class DiffLlamaMLP(nn.Module):
     def __init__(self, config):
         super().__init__()

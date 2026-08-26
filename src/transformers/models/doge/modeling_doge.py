@@ -371,6 +371,7 @@ class DogeAttention(nn.Module):
         return attn_mask
 
 
+@use_kernel_forward_from_hub("SwiGLUMLP")
 class DogeMLP(nn.Module):
     def __init__(self, config):
         super().__init__()

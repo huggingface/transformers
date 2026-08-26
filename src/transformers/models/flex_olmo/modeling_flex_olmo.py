@@ -117,6 +117,7 @@ class FlexOlmoRotaryEmbedding(nn.Module):
         return cos, sin
 
 
+@use_kernel_forward_from_hub("SwiGLUMLP")
 class FlexOlmoMLP(nn.Module):
     def __init__(self, config):
         super().__init__()

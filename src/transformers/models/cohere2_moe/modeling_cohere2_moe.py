@@ -82,6 +82,7 @@ class Cohere2MoeLayerNorm(nn.Module):
         return hidden_states.to(input_dtype)
 
 
+@use_kernel_forward_from_hub("SwiGLUMLP")
 class Cohere2MoeMLP(nn.Module):
     def __init__(self, config: Cohere2MoeConfig, intermediate_size=None):
         super().__init__()

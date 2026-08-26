@@ -95,6 +95,7 @@ class Ernie4_5RotaryEmbedding(nn.Module):
         return cos, sin
 
 
+@use_kernel_forward_from_hub("SwiGLUMLP")
 class Ernie4_5MLP(nn.Module):
     def __init__(self, config: Ernie4_5Config):
         super().__init__()

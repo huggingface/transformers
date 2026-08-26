@@ -40,7 +40,7 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseMo
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
 from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
 from ..deepseek_v2.configuration_deepseek_v2 import DeepseekV2Config
@@ -783,6 +783,7 @@ class DeepseekOcr2SamVisionEncoder(SamVisionEncoder, DeepseekOcr2PreTrainedModel
         return BaseModelOutput(last_hidden_state=hidden_states)
 
 
+@no_inherit_decorator
 class DeepseekOcr2VisionMLP(Qwen2MLP):
     pass
 

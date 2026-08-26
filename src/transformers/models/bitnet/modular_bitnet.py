@@ -22,6 +22,7 @@ from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import logging
+from ...utils.generic import no_inherit_decorator
 from ..gemma.modeling_gemma import GemmaMLP
 from ..llama.modeling_llama import (
     LlamaAttention,
@@ -42,6 +43,7 @@ class BitNetRMSNorm(LlamaRMSNorm):
     pass
 
 
+@no_inherit_decorator
 class BitNetMLP(GemmaMLP):
     def __init__(self, config: BitNetConfig):
         super().__init__(config)

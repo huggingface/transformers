@@ -208,6 +208,7 @@ class ExaoneMoeAttention(nn.Module):
         return attn_output, attn_weights
 
 
+@use_kernel_forward_from_hub("SwiGLUMLP")
 class ExaoneMoeMLP(nn.Module):
     def __init__(self, config, intermediate_size=None):
         super().__init__()

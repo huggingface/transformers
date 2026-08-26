@@ -161,6 +161,7 @@ class CohereCompassRotaryEmbedding(nn.Module):
         return freqs_t
 
 
+@use_kernel_forward_from_hub("SwiGLUMLP")
 class CohereCompassMLP(nn.Module):
     def __init__(self, config):
         super().__init__()

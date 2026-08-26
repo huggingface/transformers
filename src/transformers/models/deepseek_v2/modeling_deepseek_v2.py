@@ -137,6 +137,7 @@ class DeepseekV2Moe(nn.Module):
         return hidden_states
 
 
+@use_kernel_forward_from_hub("SwiGLUMLP")
 class DeepseekV2MLP(nn.Module):
     def __init__(self, config: DeepseekV2Config, hidden_size=None, intermediate_size=None):
         super().__init__()
