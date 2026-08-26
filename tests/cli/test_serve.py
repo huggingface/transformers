@@ -1941,7 +1941,7 @@ class TestCBWorkerDeadServerIntegration(unittest.TestCase):
         # Manager whose underlying CB has a fatal_error set -> is_alive() returns False.
         mgr = CBGenerateManager()
         mgr._cb = MagicMock()
-        mgr._cb.fatal_error = RuntimeError("CUDA illegal memory access")
+        mgr._cb.background_thread_status.fatal_error = RuntimeError("CUDA illegal memory access")
         state._cb_manager = mgr
 
         resp = TestClient(self._build_app(state)).get("/health")

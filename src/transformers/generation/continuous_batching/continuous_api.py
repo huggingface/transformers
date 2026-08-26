@@ -141,6 +141,7 @@ class BackgroundThreadStatus:
         self._local_status_lock = threading.Lock()
         self._local_status = self.DONT_STOP
         self._tp_status = self.DONT_STOP
+        self.fatal_error = None
 
     def clear(self) -> None:
         """Clear the local and TP statuses. This method should ONLY be called by the main thread itself BEFORE starting
@@ -148,14 +149,17 @@ class BackgroundThreadStatus:
         self._tp_status = self.DONT_STOP
         with self._local_status_lock:
             self._local_status = self.DONT_STOP
+        self.fatal_error = None
 
-    def request_stop(self, status: int, global_rank: int) -> None:
+    def request_stop(self, status: int, global_rank: int, error: Exception | None = None) -> None:
         """Request the background thread to stop. This does not take effect immediately, only after the TP group has
-        communicated."""
+        communicated. If no error has been recorded yet, the provided error will be recorded."""
         if status not in [self.FLUSH_AND_STOP, self.HARD_STOP]:
             raise ValueError(f"Invalid stop status {status} from rank {global_rank}")
         with self._local_status_lock:
             self._local_status = max(status, self._local_status, self._tp_status)
+        if self.fatal_error is None:
+            self.fatal_error = error
         logger.info(
             f"Rank {global_rank} requested background thread to stop with {status = }. Now {self._local_status = }"
         )
@@ -588,7 +592,6 @@ class ContinuousBatchingManager:
         self._generation_thread = None
 
         # Control flow attributes
-        self.fatal_error: Exception | None = None
         self.warmed_up = False  # Set to True after warmup is completed. Useful for persistent managers.
 
         # Model-related attributes
@@ -682,7 +685,6 @@ class ContinuousBatchingManager:
             logger.warning("Manager thread is already running.")
             return None
         self.background_thread_status.clear()
-        self.fatal_error = None
         self._generation_thread = threading.Thread(target=self._run_generation_loop)
         self._generation_thread.start()
 
@@ -1053,11 +1055,9 @@ class ContinuousBatchingManager:
 
     def _handle_critical_error(self, error: Exception, batch_processor: ContinuousBatchProcessor | None) -> None:
         """Handle critical errors that terminate the generation loop."""
-        # Record the error so callers (e.g. the serving layer) can fail fast on subsequent requests
-        self.fatal_error = error
         # Request a hard stop
         self.background_thread_status.request_stop(
-            status=BackgroundThreadStatus.HARD_STOP, global_rank=self.distributed_helper.global_rank
+            status=BackgroundThreadStatus.HARD_STOP, global_rank=self.distributed_helper.global_rank, error=error
         )
         # Communicate to other processes in the TP group that the group is stopping (they could have not crashed)
         # Since the other processes need to reach the collective, it may take a few seconds to complete.
