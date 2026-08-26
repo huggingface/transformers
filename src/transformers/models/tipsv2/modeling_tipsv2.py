@@ -652,7 +652,7 @@ class Tipsv2SinusoidalPositionalEmbedding(nn.Module):
             # in forward put the weights on the correct dtype and device of the param
             emb_weights = emb_weights.to(dtype=self.weights.dtype, device=self.weights.device)
 
-        self.register_buffer("weights", emb_weights, persistent=False)
+        self.weights = nn.Buffer(emb_weights, persistent=False)
 
     @staticmethod
     def get_embedding(num_embeddings: int, embedding_dim: int, padding_idx: int | None = None):
@@ -686,9 +686,7 @@ class Tipsv2TextEmbeddings(nn.Module):
         self.position_embedding = Tipsv2SinusoidalPositionalEmbedding(config)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False)
         self.embed_scale = math.sqrt(config.hidden_size) if config.scale_sqrt_depth else 1.0
 
     def forward(

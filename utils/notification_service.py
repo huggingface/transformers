@@ -1265,7 +1265,7 @@ if __name__ == "__main__":
                             {"line": line, "trace": trace}
                         )
 
-                        # TODO: How to deal wit this
+                        # TODO: How to deal with this
 
                         if re.search("tests/quantization", line):
                             matrix_job_results[matrix_name]["failed"]["Quantization"][artifact_gpu] += 1

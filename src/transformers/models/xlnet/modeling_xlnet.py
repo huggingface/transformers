@@ -1651,7 +1651,7 @@ class XLNetForTokenClassification(XLNetPreTrainedModel):
         use_mems (`bool`, *optional*):
             Whether to use memory states to speed up sequential decoding. If set to `True`, the model will use the hidden
             states from previous forward passes to compute attention, which can significantly improve performance for
-            sequential decoding tasks.emory states to speed up sequential decoding. If set to `True`, the model will use the hidden
+            sequential decoding tasks. Memory states to speed up sequential decoding. If set to `True`, the model will use the hidden
             states from previous forward passes to compute attention, which can significantly improve performance for
             sequential decoding tasks.
         """

@@ -725,9 +725,7 @@ class XLMModel(XLMPreTrainedModel):
             self.layer_norm2.append(nn.LayerNorm(self.dim, eps=config.layer_norm_eps))
 
         # Initialize weights and apply final processing
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False)
         self.post_init()
 
     def get_input_embeddings(self):
