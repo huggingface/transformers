@@ -308,9 +308,6 @@ class FP8Linear(nn.Linear):
         self.has_bias = has_bias
         self.block_size = block_size
         self.activation_scheme = activation_scheme
-        # `dtype=None` falls back to the ambient default dtype, i.e. the model dtype, like every other
-        # parameter in the skeleton. Used when quantizing on the fly, where the loader materializes the
-        # checkpoint's dense weight into this parameter before `Fp8Quantize` runs.
         self.weight = torch.nn.Parameter(torch.empty(out_features, in_features, dtype=dtype))
 
         if self.block_size is None:
