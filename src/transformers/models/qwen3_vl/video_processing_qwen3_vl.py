@@ -47,9 +47,9 @@ class Qwen3VLVideoProcessorInitKwargs(VideosKwargs, total=False):
     merge_size (`int`, *optional*, defaults to 2):
         The merge size of the vision encoder to llm encoder.
     min_frames (`int`, *optional*, defaults to 4):
-        The minimum number of frames that can be sampled.
+        The minimum number of frames to sample from video.
     max_frames (`int`, *optional*, defaults to 768):
-        The maximum number of frames that can be sampled.
+        The maximum number of frames to sample from video.
     cap_pixels_per_frame (`bool`, *optional*):
         Whether to cap each frame's pixel cost the way the reference implementation (qwen-vl-utils) does:
         per-frame pixels are limited to `min(max_video_tokens * factor**2, size["longest_edge"] / num_frames)`

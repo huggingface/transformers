@@ -20,10 +20,10 @@ import numpy as np
 
 from transformers.testing_utils import require_torch, require_torchvision, require_vision
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin, prepare_image_inputs
 
 
-class Cosmos3EdgeImageProcessingTester:
+class Cosmos3EdgeImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
