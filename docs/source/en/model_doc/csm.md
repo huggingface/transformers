@@ -30,6 +30,9 @@ The original csm-1b checkpoint is available under the [Sesame](https://huggingfa
     <img src="https://huggingface.co/datasets/eustlb/documentation-images/resolve/main/csm_architecture.png"/>
 </div>
 
+> [!TIP]
+> Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Refer to [Loading kernels](../kernel_doc/loading_kernels) to learn more.
+
 ## Usage Tips
 
 ### Without Conversational Context

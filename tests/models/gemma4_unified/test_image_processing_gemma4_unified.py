@@ -21,7 +21,7 @@ from transformers.models.gemma4.image_processing_pil_gemma4 import get_aspect_ra
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
 
 
 if is_torch_available():
@@ -34,7 +34,7 @@ if is_vision_available():
         pass
 
 
-class Gemma4UnifiedImageProcessingTester:
+class Gemma4UnifiedImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -79,18 +79,6 @@ class Gemma4UnifiedImageProcessingTester:
             "max_soft_tokens": self.max_soft_tokens,
             "pooling_kernel_size": self.pooling_kernel_size,
         }
-
-    # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTester.prepare_image_inputs
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
 
     def expected_output_image_shape(self, images=None):
         """Return the expected per-image output shape: (max_soft_tokens, model_patch_size² * 3)."""

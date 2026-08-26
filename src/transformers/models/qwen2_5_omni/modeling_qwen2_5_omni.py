@@ -1722,6 +1722,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
     base_model_prefix = "thinker"
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _no_split_modules = ["Qwen2_5OmniAudioEncoder", "Qwen2_5OmniVisionEncoder"]
+    _can_compile_fullgraph = True
 
     def __init__(self, config: Qwen2_5OmniThinkerConfig):
         super().__init__(config)
@@ -1862,6 +1863,50 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         special_audio_mask = special_audio_mask.unsqueeze(-1).to(inputs_embeds.device)
         return special_image_mask, special_video_mask, special_audio_mask
 
+    def compute_3d_position_ids(
+        self,
+        input_ids: torch.Tensor | None,
+        image_grid_thw: torch.Tensor | None,
+        video_grid_thw: torch.Tensor | None,
+        inputs_embeds: torch.Tensor | None,
+        attention_mask: torch.Tensor | None,
+        past_key_values: Cache | None,
+        use_audio_in_video: bool | None = None,
+        audio_feature_lengths: torch.LongTensor | None = None,
+        video_second_per_grid: torch.LongTensor | None = None,
+    ) -> torch.Tensor | None:
+        past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
+        can_compute_mrope = input_ids is not None and attention_mask is not None
+
+        if can_compute_mrope and (self.rope_deltas is None or past_key_values_length == 0):
+            position_ids, rope_deltas = self.get_rope_index(
+                input_ids,
+                image_grid_thw,
+                video_grid_thw,
+                attention_mask,
+                use_audio_in_video or False,
+                audio_feature_lengths,
+                video_second_per_grid,
+            )
+            self.rope_deltas = rope_deltas
+        # Reuse the cached rope-deltas while decoding, or when only `inputs_embeds` is given. Recomputing above
+        # instead avoids stale deltas (e.g. a training forward right after generation).
+        elif self.rope_deltas is not None and (past_key_values_length > 0 or input_ids is None):
+            batch_size, seq_length = inputs_embeds.shape[:2]
+            if attention_mask is not None:
+                position_ids = attention_mask.long().cumsum(-1) - 1
+                position_ids = position_ids.masked_fill(attention_mask == 0, 0)
+                position_ids = position_ids.view(1, batch_size, -1).repeat(3, 1, 1).to(inputs_embeds.device)
+            else:
+                position_ids = torch.arange(past_key_values_length, past_key_values_length + seq_length)
+                position_ids = position_ids.view(1, 1, -1).expand(3, batch_size, -1).to(inputs_embeds.device)
+            delta = self.rope_deltas.repeat_interleave(batch_size // self.rope_deltas.shape[0], dim=0)
+            position_ids = position_ids + delta.to(device=position_ids.device)
+        else:
+            # Can't build correct 3D positions. Let the model infer it
+            position_ids = None
+        return position_ids
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1968,28 +2013,18 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         else:
             audio_feature_lengths = None
 
-        if attention_mask is not None and position_ids is None:
-            past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
-            if past_key_values_length == 0 or self.rope_deltas is None:
-                delta0 = (1 - attention_mask).sum(dim=-1).unsqueeze(1)
-                position_ids, rope_deltas = self.get_rope_index(
-                    input_ids,
-                    image_grid_thw,
-                    video_grid_thw,
-                    attention_mask,
-                    use_audio_in_video,
-                    audio_feature_lengths,
-                    video_second_per_grid,
-                )
-                rope_deltas = rope_deltas - delta0
-                self.rope_deltas = rope_deltas
-            else:
-                batch_size, seq_length = input_ids.shape
-                delta = (past_key_values_length + self.rope_deltas).to(input_ids.device)
-                position_ids = torch.arange(seq_length, device=input_ids.device)
-                position_ids = position_ids.view(1, -1).expand(batch_size, -1)
-                position_ids = position_ids.add(delta)
-                position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
+        if position_ids is None:
+            position_ids = self.compute_3d_position_ids(
+                input_ids=input_ids,
+                image_grid_thw=image_grid_thw,
+                video_grid_thw=video_grid_thw,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
+                use_audio_in_video=use_audio_in_video,
+                audio_feature_lengths=audio_feature_lengths,
+                video_second_per_grid=video_second_per_grid,
+            )
 
         outputs = self.model(
             attention_mask=attention_mask,
@@ -2019,10 +2054,68 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             rope_deltas=self.rope_deltas,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, inputs_embeds=None, **kwargs):
-        model_inputs = super().prepare_inputs_for_generation(input_ids, inputs_embeds=inputs_embeds, **kwargs)
-        model_inputs["position_ids"] = None
-        return model_inputs
+    def _expand_inputs_for_generation(
+        self,
+        expand_size: int = 1,
+        is_encoder_decoder: bool = False,
+        input_ids: torch.LongTensor | None = None,
+        **model_kwargs,
+    ) -> tuple[torch.LongTensor, dict[str, Any]]:
+        # Overwritten -- position ids are packed as `[4, batch_size, seq_len]`, so the batch dim is not `0`
+        position_ids = model_kwargs.pop("position_ids", None)
+        input_ids, model_kwargs = super()._expand_inputs_for_generation(
+            expand_size=expand_size,
+            is_encoder_decoder=is_encoder_decoder,
+            input_ids=input_ids,
+            **model_kwargs,
+        )
+        if position_ids is not None:
+            batch_dim = 1 if position_ids.ndim == 3 else 0
+            model_kwargs["position_ids"] = position_ids.repeat_interleave(expand_size, dim=batch_dim)
+        return input_ids, model_kwargs
+
+    def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
+        # Overwritten -- requires 3D position ids
+
+        text_positions = super()._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
+
+        # Early exit in case we are continuing generation from past kv
+        past_length = 0
+        if (cache := model_kwargs.get("past_key_values")) is not None:
+            past_length = cache.get_seq_length()
+        if past_length != 0 and self.rope_deltas is not None:
+            position_ids = text_positions[None, ...] + self.rope_deltas
+            return position_ids
+
+        # Otherwise compute 3d position ids for audio/vision tokens and concat with text position ids
+        if "input_ids" in model_kwargs and model_kwargs["input_ids"].shape[1] > 0:
+            inputs_tensor = model_kwargs["input_ids"]
+
+        is_input_ids = len(inputs_tensor.shape) == 2 and inputs_tensor.dtype in [torch.int, torch.long]
+        attention_mask = model_kwargs.get("attention_mask")
+        if is_input_ids and attention_mask is not None:
+            audio_feature_lengths = model_kwargs.get("audio_feature_lengths")
+            if (feature_attention_mask := model_kwargs.get("feature_attention_mask")) is not None:
+                audio_feature_lengths = feature_attention_mask.sum(dim=-1)
+            vision_positions, rope_deltas = self.get_rope_index(
+                inputs_tensor,
+                image_grid_thw=model_kwargs.get("image_grid_thw"),
+                video_grid_thw=model_kwargs.get("video_grid_thw"),
+                attention_mask=attention_mask,
+                use_audio_in_video=model_kwargs.get("use_audio_in_video") or False,
+                audio_seqlens=audio_feature_lengths,
+                second_per_grids=model_kwargs.get("video_second_per_grid"),
+            )
+            self.rope_deltas = rope_deltas
+        else:
+            vision_positions = text_positions.unsqueeze(0).expand(3, -1, -1)
+            self.rope_deltas = torch.zeros(inputs_tensor.shape[0], 1, dtype=torch.long, device=inputs_tensor.device)
+
+        # Concatenate "text + vision" positions into [4, bs, seq-len]
+        text_positions = text_positions[None, ...]
+        position_ids = torch.cat([text_positions, vision_positions], dim=0)
+
+        return position_ids
 
 
 ############################

@@ -961,7 +961,7 @@ def is_mamba_2_ssm_available() -> bool:
 def is_flash_linear_attention_available():
     is_available, fla_version = _is_package_available("fla", return_version=True)
     return (
-        (is_torch_cuda_available() or is_torch_xpu_available())
+        (is_torch_cuda_available() or is_torch_xpu_available() or is_torch_mlu_available())
         and is_available
         and version.parse(fla_version) >= version.parse("0.2.2")
     )
@@ -1702,9 +1702,7 @@ def is_torchdynamo_compiling() -> bool:
     try:
         import torch
 
-        if hasattr(torch, "compiler"):
-            return torch.compiler.is_compiling()
-        return False
+        return torch.compiler.is_compiling()
     except Exception:
         return False
 
@@ -1713,9 +1711,7 @@ def is_torchdynamo_exporting() -> bool:
     try:
         import torch
 
-        if hasattr(torch, "compiler"):
-            return torch.compiler.is_exporting()
-        return False
+        return torch.compiler.is_exporting()
     except Exception:
         return False
 

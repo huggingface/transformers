@@ -91,6 +91,7 @@ from transformers.testing_utils import (
     get_device_properties,
     hub_retry,
     is_flaky,
+    preserve_module_forwards,
     require_accelerate,
     require_bitsandbytes,
     require_deepspeed,
@@ -105,6 +106,7 @@ from transformers.testing_utils import (
     require_torch_mps,
     require_torch_multi_accelerator,
     require_torch_multi_gpu,
+    rocm_has_sdpa_flash_backend,
     run_first,
     run_test_using_subprocess,
     set_config_for_less_flaky_test,
@@ -135,8 +137,8 @@ if is_torch_available():
     from torch import nn
 
     from transformers import MODEL_MAPPING
+    from transformers.distributed.tensor_parallel import _get_parameter_tp_plan
     from transformers.integrations.accelerate import compute_module_sizes
-    from transformers.integrations.tensor_parallel import _get_parameter_tp_plan
     from transformers.modeling_utils import load_state_dict
     from transformers.pytorch_utils import id_tensor_storage
 
@@ -3804,8 +3806,8 @@ class ModelTesterMixin(ExportTesterMixin):
         device_type, major, minor = get_device_properties()
         if device_type == "cuda" and major < 8:
             self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
-        elif device_type == "rocm" and major < 9:
-            self.skipTest(reason="This test requires an AMD GPU with compute capability >= 9.0")
+        elif device_type == "rocm" and not rocm_has_sdpa_flash_backend(major):
+            self.skipTest(reason="This AMD GPU has no SDPA flash backend available")
         elif device_type not in ["cuda", "rocm", "xpu"]:
             self.skipTest(reason="This test requires a Nvidia or AMD GPU, or an Intel XPU")
 
@@ -3825,6 +3827,10 @@ class ModelTesterMixin(ExportTesterMixin):
                 "evolla",
                 "modernbert",
                 "gemma3",
+                # gemma4: the block-overlay mask in create_masks_for_vision_model forces mask
+                # materialization unconditionally, so SDPA can never use the FA backend when the
+                # vision portion is involved. This is by design and not fixable on the modeling side.
+                "gemma4",
                 "t5gemma",
                 "diffllama",
                 "dpr",
@@ -4366,14 +4372,14 @@ class ModelTesterMixin(ExportTesterMixin):
                 num_attn_heads = getattr(config, "num_attention_heads")
                 num_attn_heads = num_attn_heads if isinstance(num_attn_heads, int) else max(num_attn_heads)
                 head_dim = head_dim if head_dim is not None else config.hidden_size // num_attn_heads
-                config.hidden_size *= max(requested_dim // head_dim, 1)
+                config.hidden_size *= max(math.ceil(requested_dim / head_dim), 1)
 
             if (
                 getattr(config, "decoder_hidden_size", None) is not None
                 and getattr(config, "decoder_num_attention_heads", None) is not None
             ):
                 decoder_head_dim = config.decoder_hidden_size // config.decoder_num_attention_heads
-                config.decoder_hidden_size *= max(requested_dim // decoder_head_dim, 1)
+                config.decoder_hidden_size *= max(math.ceil(requested_dim / decoder_head_dim), 1)
 
             if (
                 getattr(config, "cross_hidden_size", None) is not None
@@ -4384,7 +4390,7 @@ class ModelTesterMixin(ExportTesterMixin):
                     if cross_head_dim is not None
                     else config.cross_hidden_size // config.cross_num_attention_heads
                 )
-                config.cross_hidden_size *= max(requested_dim // cross_head_dim, 1)
+                config.cross_hidden_size *= max(math.ceil(requested_dim / cross_head_dim), 1)
 
             # 3d rope also depends on the head dim
             # (we assume easy shapes here where we get to the requested head dim at least)
@@ -5791,8 +5797,10 @@ class ModelTesterMixin(ExportTesterMixin):
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
 
-            # Using kernels should not raise a `ValueError`
-            model.use_kernels = True
+            # `kernelize` mutates module-level singletons, so restore them to keep later tests kernel-free
+            with preserve_module_forwards(model):
+                # Using kernels should not raise a `ValueError`
+                model.use_kernels = True
 
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
     def test_model_rope_scaling_from_config(self, scaling_type):
