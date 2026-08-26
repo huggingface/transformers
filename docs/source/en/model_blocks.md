@@ -8,48 +8,42 @@ model that introduced the variant first.
 
 ## attention
 
-Axes: `mix | extras | rope | qkv | layer_typing | qk_norm`
+Axes: `cross | mix | rope | extras | qkv | layer_typing | qk_norm`
 
 | models | canonical | since | variant | owners |
 |---|---|---|---|---|
-| 133 | `albert` | 2020-11-16 | `mha|no_extras|no_pos_emb|qkv_split|uniform_layer|no_qk_norm` | aimv2, albert, align, altclip, audio_spectrogram_transformer, beit, bert, bert_generation, bigbird_pegasus, bridgetower, camembert, canine (+121) |
-| 78 | `bart` | 2020-11-16 | `mha_cross|no_extras|no_pos_emb|qkv_split|uniform_layer|no_qk_norm` | aria, audioflamingo3, autoformer, bart, bert, bert_generation, big_bird, bigbird_pegasus, biogpt, blenderbot, blenderbot_small, blip (+66) |
-| 11 | `ctrl` | 2020-11-16 | `mha|no_extras|no_pos_emb|qkv_custom|uniform_layer|no_qk_norm` | bark, cpmant, ctrl, gemma3n, grounding_dino, led, levit, mm_grounding_dino, patchtsmixer, rwkv, swiftformer |
-| 47 | `deberta` | 2020-11-16 | `mha|no_extras|rope_half|qkv_split|uniform_layer|no_qk_norm` | big_bird, bigbird_pegasus, clvp, conditional_detr, d_fine, deberta, deberta_v2, deformable_detr, deimv2, detr, dinov3_vit, edgetam_video (+35) |
-| 24 | `funnel` | 2020-11-16 | `mha|no_extras|no_pos_emb|qkv_fused|uniform_layer|no_qk_norm` | blip, blip_2, bridgetower, cvt, deepseek_ocr2, florence2, funnel, glm_image, got_ocr2, hiera, instructblip, instructblipvideo (+12) |
-| 3 | `gpt2` | 2020-11-16 | `mha_cross|no_extras|no_pos_emb|qkv_fused|uniform_layer|no_qk_norm` | decision_transformer, gpt2, gpt_bigcode |
-| 10 | `roformer` | 2021-05-20 | `mha_cross|no_extras|rope_half|qkv_split|uniform_layer|no_qk_norm` | conditional_detr, detr, esm, evolla, idefics, mask2former, maskformer, oneformer, roformer, table_transformer |
-| 1 | `imagegpt` | 2021-11-18 | `mha_cross|no_extras|rope_half|qkv_fused|uniform_layer|no_qk_norm` | imagegpt |
-| 17 | `gpt_neox` | 2022-05-24 | `mha|no_extras|rope_half|qkv_fused|uniform_layer|no_qk_norm` | codegen, cohere_compass, ernie4_5_vl_moe, glm4v, glm4v_moe, gpt_neox, gpt_neox_japanese, modernbert, qwen2_5_vl, qwen2_vl, qwen3_5, qwen3_5_moe (+5) |
-| 1 | `bloom` | 2022-06-09 | `mha|no_extras|alibi|qkv_fused|uniform_layer|no_qk_norm` | bloom |
-| 12 | `deformable_detr` | 2022-09-14 | `deformable_cross|no_extras|rope_half|qkv_custom|uniform_layer|no_qk_norm` | deformable_detr, grounding_dino, lw_detr, mask2former, mm_grounding_dino, omdet_turbo, oneformer, pp_doclayout_v2, pp_doclayout_v3, rf_detr, rt_detr, rt_detr_v2 |
-| 1 | `esm` | 2022-09-30 | `mha|out_gate|no_pos_emb|qkv_custom|uniform_layer|no_qk_norm` | esm |
-| 69 | `llama` | 2023-03-16 | `gqa|no_extras|rope_half|qkv_split|uniform_layer|no_qk_norm` | arcee, aria, bamba, bitnet, blt, cohere2, cohere2_moe, cohere_compass, cosmos3_edge, csm, cwm, deepseek_ocr2 (+57) |
-| 2 | `persimmon` | 2023-09-12 | `mha|no_extras|rope_half|qkv_fused|uniform_layer|qk_norm` | glm_ocr, persimmon |
-| 44 | `phi` | 2023-11-10 | `gqa|no_extras|rope_half|qkv_split|uniform_layer|qk_norm` | afmoe, apertus, chameleon, cohere, diffusion_gemma, doge, dots1, esmc, exaone4, exaone4_5, exaone_moe, flex_olmo (+32) |
-| 6 | `idefics2` | 2024-04-15 | `gqa|no_extras|no_pos_emb|qkv_split|uniform_layer|no_qk_norm` | cohere_asr, dia, idefics2, jamba, moonshine_streaming, nemotron_h |
-| 5 | `dbrx` | 2024-04-18 | `gqa|no_extras|rope_half|qkv_fused|uniform_layer|no_qk_norm` | dbrx, exaone4_5, phi3, phi4_multimodal, zaya |
-| 1 | `jetmoe` | 2024-05-14 | `gqa|no_extras|rope_half|kv_fused|uniform_layer|no_qk_norm` | jetmoe |
-| 3 | `gemma2` | 2024-06-27 | `gqa|logit_softcap|rope_half|qkv_split|uniform_layer|no_qk_norm` | gemma2, t5gemma, vaultgemma |
-| 3 | `mllama` | 2024-09-25 | `gqa|no_extras|no_pos_emb|qkv_split|uniform_layer|qk_norm` | blt, inkling, mllama |
-| 4 | `moonshine` | 2025-01-10 | `gqa_cross|no_extras|rope_half|qkv_split|uniform_layer|no_qk_norm` | efficientloftr, lightglue, moonshine, moonshine_streaming |
-| 1 | `dab_detr` | 2025-02-04 | `mha|no_extras|rope_half|qkv_custom|uniform_layer|no_qk_norm` | dab_detr |
-| 1 | `dab_detr` | 2025-02-04 | `mha_cross|no_extras|rope_half|qkv_custom|uniform_layer|no_qk_norm` | dab_detr |
-| 2 | `gemma3` | 2025-03-12 | `gqa|logit_softcap|rope_half|qkv_split|uniform_layer|qk_norm` | gemma3, t5gemma2 |
-| 9 | `deepseek_v3` | 2025-03-28 | `mla|no_extras|rope_half|kv_latent|uniform_layer|no_qk_norm` | axk1, deepseek_v2, deepseek_v3, deepseek_v32, glm4_moe_lite, glm_moe_dsa, minicpm3, mistral4, youtu |
-| 3 | `janus` | 2025-04-17 | `mha|no_extras|no_pos_emb|qkv_split|uniform_layer|qk_norm` | internvl, janus, qianfan_ocr |
-| 2 | `d_fine` | 2025-04-29 | `deformable_cross|no_extras|no_pos_emb|qkv_custom|uniform_layer|no_qk_norm` | d_fine, deimv2 |
-| 1 | `t5gemma` | 2025-06-25 | `gqa_cross|logit_softcap|no_pos_emb|qkv_split|uniform_layer|no_qk_norm` | t5gemma |
-| 2 | `gemma3n` | 2025-06-26 | `mha|logit_softcap|no_pos_emb|qkv_split|uniform_layer|no_qk_norm` | gemma3n, videoprism |
-| 5 | `gpt_oss` | 2025-08-05 | `gqa|attn_sink|rope_half|qkv_split|uniform_layer|no_qk_norm` | gpt_oss, granite_swa, granitemoe_swa, mimo_v2_flash, openai_privacy_filter |
-| 1 | `t5gemma2` | 2025-12-01 | `gqa_cross|logit_softcap|rope_half|qkv_split|uniform_layer|qk_norm` | t5gemma2 |
-| 1 | `cohere_asr` | 2026-03-26 | `gqa_cross|no_extras|no_pos_emb|qkv_split|uniform_layer|no_qk_norm` | cohere_asr |
-| 1 | `gemma4` | 2026-04-02 | `mha|logit_softcap|rope_half|qkv_split|uniform_layer|no_qk_norm` | gemma4 |
-| 2 | `gemma4` | 2026-04-02 | `gqa|no_extras|rope_half|qkv_split|per_layer_type|qk_norm` | gemma4, gemma4_unified |
-| 2 | `laguna` | 2026-04-28 | `gqa|out_gate|rope_half|qkv_split|uniform_layer|qk_norm` | laguna, step3p7 |
-| 1 | `deepseek_v4` | 2026-05-02 | `mla|attn_sink|rope_half|kv_latent|per_layer_type|no_qk_norm` | deepseek_v4 |
-| 1 | `axk2` | 2026-07-24 | `mla|out_gate|rope_half|kv_latent|uniform_layer|no_qk_norm` | axk2 |
-| 1 | `esmfold2` | 2026-08-19 | `mha|no_extras|rope_half|qkv_split|uniform_layer|qk_norm` | esmfold2 |
+| 139 | `albert` | 2020-11-16 | `self_attention|gqa|no_pos_emb|no_extras|qkv_split|uniform_layer|no_qk_norm` | aimv2, albert, align, altclip, audio_spectrogram_transformer, beit, bert, bert_generation, bigbird_pegasus, bridgetower, camembert, canine (+127) |
+| 78 | `bart` | 2020-11-16 | `cross_attention|gqa|no_pos_emb|no_extras|qkv_split|uniform_layer|no_qk_norm` | aria, audioflamingo3, autoformer, bart, bert, bert_generation, big_bird, bigbird_pegasus, biogpt, blenderbot, blenderbot_small, blip (+66) |
+| 23 | `deberta` | 2020-11-16 | `self_attention|gqa|rope_half|no_extras|qkv_fused|uniform_layer|no_qk_norm` | codegen, cohere_compass, dbrx, deberta, ernie4_5_vl_moe, exaone4_5, glm4v, glm4v_moe, gpt_neox, gpt_neox_japanese, modernbert, phi3 (+11) |
+| 3 | `gpt2` | 2020-11-16 | `cross_attention|gqa|no_pos_emb|no_extras|qkv_fused|uniform_layer|no_qk_norm` | decision_transformer, gpt2, gpt_bigcode |
+| 25 | `openai` | 2020-11-16 | `self_attention|gqa|no_pos_emb|no_extras|qkv_fused|uniform_layer|no_qk_norm` | bark, blip, blip_2, bridgetower, cvt, deepseek_ocr2, florence2, glm_image, got_ocr2, hiera, instructblip, instructblipvideo (+13) |
+| 111 | `reformer` | 2020-11-16 | `self_attention|gqa|rope_half|no_extras|qkv_split|uniform_layer|no_qk_norm` | arcee, aria, bamba, big_bird, bigbird_pegasus, bitnet, blt, clvp, cohere2, cohere2_moe, cohere_compass, conditional_detr (+99) |
+| 8 | `led` | 2021-01-05 | `self_attention|gqa|no_pos_emb|no_extras|qkv_custom|uniform_layer|no_qk_norm` | gemma3n, grounding_dino, led, levit, mm_grounding_dino, patchtsmixer, rwkv, swiftformer |
+| 14 | `roformer` | 2021-05-20 | `cross_attention|gqa|rope_half|no_extras|qkv_split|uniform_layer|no_qk_norm` | conditional_detr, dab_detr, detr, efficientloftr, esm, evolla, lightglue, mask2former, maskformer, moonshine, moonshine_streaming, oneformer (+2) |
+| 1 | `imagegpt` | 2021-11-18 | `cross_attention|gqa|rope_half|no_extras|qkv_fused|uniform_layer|no_qk_norm` | imagegpt |
+| 1 | `bloom` | 2022-06-09 | `self_attention|gqa|alibi|no_extras|qkv_fused|uniform_layer|no_qk_norm` | bloom |
+| 12 | `deformable_detr` | 2022-09-14 | `cross_attention|deformable|rope_half|no_extras|qkv_sampled|uniform_layer|no_qk_norm` | deformable_detr, grounding_dino, lw_detr, mask2former, mm_grounding_dino, omdet_turbo, oneformer, pp_doclayout_v2, pp_doclayout_v3, rf_detr, rt_detr, rt_detr_v2 |
+| 1 | `esm` | 2022-09-30 | `self_attention|gqa|no_pos_emb|out_gate|qkv_fused|uniform_layer|no_qk_norm` | esm |
+| 1 | `idefics` | 2023-08-18 | `cross_attention|gqa|rope_half|no_extras|qkv_split|uniform_layer|qk_norm` | idefics |
+| 2 | `persimmon` | 2023-09-12 | `self_attention|gqa|rope_half|no_extras|qkv_fused|uniform_layer|qk_norm` | glm_ocr, persimmon |
+| 43 | `phi` | 2023-11-10 | `self_attention|gqa|rope_half|no_extras|qkv_split|uniform_layer|qk_norm` | apertus, chameleon, cohere, diffusion_gemma, doge, dots1, esmc, exaone4, exaone4_5, exaone_moe, flex_olmo, gemma3n (+31) |
+| 1 | `jetmoe` | 2024-05-14 | `self_attention|gqa|rope_half|no_extras|kv_fused|uniform_layer|no_qk_norm` | jetmoe |
+| 4 | `gemma2` | 2024-06-27 | `self_attention|gqa|rope_half|logit_softcap|qkv_split|uniform_layer|no_qk_norm` | gemma2, gemma4, t5gemma, vaultgemma |
+| 6 | `mllama` | 2024-09-25 | `self_attention|gqa|no_pos_emb|no_extras|qkv_split|uniform_layer|qk_norm` | blt, inkling, internvl, janus, mllama, qianfan_ocr |
+| 2 | `gemma3` | 2025-03-12 | `self_attention|gqa|rope_half|logit_softcap|qkv_split|uniform_layer|qk_norm` | gemma3, t5gemma2 |
+| 9 | `deepseek_v3` | 2025-03-28 | `self_attention|mla|rope_half|no_extras|kv_latent|uniform_layer|no_qk_norm` | axk1, deepseek_v2, deepseek_v3, deepseek_v32, glm4_moe_lite, glm_moe_dsa, minicpm3, mistral4, youtu |
+| 2 | `d_fine` | 2025-04-29 | `cross_attention|deformable|no_pos_emb|no_extras|qkv_sampled|uniform_layer|no_qk_norm` | d_fine, deimv2 |
+| 1 | `t5gemma` | 2025-06-25 | `cross_attention|gqa|no_pos_emb|logit_softcap|qkv_split|uniform_layer|no_qk_norm` | t5gemma |
+| 2 | `gemma3n` | 2025-06-26 | `self_attention|gqa|no_pos_emb|logit_softcap|qkv_split|uniform_layer|no_qk_norm` | gemma3n, videoprism |
+| 1 | `evolla` | 2025-07-26 | `cross_attention|gqa|no_pos_emb|out_gate|qkv_split|uniform_layer|no_qk_norm` | evolla |
+| 5 | `gpt_oss` | 2025-08-05 | `self_attention|gqa|rope_half|attn_sink|qkv_split|uniform_layer|no_qk_norm` | gpt_oss, granite_swa, granitemoe_swa, mimo_v2_flash, openai_privacy_filter |
+| 4 | `afmoe` | 2025-11-29 | `self_attention|gqa|rope_half|out_gate|qkv_split|uniform_layer|qk_norm` | afmoe, esmfold2, laguna, step3p7 |
+| 1 | `t5gemma2` | 2025-12-01 | `cross_attention|gqa|rope_half|logit_softcap|qkv_split|uniform_layer|qk_norm` | t5gemma2 |
+| 2 | `gemma4` | 2026-04-02 | `self_attention|gqa|rope_half|no_extras|qkv_split|per_layer_type|qk_norm` | gemma4, gemma4_unified |
+| 1 | `deepseek_v4` | 2026-05-02 | `self_attention|mla|rope_half|attn_sink|kv_latent|per_layer_type|no_qk_norm` | deepseek_v4 |
+| 2 | `hrm_text` | 2026-05-18 | `self_attention|gqa|rope_half|out_gate|qkv_split|uniform_layer|no_qk_norm` | hrm_text, muse_glimmer |
+| 1 | `axk2` | 2026-07-24 | `self_attention|mla|rope_half|out_gate|kv_latent|uniform_layer|no_qk_norm` | axk2 |
+| 1 | `esmfold2` | 2026-08-19 | `self_attention|gqa|no_pos_emb|out_gate|qkv_split|uniform_layer|no_qk_norm` | esmfold2 |
 
 ## layer
 
@@ -125,10 +119,11 @@ Axes: `gating`
 
 | models | canonical | since | variant | owners |
 |---|---|---|---|---|
-| 186 | `bert` | 2020-11-16 | `ungated_mlp` | altclip, apertus, arcee, aria, audio_spectrogram_transformer, axk2, bark, beit, bert, bert_generation, big_bird, blip (+174) |
-| 7 | `xlnet` | 2020-11-16 | `linear_projector` | idefics3, qwen2_5_omni, rwkv, segformer, smolvlm, vits, xlnet |
+| 187 | `bert` | 2020-11-16 | `ungated_mlp` | altclip, apertus, arcee, aria, audio_spectrogram_transformer, axk2, bark, beit, bert, bert_generation, big_bird, blip (+175) |
+| 5 | `segformer` | 2021-10-28 | `linear_projector` | idefics3, qwen2_5_omni, rwkv, segformer, smolvlm |
 | 122 | `llama` | 2023-03-16 | `gated_mlp` | afmoe, aimv2, aria, axk1, axk2, bamba, bitnet, blt, chameleon, cohere, cohere2, cohere2_moe (+110) |
 | 24 | `dinov2` | 2023-07-18 | `fused_gate_up_mlp` | dia, dinov2, dinov2_with_registers, eomt, glm, glm4, glm4v, glm_image, glm_ocr, granitemoe_swa, granitemoehybrid, granitemoeshared (+12) |
+| 1 | `vits` | 2023-09-01 | `conv_ffn` | vits |
 
 ## moe
 

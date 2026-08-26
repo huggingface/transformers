@@ -23,7 +23,7 @@ Two sections. `variants` defines each variant once, keyed by the model that intr
 `models` then names, per block kind, which of those a model matches -- a pointer, never a repeated
 tag:
 
-    "variants": {"attention": {"qwen3": "gqa|no_extras|rope_half|qkv_split|qk_rmsnorm|sliding_attention"}}
+    "variants": {"attention": {"qwen3": "self_attention|gqa|rope_half|no_extras|qkv_split|uniform_layer|qk_norm"}}
     "models":   {"afmoe": {"attention": "qwen3", "mlp": "llama", "moe": "afmoe"}}
 
 So `afmoe`'s attention *is* qwen3's, said once. One line per model keeps it greppable in both

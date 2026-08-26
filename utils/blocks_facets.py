@@ -58,22 +58,44 @@ _DASHES = str.maketrans(dict.fromkeys("‐‑‒–—―", "-"))
 # Module-level helpers worth fingerprinting: high copy count, low semantic variation.
 TRACKED_HELPERS = ("repeat_kv", "rotate_half", "apply_rotary_pos_emb", "eager_attention_forward")
 
-# Axis order == the "transformers format". Ordered by override cost, expensive first, so that
-# picking a parent by longest common prefix forces agreement on the expensive axes and leaves any
-# divergence in the cheap tail.
+# Axis order == the "transformers format". Ordered so that picking a parent by longest common
+# prefix forces agreement on the expensive axes and leaves any divergence in the cheap tail.
 #
 # Fitted, not guessed: `blocks_cli.py fit-order` measures each axis's cost as the median size of a
-# real modular override that differs on that axis alone, then scores all 720 permutations. Re-fitted
-# after `window` moved to tier 2 and `qk_norm` became binary. Measured costs (LoC): mix 72,
-# extras 58, rope 58, qkv 57, layer_typing 57, qk_norm 53. Descending cost scores 28 014, which is
-# exactly the exhaustive optimum; the previous order scored 28 190.
+# real modular override that differs on that axis alone, then scores all 5040 permutations by the
+# total override LoC the library would pay. Re-fitted after `mix` collapsed MHA/MQA into GQA and
+# `cross` split off it. Measured costs (LoC): cross 92, rope 58, extras 58, mix 55, qkv 55,
+# layer_typing 55, qk_norm 50.
+#
+# Descending cost is *not* the optimum any more: it scores 28 128 against the optimum's 26 293, and
+# this order is one of the 14 permutations that reach it -- specifically the one closest to
+# descending cost (2 inversions). The cost column is only weakly determined now: `mix` has 0
+# single-axis samples, `layer_typing` 0 and `qkv` 1, so all three fall back to the attention kind
+# median of 55 and are effectively tied. The exhaustive score, which sees every attention variant,
+# is what decides the order; the cost column only breaks its ties.
+#
+# `cross` leads because it is the one axis with a decisively higher *measured* cost, from three real
+# overrides of 48, 92 and 102 LoC: turning self-attention into cross-attention rewrites `forward`.
+# Splitting it out of `mix` is what exposed that. The old `mix` cost of 80 LoC was the median of two
+# unrelated populations -- of its 5 single-axis overrides, 2 (exaone4_5, jina_embeddings_v3) were
+# pure MHA-vs-GQA relabelling and now match their parent exactly, at no cost at all, while the other
+# 3 (lightglue, moonshine, t5gemma2) were self-vs-cross rewrites. One axis was pricing both, so it
+# mis-weighted both. Collapsing the relabelling took the attention overrides that inherit `forward`
+# unchanged from 178 to 180.
 #
 # `layer_typing` stays tier 1, but only just, and only because it is read off `forward`: three blocks
 # genuinely index by it (gemma4 and gemma4_unified take `shared_kv_states[self.layer_type]`,
 # deepseek_v4 takes `position_embeddings[self.rope_layer_type]`). The 50 blocks that merely set it in
 # `__init__` are tier 2 as `layer_typing_init` -- which is what lets `qwen3` and `qwen3_moe` share a
 # variant, as their byte-identical forwards require, while `del self.layer_type` stays visible.
-ATTENTION_AXES = ("mix", "extras", "rope", "qkv", "layer_typing", "qk_norm")
+#
+# `mix` is the mixing *mechanism* only: grouped softmax attention, MLA's shared low-rank latent, or
+# deformable sampling. It deliberately does not encode the kv head count. GQA is the general
+# formulation and MHA and MQA are the degenerate cases you get by setting
+# `num_key_value_heads` to `num_attention_heads` or to 1, which sizes an `nn.Linear` in `__init__`
+# and changes nothing in `forward`. That is a config fact, and it is reported as tier-2
+# `kv_sharing`, read out of `configuration_*.py` by `config_kv_sharing`.
+ATTENTION_AXES = ("cross", "mix", "rope", "extras", "qkv", "layer_typing", "qk_norm")
 MLP_AXES = ("gating",)
 # Left in semantic order on purpose: every MoE axis had fewer than 3 single-axis overrides to
 # measure, so `fit-order` falls back to the kind median for all six and its "best" permutation is
@@ -243,6 +265,108 @@ def config_flags(model: str) -> frozenset[str]:
     return frozenset(found)
 
 
+# The two head counts that decide *which* degenerate case of grouped attention a model instantiates.
+# The kv spellings are exactly the ones the class body used to be sniffed for, so config and class
+# can never disagree about what "kv heads" means.
+CONFIG_QUERY_HEAD_KEYS = (
+    "num_attention_heads",
+    "num_heads",
+    "n_head",
+    "n_heads",
+    "encoder_attention_heads",
+    # moonshine sizes its two towers separately and aliases `num_key_value_heads` to the decoder's
+    # via `attribute_map`, so the unprefixed name never appears as a default.
+    "decoder_num_attention_heads",
+    "encoder_num_attention_heads",
+)
+CONFIG_KV_HEAD_KEYS = (
+    "num_key_value_heads",
+    "num_kv_heads",
+    "n_kv_heads",
+    "decoder_num_key_value_heads",
+    "encoder_num_key_value_heads",
+)
+
+
+def _class_defaults(node: ast.ClassDef) -> dict[str, ast.AST]:
+    """`{name: default-expression}` for one config class, from its body and its `__init__` keywords."""
+    out: dict[str, ast.AST] = {}
+    for stmt in node.body:
+        if isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name) and stmt.value is not None:
+            out[stmt.target.id] = stmt.value
+        elif isinstance(stmt, ast.Assign) and len(stmt.targets) == 1 and isinstance(stmt.targets[0], ast.Name):
+            out[stmt.targets[0].id] = stmt.value
+        elif isinstance(stmt, ast.FunctionDef) and stmt.name == "__init__":
+            args = stmt.args
+            pairs = list(zip(args.args[len(args.args) - len(args.defaults) :], args.defaults))
+            pairs += [(a, d) for a, d in zip(args.kwonlyargs, args.kw_defaults) if d is not None]
+            for arg, default in pairs:
+                # A class-body annotation wins: it is the modern spelling of the same default.
+                out.setdefault(arg.arg, default)
+    return out
+
+
+def _int_default(node: ast.AST | None) -> int | None:
+    """The literal `int` a default expression holds, or `None` for `None`/computed/absent."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, int) and not isinstance(node.value, bool):
+        return node.value
+    return None
+
+
+def _kv_sharing_of_config(defaults: dict[str, ast.AST]) -> str | None:
+    """Which case of grouped attention one config class instantiates, or `None` if it says nothing."""
+    query_heads = next(
+        (n for n in (_int_default(defaults.get(k)) for k in CONFIG_QUERY_HEAD_KEYS) if n is not None), None
+    )
+    kv_key = next((k for k in CONFIG_KV_HEAD_KEYS if k in defaults), None)
+    if kv_key is None:
+        # gpt_bigcode -- the library's original MQA model -- spells multi-query as a boolean rather
+        # than as `num_key_value_heads=1`. Same degenerate case, different notation. Only consulted
+        # when there is no head count at all: falcon carries both, and its head count is the more
+        # precise statement of the two.
+        if isinstance(defaults.get("multi_query"), ast.Constant) and defaults["multi_query"].value is True:
+            return "mqa_degenerate"
+        # No kv-head knob at all: every query head carries its own key and value, by construction.
+        return "no_kv_heads" if query_heads is not None else None
+    kv_heads = _int_default(defaults[kv_key])
+    if kv_heads is None:
+        # `num_key_value_heads=None`, filled from `num_attention_heads` in `__init__`. Still the
+        # general formulation -- it just defaults to the degenerate one.
+        return "mha_degenerate_by_default"
+    if kv_heads == 1:
+        return "mqa_degenerate"
+    if query_heads is not None and kv_heads == query_heads:
+        return "mha_degenerate"
+    return "grouped"
+
+
+@cache
+def config_kv_sharing(model: str) -> str:
+    """
+    Which case of grouped attention the model's configs ask for -- read from the config, not the class.
+
+    GQA is the general formulation: `nn.Linear(hidden, num_key_value_heads * head_dim)` is
+    multi-head attention when `num_key_value_heads == num_attention_heads` and multi-query when it
+    is `1`. Which one you get is a *config* fact, so it belongs here and in tier 2, not in the
+    tier-1 vector -- the class body and the `forward` are identical either way.
+
+    A model with several attention towers (a text config and a vision config) legitimately asks for
+    several, so the labels are joined the way `extras` joins its flags rather than collapsed to one.
+    """
+    labels: set[str] = set()
+    for path in sorted((MODELS_ROOT / model).glob("configuration_*.py")):
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except (OSError, SyntaxError):
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef) and node.name.endswith("Config"):
+                label = _kv_sharing_of_config(_class_defaults(node))
+                if label is not None:
+                    labels.add(label)
+    return "+".join(sorted(labels)) or "unknown_kv_sharing"
+
+
 # --------------------------------------------------------------------------------------------------
 # Block classification
 # --------------------------------------------------------------------------------------------------
@@ -300,6 +424,64 @@ def _bias_source(src: str) -> str:
     return "bias_unknown"
 
 
+# A projection's *role* is a structural fact; the attribute holding it is a spelling. The library
+# spells the query projection at least eleven ways -- `q_proj`, `query`, `q`, `to_q`, `to_query`,
+# `linear_q`, `q_lin`, `query_proj`, `Wq`, `project_q`, `self_attn_query_content_proj` -- and an
+# extractor that keys off one preferred spelling turns that into architecture: `cpmant`
+# (`project_q`), `ctrl` (`Wq`) and both `dab_detr` decoder attentions fell through to `qkv_custom`,
+# and dab_detr's two singleton variants existed only because the same model spells the same
+# projection two ways in two classes.
+#
+# So roles are read off the *words* an attribute name contains, after the decoration words that
+# carry no role (`proj`, `lin`, `to`, `w`, `self`, `attn`, ...) have been split away. Word equality,
+# not substring: `qkv` must not read as `q`, and `kv_a_proj_with_mqa` must not read as `k` + `v`.
+_ROLE_WORDS = {
+    "q": ("q", "query"),
+    "k": ("k", "key"),
+    "v": ("v", "value", "values"),
+    # `dense` and `final` are the BERT and swiftformer spellings of the output projection.
+    "o": ("o", "out", "output", "dense", "final"),
+}
+_PROJ_ASSIGN_RE = re.compile(r"self\.([A-Za-z_0-9]+)\s*=\s*(?:nn\.Linear|nn\.Conv1d|Conv1D|nn\.Parameter)\b")
+# Split on separators *and* on camel-case boundaries, so `Wq` yields `w` + `q`.
+_WORD_SPLIT_RE = re.compile(r"[^A-Za-z0-9]+|(?<=[a-z0-9])(?=[A-Z])")
+
+
+_ROLE_QKV = frozenset({"q", "k", "v"})
+
+
+def _projection_roles(src: str) -> set[str]:
+    """Which of the q/k/v/o projection roles a class assigns, regardless of what it calls them."""
+    roles: set[str] = set()
+    for name in _PROJ_ASSIGN_RE.findall(src):
+        words = {w.lower() for w in _WORD_SPLIT_RE.split(name) if w}
+        # `Wq`/`Wk`/`Wv` (ctrl) hide the role behind a single-letter weight prefix that no
+        # camel-case boundary splits: there is no case change between `W` and `q`.
+        words |= {w[1:] for w in words if len(w) == 2 and w[0] == "w"}
+        for role, spellings in _ROLE_WORDS.items():
+            if not words.isdisjoint(spellings):
+                roles.add(role)
+    return roles
+
+
+# One projection three times as wide as the model, unpacked into three tensors, is a fused qkv
+# whatever the attribute is called -- `att_proj` in bark, a bare `proj` in esmfold. Both halves are
+# required: the width alone would catch an unrelated 3x projection, and a three-way unpack alone
+# would catch a class that unpacks something else.
+_FUSED_TRIPLE_WIDTH_RE = re.compile(r"nn\.Linear\(\s*[^,()]*,\s*(?:3\s*\*|[\w.]+\s*\*\s*3\b)")
+_TRIPLE_UNPACK_RE = re.compile(r"\w+\s*,\s*\w+\s*,\s*\w+\s*=\s*self\.\w+\(|\.chunk\(\s*3\b")
+
+
+def _is_fused_triple(src: str) -> bool:
+    """True when the class projects q, k and v with one 3x-wide layer and splits the result."""
+    return bool(_FUSED_TRIPLE_WIDTH_RE.search(src) and _TRIPLE_UNPACK_RE.search(src))
+
+
+def _mlp_projections(src: str) -> set[str]:
+    """The projection attributes an MLP owns, for counting them instead of naming them."""
+    return set(_PROJ_ASSIGN_RE.findall(src))
+
+
 # --------------------------------------------------------------------------------------------------
 # Per-kind facet extraction
 # --------------------------------------------------------------------------------------------------
@@ -343,35 +525,74 @@ def _forward_source(src: str) -> str:
     return ""
 
 
-def _attention_facets(src: str, flags: frozenset[str] = frozenset()) -> tuple[dict, dict]:
+def _attention_facets(
+    src: str, flags: frozenset[str] = frozenset(), kv_sharing: str = "unknown_kv_sharing"
+) -> tuple[dict, dict]:
     if _has(src, "sampling_offsets"):
         # Deformable attention samples a few learned offsets instead of scoring all keys. It is a
         # different mixing type, not a projection layout, so it never has a qkv triple.
+        #
+        # Splitting `cross` out of `mix` also un-broke the `qkv_sampled` branch below. Every
+        # deformable block in the library attends to encoder features, so `mix` was always suffixed
+        # to `deformable_cross` before that branch tested `mix == "deformable"` -- it never matched,
+        # and all 14 of them fell through to `qkv_custom`.
         mix = "deformable"
     elif _has(src, "kv_a_proj_with_mqa", "kv_lora_rank", "q_a_proj", "kv_b_proj"):
+        # MLA projects keys and values through a shared low-rank latent. That is a genuinely
+        # different mechanism -- not grouped attention with a different head count -- so it stays.
         mix = "mla"
-    elif _has(src, "num_key_value_heads", "num_kv_heads", "n_kv_heads"):
-        mix = "gqa"
     else:
-        mix = "mha"
-    if _has(src, "encoder_hidden_states", "is_cross_attention", "key_value_states"):
-        mix += "_cross"
+        # GQA is the *general* formulation, and MHA and MQA are its degenerate cases:
+        # `nn.Linear(hidden, num_key_value_heads * head_dim)` is multi-head attention when
+        # `num_key_value_heads == num_attention_heads` and multi-query when it is 1. Same code, same
+        # `forward`, one mechanism parameterised by config -- so which one you get is a *config*
+        # fact, reported as `kv_sharing` in tier 2, not a tier-1 value.
+        #
+        # The old split asked whether the class body happened to mention a kv-head count, which is
+        # not a forward difference at all. It kept `MoonshineStreamingEncoderAttention` in a
+        # different variant from `ViTAttention`, `BeitAttention`, `DeiTAttention`, `ASTAttention`
+        # and five more whose canonicalised forwards are byte-identical to it -- every one of the
+        # 10 over-split pairs in the attention census was this one distinction. `repeat_kv`, the
+        # only thing a kv-head count actually changes, appears in exactly one forward in the
+        # library.
+        mix = "gqa"
+    # Orthogonal to the mixing mechanism: whether keys and values come from somewhere else. The
+    # suffix form (`mha_cross`) put two independent facts on one axis, so `fit-order` could only
+    # weight them together and the closed-vocabulary check had to special-case the suffix.
+    cross = (
+        "cross_attention"
+        if _has(src, "encoder_hidden_states", "is_cross_attention", "key_value_states")
+        else "self_attention"
+    )
 
-    if mix.startswith("mla"):
+    if mix == "mla":
         # MLA's projection set *is* the latent layout; its names vary per model (`q_a_proj`,
         # `q_lora_rank`, `kv_b_proj`) and carry no extra information once mix is known.
         qkv = "kv_latent"
     elif mix == "deformable":
         qkv = "qkv_sampled"
-    elif _has(src, "qkv_proj", "query_key_value", "c_attn", "in_proj_weight", "Wqkv") or _re(src, r"self\.qkv\s*="):
+    elif (
+        _has(src, "qkv_proj", "query_key_value", "c_attn", "in_proj_weight", "Wqkv")
+        or _re(src, r"self\.qkv\s*=")
+        # Structural, not by name: bark's `att_proj` and esmfold's `proj` are fused qkv triples.
+        or _is_fused_triple(src)
+    ):
         qkv = "qkv_fused"
     elif _has(src, "kv_proj"):
         qkv = "kv_fused"
-    # Vision and audio models spell the same three projections a dozen ways; anchor on `= ` so
-    # `self.q` does not also match `self.qkv`.
-    elif _has(src, "q_proj", "self.query") or _re(src, r"self\.(q|to_q|linear_q|query_proj|q_lin|q_content_proj)\s*="):
+    # Three separate projections, whatever they are called. The role test is what makes this
+    # name-agnostic; the spelling list stays as a union so a class that only *mentions* `q_proj`
+    # (esmfold's invariant-point attention, evolla's sequence compressor, granite_speech's
+    # conformer) cannot regress out of `qkv_split`.
+    elif (
+        _ROLE_QKV.issubset(_projection_roles(src))
+        or _has(src, "q_proj", "self.query")
+        or _re(src, r"self\.(q|to_q|linear_q|query_proj|q_lin|q_content_proj)\s*=")
+    ):
         qkv = "qkv_split"
-    elif _has(src, "MultiheadAttention"):
+    # `nn.` qualified on purpose: the bare substring matched `FunnelRelMultiheadAttention`'s own
+    # class name and called a block with three real `q_head`/`k_head`/`v_head` projections fused.
+    elif _has(src, "nn.MultiheadAttention"):
         qkv = "qkv_fused"
     else:
         # A bespoke projection layout (mostly detection heads with positional/content splits).
@@ -383,7 +604,13 @@ def _attention_facets(src: str, flags: frozenset[str] = frozenset()) -> tuple[di
     # byte-identical forwards. Keying on the class name also mislabelled 5 of 13 -- hunyuan and lfm2
     # hold an RMSNorm under a `*_layernorm` attribute -- and called `nn.Identity()` a norm. The class
     # is a norm-block fact, already censused under `NORM_AXES`, so it lands in tier 2.
-    _qk = re.search(r"self\.(q_norm|q_layernorm|query_layernorm|query_norm)\s*=\s*(?P<cls>[\w.]+)", src)
+    # `q_layer_norm` (idefics) and `layernorm_q` are the same projection norm under two more
+    # spellings. `q_a_layernorm` is deliberately *not* in this set: it normalises MLA's compressed
+    # query latent, not the per-head query, and is already accounted for by `mix == "mla"`. Folding
+    # it in here would relabel all 11 kv_latent blocks and claim they share a facet with qwen3.
+    _qk = re.search(
+        r"self\.(q_norm|q_layernorm|query_layernorm|query_norm|q_layer_norm|layernorm_q)\s*=\s*(?P<cls>[\w.]+)", src
+    )
     qk_norm = "no_qk_norm" if _qk is None else "qk_norm"
     if _qk is None:
         qk_norm_class = "none"
@@ -427,13 +654,26 @@ def _attention_facets(src: str, flags: frozenset[str] = frozenset()) -> tuple[di
         for name, present in (
             ("attn_sink", _has(src, "sink")),
             ("logit_softcap", _has(src, "softcap", "logit_capping")),
-            ("out_gate", _re(src, r"self\.(out_gate|attn_gate|g_proj|q_gate_proj)\s*=")),
+            # Name-agnostic: `attn_output * sigmoid(self.<gate>(x))` is the same forward whether the
+            # gate is called `out_gate`, `g_proj`, `gate_proj` (afmoe, hrm_text, muse_glimmer,
+            # esmfold2) or `gate_attention` (evolla). Keying off four chosen spellings left six
+            # gated attentions sharing a variant with ungated ones, which is an under-split: their
+            # `forward` multiplies by a gate and is not inheritable from one that does not.
+            (
+                "out_gate",
+                # `g_proj` (esmfold) and `attn_gate` do not both contain the word "gate", so the
+                # explicit list stays as a union with the name-agnostic test rather than being
+                # replaced by it.
+                _re(src, r"self\.(out_gate|attn_gate|g_proj|q_gate_proj)\s*=")
+                or _re(src, r"self\.\w*gate\w*\s*=\s*(?:nn\.Linear|nn\.Parameter|Conv1D|nn\.Conv1d)"),
+            ),
         )
         if present
     )
 
     tier1 = {
         "mix": mix,
+        "cross": cross,
         "qkv": qkv,
         "qk_norm": qk_norm,
         "rope": rope,
@@ -443,6 +683,10 @@ def _attention_facets(src: str, flags: frozenset[str] = frozenset()) -> tuple[di
     tier2 = {
         "qk_norm_class": qk_norm_class,
         "layer_typing_init": layer_typing_init,
+        # Which degenerate case of grouped attention the config asks for. Read from the config, and
+        # tier 2 on purpose: `num_key_value_heads` sizes a `nn.Linear` in `__init__` and changes
+        # nothing in `forward`, so it must never split a variant.
+        "kv_sharing": kv_sharing,
         # Config-declared, therefore a *model* fact, not a class-body fact: two byte-identical
         # attention classes get different values when only their configs differ (mistral/mixtral).
         # Kept in tier 2 so canonical-owner selection can still refuse to let a non-sliding model
@@ -501,6 +745,13 @@ def _mlp_facets(src: str) -> tuple[dict, dict]:
         "self.mlp",
     ):
         gating = "ungated_mlp"
+    elif len(_mlp_projections(src)) == 2:
+        # Two projections in sequence with nothing gating between them *is* an ungated FFN, whatever
+        # the two layers are called. The name list above is 19 spellings of "the first of two" and
+        # still missed `layer_1`/`layer_2` (xlnet) and `conv_1`/`conv_2` (vits), which were reported
+        # as multimodal connectors. Conv1d rather than Linear makes it the convolutional FFN that
+        # `conv_ffn` already names -- vits is what that value was always for.
+        gating = "conv_ffn" if _has(src, "nn.Conv1d") else "ungated_mlp"
     else:
         # A single projection plus a norm: a multimodal connector, not a transformer FFN.
         gating = "linear_projector"
@@ -899,7 +1150,7 @@ def scan_file(path: Path, model: str) -> tuple[list[Block], list[Helper]]:
                 continue
             tier1, tier2 = {"topology": topology}, {}
         elif kind == "attention":
-            tier1, tier2 = _attention_facets(class_source, config_flags(model))
+            tier1, tier2 = _attention_facets(class_source, config_flags(model), config_kv_sharing(model))
         elif kind == "mixer":
             tier1, tier2 = _mixer_facets(class_source, node.name)
         elif kind == "router":
@@ -1303,7 +1554,14 @@ def _selfcheck() -> None:
     assert len(repeat_kv) == 1, f"repeat_kv should have 1 canonical body, got {len(repeat_kv)}"
 
     llama = next(b for b in by_model_kind[("llama", "attention")] if b.class_name == "LlamaAttention")
+    # Still `gqa`, but the value changed meaning: it is now the *general* formulation rather than
+    # "this class mentions num_key_value_heads". `mha` is no longer a member of the vocabulary.
     assert llama.tier1["mix"] == "gqa", llama.tier1
+    assert llama.tier1["cross"] == "self_attention", llama.tier1
+    # llama declares `num_key_value_heads=None` and fills it from `num_attention_heads`, so its
+    # default really is the degenerate MHA case -- expressed in tier 2, where it cannot split it
+    # from any of the 141 models that write a real kv-head count.
+    assert llama.tier2["kv_sharing"] == "mha_degenerate_by_default", llama.tier2
     assert llama.tier1["qk_norm"] == "no_qk_norm", llama.tier1
     assert llama.tier2["window"] == "full_attention", llama.tier2
     assert llama.tier1["rope"] == "rope_half", llama.tier1
@@ -1366,8 +1624,93 @@ def _selfcheck() -> None:
     assert dino_ffn.tier1["gating"] == "fused_gate_up_mlp", dino_ffn.tier1
     assert dino_ffn.variant == videomt_ffn.variant, (dino_ffn.variant, videomt_ffn.variant)
 
+    # ---- naming must not create variants -------------------------------------------------------
+    # Three separate projections are `qkv_split` whatever they are called. `project_q` (cpmant),
+    # `Wq` (ctrl) and `self_attn_query_content_proj` (dab_detr) all used to fall through to
+    # `qkv_custom`; dab_detr's two singleton variants existed only because the same model spells the
+    # same projection two ways in two of its own classes.
+    for model, class_name in (
+        ("cpmant", "CpmAntAttention"),
+        ("ctrl", "MultiHeadAttention"),
+        ("dab_detr", "DabDetrDecoderLayerSelfAttention"),
+        ("dab_detr", "DabDetrDecoderLayerCrossAttention"),
+    ):
+        block = next(b for b in by_model_kind[(model, "attention")] if b.class_name == class_name)
+        assert block.tier1["qkv"] == "qkv_split", (model, class_name, block.tier1)
+    # ... and one 3x-wide projection that gets unpacked into three is `qkv_fused`, whether it is
+    # called `att_proj` (bark) or a bare `proj` (esmfold).
+    bark = next(b for b in by_model_kind[("bark", "attention")] if b.class_name == "BarkSelfAttention")
+    assert bark.tier1["qkv"] == "qkv_fused", bark.tier1
+    # DeBERTa's `in_proj` is genuinely one 3x projection chunked three ways. It used to read as
+    # `qkv_split` only because `pos_q_proj` happens to contain the substring `q_proj`.
+    deberta_attn = next(
+        b for b in by_model_kind[("deberta", "attention")] if b.class_name == "DisentangledSelfAttention"
+    )
+    assert deberta_attn.tier1["qkv"] == "qkv_fused", deberta_attn.tier1
+    # The reverse mistake: `FunnelRelMultiheadAttention` owns three real `q_head`/`k_head`/`v_head`
+    # projections and was called fused because its own *class name* contains "MultiheadAttention".
+    funnel = next(b for b in by_model_kind[("funnel", "attention")] if b.class_name == "FunnelRelMultiheadAttention")
+    assert funnel.tier1["qkv"] == "qkv_split", funnel.tier1
+
+    # An output gate is an output gate whatever it is called. These six multiply the attention
+    # output by `sigmoid(self.gate_proj(x))` (or a tanh gate, for evolla) and used to share a
+    # variant with ungated attention -- an under-split, since that `forward` is not inheritable.
+    for model, class_name in (
+        ("afmoe", "AfmoeAttention"),
+        ("hrm_text", "HrmTextAttention"),
+        ("muse_glimmer", "MuseGlimmerTextAttention"),
+        ("esmfold2", "EsmFold2AtomAttention"),
+        ("esmfold2", "EsmFold2DiffusionAttention"),
+        ("evolla", "EvollaSequenceAlignerCrossAttention"),
+    ):
+        block = next(b for b in by_model_kind[(model, "attention")] if b.class_name == class_name)
+        assert "out_gate" in block.tier1["extras"], (model, class_name, block.tier1)
+    # `g_proj` does not contain the word "gate", so the explicit spellings must survive too.
+    esmfold = next(b for b in by_model_kind[("esm", "attention")] if b.class_name == "EsmFoldSelfAttention")
+    assert "out_gate" in esmfold.tier1["extras"], esmfold.tier1
+
+    # idefics spells the query norm `q_layer_norm`. `q_a_layernorm` is deliberately *not* an alias:
+    # it normalises MLA's compressed query latent, which `mix == "mla"` already reports.
+    idefics = next(b for b in by_model_kind[("idefics", "attention")] if b.class_name == "IdeficsAttention")
+    assert idefics.tier1["qk_norm"] == "qk_norm", idefics.tier1
+    dsv3 = next(b for b in by_model_kind[("deepseek_v3", "attention")] if b.class_name == "DeepseekV3Attention")
+    assert dsv3.tier1["qk_norm"] == "no_qk_norm" and dsv3.tier1["mix"] == "mla", dsv3.tier1
+
+    # Two projections in sequence is an ungated FFN whatever the two layers are called; `conv_1` /
+    # `conv_2` makes it the convolutional FFN that `conv_ffn` was always for. Both were reported as
+    # multimodal connectors because their names were not on a 19-entry spelling list.
+    xlnet_ffn = next(b for b in by_model_kind[("xlnet", "mlp")] if b.class_name == "XLNetFeedForward")
+    assert xlnet_ffn.tier1["gating"] == "ungated_mlp", xlnet_ffn.tier1
+    vits_ffn = next(b for b in by_model_kind[("vits", "mlp")] if b.class_name == "VitsFeedForward")
+    assert vits_ffn.tier1["gating"] == "conv_ffn", vits_ffn.tier1
+
     mistral = next(b for b in by_model_kind[("mistral", "attention")] if b.class_name == "MistralAttention")
     assert mistral.tier2["window"] == "sliding_attention", mistral.tier2
+    # mistral writes a real kv-head count (32 query heads, 8 kv heads): genuinely grouped, and it
+    # must still share a variant with llama, whose forward is the same.
+    assert mistral.tier2["kv_sharing"] == "grouped", mistral.tier2
+    assert mistral.variant == llama.variant, (mistral.variant, llama.variant)
+
+    # The pair this whole axis change exists for. These forwards are byte-identical, and the old
+    # `mha`/`gqa` sniff was the only thing keeping them in different variants -- an over-split, and
+    # the canonical example the audit found. `MoonshineStreamingEncoderAttention` sizes its
+    # projections with a kv-head count; `ViTAttention` does not. Same formulation, same forward.
+    vit = next(b for b in by_model_kind[("vit", "attention")] if b.class_name == "ViTAttention")
+    moonshine = next(
+        b
+        for b in by_model_kind[("moonshine_streaming", "attention")]
+        if b.class_name == "MoonshineStreamingEncoderAttention"
+    )
+    assert vit.forward == moonshine.forward, "these two forwards are byte-identical"
+    assert vit.variant == moonshine.variant, (vit.variant, moonshine.variant)
+    assert vit.tier2["kv_sharing"] != moonshine.tier2["kv_sharing"], "the config delta must stay visible"
+
+    # `cross` is its own axis now. bart's attention takes `key_value_states`, so it is the
+    # cross-capable formulation; llama's is not. Same `mix`, different `cross`.
+    bart = next(b for b in by_model_kind[("bart", "attention")] if b.class_name == "BartAttention")
+    assert bart.tier1["cross"] == "cross_attention", bart.tier1
+    assert bart.tier1["mix"] == llama.tier1["mix"] == "gqa", (bart.tier1, llama.tier1)
+    assert bart.variant != llama.variant, "self- and cross-attention are still different variants"
 
     # No model may resolve to a parent that is not a real model directory. `nemotron_h` uses the
     # level-3 `...models.jamba.modeling_jamba` import form and used to resolve to a phantom
@@ -1412,7 +1755,10 @@ def _selfcheck() -> None:
     # splitting a variant on cosmetics: a new spelling shows up as an unexpected value here rather
     # than quietly inflating the variant count.
     expected = {
-        ("attention", "mix"): {"mha", "gqa", "mla", "deformable"},
+        # `mha` is gone on purpose: it is GQA with `num_key_value_heads == num_attention_heads`,
+        # which is a config fact (tier-2 `kv_sharing`), not a mixing mechanism.
+        ("attention", "mix"): {"gqa", "mla", "deformable"},
+        ("attention", "cross"): {"self_attention", "cross_attention"},
         ("attention", "qkv"): {"qkv_split", "qkv_fused", "kv_fused", "kv_latent", "qkv_sampled", "qkv_custom"},
         ("attention", "qk_norm"): {"no_qk_norm", "qk_norm"},
         ("attention", "rope"): {"no_pos_emb", "rope_half", "rope_interleaved", "alibi"},
@@ -1433,9 +1779,9 @@ def _selfcheck() -> None:
             allowed = expected.get((block.kind, axis))
             if allowed is None:
                 continue
-            # `mix` carries an optional "+cross" suffix.
-            base = value.split("_cross")[0] if axis == "mix" else value
-            assert base in allowed, f"{block.model}/{block.class_name}: {axis}={value!r} is outside {sorted(allowed)}"
+            # No suffix stripping any more: `mix` used to carry an optional "_cross" suffix, which
+            # is now the `cross` axis and is checked against its own vocabulary like everything else.
+            assert value in allowed, f"{block.model}/{block.class_name}: {axis}={value!r} is outside {sorted(allowed)}"
 
     print(f"selfcheck ok: {len(blocks)} blocks, {len(helpers)} helpers, {len(build_variants(blocks))} variants")
 
