@@ -1697,11 +1697,7 @@ class ModelTesterMixin(ExportTesterMixin):
                 loss = model(**inputs).loss
                 loss.backward()
                 grad_expected_params = [(n, p) for n, p in model.named_parameters() if p.grad is not None]
-                # Use a small epsilon to ignore near-zero gradients (~1e-8) that can appear due to
-                # floating-point noise from gradient checkpointing recomputation, while still catching
-                # real gradient differences (which are orders of magnitude larger, typically >1).
-                _grad_eps = 1e-6
-                non_zero_grads_normal = {n for n, p in grad_expected_params if p.grad.abs().sum() > _grad_eps}
+                non_zero_grads_normal = {n for n, p in grad_expected_params if p.grad.abs().sum() > 0}
 
                 # reset all gradients to zero for the comparison with the gradient checkpointing run
                 optimizer.zero_grad()
@@ -1726,7 +1722,7 @@ class ModelTesterMixin(ExportTesterMixin):
 
                 # check that all the parameters that had non-zero gradients before, have non-zero grads with gradient
                 # checkpointing. divergence indicates a different forward-pass environment that needs special handling.
-                non_zero_grads_gradcp = {n for n, p in grad_expected_params if p.grad.abs().sum() > _grad_eps}
+                non_zero_grads_gradcp = {n for n, p in grad_expected_params if p.grad.abs().sum() > 0}
                 self.assertEqual(non_zero_grads_gradcp, non_zero_grads_normal)
 
                 if self.test_all_params_have_gradient:
