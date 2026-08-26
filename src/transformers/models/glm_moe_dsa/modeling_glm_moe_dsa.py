@@ -336,12 +336,22 @@ class GlmMoeDsaAttention(nn.Module):
 
         self.is_causal = True
 
-        if self.q_lora_rank is None:
-            self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
-        else:
-            self.q_a_proj = nn.Linear(self.hidden_size, self.q_lora_rank, bias=config.attention_bias)
-            self.q_a_layernorm = GlmMoeDsaRMSNorm(self.q_lora_rank)
-            self.q_b_proj = nn.Linear(self.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
+        self.q_proj = (
+            nn.Linear(self.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
+            if self.q_lora_rank is None
+            else None
+        )
+        self.q_a_proj = (
+            nn.Linear(self.hidden_size, config.q_lora_rank, bias=config.attention_bias)
+            if self.q_lora_rank is not None
+            else None
+        )
+        self.q_a_layernorm = GlmMoeDsaRMSNorm(config.q_lora_rank) if self.q_lora_rank is not None else None
+        self.q_b_proj = (
+            nn.Linear(config.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
+            if self.q_lora_rank is not None
+            else None
+        )
 
         self.kv_a_proj_with_mqa = nn.Linear(
             self.hidden_size,
@@ -597,10 +607,7 @@ class GlmMoeDsaDecoderLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
         self.self_attn = GlmMoeDsaAttention(config, layer_idx)
 
-        if config.mlp_layer_types[layer_idx] == "sparse":
-            self.mlp = GlmMoeDsaMoE(config)
-        else:
-            self.mlp = GlmMoeDsaMLP(config)
+        self.mlp = GlmMoeDsaMoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else GlmMoeDsaMLP(config)
 
         self.input_layernorm = GlmMoeDsaRMSNorm(config.hidden_size, config.rms_norm_eps)
         self.post_attention_layernorm = GlmMoeDsaRMSNorm(config.hidden_size, config.rms_norm_eps)
