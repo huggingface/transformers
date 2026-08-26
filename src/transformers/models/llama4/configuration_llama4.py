@@ -119,6 +119,7 @@ class Llama4TextConfig(PreTrainedConfig):
         "layers.*.feed_forward.shared_expert.down_proj": "rowwise",
         "layers.*.feed_forward.experts.gate_up_proj": "packed_rowwise",  # row because not linear
         "layers.*.feed_forward.experts.down_proj": "colwise",  # col because not linear
+        "layers.*.feed_forward.experts": "moe_tp_experts",
         "layers.*.feed_forward.gate_proj": "colwise",
         "layers.*.feed_forward.up_proj": "colwise",
         "layers.*.feed_forward.down_proj": "rowwise",
@@ -233,7 +234,7 @@ class Llama4Config(PreTrainedConfig):
     }
     sub_configs = {"text_config": Llama4TextConfig, "vision_config": Llama4VisionConfig}
     base_model_tp_plan = {
-        "multi_modal_projector.linear_1": "colwise_rep",
+        "multi_modal_projector.linear_1": "colwise_gather_output",
     }
 
     vision_config: dict | PreTrainedConfig | None = None

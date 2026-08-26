@@ -73,7 +73,7 @@ class DeepseekV2Config(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
 
-    vocab_size: int = 32000
+    vocab_size: int = 102400
     hidden_size: int = 4096
     intermediate_size: int = 11008
     num_hidden_layers: int = 32
@@ -120,6 +120,8 @@ class DeepseekV2Config(PreTrainedConfig):
     moe_intermediate_size: int = 1407
 
     def __post_init__(self, **kwargs):
+        # Also tells shared code this is an MLA config (key and value head dims differ)
+        self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
         self.head_dim = self.qk_rope_head_dim
         if self.head_dim is None:
             self.head_dim = self.hidden_size // self.num_attention_heads

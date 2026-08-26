@@ -60,6 +60,7 @@ class QuantizationMethod(str, Enum):
     FPQUANT = "fp_quant"
     AUTOROUND = "auto-round"
     MXFP4 = "mxfp4"
+    NVFP4 = "nvfp4"
     MXFP8 = "mxfp8"
     METAL = "metal"
     FOUR_OVER_SIX = "fouroversix"
@@ -215,7 +216,7 @@ class AutoRoundConfig(QuantizationConfigMixin):
             The number of bits to quantize to, supported numbers are (2, 3, 4, 8).
         group_size (`int`, *optional*, defaults to 128): Group-size value
         sym (`bool`, *optional*, defaults to `True`): Symmetric quantization or not
-        backend (`str`, *optional*, defaults to `"auto"`): The kernel to use, e.g., ipex,marlin, exllamav2, triton, etc. Ref. https://github.com/intel/auto-round?tab=readme-ov-file#specify-backend
+        backend (`str`, *optional*, defaults to `"auto"`): The inference backend. By default, AutoRound selects a compatible backend based on the device, quantization settings, and installed libraries. See [Specify inference backend](https://github.com/intel/auto-round/blob/main/docs/step_by_step.md#specify-inference-backend) for all backend options.
     """
 
     def __init__(
@@ -1283,13 +1284,10 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
 
     @property
     def is_quantization_compressed(self):
+        from compressed_tensors.quantization import QuantizationStatus
+
         qc = self.quantization_config
-        return (
-            self.is_quantized
-            and qc is not None
-            and qc.quant_method == QuantizationMethod.COMPRESSED_TENSORS
-            and qc.format != "dense"
-        )
+        return self.is_quantized and (qc is not None and qc.quantization_status == QuantizationStatus.COMPRESSED)
 
 
 @dataclass
@@ -2063,3 +2061,22 @@ class GemmaQuantizationConfig(QuantizationConfigMixin):
         self.quantize_embeddings = quantize_embeddings
         self.module_quant_configs = module_quant_configs
         self.modules_to_not_convert = modules_to_not_convert
+
+
+class NVFP4Config(QuantizationConfigMixin):
+    """Configuration for on-the-fly NVFP4 weight quantization.
+
+    Args:
+        modules_to_not_convert (`list[str]`, *optional*):
+            Module-name patterns that should remain in their original precision.
+        kwargs (`dict[str, Any]`, *optional*):
+            Additional values are ignored and reported through the Transformers logger.
+    """
+
+    def __init__(self, modules_to_not_convert: list[str] | None = None, **kwargs):
+        self.quant_method = QuantizationMethod.NVFP4
+        self.modules_to_not_convert = modules_to_not_convert
+        if kwargs:
+            logger.info(
+                f"Unused kwargs: {list(kwargs.keys())}. These kwargs are not used in {self.__class__.__name__}."
+            )

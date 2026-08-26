@@ -35,7 +35,7 @@ from transformers.generation import ContinuousBatchingConfig, GenerationConfig
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-4B",
     attn_implementation="flash_attention_2",
-    device_map="cuda",
+    device_map="auto",
     dtype=torch.bfloat16,
 )
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-4B")
@@ -404,7 +404,7 @@ Continuous batching requires a paged attention backend. Set `attn_implementation
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-4B",
     attn_implementation="paged|flash_attention_2",
-    device_map="cuda",
+    device_map="auto",
     dtype=torch.bfloat16,
 )
 ```
@@ -464,7 +464,7 @@ model = AutoModelForCausalLM.from_pretrained(
     "google/gemma-2-2b",
     config=config,
     attn_implementation="paged|sdpa",
-    device_map="cuda",
+    device_map="auto",
     dtype=torch.bfloat16,
 )
 ```

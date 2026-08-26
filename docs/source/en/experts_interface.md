@@ -213,7 +213,8 @@ model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen1.5-MoE-A2.7B",
     dtype="bfloat16",
     experts_implementation="grouped_mm",
-).eval().cuda()
+    device_map="auto",
+).eval()
 
 # Works for grouped_mm (no CUDA graphs)
 model.forward = torch.compile(model.forward, mode="max-autotune-no-cudagraphs")
