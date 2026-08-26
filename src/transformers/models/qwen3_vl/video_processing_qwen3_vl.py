@@ -46,6 +46,10 @@ class Qwen3VLVideoProcessorInitKwargs(VideosKwargs, total=False):
         The temporal patch size of the vision encoder.
     merge_size (`int`, *optional*, defaults to 2):
         The merge size of the vision encoder to llm encoder.
+    min_frames (`int`, *optional*, defaults to 4):
+        The minimum number of frames to sample from video.
+    max_frames (`int`, *optional*, defaults to 768):
+        The maximum number of frames to sample from video.
     """
 
     patch_size: int
