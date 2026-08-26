@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 The pipelines are a great and easy way to use models for inference. These pipelines are objects that abstract most of
 the complex code from the library, offering a simple API dedicated to several tasks, including Named Entity
 Recognition, Masked Language Modeling, Sentiment Analysis, Feature Extraction and Question Answering. See the
-[task summary](../task_summary) for examples of use.
+[Pipeline tutorial](../pipeline_tutorial) for examples of use.
 
 There are two categories of pipeline abstractions to be aware about:
 
