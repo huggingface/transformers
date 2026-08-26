@@ -179,6 +179,15 @@ class BackgroundThreadStatus:
         with self._local_status_lock:
             self._local_status = max(self._local_status, tp_status)
 
+    def can_accept_new_requests(self) -> bool:
+        """Whether the background thread can accept new requests. Raises an error if the background thread already died
+        with a fatal error."""
+        if self.fatal_error is not None:
+            raise RuntimeError(
+                "The continuous batching background thread died with a fatal error."
+            ) from self.fatal_error
+        return self.local_status == self.DONT_STOP
+
     @property
     def local_status(self) -> int:
         """The locally requested status, possibly ahead of the value agreed upon by the TP group."""
@@ -789,8 +798,8 @@ class ContinuousBatchingManager:
         # If this process is not a TP driver, request submission is a no-op
         if not self.is_tp_driver:
             return None
-        # If the manager is not accepting new requests, throw a warning and return None
-        if self.background_thread_status.local_status >= BackgroundThreadStatus.FLUSH_AND_STOP:
+        # If the manager is not accepting new requests, stop here. This also checks for a fatal error in the BG thread.
+        if not self.background_thread_status.can_accept_new_requests():
             preview = f"{input_ids[:3]}"[:-1] + ", ..., " + f"{input_ids[-3:]}"[1:]
             logger.warning(f"Background thread is stopping. Request with ids {preview} will be dropped.")
             return None
