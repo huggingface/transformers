@@ -220,7 +220,6 @@ If you are in Jupyter or Colab, you should login with:
 
 ```python
 import wandb
-
 wandb.login()
 ```
 
