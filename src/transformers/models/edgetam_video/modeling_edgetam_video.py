@@ -17,7 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import math
 from collections import OrderedDict
 from collections.abc import Callable, Iterator
@@ -44,7 +43,6 @@ from ...utils import ModelOutput, auto_docstring, can_return_tuple, logging
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import TransformersKwargs, is_flash_attention_requested, maybe_autocast
 from ...utils.output_capturing import OutputRecorder
-from ...vision_utils import get_vision_position_ids
 from ..auto import AutoModel
 from .configuration_edgetam_video import (
     EdgeTamVideoConfig,
@@ -884,6 +882,12 @@ class EdgeTamVideoPreTrainedModel(PreTrainedModel):
                 init.zeros_(module.scale)
         elif isinstance(module, EdgeTamVideoPositionalEmbedding):
             init.normal_(module.positional_embedding, std=module.scale)
+        elif isinstance(module, EdgeTamVideoMemoryAttention):
+            position_ids = module.precompute_positions(module.config)
+            init.copy_(module.position_ids, position_ids)
+        if isinstance(module, EdgeTamVideoMemoryAttention):
+            position_ids_k = module.precompute_positions(module.config, is_key=True)
+            init.copy_(module.position_ids_k, position_ids_k)
 
 
 class EdgeTamVideoInferenceCache:
@@ -1247,13 +1251,35 @@ class EdgeTamVideoMemoryAttentionLayer(nn.Module):
 class EdgeTamVideoMemoryAttention(nn.Module):
     def __init__(self, config: EdgeTamVideoConfig):
         super().__init__()
+        self.config = config
         self.layers = nn.ModuleList(
             [EdgeTamVideoMemoryAttentionLayer(config) for _ in range(config.memory_attention_num_layers)]
         )
         self.layer_norm = nn.LayerNorm(config.memory_attention_hidden_size)
         self.rotary_emb = EdgeTamVideoVisionRotaryEmbedding(config=config)
-        self.grid_thw = (1, config.memory_attention_rope_feat_sizes[1], config.memory_attention_rope_feat_sizes[0])
-        self.grid_thw_k = (1, config.memory_attention_rope_k_sizes[1], config.memory_attention_rope_k_sizes[0])
+
+        position_ids = self.precompute_positions(config)
+        self.position_ids = nn.Buffer(position_ids, persistent=False)
+        position_ids_k = self.precompute_positions(config, is_key=True)
+        self.position_ids_k = nn.Buffer(position_ids_k, persistent=False)
+
+    @staticmethod
+    def precompute_positions(config: EdgeTamVideoConfig, is_key: bool = False):
+        "Precompute position IDs for query or key since they are different."
+        if not is_key:
+            hpos_ids, wpos_ids = torch.meshgrid(
+                torch.arange(config.memory_attention_rope_feat_sizes[1]),
+                torch.arange(config.memory_attention_rope_feat_sizes[0]),
+                indexing="ij",
+            )
+        else:
+            hpos_ids, wpos_ids = torch.meshgrid(
+                torch.arange(config.memory_attention_rope_k_sizes[1]),
+                torch.arange(config.memory_attention_rope_k_sizes[0]),
+                indexing="ij",
+            )
+        position_ids = torch.stack([wpos_ids.flatten(), hpos_ids.flatten()], dim=-1)
+        return position_ids
 
     def forward(
         self,
@@ -1286,16 +1312,8 @@ class EdgeTamVideoMemoryAttention(nn.Module):
         memory = memory.transpose(0, 1).unsqueeze(1)
         memory_posision_embeddings = memory_posision_embeddings.transpose(0, 1).unsqueeze(1)
 
-        grid_thw = torch.tensor([self.grid_thw], device=output.device)
-        position_ids = get_vision_position_ids(grid_thw, spatial_merge_size=1)
-        position_ids = position_ids.flip(-1)
-        rope_position_embeddings = self.rotary_emb(output, position_ids)
-
-        grid_thw_k = torch.tensor([self.grid_thw_k], device=output.device)
-        position_ids_k = get_vision_position_ids(grid_thw_k, spatial_merge_size=1)
-        position_ids_k = position_ids_k.flip(-1)
-        rope_position_embeddings_k = self.rotary_emb(output, position_ids_k)
-
+        rope_position_embeddings = self.rotary_emb(output, self.position_ids)
+        rope_position_embeddings_k = self.rotary_emb(output, self.position_ids_k)
         for layer in self.layers:
             output = layer(
                 queries=output.unsqueeze(1) if output.ndim == 3 else output,

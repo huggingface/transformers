@@ -45,7 +45,6 @@ from ...utils.generic import (
 )
 from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
-from ...vision_utils import get_vision_position_ids
 from ..auto import AutoModel
 from ..clip import CLIPTextModelWithProjection  # trf-ignore: TRF009
 from .configuration_sam3 import (
@@ -743,24 +742,38 @@ class Sam3ViTLayer(GradientCheckpointingLayer):
 
         self.config = config
         hidden_size = config.hidden_size
-        image_size = config.image_size
-        image_size = image_size if isinstance(image_size, (list, tuple)) else (image_size, image_size)
-
-        patch_size = config.patch_size
-        patch_size = patch_size if isinstance(patch_size, (list, tuple)) else (patch_size, patch_size)
-
-        self.grid_thw = (1, image_size[1] // patch_size[1], image_size[0] // patch_size[0])
-        if window_size > 0:
-            self.grid_thw = (1, window_size, window_size)
-
         self.layer_norm1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
         self.rotary_emb = Sam3ViTRotaryEmbedding(config)
         self.attention = Sam3ViTRoPEAttention(config)
         self.layer_norm2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
         self.mlp = Sam3MLP(config)
         self.dropout = nn.Dropout(config.hidden_dropout)
-
         self.window_size = window_size
+
+        position_ids = self.precompute_positions(config, window_size)
+        self.position_ids = nn.Buffer(position_ids, persistent=False)
+
+    @staticmethod
+    def precompute_positions(config: Sam3ViTConfig, window_size: int):
+        if window_size > 0:
+            hw_grid = (window_size, window_size)
+        else:
+            image_size = config.image_size
+            image_size = image_size if isinstance(image_size, (list, tuple)) else (image_size, image_size)
+
+            patch_size = config.patch_size
+            patch_size = patch_size if isinstance(patch_size, (list, tuple)) else (patch_size, patch_size)
+
+            hw_grid = (image_size[1] // patch_size[1], image_size[0] // patch_size[0])
+
+        hpos_ids, wpos_ids = torch.meshgrid(
+            torch.arange(hw_grid[0]),
+            torch.arange(hw_grid[1]),
+            indexing="ij",
+        )
+        position_ids = torch.stack([wpos_ids.flatten(), hpos_ids.flatten()], dim=-1)
+        position_ids = position_ids * (config.window_size / hw_grid[1])
+        return position_ids
 
     def forward(
         self,
@@ -776,12 +789,7 @@ class Sam3ViTLayer(GradientCheckpointingLayer):
             # Partition into non-overlapping windows for efficient attention
             hidden_states, pad_height_width = window_partition(hidden_states, self.window_size)
 
-        grid_thw = torch.tensor([self.grid_thw], device=hidden_states.device)
-        position_ids = get_vision_position_ids(grid_thw, spatial_merge_size=1, kwargs=kwargs)
-        position_ids = position_ids.flip(-1)
-        position_ids = position_ids * (self.config.window_size / self.grid_thw[2])
-
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+        position_embeddings = self.rotary_emb(hidden_states, self.position_ids)
         hidden_states, _ = self.attention(hidden_states, position_embeddings, **kwargs)
 
         if self.window_size > 0:
@@ -813,6 +821,9 @@ class Sam3PreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, Sam3ViTEmbeddings):
             init.normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, Sam3ViTLayer):
+            position_ids = module.precompute_positions(module.config, module.window_size)
+            init.copy_(module.position_ids, position_ids)
 
 
 @auto_docstring

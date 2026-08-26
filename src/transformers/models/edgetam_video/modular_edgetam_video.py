@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import math
 from collections.abc import Callable
 from typing import Any
@@ -22,6 +21,7 @@ import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 from torch import Tensor
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -30,7 +30,6 @@ from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import auto_docstring
 from ...utils.output_capturing import OutputRecorder
-from ...vision_utils import get_vision_position_ids
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..sam2.modeling_sam2 import eager_attention_forward, window_partition
 from ..sam2_video.configuration_sam2_video import (
@@ -575,7 +574,11 @@ class EdgeTamVideoFeedForward(Sam2VideoFeedForward):
 
 
 class EdgeTamVideoPreTrainedModel(Sam2VideoPreTrainedModel):
-    pass
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, EdgeTamVideoMemoryAttention):
+            position_ids_k = module.precompute_positions(module.config, is_key=True)
+            init.copy_(module.position_ids_k, position_ids_k)
 
 
 class EdgeTamVideoInferenceSession(Sam2VideoInferenceSession):
@@ -651,7 +654,26 @@ class EdgeTamVideoMemoryAttentionLayer(nn.Module):
 class EdgeTamVideoMemoryAttention(Sam2VideoMemoryAttention):
     def __init__(self, config: EdgeTamVideoConfig):
         super().__init__()
-        self.grid_thw_k = (1, config.memory_attention_rope_k_sizes[1], config.memory_attention_rope_k_sizes[0])
+        position_ids_k = self.precompute_positions(config, is_key=True)
+        self.position_ids_k = nn.Buffer(position_ids_k, persistent=False)
+
+    @staticmethod
+    def precompute_positions(config: EdgeTamVideoConfig, is_key: bool = False):
+        "Precompute position IDs for query or key since they are different."
+        if not is_key:
+            hpos_ids, wpos_ids = torch.meshgrid(
+                torch.arange(config.memory_attention_rope_feat_sizes[1]),
+                torch.arange(config.memory_attention_rope_feat_sizes[0]),
+                indexing="ij",
+            )
+        else:
+            hpos_ids, wpos_ids = torch.meshgrid(
+                torch.arange(config.memory_attention_rope_k_sizes[1]),
+                torch.arange(config.memory_attention_rope_k_sizes[0]),
+                indexing="ij",
+            )
+        position_ids = torch.stack([wpos_ids.flatten(), hpos_ids.flatten()], dim=-1)
+        return position_ids
 
     def forward(
         self,
@@ -684,16 +706,8 @@ class EdgeTamVideoMemoryAttention(Sam2VideoMemoryAttention):
         memory = memory.transpose(0, 1).unsqueeze(1)
         memory_posision_embeddings = memory_posision_embeddings.transpose(0, 1).unsqueeze(1)
 
-        grid_thw = torch.tensor([self.grid_thw], device=output.device)
-        position_ids = get_vision_position_ids(grid_thw, spatial_merge_size=1)
-        position_ids = position_ids.flip(-1)
-        rope_position_embeddings = self.rotary_emb(output, position_ids)
-
-        grid_thw_k = torch.tensor([self.grid_thw_k], device=output.device)
-        position_ids_k = get_vision_position_ids(grid_thw_k, spatial_merge_size=1)
-        position_ids_k = position_ids_k.flip(-1)
-        rope_position_embeddings_k = self.rotary_emb(output, position_ids_k)
-
+        rope_position_embeddings = self.rotary_emb(output, self.position_ids)
+        rope_position_embeddings_k = self.rotary_emb(output, self.position_ids_k)
         for layer in self.layers:
             output = layer(
                 queries=output.unsqueeze(1) if output.ndim == 3 else output,

@@ -38,7 +38,6 @@ from ...utils import ModelOutput, auto_docstring, logging
 from ...utils.generic import TransformersKwargs
 from ...utils.output_capturing import OutputRecorder
 from ...video_utils import VideoInput
-from ...vision_utils import get_vision_position_ids
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..sam2.configuration_sam2 import (
     Sam2MaskDecoderConfig,
@@ -938,6 +937,9 @@ class Sam2VideoPreTrainedModel(PreTrainedModel):
                 init.zeros_(module.scale)
         elif isinstance(module, Sam2VideoPositionalEmbedding):
             init.normal_(module.positional_embedding, std=module.scale)
+        elif isinstance(module, Sam2VideoMemoryAttention):
+            position_ids = module.precompute_positions(module.config)
+            init.copy_(module.position_ids, position_ids)
 
 
 class Sam2VideoVisionRotaryEmbedding(Sam3ViTRotaryEmbedding):
@@ -1158,12 +1160,25 @@ class Sam2VideoMemoryAttentionLayer(nn.Module):
 class Sam2VideoMemoryAttention(nn.Module):
     def __init__(self, config: Sam2VideoConfig):
         super().__init__()
+        self.config = config
         self.layers = nn.ModuleList(
             [Sam2VideoMemoryAttentionLayer(config) for _ in range(config.memory_attention_num_layers)]
         )
         self.layer_norm = nn.LayerNorm(config.memory_attention_hidden_size)
         self.rotary_emb = Sam2VideoVisionRotaryEmbedding(config=config)
-        self.grid_thw = (1, config.memory_attention_rope_feat_sizes[1], config.memory_attention_rope_feat_sizes[0])
+
+        position_ids = self.precompute_positions(config)
+        self.position_ids = nn.Buffer(position_ids, persistent=False)
+
+    @staticmethod
+    def precompute_positions(config: Sam2VideoConfig):
+        hpos_ids, wpos_ids = torch.meshgrid(
+            torch.arange(config.memory_attention_rope_feat_sizes[1]),
+            torch.arange(config.memory_attention_rope_feat_sizes[0]),
+            indexing="ij",
+        )
+        position_ids = torch.stack([wpos_ids.flatten(), hpos_ids.flatten()], dim=-1)
+        return position_ids
 
     def forward(
         self,
@@ -1194,11 +1209,7 @@ class Sam2VideoMemoryAttention(nn.Module):
         output = output.transpose(0, 1)
         memory = memory.transpose(0, 1).unsqueeze(1)
         memory_posision_embeddings = memory_posision_embeddings.transpose(0, 1).unsqueeze(1)
-
-        grid_thw = torch.tensor([self.grid_thw], device=output.device)
-        position_ids = get_vision_position_ids(grid_thw, spatial_merge_size=1)
-        position_ids = position_ids.flip(-1)
-        rope_position_embeddings = self.rotary_emb(output, position_ids)
+        rope_position_embeddings = self.rotary_emb(output, self.position_ids)
         for layer in self.layers:
             output = layer(
                 queries=output.unsqueeze(1) if output.ndim == 3 else output,

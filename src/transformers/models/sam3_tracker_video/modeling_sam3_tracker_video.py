@@ -45,7 +45,6 @@ from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import is_flash_attention_requested, maybe_autocast
 from ...utils.output_capturing import OutputRecorder
-from ...vision_utils import get_vision_position_ids
 from ..auto import AutoModel
 from .configuration_sam3_tracker_video import (
     Sam3TrackerVideoConfig,
@@ -740,9 +739,11 @@ class Sam3TrackerVideoPreTrainedModel(PreTrainedModel):
                 init.zeros_(module.scale)
         elif isinstance(module, Sam3TrackerVideoPositionalEmbedding):
             init.normal_(module.positional_embedding, std=module.scale)
+        elif isinstance(module, Sam3TrackerVideoMemoryAttention):
+            position_ids = module.precompute_positions(module.config)
+            init.copy_(module.position_ids, position_ids)
 
 
-# Simple axial 2D rope as in sam3/edgetam/etc with same freq of head-dim//2 for H and W
 class Sam3TrackerVideoVisionRotaryEmbedding(nn.Module):
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Sam3TrackerVideoConfig, device=None):
@@ -799,11 +800,12 @@ class Sam3TrackerVideoVisionRotaryEmbedding(nn.Module):
         sin = self.recomposition_to_2d(sin)
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
+    # Ignore copy
     def recomposition_to_2d(self, freq):
         # take each grid's (N, D), the full frequency range
         freq_h, freq_w = freq[:, 0], freq[:, 1]
-        freq_hw = torch.cat([freq_h, freq_w], dim=-1)
-        return torch.cat([freq_hw, freq_hw], dim=-1)
+        freq_hw = torch.cat([freq_h, freq_w], dim=-1)[None, ...]
+        return freq_hw.repeat_interleave(2, dim=-1)
 
 
 def rotate_pairwise(x):
@@ -999,12 +1001,25 @@ class Sam3TrackerVideoMemoryAttentionLayer(nn.Module):
 class Sam3TrackerVideoMemoryAttention(nn.Module):
     def __init__(self, config: Sam3TrackerVideoConfig):
         super().__init__()
+        self.config = config
         self.layers = nn.ModuleList(
             [Sam3TrackerVideoMemoryAttentionLayer(config) for _ in range(config.memory_attention_num_layers)]
         )
         self.layer_norm = nn.LayerNorm(config.memory_attention_hidden_size)
         self.rotary_emb = Sam3TrackerVideoVisionRotaryEmbedding(config=config)
-        self.grid_thw = (1, config.memory_attention_rope_feat_sizes[1], config.memory_attention_rope_feat_sizes[0])
+
+        position_ids = self.precompute_positions(config)
+        self.position_ids = nn.Buffer(position_ids, persistent=False)
+
+    @staticmethod
+    def precompute_positions(config: Sam3TrackerVideoConfig):
+        hpos_ids, wpos_ids = torch.meshgrid(
+            torch.arange(config.memory_attention_rope_feat_sizes[1]),
+            torch.arange(config.memory_attention_rope_feat_sizes[0]),
+            indexing="ij",
+        )
+        position_ids = torch.stack([wpos_ids.flatten(), hpos_ids.flatten()], dim=-1)
+        return position_ids
 
     def forward(
         self,
@@ -1035,11 +1050,7 @@ class Sam3TrackerVideoMemoryAttention(nn.Module):
         output = output.transpose(0, 1)
         memory = memory.transpose(0, 1).unsqueeze(1)
         memory_posision_embeddings = memory_posision_embeddings.transpose(0, 1).unsqueeze(1)
-
-        grid_thw = torch.tensor([self.grid_thw], device=output.device)
-        position_ids = get_vision_position_ids(grid_thw, spatial_merge_size=1)
-        position_ids = position_ids.flip(-1)
-        rope_position_embeddings = self.rotary_emb(output, position_ids)
+        rope_position_embeddings = self.rotary_emb(output, self.position_ids)
         for layer in self.layers:
             output = layer(
                 queries=output.unsqueeze(1) if output.ndim == 3 else output,
