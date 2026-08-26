@@ -14,7 +14,9 @@ from ...audio_processing_base import make_legacy_audio_processor_alias
 from .audio_processing_phi4_multimodal import Phi4MultimodalAudioProcessor
 
 
-Phi4MultimodalFeatureExtractor = make_legacy_audio_processor_alias(Phi4MultimodalAudioProcessor, "Phi4MultimodalFeatureExtractor")
+Phi4MultimodalFeatureExtractor = make_legacy_audio_processor_alias(
+    Phi4MultimodalAudioProcessor, "Phi4MultimodalFeatureExtractor"
+)
 
 
 __all__ = ["Phi4MultimodalFeatureExtractor"]

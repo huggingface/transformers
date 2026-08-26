@@ -472,6 +472,9 @@ class BaseAudioProcessor(AudioProcessingMixin):
             or spectrogram_config.remove_dc_offset
             or bool(spectrogram_config.stft_config.frame_extension)
             or spectrogram_config.stft_config.center == "left"  # truthy string would center-pad natively
+            # A native STFT frames on `n_fft`; left-aligning the window inside the FFT buffer
+            # means the framing must use `win_length`, which only the manual path can do.
+            or spectrogram_config.stft_config.left_align_fft
         )
 
     def _cast_stft_output(self, magnitudes, spectrogram_config):

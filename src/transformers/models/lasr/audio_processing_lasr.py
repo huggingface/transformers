@@ -16,7 +16,7 @@ from ...audio_processing_backends import TorchAudioBackend
 from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
-class LasrAudioProcessor(TorchAudioBackend):
+class LasrAudioProcessorMixin:
     sampling_rate = 16000
     force_mono = True
     spectrogram_config = SpectrogramConfig(
@@ -43,6 +43,10 @@ class LasrAudioProcessor(TorchAudioBackend):
         mel_floor=1e-5,
         computation_dtype="float64",
     )
+
+
+class LasrAudioProcessor(LasrAudioProcessorMixin, TorchAudioBackend):
+    pass
 
 
 __all__ = ["LasrAudioProcessor"]

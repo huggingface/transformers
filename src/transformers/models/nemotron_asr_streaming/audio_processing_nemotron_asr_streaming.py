@@ -15,31 +15,26 @@
 from ..parakeet.audio_processing_parakeet import ParakeetAudioProcessor
 
 
-class NemotronAsrStreamingAudioProcessor(ParakeetAudioProcessor):
-    """Audio processor for NemotronAsrStreaming.
-
-    The STFT + mel + preemphasis + log pipeline is identical to Parakeet's
-    (`n_fft=512`, `hop_length=160`, `win_length=400`, `power=2.0`,
-    `pad_mode="constant"`, `periodic=False`, slaney mel, `preemphasis=0.97`,
-    `log_mode="log"`, `mel_floor=2**-24`), including the librosa-bit-exact filter
-    bank it declares via `bank_rounding`. Unlike Parakeet, NemotronAsrStreaming never applies
-    per-utterance mean/variance normalization — it only zeroes the padded frames
-    and emits the legacy output keys the model consumes (`input_features` /
-    `attention_mask`).
-    """
+class NemotronAsrStreamingAudioProcessorMixin:
+    """Parakeet's STFT + mel + preemphasis + log pipeline without its per-utterance mean/variance
+    normalization: padded frames are zeroed and the legacy keys the model consumes
+    (`input_features` / `attention_mask`) are emitted instead."""
 
     model_input_names = ["input_features", "attention_mask"]
 
     def _postprocess_output(self, output, audio_ranges=None, feature_ranges=None, **kwargs):
-        # No per-utterance mean/var normalization (unlike Parakeet's CMVN). Zero the padded
-        # frames via the mask, then rename to the legacy keys the model's forward expects.
         features = output.pop("audio_features")
         mask = output.pop("audio_features_mask", None)
         if mask is not None:
-            features = features * mask.unsqueeze(-1).to(features.dtype)
+            features = features * self._astype(mask[..., None], self._dtype_name(features))
             output["attention_mask"] = mask
         output["input_features"] = features
         return output
+
+
+class NemotronAsrStreamingAudioProcessor(NemotronAsrStreamingAudioProcessorMixin, ParakeetAudioProcessor):
+    def _dtype_name(self, x):
+        return str(x.dtype).removeprefix("torch.")
 
 
 __all__ = ["NemotronAsrStreamingAudioProcessor"]

@@ -19,6 +19,7 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .audio_processing_nemotron_asr_streaming import *
+    from .audio_processing_numpy_nemotron_asr_streaming import *
     from .configuration_nemotron_asr_streaming import *
     from .feature_extraction_nemotron_asr_streaming import *
     from .modeling_nemotron_asr_streaming import *

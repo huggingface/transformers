@@ -14,7 +14,9 @@ from ...audio_processing_base import make_legacy_audio_processor_alias
 from .audio_processing_musicgen_melody import MusicgenMelodyAudioProcessor
 
 
-MusicgenMelodyFeatureExtractor = make_legacy_audio_processor_alias(MusicgenMelodyAudioProcessor, "MusicgenMelodyFeatureExtractor")
+MusicgenMelodyFeatureExtractor = make_legacy_audio_processor_alias(
+    MusicgenMelodyAudioProcessor, "MusicgenMelodyFeatureExtractor"
+)
 
 
 __all__ = ["MusicgenMelodyFeatureExtractor"]

@@ -13,10 +13,11 @@
 # limitations under the License.
 
 from ...audio_processing_backends import TorchAudioBackend
+from ...audio_utils import SpectrogramConfig, StftConfig
 from ...utils.import_utils import requires
 
 
-class MusicgenMelodyAudioProcessor(TorchAudioBackend):
+class MusicgenMelodyAudioProcessorMixin:
     sampling_rate = 32000
     force_mono = True
     do_extract_spectrogram = True
@@ -25,24 +26,45 @@ class MusicgenMelodyAudioProcessor(TorchAudioBackend):
     hop_length = 4096
     n_chroma = 12
     chunk_length = 30
+    # `chroma_filters` is an array, so it must not reach `to_json_string()`
+    _excluded_dict_keys = {"mel_filters", "window", "chroma_filters"}
 
-    @requires(backends=("librosa", "torch"))
+    # Only used by the numpy sibling; the torch one goes through `torchaudio.transforms.Spectrogram`.
+    power_spectrogram_config = SpectrogramConfig(
+        stft_config=StftConfig(
+            n_fft=16384,
+            win_length=16384,
+            hop_length=4096,
+            power=2.0,
+            center=True,
+            normalized=True,
+            window_fn="hann_window",
+            periodic=True,
+        ),
+    )
+
+    @requires(backends=("librosa",))
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         import librosa
-        import torch
 
-        self.chroma_filters = torch.from_numpy(
-            librosa.filters.chroma(sr=self.sampling_rate, n_fft=self.n_fft, tuning=0, n_chroma=self.n_chroma)
-        ).float()
+        filters = librosa.filters.chroma(sr=self.sampling_rate, n_fft=self.n_fft, tuning=0, n_chroma=self.n_chroma)
+        self.chroma_filters = self._astype(self._as_backend_array(filters), "float32")
 
+    def _pad_for_fft(self, waveform):
+        if waveform.shape[-1] >= self.n_fft:
+            return waveform
+        pad = self.n_fft - waveform.shape[-1]
+        return self._pad_axis(waveform, pad // 2, pad // 2 + pad % 2, axis=-1)
+
+
+class MusicgenMelodyAudioProcessor(MusicgenMelodyAudioProcessorMixin, TorchAudioBackend):
     def extract_spectrogram(self, audio, **kwargs):
         import torch
         import torchaudio
 
         waveform = audio  # Already a batched tensor from _to_batch
         device = waveform.device
-        batch_size = waveform.shape[0]
 
         # Pad if too short for FFT
         if waveform.shape[-1] < self.n_fft:

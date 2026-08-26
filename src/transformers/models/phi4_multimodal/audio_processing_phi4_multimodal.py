@@ -18,7 +18,7 @@ from ...audio_processing_backends import TorchAudioBackend
 from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
-class Phi4MultimodalAudioProcessor(TorchAudioBackend):
+class Phi4MultimodalAudioProcessorMixin:
     sampling_rate = 16000
     force_mono = True
     extra_model_input_names = ["audio_embed_sizes"]
@@ -44,15 +44,26 @@ class Phi4MultimodalAudioProcessor(TorchAudioBackend):
             mel_scale="kaldi",
             triangularize_in_mel_space=True,
             matmul_order="features_first",
-            # The legacy FE builds the kaldi bank in float64 numpy then casts to float32;
-            # a float64 build (cast back to the default float by the base dispatcher)
-            # reproduces those filters bit-exactly, unlike the default float32 kaldi path.
             computation_dtype="float64",
         ),
         mel_floor=1.0,
         log_mode="log",
     )
 
+    def _compute_audio_embed_size(self, audio_frames):
+        integer = audio_frames // self.audio_compression_rate
+        result = integer + (audio_frames % self.audio_compression_rate > 0)
+
+        integer = result // self.audio_downsample_rate
+        return integer + (result % self.audio_downsample_rate > 0)
+
+    def _postprocess_output(self, output, **kwargs):
+        feature_lengths = output["audio_features_mask"].sum(-1) * self.audio_feat_stride
+        output["audio_embed_sizes"] = self._compute_audio_embed_size(feature_lengths)
+        return output
+
+
+class Phi4MultimodalAudioProcessor(Phi4MultimodalAudioProcessorMixin, TorchAudioBackend):
     def _apply_frame_processing(self, frames, *, spectrogram_config, audio_ranges=None, **kwargs):
         # Mask frames that overlap the boundary between real audio and padding
         stft_cfg = spectrogram_config.stft_config
@@ -90,23 +101,6 @@ class Phi4MultimodalAudioProcessor(TorchAudioBackend):
         if stft_cfg.normalized:
             spec = spec / window.pow(2.0).sum().sqrt()
         return spec.transpose(-2, -1)
-
-    def _compute_audio_embed_size(self, audio_frames):
-        integer = audio_frames // self.audio_compression_rate
-        remainder = audio_frames % self.audio_compression_rate
-        result = integer + (remainder > 0).to(integer.dtype)
-
-        integer = result // self.audio_downsample_rate
-        remainder = result % self.audio_downsample_rate
-        result = integer + (remainder > 0).to(integer.dtype)
-
-        return result
-
-    def _postprocess_output(self, output, **kwargs):
-        feature_lengths = output["audio_features_mask"].sum(dim=-1)
-        feature_lengths = feature_lengths * self.audio_feat_stride
-        output["audio_embed_sizes"] = self._compute_audio_embed_size(feature_lengths)
-        return output
 
 
 __all__ = ["Phi4MultimodalAudioProcessor"]

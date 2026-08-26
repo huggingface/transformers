@@ -20,11 +20,11 @@ from ...audio_processing_backends import TorchAudioBackend
 from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
-class GraniteSpeechAudioProcessor(TorchAudioBackend):
+class GraniteSpeechAudioProcessorMixin:
     sampling_rate = 16000
     force_mono = True
     # `_postprocess_output` builds its own mask over the projector output length,
-    # which is why `return_padding_mask` is False above.
+    # which is why `return_padding_mask` is False below.
     extra_model_input_names = ["audio_features_mask", "audio_embed_sizes"]
     return_padding_mask = False
     do_extract_spectrogram = True
@@ -49,34 +49,27 @@ class GraniteSpeechAudioProcessor(TorchAudioBackend):
     )
 
     def extract_spectrogram(self, audio, **kwargs):
-        logmel = super().extract_spectrogram(audio, **kwargs).transpose(-1, -2)  # (batch, time, n_mels)
-        # Remove last frame if odd, then stack frame pairs
+        logmel = super().extract_spectrogram(audio, **kwargs).swapaxes(-1, -2)  # (batch, time, n_mels)
         if logmel.shape[1] % 2 == 1:
             logmel = logmel[:, :-1]
         return logmel.reshape(logmel.shape[0], -1, 2 * logmel.shape[-1])
 
     def _postprocess_output(self, output, audio_ranges=None, **kwargs):
         hop_length = self.spectrogram_config.stft_config.hop_length
-
-        # Compute audio_embed_sizes from original audio lengths
         effective_window_size = self.projector_window_size // self.projector_downsample_rate
         audio_embed_sizes = []
         for start, end in audio_ranges:
-            raw_length = end - start
-            mel_length = raw_length // hop_length + 1
-            encoder_length = mel_length // 2
-            nblocks = math.ceil(encoder_length / self.projector_window_size)
-            projector_length = nblocks * effective_window_size
-            audio_embed_sizes.append(projector_length)
-
-        # Build input_features_mask matching the FE
-        input_features_mask = torch.arange(max(audio_embed_sizes)).view(1, -1) < torch.tensor(audio_embed_sizes).view(
-            -1, 1
-        )
-
+            mel_length = (end - start) // hop_length + 1
+            nblocks = math.ceil((mel_length // 2) / self.projector_window_size)
+            audio_embed_sizes.append(nblocks * effective_window_size)
         output["audio_embed_sizes"] = audio_embed_sizes
-        output["audio_features_mask"] = input_features_mask
+        output["audio_features_mask"] = self._embed_mask(audio_embed_sizes)
         return output
+
+
+class GraniteSpeechAudioProcessor(GraniteSpeechAudioProcessorMixin, TorchAudioBackend):
+    def _embed_mask(self, sizes):
+        return torch.arange(max(sizes)).view(1, -1) < torch.tensor(sizes).view(-1, 1)
 
 
 __all__ = ["GraniteSpeechAudioProcessor"]

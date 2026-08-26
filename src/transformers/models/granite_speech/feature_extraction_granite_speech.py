@@ -14,7 +14,9 @@ from ...audio_processing_base import make_legacy_audio_processor_alias
 from .audio_processing_granite_speech import GraniteSpeechAudioProcessor
 
 
-GraniteSpeechFeatureExtractor = make_legacy_audio_processor_alias(GraniteSpeechAudioProcessor, "GraniteSpeechFeatureExtractor")
+GraniteSpeechFeatureExtractor = make_legacy_audio_processor_alias(
+    GraniteSpeechAudioProcessor, "GraniteSpeechFeatureExtractor"
+)
 
 
 __all__ = ["GraniteSpeechFeatureExtractor"]

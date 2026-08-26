@@ -14,13 +14,11 @@
 
 import math
 
-import torch
-
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
+from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig, _clamp_min
 
 
-class InklingAudioProcessor(TorchAudioBackend):
+class InklingAudioProcessorMixin:
     sampling_rate = 16000
     force_mono = True
     model_input_names = ["input_features", "input_features_mask"]
@@ -54,16 +52,12 @@ class InklingAudioProcessor(TorchAudioBackend):
         stft_cfg = spectrogram_config.stft_config
         hop, n_fft = stft_cfg.hop_length, stft_cfg.n_fft
         right_pad = math.ceil(audio.shape[-1] / hop) * hop - audio.shape[-1]
-        left_pad = max(n_fft - hop, 0)
-        audio = torch.nn.functional.pad(audio, (left_pad, right_pad))
+        audio = self._pad_axis(audio, max(n_fft - hop, 0), right_pad, axis=-1)
         return super()._stft(audio, spectrogram_config=spectrogram_config, **kwargs)
 
     def _compute_magnitudes(self, stft_out, power, spectrogram_config=None):
-        magnitudes = torch.view_as_real(stft_out)
-        magnitudes = magnitudes.pow(2).sum(-1).clamp_min(1e-10).sqrt()
-        if power != 1.0:
-            magnitudes = magnitudes.pow(power)
-        return magnitudes
+        magnitudes = _clamp_min(stft_out.real**2 + stft_out.imag**2, 1e-10) ** 0.5
+        return magnitudes**power if power != 1.0 else magnitudes
 
     def _get_mask_width(self, padded_length, spectrogram_config) -> int:
         # Inkling right-pads to a whole number of hops, so it emits ceil(length / hop) frames.
@@ -76,10 +70,15 @@ class InklingAudioProcessor(TorchAudioBackend):
         features = output.pop("audio_features")
         mask = output.pop("audio_features_mask", None)
         if mask is not None:
-            features = features * mask.unsqueeze(-1).to(features.dtype)
+            # the mask is 0/1, so the numpy int-promotion round-trip is exact
+            features = self._astype(features * mask[..., None], "float32")
             output["input_features_mask"] = mask
         output["input_features"] = features
         return output
+
+
+class InklingAudioProcessor(InklingAudioProcessorMixin, TorchAudioBackend):
+    pass
 
 
 __all__ = ["InklingAudioProcessor"]

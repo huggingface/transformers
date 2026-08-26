@@ -15,10 +15,10 @@
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
+from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig, _clamp_min
 
 
-class VoxtralRealtimeAudioProcessor(TorchAudioBackend):
+class VoxtralRealtimeAudioProcessorMixin:
     sampling_rate = 16000
     force_mono = True
     spectrogram_config = SpectrogramConfig(
@@ -38,22 +38,22 @@ class VoxtralRealtimeAudioProcessor(TorchAudioBackend):
     )
     global_log_mel_max = 1.5
 
-    def _apply_mel_scale(self, features, *, spectrogram_config, **kwargs):
-        mel_filters = self.mel_filters.to(device=features.device)
-        return torch.clamp(torch.matmul(mel_filters.T, features), min=spectrogram_config.mel_floor)
-
     def _normalize_magnitude(self, features, *, spectrogram_config, **kwargs):
         # Voxtral uses a *fixed* `global_log_mel_max` as the upper bound (rather than the
         # per-utterance amax that the base `clip_max_offset` field expects), so we don't set
         # the post-log fields on `spectrogram_config` and handle the whole rescale here.
         features = super()._normalize_magnitude(features, spectrogram_config=spectrogram_config, **kwargs)
-        if self.global_log_mel_max is not None:
-            spec_max = torch.tensor(self.global_log_mel_max, device=features.device, dtype=features.dtype)
-        else:
-            spec_max = features.amax(dim=(-2, -1), keepdim=True)
-        features = torch.maximum(features, spec_max - 8.0)
-        features = (features + 4.0) / 4.0
-        return features
+        spec_max = (
+            self.global_log_mel_max if self.global_log_mel_max is not None else self._amax_over_features(features)
+        )
+        features = _clamp_min(features, spec_max - 8.0)
+        return (features + 4.0) / 4.0
+
+
+class VoxtralRealtimeAudioProcessor(VoxtralRealtimeAudioProcessorMixin, TorchAudioBackend):
+    def _apply_mel_scale(self, features, *, spectrogram_config, **kwargs):
+        mel_filters = self.mel_filters.to(device=features.device)
+        return _clamp_min(torch.matmul(mel_filters.T, features), spectrogram_config.mel_floor)
 
 
 __all__ = ["VoxtralRealtimeAudioProcessor"]

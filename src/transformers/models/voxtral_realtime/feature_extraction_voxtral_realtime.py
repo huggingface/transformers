@@ -14,7 +14,9 @@ from ...audio_processing_base import make_legacy_audio_processor_alias
 from .audio_processing_voxtral_realtime import VoxtralRealtimeAudioProcessor
 
 
-VoxtralRealtimeFeatureExtractor = make_legacy_audio_processor_alias(VoxtralRealtimeAudioProcessor, "VoxtralRealtimeFeatureExtractor")
+VoxtralRealtimeFeatureExtractor = make_legacy_audio_processor_alias(
+    VoxtralRealtimeAudioProcessor, "VoxtralRealtimeFeatureExtractor"
+)
 
 
 __all__ = ["VoxtralRealtimeFeatureExtractor"]

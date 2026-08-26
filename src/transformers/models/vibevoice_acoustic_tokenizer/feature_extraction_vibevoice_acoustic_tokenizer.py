@@ -14,7 +14,9 @@ from ...audio_processing_base import make_legacy_audio_processor_alias
 from .audio_processing_vibevoice_acoustic_tokenizer import VibevoiceAcousticTokenizerAudioProcessor
 
 
-VibeVoiceAcousticTokenizerFeatureExtractor = make_legacy_audio_processor_alias(VibevoiceAcousticTokenizerAudioProcessor, "VibeVoiceAcousticTokenizerFeatureExtractor")
+VibeVoiceAcousticTokenizerFeatureExtractor = make_legacy_audio_processor_alias(
+    VibevoiceAcousticTokenizerAudioProcessor, "VibeVoiceAcousticTokenizerFeatureExtractor"
+)
 
 
 __all__ = ["VibeVoiceAcousticTokenizerFeatureExtractor"]

@@ -371,9 +371,6 @@ class TorchAudioBackend(BaseAudioProcessor):
 
     # ── STFT pipeline ─────────────────────────────────────────────────────
 
-    def _needs_manual_framing(self, spectrogram_config):
-        return super()._needs_manual_framing(spectrogram_config) or spectrogram_config.stft_config.left_align_fft
-
     def _create_stft_window(self, win_length, stft_cfg, audio):
         dtype = getattr(torch, stft_cfg.window_dtype) if stft_cfg.window_dtype else audio.dtype
         wkwargs = {**(stft_cfg.wkwargs or {}), "dtype": dtype}
