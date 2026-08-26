@@ -56,13 +56,13 @@ logger = logging.get_logger(__name__)
 
 @use_kernel_forward_from_hub("RMSNormGated")
 class Qwen3NextRMSNormGated(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6, **kwargs):
+    def __init__(self, hidden_size: int, eps: float = 1e-6, **kwargs) -> None:
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
         self.activation = "silu"
 
-    def forward(self, hidden_states, gate: torch.Tensor):
+    def forward(self, hidden_states: torch.Tensor, gate: torch.Tensor) -> torch.Tensor:
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
