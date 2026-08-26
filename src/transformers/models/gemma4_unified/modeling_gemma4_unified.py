@@ -29,6 +29,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
+from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import (
     _preprocess_mask_arguments,
     blockwise_overlay,
@@ -455,6 +456,7 @@ class Gemma4UnifiedTextAttention(nn.Module):
         return attn_output, attn_weights
 
 
+@use_kernel_forward_from_hub("GeGLUMLP")
 class Gemma4UnifiedTextMLP(nn.Module):
     def __init__(self, config: Gemma4UnifiedTextConfig, layer_idx: int):
         super().__init__()

@@ -33,7 +33,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
-from ...integrations import use_experts_implementation
+from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
 from ...masking_utils import (
     _preprocess_mask_arguments,
     blockwise_overlay,
@@ -688,6 +688,7 @@ class Gemma4VisionPooler(nn.Module):
         return hidden_states, padding_positions
 
 
+@use_kernel_forward_from_hub("GeGLUMLP")
 class Gemma4VisionMLP(nn.Module):
     def __init__(self, config: Gemma4VisionConfig):
         super().__init__()
@@ -1062,6 +1063,7 @@ class Gemma4VisionEncoder(nn.Module):
         return BaseModelOutputWithPast(last_hidden_state=hidden_states)
 
 
+@use_kernel_forward_from_hub("GeGLUMLP")
 class Gemma4TextMLP(nn.Module):
     def __init__(self, config: Gemma4TextConfig, layer_idx: int):
         super().__init__()

@@ -117,6 +117,7 @@ class Gemma3TextScaledWordEmbedding(nn.Embedding):
         return super().forward(input_ids) * self.embed_scale.to(self.weight.dtype)
 
 
+@use_kernel_forward_from_hub("GeGLUMLP")
 class Gemma3MLP(nn.Module):
     def __init__(self, config: Gemma3TextConfig):
         super().__init__()

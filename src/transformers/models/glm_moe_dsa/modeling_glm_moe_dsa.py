@@ -470,6 +470,7 @@ class GlmMoeDsaAttention(nn.Module):
         return attn_output, attn_weights, topk_indices
 
 
+@use_kernel_forward_from_hub("SwiGLUMLP")
 class GlmMoeDsaMLP(nn.Module):
     def __init__(self, config, intermediate_size=None):
         super().__init__()

@@ -28,7 +28,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
-from ...integrations import use_experts_implementation
+from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
 from ...masking_utils import (
     ALL_MASK_ATTENTION_FUNCTIONS,
     bidirectional_mask_function,
@@ -497,6 +497,7 @@ class DiffusionGemmaDecoderTextAttention(nn.Module):
         return keys, values
 
 
+@use_kernel_forward_from_hub("GeGLUMLP")
 class DiffusionGemmaText4MLP(nn.Module):
     def __init__(self, config: DiffusionGemmaTextConfig, layer_idx: int):
         super().__init__()

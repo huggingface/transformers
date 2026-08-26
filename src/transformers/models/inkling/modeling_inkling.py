@@ -282,6 +282,7 @@ class InklingAttention(nn.Module):
         return attn_output, attn_weights
 
 
+@use_kernel_forward_from_hub("GeGLUMLP")
 class InklingMLP(nn.Module):
     def __init__(self, config: InklingTextConfig):
         super().__init__()

@@ -611,6 +611,7 @@ class JambaMambaMixer(nn.Module):
         return contextualized_states
 
 
+@use_kernel_forward_from_hub("SwiGLUMLP")
 class JambaMLP(nn.Module):
     def __init__(self, config):
         super().__init__()

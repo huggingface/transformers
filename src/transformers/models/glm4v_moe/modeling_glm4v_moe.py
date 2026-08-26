@@ -315,6 +315,7 @@ class Glm4vMoeTextMoE(nn.Module):
         return hidden_states
 
 
+@use_kernel_forward_from_hub("SwiGLUMLP")
 class Glm4vMoeTextMLP(nn.Module):
     def __init__(self, config, intermediate_size=None):
         super().__init__()

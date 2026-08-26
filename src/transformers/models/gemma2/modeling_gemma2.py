@@ -66,6 +66,7 @@ class Gemma2RMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.eps}"
 
 
+@use_kernel_forward_from_hub("GeGLUMLP")
 class Gemma2MLP(nn.Module):
     def __init__(self, config):
         super().__init__()

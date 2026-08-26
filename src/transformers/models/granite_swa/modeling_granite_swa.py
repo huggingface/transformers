@@ -217,6 +217,7 @@ class GraniteSWARMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
+@use_kernel_forward_from_hub("SwiGLUMLP")
 class GraniteSWAMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
