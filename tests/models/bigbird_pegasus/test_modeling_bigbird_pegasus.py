@@ -356,8 +356,10 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
                     if non_zero_grads_gradcp != non_zero_grads_normal:
                         only_in_normal = non_zero_grads_normal - non_zero_grads_gradcp
                         only_in_gradcp = non_zero_grads_gradcp - non_zero_grads_normal
+                        max_normal = max(normal_grad_sums.values()) if normal_grad_sums else 0.0
+                        max_gradcp = max(gradcp_grad_sums.values()) if gradcp_grad_sums else 0.0
                         logger.warning(
-                            "[iter %d][%s] MISMATCH: only_in_normal=%s (normal_sums=%s, gradcp_sums=%s), only_in_gradcp=%s (normal_sums=%s, gradcp_sums=%s)",
+                            "[iter %d][%s] MISMATCH: only_in_normal=%s (normal_sums=%s, gradcp_sums=%s), only_in_gradcp=%s (normal_sums=%s, gradcp_sums=%s) | max_grad_sum: normal=%.6e gradcp=%.6e",
                             iteration,
                             model_class.__name__,
                             only_in_normal,
@@ -366,6 +368,8 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
                             only_in_gradcp,
                             {n: normal_grad_sums[n] for n in only_in_gradcp},
                             {n: gradcp_grad_sums[n] for n in only_in_gradcp},
+                            max_normal,
+                            max_gradcp,
                         )
                         mismatch_count += 1
 
