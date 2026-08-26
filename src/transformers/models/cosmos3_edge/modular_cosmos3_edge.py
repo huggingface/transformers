@@ -610,6 +610,9 @@ class Cosmos3EdgePatchMerger(Qwen3_5MoeVisionPatchMerger):
 
 
 class Cosmos3EdgeModel(Qwen2VLModel, Cosmos3EdgePreTrainedModel):
+    config_class = Cosmos3EdgeConfig
+    accepts_loss_kwargs = False
+
     def __init__(self, config: Cosmos3EdgeConfig):
         # Qwen2VLModel's constructor instantiates its Qwen-specific submodels. Cosmos3 Edge uses the same
         # multimodal API, but its checkpoint has distinct packed vision and Llama-derived text components.
@@ -620,14 +623,16 @@ class Cosmos3EdgeModel(Qwen2VLModel, Cosmos3EdgePreTrainedModel):
         self.rope_deltas = None
         self.post_init()
 
-    def get_rope_index(self, input_ids, mm_token_type_ids, image_grid_thw=None, video_grid_thw=None, **kwargs):
+    def get_rope_index(
+        self, input_ids, mm_token_type_ids, image_grid_thw=None, video_grid_thw=None, attention_mask=None, **kwargs
+    ):
         return get_rope_index(
             self.config,
             input_ids,
             mm_token_type_ids,
+            attention_mask=attention_mask,
             image_grid_thw=image_grid_thw,
             video_grid_thw=video_grid_thw,
-            **kwargs,
         )
 
     def get_image_features(

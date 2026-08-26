@@ -878,12 +878,10 @@ def get_rope_index(
     config,
     input_ids: torch.LongTensor,
     mm_token_type_ids: torch.IntTensor,
-    *,
     attention_mask: torch.Tensor | None = None,
     image_grid_thw: torch.LongTensor | None = None,
     video_grid_thw: torch.LongTensor | None = None,
     second_per_grid_ts: torch.Tensor | None = None,
-    **unused,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """M-RoPE decoder positions for a sequence of interleaved text and vision runs.
 
@@ -895,8 +893,7 @@ def get_rope_index(
     """
     vision_config = getattr(config, "vision_config", config)
     spatial_merge_size = vision_config.spatial_merge_size
-    temporal_merge_size = getattr(vision_config, "temporal_merge_size", None) or 1
-    tokens_per_second = getattr(vision_config, "tokens_per_second", None)
+    tokens_per_second = vision_config.tokens_per_second
     grids = {1: image_grid_thw, 2: video_grid_thw}
 
     position_ids = torch.full(
@@ -921,10 +918,10 @@ def get_rope_index(
 
             grid_thw = grids[modality_type][counter[modality_type]]
             counter[modality_type] += 1
-            grid_t = grid_thw[0].item() // (temporal_merge_size if modality_type == 2 else 1)
+            grid_t = grid_thw[0].item()
             grid_h, grid_w = grid_thw[1].item() // spatial_merge_size, grid_thw[2].item() // spatial_merge_size
             time_interval = 1
-            if modality_type == 2 and tokens_per_second is not None and second_per_grid_ts is not None:
+            if modality_type == 2 and second_per_grid_ts is not None:
                 time_interval = tokens_per_second * int(second_per_grid_ts[counter[modality_type] - 1])
             temporal = torch.arange(grid_t, device=token_ids.device) * time_interval + current_position
             height = torch.arange(grid_h, device=token_ids.device) + current_position

@@ -188,14 +188,12 @@ def get_rope_index(
     config,
     input_ids: torch.LongTensor,
     mm_token_type_ids: torch.IntTensor | None = None,
-    *,
     attention_mask: torch.Tensor | None = None,
     image_grid_thw: torch.LongTensor | None = None,
     video_grid_thw: torch.LongTensor | None = None,
     second_per_grid_ts: torch.Tensor | None = None,
     audio_seqlens: torch.LongTensor | None = None,
     use_audio_in_video: bool = False,
-    **unused,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Qwen2.5-Omni's M-RoPE: image/video/audio spans located by their placeholder tokens (no
     `mm_token_type_ids`), audio 1D in time, vision 3D, the temporal axis counting

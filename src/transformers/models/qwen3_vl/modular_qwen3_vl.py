@@ -675,14 +675,16 @@ class Qwen3VLModel(Qwen2VLModel):
         self.visual = AutoModel.from_config(config.vision_config)
         self.language_model = AutoModel.from_config(config.text_config)
 
-    def get_rope_index(self, input_ids, mm_token_type_ids, image_grid_thw=None, video_grid_thw=None, **kwargs):
+    def get_rope_index(
+        self, input_ids, mm_token_type_ids, image_grid_thw=None, video_grid_thw=None, attention_mask=None, **kwargs
+    ):
         return get_rope_index(
             self.config,
             input_ids,
             mm_token_type_ids,
+            attention_mask=attention_mask,
             image_grid_thw=image_grid_thw,
             video_grid_thw=video_grid_thw,
-            **kwargs,
         )
 
     def get_image_features(

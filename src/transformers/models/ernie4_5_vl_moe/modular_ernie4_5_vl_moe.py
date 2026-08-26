@@ -833,7 +833,6 @@ def get_rope_index(
     image_grid_thw: torch.LongTensor | None = None,
     video_grid_thw: torch.LongTensor | None = None,
     attention_mask: torch.Tensor | None = None,
-    **kwargs,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Calculate the 3D rope index based on image and video's sizes. The utility expects a `vision + text`
@@ -965,7 +964,6 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
             image_grid_thw=image_grid_thw,
             video_grid_thw=video_grid_thw,
             attention_mask=attention_mask,
-            **kwargs,
         )
 
     @accepts_precomputed_kwargs(modality="video")

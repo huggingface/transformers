@@ -93,10 +93,8 @@ def get_rope_index(
     config,
     input_ids: torch.LongTensor,
     mm_token_type_ids: torch.IntTensor,
-    *,
     attention_mask: torch.Tensor | None = None,
     image_grid_thw: torch.LongTensor | None = None,
-    **unused,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """HunYuanVL's M-RoPE: every token keeps plain 1D positions, and each image span overwrites its slice
     with `(width, height, image_index)` on the last three of `mrope_section`'s axes.

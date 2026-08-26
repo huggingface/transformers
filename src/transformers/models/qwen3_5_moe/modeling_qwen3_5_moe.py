@@ -1330,11 +1330,9 @@ def get_rope_index(
     config,
     input_ids: torch.LongTensor,
     mm_token_type_ids: torch.IntTensor,
-    *,
     attention_mask: torch.Tensor | None = None,
     image_grid_thw: torch.LongTensor | None = None,
     video_grid_thw: torch.LongTensor | None = None,
-    **unused,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """M-RoPE decoder positions for a sequence of interleaved text and vision runs.
 
@@ -1348,7 +1346,6 @@ def get_rope_index(
     """
     vision_config = getattr(config, "vision_config", config)
     spatial_merge_size = vision_config.spatial_merge_size
-    temporal_merge_size = getattr(vision_config, "temporal_merge_size", None) or 1
     if video_grid_thw is not None:
         video_grid_thw = torch.repeat_interleave(video_grid_thw, video_grid_thw[:, 0], dim=0)
         video_grid_thw[:, 0] = 1
@@ -1376,7 +1373,7 @@ def get_rope_index(
 
             grid_thw = grids[modality_type][counter[modality_type]]
             counter[modality_type] += 1
-            grid_t = grid_thw[0].item() // (temporal_merge_size if modality_type == 2 else 1)
+            grid_t = grid_thw[0].item()
             grid_h, grid_w = grid_thw[1].item() // spatial_merge_size, grid_thw[2].item() // spatial_merge_size
             temporal = torch.arange(grid_t, device=token_ids.device) + current_position
             height = torch.arange(grid_h, device=token_ids.device) + current_position
@@ -1411,7 +1408,7 @@ class Qwen3_5MoeModel(Qwen3_5MoePreTrainedModel, MultiModalPreTrainedModelMixin)
         self.post_init()
 
     def get_rope_index(
-        self, input_ids, mm_token_type_ids, image_grid_thw=None, video_grid_thw=None, **kwargs
+        self, input_ids, mm_token_type_ids, image_grid_thw=None, video_grid_thw=None, attention_mask=None, **kwargs
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """M-RoPE decoder position ids: `(position_ids, rope_deltas)`, laid out span by span over
         `mm_token_type_ids` by [`get_rope_index`] above."""
@@ -1419,9 +1416,9 @@ class Qwen3_5MoeModel(Qwen3_5MoePreTrainedModel, MultiModalPreTrainedModelMixin)
             self.config,
             input_ids,
             mm_token_type_ids,
+            attention_mask=attention_mask,
             image_grid_thw=image_grid_thw,
             video_grid_thw=video_grid_thw,
-            **kwargs,
         )
 
     @accepts_precomputed_kwargs(modality="video")
