@@ -16,8 +16,9 @@ from __future__ import annotations
 import os
 import re
 import warnings
+from typing import TYPE_CHECKING
 
-from ..utils import is_torch_available, is_torch_greater_or_equal, logging
+from ..utils import is_torch_greater_or_equal, logging
 from ..utils.hub import create_and_tag_model_card
 from .configuration_utils import DistributedConfig
 from .fsdp import apply_fully_sharded_data_parallelism, is_fsdp_managed_module
@@ -44,7 +45,7 @@ from .utils import (
 logger = logging.get_logger(__name__)
 
 
-if is_torch_available():
+if TYPE_CHECKING:
     import torch.nn as nn
 
 
@@ -71,19 +72,6 @@ class DistributedMixin:
             self._tp_plan.update(self.config.base_model_tp_plan or {})
             self._ep_plan.update(self.config.base_model_ep_plan or {})
             self._fsdp_plan.update(self.config.base_model_fsdp_plan or {})
-
-            # Shard input embeddings for both tied and untied models. Note that architectures use different names for input embeddings.
-            if self._tp_plan:
-                try:
-                    input_embeddings = self.get_input_embeddings()
-                except NotImplementedError:
-                    input_embeddings = None
-                if isinstance(input_embeddings, nn.Embedding):
-                    input_embedding_name = next(
-                        (name for name, module in self.named_modules() if module is input_embeddings), None
-                    )
-                    if input_embedding_name:
-                        self._tp_plan.setdefault(input_embedding_name, "embedding_rowwise")
 
         for name, module in self.named_children():
             if plan := getattr(module, "_ep_plan", None):
