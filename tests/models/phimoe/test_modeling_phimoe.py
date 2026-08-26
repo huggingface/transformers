@@ -21,6 +21,7 @@ from parameterized import parameterized
 
 from transformers import StaticCache, is_torch_available
 from transformers.testing_utils import (
+    backend_device_count,
     cap_psutil_cpu_memory,
     cleanup,
     require_torch,
@@ -121,10 +122,12 @@ class PhimoeIntegrationTest(unittest.TestCase):
     def get_model(cls):
         if cls.model is None:
             cls.offload_dir = tempfile.TemporaryDirectory()
-            # Cap CPU memory to 60 GiB during loading so device_map="auto" is forced to offload
-            # some layers to disk. Without the cap, on K8S runners where psutil reports the full
-            # node RAM (~83 GiB after the session-wide patch), device_map may assign too many
-            # layers to GPU+CPU with nothing on disk, leading to GPU OOM at inference time.
+            # Cap CPU memory to 60 GiB × num_accelerators during loading so device_map="auto" is
+            # forced to offload some layers to disk. Without the cap, on K8S runners where psutil
+            # reports the full node RAM (~83 GiB after the session-wide patch), device_map may assign
+            # too many layers to GPU+CPU with nothing on disk, leading to GPU OOM at inference time.
+            # Scaling by num_accelerators keeps the GPU-to-CPU memory ratio constant across single-
+            # and multi-GPU runners, so device_map distributes layers consistently.
             #
             # We use cap_psutil_cpu_memory rather than passing max_memory={"cpu": "60GiB"} to
             # from_pretrained: without also specifying GPU memory, device_map="auto" skips the GPU
@@ -133,7 +136,8 @@ class PhimoeIntegrationTest(unittest.TestCase):
             # would be fragile. Patching psutil gives device_map the correct overall memory view
             # (GPU + capped CPU), so it distributes layers across GPU, CPU, and disk as intended.
             # The cap is restored to the session-wide value after from_pretrained returns.
-            with cap_psutil_cpu_memory(60 * 1024**3):
+            num_accelerators = max(1, backend_device_count(torch_device)) if torch_device is not None else 1
+            with cap_psutil_cpu_memory(int(60 * num_accelerators * 1024**3)):
                 cls.model = PhimoeForCausalLM.from_pretrained(
                     "microsoft/Phi-3.5-MoE-instruct",
                     experts_implementation="eager",
