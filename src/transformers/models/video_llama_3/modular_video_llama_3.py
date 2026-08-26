@@ -35,7 +35,7 @@ from ...image_utils import (
 )
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import ProcessorMixin, Unpack
+from ...processing_utils import ProcessorMixin, Unpack, VideosKwargs
 from ...utils import TensorType, auto_docstring, can_return_tuple, logging
 from ...utils.generic import (
     get_max_seqlen,
@@ -65,10 +65,7 @@ from ..qwen2_vl.modeling_qwen2_vl import (
 from ..qwen2_vl.processing_qwen2_vl import (
     Qwen2VLProcessorKwargs,
 )
-from ..qwen2_vl.video_processing_qwen2_vl import (
-    Qwen2VLVideoProcessor,
-    Qwen2VLVideoProcessorInitKwargs,
-)
+from ..qwen2_vl.video_processing_qwen2_vl import Qwen2VLVideoProcessor
 from ..qwen3_vl.processing_qwen3_vl import Qwen3VLProcessor
 from ..siglip.configuration_siglip import SiglipVisionConfig
 from ..siglip.modeling_siglip import (
@@ -1129,7 +1126,7 @@ class VideoLlama3ImageProcessor(Qwen2VLImageProcessor):
         )
 
 
-class VideoLlama3VideoProcessorInitKwargs(Qwen2VLVideoProcessorInitKwargs):
+class VideoLlama3VideoProcessorInitKwargs(VideosKwargs, total=False):
     r"""
     min_pixels (`int`, *optional*, defaults to `56 * 56`):
         The min pixels of the image to resize the image.
@@ -1149,6 +1146,13 @@ class VideoLlama3VideoProcessorInitKwargs(Qwen2VLVideoProcessorInitKwargs):
         Whether to compress videos when processing or not.
     """
 
+    min_pixels: int
+    max_pixels: int
+    patch_size: int
+    temporal_patch_size: int
+    merge_size: int
+    min_frames: int
+    max_frames: int
     use_token_compression: bool | None
 
 
@@ -1159,6 +1163,10 @@ class VideoLlama3VideoProcessor(Qwen2VLVideoProcessor):
     temporal_patch_size = 1
     max_frames = 180
     return_metadata = True
+    # This processor's resize already spreads `size.longest_edge` across the sampled frames, so
+    # Qwen2VL's opt-in cap does not apply here.
+    cap_pixels_per_frame = AttributeError()
+    max_video_tokens = AttributeError()
     valid_kwargs = VideoLlama3VideoProcessorInitKwargs
     model_input_names = ["pixel_values_videos", "video_grid_thw", "video_merge_sizes", "video_compression_mask"]
 
