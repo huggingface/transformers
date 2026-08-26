@@ -422,7 +422,7 @@ def accelerate_dispatch(model, hf_quantizer, device_map, offload_folder, offload
 
     if not is_fsdp_enabled() and not is_deepspeed_zero3_enabled():
         context_manager = (
-            skip_device_map_check() if getattr(model, "_no_placement_params", None) is not None else nullcontext
+            skip_device_map_check() if getattr(model, "_no_placement_params", None) is not None else nullcontext()
         )
         with context_manager:
             dispatch_model(model, **device_map_kwargs)
