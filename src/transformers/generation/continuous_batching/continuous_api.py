@@ -874,7 +874,7 @@ class ContinuousBatchingManager:
             self.cancel_queue.put(request_id)
             self._has_new_requests.set()
 
-    # TODO:handle benchmarking properly when updating / fixing the requeue logic
+    # TODO (remi-or) : handle benchmarking properly when updating / fixing the requeue logic
     # TODO (remi-or) : this NEEDS to get fixed in a future PR -- it's quite wasteful
     def get_result(self, request_id: str | None = None, timeout: float | None = None) -> GenerationOutput | None:
         """Retrieve one result from the output queue. If an ID is provided, returns the first matching request. If a
