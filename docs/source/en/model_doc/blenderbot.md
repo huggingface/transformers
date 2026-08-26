@@ -85,10 +85,6 @@ print(tokenizer.batch_decode(reply_ids))
 
 [[autodoc]] BlenderbotTokenizer
 
-## BlenderbotTokenizerFast
-
-[[autodoc]] BlenderbotTokenizerFast
-
 ## BlenderbotModel
 
 See [`~transformers.BartModel`] for arguments to *forward* and *generate*

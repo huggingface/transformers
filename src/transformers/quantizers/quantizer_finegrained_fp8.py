@@ -185,7 +185,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         from ..integrations.finegrained_fp8 import FP8Experts
 
         impl = getattr(config, "_experts_implementation", None)
-        layer_overrides = FP8Experts._impl_tp_layer_overrides.get(impl)
+        layer_overrides = FP8Experts._impl_tp_layer_overrides.get(impl, {})
         for plan_attr in ("base_model_tp_plan", "base_model_ep_plan"):
             base_plan = getattr(config, plan_attr, None) or {}
             # Per-impl rewrite of the experts parallel-layer kind. Applied LAST so it composes

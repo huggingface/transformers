@@ -63,12 +63,31 @@ class TestTensorParallelProperties(TestCasePlus):
         model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
         model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
 
-        # Test invalid parallel style
+        invalid_plan = {
+            "layers.*.self_attn.q_proj": "invalid_style",
+            "layers.*.self_attn.k_proj": "another_invalid_style",
+        }
         with self.assertRaises(ValueError) as context:
-            model.tp_plan = {"layers.*.self_attn.q_proj": "invalid_style"}
+            model.tp_plan = invalid_plan
 
-        self.assertIn("Unsupported tensor parallel style 'invalid_style'", str(context.exception))
-        self.assertIn("Supported styles are", str(context.exception))
+        error_message = str(context.exception)
+        for style in invalid_plan.values():
+            self.assertIn(repr(style), error_message)
+        self.assertIn("Supported styles are", error_message)
+
+    def test_apply_tensor_parallelism_reports_all_invalid_styles(self):
+        model = torch.nn.Module()
+        model.tp_plan = {
+            "first_layer": "invalid_style",
+            "second_layer": "another_invalid_style",
+        }
+
+        with self.assertRaises(ValueError) as context:
+            tensor_parallel.apply_tensor_parallelism(model, tp_mesh=None)
+
+        error_message = str(context.exception)
+        self.assertIn("'invalid_style'", error_message)
+        self.assertIn("'another_invalid_style'", error_message)
 
     def test_tp_plan_validation_nonexistent_layer_warning(self):
         """Test that warnings are issued for non-existent layer patterns."""

@@ -128,7 +128,7 @@ Let's visualize the predictions:
 
 Now that you've seen how to use the zero-shot object detection pipeline, let's replicate the same result manually.
 
-Start by loading the model and associated processor from a [checkpoint on the Hugging Face Hub](hf.co/iSEE-Laboratory/llmdet_large).
+Start by loading the model and associated processor from a [checkpoint on the Hugging Face Hub](https://huggingface.co/iSEE-Laboratory/llmdet_large).
 Here we'll use the same checkpoint as before:
 
 ```py

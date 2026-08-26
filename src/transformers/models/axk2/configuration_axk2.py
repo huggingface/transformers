@@ -20,13 +20,12 @@
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RotaryEmbeddingConfigMixin
 from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="skt/A.X-K2")
 @strict
-class AXK2Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class AXK2Config(PreTrainedConfig):
     r"""
     n_group (`int`, *optional*):
         Number of expert groups for grouped routing, used by the larger A.X-K2 releases. `None` (the
