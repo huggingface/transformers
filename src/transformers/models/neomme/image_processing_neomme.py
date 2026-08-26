@@ -148,6 +148,20 @@ class NeoMMEImageProcessor(TorchvisionBackend):
         if size is not None and set(dict(size)) != {"min_pixels", "max_pixels"}:
             raise ValueError("size must contain exactly min_pixels and max_pixels.")
 
+        if kwargs["do_pad"] or kwargs["pad_size"] is not None:
+            raise ValueError("NeoMMEImageProcessor does not support `do_pad` or `pad_size`.")
+
+        for name in ("patch_size", "max_side"):
+            value = kwargs[name]
+            if value is not None and (not isinstance(value, int) or isinstance(value, bool) or value <= 0):
+                raise ValueError(f"{name} must be a positive integer, got {value!r}.")
+
+        if size is not None:
+            for name in ("min_pixels", "max_pixels"):
+                value = size.get(name)
+                if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+                    raise ValueError(f"{name} must be a positive integer, got {value!r}.")
+
         if kwargs["size"] is None:
             # Generic resize validation requires `size`; NeoMME can resize from `max_side` alone.
             kwargs.pop("do_resize", None)
