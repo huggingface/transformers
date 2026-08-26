@@ -101,6 +101,7 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
 
     # QSA indexer parameters are trained through a separate objective rather than the causal-LM loss.
     test_all_params_have_gradient = False
+    test_torch_exportable = False  # QSA index selection has data-dependent control flow
 
     def _get_conv_state_shape(self, batch_size: int, config):
         intermediate_size = (
@@ -508,6 +509,7 @@ class Qwen4ExpVisionText2TextModelTester(VLMModelTester):
 class Qwen4ExpCompositeModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = Qwen4ExpVisionText2TextModelTester
     test_all_params_have_gradient = False
+    test_torch_exportable = False  # QSA index selection has data-dependent control flow
 
     def get_config(self):
         return self.model_tester.get_config(ple_layer_ids=[1])
