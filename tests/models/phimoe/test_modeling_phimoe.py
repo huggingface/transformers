@@ -20,7 +20,7 @@ import unittest
 
 import psutil
 
-from transformers import is_torch_available
+from transformers import StaticCache, is_torch_available
 from transformers.testing_utils import (
     cleanup,
     require_torch,
@@ -49,8 +49,6 @@ if is_torch_available():
 
     class PhimoeMiniWithStaticCache(torch.nn.Module):
         def __init__(self, model: PhimoeForCausalLM, batch_size: int, max_seq_len: int):
-            from transformers import StaticCache
-
             super().__init__()
             self.model = model
             self.cache = StaticCache(config=model.config, max_cache_len=max_seq_len)
