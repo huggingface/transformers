@@ -47,6 +47,7 @@ from ...utils.output_capturing import capture_outputs
 from .configuration_ministral import MinistralConfig
 
 
+@use_kernel_forward_from_hub("SwiGLUMLP")
 class MinistralMLP(nn.Module):
     def __init__(self, config):
         super().__init__()

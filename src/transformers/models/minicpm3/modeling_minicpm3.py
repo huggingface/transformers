@@ -134,6 +134,7 @@ class MiniCPM3RotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
+@use_kernel_forward_from_hub("SwiGLUMLP")
 class MiniCPM3MLP(nn.Module):
     def __init__(self, config):
         super().__init__()

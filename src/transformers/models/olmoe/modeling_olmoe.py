@@ -118,6 +118,7 @@ class OlmoeRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
+@use_kernel_forward_from_hub("SwiGLUMLP")
 class OlmoeMLP(nn.Module):
     def __init__(self, config):
         super().__init__()

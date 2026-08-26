@@ -684,6 +684,7 @@ class OlmoHybridGatedDeltaNet(nn.Module):
         return output
 
 
+@use_kernel_forward_from_hub("SwiGLUMLP")
 class OlmoHybridMLP(nn.Module):
     def __init__(self, config):
         super().__init__()

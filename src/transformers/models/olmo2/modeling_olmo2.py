@@ -266,6 +266,7 @@ class Olmo2Attention(nn.Module):
         return attn_output, attn_weights
 
 
+@use_kernel_forward_from_hub("SwiGLUMLP")
 class Olmo2MLP(nn.Module):
     def __init__(self, config):
         super().__init__()

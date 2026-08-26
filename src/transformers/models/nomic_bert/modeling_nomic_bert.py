@@ -262,6 +262,7 @@ class NomicBertAttention(nn.Module):
         return attn_output, attn_weights
 
 
+@use_kernel_forward_from_hub("SwiGLUMLP")
 class NomicBertMLP(nn.Module):
     def __init__(self, config):
         super().__init__()

@@ -355,6 +355,7 @@ class MellumSparseMoeBlock(nn.Module):
         return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
 
 
+@use_kernel_forward_from_hub("SwiGLUMLP")
 class MellumMLP(nn.Module):
     def __init__(self, config, intermediate_size=None):
         super().__init__()
