@@ -16,7 +16,6 @@ import gc
 import tempfile
 import unittest
 from contextlib import ExitStack, contextmanager
-from types import SimpleNamespace
 from unittest.mock import patch
 
 from parameterized import parameterized
