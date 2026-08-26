@@ -34,6 +34,17 @@ _LEGACY_KEY_MAP = {
 }
 
 
+def legacy_chunk_length_to_max_length(value, config_dict):
+    """Map a legacy `chunk_length` (seconds) to `max_length` (samples).
+
+    Not in `_legacy_field_mapping_base`: `chunk_length` is only the model's full input length
+    for some checkpoints. CLVP, for one, carries `chunk_length=30` next to a 6-second
+    `max_length`, so processors opt in through their own `legacy_field_mapping`.
+    """
+    sampling_rate = config_dict.get("sampling_rate") or 16000
+    config_dict.setdefault("max_length", value * sampling_rate)
+
+
 AudioProcessorType = TypeVar("AudioProcessorType", bound="AudioProcessingMixin")
 
 
@@ -75,6 +86,22 @@ class BatchFeature(BaseBatchFeature):
             return True
         new_key = self._resolve_legacy_key(item)
         return new_key is not None and new_key in self.data
+
+    def __getattr__(self, item):
+        # `outputs.input_features` is as common in the wild as `outputs["input_features"]`.
+        if isinstance(item, str) and item not in ("data", "skip_tensor_conversion"):
+            new_key = self._resolve_legacy_key(item)
+            if new_key is not None and new_key in self.data:
+                return self[item]
+        return super().__getattr__(item)
+
+    def __delitem__(self, item):
+        # Makes `pop`/`del` on a legacy key work, since both route through here.
+        if isinstance(item, str) and item not in self.data:
+            new_key = self._resolve_legacy_key(item)
+            if new_key is not None and new_key in self.data:
+                item = new_key
+        del self.data[item]
 
     def _resolve_legacy_key(self, old_key):
         if old_key in ("attention_mask", "padding_mask"):
@@ -125,21 +152,50 @@ class AudioProcessingMixin(PreprocessingMixin):
         "audio_processor_type": None,
         "processor_class": None,
         "return_attention_mask": "return_padding_mask",
-        # Spectrogram-domain keys (no-op for non-spectrogram models since hub configs
-        # for raw-audio models don't carry them)
+        # Length keys, in samples.
+        "n_samples": "max_length",
+        # Spectrogram-domain keys, skipped for models that declare no `spectrogram_config`
+        # (see `_legacy_target_exists`). Several appear under more than one legacy spelling.
         "hop_length": "spectrogram_config.stft_config.hop_length",
         "n_fft": "spectrogram_config.stft_config.n_fft",
+        "fft_length": "spectrogram_config.stft_config.n_fft",
         "win_length": "spectrogram_config.stft_config.win_length",
+        "frame_length": "spectrogram_config.stft_config.win_length",
         "window_fn": "spectrogram_config.stft_config.window_fn",
         "power": "spectrogram_config.stft_config.power",
         "center": "spectrogram_config.stft_config.center",
         "pad_mode": "spectrogram_config.stft_config.pad_mode",
+        "num_mel_bins": "spectrogram_config.mel_scale_config.n_mels",
         "f_min": "spectrogram_config.mel_scale_config.f_min",
         "f_max": "spectrogram_config.mel_scale_config.f_max",
+        "min_frequency": "spectrogram_config.mel_scale_config.f_min",
+        "max_frequency": "spectrogram_config.mel_scale_config.f_max",
+        "frequency_min": "spectrogram_config.mel_scale_config.f_min",
+        "frequency_max": "spectrogram_config.mel_scale_config.f_max",
         "preemphasis": "spectrogram_config.preemphasis",
         "mel_floor": "spectrogram_config.mel_floor",
+        # Derived from the keys above; the modern pipeline recomputes them.
+        "max_length_s": None,
+        "nb_max_frames": None,
+        "nb_frequency_bins": None,
     }
     legacy_field_mapping: dict | None = None
+
+    @classmethod
+    def _legacy_target_exists(cls, target: str) -> bool:
+        """Whether the config a dot-path ``target`` writes into is declared on the class.
+
+        Guards the spectrogram-domain mappings: a raw-audio model whose hub config happens to
+        carry `hop_length` or `num_mel_bins` has no `spectrogram_config` to receive them, and
+        conjuring one out of those keys alone would silently turn it into a spectrogram
+        extractor (`_standardize_kwargs` derives `do_extract_spectrogram` from its presence).
+        """
+        config = cls
+        for part in target.split(".")[:-1]:
+            config = getattr(config, part, None)
+            if config is None:
+                return False
+        return True
 
     @classmethod
     def _apply_legacy_field_mapping(cls, config_dict: dict) -> dict:
@@ -147,6 +203,10 @@ class AudioProcessingMixin(PreprocessingMixin):
         merged = {**cls._legacy_field_mapping_base, **(cls.legacy_field_mapping or {})}
         for legacy_key, target in merged.items():
             if legacy_key not in config_dict:
+                continue
+            if isinstance(target, str) and not cls._legacy_target_exists(target):
+                # Leave the key flat rather than dropping it: models that compute their own
+                # features read it straight off the instance (e.g. Musicgen-Melody's `n_fft`).
                 continue
             value = config_dict.pop(legacy_key)
             if target is None:

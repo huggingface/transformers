@@ -41,6 +41,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_whisper import WhisperConfig
@@ -509,7 +510,7 @@ class WhisperDecoderLayer(GradientCheckpointingLayer):
 class WhisperPreTrainedModel(PreTrainedModel):
     config: WhisperConfig
     base_model_prefix = "model"
-    main_input_name = "input_features"
+    main_input_name = "audio_features"
     input_modalities = ("audio", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["WhisperEncoderLayer", "WhisperDecoderLayer"]
@@ -589,33 +590,34 @@ class WhisperEncoder(WhisperPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @deprecate_kwarg("input_features", new_name="audio_features", version="5.5", warn_if_greater_or_equal_version=True)
     def forward(
         self,
-        input_features,
+        audio_features,
         attention_mask=None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         r"""
         Args:
-            input_features (`torch.LongTensor` of shape `(batch_size, feature_size, sequence_length)`):
+            audio_features (`torch.LongTensor` of shape `(batch_size, feature_size, sequence_length)`):
                 Float values of mel features extracted from the raw speech waveform. Raw speech waveform can be
                 obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a
                 `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library (`pip install torchcodec`) or
                 the soundfile library (`pip install soundfile`). To prepare the array into
-                `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel features, padding
+                `audio_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel features, padding
                 and conversion into a tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
             attention_mask (`torch.Tensor`)`, *optional*):
-                Whisper does not support masking of the `input_features`, this argument is preserved for compatibility,
+                Whisper does not support masking of the `audio_features`, this argument is preserved for compatibility,
                 but it is not used. By default the silence in the input log mel spectrogram are ignored.
         """
 
         expected_seq_length = self.config.max_source_positions * self.conv1.stride[0] * self.conv2.stride[0]
-        if input_features.shape[-1] != expected_seq_length:
+        if audio_features.shape[-1] != expected_seq_length:
             raise ValueError(
-                f"Whisper expects the mel input features to be of length {expected_seq_length}, but found {input_features.shape[-1]}. Make sure to pad the input mel features to {expected_seq_length}."
+                f"Whisper expects the mel input features to be of length {expected_seq_length}, but found {audio_features.shape[-1]}. Make sure to pad the input mel features to {expected_seq_length}."
             )
 
-        inputs_embeds = nn.functional.gelu(self.conv1(input_features))
+        inputs_embeds = nn.functional.gelu(self.conv1(audio_features))
         inputs_embeds = nn.functional.gelu(self.conv2(inputs_embeds))
 
         inputs_embeds = inputs_embeds.permute(0, 2, 1)
@@ -820,7 +822,7 @@ class WhisperModel(WhisperPreTrainedModel):
 
     def _mask_input_features(
         self,
-        input_features: torch.FloatTensor,
+        audio_features: torch.FloatTensor,
         attention_mask: torch.LongTensor | None = None,
     ):
         """
@@ -830,10 +832,10 @@ class WhisperModel(WhisperPreTrainedModel):
 
         # `config.apply_spec_augment` can set masking to False
         if not getattr(self.config, "apply_spec_augment", True):
-            return input_features
+            return audio_features
 
         # generate indices & apply SpecAugment along time axis
-        batch_size, hidden_size, sequence_length = input_features.size()
+        batch_size, hidden_size, sequence_length = audio_features.size()
 
         if self.config.mask_time_prob > 0 and self.training:
             # generate indices & apply SpecAugment along time axis
@@ -844,9 +846,9 @@ class WhisperModel(WhisperPreTrainedModel):
                 attention_mask=attention_mask,
                 min_masks=self.config.mask_time_min_masks,
             )
-            mask_time_indices = torch.tensor(mask_time_indices, device=input_features.device, dtype=torch.bool)
+            mask_time_indices = torch.tensor(mask_time_indices, device=audio_features.device, dtype=torch.bool)
             mask_time_indices = mask_time_indices[:, None].expand(-1, hidden_size, -1)
-            input_features[mask_time_indices] = 0
+            audio_features[mask_time_indices] = 0
 
         if self.config.mask_feature_prob > 0 and self.training:
             # generate indices & apply SpecAugment along feature axis
@@ -856,16 +858,17 @@ class WhisperModel(WhisperPreTrainedModel):
                 mask_length=self.config.mask_feature_length,
                 min_masks=self.config.mask_feature_min_masks,
             )
-            mask_feature_indices = torch.tensor(mask_feature_indices, device=input_features.device, dtype=torch.bool)
-            input_features[mask_feature_indices] = 0
+            mask_feature_indices = torch.tensor(mask_feature_indices, device=audio_features.device, dtype=torch.bool)
+            audio_features[mask_feature_indices] = 0
 
-        return input_features
+        return audio_features
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("input_features", new_name="audio_features", version="5.5", warn_if_greater_or_equal_version=True)
     def forward(
         self,
-        input_features: torch.FloatTensor | None = None,
+        audio_features: torch.FloatTensor | None = None,
         attention_mask: torch.LongTensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
@@ -911,17 +914,17 @@ class WhisperModel(WhisperPreTrainedModel):
          >>> feature_extractor = AutoFeatureExtractor.from_pretrained("openai/whisper-base")
          >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
          >>> inputs = feature_extractor(ds[0]["audio"]["array"], return_tensors="pt")
-         >>> input_features = inputs.input_features
+         >>> audio_features = inputs.audio_features
          >>> decoder_input_ids = torch.tensor([[1, 1]]) * model.config.decoder_start_token_id
-         >>> last_hidden_state = model(input_features, decoder_input_ids=decoder_input_ids).last_hidden_state
+         >>> last_hidden_state = model(audio_features, decoder_input_ids=decoder_input_ids).last_hidden_state
          >>> list(last_hidden_state.shape)
          [1, 2, 512]
          ```"""
         if encoder_outputs is None:
-            input_features = self._mask_input_features(input_features, attention_mask=attention_mask)
+            audio_features = self._mask_input_features(audio_features, attention_mask=attention_mask)
 
             encoder_outputs = self.encoder(
-                input_features,
+                audio_features,
                 **kwargs,
             )
         elif not isinstance(encoder_outputs, BaseModelOutput):
@@ -991,9 +994,10 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("input_features", new_name="audio_features", version="5.5", warn_if_greater_or_equal_version=True)
     def forward(
         self,
-        input_features: torch.FloatTensor | None = None,
+        audio_features: torch.FloatTensor | None = None,
         attention_mask: torch.LongTensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
@@ -1047,9 +1051,9 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
         >>> inputs = processor(ds[0]["audio"]["array"], return_tensors="pt")
-        >>> input_features = inputs.input_features
+        >>> audio_features = inputs.audio_features
 
-        >>> generated_ids = model.generate(inputs=input_features)
+        >>> generated_ids = model.generate(inputs=audio_features)
 
         >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
         >>> transcription
@@ -1066,7 +1070,7 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
                 )
 
         outputs: Seq2SeqModelOutput = self.model(
-            input_features,
+            audio_features,
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             encoder_outputs=encoder_outputs,
@@ -1188,11 +1192,11 @@ class WhisperForCausalLM(WhisperPreTrainedModel, GenerationMixin):
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> sample = ds[0]["audio"]
-        >>> input_features = processor(
+        >>> audio_features = processor(
         ...     sample["array"], sampling_rate=sample["sampling_rate"], return_tensors="pt"
-        ... ).input_features
+        ... ).audio_features
 
-        >>> predicted_ids = model.generate(input_features, assistant_model=assistant_model)
+        >>> predicted_ids = model.generate(audio_features, assistant_model=assistant_model)
 
         >>> # decode token ids to text
         >>> transcription = processor.batch_decode(predicted_ids, skip_special_tokens=True)[0]
@@ -1267,9 +1271,10 @@ class WhisperForAudioClassification(WhisperPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("input_features", new_name="audio_features", version="5.5", warn_if_greater_or_equal_version=True)
     def forward(
         self,
-        input_features: torch.LongTensor | None = None,
+        audio_features: torch.LongTensor | None = None,
         encoder_outputs: tuple[tuple[torch.FloatTensor]] | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs,
@@ -1296,10 +1301,10 @@ class WhisperForAudioClassification(WhisperPreTrainedModel):
         >>> inputs = feature_extractor(
         ...     sample["audio"]["array"], sampling_rate=sample["audio"]["sampling_rate"], return_tensors="pt"
         ... )
-        >>> input_features = inputs.input_features
+        >>> audio_features = inputs.audio_features
 
         >>> with torch.no_grad():
-        ...     logits = model(input_features).logits
+        ...     logits = model(audio_features).logits
 
         >>> predicted_class_ids = torch.argmax(logits).item()
         >>> predicted_label = model.config.id2label[predicted_class_ids]
@@ -1312,7 +1317,7 @@ class WhisperForAudioClassification(WhisperPreTrainedModel):
 
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
-                input_features,
+                audio_features,
                 **kwargs,
             )
         elif not isinstance(encoder_outputs, BaseModelOutput):

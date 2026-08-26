@@ -27,6 +27,7 @@ class AudioSpectrogramTransformerAudioProcessorNumpy(NumpyAudioBackend):
 
     sampling_rate = 16000
     force_mono = True
+    model_input_names = ["audio_values"]
     return_padding_mask = False
     do_batch_spectrogram = False
 

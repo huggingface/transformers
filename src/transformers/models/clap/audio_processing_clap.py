@@ -21,6 +21,12 @@ from .audio_processing_numpy_clap import ClapAudioProcessorMixin
 class ClapAudioProcessor(ClapAudioProcessorMixin, TorchAudioBackend):
     """Torch sibling of [`ClapAudioProcessorNumpy`]. See the mixin for the pipeline."""
 
+    # `is_longer` replaces the padding mask CLAP does not use.
+    extra_model_input_names = ["is_longer"]
+
+    def _tile(self, audio, n_repeat):
+        return audio.repeat(n_repeat)
+
     def _native_stft(self, audio, window, frame_length, hop_length, n_fft, stft_cfg):
         stft_out = super()._native_stft(audio, window, frame_length, hop_length, n_fft, stft_cfg)
         # round-trip through complex64 like the legacy FE, so float64 magnitudes match bit-exactly

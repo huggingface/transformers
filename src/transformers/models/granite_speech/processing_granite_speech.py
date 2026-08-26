@@ -101,5 +101,11 @@ class GraniteSpeechProcessor(ProcessorMixin):
             return text
         raise TypeError("Invalid text provided! Text should be a string or list of strings.")
 
+    @property
+    def unused_input_names(self) -> list[str]:
+        "Input names returned always by subprocessors but not used in model's `forward`"
+        # Popped in `__call__` to expand the audio placeholder tokens; never reaches `forward`.
+        return ["audio_embed_sizes"]
+
 
 __all__ = ["GraniteSpeechProcessor"]

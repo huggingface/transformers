@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from dataclasses import replace
+
 import numpy as np
 
 from ...audio_processing_backends import NumpyAudioBackend
@@ -20,19 +22,19 @@ from ...utils import PaddingStrategy
 
 
 class ClapAudioProcessorMixin:
-    """Backend-agnostic CLAP logic shared by the numpy and torch siblings: `rand_trunc`
-    (single view) and `fusion` (4-view chunking with a bilinear-downsampled global view)
-    truncation modes. Random offsets come from `np.random` on both backends."""
-
     sampling_rate = 48000
     force_mono = True
     max_length = 480000
     truncation_mode = "rand_trunc"  # "fusion" or "rand_trunc"
     return_padding_mask = False  # CLAP returns is_longer instead of a padding mask
+    # How audio shorter than `max_length` is filled: "repeatpad" (tile, then zero-pad the
+    # remainder), "repeat" (tile past `max_length` and cut) or "pad" (zero-pad only). Both
+    # released checkpoints use "repeatpad"; the legacy FE spelled this its `padding` argument.
+    padding_mode = "repeatpad"
 
-    # computation_dtype="float64": the legacy FE builds its filter banks in float64
-    _mel_configs = {
-        "rand_trunc": MelScaleConfig(
+    spectrogram_config = SpectrogramConfig(
+        stft_config=StftConfig(n_fft=1024, hop_length=480, power=2.0),
+        mel_scale_config=MelScaleConfig(
             n_mels=64,
             f_min=50,
             f_max=14000,
@@ -41,30 +43,39 @@ class ClapAudioProcessorMixin:
             frequency_bin_mode="linspace",
             computation_dtype="float64",
         ),
-        "fusion": MelScaleConfig(
-            n_mels=64,
-            f_min=50,
-            f_max=14000,
-            mel_scale="htk",
-            frequency_bin_mode="linspace",
-            computation_dtype="float64",
-        ),
+        log_mode="dB",
+        computation_dtype="float64",
+    )
+    # The two modes share every STFT and log setting and differ *only* in how the mel bank is
+    # built: `rand_trunc` audio reaches HTSAT as a waveform and is mel'd by its torchlibrosa
+    # front-end (librosa defaults, i.e. the slaney scale + slaney norm above), while `fusion`
+    # mels are precomputed with torchaudio defaults instead. The checkpoints are therefore
+    # trained on differently scaled mels and are not interchangeable.
+    _fusion_mel_overrides = {"mel_scale": "htk", "norm": None}
+
+    # Legacy hub configs spell the mode as `truncation`. `top_db` only lines up with
+    # `clip_max_offset` because CLAP's `log_mode` is "dB" (Whisper's offset is in log10 units).
+    legacy_field_mapping = {
+        "truncation": "truncation_mode",
+        "feature_size": "spectrogram_config.mel_scale_config.n_mels",
+        "fft_window_size": "spectrogram_config.stft_config.n_fft",
+        "top_db": "spectrogram_config.clip_max_offset",
+        "nb_max_samples": "max_length",
+        "chunk_length_s": None,  # duplicates nb_max_samples
     }
 
     def _set_attributes(self, **kwargs):
-        # an explicitly passed spectrogram_config wins over the per-mode default
-        if kwargs.get("spectrogram_config") is None:
-            self.spectrogram_config = SpectrogramConfig(
-                stft_config=StftConfig(n_fft=1024, hop_length=480, power=2.0),
-                mel_scale_config=self._mel_configs[self.truncation_mode],
-                log_mode="dB",
-                computation_dtype="float64",
-            )
+        if self.truncation_mode == "fusion":
+            mel_scale_config = replace(self.spectrogram_config.mel_scale_config, **self._fusion_mel_overrides)
+            self.spectrogram_config = replace(self.spectrogram_config, mel_scale_config=mel_scale_config)
         super()._set_attributes(**kwargs)
         # fusion extracts the full mel then chunks, so no pre-truncation
         self.truncation = self.truncation_mode == "rand_trunc"
 
     def _get_padding_strategies(self, padding=False, max_length=None):
+        if padding in ("repeatpad", "repeat", "pad"):
+            # legacy spelling: `padding` named the fill method for short audio, not the target length
+            self.padding_mode, padding = padding, True
         # CLAP always pads to max_length, not to the longest in the batch
         if padding is True and max_length is not None:
             return PaddingStrategy.MAX_LENGTH
@@ -73,6 +84,22 @@ class ClapAudioProcessorMixin:
     def pad(self, audio, *args, **kwargs):
         self._is_longer_flags = []
         return super().pad(audio, *args, **kwargs)
+
+    def _to_batch(self, audio):
+        # `extract_spectrogram` mels each waveform on its own, so leave them as a list: in fusion
+        # mode nothing truncates to `max_length` and clips longer than it stay ragged.
+        return audio
+
+    def _pad_single(self, audio, max_length):
+        """Tile short audio before the base class zero-pads whatever remains."""
+        current_length = audio.shape[-1]
+        if current_length < max_length and self.padding_mode in ("repeat", "repeatpad"):
+            n_repeat = max_length // current_length
+            if self.padding_mode == "repeat":
+                audio = self._tile(audio, n_repeat + 1)[..., :max_length]
+            else:
+                audio = self._tile(audio, n_repeat)
+        return super()._pad_single(audio, max_length)
 
     def _truncate_single(self, audio_el, max_length):
         """Random-offset truncation for rand_trunc mode, also tracks which samples were longer."""
@@ -140,6 +167,12 @@ class ClapAudioProcessorMixin:
 
 class ClapAudioProcessorNumpy(ClapAudioProcessorMixin, NumpyAudioBackend):
     """NumPy sibling of [`ClapAudioProcessor`]."""
+
+    # `is_longer` replaces the padding mask CLAP does not use.
+    extra_model_input_names = ["is_longer"]
+
+    def _tile(self, audio, n_repeat):
+        return np.tile(audio, n_repeat)
 
     def _bilinear_shrink(self, mel, chunk_frames):
         # legacy numpy dtype path: float64 straight through interpolate (torch sibling

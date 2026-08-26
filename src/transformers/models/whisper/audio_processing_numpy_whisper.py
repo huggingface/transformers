@@ -15,13 +15,8 @@
 import numpy as np
 
 from ...audio_processing_backends import NumpyAudioBackend
+from ...audio_processing_base import legacy_chunk_length_to_max_length
 from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
-
-
-def _whisper_chunk_length_to_max_length(value, config_dict):
-    # Map legacy chunk_length (seconds) → max_length (samples) using sampling_rate.
-    sampling_rate = config_dict.get("sampling_rate") or 16000
-    config_dict.setdefault("max_length", value * sampling_rate)
 
 
 class WhisperAudioProcessorNumpy(NumpyAudioBackend):
@@ -52,8 +47,7 @@ class WhisperAudioProcessorNumpy(NumpyAudioBackend):
 
     legacy_field_mapping = {
         "feature_size": "spectrogram_config.mel_scale_config.n_mels",
-        "chunk_length": _whisper_chunk_length_to_max_length,
-        "n_samples": "max_length",
+        "chunk_length": legacy_chunk_length_to_max_length,
     }
 
     def _apply_mel_scale(self, features, *, spectrogram_config, **kwargs):

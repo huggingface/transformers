@@ -17,7 +17,6 @@ from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
 class Gemma3nAudioProcessorNumpy(NumpyAudioBackend):
-
     sampling_rate = 16000
     force_mono = True
     max_length = 480000  # 30 seconds
@@ -26,10 +25,6 @@ class Gemma3nAudioProcessorNumpy(NumpyAudioBackend):
 
     legacy_field_mapping = {
         "feature_size": "spectrogram_config.mel_scale_config.n_mels",
-        "frame_length": "spectrogram_config.stft_config.win_length",
-        "fft_length": "spectrogram_config.stft_config.n_fft",
-        "min_frequency": "spectrogram_config.mel_scale_config.f_min",
-        "max_frequency": "spectrogram_config.mel_scale_config.f_max",
     }
 
     spectrogram_config = SpectrogramConfig(

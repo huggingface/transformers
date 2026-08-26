@@ -28,10 +28,6 @@ class Gemma4AudioProcessorNumpy(NumpyAudioBackend):
     legacy_field_mapping = {
         "feature_size": "spectrogram_config.mel_scale_config.n_mels",
         "mel_floor": "spectrogram_config.pre_log_offset",
-        "frame_length": "spectrogram_config.stft_config.win_length",
-        "fft_length": "spectrogram_config.stft_config.n_fft",
-        "min_frequency": "spectrogram_config.mel_scale_config.f_min",
-        "max_frequency": "spectrogram_config.mel_scale_config.f_max",
     }
 
     spectrogram_config = SpectrogramConfig(

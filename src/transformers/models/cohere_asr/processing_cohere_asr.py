@@ -170,9 +170,16 @@ class CohereAsrProcessor(ProcessorMixin):
         return outputs
 
     @property
+    def unused_input_names(self) -> list[str]:
+        "Input names returned always by subprocessors but not used in model's `forward`"
+        # `CohereAsrForConditionalGeneration.prepare_inputs_for_generation` absorbs it.
+        return ["audio_chunk_index"]
+
+    @property
     def model_input_names(self):
         feature_extractor_input_names = self.feature_extractor.model_input_names
-        return feature_extractor_input_names + ["labels"]
+        names = feature_extractor_input_names + ["labels"]
+        return [name for name in names if name not in self.unused_input_names]
 
 
 __all__ = ["CohereAsrProcessor"]

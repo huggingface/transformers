@@ -23,6 +23,9 @@ from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 class GraniteSpeechAudioProcessor(TorchAudioBackend):
     sampling_rate = 16000
     force_mono = True
+    # `_postprocess_output` builds its own mask over the projector output length,
+    # which is why `return_padding_mask` is False above.
+    extra_model_input_names = ["audio_features_mask", "audio_embed_sizes"]
     return_padding_mask = False
     do_extract_spectrogram = True
     projector_window_size = 15

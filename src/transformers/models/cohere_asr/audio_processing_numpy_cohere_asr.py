@@ -152,6 +152,7 @@ class CohereAsrAudioProcessorMixin:
 
 
 class CohereAsrAudioProcessorNumpy(CohereAsrAudioProcessorMixin, NumpyAudioBackend):
+    extra_model_input_names = ["audio_chunk_index"]
     def _seeded_noise(self, length, seed, like):
         return np.random.RandomState(seed).standard_normal(length).astype(like.dtype)
 

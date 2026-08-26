@@ -18,6 +18,7 @@ from typing import Any, Unpack
 import numpy as np
 
 from .audio_processing_base import AudioProcessingMixin
+from .audio_processing_base import BatchFeature
 from .audio_utils import (
     AudioInput,
     SpectrogramConfig,
@@ -27,7 +28,6 @@ from .audio_utils import (
     make_list_of_audio,
     power_to_db,
 )
-from .feature_extraction_utils import BatchFeature
 from .processing_utils import AudioKwargs
 from .tokenization_utils_base import TruncationStrategy
 from .utils import PaddingStrategy, TensorType, logging
@@ -46,7 +46,8 @@ class BaseAudioProcessor(AudioProcessingMixin):
     padding_value = 0.0
     return_padding_mask = True
     do_batch_spectrogram = True
-    model_input_names = ["audio"]
+    # Keys `_postprocess_output` adds on top of the derived ones, for `model_input_names`.
+    extra_model_input_names: list[str] = []
     dither: float = 0.0
     # Output keys left untouched by `convert_to_tensors`, for non-array metadata a model
     # returns alongside its features (e.g. Cohere-ASR's `audio_chunk_index`).
@@ -75,6 +76,20 @@ class BaseAudioProcessor(AudioProcessingMixin):
             if self.spectrogram_config.mel_scale_config is not None and not hasattr(self, "mel_filters"):
                 self.mel_filters = self._mel_filter_bank(self.spectrogram_config)
         self._cached_stft_window = None
+
+    @property
+    def model_input_names(self) -> list[str]:
+        """The keys `__call__` emits, i.e. the kwargs the model's `forward` accepts.
+
+        Mirrors how `_standardize_kwargs` resolves `do_extract_spectrogram`. Declare
+        `extra_model_input_names` for keys `_postprocess_output` adds; shadow this with a plain
+        list only when it *renames* the derived keys. A composite processor subtracts the ones
+        it consumes itself via its `unused_input_names`.
+        """
+        extracts_spectrogram = getattr(self, "do_extract_spectrogram", self.spectrogram_config is not None)
+        key = "audio_features" if extracts_spectrogram else "audio_values"
+        names = [key, f"{key}_mask"] if self.return_padding_mask else [key]
+        return names + self.extra_model_input_names
 
     def _standardize_kwargs(
         self,

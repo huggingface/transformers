@@ -19,13 +19,9 @@ from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
 class Xcodec2AudioProcessorNumpy(NumpyAudioBackend):
-    """NumPy sibling of [`Xcodec2AudioProcessor`]. Dual-output codec processor: raw padded
-    audio for the acoustic encoder (`audio_values`) plus per-utterance kaldi fbank features
-    for the semantic encoder (`audio_features`), computed in `_postprocess_output` from the
-    padded audio batch (matching the legacy `Xcodec2FeatureExtractor`)."""
-
     sampling_rate = 16000
     force_mono = True
+    model_input_names = ["audio_features", "audio_features_mask", "audio_values", "audio_values_mask"]
     add_channel_dim = True
     padding_value = 0.0
     # One acoustic-encoder frame = `hop_length` audio samples (product of downsampling ratios)

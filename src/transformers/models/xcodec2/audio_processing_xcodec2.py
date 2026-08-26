@@ -21,6 +21,7 @@ from .audio_processing_numpy_xcodec2 import Xcodec2AudioProcessorNumpy
 class Xcodec2AudioProcessor(TorchAudioBackend):
     sampling_rate = 16000
     force_mono = True
+    model_input_names = ["audio_features", "audio_features_mask", "audio_values", "audio_values_mask"]
     add_channel_dim = True
     hop_length = 320
     pad_to_multiple_of = 320

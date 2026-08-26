@@ -19,6 +19,8 @@ from .audio_processing_numpy_cohere_asr import CohereAsrAudioProcessorMixin
 
 
 class CohereAsrAudioProcessor(CohereAsrAudioProcessorMixin, TorchAudioBackend):
+    extra_model_input_names = ["audio_chunk_index"]
+
     def _seeded_noise(self, length, seed, like):
         generator = torch.Generator(device=like.device).manual_seed(seed)
         return torch.randn(length, dtype=like.dtype, device=like.device, generator=generator)
