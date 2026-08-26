@@ -1,7 +1,7 @@
 # Optimizing inference
 
 perf_infer_gpu_many: perf_infer_gpu_multi
-perf_infer_gpu_one: attention_interface
+perf_infer_gpu_one: optimization_overview
 perf_train_cpu_many: perf_train_cpu
 quantization: quantization/overview
 serving: serve-cli/serving
