@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import os
 import re
+import sys
 from functools import partial
 from typing import TYPE_CHECKING
 
@@ -606,7 +607,8 @@ class MtpModel(PreTrainedModel):
         mtp_state_dict = {}
         all_pointer = set()
         for file in mtp_files:
-            file_pointer = safe_open(file, framework="pt", device="cpu")
+            backend = "pread" if sys.platform == "win32" else "mmap"
+            file_pointer = safe_open(file, framework="pt", device="cpu", backend=backend)
             all_pointer.add(file_pointer)
             for k in file_pointer.keys():
                 # It's one of the mtp weights
