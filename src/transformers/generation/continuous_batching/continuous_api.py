@@ -179,13 +179,17 @@ class BackgroundThreadStatus:
         with self._local_status_lock:
             self._local_status = max(self._local_status, tp_status)
 
-    def can_accept_new_requests(self) -> bool:
-        """Whether the background thread can accept new requests. Raises an error if the background thread already died
-        with a fatal error."""
+    def check_for_fatal_error(self) -> None:
+        """Raises an error if the background thread already died with a fatal error."""
         if self.fatal_error is not None:
             raise RuntimeError(
                 "The continuous batching background thread died with a fatal error."
             ) from self.fatal_error
+
+    def can_accept_new_requests(self) -> bool:
+        """Whether the background thread can accept new requests. Raises an error if the background thread already died
+        with a fatal error."""
+        self.check_for_fatal_error()
         return self.local_status == self.DONT_STOP
 
     @property
@@ -875,8 +879,12 @@ class ContinuousBatchingManager:
     def get_result(self, request_id: str | None = None, timeout: float | None = None) -> GenerationOutput | None:
         """Retrieve one result from the output queue. If an ID is provided, returns the first matching request. If a
         timeout is provided, returns None after the timeout (in seconds)."""
-        if self._generation_thread is None and self.output_router.output_queue.empty():
-            return None
+        # Stop if the output queue is empty and the bg thread is not going to produce new results (crashed or stopped)
+        if self.output_router.output_queue.empty():
+            self.background_thread_status.check_for_fatal_error()
+            if self._generation_thread is None:
+                return None
+        # Otherwise, wait for a result from the output queue
         try:
             result = self.output_router.output_queue.get(block=True, timeout=timeout)
             if request_id is not None and result.request_id != request_id:
