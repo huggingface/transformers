@@ -110,34 +110,50 @@ class _IdentityOp(ConversionOps):
 
 
 class Chunk(ConversionOps):
-    """Split a tensor along `dim` into equally sized chunks."""
+    """Split a tensor along `dim` into equally sized chunks. Additionally, `num_shards_attribute` is a config field to read
+    to know how many tensors to chunk into. Useful when concatenating an arbitrary number of tensors."""
 
-    def __init__(self, dim: int = 0):
+    def __init__(self, dim: int = 0, num_shards_attribute: str | None = None):
         self.dim = dim
+        self.num_shards_attribute = num_shards_attribute
 
     @torch.no_grad
     def convert(
         self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
     ) -> dict[str, torch.Tensor]:
+        if len(input_dict) > 1:
+            raise ValueError("Undefined Operation encountered")
         tensors = next(iter(input_dict.values()))
         tensor = tensors[0] if isinstance(tensors, list) else tensors
-        targets = target_patterns
-        sizes = len(targets)
-        chunks = tuple(chunk.contiguous() for chunk in torch.chunk(tensor, sizes, dim=self.dim))
-        if len(input_dict) > 1 or len(target_patterns) == 1 or len(chunks) != len(target_patterns):
-            raise ValueError(f"Failed to convert {kwargs.get('full_layer_name')}")
+        targets = self.get_target_patterns(target_patterns, **kwargs)
+        num_shards = len(targets)
+        chunks = tuple(chunk.contiguous() for chunk in torch.chunk(tensor, num_shards, dim=self.dim))
         return dict(zip(targets, chunks))
+
+    def get_target_patterns(self, target_patterns: list[str], **kwargs) -> list[str]:
+        if self.num_shards_attribute is None:
+            return target_patterns
+        # In this case we need to use the config to know how many chunks to create
+        else:
+            if len(target_patterns) > 1:
+                raise ValueError("Undefined Operation encountered")
+            subconfig = kwargs["config"].get_text_config()
+            num_shards = getattr(subconfig, self.num_shards_attribute)
+            target_patterns = [target_patterns[0].replace("*", str(i)) for i in range(num_shards)]
+            return target_patterns
 
     @property
     def reverse_op(self) -> ConversionOps:
-        return Concatenate(self.dim)
+        return Concatenate(self.dim, self.num_shards_attribute)
 
 
 class Concatenate(ConversionOps):
-    """Concatenate tensors along `dim`."""
+    """Concatenate tensors along `dim`. Additionally, if concatenating an aribitrary number of tensors, `num_shards_attribute` is
+    a config field to read to know how many tensors to recreate when using the opposite Ops."""
 
-    def __init__(self, dim: int = 0):
+    def __init__(self, dim: int = 0, num_shards_attribute: str | None = None):
         self.dim = dim
+        self.num_shards_attribute = num_shards_attribute
 
     @torch.no_grad
     def convert(
@@ -173,7 +189,7 @@ class Concatenate(ConversionOps):
 
     @property
     def reverse_op(self) -> ConversionOps:
-        return Chunk(self.dim)
+        return Chunk(self.dim, self.num_shards_attribute)
 
 
 class Interleave(ConversionOps):
@@ -830,7 +846,7 @@ class WeightTransform:
         branches = []
         for i, source_pattern in enumerate(self.source_patterns):
             group_name = f"g{i}"
-            pattern = source_pattern.replace(".*.", r"\..*\.")
+            pattern = source_pattern.replace("*.", r".*\.")
             branches.append(f"(?P<{group_name}>{pattern})")
         self.compiled_sources = re.compile("|".join(branches))
 
@@ -1134,13 +1150,18 @@ _INTERNAL_MANY_TO_MANY_CONVERSIONS = (
 
 
 class WeightConverter(WeightTransform):
-    __slots__ = ("operations",)
+    __slots__ = ("operations", "force_cpu")
 
     def __init__(
-        self, source_patterns: str | list[str], target_patterns: str | list[str], operations: list[ConversionOps]
+        self,
+        source_patterns: str | list[str],
+        target_patterns: str | list[str],
+        operations: list[ConversionOps],
+        force_cpu: bool = False,
     ):
         super().__init__(source_patterns, target_patterns)
         self.operations: list[ConversionOps] = operations
+        self.force_cpu = force_cpu
 
         if bool(len(self.source_patterns) - 1) + bool(len(self.target_patterns) - 1) >= 2:
             # We allow many-to-many only if we use an internal operation that can handle it
@@ -1179,8 +1200,8 @@ class WeightConverter(WeightTransform):
         # Tensors are returned from ops with the target patterns, we need to expand them to full name.
         # This means we need to grab the prefix and suffix to add to every target key
         full_name = layer_name
-        if ".*." in layer_name:
-            full_name = layer_name.replace(".*.", ".0.")
+        if "*." in layer_name:
+            full_name = layer_name.replace("*.", "0.")
 
         try:
             prefix, _, suffix = next(full_name.partition(k) for k in collected_tensors.keys() if k in full_name)
@@ -1249,16 +1270,23 @@ def spawn_materialize(
 
 
 def dot_natural_key(s: str):
-    """Sort key for state-dict names: split on `"."` and sort digits numerically
-    and strings alphabetically. We emit a tuple at each point to sort ints
-    first and strings second to avoid int-string comparison failures.
+    """
+    Sort key for state-dict names: split on `"."` and sort digits numerically and strings alphabetically. It emits a
+    tuple at each point to sort ints first and strings second to avoid int-string comparison failures.
     """
     parts = []
     for part in s.split("."):
         if part.isdigit():
             parts.append((0, int(part)))
         else:
-            parts.append((1, part))
+            # This will remove all trailing digit characters, as `rstrip` actually considers it as a set of chars
+            text_part = part.rstrip("0123456789")
+            trailing_digits = part[len(text_part) :]
+            # Sort numeric suffixes numerically, so `shard_2` precedes `shard_11` for example
+            if trailing_digits != "":
+                parts.append((1, text_part, int(trailing_digits)))
+            else:
+                parts.append((1, text_part))
     return parts
 
 
@@ -1688,15 +1716,21 @@ def convert_and_load_state_dict_in_model(
             # 4. Handle DTensor sharding or device_map placement
             param_device = get_device(device_map, renamed_key, valid_torch_device=True)
             sharding_op = None
-            materialize_device = param_device
-
             if is_dtensor(empty_param):
                 sharding_op = DtensorShardOperation(empty_param)
+
+            # Some parameters are so large (qwen4_exp ple_embedding is about ~95 GiB) that we cannot afford to perform the Operations
+            # directly on the device, as it will completely blow up the memory during the ops memory spike. So defer to "cpu", then
+            # accelerate will take care of putting back on correct device after loading
+            # Note that we only do it with `device_map` but not with `tp_plan`, as tp will perform local sharding before, so memory
+            # spike during conversion ops should be fine
+            if sharding_op is None and isinstance(mapping, WeightConverter) and mapping.force_cpu:
+                param_device = "cpu"
 
             future_or_tensor = spawn_materialize(
                 thread_pool,
                 tensor,
-                materialize_device,
+                param_device,
                 _dtype,
                 sharding_op=sharding_op,
                 tensor_idx=tensor_idx,
