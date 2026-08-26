@@ -70,12 +70,8 @@ class NeoMMEEmbeddings(nn.Module):
         self.word_embeddings = nn.Embedding(config.vocab_size, config.embedding_rank)
         self.embedding_projection = nn.Linear(config.embedding_rank, config.hidden_size, bias=False)
 
-    def forward(
-        self, input_ids: torch.LongTensor | None = None, inputs_embeds: torch.Tensor | None = None
-    ) -> torch.Tensor:
-        if inputs_embeds is None:
-            inputs_embeds = self.word_embeddings(input_ids)
-        return self.embedding_projection(inputs_embeds)
+    def forward(self, input_ids: torch.LongTensor) -> torch.Tensor:
+        return self.embedding_projection(self.word_embeddings(input_ids))
 
 
 class NeoMMEPatchEmbeddings(nn.Module):
@@ -532,7 +528,6 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         pixel_values: torch.Tensor | None = None,
-        inputs_embeds: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         r"""
@@ -542,17 +537,13 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
         pixel_values (`torch.Tensor` of shape `(num_patches, 3 * patch_size ** 2)`, *optional*):
             Flattened image patches returned by [`NeoMMEProcessor`]. The model places these patches at image
             placeholders in `input_ids`.
-        inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, embedding_rank)`, *optional*):
-            Token embeddings before projection to `hidden_size`. Use `input_ids` for image inputs because the model
-            needs the image placeholders to place `pixel_values`.
         """
         if input_ids is None:
             raise ValueError("NeoMME requires `input_ids` because value embeddings are token-ID lookups.")
+        if "inputs_embeds" in kwargs:
+            raise ValueError("NeoMME does not support `inputs_embeds`; pass `input_ids` instead.")
 
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        hidden_states = self.embed_tokens(input_ids=input_ids)
+        hidden_states = self.embed_tokens(input_ids)
         if pixel_values is not None:
             image_outputs = self.get_image_features(pixel_values, return_dict=True)
             image_mask = self.get_placeholder_mask(input_ids, image_outputs.pooler_output)
@@ -628,7 +619,6 @@ class NeoMMEForMaskedLM(NeoMMEPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         pixel_values: torch.Tensor | None = None,
-        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MaskedLMOutput:
@@ -642,7 +632,6 @@ class NeoMMEForMaskedLM(NeoMMEPreTrainedModel):
             attention_mask=attention_mask,
             position_ids=position_ids,
             pixel_values=pixel_values,
-            inputs_embeds=inputs_embeds,
             **kwargs,
         )
         hidden_states = outputs.last_hidden_state
@@ -732,7 +721,6 @@ class NeoMMEForRetrieval(NeoMMEPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         pixel_values: torch.Tensor | None = None,
-        inputs_embeds: torch.Tensor | None = None,
         output_multivector: bool = True,
         output_dense: bool = True,
         dense_dim: int | None = None,
@@ -755,7 +743,6 @@ class NeoMMEForRetrieval(NeoMMEPreTrainedModel):
             attention_mask=attention_mask,
             position_ids=position_ids,
             pixel_values=pixel_values,
-            inputs_embeds=inputs_embeds,
             **kwargs,
         )
         hidden_states = outputs.last_hidden_state

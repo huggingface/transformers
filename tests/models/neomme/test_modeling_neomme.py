@@ -491,6 +491,8 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
             inputs_embeds = model.get_input_embeddings()(input_ids)
             with self.assertRaisesRegex(ValueError, "requires `input_ids`"):
                 model(inputs_embeds=inputs_embeds, pixel_values=pixel_values)
+            with self.assertRaisesRegex(ValueError, "does not support `inputs_embeds`"):
+                model(input_ids=input_ids, inputs_embeds=inputs_embeds, pixel_values=pixel_values)
 
         with self.subTest(case="multi_image_order"):
             grids = [(2, 3), (1, 2)]
@@ -504,7 +506,7 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
             input_ids = torch.tensor([sequence], device=torch_device)
             pixel_values = floats_tensor([len(patch_positions), config.patch_dim]).to(torch_device)
 
-            inputs_embeds = model.embeddings(input_ids=input_ids)
+            inputs_embeds = model.embed_tokens(input_ids)
             image_features = model.get_image_features(pixel_values).pooler_output
             image_mask = model.get_placeholder_mask(input_ids, image_features)
             scattered = inputs_embeds.masked_scatter(image_mask, image_features)
