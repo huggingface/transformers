@@ -14,18 +14,60 @@ rendered properly in your Markdown viewer.
 
 -->
 
-*This model was contributed to Hugging Face Transformers on 2026-08-20.*
+*This model was contributed to Hugging Face Transformers on 2026-08-26.*
 
 # NeoMME
 
+[![Hugging Face](https://img.shields.io/badge/Collection-FFD21E?style=for-the-badge&logo=huggingface&logoColor=000)](https://huggingface.co/collections/Hcompany/neomme)
 [![arXiv](https://img.shields.io/badge/arXiv-coming_soon-b31b1b.svg?style=for-the-badge)](https://arxiv.org)
-[![Hugging Face](https://img.shields.io/badge/NeoMME_Collection-FFD21E?style=for-the-badge&logo=huggingface&logoColor=000)](https://huggingface.co/collections/Hcompany/neomme)
 
 NeoMME is a family of efficient 260M and 800M parameter multimodal-native multilingual foundation encoders from H Company. It processes multilingual text tokens and raw image patches in a single bidirectional Transformer encoder, without a separately pretrained vision tower or causal language model.
 
-NeoMME-Retriever is a model fine-tuned from the NeoMME backbone for visual document retrieval with joint late-interaction and dense objectives. It produces multivector embeddings for MeanMaxSim scoring (late-interaction) and mean-pooled embeddings for cosine similarity (dense).
+NeoMME-Retriever is a model fine-tuned from the NeoMME backbone for visual document retrieval with joint late-interaction and dense objectives. It takes text queries and documents (text or page screenshots) and produces multi-vector embeddings for MeanMaxSim scoring (late-interaction) and mean-pooled embeddings for cosine similarity (dense).
 
 The pretrained backbones and retrieval checkpoints are available under Apache 2.0 in the [NeoMME collection](https://huggingface.co/collections/Hcompany/neomme) and can be used with [Sentence Transformers](https://huggingface.co/sentence-transformers).
+
+## Example usage
+
+**Generate encoder hidden states**
+
+```python
+import requests
+import torch
+from PIL import Image
+
+from transformers import AutoModel, AutoProcessor
+
+
+def encode_document_text(processor, text: str) -> str:
+    return f"{processor.tokenizer.document_token}{text}"
+
+
+model_id = "Hcompany/NeoMME-260M"
+processor = AutoProcessor.from_pretrained(model_id)
+model = AutoModel.from_pretrained(model_id, device_map="auto")
+
+text = "The cat sat on a mat."
+image_url = "https://github.com/tonywu71/colpali-cookbooks/blob/main/examples/data/shift_kazakhstan.jpg?raw=true"
+image = Image.open(requests.get(image_url, stream=True).raw)
+
+inputs = processor(
+    text=[
+        encode_document_text(processor, text),
+        encode_document_text(processor, processor.image_token),
+    ],
+    images=[image],
+    padding=True,
+    return_tensors="pt",
+).to(model.device)
+
+with torch.inference_mode():
+    outputs = model(**inputs)
+
+text_hidden_states, image_hidden_states = outputs.last_hidden_state
+```
+
+**Masked language modeling**
 
 ```python
 import torch
@@ -33,11 +75,12 @@ import torch
 from transformers import AutoModelForMaskedLM, AutoProcessor
 
 
-model_name = "Hcompany/NeoMME-260M"
-processor = AutoProcessor.from_pretrained(model_name)
-model = AutoModelForMaskedLM.from_pretrained(model_name, device_map="auto")
+model_id = "Hcompany/NeoMME-260M"
+processor = AutoProcessor.from_pretrained(model_id)
+model = AutoModelForMaskedLM.from_pretrained(model_id, device_map="auto")
 
-text = f"The capital of {processor.tokenizer.mask_token} is London."
+# Equivalent: "<doc>The capital of <mask> is London."
+text = f"{processor.tokenizer.document_token}The capital of {processor.tokenizer.mask_token} is London."
 inputs = processor(text=[text], return_tensors="pt").to(model.device)
 
 with torch.inference_mode():
@@ -47,6 +90,8 @@ masked_index = (inputs.input_ids[0] == processor.tokenizer.mask_token_id).nonzer
 predicted_token_id = outputs.logits[0, masked_index].argmax(dim=-1)
 print(processor.tokenizer.decode(predicted_token_id))
 ```
+
+**Visual document retrieval**
 
 > [!IMPORTANT]
 > Install `sentence-transformers>=6.0.0` to use MeanMaxSim scoring in the retrieval example below. For the
@@ -58,7 +103,7 @@ from typing import Any, Literal
 import requests
 import torch
 from PIL import Image
-from sentence_transformers.util import mean_maxsim
+from sentence_transformers.util import cos_sim, mean_maxsim
 
 from transformers import BatchFeature, NeoMMEForRetrieval, NeoMMEProcessor
 
@@ -103,16 +148,19 @@ inputs_documents = encode(document_messages, "document").to(model.device)
 inputs_text = encode(query_messages, "query").to(model.device)
 
 with torch.inference_mode():
-    document_embeddings = model(**inputs_documents).embeddings
-    query_embeddings = model(**inputs_text).embeddings
+    document_outputs = model(**inputs_documents)
+    query_outputs = model(**inputs_text)
 
-scores = mean_maxsim(
-    query_embeddings,
-    document_embeddings,
+late_scores = mean_maxsim(
+    query_outputs.embeddings,
+    document_outputs.embeddings,
     a_mask=inputs_text["attention_mask"],
     b_mask=inputs_documents["attention_mask"],
 )
-print(scores)  # Expected: scores[0, 0] > scores[0, 1] and scores[1, 1] > scores[1, 0].
+dense_scores = cos_sim(query_outputs.dense_embeddings, document_outputs.dense_embeddings)
+
+# Expected: late_scores[0, 0] > late_scores[0, 1] and late_scores[1, 1] > late_scores[1, 0].
+print(late_scores, dense_scores)
 ```
 
 ## NeoMMEConfig
