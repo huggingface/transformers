@@ -1166,7 +1166,7 @@ class VideoLlama3VideoProcessor(Qwen2VLVideoProcessor):
     # This processor's resize already spreads `size.longest_edge` across the sampled frames, so
     # Qwen2VL's opt-in cap does not apply here.
     cap_pixels_per_frame = AttributeError()
-    video_total_seq_len = AttributeError()
+    max_video_tokens = AttributeError()
     valid_kwargs = VideoLlama3VideoProcessorInitKwargs
     model_input_names = ["pixel_values_videos", "video_grid_thw", "video_merge_sizes", "video_compression_mask"]
 
