@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import torch
@@ -27,7 +28,7 @@ from ...modeling_outputs import (
     CausalLMOutputWithPast,
     ModelOutput,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -224,10 +225,13 @@ class EvollaSaProtProteinEncoder(EvollaSaProtPreTrainedModel):
 
 
 class EvollaSequenceCompressorAttention(nn.Module):
-    def __init__(self, dim, dim_head=64, heads=8):
+    def __init__(self, config: EvollaConfig, dim, dim_head=64, heads=8):
         super().__init__()
+        self.config = config
         self.scale = dim_head**-0.5
         self.heads = heads
+        self.head_dim = dim_head
+        self.is_causal = False
         inner_dim = dim_head * heads
 
         self.norm_media = nn.LayerNorm(dim)
@@ -237,7 +241,7 @@ class EvollaSequenceCompressorAttention(nn.Module):
         self.to_kv = nn.Linear(dim, inner_dim * 2, bias=False)
         self.to_out = nn.Linear(inner_dim, dim, bias=False)
 
-    def forward(self, x, latents, mask):
+    def forward(self, x, latents, mask, **kwargs: Unpack[TransformersKwargs]):
         """
         Args:
             x (torch.Tensor): image features
@@ -259,21 +263,26 @@ class EvollaSequenceCompressorAttention(nn.Module):
         q = q.view(q.size(0), q.size(1), h, -1).permute(0, 2, 1, 3)
         k = k.view(k.size(0), k.size(1), h, -1).permute(0, 2, 1, 3)
         v = v.view(v.size(0), v.size(1), h, -1).permute(0, 2, 1, 3)
-        q = q * self.scale  # batch_size, num_heads, num_latents, dim_head
 
-        # attention
-        sim = torch.matmul(q, k.transpose(-1, -2))
-        sim = sim - sim.amax(dim=-1, keepdim=True).detach()
-        bs, nh, skd, okd = sim.shape
-        ones = torch.ones(nh, skd).to(mask.device)  # Create a tensor of ones with shape (nh, skd)
-        mask_exp = mask[:, None, None, :]
-        ones_exp = ones[None, :, :, None]
-        mask = mask_exp * ones_exp
+        # `mask` is a (batch, kv_len) keep-mask; turn it into the additive float mask the
+        # attention interface expects. It broadcasts over heads and queries, which is what
+        # the explicit outer-product with a `ones(num_heads, num_latents)` tensor did before.
+        attention_mask = torch.zeros_like(mask, dtype=q.dtype).masked_fill_(mask == 0, -1e4)[:, None, None, :]
 
-        sim = sim.masked_fill((1 - mask).bool(), -1e4)
-        attn = sim.softmax(dim=-1)
-        out = torch.matmul(attn, v)
-        out = out.permute(0, 2, 1, 3)
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+
+        out, _ = attention_interface(
+            self,
+            q,
+            k,
+            v,
+            attention_mask,
+            dropout=0.0,
+            scaling=self.scale,
+            **kwargs,
+        )
 
         # [batch, seq, head, features] -> [batch, seq, head*features]
         out = out.reshape(out.size(0), out.size(1), -1)
@@ -307,7 +316,10 @@ class EvollaSequenceCompressorResampler(nn.Module):
                 nn.ModuleList(
                     [
                         EvollaSequenceCompressorAttention(
-                            dim=protein_repr_dim, dim_head=config.resampler_dim_head, heads=config.resampler_heads
+                            config,
+                            dim=protein_repr_dim,
+                            dim_head=config.resampler_dim_head,
+                            heads=config.resampler_heads,
                         ),
                         EvollaFeedForward(dim=protein_repr_dim, mult=config.resampler_ff_mult),
                     ]

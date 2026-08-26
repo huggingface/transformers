@@ -15,7 +15,6 @@
 PyTorch XLM model.
 """
 
-import math
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -36,13 +35,41 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward
-from ...utils import ModelOutput, auto_docstring, logging
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging
 from .configuration_xlm import XLMConfig
 
 
 logger = logging.get_logger(__name__)
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
+
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
 
 
 def create_sinusoidal_embeddings(n_pos, dim, out):
@@ -500,6 +527,9 @@ class MultiHeadAttention(nn.Module):
         self.n_heads = n_heads
         self.head_dim = dim // n_heads
         self.dropout = config.attention_dropout
+        self.scaling = self.head_dim**-0.5
+        self.is_causal = False
+        self.config = config
         assert self.dim % self.n_heads == 0
 
         self.q_lin = nn.Linear(dim, dim)
@@ -514,7 +544,7 @@ class MultiHeadAttention(nn.Module):
         kv=None,
         cache=None,
         output_attentions=False,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         """
         Self-attention (if kv is None) or attention over source sentence (provided by kv).
@@ -555,16 +585,27 @@ class MultiHeadAttention(nn.Module):
                 if is_cross_attention:
                     cache.is_updated[self.layer_id] = True
 
-        q = q / math.sqrt(self.head_dim)  # (bs, n_heads, qlen, head_dim)
-        scores = torch.matmul(q, k.transpose(2, 3))  # (bs, n_heads, qlen, klen)
-        mask = (mask == 0).view(mask_reshape).expand_as(scores)  # (bs, n_heads, qlen, klen)
-        scores.masked_fill_(mask, torch.finfo(scores.dtype).min)  # (bs, n_heads, qlen, klen)
+        # The mask is a "keep" mask (`bool`/0-1); turn it into the additive float mask the
+        # attention interface expects, so every backend applies it the same way.
+        bool_mask = (mask == 0).view(mask_reshape)  # (bs, 1, qlen or 1, klen)
+        attention_mask = torch.zeros_like(bool_mask, dtype=q.dtype).masked_fill_(bool_mask, torch.finfo(q.dtype).min)
 
-        weights = nn.functional.softmax(scores.float(), dim=-1).type_as(scores)  # (bs, n_heads, qlen, klen)
-        weights = nn.functional.dropout(weights, p=self.dropout, training=self.training)  # (bs, n_heads, qlen, klen)
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
-        context = torch.matmul(weights, v)  # (bs, n_heads, qlen, head_dim)
-        context = context.transpose(1, 2).contiguous().view(bs, -1, self.n_heads * self.head_dim)
+        context, weights = attention_interface(
+            self,
+            q,
+            k,
+            v,
+            attention_mask,
+            dropout=0.0 if not self.training else self.dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
+
+        context = context.reshape(bs, -1, self.n_heads * self.head_dim).contiguous()
 
         outputs = (self.out_lin(context),)
         if output_attentions:

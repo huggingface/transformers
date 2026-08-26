@@ -15,6 +15,7 @@
 
 import copy
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import torch
@@ -26,8 +27,9 @@ from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
-from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, logging, torch_compilable_check
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging, torch_compilable_check
 from .configuration_prophetnet import ProphetNetConfig
 
 
@@ -382,6 +384,35 @@ class ProphetNetPositionalEmbeddings(nn.Embedding):
         return super().forward(position_ids)
 
 
+# Copied from transformers.models.bart.modeling_bart.eager_attention_forward
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
+
+    # Take the dot product between "query" and "key" to get the raw attention scores.
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
 class ProphetNetAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -389,10 +420,15 @@ class ProphetNetAttention(nn.Module):
         super().__init__()
         hidden_size = config.hidden_size
 
+        self.config = config
         self.attention_dropout = config.attention_dropout
         self.dropout = config.dropout
         self.num_attn_heads = num_attn_heads
         self.head_dim = hidden_size // num_attn_heads
+        self.scaling = self.head_dim**-0.5
+        # `ProphetNetAttention` is only used for the (bidirectional) encoder self-attention and for the
+        # decoder cross-attention, so it is never causal.
+        self.is_causal = False
         self.layer_idx = layer_idx
 
         assert self.head_dim * num_attn_heads == hidden_size, (
@@ -412,22 +448,18 @@ class ProphetNetAttention(nn.Module):
         key_value_states: Tensor | None = None,
         attention_mask: Tensor | None = None,
         past_key_values: Cache | None = None,
-        output_attentions: bool | None = False,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[Tensor, Tensor | None]:
-        batch_size, tgt_len, hidden_size = hidden_states.size()
-
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
         is_cross_attention = key_value_states is not None
-        assert list(hidden_states.size()) == [
-            batch_size,
-            tgt_len,
-            hidden_size,
-        ], f"Size of hidden states should be {batch_size, tgt_len, hidden_size}, but is {hidden_states.size()}"
+
+        # determine input shapes
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
         # previous time steps are cached - no need to recompute key and value if they are static
-        query_states = self.query_proj(hidden_states) / (self.head_dim**0.5)
+        query_states = self.query_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         is_updated = False
         if past_key_values is not None:
@@ -449,8 +481,9 @@ class ProphetNetAttention(nn.Module):
         else:
             key_states = self.key_proj(current_states)
             value_states = self.value_proj(current_states)
-            key_states = key_states.view(batch_size, -1, self.num_attn_heads, self.head_dim).transpose(1, 2)
-            value_states = value_states.view(batch_size, -1, self.num_attn_heads, self.head_dim).transpose(1, 2)
+            kv_shape = (*current_states.shape[:-1], -1, self.head_dim)
+            key_states = key_states.view(kv_shape).transpose(1, 2)
+            value_states = value_states.view(kv_shape).transpose(1, 2)
 
             if past_key_values is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
@@ -459,45 +492,30 @@ class ProphetNetAttention(nn.Module):
                 if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
                     past_key_values.is_updated[self.layer_idx] = True
 
-        query_states = query_states.view(batch_size, tgt_len, self.num_attn_heads, self.head_dim).transpose(1, 2)
-        src_len = key_states.size(2)
-
-        attn_weights = torch.einsum("bsij,bsjk->bsik", query_states, key_states.transpose(2, 3))
-        expected_shape = (batch_size, self.num_attn_heads, tgt_len, src_len)
-        if attn_weights.size() != expected_shape:
-            raise ValueError(f"Attention weights should have size {expected_shape}, but is {attn_weights.size()}")
-
         # This is part of a workaround to get around fork/join parallelism not supporting Optional types.
         if attention_mask is not None and attention_mask.dim() == 0:
             attention_mask = None
 
-        expected_shape = (batch_size, self.num_attn_heads, 1, src_len)
-        if attention_mask is not None and attention_mask.size() != expected_shape:
-            raise ValueError(f"Attention mask should have size {expected_shape}, but is {attention_mask.size()}")
-        if attention_mask is not None:  # don't attend to padding symbols
-            attn_weights = attn_weights + attention_mask
-        if output_attentions:
-            attn_weights_reshaped = attn_weights
-        else:
-            attn_weights_reshaped = None
-
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-
-        attn_probs = nn.functional.dropout(
-            attn_weights,
-            p=self.attention_dropout,
-            training=self.training,
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
         )
-        attn_output = torch.einsum("bsij,bsjk->bsik", attn_probs, value_states)
-        expected_shape = (batch_size, self.num_attn_heads, tgt_len, self.head_dim)
-        if attn_output.size() != expected_shape:
-            raise ValueError(f"`attn_output` should have shape {expected_shape}, but is of shape {attn_output.size()}")
 
-        attn_output = attn_output.transpose(1, 2).reshape(batch_size, tgt_len, hidden_size)
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.out_proj(attn_output)
 
         attn_output = nn.functional.dropout(attn_output, p=self.dropout, training=self.training)
-        return attn_output, attn_weights_reshaped
+        return attn_output, attn_weights
 
 
 class ProphetNetFeedForward(nn.Module):

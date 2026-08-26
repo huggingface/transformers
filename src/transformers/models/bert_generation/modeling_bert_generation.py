@@ -219,14 +219,13 @@ class BertGenerationCrossAttention(nn.Module):
         return attn_output, attn_weights
 
 
+# Output projection plus the residual LayerNorm, kept for the cross-attention path only. The
+# self-attention path no longer uses this: its projection is `BertGenerationAttention.o_proj` and its
+# LayerNorm belongs to `BertGenerationLayer`. Cross-attention keeps the original layout deliberately, so that
+# the rare checkpoints carrying `crossattention.*` weights load with no key renaming at all. The
+# note sits outside the class body because the models copying this class do still use it for
+# self-attention.
 class BertGenerationSelfOutput(nn.Module):
-    """Output projection plus the residual LayerNorm, kept for the cross-attention path only.
-
-    The self-attention path no longer uses this: its projection is `BertGenerationAttention.o_proj` and its
-    LayerNorm belongs to `BertGenerationLayer`. Cross-attention keeps the original layout deliberately, so
-    that the rare checkpoints carrying `crossattention.*` weights load with no key renaming at all.
-    """
-
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)

@@ -14,6 +14,7 @@
 """PyTorch TimeSformer model."""
 
 import collections
+from collections.abc import Callable
 
 import torch
 from torch import nn
@@ -23,8 +24,10 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
 from ...utils import (
+    TransformersKwargs,
     auto_docstring,
     logging,
 )
@@ -144,6 +147,35 @@ class TimesformerEmbeddings(nn.Module):
         return embeddings
 
 
+# Copied from transformers.models.bert.modeling_bert.eager_attention_forward
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
+
+    # Take the dot product between "query" and "key" to get the raw attention scores.
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
 # Adapted from https://github.com/facebookresearch/TimeSformer/blob/a5ef29a7b7264baff199a30b3306ac27de901133/timesformer/models/vit.py#L57
 class TimesformerSelfAttention(nn.Module):
     def __init__(self, config: TimesformerConfig):
@@ -153,13 +185,15 @@ class TimesformerSelfAttention(nn.Module):
         qkv_bias = config.qkv_bias
         attention_dropout_prob = config.attention_probs_dropout_prob
 
+        self.config = config
         self.num_heads = num_heads
         head_dim = config.hidden_size // num_heads
         self.scale = head_dim**-0.5
+        self.is_causal = False
         self.qkv = nn.Linear(config.hidden_size, config.hidden_size * 3, bias=qkv_bias)
         self.attn_drop = nn.Dropout(attention_dropout_prob)
 
-    def forward(self, hidden_states, output_attentions: bool = False):
+    def forward(self, hidden_states, output_attentions: bool = False, **kwargs: Unpack[TransformersKwargs]):
         batch_size, hidden_size, num_channels = hidden_states.shape
         qkv = (
             self.qkv(hidden_states)
@@ -168,11 +202,21 @@ class TimesformerSelfAttention(nn.Module):
         )
         query, key, value = qkv[0], qkv[1], qkv[2]
 
-        attention_probs = (query @ key.transpose(-2, -1)) * self.scale
-        attention_probs = attention_probs.softmax(dim=-1)
-        attention_probs = self.attn_drop(attention_probs)
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
-        context_layer = (attention_probs @ value).transpose(1, 2).reshape(batch_size, hidden_size, num_channels)
+        context_layer, attention_probs = attention_interface(
+            self,
+            query,
+            key,
+            value,
+            None,
+            dropout=0.0 if not self.training else self.attn_drop.p,
+            scaling=self.scale,
+            **kwargs,
+        )
+        context_layer = context_layer.reshape(batch_size, hidden_size, num_channels)
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 

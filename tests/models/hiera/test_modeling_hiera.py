@@ -309,9 +309,14 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             self.assertEqual(len(attentions), expected_num_attentions)
 
             self.assertListEqual(
-                list(attentions[0].shape[-4:]),
-                [self.model_tester.num_heads[0], num_windows, mask_unit_area, seq_len // num_windows],
+                list(attentions[0].shape[-3:]),
+                [self.model_tester.num_heads[0], mask_unit_area, seq_len // num_windows],
             )
+            # Mask-unit attention folds the window axis into the batch axis, which is the layout the
+            # shared attention interface computes in -- and the tensor that is actually on the
+            # autograd path. Reshaping it back to (batch, heads, windows, q, k) for reporting left
+            # the returned weights off that path, so `retain_grad` on them yielded None.
+            self.assertEqual(attentions[0].shape[0] % num_windows, 0)
             out_len = len(outputs)
 
             # Check attention is always last and order is fine
@@ -332,8 +337,8 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             self.assertEqual(len(self_attentions), expected_num_attentions)
 
             self.assertListEqual(
-                list(self_attentions[0].shape[-4:]),
-                [self.model_tester.num_heads[0], num_windows, mask_unit_area, seq_len // num_windows],
+                list(self_attentions[0].shape[-3:]),
+                [self.model_tester.num_heads[0], mask_unit_area, seq_len // num_windows],
             )
 
     # Overriding as attention shape depends on patch_stride and mask_unit_size

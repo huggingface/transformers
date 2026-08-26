@@ -14,6 +14,7 @@
 """PyTorch Hiera model."""
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import torch
@@ -30,13 +31,41 @@ from ...modeling_outputs import (
     ImageClassifierOutput,
     ModelOutput,
 )
-from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging, torch_int
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, logging, torch_int
 from ...utils.generic import can_return_tuple
 from .configuration_hiera import HieraConfig
 
 
 logger = logging.get_logger(__name__)
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
+
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
 
 
 @auto_docstring(
@@ -321,6 +350,7 @@ class HieraMaskUnitAttention(nn.Module):
 
     def __init__(
         self,
+        config,
         hidden_size: int,
         hidden_size_output: int,
         num_heads: int,
@@ -329,12 +359,14 @@ class HieraMaskUnitAttention(nn.Module):
         use_mask_unit_attn: bool = False,
     ) -> None:
         super().__init__()
+        self.config = config
         self.num_heads = num_heads
         self.query_stride = query_stride
         self.hidden_size_output = hidden_size_output
 
         self.head_dim = hidden_size_output // num_heads
         self.scale = (self.head_dim) ** -0.5
+        self.is_causal = False
 
         self.qkv = nn.Linear(hidden_size, 3 * hidden_size_output)
         self.proj = nn.Linear(hidden_size_output, hidden_size_output)
@@ -346,6 +378,8 @@ class HieraMaskUnitAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         output_attentions: bool = False,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Input should be of shape [batch, tokens, channels]."""
         batch_size, seq_len, _ = hidden_states.shape
@@ -365,11 +399,32 @@ class HieraMaskUnitAttention(nn.Module):
             query = query.view(batch_size, self.num_heads, num_windows, self.query_stride, -1, self.head_dim)
             query = query.max(dim=3).values
 
-        attn_weights = (query * self.scale) @ key.transpose(-1, -2)
-        attn_weights = attn_weights.softmax(dim=-1)
+        # Attention is confined to each mask unit, so fold the mask-unit axis into the batch
+        # axis: the shared interface then sees a plain (batch, heads, seq, head_dim) layout and
+        # the windowing is enforced by the batching itself.
+        def fold_windows(states: torch.Tensor) -> torch.Tensor:
+            return states.permute(0, 2, 1, 3, 4).reshape(batch_size * num_windows, self.num_heads, -1, self.head_dim)
 
-        attn_output = attn_weights @ value
-        attn_output = attn_output.transpose(1, 3).reshape(batch_size, -1, self.hidden_size_output)
+        query, key, value = fold_windows(query), fold_windows(key), fold_windows(value)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query,
+            key,
+            value,
+            attention_mask,
+            dropout=0.0,
+            scaling=self.scale,
+            **kwargs,
+        )
+
+        # (batch * windows, tokens, heads, head_dim) -> (batch, tokens * windows, hidden_size)
+        attn_output = attn_output.view(batch_size, num_windows, -1, self.num_heads, self.head_dim)
+        attn_output = attn_output.permute(0, 2, 1, 3, 4).reshape(batch_size, -1, self.hidden_size_output)
         attn_output = self.proj(attn_output)
 
         return (attn_output, attn_weights) if output_attentions else (attn_output, None)
@@ -434,6 +489,7 @@ class HieraLayer(nn.Module):
 
         self.layernorm_before = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
         self.attn = HieraMaskUnitAttention(
+            config=config,
             hidden_size=hidden_size,
             hidden_size_output=hidden_size_output,
             num_heads=num_heads,

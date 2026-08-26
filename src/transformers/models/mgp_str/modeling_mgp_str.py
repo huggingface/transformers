@@ -14,6 +14,7 @@
 """PyTorch MGP-STR model."""
 
 import collections.abc
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import torch
@@ -22,9 +23,37 @@ from torch import nn
 
 from ... import initialization as init
 from ...modeling_outputs import BaseModelOutput
-from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring
 from .configuration_mgp_str import MgpstrConfig
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
+
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
 
 
 @auto_docstring(
@@ -125,17 +154,26 @@ class MgpstrMlp(nn.Module):
 class MgpstrAttention(nn.Module):
     def __init__(self, config: MgpstrConfig):
         super().__init__()
+        self.config = config
         self.num_heads = config.num_attention_heads
         head_dim = config.hidden_size // config.num_attention_heads
+        self.head_dim = head_dim
         self.scale = head_dim**-0.5
+        self.is_causal = False
 
         self.qkv = nn.Linear(config.hidden_size, config.hidden_size * 3, bias=config.qkv_bias)
         self.attn_drop = nn.Dropout(config.attn_drop_rate)
         self.proj = nn.Linear(config.hidden_size, config.hidden_size)
         self.proj_drop = nn.Dropout(config.drop_rate)
 
-    def forward(self, hidden_states):
+    def forward(
+        self,
+        hidden_states,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ):
         batch_size, num, channel = hidden_states.shape
+        input_shape = hidden_states.shape[:-1]
         qkv = (
             self.qkv(hidden_states)
             .reshape(batch_size, num, 3, self.num_heads, channel // self.num_heads)
@@ -143,11 +181,22 @@ class MgpstrAttention(nn.Module):
         )
         query, key, value = qkv[0], qkv[1], qkv[2]
 
-        attention_probs = (query @ key.transpose(-2, -1)) * self.scale
-        attention_probs = attention_probs.softmax(dim=-1)
-        attention_probs = self.attn_drop(attention_probs)
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
-        context_layer = (attention_probs @ value).transpose(1, 2).reshape(batch_size, num, channel)
+        context_layer, attention_probs = attention_interface(
+            self,
+            query,
+            key,
+            value,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attn_drop.p,
+            scaling=self.scale,
+            **kwargs,
+        )
+
+        context_layer = context_layer.reshape(*input_shape, -1).contiguous()
         context_layer = self.proj(context_layer)
         context_layer = self.proj_drop(context_layer)
         return (context_layer, attention_probs)

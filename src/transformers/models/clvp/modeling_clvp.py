@@ -33,7 +33,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     CausalLMOutputWithCrossAttentions,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import Conv1D
 from ...utils import (
@@ -268,12 +268,41 @@ class ClvpRotaryPositionalEmbedding(nn.Module):
         return self.cached_rotary_positional_embedding
 
 
+# Copied from transformers.models.bert.modeling_bert.eager_attention_forward
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
+
+    # Take the dot product between "query" and "key" to get the raw attention scores.
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
 class ClvpSelfAttention(nn.Module):
     """
     Multi-headed attention to combine Absolute and Rotary Positional Embeddings into a single Attention module.
     """
 
-    def __init__(self, config, layer_idx=None):
+    def __init__(self, config, layer_idx=None, is_causal=False):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
@@ -287,6 +316,7 @@ class ClvpSelfAttention(nn.Module):
         self.scale = self.head_dim**-0.5
         self.dropout = config.attention_dropout
         self.layer_idx = layer_idx
+        self.is_causal = is_causal
 
         if hasattr(config, "max_position_embeddings"):
             max_positions = config.max_position_embeddings
@@ -320,7 +350,7 @@ class ClvpSelfAttention(nn.Module):
         bsz, _, embed_dim = hidden_states.size()
 
         # get query proj
-        query_states = self._shape(self.q_proj(hidden_states), -1, bsz) * self.scale
+        query_states = self._shape(self.q_proj(hidden_states), -1, bsz)
         key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
         value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
 
@@ -353,29 +383,22 @@ class ClvpSelfAttention(nn.Module):
             value_states = torch.cat((value_rot, value_pass), dim=-1)
 
         tgt_len = query_states.shape[2]
-        src_len = key_states.shape[2]
-        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3))
 
-        if attention_mask is not None:
-            if attention_mask.size() != (bsz, 1, tgt_len, src_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
-                )
-            attn_weights = attn_weights + attention_mask
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-
-        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-        attn_output = torch.matmul(attn_probs, value_states)
-
-        if attn_output.size() != (bsz, self.num_heads, tgt_len, self.head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
-                f" {attn_output.size()}"
-            )
-
-        attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.reshape(bsz, tgt_len, self.embed_dim)
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.dropout,
+            scaling=self.scale,
+            **kwargs,
+        )
+        attn_output = attn_output.reshape(bsz, tgt_len, self.embed_dim).contiguous()
 
         attn_output = self.out_proj(attn_output)
 
@@ -584,7 +607,7 @@ class ClvpDecoderLayer(nn.Module):
         inner_dim = config.n_inner if config.n_inner is not None else 4 * hidden_size
 
         self.input_layernorm = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
-        self.attn = ClvpSelfAttention(config, layer_idx=layer_idx)
+        self.attn = ClvpSelfAttention(config, layer_idx=layer_idx, is_causal=True)
         self.post_attention_layernorm = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
         self.mlp = ClvpDecoderMLP(inner_dim, config)

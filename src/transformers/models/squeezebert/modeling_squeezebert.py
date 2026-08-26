@@ -13,7 +13,7 @@
 # limitations under the License.
 """PyTorch SqueezeBert model."""
 
-import math
+from collections.abc import Callable
 
 import torch
 from torch import nn
@@ -31,8 +31,10 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
 from ...utils import (
+    TransformersKwargs,
     auto_docstring,
     logging,
 )
@@ -80,26 +82,6 @@ class SqueezeBertEmbeddings(nn.Module):
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
         return embeddings
-
-
-class MatMulWrapper(nn.Module):
-    """
-    Wrapper for torch.matmul(). This makes flop-counting easier to implement. Note that if you directly call
-    torch.matmul() in your code, the flop counter will typically ignore the flops of the matmul.
-    """
-
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, mat1, mat2):
-        """
-
-        :param inputs: two torch tensors :return: matmul of these tensors
-
-        Here are the typical dimensions found in BERT (the B is optional) mat1.shape: [B, <optional extra dims>, M, K]
-        mat2.shape: [B, <optional extra dims>, K, N] output shape: [B, <optional extra dims>, M, N]
-        """
-        return torch.matmul(mat1, mat2)
 
 
 class SqueezeBertLayerNorm(nn.LayerNorm):
@@ -153,6 +135,35 @@ class ConvActivation(nn.Module):
         return self.act(output)
 
 
+# Copied from transformers.models.bert.modeling_bert.eager_attention_forward
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
+
+    # Take the dot product between "query" and "key" to get the raw attention scores.
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
 class SqueezeBertSelfAttention(nn.Module):
     def __init__(self, config, cin, q_groups=1, k_groups=1, v_groups=1):
         """
@@ -164,19 +175,18 @@ class SqueezeBertSelfAttention(nn.Module):
             raise ValueError(
                 f"cin ({cin}) is not a multiple of the number of attention heads ({config.num_attention_heads})"
             )
+        self.config = config
         self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = int(cin / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
+        self.scaling = self.attention_head_size**-0.5
+        self.is_causal = False
 
         self.query = nn.Conv1d(in_channels=cin, out_channels=cin, kernel_size=1, groups=q_groups)
         self.key = nn.Conv1d(in_channels=cin, out_channels=cin, kernel_size=1, groups=k_groups)
         self.value = nn.Conv1d(in_channels=cin, out_channels=cin, kernel_size=1, groups=v_groups)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-        self.softmax = nn.Softmax(dim=-1)
-
-        self.matmul_qk = MatMulWrapper()
-        self.matmul_qkv = MatMulWrapper()
 
     def transpose_for_scores(self, x):
         """
@@ -187,60 +197,36 @@ class SqueezeBertSelfAttention(nn.Module):
         x = x.view(*new_x_shape)
         return x.permute(0, 1, 3, 2)  # [N, C1, C2, W] --> [N, C1, W, C2]
 
-    def transpose_key_for_scores(self, x):
-        """
-        - input: [N, C, W]
-        - output: [N, C1, C2, W] where C1 is the head index, and C2 is one head's contents
-        """
-        new_x_shape = (x.size()[0], self.num_attention_heads, self.attention_head_size, x.size()[-1])  # [N, C1, C2, W]
-        x = x.view(*new_x_shape)
-        # no `permute` needed
-        return x
-
-    def transpose_output(self, x):
-        """
-        - input: [N, C1, W, C2]
-        - output: [N, C, W]
-        """
-        x = x.permute(0, 1, 3, 2).contiguous()  # [N, C1, C2, W]
-        new_x_shape = (x.size()[0], self.all_head_size, x.size()[3])  # [N, C, W]
-        x = x.view(*new_x_shape)
-        return x
-
-    def forward(self, hidden_states, attention_mask, output_attentions):
+    def forward(self, hidden_states, attention_mask, output_attentions, **kwargs: Unpack[TransformersKwargs]):
         """
         expects hidden_states in [N, C, W] data layout.
 
         The attention_mask data layout is [N, W], and it does not need to be transposed.
         """
-        mixed_query_layer = self.query(hidden_states)
-        mixed_key_layer = self.key(hidden_states)
-        mixed_value_layer = self.value(hidden_states)
+        query_layer = self.transpose_for_scores(self.query(hidden_states))
+        key_layer = self.transpose_for_scores(self.key(hidden_states))
+        value_layer = self.transpose_for_scores(self.value(hidden_states))
 
-        query_layer = self.transpose_for_scores(mixed_query_layer)
-        key_layer = self.transpose_key_for_scores(mixed_key_layer)
-        value_layer = self.transpose_for_scores(mixed_value_layer)
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
-        # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_score = self.matmul_qk(query_layer, key_layer)
-        attention_score = attention_score / math.sqrt(self.attention_head_size)
-        # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
-        if attention_mask is not None:
-            attention_score = attention_score + attention_mask
-
-        # Normalize the attention scores to probabilities.
-        attention_probs = self.softmax(attention_score)
-
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs)
-
-        context_layer = self.matmul_qkv(attention_probs, value_layer)
-        context_layer = self.transpose_output(context_layer)
+        context_layer, attention_probs = attention_interface(
+            self,
+            query_layer,
+            key_layer,
+            value_layer,
+            attention_mask,
+            dropout=0.0 if not self.training else self.dropout.p,
+            scaling=self.scaling,
+            **kwargs,
+        )
+        # [N, W, C1, C2] --> [N, W, C] --> [N, C, W]
+        context_layer = context_layer.reshape(*context_layer.shape[:2], -1).transpose(1, 2).contiguous()
 
         result = {"context_layer": context_layer}
         if output_attentions:
-            result["attention_score"] = attention_score
+            result["attention_score"] = attention_probs
         return result
 
 
