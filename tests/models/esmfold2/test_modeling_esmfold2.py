@@ -41,8 +41,7 @@ if is_torch_available():
     from transformers import EsmFold2Model
     from transformers.models.esmfold2.modeling_esmfold2 import EsmFold2AtomAttention, EsmFold2AtomInputs
 
-# TEMP: revert to "biohub/ESMFold2" once that snapshot bundles the ESMC-6B backbone under ``esmc.*``.
-_INTEGRATION_CKPT = "Rocketknight1/ESMFold2-merged-temp"
+_INTEGRATION_CKPT = "biohub/ESMFold2-hf"
 
 
 def get_tiny_config(**overrides) -> "EsmFold2Config":

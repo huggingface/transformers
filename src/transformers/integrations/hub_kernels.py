@@ -64,6 +64,8 @@ _kernels_enabled = _TRANSFORMERS_USE_HUB_KERNELS in ENV_VARS_TRUE_VALUES
 
 # Maps from func name to the internal module path
 _KERNELS_INTERNAL_PATH_MAPPINGS = {
+    "chunk_kda": "ops.kda",
+    "fused_recurrent_kda": "ops.kda",
     "chunk_gated_delta_rule": "ops.gated_delta_rule",
     "fused_recurrent_gated_delta_rule": "ops.gated_delta_rule",
     "mamba_split_conv1d_scan_combined": "ops.triton.ssd_combined",
@@ -295,7 +297,7 @@ if is_kernels_available():
                     Mode.INFERENCE: LayerRepository(
                         repo_id="biohub/esmfold2-trimul",
                         layer_name="ESMFold2TriangleMultiplication",
-                        version=1,
+                        revision="9bcafd5b29a6c81645ae299d5364f5b9e503aca8",
                         trust_remote_code=True,
                     ),
                 },
@@ -491,6 +493,34 @@ if is_kernels_available():
                         repo_id="kernels-community/activation", layer_name="GeluTanh", version=1
                     )
                 }
+            },
+            "chunk_kda": {
+                "cuda": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="chunk_kimi_delta_attention",
+                        version=1,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="chunk_kimi_delta_attention",
+                        version=1,
+                    ),
+                },
+            },
+            "fused_recurrent_kda": {
+                "cuda": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="recurrent_kimi_delta_attention",
+                        version=1,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="recurrent_kimi_delta_attention",
+                        version=1,
+                    ),
+                },
             },
             "rotary_pos_emb": {
                 "xpu": {
