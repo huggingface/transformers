@@ -429,6 +429,14 @@ class NeoMMEPreTrainedModel(PreTrainedModel):
     }
     input_modalities = ("image", "text")
 
+    def get_input_embeddings(self) -> nn.Embedding:
+        backbone = getattr(self, self.base_model_prefix, self)
+        return backbone.embed_tokens.word_embeddings
+
+    def set_input_embeddings(self, value: nn.Embedding) -> None:
+        backbone = getattr(self, self.base_model_prefix, self)
+        backbone.embed_tokens.word_embeddings = value
+
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         # `apply` visits children before parents, so the NeoMME-specific parent initialization below runs last.
