@@ -21,15 +21,15 @@ from typing import Literal
 @dataclass
 class DistributedConfig:
     """
-    Configuration for native distributed training (FSDP2 + TP).
+    Configuration for native distributed inference and training with tensor, pipeline, or FSDP2 parallelism.
 
     Args:
         tp_size (`int`, *optional*):
             Number of devices for tensor parallelism. If `None` and `tp_plan` is set, defaults to
             `WORLD_SIZE // (other_parallel_size)`. If `None` and no `tp_plan` is set, defaults to 1.
-        tp_plan (`dict`, *optional*):
-            Tensor parallel sharding plan. Leave as `None` to use the model's `base_model_tp_plan`.
-            Set explicitly to override, or pass `"auto"` to use the model's predefined plan.
+        tp_plan (`dict[str, str]` or `"auto"`, *optional*):
+            Tensor parallel sharding plan. Pass `"auto"`, or leave as `None` when `tp_size` is set, to use the
+            model's predefined `base_model_tp_plan`. Pass a dictionary to override the predefined plan.
         enable_sequence_parallel (`bool`, *optional*, defaults to `False`):
             Reserved for sequence parallelism. Not wired up yet.
         enable_expert_parallel (`bool`, *optional*, defaults to `False`):

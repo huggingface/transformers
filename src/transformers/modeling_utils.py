@@ -4044,7 +4044,8 @@ class PreTrainedModel(
                 GPU and the available CPU RAM if unset.
             distributed_config ([`~transformers.distributed.configuration_utils.DistributedConfig`], *optional*):
                 Configuration for native distributed loading with tensor parallelism or FSDP2. Pass
-                `DistributedConfig(tp_size=N)` for tensor parallelism, or
+                `DistributedConfig(tp_size=N)` to use a model's predefined tensor parallel plan,
+                `DistributedConfig(tp_plan=...)` to specify a tensor parallel plan, or
                 `DistributedConfig(fsdp_size=N)` for FSDP2. Requires `torchrun` and an initialized
                 process group when `tp_size > 1` or `fsdp_size > 1`. Mutually exclusive with `device_map`.
             device_mesh (`torch.distributed.DeviceMesh`, *optional*):

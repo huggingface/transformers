@@ -356,7 +356,9 @@ To use the LLM-Compressor technique, we recommend leveraging the pre-quantized F
 
 ```python
 
-from transformers import AutoTokenizer, Llama4ForConditionalGeneration
+import os
+
+from transformers import AutoTokenizer, DistributedConfig, Llama4ForConditionalGeneration
 
 
 model_id = "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8"
@@ -366,13 +368,19 @@ tokenizer = AutoTokenizer.from_pretrained(model_id)
 messages = [
     {"role": "user", "content": "Who are you?"},
 ]
-inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt", return_dict=True).to(model.device)
 
+distributed_config = DistributedConfig(tp_size=int(os.environ["WORLD_SIZE"]))
 model = Llama4ForConditionalGeneration.from_pretrained(
     model_id,
-    tp_plan="auto",
-    device_map="auto",
+    distributed_config=distributed_config,
 )
+
+inputs = tokenizer.apply_chat_template(
+    messages,
+    add_generation_prompt=True,
+    return_tensors="pt",
+    return_dict=True,
+).to(model.device)
 
 outputs = model.generate(**inputs.to(model.device), max_new_tokens=100)
 outputs = tokenizer.batch_decode(outputs[:, inputs["input_ids"].shape[-1]:])

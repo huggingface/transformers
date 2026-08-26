@@ -83,17 +83,19 @@ generate_text = tokenizer.decode(output_ids, skip_special_tokens=True)
 ### Distributed Generation with Tensor Parallelism
 
 ```python
-from transformers import AutoModelForCausalLM, AutoTokenizer
+import os
+
+from transformers import AutoModelForCausalLM, AutoTokenizer, DistributedConfig
 
 
 model_name = "baidu/ERNIE-4.5-21B-A3B-PT"
 
 # load the tokenizer and the model
 tokenizer = AutoTokenizer.from_pretrained(model_name)
+distributed_config = DistributedConfig(tp_size=int(os.environ["WORLD_SIZE"]))
 model = AutoModelForCausalLM.from_pretrained(
     model_name,
-    device_map="auto",
-    tp_plan="auto",
+    distributed_config=distributed_config,
 )
 
 # prepare the model input

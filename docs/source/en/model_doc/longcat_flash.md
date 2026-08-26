@@ -46,7 +46,9 @@ The model is large: you will need 2x8 H100 to run inference.
 ```python
 # launch_longcat.py
 
-from transformers import AutoTokenizer, LongcatFlashForCausalLM
+import os
+
+from transformers import AutoTokenizer, DistributedConfig, LongcatFlashForCausalLM
 
 
 model_id = "meituan-longcat/LongCat-Flash-Chat"
@@ -54,16 +56,18 @@ model_id = "meituan-longcat/LongCat-Flash-Chat"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 
 chat = [
-      {"role": "user", "content": "Hello! What is the capital of France? What can you tell me about it?"},
+    {"role": "user", "content": "Hello! What is the capital of France? What can you tell me about it?"},
 ]
 
+distributed_config = DistributedConfig(tp_size=int(os.environ["WORLD_SIZE"]))
 model = LongcatFlashForCausalLM.from_pretrained(
-      model_id,
-      tp_plan="auto",
- device_map="auto")
+    model_id,
+    distributed_config=distributed_config,
+)
 
 inputs = tokenizer.apply_chat_template(
-      chat, tokenize=True, add_generation_prompt=True, return_tensors="pt").to(model.device)
+    chat, tokenize=True, add_generation_prompt=True, return_tensors="pt"
+).to(model.device)
 
 outputs = model.generate(inputs, max_new_tokens=30)
 print(tokenizer.batch_decode(outputs))
