@@ -158,18 +158,23 @@ class BackgroundThreadStatus:
             self._local_status = self.DONT_STOP
         self.fatal_error = None
 
-    def request_stop(self, status: int, global_rank: int, error: Exception | None = None) -> None:
+    def request_stop(self, status: int, global_rank: int) -> None:
         """Request the background thread to stop. This does not take effect immediately, only after the TP group has
-        communicated. If no error has been recorded yet, the provided error will be recorded."""
+        communicated."""
         if status not in [self.FLUSH_AND_STOP, self.HARD_STOP]:
             raise ValueError(f"Invalid stop status {status} from rank {global_rank}")
         with self._local_status_lock:
             self._local_status = max(status, self._local_status, self._tp_status)
-        if self.fatal_error is None:
-            self.fatal_error = error
         logger.info(
             f"Rank {global_rank} requested background thread to stop with {status = }. Now {self._local_status = }"
         )
+
+    def record_fatal_error(self, error: Exception) -> None:
+        """Record a fatal error if none has been recorded yet."""
+        if self.fatal_error is not None:
+            logger.error(f"A fatal error was already recorded, ignoring later error: {error}")
+        else:
+            self.fatal_error = error
 
     def mark_as_stopped(self) -> None:
         """Mark the background thread as stopped. This should be called by the main thread when the generation loop
@@ -186,18 +191,13 @@ class BackgroundThreadStatus:
         with self._local_status_lock:
             self._local_status = max(self._local_status, tp_status)
 
-    def check_for_fatal_error(self) -> None:
-        """Raises an error if the background thread already died with a fatal error."""
+    def can_accept_new_requests(self) -> str | None:
+        """If the background thread cannot accept new requests, return the reason why. Otherwise, returns None."""
         if self.fatal_error is not None:
-            raise RuntimeError(
-                "The continuous batching background thread died with a fatal error."
-            ) from self.fatal_error
-
-    def can_accept_new_requests(self) -> bool:
-        """Whether the background thread can accept new requests. Raises an error if the background thread already died
-        with a fatal error."""
-        self.check_for_fatal_error()
-        return self.local_status == self.DONT_STOP
+            return "The background thread died with a fatal error."
+        if self.local_status != self.DONT_STOP:
+            return "The background thread is stopping."
+        return None
 
     @property
     def local_status(self) -> int:
@@ -806,10 +806,11 @@ class ContinuousBatchingManager:
         # If this process is not a TP driver, request submission is a no-op
         if not self.is_tp_driver:
             return None
-        # If the manager is not accepting new requests, stop here. This also checks for a fatal error in the BG thread.
-        if not self.background_thread_status.can_accept_new_requests():
+        # If the manager is not accepting new requests, stop here.
+        denial_msg = self.background_thread_status.can_accept_new_requests()
+        if denial_msg is not None:
             preview = f"{input_ids[:3]}"[:-1] + ", ..., " + f"{input_ids[-3:]}"[1:]
-            logger.warning(f"Background thread is stopping. Request with ids {preview} will be dropped.")
+            logger.warning(f"{denial_msg}. Request with ids {preview} will be dropped.")
             return None
 
         if request_id is None:
@@ -885,8 +886,7 @@ class ContinuousBatchingManager:
         timeout is provided, returns None after the timeout (in seconds)."""
         # Stop if the output queue is empty and the bg thread is not going to produce new results (crashed or stopped)
         if self.output_router.output_queue.empty():
-            self.background_thread_status.check_for_fatal_error()
-            if self._generation_thread is None:
+            if self._generation_thread is None or self.background_thread_status.fatal_error is not None:
                 return None
         # Otherwise, wait for a result from the output queue
         try:
@@ -1078,13 +1078,15 @@ class ContinuousBatchingManager:
         """Handle critical errors that terminate the generation loop."""
         # Request a hard stop
         self.background_thread_status.request_stop(
-            status=BackgroundThreadStatus.HARD_STOP, global_rank=self.distributed_helper.global_rank, error=error
+            status=BackgroundThreadStatus.HARD_STOP, global_rank=self.distributed_helper.global_rank
         )
         # Communicate to other processes in the TP group that the group is stopping (they could have not crashed)
         # Since the other processes need to reach the collective, it may take a few seconds to complete.
         self.distributed_helper.tp_all_reduce_state(0, BackgroundThreadStatus.HARD_STOP)
         # Fail all remaining requests
         self._fail_all_remaining_requests(error, batch_processor)
+        # After failing the remaining requests (and so retrieving their partial outputs), record the fatal error
+        self.background_thread_status.record_fatal_error(error)
 
     def _fail_all_remaining_requests(self, error: Exception, batch_processor: ContinuousBatchProcessor | None) -> None:
         """Fail all remaining requests in the input queue and active requests."""
@@ -1298,6 +1300,7 @@ class ContinuousMixin:
         # Main loop
         results = {}
         finished_count = 0
+        request_ids = []  # if the manager fails before add_requests returns, request_ids should not be unbounded
         with manager_cm as manager, logging_cm, pbar_cm as pbar:
             try:
                 request_ids = manager.add_requests(
