@@ -13,12 +13,13 @@
 # limitations under the License.
 """Testing suite for the PyTorch Lumma model."""
 
+import gc
 import unittest
 
 from huggingface_hub.errors import StrictDataclassClassValidationError
 
-from transformers import LummaConfig, is_torch_available
-from transformers.testing_utils import require_torch, torch_device
+from transformers import AutoTokenizer, LummaConfig, is_torch_available
+from transformers.testing_utils import backend_empty_cache, cleanup, require_torch, slow, torch_device
 
 
 if is_torch_available():
@@ -124,6 +125,19 @@ class LummaModelTest(CausalLMModelTest, unittest.TestCase):
     # Factorized embedding limits the reachable gradient magnitude; relax
     # the threshold so the test does not false-fail on legitimate models.
     training_grad_norm_reduction_threshold = 0.2
+
+    def _should_skip(self, model_class, generate=False, dynamic=False, backend=None, generation_config=None):
+        # Shared-KV stores raw keys and uses growable DynamicCache semantics; StaticCache
+        # pre-allocation breaks `decompose_prefill_decode` during export (same root cause as
+        # the skipped `test_generate_with_static_cache` tests below).
+        if (
+            model_class.__name__ == "LummaForCausalLM"
+            and generate
+            and generation_config is not None
+            and generation_config.cache_implementation is not None
+        ):
+            return True
+        return super()._should_skip(model_class, generate, dynamic, backend, generation_config)
 
     # ── Incompatible generic tests ────────────────────────────────────────
     # _VirtualLayerCache (used for layer sharing) is a growable dynamic
@@ -1139,3 +1153,127 @@ class LummaModelTest(CausalLMModelTest, unittest.TestCase):
         with torch.no_grad():
             output = model(input_ids)
         self.assertEqual(output.logits.shape, (2, 4, config.vocab_size))
+
+
+# ---------------------------------------------------------------------------
+# Integration tests (real checkpoint on the Hub)
+# ---------------------------------------------------------------------------
+
+
+@require_torch
+class LummaIntegrationTest(unittest.TestCase):
+    """
+    End-to-end tests against FrontiersMind/Lumma-0.6B-Base.
+
+    Uses native Lumma classes (not trust_remote_code) to validate config loading,
+    weight mapping, forward logits, and greedy generation for both KV-cache modes.
+    """
+
+    model_id = "FrontiersMind/Lumma-0.6B-Base"
+
+    @classmethod
+    @slow
+    def setUpClass(cls):
+        cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_id)
+        cls.model = LummaForCausalLM.from_pretrained(
+            cls.model_id,
+            torch_dtype=torch.float32,
+            attn_implementation="eager",
+            low_cpu_mem_usage=True,
+        )
+        cls.model.eval()
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=False)
+
+    @classmethod
+    @slow
+    def tearDownClass(cls):
+        del cls.model
+        del cls.tokenizer
+        backend_empty_cache(torch_device)
+        gc.collect()
+
+    @slow
+    def test_config_from_pretrained(self):
+        config = LummaConfig.from_pretrained(self.model_id)
+        self.assertTrue(config.shared_kv)
+        self.assertTrue(config.factorized_embedding)
+        self.assertFalse(config.layer_sharing)
+        self.assertTrue(config.q_norm)
+        self.assertFalse(config.qk_norm)
+        self.assertEqual(config.embedding_rank, 512)
+        self.assertEqual(config.hidden_size, 1440)
+        self.assertEqual(config.num_hidden_layers, 30)
+        self.assertEqual(config.kv_cache_mode, "shared")
+        self.assertEqual(config.vocab_size, 131072)
+
+    @slow
+    def test_model_logits(self):
+        prompt = "The world is a strange place"
+        input_ids = self.tokenizer(prompt, return_tensors="pt")["input_ids"].to(torch_device)
+        self.model.to(torch_device)
+
+        with torch.no_grad():
+            logits = self.model(input_ids).logits.float().cpu()
+
+        expected_mean = torch.tensor(
+            [[-8.2007, -13.6818, -17.6843, -581.9263, -563.5366, -484.8916, -573.0134]]
+        )
+        torch.testing.assert_close(logits.mean(-1), expected_mean, rtol=1e-3, atol=1e-2)
+
+        expected_slice = torch.tensor(
+            [
+                -502.4723, -528.4839, -531.5851, -551.2880, -500.2036, -503.5386, -508.3394, -511.8530,
+                -511.7902, -508.9474, -506.5112, -507.6371, -503.0289, -506.4698, -510.8746, -496.7089,
+                -504.4874, -497.3700, -505.3857, -508.7207, -507.2157, -508.1799, -509.4573, -510.1986,
+                -510.0124, -510.0735, -509.9301, -510.0020, -509.7533, -500.5181,
+            ]
+        )
+        torch.testing.assert_close(logits[0, -1, :30], expected_slice, rtol=1e-3, atol=1e-2)
+
+    @slow
+    def test_model_generation_shared_kv(self):
+        prompt = "The world is a strange place"
+        input_ids = self.tokenizer(prompt, return_tensors="pt")["input_ids"].to(torch_device)
+        self.model.to(torch_device)
+        self.model.config.kv_cache_mode = "shared"
+
+        generated_ids = self.model.generate(input_ids, max_new_tokens=15, do_sample=False)
+        text = self.tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+        self.assertEqual(
+            text,
+            " The world is a strange place, and the people who live there are not always what they seem. They",
+        )
+
+    @slow
+    def test_model_generation_vanilla_kv(self):
+        prompt = "The world is a strange place"
+        input_ids = self.tokenizer(prompt, return_tensors="pt")["input_ids"].to(torch_device)
+        self.model.to(torch_device)
+        self.model.config.kv_cache_mode = "vanilla"
+
+        generated_ids = self.model.generate(input_ids, max_new_tokens=15, do_sample=False)
+        text = self.tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+        self.assertEqual(
+            text,
+            " The world is a strange place, and the people who live there are not always what they seem. They",
+        )
+
+    @slow
+    def test_decode_with_cache(self):
+        prompt = "The world is a strange place"
+        input_ids = self.tokenizer(prompt, return_tensors="pt")["input_ids"].to(torch_device)
+        self.model.to(torch_device)
+        self.model.config.kv_cache_mode = "shared"
+
+        with torch.no_grad():
+            prefill = self.model(input_ids, use_cache=True)
+            decode = self.model(
+                input_ids[:, -1:],
+                past_key_values=prefill.past_key_values,
+                use_cache=True,
+            )
+
+        self.assertEqual(decode.logits.shape, (1, 1, self.model.config.vocab_size))
+        self.assertIsNotNone(prefill.past_key_values)
