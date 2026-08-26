@@ -1325,13 +1325,18 @@ class ContinuousMixin:
 
         # Re-order requests to match the order of the inputs
         reordered_results = {}
-        missing_keys = []
+        missing_keys, failed_keys = [], []
         for req_id in request_ids:
             result = results.get(req_id)
             if result is not None:
                 reordered_results[req_id] = result
+                if result.error is not None:
+                    failed_keys.append(req_id)
             else:
                 missing_keys.append(req_id)
+
         if missing_keys:
             logger.error(f"Requests {missing_keys} not found in results.")
+        if failed_keys:
+            logger.error(f"Requests {failed_keys} failed during generation.")
         return reordered_results
