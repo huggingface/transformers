@@ -37,12 +37,13 @@ if is_torch_available():
     )
     from transformers import initialization as init
     from transformers.models.neomme.modeling_neomme import (
-        NeoMMEAttention,
         NeoMMEDenseHead,
         NeoMMEEncoderLayer,
+        NeoMMEExclusiveSelfAttention,
         NeoMMEMLP,
         NeoMMEMultiVectorHead,
         NeoMMEPreTrainedModel,
+        NeoMMESigmoidGatedProjection,
         apply_rotary_pos_emb,
     )
 
@@ -57,11 +58,11 @@ def _patch_residual_init(test_case: unittest.TestCase) -> None:
     @torch.no_grad()
     def initialize_with_live_residual_branches(self: NeoMMEPreTrainedModel, module: torch.nn.Module) -> None:
         initialize(self, module)
-        if isinstance(module, NeoMMEAttention):
+        if isinstance(module, NeoMMESigmoidGatedProjection):
             init.normal_(module.o_proj.weight, mean=0.0, std=self.config.initializer_range)
-            if module.alpha is not None:
-                # Use O(1) values so `tanh(alpha)` exercises the XSA branch.
-                init.normal_(module.alpha, mean=0.0, std=1.0)
+        elif isinstance(module, NeoMMEExclusiveSelfAttention):
+            # Use O(1) values so `tanh(alpha)` exercises the XSA branch.
+            init.normal_(module.alpha, mean=0.0, std=1.0)
         elif isinstance(module, NeoMMEMLP):
             init.normal_(module.down_proj.weight, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, NeoMMEEncoderLayer):
@@ -306,6 +307,13 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
             [layer.sliding_window for layer in config.per_layer_config],
             [256, 1024, 256, 1024, 256, None, 1024, 256, 1024, 256, 1024, None, 256, 1024, 256, 1024, None],
         )
+
+    def test_attention_helper_modules(self):
+        config = self.model_tester.get_config()
+        model = NeoMMEModel(config)
+        attention = model.layers[0].self_attn
+        self.assertIsInstance(attention.exclusive_self_attention, NeoMMEExclusiveSelfAttention)
+        self.assertIsInstance(attention.output_projection, NeoMMESigmoidGatedProjection)
 
     def test_window_widths_validated(self):
         """Global and per-layer windows must be positive; `None` selects full attention."""

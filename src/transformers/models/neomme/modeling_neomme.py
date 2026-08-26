@@ -168,6 +168,43 @@ class NeoMMERotaryEmbedding(nn.Module):
         return torch.cat([cos, cos], dim=-1), torch.cat([sin, sin], dim=-1)
 
 
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
+class NeoMMEExclusiveSelfAttention(nn.Module):
+    def __init__(self, config: NeoMMEConfig):
+        super().__init__()
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        self.alpha = nn.Parameter(torch.zeros(config.num_attention_heads))
+
+    def forward(self, attn_output: torch.Tensor, value_states: torch.Tensor) -> torch.Tensor:
+        value_states = repeat_kv(value_states, self.num_key_value_groups).transpose(1, 2)
+        value_unit = F.normalize(value_states.float(), dim=-1).to(attn_output.dtype)
+        projection = (attn_output * value_unit).sum(-1, keepdim=True)
+        scale = torch.tanh(self.alpha).to(attn_output.dtype).view(1, 1, -1, 1)
+        return attn_output - (scale * projection) * value_unit
+
+
+class NeoMMESigmoidGatedProjection(nn.Module):
+    def __init__(self, config: NeoMMEConfig):
+        super().__init__()
+        projection_size = config.num_attention_heads * config.head_dim
+        self.gate_proj = nn.Linear(config.hidden_size, projection_size, bias=False)
+        self.o_proj = nn.Linear(projection_size, config.hidden_size, bias=config.attention_bias)
+
+    def forward(self, attn_output: torch.Tensor, hidden_states: torch.Tensor) -> torch.Tensor:
+        return self.o_proj(attn_output * torch.sigmoid(self.gate_proj(hidden_states)))
+
+
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
@@ -209,18 +246,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     q_embed = torch.cat([q_embed, q_pass], dim=-1)
     k_embed = torch.cat([k_embed, k_pass], dim=-1)
     return q_embed, k_embed
-
-
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
 def eager_attention_forward(
@@ -275,9 +300,6 @@ class NeoMMEAttention(nn.Module):
         self.v_proj = nn.Linear(
             config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
         )
-        self.o_proj = nn.Linear(
-            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
-        )
         # Parent LlamaAttention already sets: layer_idx, num_heads, num_key_value_heads, num_key_value_groups, head_dim
         # We only add NeoMME-specific attributes
         self.is_local_attention = config.layer_types[layer_idx] == "sliding_attention"
@@ -287,14 +309,13 @@ class NeoMMEAttention(nn.Module):
         self.sliding_window = (
             config.per_layer_config[layer_idx].sliding_window + 1 if self.is_local_attention else None
         )
-        self.gate_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
 
         self.attention_type = config.layer_types[layer_idx]
         self.num_attention_heads = config.num_attention_heads
         self.q_norm = NeoMMERMSNorm(config.head_dim, config.norm_eps, with_scale=False)
         self.k_norm = NeoMMERMSNorm(config.head_dim, config.norm_eps, with_scale=False)
-        # Exclusive Self-Attention: zero-init, so `tanh(alpha) == 0` makes it an exact no-op at step 0.
-        self.alpha = nn.Parameter(torch.zeros(config.num_attention_heads))
+        self.exclusive_self_attention = NeoMMEExclusiveSelfAttention(config)
+        self.output_projection = NeoMMESigmoidGatedProjection(config)
 
     def forward(
         self,
@@ -335,21 +356,10 @@ class NeoMMEAttention(nn.Module):
             **kwargs,
         )
 
-        attn_output = self._exclusive_self_attention(attn_output, value_states)
+        attn_output = self.exclusive_self_attention(attn_output, value_states)
         attn_output = attn_output.reshape(*input_shape, -1)
-        gated_output = attn_output * torch.sigmoid(self.gate_proj(hidden_states))
-        attn_output = self.o_proj(gated_output)
+        attn_output = self.output_projection(attn_output, hidden_states)
         return attn_output, attn_weights
-
-    def _exclusive_self_attention(self, attn_output: torch.Tensor, value_states: torch.Tensor) -> torch.Tensor:
-        """Exclusive self-attention correction along the value direction."""
-        value_states = repeat_kv(value_states, self.num_key_value_groups)  # (batch, heads, seq, head_dim)
-        value_states = value_states.transpose(1, 2)  # (batch, seq, heads, head_dim)
-        value_unit = F.normalize(value_states.float(), dim=-1).to(attn_output.dtype)
-
-        projection = (attn_output * value_unit).sum(-1, keepdim=True)  # (batch, seq, heads, 1)
-        scale = torch.tanh(self.alpha).to(attn_output.dtype).view(1, 1, -1, 1)
-        return attn_output - (scale * projection) * value_unit
 
 
 class NeoMMEMLP(nn.Module):
@@ -430,10 +440,11 @@ class NeoMMEPreTrainedModel(PreTrainedModel):
 
         if isinstance(module, NeoMMEEmbeddings):
             init.normal_(module.word_embeddings.weight, mean=0.0, std=self.config.embedding_rank**-0.5)
-        elif isinstance(module, NeoMMEAttention):
+        elif isinstance(module, NeoMMEExclusiveSelfAttention):
+            init.zeros_(module.alpha)
+        elif isinstance(module, NeoMMESigmoidGatedProjection):
             # Zero-init so the attention residual contributes nothing at initialization.
             init.zeros_(module.o_proj.weight)
-            init.zeros_(module.alpha)
         elif isinstance(module, NeoMMEMLP):
             init.zeros_(module.down_proj.weight)
         elif isinstance(module, NeoMMEEncoderLayer):
