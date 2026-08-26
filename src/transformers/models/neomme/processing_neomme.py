@@ -56,8 +56,15 @@ class NeoMMEProcessor(ProcessorMixin):
         **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         r"""
-        Tokenize text or process images. Retrieval inputs must first be formatted with
+        Tokenize text or process images. Depending on the downstream task, inputs must first be formatted with
         [`~NeoMMEProcessor.apply_chat_template`].
+
+        - Text inputs are tokenized as provided. For masked language modeling, prepend the document token
+          (`tokenizer.document_token`) manually. For retrieval, use [`~NeoMMEProcessor.apply_chat_template`]
+          instead.
+        - Image inputs always receive the complete document-page token formatting (the `<doc>` prefix followed
+          by the `<img>` patch grid with `<row>` markers). For retrieval, use
+          `apply_chat_template(..., task="document")` instead.
 
         Returns:
             A [`BatchFeature`] with `input_ids` and `attention_mask`. Image inputs also return `position_ids`,
