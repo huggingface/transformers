@@ -54,6 +54,7 @@ from .configuration_qwen3_next import Qwen3NextConfig
 logger = logging.get_logger(__name__)
 
 
+# NOTE: the FLA package does not re-cast to `input_dtype` in its implementation, maybe we should do the same
 @use_kernel_forward_from_hub("RMSNormGated")
 class Qwen3NextRMSNormGated(nn.Module):
     def __init__(self, hidden_size: int, eps: float = 1e-6, **kwargs) -> None:
@@ -200,6 +201,8 @@ def causal_conv1d_fn(
     return out.to(hidden_states.dtype)
 
 
+# NOTE: the FLA package computes `x / torch.sqrt((x * x).sum(dim=dim, keepdim=True) + eps)` instead, so if we align
+# with the GatedRMSNorm, maybe we can make that change as well.
 def l2norm(x: torch.FloatTensor, dim: int = -1, eps: float = 1e-6):
     """This function is intended to align with the l2norm implementation in the FLA library."""
     inv_norm = torch.rsqrt((x * x).sum(dim=dim, keepdim=True) + eps)
@@ -246,7 +249,7 @@ def torch_chunk_gated_delta_rule(
         x.transpose(1, 2).to(torch.float32, memory_format=torch.contiguous_format)
         for x in (query, key, value, beta, log_decay)
     ]
-    # If enabled, normalize query and key vectors (done once in fp32 for better accuracy)
+    # If enabled, normalize query and key vectors (in fp32 to match the FLA library)
     if use_qk_l2norm_in_kernel:
         query = l2norm(query, dim=-1, eps=1e-6)
         key = l2norm(key, dim=-1, eps=1e-6)
