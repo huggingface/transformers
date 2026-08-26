@@ -574,9 +574,7 @@ class FSMTDecoder(nn.Module):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
         elif input_ids is not None:
-            # Embed positions. `generate` hands one token per step, so the tokens already in the cache have
-            # to be counted in — positions come from a cumsum over `input_ids`, which on a length-1 step
-            # restarts at `padding_idx + 1` and would give every decode step the same position.
+            # Embed positions, accounting for the tokens already in the cache
             past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
             positions = self.embed_positions(input_ids, past_key_values_length)
             x = self.embed_tokens(input_ids) * self.embed_scale

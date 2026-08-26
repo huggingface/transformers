@@ -836,7 +836,12 @@ class GitModel(GitPreTrainedModel):
                 attention_mask = torch.cat(
                     [torch.ones_like(image_token_type_ids, dtype=attention_mask.dtype), attention_mask], dim=-1
                 )
-        elif past_key_values is not None and past_key_values_length > 0 and attention_mask is not None:
+        elif (
+            past_key_values is not None
+            and past_key_values_length > 0
+            and attention_mask is not None
+            and attention_mask.ndim == 2
+        ):
             # GIT keeps the image tokens in the cache without placeholder tokens in `input_ids`, so the
             # incoming padding mask is narrower than the cache — widen it over the cached image tokens.
             extended_attention_mask = torch.ones(

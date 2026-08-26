@@ -394,12 +394,8 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
             outputs, model_kwargs, is_encoder_decoder, num_new_tokens
         )
         if token_type_ids is not None:
-            # A generated token is the suffix, which attends causally. The generic update repeats the last
-            # prompt value instead — 0 for a prompt with no suffix yet — putting the new tokens in the
-            # bidirectional *prefix* block, so with no cache, where the mask is rebuilt over the whole
-            # grown sequence every step, earlier tokens end up attending tokens generated after them.
-            # `token_type_ids == 0` is also what the processor masks out of `labels`, so a predicted token
-            # is 1 by definition.
+            # A generated token belongs to the causal suffix, so it is 1. The generic update repeats the
+            # last prompt value (0 before any suffix), which would put it in the bidirectional prefix.
             model_kwargs["token_type_ids"] = torch.cat(
                 [token_type_ids, token_type_ids.new_ones((token_type_ids.shape[0], num_new_tokens))], dim=-1
             )

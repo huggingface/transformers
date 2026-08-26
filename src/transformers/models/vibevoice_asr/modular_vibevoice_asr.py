@@ -462,9 +462,6 @@ class VibeVoiceAsrForConditionalGeneration(VibeVoiceAsrPreTrainedModel, Generati
 
         model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
 
-        # Without a cache, every step recomputes the whole prefix, so the audio has to come along or the
-        # placeholder tokens silently fall back to their text embedding — the same rule the base
-        # implementation applies through `MULTIMODAL_INPUTS_TO_DROP_OUTSIDE_PREFILL`.
         if is_first_iteration or not kwargs.get("use_cache", True):
             if input_values is not None:
                 model_inputs["input_values"] = input_values

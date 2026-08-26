@@ -20,7 +20,6 @@
 from collections import UserDict
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
 
 import torch
 from torch import nn
@@ -1343,20 +1342,6 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4UnifiedPreTrainedModel, Genera
             audio_hidden_states=outputs.audio_hidden_states,
             shared_kv_states=outputs.shared_kv_states,
         )
-
-    def _update_model_kwargs_for_generation(
-        self,
-        outputs: ModelOutput,
-        model_kwargs: dict[str, Any],
-        is_encoder_decoder: bool = False,
-        num_new_tokens: int = 1,
-    ) -> dict[str, Any]:
-        # Gemma4Unified's `token_type_ids` are the multimodal ones, marking *image* spans (`== 1`) rather than
-        # PaliGemma's prefix, so the generic update — which repeats the last value, 0 for the text a prompt
-        # ends on — is already right here. Spelled out
-        # against `GenerationMixin` in the modular source, where a plain `super()` delegation would instead
-        # be read as "inherit PaliGemma's body".
-        return super()._update_model_kwargs_for_generation(outputs, model_kwargs, is_encoder_decoder, num_new_tokens)
 
     @staticmethod
     def create_masks_for_generate(
