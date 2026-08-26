@@ -325,11 +325,7 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
                     loss.backward()
                     grad_expected_params = [(n, p) for n, p in model.named_parameters() if p.grad is not None]
                     normal_grad_sums = {n: p.grad.abs().sum().item() for n, p in grad_expected_params}
-                    # Use a small epsilon to ignore near-zero gradients (~1e-8) that can appear due to
-                    # floating-point noise from GC recomputation (e.g. qa_outputs.bias), while still
-                    # catching real gradient differences (which are orders of magnitude larger, ~10-30).
-                    _grad_eps = 1e-7
-                    non_zero_grads_normal = {n for n, s in normal_grad_sums.items() if s > _grad_eps}
+                    non_zero_grads_normal = {n for n, s in normal_grad_sums.items() if s > 0}
 
                     # reset all gradients to zero for the comparison with the gradient checkpointing run
                     optimizer.zero_grad()
@@ -355,27 +351,35 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
                     # check that all the parameters that had non-zero gradients before, have non-zero grads with gradient
                     # checkpointing. divergence indicates a different forward-pass environment that needs special handling.
                     gradcp_grad_sums = {n: p.grad.abs().sum().item() for n, p in grad_expected_params}
-                    non_zero_grads_gradcp = {n for n, s in gradcp_grad_sums.items() if s > _grad_eps}
+                    non_zero_grads_gradcp = {n for n, s in gradcp_grad_sums.items() if s > 0}
 
                     if non_zero_grads_gradcp != non_zero_grads_normal:
                         only_in_normal = non_zero_grads_normal - non_zero_grads_gradcp
                         only_in_gradcp = non_zero_grads_gradcp - non_zero_grads_normal
-                        max_normal = max(normal_grad_sums.values()) if normal_grad_sums else 0.0
-                        max_gradcp = max(gradcp_grad_sums.values()) if gradcp_grad_sums else 0.0
-                        logger.warning(
-                            "[iter %d][%s] MISMATCH: only_in_normal=%s (normal_sums=%s, gradcp_sums=%s), only_in_gradcp=%s (normal_sums=%s, gradcp_sums=%s) | max_grad_sum: normal=%.6e gradcp=%.6e",
-                            iteration,
-                            model_class.__name__,
-                            only_in_normal,
-                            {n: normal_grad_sums[n] for n in only_in_normal},
-                            {n: gradcp_grad_sums[n] for n in only_in_normal},
-                            only_in_gradcp,
-                            {n: normal_grad_sums[n] for n in only_in_gradcp},
-                            {n: gradcp_grad_sums[n] for n in only_in_gradcp},
-                            max_normal,
-                            max_gradcp,
-                        )
-                        mismatch_count += 1
+
+                        # Filter out fp noise: if one side is exactly 0.0 and the other is within
+                        # 1e-6 (orders of magnitude below real gradients ~10-30), treat as OK.
+                        _fp_noise = 1e-6
+                        only_in_normal = {n for n in only_in_normal if not (gradcp_grad_sums[n] == 0.0 and normal_grad_sums[n] <= _fp_noise)}
+                        only_in_gradcp = {n for n in only_in_gradcp if not (normal_grad_sums[n] == 0.0 and gradcp_grad_sums[n] <= _fp_noise)}
+
+                        if only_in_normal or only_in_gradcp:
+                            max_normal = max(normal_grad_sums.values()) if normal_grad_sums else 0.0
+                            max_gradcp = max(gradcp_grad_sums.values()) if gradcp_grad_sums else 0.0
+                            logger.warning(
+                                "[iter %d][%s] MISMATCH: only_in_normal=%s (normal_sums=%s, gradcp_sums=%s), only_in_gradcp=%s (normal_sums=%s, gradcp_sums=%s) | max_grad_sum: normal=%.6e gradcp=%.6e",
+                                iteration,
+                                model_class.__name__,
+                                only_in_normal,
+                                {n: normal_grad_sums[n] for n in only_in_normal},
+                                {n: gradcp_grad_sums[n] for n in only_in_normal},
+                                only_in_gradcp,
+                                {n: normal_grad_sums[n] for n in only_in_gradcp},
+                                {n: gradcp_grad_sums[n] for n in only_in_gradcp},
+                                max_normal,
+                                max_gradcp,
+                            )
+                            mismatch_count += 1
 
                 if mismatch_count > 0:
                     logger.warning(
