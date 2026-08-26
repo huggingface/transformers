@@ -328,7 +328,7 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
                     # Use a small epsilon to ignore near-zero gradients (~1e-8) that can appear due to
                     # floating-point noise from GC recomputation (e.g. qa_outputs.bias), while still
                     # catching real gradient differences (which are orders of magnitude larger, ~10-30).
-                    _grad_eps = 1e-6
+                    _grad_eps = 1e-7
                     non_zero_grads_normal = {n for n, s in normal_grad_sums.items() if s > _grad_eps}
 
                     # reset all gradients to zero for the comparison with the gradient checkpointing run
