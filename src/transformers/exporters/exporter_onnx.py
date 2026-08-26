@@ -51,14 +51,15 @@ import numpy as np
 
 from ..utils import logging
 from ..utils.import_utils import is_onnxscript_available, is_torch_available
-from .configs import OnnxConfig
+from .configs import ExportFormat, OnnxConfig
 from .exporter_dynamo import DynamoExporter
-from .utils import (
+from .metadata import (
     EXPORT_METADATA_KEY,
+)
+from .utils import (
     _resolve_dotted_path,
     apply_fx_node_fixes,
     apply_patches,
-    build_export_metadata,
     duplicate_leaf_tensors,
     get_leaf_tensors,
     register_fx_node_fix,
@@ -68,7 +69,6 @@ from .utils import (
 
 if is_torch_available():
     import torch
-    from torch.export import ExportedProgram
     from torch.onnx import ONNXProgram
 
     from .. import masking_utils
@@ -105,10 +105,13 @@ class OnnxExporter(DynamoExporter):
     ```
     """
 
+    export_format = ExportFormat.ONNX
+    artifact_suffix = ".onnx"
+
     required_packages = ["torch", "onnx", "onnxscript"]
     tested_versions = {"torch": "2.12.0", "onnx": "1.21.0", "onnxscript": "0.7.0"}
 
-    def export(
+    def export_artifact(
         self,
         model: PreTrainedModel,
         sample_inputs: MutableMapping[str, Any],
@@ -120,7 +123,7 @@ class OnnxExporter(DynamoExporter):
             raise TypeError(f"Expected config to be an OnnxConfig or dict, got {type(config)}")
 
         with apply_patches("onnx"), patch_model_outputs(model) as (inputs_names, outputs_names):
-            exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
+            exported_program, metadata = super().export_artifact(model, sample_inputs, config=config)
             inputs_names, outputs_names = disambiguate_io_names(inputs_names, outputs_names)
             apply_fx_node_fixes("onnx", exported_program.graph_module)
             onnx_program: ONNXProgram = torch.onnx.export(
@@ -142,9 +145,18 @@ class OnnxExporter(DynamoExporter):
         # but nothing about precision or mask layout, so the runner would have to infer them
         # (`build_export_metadata`). `metadata_props` survives saving and comes back through
         # `session.get_modelmeta().custom_metadata_map`.
-        metadata = build_export_metadata(model, sample_inputs, exported_program, self.required_packages)
+        # Also inside the file, so a lone `.onnx` handed to someone else still describes itself; the
+        # authoritative copy for a saved directory is the one `export_artifact` hands back.
         onnx_program.model.metadata_props[EXPORT_METADATA_KEY] = json.dumps(metadata)
-        return onnx_program
+        return onnx_program, metadata
+
+    @classmethod
+    def save_artifact(cls, artifact, path) -> None:
+        """`metadata_props` is part of the model proto, so the payload is already inside what gets written.
+        Whether the initializers spill to a sidecar file is left to ONNX, which decides on the graph's size —
+        the export-time `external_data` flag governs the trace, not this. Each component is saved under its
+        own name because those sidecars are named after the file."""
+        artifact.save(path)
 
 
 # ── ONNX helpers ────────────────────────────────────────────────────────────

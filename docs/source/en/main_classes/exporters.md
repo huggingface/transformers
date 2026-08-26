@@ -16,7 +16,8 @@ rendered properly in your Markdown viewer.
 
 # Exporters
 
-New export backends can be added to Transformers by subclassing [`HfExporter`].
+New export backends can be added to Transformers by subclassing [`HfExporter`] and implementing its two
+hooks, `export_artifact` and `save_artifact`.
 
 <Tip>
 
@@ -39,17 +40,57 @@ Learn how to use the built-in exporters in the [Exporters](../exporters) guide.
 ## DynamoExporter
 
 [[autodoc]] exporters.exporter_dynamo.DynamoExporter
-    - export
+    - export_artifact
+    - save_artifact
 
 ## OnnxExporter
 
 [[autodoc]] exporters.exporter_onnx.OnnxExporter
-    - export
+    - export_artifact
+    - save_artifact
 
 ## ExecutorchExporter
 
 [[autodoc]] exporters.exporter_executorch.ExecutorchExporter
-    - export
+    - export_artifact
+    - save_artifact
+
+## ExporterOutput
+
+[[autodoc]] exporters.base.ExporterOutput
+
+## Running an export
+
+What an export is loaded back as: a decomposed, cache-driven export is driven through `generate`, a single
+graph is called. [`AutoExportedModel`] reads the manifest and picks between them.
+
+## AutoExportedModel
+
+[[autodoc]] exporters.auto.AutoExportedModel
+
+## ExportedGenerator
+
+[[autodoc]] exporters.generator.ExportedGenerator
+    - from_pretrained
+    - from_runners
+
+## ExportedModel
+
+[[autodoc]] exporters.model.ExportedModel
+    - from_pretrained
+    - __call__
+
+## ModelRunner
+
+One exported graph, bound to the runtime that runs it.
+
+[[autodoc]] exporters.base.ModelRunner
+
+[[autodoc]] exporters.runner_dynamo.DynamoModelRunner
+
+[[autodoc]] exporters.runner_onnx.OnnxModelRunner
+
+[[autodoc]] exporters.runner_executorch.ExecutorchModelRunner
 
 ## DynamoConfig
 

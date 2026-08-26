@@ -8,8 +8,14 @@ from typing import Any
 import torch
 
 from .base import ModelRunner
-from .runtime_utils import _read_cache_entry
-from .utils import EXPORT_METADATA_KEY, ExportMetadata, get_leaf_tensors
+from .caches import _read_cache_entry
+from .metadata import (
+    EXPORT_METADATA_KEY,
+    ExportMetadata,
+)
+from .utils import (
+    get_leaf_tensors,
+)
 
 
 def _ort_to_torch_dtype(ort_type: str | None) -> torch.dtype | None:
@@ -82,11 +88,12 @@ class OnnxModelRunner(ModelRunner):
     `output.<name>` graph inputs/outputs, so a `past_key_values` kwarg is flattened into the feed and the
     `output.` prefix stripped from the results (back to plain leaf names)."""
 
-    def __init__(self, session):
+    def __init__(self, session, export_metadata=None):
         self._session = session
         self._output_names = [o.name for o in session.get_outputs()]
-        self.export_metadata = ExportMetadata.from_json(
-            session.get_modelmeta().custom_metadata_map.get(EXPORT_METADATA_KEY)
+        self.export_metadata = self.resolve_metadata(
+            export_metadata,
+            lambda: ExportMetadata.from_json(session.get_modelmeta().custom_metadata_map.get(EXPORT_METADATA_KEY)),
         )
         # Where the session runs, and so where `__call__` lands its outputs.
         self.device = "cuda" if any("CUDA" in p for p in session.get_providers()) else "cpu"
@@ -172,6 +179,42 @@ class OnnxModelRunner(ModelRunner):
             # `_bound_run`), which is strictly better than feeding the whole thing through the host to avoid
             # a single unsizeable tensor.
             self._binds = True
+
+    @staticmethod
+    def _providers_for(device=None) -> list[str]:
+        """The providers to open a session with. `device` pins it; without one, CUDA is used only when a
+        device is actually visible — an ORT build carries its CUDA provider whether or not the machine has a
+        GPU, and asking for it without one prints a provider failure before falling back on its own."""
+        import onnxruntime
+
+        available = onnxruntime.get_available_providers()
+        if device is not None:
+            wants_cuda = torch.device(device).type == "cuda"
+        else:
+            wants_cuda = torch.cuda.is_available()
+        if wants_cuda and "CUDAExecutionProvider" not in available:
+            raise ValueError("This onnxruntime build has no CUDA provider, so the session cannot run on CUDA.")
+        return ["CUDAExecutionProvider"] if wants_cuda else ["CPUExecutionProvider"]
+
+    @classmethod
+    def from_artifact(cls, artifact, export_metadata=None, device=None, providers=None, **kwargs) -> OnnxModelRunner:
+        """Open an in-memory `ONNXProgram` as a session, without writing the proto out first."""
+        import onnxruntime
+
+        providers = providers or cls._providers_for(device)
+        session = onnxruntime.InferenceSession(artifact.model_proto.SerializeToString(), providers=providers)
+        return cls(session, export_metadata=export_metadata, **kwargs)
+
+    @classmethod
+    def from_pretrained(cls, path, export_metadata=None, device=None, providers=None, **kwargs) -> OnnxModelRunner:
+        """Open a saved `.onnx` as an ORT session. `device` picks the providers (and so where the runner's
+        outputs land); pass `providers` to choose them outright."""
+        import onnxruntime
+
+        providers = providers or cls._providers_for(device)
+        return cls(
+            onnxruntime.InferenceSession(str(path), providers=providers), export_metadata=export_metadata, **kwargs
+        )
 
     def __call__(self, **kwargs) -> dict[str, torch.Tensor]:
         feed = self._flattened(kwargs)

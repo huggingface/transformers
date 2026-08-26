@@ -48,14 +48,15 @@ from typing import Any
 
 from ..utils import logging
 from ..utils.import_utils import is_executorch_available, is_torch_available
-from .configs import ExecutorchConfig
+from .configs import ExecutorchConfig, ExportFormat
 from .exporter_dynamo import DynamoExporter, varlen_attn_masked_sdpa
-from .utils import (
+from .metadata import (
     EXPORT_METADATA_KEY,
+)
+from .utils import (
     apply_fx_node_fixes,
     apply_fx_program_fixes,
     apply_patches,
-    build_export_metadata,
     module_dtype,
     register_fx_node_fix,
     register_fx_program_fix,
@@ -124,10 +125,13 @@ class ExecutorchExporter(DynamoExporter):
     ```
     """
 
+    export_format = ExportFormat.EXECUTORCH
+    artifact_suffix = ".pte"
+
     required_packages = ["torch", "executorch"]
     tested_versions = {"torch": "2.12.0", "executorch": "1.3.1"}
 
-    def export(
+    def export_artifact(
         self,
         model: PreTrainedModel,
         sample_inputs: MutableMapping[str, Any],
@@ -150,7 +154,7 @@ class ExecutorchExporter(DynamoExporter):
             apply_patches("executorch"),
             apply_patches(f"executorch.{config.backend}"),
         ):
-            exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
+            exported_program, metadata = super().export_artifact(model, sample_inputs, config=config)
             apply_fx_program_fixes("executorch", exported_program)
 
             with keep_backed_symbols_symbolic(exported_program):
@@ -162,17 +166,19 @@ class ExecutorchExporter(DynamoExporter):
                     # A `.pte` binds its inputs positionally and reports only counts and shapes, so what
                     # the graph *is* rides along as one constant method — the same schema the ONNX
                     # exporter writes into `metadata_props` (`build_export_metadata`).
-                    constant_methods={
-                        EXPORT_METADATA_KEY: [
-                            json.dumps(
-                                build_export_metadata(model, sample_inputs, exported_program, self.required_packages)
-                            )
-                        ]
-                    },
+                    constant_methods={EXPORT_METADATA_KEY: [json.dumps(metadata)]},
                 )
                 executorch_programs_manager = edge_program_manager.to_executorch(config=_get_backend_config(config))
 
-        return executorch_programs_manager
+        return executorch_programs_manager, metadata
+
+    @classmethod
+    def save_artifact(cls, artifact, path) -> None:
+        """The metadata is a constant method inside the program (`_patch_metadata_method`), so it is already
+        part of the serialized `.pte`. Streamed rather than taken through `.buffer`, which materializes the
+        whole program as bytes first."""
+        with open(path, "wb") as file:
+            artifact.write_to_file(file)
 
 
 @contextlib.contextmanager
@@ -486,6 +492,26 @@ def _patch_topk(original):
         topk_indices = indices.narrow(dim, 0, k)
         topk_values = torch.gather(input, dim, topk_indices)
         return torch.return_types.topk((topk_values, topk_indices))
+
+    return patch
+
+
+@register_patch("executorch.xnnpack", "torch.argsort", "torch.Tensor.argsort")
+def _patch_argsort(original):
+    """Topk-based argsort for XNNPACK, whose portable runtime ships no `sort` kernel.
+
+    The mirror image of `_patch_topk`: that one rewrites `topk` as `argsort` for CUDA, which has no topk
+    kernel, and is deliberately not registered here because the portable registry is the other way round —
+    it has `aten.topk.values` but no `aten.sort.values`, so a graph reaching lowering with an `argsort` in it
+    produces a `.pte` that fails to *load* (`Missing operator: aten::sort.values`). A model that sorts on its
+    own hits that wall the same way (muse_glimmer's vision tower inverts its window permutation with
+    `torch.argsort`), so the rewrite is applied here rather than left to each model.
+
+    `topk` over the whole axis is a full sort, and `largest=descending` matches `argsort`'s ordering.
+    """
+
+    def patch(input, dim=-1, descending=False, stable=False):
+        return torch.topk(input, input.shape[dim], dim=dim, largest=descending, sorted=True).indices
 
     return patch
 

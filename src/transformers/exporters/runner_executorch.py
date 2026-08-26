@@ -3,12 +3,19 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 import torch
 
 from .base import ModelRunner
-from .runtime_utils import _cache_tensors
-from .utils import EXPORT_METADATA_KEY, ExportMetadata, get_leaf_tensors
+from .caches import _cache_tensors
+from .metadata import (
+    EXPORT_METADATA_KEY,
+    ExportMetadata,
+)
+from .utils import (
+    get_leaf_tensors,
+)
 
 
 def _executorch_constant(value):
@@ -72,11 +79,13 @@ class ExecutorchModelRunner(ModelRunner):
     # Cache inputs are matched by name; the model's own outputs come back under the names the trace recorded
     # (`logits`, `past_key_values.layers.0.keys`, …), the same mapping the other backends return.
 
-    def __init__(self, program):
+    def __init__(self, program, export_metadata=None):
         self._method = program.load_method("forward")
         # A `.pte` binds inputs positionally and reports only counts and shapes, so everything about what it
         # takes and returns comes from the metadata the exporter baked in.
-        self.export_metadata = ExportMetadata.from_json(_baked_export_metadata(program))
+        self.export_metadata = self.resolve_metadata(
+            export_metadata, lambda: ExportMetadata.from_json(_baked_export_metadata(program))
+        )
         self._output_names = self.export_metadata.output_names
         # The model's own outputs are the LAST that many: the lowering emits its mutated-input copies first.
         total_outputs = self._method.metadata.num_outputs()
@@ -94,6 +103,25 @@ class ExecutorchModelRunner(ModelRunner):
         self.kv_geometry = self.export_metadata.kv_geometry
         # Same contract as the other runners': a graph that took a *dict* of masks declares one input per
         # attention type, so the generation loop has the ranks to build it rather than assuming a single mask.
+
+    @classmethod
+    def from_artifact(cls, artifact, export_metadata=None, device=None, **kwargs) -> ExecutorchModelRunner:
+        """Load an in-memory `ExecutorchProgramManager` through its serialized buffer, which is what the
+        runtime accepts — there is no path to hand it."""
+        from executorch.runtime import Runtime, Verification
+
+        program = Runtime.get().load_program(artifact.buffer, verification=Verification.Minimal)
+        return cls(program, export_metadata=export_metadata, **kwargs)
+
+    @classmethod
+    def from_pretrained(cls, path, export_metadata=None, device=None, **kwargs) -> ExecutorchModelRunner:
+        """Load a saved `.pte` into the ExecuTorch runtime. `Verification.Minimal` matches what the export
+        tests load with — full verification walks the whole program and buys nothing here, since the file
+        was just written by us."""
+        from executorch.runtime import Runtime, Verification
+
+        program = Runtime.get().load_program(Path(path), verification=Verification.Minimal)
+        return cls(program, export_metadata=export_metadata, **kwargs)
 
     def __call__(self, **kwargs) -> dict[str, torch.Tensor]:
         for cache_input, declared in self._cache_names.items():

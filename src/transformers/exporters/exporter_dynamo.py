@@ -42,6 +42,7 @@ from __future__ import annotations
 import copy
 import importlib
 import inspect
+import json
 import sys
 import types
 from collections.abc import MutableMapping
@@ -51,11 +52,13 @@ from typing import Any
 from ..utils import logging
 from ..utils.import_utils import is_detectron2_available, is_torch_available, torch_compilable_check
 from .base import HfExporter
-from .configs import DynamoConfig
-from .utils import (
+from .configs import DynamoConfig, ExportFormat
+from .metadata import (
     EXPORT_METADATA_KEY,
-    apply_patches,
     build_export_metadata,
+)
+from .utils import (
+    apply_patches,
     patch_attributes,
     prepare_for_export,
     register_patch,
@@ -87,11 +90,14 @@ class DynamoExporter(HfExporter):
     ```
     """
 
+    export_format = ExportFormat.DYNAMO
+    artifact_suffix = ".pt2"
+
     required_packages = ["torch"]
     min_versions = {"torch": "2.11.0"}
     tested_versions = {"torch": "2.12.0"}
 
-    def export(
+    def export_artifact(
         self,
         model: PreTrainedModel,
         sample_inputs: MutableMapping[str, Any],
@@ -137,17 +143,25 @@ class DynamoExporter(HfExporter):
         # read theirs, and every backend gets it here — `self.required_packages` is the subclass's, so the
         # versions name whichever exporter is running.
         #
-        # Unlike those two it does NOT survive serialization: `torch.export.save` keeps a whitelist of meta
-        # keys (a loaded program has only `treespec_namedtuple_fields`), where ONNX carries the payload in
-        # `metadata_props` and ExecuTorch in a constant method — both inside the file. Nothing here saves, so
-        # the in-memory program is the whole lifetime today; a caller who saves one and reloads it gets a
-        # runner with no metadata, and `kv_geometry` / `mask_dict_ranks` / `input_shapes` / `cache_input` are
-        # exactly the facts that go missing. `torch.export.save(..., extra_files=...)` round-trips and is
-        # where this belongs once the save path is ours to own.
-        exported_program.graph_module.meta[EXPORT_METADATA_KEY] = build_export_metadata(
-            model, sample_inputs, exported_program, self.required_packages
-        )
-        return exported_program
+        # Unlike those two it does NOT survive serialization on its own: `torch.export.save` keeps a
+        # whitelist of meta keys (a loaded program has only `treespec_namedtuple_fields`), where ONNX carries
+        # the payload in `metadata_props` and ExecuTorch in a constant method — both inside the file. So
+        # `save_artifact` copies it into `extra_files` and `DynamoModelRunner.from_pretrained` puts it back,
+        # which is what keeps `kv_geometry` / `mask_dict_ranks` / `input_shapes` / `cache_input` answerable
+        # for a program that has been through disk.
+        metadata = build_export_metadata(model, sample_inputs, exported_program, self.required_packages)
+        exported_program.graph_module.meta[EXPORT_METADATA_KEY] = metadata
+        return exported_program, metadata
+
+    @classmethod
+    def save_artifact(cls, artifact, path) -> None:
+        """`torch.export.save` keeps a whitelist of `meta` keys and ours is not on it, so the metadata rides
+        in `extra_files` — the only part of the archive that round-trips arbitrary payloads. ONNX and
+        ExecuTorch carry theirs inside the graph itself; this is the same payload, in the slot this format
+        gives it."""
+        metadata = artifact.graph_module.meta.get(EXPORT_METADATA_KEY)
+        extra_files = {EXPORT_METADATA_KEY: json.dumps(metadata)} if metadata is not None else None
+        torch.export.save(artifact, str(path), extra_files=extra_files)
 
 
 # ── Stage 1: Model signature patch ──────────────────────────────────────────

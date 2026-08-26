@@ -39,218 +39,45 @@ from __future__ import annotations
 import copy
 import re
 from dataclasses import dataclass
+from pathlib import Path
 
 import torch
-from torch.utils._pytree import tree_flatten, tree_leaves, tree_unflatten
 
 from ..cache_utils import DynamicCache, EncoderDecoderCache, StaticCache, StaticLayer
 from ..generation import GenerationConfig, GenerationMixin
 from ..masking_utils import create_masks_for_generate
 from ..modeling_multimodal_utils import get_mrope_index, uses_mrope
 from ..modeling_outputs import BaseModelOutput, CausalLMOutputWithPast
-from ..utils import logging
+from ..models.auto import AutoConfig
+from ..utils import GENERATION_CONFIG_NAME, logging
 from .base import (
     ModelRunner,
+    load_export_runners,
+    resolve_export_file,
+    split_download_kwargs,
 )
-from .utils import (
+from .caches import (
+    _advance_cache,
+    _cache_length,
+    _empty_container,
+    _self_attention_layers,
+)
+from .decompose import (
     _MODALITY_AUX_SUFFIXES,
     _MODALITY_SPECS,
-    _find_config_attr,
-    _resolve_modeling_module,
     anyres_patch_counts,
-    cast_leaf_tensors,
     flatten_anyres_patches,
+    streaming_embedder_spec,
+)
+from .utils import (
+    _find_config_attr,
+    cast_leaf_tensors,
     materialize_cache_layers,
     precompute_export_inputs,
-    streaming_embedder_spec,
 )
 
 
 logger = logging.get_logger(__name__)
-
-
-def _cache_tensors(past_key_values) -> list[torch.Tensor]:
-    """The cache's tensor leaves, in the pytree order the exporter named them."""
-    return [t for t in tree_leaves(past_key_values) if isinstance(t, torch.Tensor)]
-
-
-def _read_cache_step(container, part: str):
-    """One step of a cache leaf path: an index into a list, a key into a dict (a layer may keep its state
-    dict-keyed by entry name — deepseek_v4's `buffer_kv["compressor"]`), or an attribute."""
-    if part.isdigit():
-        return container[int(part)]
-    if isinstance(container, dict):
-        return container.get(part)
-    return getattr(container, part, None)
-
-
-def _read_cache_entry(cache, path: list[str]):
-    """The cache's entry at a named leaf path (`layers.0.conv_states.0`), or `None` where the path does
-    not (yet) lead anywhere — a recurrent layer's states are `None` until a step produces them."""
-    target = cache
-    for part in path:
-        if target is None:
-            return None
-        target = _read_cache_step(target, part)
-    return target
-
-
-def _assign_cache_entry(cache, path: list[str], value) -> None:
-    """Write a decode step's cache output back at its named path (`layers.0.conv_states.0`).
-
-    Keeps a fixed-size buffer in place (`copy_`, so the cache object and any graph that mutated it stay
-    valid) and replaces the entry outright when it grew or did not exist yet — a growing `DynamicCache`
-    returns longer tensors, and a recurrent layer's states start as `None`.
-    """
-    target = cache
-    for part in path[:-1]:
-        target = _read_cache_step(target, part)
-    last = path[-1]
-    current = _read_cache_step(target, last)
-    if isinstance(current, torch.Tensor) and isinstance(value, torch.Tensor) and current.shape == value.shape:
-        if current is not value:
-            current.copy_(value)
-        return
-    if not isinstance(value, torch.Tensor) and isinstance(current, torch.Tensor):
-        value = torch.tensor(value, dtype=current.dtype, device=current.device)
-    if last.isdigit():
-        target[int(last)] = value
-    elif isinstance(target, dict):
-        target[last] = value
-    else:
-        setattr(target, last, value)
-
-
-def _self_attention_layers(cache) -> list:
-    """A cache's self-attention layers. An `EncoderDecoderCache` keeps them in the two caches it pairs
-    rather than on itself, so asking it for `.layers` finds nothing — every question here (how long, what
-    geometry, does it keep keys, which states exist) is about the self-attention half."""
-    if cache is None:
-        return []
-    return getattr(getattr(cache, "self_attention_cache", cache), "layers", [])
-
-
-def _cache_length(cache) -> int:
-    """`cache.get_seq_length()`, or 0 for a cache that has no attention layer to ask.
-
-    A recurrent-only cache (mamba, rwkv, …) raises rather than answering: it keeps a fixed-size state
-    instead of a growing sequence, so "how many tokens are in it" is only ever 0 or "already running",
-    which its own `has_previous_state` flag records.
-    """
-    if cache is None:
-        return 0
-    try:
-        return cache.get_seq_length()
-    except (ValueError, StopIteration):
-        started = any(
-            all(getattr(layer, "has_previous_state", {}).values() or [False])
-            for layer in _self_attention_layers(cache)
-        )
-        return 1 if started else 0
-
-
-def _advance_cache(past_key_values, outputs: dict[str, torch.Tensor], num_new_tokens: int):
-    """Advance the cache with a decode step's outputs (the `past_key_values.…` entries, in cache-leaf
-    order). A fixed-size cache keeps its shapes, so `copy_` in place — preserving the cache object and its
-    non-tensor state; a graph that already mutated the cache in place returns the same tensors, making the
-    copy a no-op. A growing `DynamicCache` returns longer tensors (its seq axis grew), so rebuild the cache
-    from the grown leaves through the registered cache pytree. The tensors themselves tell the two apart.
-
-    Sliding layers additionally keep their running length in a plain python int — `cumulative_length_int`
-    on static sliding layers, `cumulative_length` itself on growing ones. It's not a pytree tensor, so the
-    decode graph never updates it (the static graph bakes it as a trace-time constant; the growing-cache
-    rebuild resurrects the pre-step value from the pytree context). Advance it by the tokens just
-    processed, the way the eager `update` does — deliberately NOT read from the static layer's
-    `cumulative_length` tensor: `int(tensor)` is a device→host sync (which also blocks CUDA-graph
-    capture), and once a sliding layer is full the tensor stops advancing while the int keeps counting."""
-    # a recurrent model's graph names its cache outputs after its own kwarg (`cache_params.…`)
-    cache_updates = [
-        (name, value) for name, value in outputs.items() if name.startswith(("past_key_values", "cache_params"))
-    ]
-    if cache_updates:
-        cache_leaves = _cache_tensors(past_key_values)
-        # Align updates to cache leaves. ExecuTorch names its cache inputs by flat leaf index
-        # (`past_key_values_<N>`) and may prune placeholders its lowering left unused, so index by the
-        # suffix and keep the old leaf where no update came back; other backends' dotted names arrive in
-        # leaf order. The `.pte` runtime also returns rank-0 updates as python scalars — re-wrap them.
-        updated = list(cache_leaves)
-        for position, (name, new) in enumerate(cache_updates):
-            path = name.split(".")[1:]
-            if path:
-                # A dotted name is the leaf's path in the cache (`layers.0.conv_states.0`, `layers.1.keys`),
-                # which is the only alignment that holds when the graph returns entries the cache has no
-                # leaf for — a recurrent layer keeps its `conv_states` / `recurrent_states` as `None` until
-                # a step produces them, so counting leaves would run off the end.
-                _assign_cache_entry(past_key_values, path, new)
-                continue
-            # ExecuTorch names its cache inputs by flat leaf index and may prune the ones its lowering left
-            # unused, so index by the suffix and keep the old leaf where no update came back.
-            suffix = name.rsplit("_", 1)[-1]
-            index = int(suffix) if suffix.isdigit() else position
-            if not isinstance(new, torch.Tensor):
-                new = torch.tensor(new, dtype=cache_leaves[index].dtype, device=cache_leaves[index].device)
-            updated[index] = new
-        if any(name.split(".")[1:] == [] for name, _ in cache_updates):
-            if any(old.shape != new.shape for old, new in zip(cache_leaves, updated)):
-                _, spec = tree_flatten(past_key_values)
-                past_key_values = tree_unflatten(updated, spec)
-            else:
-                for old, new in zip(cache_leaves, updated):
-                    if old is not new:
-                        old.copy_(new)
-    _mark_existing_states(past_key_values)
-    for layer in _self_attention_layers(past_key_values):
-        if hasattr(layer, "cumulative_length_int"):
-            layer.cumulative_length_int += num_new_tokens
-        elif isinstance(getattr(layer, "cumulative_length", None), int):
-            layer.cumulative_length += num_new_tokens
-    # An `EncoderDecoderCache` also keeps `is_updated` python flags (pytree context, so the graph never
-    # flips them and the growing rebuild resurrects the pre-step values): every decoder step leaves the
-    # cross cache written — the prefill graph writes it, decode graphs read it.
-    if getattr(past_key_values, "is_updated", None):
-        past_key_values.is_updated = dict.fromkeys(past_key_values.is_updated, True)
-    return past_key_values
-
-
-def _mark_existing_states(past_key_values) -> None:
-    """Mark each layer's recurrent states as existing, exactly where they do.
-
-    A recurrent layer records "these states exist now" as python bools in the pytree context, so the
-    graph cannot flip them — whoever filled the states (a decode step's write-back, or the fresh-cache
-    materialization) marks them the way the eager `update` would, or the cache no longer matches the
-    traced spec."""
-    for layer in _self_attention_layers(past_key_values):
-        conv_states = getattr(layer, "conv_states", None)
-        if isinstance(conv_states, dict):
-            # ... and the scalars its `lazy_initialization` records alongside them
-            for key, conv in conv_states.items():
-                if isinstance(conv, torch.Tensor):
-                    if isinstance(getattr(layer, "conv_kernel_size", None), dict):
-                        layer.conv_kernel_size[key] = conv.shape[-1]
-                    if getattr(layer, "dtype", None) is None:
-                        layer.dtype, layer.device = conv.dtype, conv.device
-        # ... and mark exactly the states that now exist: a conv-only layer (lfm2) never gets recurrent
-        # states, so flipping its flag would describe a cache the graph was not traced with
-        for flag, attr in (
-            ("is_conv_states_initialized", "conv_states"),
-            ("is_recurrent_states_initialized", "recurrent_states"),
-            ("has_previous_state", None),
-        ):
-            marks = getattr(layer, flag, None)
-            if not isinstance(marks, dict):
-                continue
-            for key in marks:
-                if attr is None:
-                    present = any(
-                        isinstance(getattr(layer, name, {}).get(key), torch.Tensor)
-                        for name in ("conv_states", "recurrent_states")
-                        if isinstance(getattr(layer, name, None), dict)
-                    )
-                else:
-                    states = getattr(layer, attr, None)
-                    present = isinstance(states, dict) and isinstance(states.get(key), torch.Tensor)
-                if present:
-                    marks[key] = True
 
 
 # The text-path kwargs `generate` always carries. A modality graph that declares one of these names means
@@ -324,26 +151,6 @@ def _pack_anyres_features(config, features, image_sizes, outputs) -> torch.Tenso
                 feature = torch.cat((feature, newline[None].to(feature)), dim=0)
             packed.append(feature)
     return torch.cat(packed, dim=0)
-
-
-def _empty_container(container: str, config, batch_size: int, dtype, device, encoder_config=None):
-    """A container shaped the way the trace saw it, holding nothing yet.
-
-    `"cache"` is one of the generic `Cache` classes: built from `encoder_config` so its layers are the kinds
-    that sub-model caches with (the audio tower's windowed layers, `sliding_window` and all) and materialized
-    to zero length, which is the state the trace recorded — lazily-uninitialized layers would flatten to a
-    shorter pytree than the graph declares. Anything else is a model's own container class
-    (voxtral_realtime's conv-state `VoxtralRealtimeConv1dPaddingCache`), reached by name in its `modeling_*`
-    module the way the precompute reaches a model's own helpers — from the config alone, no model instance."""
-    if container != "cache":
-        module = _resolve_modeling_module(config)
-        container_class = getattr(module, container, None) if module is not None else None
-        return container_class() if container_class is not None else None
-    if encoder_config is None:
-        return DynamicCache()
-    cache = DynamicCache(config=encoder_config)
-    materialize_cache_layers(cache, batch_size, encoder_config, dtype, device)
-    return cache
 
 
 @dataclass
@@ -557,6 +364,35 @@ class ExportedGenerator(GenerationMixin):
             modalities=modalities,
             embedder=embedder,
         )
+
+    @classmethod
+    def from_pretrained(cls, save_directory: str | Path, **kwargs) -> ExportedGenerator:
+        """Load a saved export — a local directory or a Hub repo — and return a runnable generator.
+
+        The manifest says which file is which component and which backend wrote them, so each artifact is
+        opened by the runner for that format; everything else about the graphs — precision, cache geometry,
+        traced shapes — comes from inside the artifacts themselves. The `generation_config` saved alongside
+        is the one the model was exported with, which is what makes the cache the graphs were traced against
+        the cache this builds.
+
+        Example:
+            OnnxExporter().save_pretrained(programs, "out/", config=model.config,
+                                           generation_config=generation_config)
+            runtime = ExportedGenerator.from_pretrained("out/")
+            ids = runtime.generate(input_ids=prompt, max_new_tokens=32)
+        """
+        download_kwargs, _ = split_download_kwargs(dict(kwargs))
+        runners, _ = load_export_runners(save_directory, **kwargs)
+        config = AutoConfig.from_pretrained(save_directory, **download_kwargs)
+        # The one the model was exported with, saved beside the artifacts: it declares the cache the graphs
+        # were traced against, so a load without it would build a different one.
+        has_generation_config = (
+            resolve_export_file(save_directory, GENERATION_CONFIG_NAME, **download_kwargs) is not None
+        )
+        generation_config = (
+            GenerationConfig.from_pretrained(save_directory, **download_kwargs) if has_generation_config else None
+        )
+        return cls.from_runners(runners, config, generation_config)
 
     # ── GenerationMixin plumbing (a real PreTrainedModel provides all of this) ──
     @property

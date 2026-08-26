@@ -23,6 +23,12 @@ small workaround at that stage rather than editing the model.
 
 Add a workaround by writing one function and registering it with a decorator. Each workaround belongs at the lowest stage that can express it cleanly.
 
+To add a whole backend rather than a workaround, subclass [`HfExporter`] and implement its two hooks —
+`export_artifact`, which traces one graph and returns it with the metadata describing it, and
+`save_artifact`, which writes one out — then declare `export_format` and `artifact_suffix`. The public
+`export` / `export_for_generation` entry points, the [`~exporters.ExporterOutput`] they return, and
+loading it back are built on those two and need no per-backend code.
+
 ## Patches and fixes
 
 A workaround is either a patch or a fix. The two differ in whether they can be reverted.
@@ -80,7 +86,7 @@ this reference line up. Look there for the exact ops and classes each stage hand
 
 ### DynamoExporter
 
-The base exporter runs one patch stage and four helpers, in order, inside `DynamoExporter.export`
+The base exporter runs one patch stage and four helpers, in order, inside `DynamoExporter.export_artifact`
 (see [exporter_dynamo.py](https://github.com/huggingface/transformers/blob/main/src/transformers/exporters/exporter_dynamo.py)).
 
 1. Forward-signature patch: gives `model.forward` a flat argument signature so `torch.export`

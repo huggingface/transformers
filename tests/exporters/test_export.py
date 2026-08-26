@@ -16,24 +16,30 @@ import copy
 import functools
 import inspect
 import itertools
+import os
 import re
+import sys
+import tempfile
 import warnings
 from contextlib import contextmanager
+from pathlib import Path
 
 import pytest
 import torch
 from parameterized import parameterized
 
 from transformers import GenerationConfig, set_seed
+from transformers.exporters.decompose import (
+    decompose_for_generation,
+    decompose_multimodal,
+    is_multimodal,
+)
 from transformers.exporters.exporter_dynamo import _VARLEN_ATTENTION_PATHS, DynamoConfig, DynamoExporter
 from transformers.exporters.exporter_executorch import ExecutorchConfig, ExecutorchExporter
 from transformers.exporters.exporter_onnx import OnnxConfig, OnnxExporter
 from transformers.exporters.utils import (
     cast_leaf_tensors,
-    decompose_for_generation,
-    decompose_multimodal,
     get_leaf_tensors,
-    is_multimodal,
     module_device,
     module_dtype,
     precompute_export_inputs,
@@ -543,6 +549,17 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
 # delegated or not (that code is an arena the plan cannot allocate, not a refusal), and sam3_lite_text goes
 # on to fail at execute with `0x12` once undelegated.
 EXECUTORCH_DISABLE_PARTITION: dict[str, dict[str, str]] = {
+    # Dynamic shapes only — measured there; the static variant fails earlier, for its own reasons.
+    "dynamic": {
+        "MuseGlimmerForConditionalGeneration": (
+            "XNNPACK cannot propagate the vision encoder's runtime shapes: its inputs are dynamic on every "
+            "axis (`pixel_values (None, None)`, `cu_seqlens (None,)`, `window_index (None,)`), and the "
+            "delegate refuses at execute with `Propagating input shapes failed with code: "
+            "xnn_status_invalid_parameter` (`0x1` at `CALL_DELEGATE`). Undelegated, the same graph generates."
+        ),
+        # The base model decomposes to the same vision encoder, so the per-component run hits it too.
+        "MuseGlimmerModel": "Same vision encoder as `MuseGlimmerForConditionalGeneration`.",
+    },
     # Static shapes only — the dynamic variants lower and run delegated.
     "static": {
         "Qwen3_5Model": (
@@ -707,30 +724,84 @@ def _clean_inputs_for_export(inputs_dict, config):
     return inputs_dict
 
 
-def _runner_for(backend, artifact):
-    """The `ModelRunner` a deployment would wrap this artifact in — nothing is exported here.
+# A line ExecuTorch's C++ side wrote, as opposed to anything else sharing stderr.
+_EXECUTORCH_LOG_LINE = re.compile(r"\[\w+\.cpp:\d+\]")
+# Where each component's ExecuTorch log is written, one file per label. Under `-n auto` every worker shares
+# stderr, so a sweep's log interleaves and cannot be attributed to the test that produced it — which is the
+# whole point of keeping it. A file per label keeps them separable.
+_EXECUTORCH_LOG_DIR = Path(os.environ.get("TRANSFORMERS_EXECUTORCH_LOG_DIR", "executorch_logs"))
 
-    Both the per-component checks and the `generate` drive go through this, so a test can never pass by
-    binding inputs more correctly than the shipped runner does."""
-    if backend == "dynamo":
-        from transformers.exporters import DynamoModelRunner
 
-        return DynamoModelRunner(artifact.module())
-    if backend == "executorch":
-        from executorch.runtime import Runtime, Verification
+def _write_executorch_log(label: str, log: str) -> str | None:
+    """Write one component's ExecuTorch log beside the others, and return where it went."""
+    lines = [line for line in log.splitlines(keepends=True) if _EXECUTORCH_LOG_LINE.search(line)]
+    if not lines:
+        return None
+    _EXECUTORCH_LOG_DIR.mkdir(parents=True, exist_ok=True)
+    filename = re.sub(r"[^\w.-]+", "_", label) + ".log"
+    path = _EXECUTORCH_LOG_DIR / filename
+    path.write_text("".join(lines))
+    return str(path)
 
-        from transformers.exporters import ExecutorchModelRunner
 
-        return ExecutorchModelRunner(Runtime.get().load_program(artifact.buffer, verification=Verification.Minimal))
-    if backend == "onnx":
-        import onnxruntime as ort
+@contextmanager
+def _capturing_executorch_log():
+    """Capture what ExecuTorch writes to stderr, and yield a reader for it.
 
-        from transformers.exporters import OnnxModelRunner
+    ExecuTorch logs from C++ — the operator registry and `method.cpp` write straight to fd 2 — so
+    `contextlib.redirect_stderr`, which only rebinds `sys.stderr`, sees none of it. The fd itself has to be
+    redirected.
 
-        # CPU: the parity check's eager side runs on CPU too, since ORT round-trips through the host.
-        session = ort.InferenceSession(artifact.model_proto.SerializeToString(), providers=["CPUExecutionProvider"])
-        return OnnxModelRunner(session)
-    raise ValueError(f"Unknown backend {backend}")
+    Needs `-s` (`--capture=no`) to see anything: under pytest's own fd capture ExecuTorch emits no log at
+    all — not to this sink and not to pytest's, so a sweep that wants the kernel names in the tolerance
+    warnings has to disable capture. Redirecting to a plain file is otherwise fine; the emptiness is
+    ExecuTorch's, not this redirect's.
+    """
+    sys.stderr.flush()
+    saved = os.dup(2)
+    with tempfile.TemporaryFile("w+b") as sink:
+        os.dup2(sink.fileno(), 2)
+
+        def read_log() -> str:
+            """Read while the redirect is still up: a caller handling the exception has not left the block
+            yet, so the log cannot be handed over only on exit."""
+            sys.stderr.flush()
+            here = sink.tell()
+            sink.seek(0)
+            text = sink.read().decode("utf-8", "replace")
+            sink.seek(here)
+            return text
+
+        try:
+            yield read_log
+        finally:
+            sys.stderr.flush()
+            os.dup2(saved, 2)
+            os.close(saved)
+            sink.seek(0)
+            # Nothing another writer put on stderr is swallowed; ExecuTorch's own lines are held back,
+            # because a tolerated failure files them per label rather than interleaving them into the run.
+            passthrough = sink.read().decode("utf-8", "replace").splitlines(keepends=True)
+            sys.stderr.write("".join(line for line in passthrough if not _EXECUTORCH_LOG_LINE.search(line)))
+
+
+def _executorch_log_detail(log: str) -> str:
+    """The actionable part of an ExecuTorch failure log: which kernel is missing, else its last complaint.
+
+    A bare error code says only which phase failed. The kernel name says whether it is a platform ceiling or
+    something the export should have avoided emitting (a graph reaching lowering with an `argsort` in it asks
+    the portable registry for `aten::sort.values`, which it does not ship, while `aten::topk.values` — the
+    same computation — it does).
+    """
+    missing = re.findall(r"Missing operator: \[\d+\] (\S+)", log) or re.findall(r"kernel '([^']+)' not found", log)
+    if missing:
+        return f"missing kernel(s) {sorted(set(missing))}"
+    complaints = [line.strip() for line in log.splitlines() if re.match(r"\[\w+\.cpp:\d+\]", line.strip())]
+    # Prefer the line that says *why* over the one that says where it gave up: a delegate refusal logs its
+    # `xnn_status_*` first and then a generic `CALL_DELEGATE execute failed` last, and only the first is
+    # actionable.
+    causes = [line for line in complaints if re.search(r"xnn_status|Internal Error|Attempted to resize", line)]
+    return (causes or complaints)[-1] if (causes or complaints) else ""
 
 
 @contextmanager
@@ -743,19 +814,27 @@ def _tolerating_executorch_limits(label: str):
     never declared, and a missing input means the decomposition produced a component we cannot feed. A model
     that genuinely needs an exception belongs in `EXPORT_SKIPS`, argued, where it can be seen.
     """
-    try:
-        yield
-    except (RuntimeError, MemoryError) as error:
-        if not _is_executorch_runtime_limit(error):
-            raise
-        # A tolerated failure still reports the test as passed, so say so — otherwise a green run is
-        # indistinguishable from one where the program actually ran.
-        warnings.warn(
-            f"{label}: ExecuTorch runtime limitation tolerated; this test passes without running the "
-            f"program — add it to `EXECUTORCH_DISABLE_PARTITION` if lowering it undelegated runs instead: "
-            f"{str(error).strip().splitlines()[0]}",
-            stacklevel=2,
-        )
+    with _capturing_executorch_log() as executorch_log:
+        try:
+            yield
+        except (RuntimeError, MemoryError) as error:
+            if not _is_executorch_runtime_limit(error):
+                raise
+            # A tolerated failure still reports the test as passed, so say so — otherwise a green run is
+            # indistinguishable from one where the program actually ran. The log detail is what makes the
+            # warning actionable: the error code alone cannot tell a platform ceiling from an op the export
+            # should not have emitted.
+            log = executorch_log()
+            detail = _executorch_log_detail(log)
+            written = _write_executorch_log(label, log)
+            warnings.warn(
+                f"{label}: ExecuTorch runtime limitation tolerated; this test passes without running the "
+                f"program — add it to `EXECUTORCH_DISABLE_PARTITION` if lowering it undelegated runs "
+                f"instead: {str(error).strip().splitlines()[0]}"
+                + (f" [{detail}]" if detail else "")
+                + (f" (full log: {written})" if written else ""),
+                stacklevel=2,
+            )
 
 
 # ExecuTorch runtime error codes that mean "the export is valid (it produced a loadable program) but
@@ -986,7 +1065,10 @@ class ExportTesterMixin:
         no standalone prefill graph; their multi-token `decode` serves both, exercising the single-graph
         path (dynamic shapes only)."""
         from transformers.exporters import ExportedGenerator
-        from transformers.exporters.utils import _MODALITY_SPECS, _STREAMING_EMBEDDERS
+        from transformers.exporters.decompose import (
+            _MODALITY_SPECS,
+            _STREAMING_EMBEDDERS,
+        )
 
         model = components["decode"][0]
         if not dynamic and "embed_tokens" in components:
@@ -1004,7 +1086,7 @@ class ExportTesterMixin:
             *(spec[0] for spec in _MODALITY_SPECS),
             *(spec[0] for spec in _STREAMING_EMBEDDERS.values()),
         }
-        runners = {name: _runner_for(backend, exported[name]) for name in components if name in wanted}
+        runners = {name: exported[name].runner() for name in components if name in wanted}
         runtime = ExportedGenerator.from_runners(runners, model.config, model.generation_config)
         device = runtime.device
         model = model.to(device)
@@ -1104,11 +1186,11 @@ class ExportTesterMixin:
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    exported_program = exporter.export(model, inputs, config=config)
+                    output = exporter.export(model, inputs, config=config)
 
                     with torch.no_grad():
                         set_seed(1234)
-                        exported_outputs = get_leaf_tensors(exported_program.module()(**copy.deepcopy(inputs)))
+                        exported_outputs = output.runner()(**copy.deepcopy(inputs))
                         self.assertTrue(exported_outputs, f"Exported outputs are empty for {name}.")
 
                     self._check_outputs_close(exported_outputs, eager_outputs[name], atol=atol, rtol=rtol)
@@ -1194,8 +1276,8 @@ class ExportTesterMixin:
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    onnx_program = exporter.export(model, inputs, config=config)
-                    onnx_outputs = _runner_for("onnx", onnx_program)(**inputs)
+                    output = exporter.export(model, inputs, config=config)
+                    onnx_outputs = output.runner()(**inputs)
                     self.assertTrue(onnx_outputs, f"ONNX outputs are empty for {name}.")
                     self.assertEqual(set(onnx_outputs.keys()), set(eager_outputs[name].keys()))
 
@@ -1231,12 +1313,11 @@ class ExportTesterMixin:
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    program = exporter.export(model, inputs, config=config)
+                    output = exporter.export(model, inputs, config=config)
                     # Building the runner stays *inside* the tolerance: loading the method is where
                     # ExecuTorch reports a missing kernel or an oversized arena.
                     with _tolerating_executorch_limits(f"{model_class.__name__}/{name}"):
-                        runner = _runner_for("executorch", program)
-                        outputs = runner(**inputs)
+                        outputs = output.runner()(**inputs)
                         tensors = [t for t in outputs.values() if isinstance(t, torch.Tensor)]
                         self.assertEqual(len(tensors), len(eager_outputs[name]))
 
@@ -1339,15 +1420,15 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             exported = {}
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    exported_program = exporter.export(model, inputs, config=config)
+                    output = exporter.export(model, inputs, config=config)
 
                     with torch.no_grad():
                         set_seed(1234)
-                        exported_outputs = get_leaf_tensors(exported_program.module()(**copy.deepcopy(inputs)))
+                        exported_outputs = output.runner()(**copy.deepcopy(inputs))
                         self.assertTrue(exported_outputs, "Exported outputs are empty.")
 
                     self._check_outputs_close(exported_outputs, eager_outputs[name], atol=atol, rtol=rtol)
-                    exported[name] = exported_program
+                    exported[name] = output
 
             # End-to-end id-parity (text and VLM), over both cache kinds (static `cache_implementation`
             # and the default growing `DynamicCache`). Runs whenever the exported graphs can serve
@@ -1408,14 +1489,13 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             exported = {}
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    onnx_program = exporter.export(model, inputs, config=config)
-                    onnx_outputs = _runner_for("onnx", onnx_program)(**inputs)
+                    output = exporter.export(model, inputs, config=config)
+                    onnx_outputs = output.runner()(**inputs)
                     self.assertTrue(onnx_outputs, "ONNX outputs are empty.")
                     self.assertEqual(set(onnx_outputs.keys()), set(eager_outputs[name].keys()))
-                    exported[name] = onnx_program
+                    exported[name] = output
 
-            # End-to-end id-parity (text and VLM) — see `_runner_for` for the ONNX session and
-            # the dynamo call site for the gate.
+            # End-to-end id-parity (text and VLM) — see the dynamo call site for the gate.
             can_split_prefill = "prefill" in exported and (dynamic or _needs_static_cache(generation_config))
             if (can_split_prefill or (dynamic and multi_token_decode)) and components.keys() <= exported.keys():
                 if not self._should_skip(
@@ -1472,16 +1552,15 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             exported = {}
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    program = exporter.export(model, inputs, config=config)
+                    output = exporter.export(model, inputs, config=config)
                     # Building the runner stays *inside* the tolerance: loading the method is where
                     # ExecuTorch reports a missing kernel or an oversized arena.
                     with _tolerating_executorch_limits(f"{model_class.__name__}/{name}"):
-                        runner = _runner_for("executorch", program)
-                        outputs = runner(**inputs)
+                        outputs = output.runner()(**inputs)
                         tensors = [t for t in outputs.values() if isinstance(t, torch.Tensor)]
                         self.assertEqual(len(tensors), len(eager_outputs[name]))
                         # Only a component that ran is handed to the generate drive below.
-                        exported[name] = program
+                        exported[name] = output
 
             # End-to-end id-parity (text and VLM). Multi-token decode works on ExecuTorch because
             # `_fix_range_constraints` bounds the otherwise-unbounded sequence dim (XNNPACK can't size a

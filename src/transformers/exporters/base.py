@@ -17,20 +17,34 @@
 from __future__ import annotations
 
 import functools
+import json
 from abc import ABC, abstractmethod
-from collections.abc import MutableMapping
+from collections.abc import Iterable, Mapping, MutableMapping
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import torch
 from packaging import version
 
-from ..utils import logging
+from ..utils import cached_file, logging
 from ..utils.import_utils import _is_package_available, is_torch_available
-from .configs import ExportConfigMixin
-from .utils import EXPORT_METADATA_KEY, ExportMetadata, decompose_for_generation
+from .configs import ExportConfigMixin, ExportFormat
+from .decompose import (
+    decompose_for_generation,
+)
+from .metadata import (
+    EXPORT_METADATA_KEY,
+    ExportMetadata,
+)
 
 
 logger = logging.get_logger(__name__)
+
+# Everything a saved export says about itself: which backend wrote it, which file each component is, and
+# what the exporter recorded about each component's graph. One file, because those are one question — and
+# because the alternative, leaning on each backend's file format to carry the metadata, silently leaves a
+# runner inferring precision and cache layout when the format cannot (`torch.export` cannot).
+EXPORT_MANIFEST_FILE = "export.json"
 
 
 if TYPE_CHECKING:
@@ -42,13 +56,238 @@ if TYPE_CHECKING:
         from ..modeling_utils import PreTrainedModel
 
 
+# What `from_pretrained` takes for the download rather than for the runner it builds.
+HUB_DOWNLOAD_KWARGS = frozenset(
+    {"cache_dir", "force_download", "local_files_only", "token", "revision", "subfolder", "proxies"}
+)
+
+
+def split_download_kwargs(kwargs: dict) -> tuple[dict, dict]:
+    """Split `from_pretrained` kwargs into the ones that resolve files and the ones that build runners."""
+    download = {name: kwargs.pop(name) for name in list(kwargs) if name in HUB_DOWNLOAD_KWARGS}
+    return download, kwargs
+
+
+def resolve_export_file(pretrained_model_name_or_path, filename: str, **download_kwargs) -> str | None:
+    """Locate one of an export's files, in a local directory or a Hub repo.
+
+    `cached_file` resolves both, so a saved export is loadable from the Hub the way a checkpoint is; returns
+    `None` when the file is simply not there, which is how an optional one (a `generation_config.json`) is
+    checked for.
+    """
+    return cached_file(
+        pretrained_model_name_or_path,
+        filename,
+        _raise_exceptions_for_missing_entries=False,
+        **download_kwargs,
+    )
+
+
+def read_export_manifest(pretrained_model_name_or_path, **download_kwargs) -> dict:
+    """Read and check a saved export's manifest, so both loaders fail the same way.
+
+    Takes a local directory or a Hub repo id. An export that lost its recorded metadata is refused rather
+    than loaded: a runner without it still runs, inferring the precision, the cache kwarg and the mask
+    layout from names and shapes, and silently getting them wrong is the failure this payload exists to
+    prevent.
+    """
+    path = resolve_export_file(pretrained_model_name_or_path, EXPORT_MANIFEST_FILE, **download_kwargs)
+    if path is None:
+        raise OSError(
+            f"No `{EXPORT_MANIFEST_FILE}` in {pretrained_model_name_or_path}. Exported models are loaded "
+            "from what `ExporterOutput.save_pretrained` wrote; to assemble runners yourself, build each one "
+            "with `ModelRunner.from_pretrained` and pass them to `ExportedGenerator.from_runners`."
+        )
+    manifest = json.loads(Path(path).read_text())
+    components = manifest.get("components") or {}
+    if not components:
+        raise OSError(f"{path} lists no components.")
+    missing = [name for name, entry in components.items() if not entry.get("metadata")]
+    if missing:
+        raise OSError(
+            f"{path} has no recorded export metadata for {missing}. Re-save the export with "
+            "`ExporterOutput.save_pretrained`, which writes it; loading without it would fall back to "
+            "inferring precision and cache layout from the graph's names and shapes."
+        )
+    return manifest
+
+
+def load_export_runners(pretrained_model_name_or_path, **kwargs) -> tuple[dict[str, ModelRunner], dict]:
+    """Resolve a saved export into `{component: runner}` plus its manifest.
+
+    The part both loaders share: read the manifest, pick the runner for the format it names, and build one
+    per component from the file it names — each handed the metadata the save recorded for it, so a reloaded
+    runner knows what the one built straight from the export knows.
+    """
+    from .auto import export_backend
+
+    download_kwargs, runner_kwargs = split_download_kwargs(kwargs)
+    manifest = read_export_manifest(pretrained_model_name_or_path, **download_kwargs)
+    runner_class = export_backend(manifest["export_format"], "runner")
+    runners = {
+        component: runner_class.from_pretrained(
+            resolve_export_file(pretrained_model_name_or_path, entry["file"], **download_kwargs),
+            export_metadata=entry["metadata"],
+            **runner_kwargs,
+        )
+        for component, entry in manifest["components"].items()
+    }
+    return runners, manifest
+
+
+class ExporterOutput(Mapping):
+    """What an export produced: each component's artifact, what the trace recorded about it, and the configs.
+
+    A `Mapping` over `{component: artifact}`, so indexing and iteration reach the thing you would hand a
+    backend. `metadata` holds the matching `{component: dict}` — the trace's own account of each graph
+    (`build_export_metadata`), which travels here rather than hidden inside the artifacts: the backends carry
+    it differently in their files and `torch.export` cannot carry it at all, so a save that read it back out
+    of them would depend on the format rather than on the export.
+
+    `generation_config` is part of the product, not decoration: it declares the cache the graphs were traced
+    against, so a load without it would build the wrong one.
+    """
+
+    def __init__(
+        self,
+        artifacts: dict[str, object],
+        metadata: dict[str, dict],
+        export_format: ExportFormat,
+        config: object | None = None,
+        generation_config: GenerationConfig | None = None,
+        kind: str = "model",
+    ):
+        self.artifacts = dict(artifacts)
+        self.metadata = dict(metadata)
+        self.export_format = export_format
+        self.config = config
+        self.generation_config = generation_config
+        self.kind = kind
+
+    def __getitem__(self, component: str):
+        return self.artifacts[component]
+
+    def __iter__(self):
+        return iter(self.artifacts)
+
+    def __len__(self) -> int:
+        return len(self.artifacts)
+
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}(format={self.export_format.value!r}, components={list(self.artifacts)})"
+
+    @property
+    def backend(self) -> type[HfExporter]:
+        """The exporter class for this format — what knows the suffix and how to write the files. Resolved
+        from the format the way a load resolves its runner, rather than held as a reference back to the
+        instance that produced this."""
+        from .auto import export_backend
+
+        return export_backend(self.export_format, "exporter")
+
+    @property
+    def artifact(self):
+        """The one artifact, for a single-component export ([`~HfExporter.export`]). Raises for a decomposed
+        model, where there is no single graph to mean."""
+        if len(self.artifacts) != 1:
+            raise ValueError(
+                f"This export has {len(self.artifacts)} components ({list(self.artifacts)}); index it by "
+                "component name instead of asking for `.artifact`."
+            )
+        return next(iter(self.artifacts.values()))
+
+    def save_pretrained(self, save_directory: str | Path) -> None:
+        """Write the components, the configs, and the manifest that makes the directory loadable.
+
+        One file per component, named after it, so the sidecars a large ONNX graph spills stay distinct.
+        Reload with [`~exporters.ExportedGenerator.from_pretrained`].
+        """
+        backend = self.backend
+        directory = Path(save_directory)
+        directory.mkdir(parents=True, exist_ok=True)
+
+        components = {}
+        for name, artifact in self.artifacts.items():
+            filename = f"{name}{backend.artifact_suffix}"
+            backend.save_artifact(artifact, directory / filename)
+            components[name] = {"file": filename, "metadata": self.metadata.get(name, {})}
+
+        (directory / EXPORT_MANIFEST_FILE).write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "export_format": self.export_format.value,
+                    # What to load this back as: a decomposed, cache-driven export is driven through
+                    # `generate`, a single graph is just called. Recorded rather than inferred from the
+                    # component names, which are the exporter's business and not a contract.
+                    "kind": self.kind,
+                    "components": components,
+                },
+                indent=2,
+            )
+            + "\n"
+        )
+        # Written as the model's own files, so a load reads them the way it reads any checkpoint's.
+        if self.config is not None:
+            self.config.save_pretrained(directory)
+        if self.generation_config is not None:
+            self.generation_config.save_pretrained(directory)
+
+    def runners(self, components: Iterable[str] | None = None, **kwargs) -> dict[str, ModelRunner]:
+        """A runner per artifact, built in memory — the same runners a load builds, handed the same
+        metadata, so an export can be checked in the process that produced it.
+
+        `components` limits which ones are built (opening a session has a cost); `kwargs` go to each
+        runner, `device=` among them.
+        """
+        from .auto import export_backend
+
+        runner_class = export_backend(self.export_format, "runner")
+        wanted = self.artifacts if components is None else {name: self.artifacts[name] for name in components}
+        return {
+            name: runner_class.from_artifact(artifact, export_metadata=self.metadata.get(name), **kwargs)
+            for name, artifact in wanted.items()
+        }
+
+    def runner(self, **kwargs) -> ModelRunner:
+        """The one runner, for a single-component export — `.runners()` is the decomposed form, as
+        `.artifact` is to `[...]`."""
+        if len(self.artifacts) != 1:
+            raise ValueError(
+                f"This export has {len(self.artifacts)} components ({list(self.artifacts)}); use "
+                "`.runners()` and pick by component name."
+            )
+        return next(iter(self.runners(**kwargs).values()))
+
+    def runtime(self, **kwargs):
+        """Something runnable, without going to disk: an [`ExportedGenerator`] for a decomposed export, an
+        [`ExportedModel`] for a single graph. Dispatches on `kind`, exactly as a load does."""
+        runners = self.runners(**kwargs)
+        if self.kind == "generation":
+            from .generator import ExportedGenerator
+
+            return ExportedGenerator.from_runners(runners, self.config, self.generation_config)
+
+        from .model import ExportedModel
+
+        return ExportedModel(next(iter(runners.values())), self.config)
+
+
 class HfExporter(ABC):
     """
     Abstract base class for all Transformers exporters.
 
-    Subclass and implement [`~HfExporter.export`] to add a new export backend.
+    To add a backend, subclass and implement its two halves: [`~HfExporter.export_artifact`] to trace one
+    graph, and [`~HfExporter.save_artifact`] to write one out. The public [`~HfExporter.export`] and
+    [`~HfExporter.export_for_generation`] build an [`ExporterOutput`] on top of them.
     """
 
+    # What this backend is, and what its artifacts are called on disk. Both required of a concrete
+    # exporter: one that can trace a graph can name the file it writes.
+    export_format: ExportFormat
+    artifact_suffix: str
+
+    # What it needs installed to run.
     required_packages: list[str] = []
     # Hard minimum versions — the exporter raises below these (features it relies on are absent).
     min_versions: dict[str, str] = {}
@@ -101,35 +340,53 @@ class HfExporter(ABC):
             )
 
     @abstractmethod
-    def export(
+    def export_artifact(
         self,
         model: PreTrainedModel,
         sample_inputs: MutableMapping[str, torch.Tensor | Cache],
         config: ExportConfigMixin,
-    ):
-        """
-        Export the model and return the backend-specific program object.
+    ) -> tuple[object, dict]:
+        """Trace one graph. The backend extension point, paired with [`~HfExporter.save_artifact`].
+
+        Returns `(artifact, metadata)`: the backend's own program object, and what the trace recorded about
+        it (`build_export_metadata`). The metadata is returned rather than left inside the artifact because
+        only some formats can carry it — handing it back means every caller has it regardless.
 
         Args:
             model ([`PreTrainedModel`]):
                 The model to export.
             sample_inputs (`dict[str, torch.Tensor | Cache]`):
-                **Forward** kwargs — what you'd pass to `model(**sample_inputs)`. These are used
-                directly as the example inputs during tracing. For an autoregressive decode-step
-                export, this means you need to include `past_key_values`, `cache_position`, etc.
-                If you only have generation-style inputs, use [`~HfExporter.export_for_generation`]
-                instead — it runs `model.generate` for you and exports each stage.
+                **Forward** kwargs — what you'd pass to `model(**sample_inputs)`, used directly as the
+                example inputs during tracing. For an autoregressive decode step that means including
+                `past_key_values`, `cache_position`, etc. If you only have generation-style inputs, use
+                [`~HfExporter.export_for_generation`], which runs `model.generate` for you.
             config ([`~transformers.exporters.configs.ExportConfigMixin`]):
                 Backend-specific configuration.
-
-        Returns:
-            Backend-specific export artifact.
         """
-        raise NotImplementedError(
-            f"{type(self).__name__} does not implement `export`. Pick a concrete exporter "
-            "(`DynamoExporter`, `OnnxExporter`, `ExecutorchExporter`), or override `export` "
-            "in your subclass with a backend-specific tracing pipeline that consumes `config` "
-            "and returns the runtime artifact."
+
+    def export(
+        self,
+        model: PreTrainedModel,
+        sample_inputs: MutableMapping[str, torch.Tensor | Cache],
+        config: ExportConfigMixin,
+    ) -> ExporterOutput:
+        """Export the model as one graph, as an [`ExporterOutput`] that can save and run itself.
+
+        Takes the same **forward** kwargs as [`~HfExporter.export_artifact`]; reach the backend's own
+        program object through `output.artifact`. No `generation_config`: one graph is called, not
+        generated from, so there is no cache contract to record — that is
+        [`~HfExporter.export_for_generation`]'s business.
+        """
+        artifact, metadata = self.export_artifact(model, sample_inputs, config)
+        # `getattr`, because a single graph is often a decomposed component rather than a whole model, and
+        # those are plain `nn.Module`s: an encoder-decoder's `FSMTEncoder`, an RNN-T's decoder. Such an
+        # export simply saves no `config.json`.
+        return ExporterOutput(
+            {"model": artifact},
+            {"model": metadata},
+            self.export_format,
+            kind="model",
+            config=getattr(model, "config", None),
         )
 
     def export_for_generation(
@@ -194,17 +451,39 @@ class HfExporter(ABC):
         else:
             configs = dict.fromkeys(components, config)
 
-        exported: dict[str, object] = {}
+        artifacts: dict[str, object] = {}
+        metadata: dict[str, dict] = {}
         for name, (submodel, subinputs) in components.items():
             try:
-                exported[name] = self.export(submodel, subinputs, config=configs[name])
+                artifacts[name], metadata[name] = self.export_artifact(submodel, subinputs, config=configs[name])
             except Exception as e:
                 raise RuntimeError(
-                    f"{type(self).__name__}.export failed on component '{name}' "
+                    f"{type(self).__name__}.export_artifact failed on component '{name}' "
                     f"(submodel={type(submodel).__name__}, input keys={list(subinputs)})."
                 ) from e
 
-        return exported
+        # Carrying the configs the components were traced with is what lets the result save itself: the
+        # `generation_config` in particular declares the cache the graphs were traced against, and a save
+        # that lost it would leave a load guessing.
+        return ExporterOutput(
+            artifacts,
+            metadata,
+            self.export_format,
+            kind="generation",
+            config=getattr(model, "config", None),
+            generation_config=generation_config
+            if generation_config is not None
+            else getattr(model, "generation_config", None),
+        )
+
+    @classmethod
+    @abstractmethod
+    def save_artifact(cls, artifact, path: Path) -> None:
+        """Write one exported component to `path`. Implemented per backend, which owns its file format.
+
+        A class method: what a format writes is a property of the format, not of a particular exporter
+        instance, which is what lets an [`ExporterOutput`] save itself knowing only which backend made it.
+        """
 
 
 class ModelRunner(ABC):
@@ -346,6 +625,27 @@ class ModelRunner(ABC):
         mismatching a shape."""
         shape = self.input_shapes.get("attention_mask")
         return len(shape) if shape is not None else None
+
+    @staticmethod
+    def resolve_metadata(injected, from_artifact) -> ExportMetadata:
+        """The metadata a load passed in, else what the artifact itself carries.
+
+        `from_artifact` is called only when needed: reading it back out of an artifact costs something on
+        some backends (ExecuTorch executes a baked constant method to get at it).
+        """
+        return ExportMetadata.from_dict(injected) if injected is not None else from_artifact()
+
+    @classmethod
+    def from_pretrained(cls, path: str | Path, **kwargs) -> ModelRunner:
+        """Build the runner from one saved artifact — the inverse of [`~HfExporter.save_artifact`].
+
+        Each backend loads its own file into whatever it runs (an ORT session, an unlifted module, a
+        loaded `.pte`) and hands it to `__init__`, so a reloaded runner is the one the exporter produced.
+        """
+        raise NotImplementedError(
+            f"{cls.__name__} cannot be loaded from disk. Implement `from_pretrained` to build it from a "
+            "saved artifact."
+        )
 
     @abstractmethod
     def __call__(self, **kwargs) -> dict[str, torch.Tensor]:
