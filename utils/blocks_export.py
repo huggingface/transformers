@@ -54,21 +54,54 @@ from blocks_facets import REPO_ROOT, build_date_data, build_variants, scan_repo 
 
 MANIFEST_PATH = REPO_ROOT / "utils" / "model_blocks.json"
 # Fixed so output is deterministic; kinds absent from a model are simply omitted.
-KIND_ORDER = ("attention", "mixer", "layer", "layer_other", "mlp", "moe", "rotary", "norm")
+# Ordered roughly by how much of a model's identity the block carries. `router` and `indexer`
+# are separate from `moe` and `attention` on purpose: routing is chosen independently of the
+# expert stack it feeds, and a sparse-attention indexer owns projections of its own.
+KIND_ORDER = (
+    "attention",
+    "indexer",
+    "mixer",
+    "layer",
+    "layer_other",
+    "mlp",
+    "moe",
+    "router",
+    "rotary",
+    "norm",
+)
 
 
 def build_manifest(blocks: list) -> dict[str, dict]:
     """`{"variants": {kind: {owner: tag}}, "models": {model: {kind: owner}}}`."""
     variants = build_variants(blocks)
-    # Each variant is defined once, under the model that introduced it.
+    dates = build_date_data()
+    # Each variant is defined once, under the model that introduced it. One model can introduce two
+    # variants of the same kind, though -- an encoder layer and a decoder layer (bart, blenderbot), a
+    # self- and a cross-attention (llama4, gemma4), an indexer and its scorer (deepseek_v4) -- and a
+    # plain `{owner: tag}` map cannot hold both. Writing them both under the same key silently
+    # dropped 22 variants and left the models that used them pointing at the wrong tag. So: keep the
+    # oldest holder when that name is still free, otherwise fall back to the next-oldest holder, and
+    # only when a variant has a single holder disambiguate it with a `#n` suffix.
     owner_of: dict[str, str] = {}
     definitions: dict[str, dict[str, str]] = defaultdict(dict)
-    for variant in variants.values():
-        owner = variant.canonical
+    holders_of: dict[str, list[str]] = {
+        v.tag: sorted({b.model for b in v.blocks}, key=lambda m: (dates.get(m, "9999-99-99"), m))
+        for v in variants.values()
+    }
+    ordered_variants = sorted(
+        (v for v in variants.values() if v.canonical is not None),
+        key=lambda v: (v.kind, dates.get(v.canonical, "9999-99-99"), v.variant),
+    )
+    for variant in ordered_variants:
+        taken = definitions[variant.kind]
+        owner = next((m for m in holders_of[variant.tag] if m not in taken), None)
         if owner is None:
-            continue
+            base, i = variant.canonical, 2
+            while f"{base}#{i}" in taken:
+                i += 1
+            owner = f"{base}#{i}"
         owner_of[variant.tag] = owner
-        definitions[variant.kind][owner] = variant.variant
+        taken[owner] = variant.variant
 
     per_model: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
     for block in blocks:
@@ -89,7 +122,6 @@ def build_manifest(blocks: list) -> dict[str, dict]:
             models[model] = entry
     # Variants in the order they entered the library, oldest first: the vocabulary reads as the
     # architecture's history rather than as an alphabet.
-    dates = build_date_data()
     ordered = {
         kind: dict(sorted(definitions[kind].items(), key=lambda kv: (dates.get(kv[0], "9999-99-99"), kv[0])))
         for kind in KIND_ORDER

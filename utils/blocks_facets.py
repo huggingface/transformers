@@ -36,6 +36,7 @@ import re
 import statistics
 import subprocess
 import sys
+import textwrap
 from collections import defaultdict
 from dataclasses import dataclass, field
 from functools import cache
@@ -62,17 +63,17 @@ TRACKED_HELPERS = ("repeat_kv", "rotate_half", "apply_rotary_pos_emb", "eager_at
 # divergence in the cheap tail.
 #
 # Fitted, not guessed: `blocks_cli.py fit-order` measures each axis's cost as the median size of a
-# real modular override that differs on that axis alone, then scores all 720 permutations. Measured
-# costs (LoC): mix 72, extras 62, rope 58, qkv 52, qk_norm 50, window 50. This descending-cost order
-# scores 26 591 against the exhaustive optimum's 26 584 -- 8 LoC apart, i.e. noise -- while the
-# hand-picked order it replaced scored 30 571, 15% worse.
-# `layer_typing` sits next to `window` because it gates the same thing: whether the layer picks a
-# mask function from `config.layer_types[layer_idx]` or uses one uniformly. It is tier 1 -- it
-# changes which mask `forward` requests -- and it is exactly what made `qwen3` and `qwen3_moe` look
-# interchangeable: their forwards are byte-identical and `Qwen3MoeAttention.__init__` does
-# `del self.layer_type`, which no other facet could see. The order needs re-fitting now that a
-# seventh axis exists; `blocks_cli.py fit-order` does that.
-ATTENTION_AXES = ("mix", "extras", "rope", "qkv", "qk_norm", "window", "layer_typing")
+# real modular override that differs on that axis alone, then scores all 720 permutations. Re-fitted
+# after `window` moved to tier 2 and `qk_norm` became binary. Measured costs (LoC): mix 72,
+# extras 58, rope 58, qkv 57, layer_typing 57, qk_norm 53. Descending cost scores 28 014, which is
+# exactly the exhaustive optimum; the previous order scored 28 190.
+#
+# `layer_typing` stays tier 1, but only just, and only because it is read off `forward`: three blocks
+# genuinely index by it (gemma4 and gemma4_unified take `shared_kv_states[self.layer_type]`,
+# deepseek_v4 takes `position_embeddings[self.rope_layer_type]`). The 50 blocks that merely set it in
+# `__init__` are tier 2 as `layer_typing_init` -- which is what lets `qwen3` and `qwen3_moe` share a
+# variant, as their byte-identical forwards require, while `del self.layer_type` stays visible.
+ATTENTION_AXES = ("mix", "extras", "rope", "qkv", "layer_typing", "qk_norm")
 MLP_AXES = ("gating",)
 # Left in semantic order on purpose: every MoE axis had fewer than 3 single-axis overrides to
 # measure, so `fit-order` falls back to the kind median for all six and its "best" permutation is
@@ -80,7 +81,9 @@ MLP_AXES = ("gating",)
 MOE_AXES = ("router", "router_bias", "topk_norm", "shared", "weights", "grouping")
 NORM_AXES = ("norm_kind",)
 ROTARY_AXES = ("rope_kind",)
-MIXER_AXES = ("mechanism",)
+MIXER_AXES = ("mechanism", "gating", "conv")
+ROUTER_AXES = ("scoring", "selection", "router_bias", "topk_norm", "scaling")
+INDEXER_AXES = ("query_source", "scoring", "key_norm", "output")
 
 TIER1_AXES = {
     "attention": ATTENTION_AXES,
@@ -89,6 +92,8 @@ TIER1_AXES = {
     "norm": NORM_AXES,
     "rotary": ROTARY_AXES,
     "mixer": MIXER_AXES,
+    "router": ROUTER_AXES,
+    "indexer": INDEXER_AXES,
     "layer": ("topology",),
     "conv_block": ("conv",),
 }
@@ -249,6 +254,12 @@ _KIND_PATTERNS = (
     # removed mamba, mamba2, falcon_mamba, recurrent_gemma and patchtsmixer from the census entirely.
     # The `*Attention`-suffixed forms are listed explicitly because they are linear/recurrent mixers
     # wearing an attention name (`MiniMaxLightningAttention`).
+    # Sparse-attention indexers (DeepSeek DSA and friends) own their own projections and top-k
+    # selection; they matched nothing at all before, so every model with one was invisible.
+    ("indexer", r"Indexer\w*$"),
+    # Routing is a separate decision from the expert stack it feeds -- `*TopkRouter` is where topk,
+    # group-limiting and the score-correction bias actually live.
+    ("router", r"Router$"),
     ("mixer", r"(Mixer|Mamba|SSM|DeltaNet|RWKV|Retention)$"),
     ("mixer", r"(Lightning|Linear|GatedDelta|Delta|SSM|Mamba)Attention$"),
     ("moe", r"(SparseMoeBlock|MoeBlock|MoE|Moe|Experts|Expert)$"),
@@ -317,6 +328,21 @@ def is_container(src: str) -> bool:
     return not _has(src, "nn.Linear", "nn.Parameter", "Conv1D", "nn.Conv1d", "nn.Embedding")
 
 
+def _forward_source(src: str) -> str:
+    """Just the `forward` method of a class source, for facets that must key off `forward` only."""
+    try:
+        tree = ast.parse(textwrap.dedent(src))
+    except (SyntaxError, ValueError):
+        return src
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == "forward":
+            try:
+                return ast.unparse(node)
+            except (AttributeError, ValueError):
+                return src
+    return ""
+
+
 def _attention_facets(src: str, flags: frozenset[str] = frozenset()) -> tuple[dict, dict]:
     if _has(src, "sampling_offsets"):
         # Deformable attention samples a few learned offsets instead of scoring all keys. It is a
@@ -352,12 +378,21 @@ def _attention_facets(src: str, flags: frozenset[str] = frozenset()) -> tuple[di
         # Named rather than "unknown" so it groups honestly instead of merging unrelated blocks.
         qkv = "qkv_custom"
 
-    if _re(src, r"self\.(q_norm|query_norm)\s*=\s*\w*RMSNorm"):
-        qk_norm = "qk_rmsnorm"
-    elif _re(src, r"self\.(q_norm|q_layernorm|query_layernorm|query_norm)\s*="):
-        qk_norm = "qk_layernorm"
+    # Binary on purpose. `forward` calls `self.q_norm(...)` whatever class the attribute holds, so
+    # the class cannot gate it: cohere (`CohereLayerNorm`) and glm4_moe (`Glm4MoeRMSNorm`) have
+    # byte-identical forwards. Keying on the class name also mislabelled 5 of 13 -- hunyuan and lfm2
+    # hold an RMSNorm under a `*_layernorm` attribute -- and called `nn.Identity()` a norm. The class
+    # is a norm-block fact, already censused under `NORM_AXES`, so it lands in tier 2.
+    _qk = re.search(r"self\.(q_norm|q_layernorm|query_layernorm|query_norm)\s*=\s*(?P<cls>[\w.]+)", src)
+    qk_norm = "no_qk_norm" if _qk is None else "qk_norm"
+    if _qk is None:
+        qk_norm_class = "none"
+    elif _qk.group("cls").endswith("Identity"):
+        qk_norm_class = "identity"
+    elif "RMSNorm" in _qk.group("cls"):
+        qk_norm_class = "rmsnorm"
     else:
-        qk_norm = "no_qk_norm"
+        qk_norm_class = "layernorm"
 
     # The window axis speaks `config.layer_types`' own vocabulary, and is decided by what the
     # config declares -- not by what the class body happens to mention.
@@ -379,7 +414,13 @@ def _attention_facets(src: str, flags: frozenset[str] = frozenset()) -> tuple[di
 
     # Reading `config.layer_types[layer_idx]` means the model mixes attention patterns per layer;
     # deleting it (as `Qwen3MoeAttention` does) means one pattern throughout.
-    layer_typing = "per_layer_type" if _has(src, "layer_types[", "self.layer_type") else "uniform_layer"
+    # Tier 1 means "changes `forward`", so read it off `forward` -- not off `__init__`. Only 3 of the
+    # 53 blocks the class-body test called `per_layer_type` actually use the layer type in `forward`
+    # (gemma4/gemma4_unified index `shared_kv_states[self.layer_type]`, deepseek_v4 indexes
+    # `position_embeddings[self.rope_layer_type]`). For the other 50 it is an `__init__` fact.
+    _fwd = _forward_source(src)
+    layer_typing = "per_layer_type" if _has(_fwd, "layer_type") else "uniform_layer"
+    layer_typing_init = "per_layer_type" if _has(src, "layer_types[", "self.layer_type") else "uniform_layer"
 
     extras = tuple(
         name
@@ -395,12 +436,18 @@ def _attention_facets(src: str, flags: frozenset[str] = frozenset()) -> tuple[di
         "mix": mix,
         "qkv": qkv,
         "qk_norm": qk_norm,
-        "window": window,
         "rope": rope,
         "extras": "+".join(extras) or "no_extras",
         "layer_typing": layer_typing,
     }
     tier2 = {
+        "qk_norm_class": qk_norm_class,
+        "layer_typing_init": layer_typing_init,
+        # Config-declared, therefore a *model* fact, not a class-body fact: two byte-identical
+        # attention classes get different values when only their configs differ (mistral/mixtral).
+        # Kept in tier 2 so canonical-owner selection can still refuse to let a non-sliding model
+        # own a sliding parent, without that fact splitting the variant.
+        "window": window,
         "bias": _bias_source(src),
         "head_dim": "head_dim_from_config" if _has(src, "config.head_dim") else "head_dim_derived",
         "dropout": "attn_dropout" if _has(src, "attention_dropout", "attn_pdrop") else "no_attn_dropout",
@@ -417,7 +464,15 @@ def _mlp_facets(src: str) -> tuple[dict, dict]:
     if _has(src, "pointwise_conv", "depthwise_conv"):
         # Conformer-style convolutional feed-forward: not a linear MLP at all.
         gating = "conv_ffn"
-    elif _has(src, "gate_up_proj"):
+    elif _has(src, "gate_up_proj") or (
+        # Structural, not by attribute name: one projection widened to 2x, split in two, and one half
+        # gating the other *is* a fused SwiGLU whatever the tensors are called. Keying off names alone
+        # labelled 14 of these `ungated_mlp` and one `linear_projector`, and split byte-identical
+        # classes (`Dinov2SwiGLUFFN` vs `VideomtGatedMLP`) into different variants.
+        _re(src, r"\.chunk\(\s*2\b")
+        # any activation spelling: silu(x)*y, self.act_fn(x)*y, self.activation(x)*y, ACT2FN[c](x)*y
+        and _re(src, r"(?:silu|gelu|glu|\w*[Aa]ct\w*)(?:\[[^\]]*\])?\s*\([^()]*\)\s*\*")
+    ):
         gating = "fused_gate_up_mlp"
     elif _has(src, "gate_proj") or (_has(src, "self.w1") and _has(src, "self.w3")):
         gating = "gated_mlp"
@@ -491,20 +546,86 @@ def _norm_facets(src: str) -> tuple[dict, dict]:
     return {"norm_kind": kind}, {"eps": "eps_from_config" if _has(src, "config.") else "eps_literal"}
 
 
-def _mixer_facets(src: str) -> tuple[dict, dict]:
+def _mixer_facets(src: str, class_name: str = "") -> tuple[dict, dict]:
     """
     Linear / recurrent token mixers. Coarse on purpose: these are the frontier of the library and a
     detailed facet set would be guesswork. Recording the mechanism beats dropping the block.
+
+    Order matters, and getting it wrong is not hypothetical: a gated DeltaNet also carries `A_log`
+    and `dt_bias`, so testing for SSM first silently folded every `*GatedDeltaNet` into mamba's
+    variant and the delta-rule mixers vanished from the census. The class name is the reliable
+    discriminator, so it is checked before any source sniffing.
     """
-    if _has(src, "A_log", "dt_bias", "ssm_state"):
-        mechanism = "ssm"
-    elif _has(src, "beta", "g_norm", "gated_delta"):
+    if _has(class_name, "GatedDelta", "DeltaNet") or _has(src, "gated_delta_rule", "delta_rule"):
         mechanism = "gated_delta"
-    elif _has(src, "decay", "slope_rate"):
+    elif _has(src, "ssm_state", "selective_scan", "A_log", "dt_bias"):
+        mechanism = "ssm"
+    elif _has(src, "slope_rate", "decay"):
         mechanism = "decay_linear"
     else:
         mechanism = "custom_mixer"
-    return {"mechanism": mechanism}, {"conv": "depthwise_conv" if _has(src, "conv1d") else "no_conv"}
+    return {
+        "mechanism": mechanism,
+        # the output gate is what separates a gated delta rule from a plain one
+        "gating": "output_gate" if _has(src, "g_norm", "gate_proj", "self.gate") else "no_output_gate",
+        "conv": "depthwise_conv" if _has(src, "conv1d") else "no_conv",
+    }, {}
+
+
+def _router_facets(src: str, class_name: str = "") -> tuple[dict, dict]:
+    """
+    Expert routing, kept apart from the expert stack it feeds. The two really are independent
+    choices: DeepSeek pairs group-limited sigmoid routing with a score-correction bias, Mixtral
+    pairs plain softmax top-k with the same grouped expert weights.
+    """
+    if _has(src, "scoring_func", "ACT2FN["):
+        scoring = "config_scoring"
+    elif _has(src, "sigmoid"):
+        scoring = "sigmoid_router"
+    elif _has(src, "softmax"):
+        scoring = "softmax_router"
+    else:
+        scoring = "custom_router"
+    if _has(src, "tid2eid") or _has(class_name, "Hash"):
+        # DeepSeek-V4 hash routing: a frozen token-id -> expert-id table decides *which* experts
+        # run, so selection is static and only the weighting is learned.
+        selection = "hash_table"
+    elif _has(src, "sparsemixer"):
+        selection = "sparsemixer"
+    elif _has(src, "topk_group", "n_group", "num_group"):
+        # experts are bucketed into groups and only the best groups can be selected from
+        selection = "group_limited_topk"
+    elif _has(class_name, "Top1"):
+        selection = "top1"
+    elif _has(class_name, "Top2"):
+        selection = "top2"
+    else:
+        # arity comes from the class name, never the body: `top_1_mask` appears inside a top-2
+        # router and used to mislabel it.
+        selection = "flat_topk"
+    return {
+        "scoring": scoring,
+        "selection": selection,
+        "router_bias": "score_correction_bias"
+        if _has(src, "e_score_correction_bias", "expert_bias", "correction_bias")
+        else "no_router_bias",
+        "topk_norm": "norm_topk" if _has(src, "norm_topk") else "no_norm_topk",
+        "scaling": "routed_scaling" if _has(src, "routed_scaling_factor") else "no_scaling",
+    }, {"jitter": "jitter_noise" if _has(src, "jitter") else "no_jitter"}
+
+
+def _indexer_facets(src: str) -> tuple[dict, dict]:
+    """
+    Sparse-attention indexers: the lightweight scorer that picks which tokens the real attention is
+    allowed to see. Separate projections from the attention they gate, which is exactly why they
+    need their own entry rather than being read off the attention class.
+    """
+    return {
+        "query_source": "lora_query" if _has(src, "wq_b", "q_lora", "q_b_proj") else "hidden_query",
+        "scoring": "weighted_head_sum" if _has(src, "weights_proj") else "dot_score",
+        "key_norm": "key_norm" if _has(src, "k_norm", "key_norm") else "no_key_norm",
+        "output": "additive_mask" if _has(src, "masked_fill", "-inf") else "topk_indices",
+    }, {"scale": "learned_scale" if _has(src, "softmax_scale") else "fixed_scale"}
 
 
 def _rotary_facets(src: str) -> tuple[dict, dict]:
@@ -525,6 +646,8 @@ _FACET_EXTRACTORS = {
     "norm": _norm_facets,
     "rotary": _rotary_facets,
     "mixer": _mixer_facets,
+    "router": _router_facets,
+    "indexer": _indexer_facets,
 }
 
 
@@ -731,7 +854,18 @@ def scan_file(path: Path, model: str) -> tuple[list[Block], list[Helper]]:
     blocks: list[Block] = []
     helpers: list[Helper] = []
     moe_nodes: list[tuple[ast.ClassDef, str]] = []
-    for node in ast.parse(source).body:
+    tree = ast.parse(source)
+    # An indexer that another indexer instantiates is a component of it, not an indexer in its own
+    # right -- the same reason a `*SelfAttention` inside an `*Attention` wrapper is skipped.
+    indexer_nodes = [n for n in tree.body if isinstance(n, ast.ClassDef) and classify(n.name) == "indexer"]
+    nested_indexers = {
+        other.name
+        for node in indexer_nodes
+        for other in indexer_nodes
+        if other is not node
+        and re.search(rf"=\s*{re.escape(other.name)}\s*\(", "\n".join(lines[node.lineno - 1 : node.end_lineno]))
+    }
+    for node in tree.body:
         if isinstance(node, ast.FunctionDef) and node.name in TRACKED_HELPERS:
             helpers.append(Helper(model, path, node.name, canonical_source(node)))
             continue
@@ -741,6 +875,11 @@ def scan_file(path: Path, model: str) -> tuple[list[Block], list[Helper]]:
         if kind is None:
             continue
         class_source = "\n".join(lines[node.lineno - 1 : node.end_lineno])
+        if kind == "indexer" and node.name in nested_indexers:
+            # `DeepseekV4IndexerScorer` is built by `DeepseekV4Indexer` (`self.scorer = ...`): it is
+            # part of an indexer, not one of its own. Counting it separately made one model the
+            # owner of two indexer variants and pushed the real indexer out to a suffixed key.
+            continue
         if kind == "moe":
             # A model's MoE design is spread over three classes -- `*Experts` holds the weights,
             # `*SparseMoeBlock` the wiring, `*TopkRouter` the routing -- so no single class sees
@@ -761,6 +900,10 @@ def scan_file(path: Path, model: str) -> tuple[list[Block], list[Helper]]:
             tier1, tier2 = {"topology": topology}, {}
         elif kind == "attention":
             tier1, tier2 = _attention_facets(class_source, config_flags(model))
+        elif kind == "mixer":
+            tier1, tier2 = _mixer_facets(class_source, node.name)
+        elif kind == "router":
+            tier1, tier2 = _router_facets(class_source, node.name)
         elif kind in _FACET_EXTRACTORS:
             tier1, tier2 = _FACET_EXTRACTORS[kind](class_source)
         else:
@@ -1162,26 +1305,29 @@ def _selfcheck() -> None:
     llama = next(b for b in by_model_kind[("llama", "attention")] if b.class_name == "LlamaAttention")
     assert llama.tier1["mix"] == "gqa", llama.tier1
     assert llama.tier1["qk_norm"] == "no_qk_norm", llama.tier1
-    assert llama.tier1["window"] == "full_attention", llama.tier1
+    assert llama.tier2["window"] == "full_attention", llama.tier2
     assert llama.tier1["rope"] == "rope_half", llama.tier1
     assert llama.tier2["bias"] == "bias_from_config", llama.tier2
 
     qwen3 = next(b for b in by_model_kind[("qwen3", "attention")] if b.class_name == "Qwen3Attention")
-    assert qwen3.tier1["qk_norm"] == "qk_rmsnorm", qwen3.tier1
-    assert qwen3.tier1["layer_typing"] == "per_layer_type", qwen3.tier1
+    assert qwen3.tier1["qk_norm"] == "qk_norm", qwen3.tier1
+    assert qwen3.tier2["qk_norm_class"] == "rmsnorm", qwen3.tier2
+    assert qwen3.tier1["layer_typing"] == "uniform_layer", qwen3.tier1
+    assert qwen3.tier2["layer_typing_init"] == "per_layer_type", qwen3.tier2
 
     # qwen3_moe's attention forward is byte-identical to qwen3's, but its `__init__` deletes
     # `layer_type`. Without this axis the two read as one variant with `init_diff=0`, which is how a
     # model came to inherit the MoE flavour of an attention it did not want.
     qwen3_moe = next(b for b in by_model_kind[("qwen3_moe", "attention")] if b.class_name == "Qwen3MoeAttention")
     assert qwen3_moe.tier1["layer_typing"] == "uniform_layer", qwen3_moe.tier1
-    assert qwen3.variant != qwen3_moe.variant, "qwen3 and qwen3_moe attention must be distinguishable"
+    assert qwen3.variant == qwen3_moe.variant, "byte-identical forwards must share a variant"
+    assert qwen3.tier2["layer_typing_init"] != qwen3_moe.tier2["layer_typing_init"], "init delta must stay visible"
 
     # olmoe threads `getattr(config, "sliding_window", None)` but declares no window anywhere, so
     # it must not be classified as -- let alone become the canonical owner of -- a sliding variant.
     assert "sliding_window" not in config_flags("olmoe"), config_flags("olmoe")
     olmoe = next(b for b in by_model_kind[("olmoe", "attention")] if b.class_name == "OlmoeAttention")
-    assert olmoe.tier1["window"] == "full_attention", olmoe.tier1
+    assert olmoe.tier2["window"] == "full_attention", olmoe.tier2
     assert olmoe.tier2["sliding_capable"] == "sliding_capable", olmoe.tier2
     # DebertaLayerNorm computes a variance but centres and biases: it is a LayerNorm.
     deberta_norm = next(b for b in by_model_kind[("deberta", "norm")] if b.class_name == "DebertaLayerNorm")
@@ -1189,8 +1335,39 @@ def _selfcheck() -> None:
     llama_norm = next(b for b in by_model_kind[("llama", "norm")] if b.class_name == "LlamaRMSNorm")
     assert llama_norm.tier1["norm_kind"] == "rmsnorm", llama_norm.tier1
 
+    # A gated DeltaNet also carries `A_log`/`dt_bias`; testing SSM first folded all four of them
+    # into mamba's variant, so the delta-rule mixers did not appear anywhere in the census.
+    delta = next(b for b in by_model_kind[("qwen3_next", "mixer")] if b.class_name == "Qwen3NextGatedDeltaNet")
+    assert delta.tier1["mechanism"] == "gated_delta", delta.tier1
+    mamba = next(b for b in by_model_kind[("mamba", "mixer")] if b.class_name == "MambaMixer")
+    assert mamba.tier1["mechanism"] == "ssm", mamba.tier1
+    assert delta.variant != mamba.variant, "gated delta and mamba must be distinguishable"
+
+    # Sparse-attention indexers matched no kind pattern at all, so every model with one was absent.
+    assert by_model_kind[("deepseek_v32", "indexer")], "deepseek_v32 indexer went missing"
+    # ... but the scorer *inside* deepseek_v4's indexer is a component of it, not a second indexer.
+    v4_indexers = {b.class_name for b in by_model_kind[("deepseek_v4", "indexer")]}
+    assert v4_indexers == {"DeepseekV4Indexer"}, v4_indexers
+
+    # Routing is its own decision, separate from the expert stack it feeds.
+    dsr = next(b for b in by_model_kind[("deepseek_v3", "router")] if b.class_name == "DeepseekV3TopkRouter")
+    assert dsr.tier1["scoring"] == "sigmoid_router", dsr.tier1
+    assert dsr.tier1["selection"] == "group_limited_topk", dsr.tier1
+    assert dsr.tier1["router_bias"] == "score_correction_bias", dsr.tier1
+    hashr = next(b for b in by_model_kind[("deepseek_v4", "router")] if b.class_name == "DeepseekV4HashRouter")
+    assert hashr.tier1["selection"] == "hash_table", hashr.tier1
+    nllb = next(b for b in by_model_kind[("nllb_moe", "router")] if b.class_name == "NllbMoeTop2Router")
+    assert nllb.tier1["selection"] == "top2", nllb.tier1
+
+    # `Dinov2SwiGLUFFN` and `VideomtGatedMLP` are byte-identical fused SwiGLUs. Naming-based gating
+    # detection gave them two different labels and called neither one gated.
+    dino_ffn = next(b for b in by_model_kind[("dinov2", "mlp")] if b.class_name == "Dinov2SwiGLUFFN")
+    videomt_ffn = next(b for b in by_model_kind[("videomt", "mlp")] if b.class_name == "VideomtGatedMLP")
+    assert dino_ffn.tier1["gating"] == "fused_gate_up_mlp", dino_ffn.tier1
+    assert dino_ffn.variant == videomt_ffn.variant, (dino_ffn.variant, videomt_ffn.variant)
+
     mistral = next(b for b in by_model_kind[("mistral", "attention")] if b.class_name == "MistralAttention")
-    assert mistral.tier1["window"] == "sliding_attention", mistral.tier1
+    assert mistral.tier2["window"] == "sliding_attention", mistral.tier2
 
     # No model may resolve to a parent that is not a real model directory. `nemotron_h` uses the
     # level-3 `...models.jamba.modeling_jamba` import form and used to resolve to a phantom
@@ -1237,8 +1414,7 @@ def _selfcheck() -> None:
     expected = {
         ("attention", "mix"): {"mha", "gqa", "mla", "deformable"},
         ("attention", "qkv"): {"qkv_split", "qkv_fused", "kv_fused", "kv_latent", "qkv_sampled", "qkv_custom"},
-        ("attention", "qk_norm"): {"no_qk_norm", "qk_rmsnorm", "qk_layernorm"},
-        ("attention", "window"): set(layer_pattern_vocabulary()),
+        ("attention", "qk_norm"): {"no_qk_norm", "qk_norm"},
         ("attention", "rope"): {"no_pos_emb", "rope_half", "rope_interleaved", "alibi"},
         ("attention", "layer_typing"): {"per_layer_type", "uniform_layer"},
         ("mlp", "gating"): {"gated_mlp", "ungated_mlp", "fused_gate_up_mlp", "conv_ffn", "linear_projector"},
