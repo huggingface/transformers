@@ -127,11 +127,11 @@ class PhimoeIntegrationTest(unittest.TestCase):
             # layers to GPU+CPU with nothing on disk, leading to GPU OOM at inference time.
             #
             # We use cap_psutil_cpu_memory rather than passing max_memory={"cpu": "60GiB"} to
-            # from_pretrained: the latter only caps CPU in the planning budget but leaves GPU
-            # unspecified, causing device_map="auto" to skip the GPU entirely and place all
-            # layers on CPU/disk, which produces wrong numerical results.
-            # Patching psutil gives device_map the correct overall memory view (GPU + capped CPU),
-            # so it distributes layers across GPU, CPU, and disk as intended.
+            # from_pretrained: without also specifying GPU memory, device_map="auto" skips the GPU
+            # entirely, which is undesirable since integration tests should use the GPU whenever
+            # possible. Correctly specifying GPU memory alongside CPU (e.g. {0: get_gpu_memory()})
+            # would be fragile. Patching psutil gives device_map the correct overall memory view
+            # (GPU + capped CPU), so it distributes layers across GPU, CPU, and disk as intended.
             # The cap is restored to the session-wide value after from_pretrained returns.
             with cap_psutil_cpu_memory(60 * 1024**3):
                 cls.model = PhimoeForCausalLM.from_pretrained(
