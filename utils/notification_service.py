@@ -1506,9 +1506,12 @@ if __name__ == "__main__":
     other_workflow_run_ids = []
 
     if is_scheduled_ci_run:
+        print(f"[DEBUG notification_service] is_scheduled_ci_run=True, is_nvidia_daily_ci_workflow={is_nvidia_daily_ci_workflow}")
+        print(f"[DEBUG notification_service] GITHUB_RUN_ID={os.getenv('GITHUB_RUN_ID')!r}, workflow_id={workflow_id!r}")
         prev_workflow_run_id = get_last_daily_ci_workflow_run_id(
             token=os.environ["ACCESS_REPO_INFO_TOKEN"], workflow_id=workflow_id
         )
+        print(f"[DEBUG notification_service] prev_workflow_run_id={prev_workflow_run_id!r}")
         # For a scheduled run that is not the Nvidia's scheduled daily CI, add Nvidia's scheduled daily CI run as a target to compare.
         if not is_nvidia_daily_ci_workflow:
             # The id of the workflow `.github/workflows/self-scheduled-caller.yml` (not of a workflow run of it).
@@ -1517,6 +1520,7 @@ if __name__ == "__main__":
             other_workflow_run_id = get_last_daily_ci_workflow_run_id(
                 token=os.environ["ACCESS_REPO_INFO_TOKEN"], workflow_id=other_workflow_id, commit_sha=ci_sha
             )
+            print(f"[DEBUG notification_service] other_workflow_run_id={other_workflow_run_id!r} (other_workflow_id={other_workflow_id!r}, ci_sha={ci_sha!r})")
             other_workflow_run_ids.append(other_workflow_run_id)
     else:
         prev_workflow_run_id = os.environ["PREV_WORKFLOW_RUN_ID"]
