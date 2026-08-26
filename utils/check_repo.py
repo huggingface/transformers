@@ -91,6 +91,7 @@ PRIVATE_MODELS = [
     "Qwen3VLMoeVisionModel",
     "Qwen3_5VisionModel",
     "Qwen3_5MoeVisionModel",
+    "Qwen4ExpVisionModel",  # Building part of Qwen4ExpModel and tested through its multimodal forward.
     "SwitchTransformersStack",
     "SiglipTextTransformer",
     "Siglip2TextTransformer",
@@ -261,6 +262,8 @@ IGNORE_NON_TESTED = (
         "Glm4vMoeTextModel",  # Building part of bigger (tested) model
         "GlmImageTextModel",  # Building part of bigger (tested) model
         "GlmOcrTextModel",  # Building part of bigger (tested) model
+        "Glm5NextTextModel",  # Building part of bigger (tested) model
+        "Glm5NextVisionModel",  # Building part of bigger (tested) model
         "Qwen2VLTextModel",  # Building part of bigger (tested) model
         "Qwen2_5_VLTextModel",  # Building part of bigger (tested) model
         "MiniCPMV4_6Model",  # Building part of bigger (tested) model. Tested implicitly through MiniCPMV4_6ForConditionalGeneration.
