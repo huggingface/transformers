@@ -853,7 +853,7 @@ def infer_auto_device_map(
             # the `no_placement_params` and place only the other parameters on accelerator. We first check if it would fit on the next device
             # before doing it though, in case we have huge accelerators that could still fit the huge param without escaping
             next_device = devices[current_device + 1]
-            next_max_size = max_memory[next_device] if next_device != "disk" else None
+            next_max_size = max_memory[next_device] if next_device != "disk" else float("inf")
             fits_on_next_device = device_memory_used[next_device] + module_size_with_ties <= next_max_size
             # If it does not fit on the next fresh gpu, it would lead to offloading any following modules to cpu/disk without
             # this workaround of `no_placement_params`
