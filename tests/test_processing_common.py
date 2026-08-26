@@ -1120,7 +1120,10 @@ class ProcessorTesterMixin:
 
         inputs = processor(**inputs_dict, **extra_kwargs, text_kwargs={}, return_tensors="pt")
         for k, v in inputs.items():
-            self.assertIsInstance(v, torch.Tensor, msg=f"{k} should be a torch.Tensor")
+            if k in processor.skip_tensor_conversion:
+                self.assertNotIsInstance(v, torch.Tensor, msg=f"{k} should not be a torch.Tensor")
+            else:
+                self.assertIsInstance(v, torch.Tensor, msg=f"{k} should be a torch.Tensor")
 
     def test_args_overlap_kwargs(self):
         if "image_processor" not in self.processor_class.get_attributes():
@@ -1724,7 +1727,10 @@ class ProcessorTesterMixin:
 
         return_tensor_to_type = {"pt": torch.Tensor, "np": np.ndarray, None: list}
         for k in out_dict:
-            self.assertIsInstance(out_dict[k], return_tensor_to_type[return_tensors])
+            if k in processor.skip_tensor_conversion:
+                self.assertNotIsInstance(out_dict[k], (torch.Tensor, np.ndarray))
+            else:
+                self.assertIsInstance(out_dict[k], return_tensor_to_type[return_tensors])
 
         # Test continue from final message
         assistant_message = {

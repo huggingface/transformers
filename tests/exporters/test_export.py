@@ -119,6 +119,14 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "exported prefill returns only `logits` while eager surfaces the populated KV cache. "
             "Same shape as Voxtral. TODO: align the generate-decomposition path."
         ),
+        "UnlimitedOcrForConditionalGeneration": (
+            "The reference sliding window cache writes into `prefill_keys`/`keys`, which are views of a "
+            "single contiguous buffer. The test exports models with grad enabled, so the first in-place write "
+            "of grad-carrying states turns that buffer into a leaf requiring grad and the next write "
+            "raises `a leaf Variable that requires grad is being used in an in-place operation`. Exporting in "
+            "a `torch.no_grad` context works correctly. Alternatively, kv values have to be detached before "
+            "updating the cache."
+        ),
     },
     # Every backend, dynamic-shape only.
     "dynamic": {
@@ -163,6 +171,11 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         ),
         "PixioModel": ("Lowering exceeds the 10-minute test timeout."),
         "PixioBackbone": "Same `timeout` failure as `PixioModel`.",
+        "UnlimitedOcrModel": (
+            "The vision component hits `DispatchError: No ONNX function found for aten.mul.Scalar` "
+            "(no decompositions registered for the real-valued input). Torch export works."
+        ),
+        "UnlimitedOcrForConditionalGeneration": "Same `aten.mul.Scalar` dispatch failure as `UnlimitedOcrModel`.",
     },
     # ONNX, generate path only.
     "onnx.generate": {

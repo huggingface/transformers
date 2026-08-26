@@ -271,6 +271,8 @@ IGNORE_NON_TESTED = (
         "InternVLVisionModel",  # Building part of bigger (tested) model
         "DeepseekOcr2TextModel",  # Building part of bigger (tested) model
         "DeepseekOcr2VisionModel",  # Building part of bigger (tested) model
+        "UnlimitedOcrTextModel",  # Building part of bigger (tested) model
+        "UnlimitedOcrVisionModel",  # Building part of bigger (tested) model
         "QianfanOCRVisionModel",  # Building part of bigger (tested) model
         "JanusVisionModel",  # Building part of bigger (tested) model
         "PPDocLayoutV3Model",  # Building part of bigger (tested) model
@@ -555,6 +557,8 @@ IGNORE_NON_AUTO_CONFIGURED = (
         "InklingTextModel",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
         "InklingAudioModel",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
         "InklingVisionModel",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
+        "UnlimitedOcrTextModel",  # Building part of bigger (tested) model
+        "UnlimitedOcrVisionModel",  # Building part of bigger (tested) model
     ]
 )
 
