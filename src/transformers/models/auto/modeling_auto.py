@@ -235,6 +235,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("granite", "GraniteModel"),
         ("granite4_vision", "Granite4VisionModel"),
         ("granite_speech", "GraniteSpeechModel"),
+        ("granite_speech5_ctc", "GraniteSpeech5ForCTC"),
+        ("granite_speech5_encoder", "GraniteSpeech5Encoder"),
         ("granite_speech_plus", "GraniteSpeechPlusModel"),
         ("granite_swa", "GraniteSWAModel"),
         ("granitemoe", "GraniteMoeModel"),
@@ -448,6 +450,9 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("qwen3_vl_moe_vision", "Qwen3VLMoeVisionModel"),
         ("qwen3_vl_text", "Qwen3VLTextModel"),
         ("qwen3_vl_vision", "Qwen3VLVisionModel"),
+        ("qwen4_exp", "Qwen4ExpModel"),
+        ("qwen4_exp_text", "Qwen4ExpTextModel"),
+        ("qwen4_exp_vision", "Qwen4ExpVisionModel"),
         ("radio", "RadioModel"),
         ("recurrent_gemma", "RecurrentGemmaModel"),
         ("reformer", "ReformerModel"),
@@ -833,6 +838,8 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("qwen3_5_text", "Qwen3_5ForCausalLM"),
         ("qwen3_moe", "Qwen3MoeForCausalLM"),
         ("qwen3_next", "Qwen3NextForCausalLM"),
+        ("qwen4_exp", "Qwen4ExpForCausalLM"),  # VLM compatibility
+        ("qwen4_exp_text", "Qwen4ExpForCausalLM"),
         ("recurrent_gemma", "RecurrentGemmaForCausalLM"),
         ("reformer", "ReformerModelWithLMHead"),
         ("rembert", "RemBertForCausalLM"),
@@ -1146,6 +1153,7 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
         ("qwen3_omni_moe_thinker", "Qwen3OmniMoeThinkerForConditionalGeneration"),
         ("qwen3_vl", "Qwen3VLForConditionalGeneration"),
         ("qwen3_vl_moe", "Qwen3VLMoeForConditionalGeneration"),
+        ("qwen4_exp", "Qwen4ExpForConditionalGeneration"),
         ("shieldgemma2", "Gemma3ForConditionalGeneration"),
         ("smolvlm", "SmolVLMForConditionalGeneration"),
         ("step3p7", "Step3p7ForConditionalGeneration"),
@@ -1778,6 +1786,7 @@ MODEL_FOR_CTC_MAPPING_NAMES = OrderedDict(
     [
         # Model for Connectionist temporal classification (CTC) mapping
         ("data2vec-audio", "Data2VecAudioForCTC"),
+        ("granite_speech5_ctc", "GraniteSpeech5ForCTC"),
         ("hubert", "HubertForCTC"),
         ("lasr_ctc", "LasrForCTC"),
         ("parakeet_ctc", "ParakeetForCTC"),

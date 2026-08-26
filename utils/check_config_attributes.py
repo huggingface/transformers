@@ -68,6 +68,7 @@ SPECIAL_CASES_TO_ALLOW = {
         "mtp_mlp_layer_types",
     ],
     "OpenAIPrivacyFilterConfig": ["classifier_dropout", "output_router_logits", "router_aux_loss_coef"],
+    "Qwen4ExpTextConfig": ["split_ngram_parts"],  # Used by Concatenate during checkpoint conversion
     "HYV3Config": ["output_router_logits"],
     "NougatConfig": ["decoder", "encoder"],
     "PI0Config": ["vlm_projection_dim"],

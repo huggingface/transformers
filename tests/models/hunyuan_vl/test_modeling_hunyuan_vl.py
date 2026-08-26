@@ -246,6 +246,26 @@ class HunYuanVLModelTest(VLMModelTest, unittest.TestCase):
         self.assertEqual(text_config.rope_parameters["mrope_section"], [2, 2, 2, 2])
         self.assertNotIn("xdrope_section", text_config.rope_parameters)
 
+    def test_legacy_field_aliases_normalize_onto_canonical_fields(self):
+        # `attention_head_dim` / `org_vocab_size` / `pad_id` are the names the Tencent codebase uses for `head_dim` /
+        # `vocab_size` / `pad_token_id`; every public checkpoint stores both spellings with the same value. They must
+        # fold onto the canonical field rather than linger as duplicate attributes.
+        aliases = {"attention_head_dim": "head_dim", "org_vocab_size": "vocab_size", "pad_id": "pad_token_id"}
+        legacy_kwargs = {"attention_head_dim": 16, "org_vocab_size": 99, "pad_id": 7}
+
+        for config in (HunYuanVLTextConfig(**legacy_kwargs), HunYuanVLConfig(**legacy_kwargs).text_config):
+            for alias, canonical in aliases.items():
+                self.assertEqual(getattr(config, canonical), legacy_kwargs[alias])
+                # reading the alias keeps working, but it is not stored (and so not serialized) separately
+                self.assertEqual(getattr(config, alias), legacy_kwargs[alias])
+                self.assertNotIn(alias, config.__dict__)
+                self.assertNotIn(alias, config.to_dict())
+
+        # the top-level config folds them into `text_config` instead of keeping them at the root
+        config = HunYuanVLConfig(**legacy_kwargs)
+        for alias in aliases:
+            self.assertNotIn(alias, config.to_dict())
+
     def test_mismatching_num_image_tokens(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:

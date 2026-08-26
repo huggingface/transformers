@@ -58,7 +58,6 @@ class VideoLlama3VideoProcessorInitKwargs(VideosKwargs, total=False):
     merge_size: int
     min_frames: int
     max_frames: int
-
     use_token_compression: bool | None
 
 

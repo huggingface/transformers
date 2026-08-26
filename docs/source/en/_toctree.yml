@@ -873,6 +873,8 @@
         title: Qwen3MoE
       - local: model_doc/qwen3_next
         title: Qwen3Next
+      - local: model_doc/qwen4_exp
+        title: Qwen4-Exp
       - local: model_doc/rag
         title: RAG
       - local: model_doc/recurrent_gemma
@@ -1135,6 +1137,8 @@
         title: GLM-ASR
       - local: model_doc/granite_speech
         title: GraniteSpeech
+      - local: model_doc/granite_speech5
+        title: GraniteSpeech5
       - local: model_doc/granite_speech_plus
         title: GraniteSpeechPlus
       - local: model_doc/higgs_audio_v2

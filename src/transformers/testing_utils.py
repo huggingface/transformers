@@ -1450,6 +1450,46 @@ def require_deterministic_for_xpu(test_case):
     return wrapper
 
 
+def require_deterministic_for_accelerator(test_case=None, *, devices=None):
+    """Decorator that enables deterministic algorithms for the duration of a test.
+
+    Uses ``get_device_properties()`` to detect the device type — no per-backend
+    ``is_torch_*_available()`` conditions needed. On CPU the test runs unchanged.
+
+    Args:
+        devices: Optional list of device type strings (e.g. ``["cuda", "xpu"]``). If given,
+            deterministic mode is only enabled when the active device matches one of them.
+            If ``None`` (default), deterministic mode is enabled for all non-CPU accelerators.
+
+    Can be used with or without arguments::
+
+        @require_deterministic_for_accelerator
+        def test_foo(self): ...
+
+        @require_deterministic_for_accelerator(devices=["cuda"])
+        def test_bar(self): ...
+    """
+
+    def decorator(tc):
+        @wraps(tc)
+        def wrapper(*args, **kwargs):
+            device_type = get_device_properties()[0]
+            should_enable = device_type != "cpu" and (devices is None or device_type in devices)
+            if should_enable:
+                original_state = torch.are_deterministic_algorithms_enabled()
+                try:
+                    torch.use_deterministic_algorithms(True)
+                    return tc(*args, **kwargs)
+                finally:
+                    torch.use_deterministic_algorithms(original_state)
+            else:
+                return tc(*args, **kwargs)
+
+        return wrapper
+
+    return decorator if test_case is None else decorator(test_case)
+
+
 def require_torch_tf32(test_case):
     """Decorator marking a test that requires Ampere or a newer GPU arch, cuda>=11 and torch>=1.7."""
     return unittest.skipUnless(

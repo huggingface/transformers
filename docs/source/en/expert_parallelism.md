@@ -49,3 +49,5 @@ Launch your inference script with [torchrun](https://pytorch.org/docs/stable/ela
 ```zsh
 torchrun --nproc-per-node 8 your_script.py
 ```
+
+[[autodoc]] DistributedConfig
