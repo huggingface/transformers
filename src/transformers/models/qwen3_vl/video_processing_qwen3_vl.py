@@ -50,6 +50,17 @@ class Qwen3VLVideoProcessorInitKwargs(VideosKwargs, total=False):
         The minimum number of frames to sample from video.
     max_frames (`int`, *optional*, defaults to 768):
         The maximum number of frames to sample from video.
+    cap_pixels_per_frame (`bool`, *optional*):
+        Whether to cap each frame's pixel cost the way the reference implementation (qwen-vl-utils) does:
+        per-frame pixels are limited to `min(max_video_tokens * factor**2, size["longest_edge"] / num_frames)`
+        and floored at `1.05 * size["shortest_edge"]`, so token cost scales with clip duration. Without the
+        cap, videos that sample few frames spend the whole `size["longest_edge"]` budget on those frames and
+        keep near-native per-frame resolution, so a short clip can cost almost as many tokens as a long
+        video. If unset, the current uncapped behavior is kept and a warning is emitted: the default will
+        change to `True` in v5.22, after which the argument will be removed.
+    max_video_tokens (`int`, *optional*, defaults to 768):
+        The per-frame token ceiling applied by `cap_pixels_per_frame`, in vision tokens per frame
+        (qwen-vl-utils' `VIDEO_MAX_TOKEN_NUM`).
     """
 
     patch_size: int
@@ -57,6 +68,8 @@ class Qwen3VLVideoProcessorInitKwargs(VideosKwargs, total=False):
     merge_size: int
     min_frames: int
     max_frames: int
+    cap_pixels_per_frame: bool
+    max_video_tokens: int
 
 
 def smart_resize(
@@ -99,25 +112,26 @@ def smart_resize(
 class Qwen3VLVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
     size = {"shortest_edge": 128 * 32 * 32, "longest_edge": 32 * 32 * 768}
-    max_image_size = {"longest_edge": 28 * 28 * 2 * 30000}
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
     do_resize = True
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
-    do_sample_frames = True
     patch_size = 16
     temporal_patch_size = 2
-    max_duration = None
     merge_size = 2
-    valid_kwargs = Qwen3VLVideoProcessorInitKwargs
-    num_frames = None
-    fps = 2
-
-    model_input_names = ["pixel_values_videos", "video_grid_thw"]
     min_frames = 4
     max_frames = 768
+    do_sample_frames = True
+    cap_pixels_per_frame = None
+    max_video_tokens = 768
+    valid_kwargs = Qwen3VLVideoProcessorInitKwargs
+    model_input_names = ["pixel_values_videos", "video_grid_thw"]
+    max_image_size = {"longest_edge": 28 * 28 * 2 * 30000}
+    max_duration = None
+    num_frames = None
+    fps = 2
 
     def __init__(self, **kwargs: Unpack[Qwen3VLVideoProcessorInitKwargs]):
         super().__init__(**kwargs)
@@ -178,21 +192,30 @@ class Qwen3VLVideoProcessor(BaseVideoProcessor):
         resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         factor: int,
         temporal_factor: int,
+        cap_pixels_per_frame: bool | None = None,
         **kwargs,
     ) -> "torch.Tensor":
         """Resize dynamically based on input video aspect ratio."""
         if not size.shortest_edge or not size.longest_edge:
             raise ValueError(f"`size` dict must contain 'shortest_edge' and 'longest_edge' keys but got {size}.")
 
+        num_frames = videos.shape[1]
+        max_pixels = size.longest_edge
+        if cap_pixels_per_frame:
+            # per-frame pixels are capped at `max_video_tokens` patches or the budget's even share per frame
+            frame_cap = self.max_video_tokens * factor * factor
+            pixels_per_frame = max(min(frame_cap, size.longest_edge // num_frames), int(size.shortest_edge * 1.05))
+            max_pixels = pixels_per_frame * num_frames
+
         height, width = videos.shape[-2:]
         resized_height, resized_width = smart_resize(
             height=height,
             width=width,
-            num_frames=videos.shape[1],
+            num_frames=num_frames,
             factor=factor,
             temporal_factor=temporal_factor,
             min_pixels=size.shortest_edge,
-            max_pixels=size.longest_edge,
+            max_pixels=max_pixels,
         )
         return super().resize(
             image=videos,
@@ -242,25 +265,36 @@ class Qwen3VLVideoProcessor(BaseVideoProcessor):
 
     def _preprocess(
         self,
-        videos: list[torch.Tensor],
-        do_convert_rgb: bool = True,
-        do_resize: bool = True,
-        size: SizeDict | None = None,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None" = PILImageResampling.BICUBIC,
-        do_rescale: bool = True,
-        rescale_factor: float = 1 / 255.0,
-        do_normalize: bool = True,
-        image_mean: float | list[float] | None = None,
-        image_std: float | list[float] | None = None,
+        videos: list["torch.Tensor"],
+        do_convert_rgb: bool,
+        do_resize: bool,
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
         patch_size: int | None = None,
         temporal_patch_size: int | None = None,
         merge_size: int | None = None,
+        cap_pixels_per_frame: bool | None = None,
         return_tensors: str | TensorType | None = None,
         **kwargs,
     ):
+        if cap_pixels_per_frame is None:
+            logger.warning_once(
+                "Qwen3VL video processing does not apply the per-frame pixel cap the reference "
+                "implementation (qwen-vl-utils) applies, so some videos cost far more tokens than they "
+                "would there. In v5.22 the capped behavior will become the default and "
+                "`cap_pixels_per_frame` will be removed. Pass `cap_pixels_per_frame=True` to adopt the "
+                "reference behavior now, or `False` to keep the current behavior and silence this "
+                "warning."
+            )
+            cap_pixels_per_frame = False
+        # Group videos by size for batched resizing
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
         resized_videos_grouped = {}
-
         for shape, stacked_videos in grouped_videos.items():
             if do_convert_rgb:
                 stacked_videos = self.convert_to_rgb(stacked_videos)
@@ -271,6 +305,7 @@ class Qwen3VLVideoProcessor(BaseVideoProcessor):
                     resample=resample,
                     factor=patch_size * merge_size,
                     temporal_factor=temporal_patch_size,
+                    cap_pixels_per_frame=cap_pixels_per_frame,
                 )
             resized_videos_grouped[shape] = stacked_videos
         resized_videos = reorder_videos(resized_videos_grouped, grouped_videos_index)
@@ -299,12 +334,55 @@ class Qwen3VLVideoProcessor(BaseVideoProcessor):
         processed_grids = reorder_videos(processed_grids, grouped_videos_index)
         pixel_values_videos = torch.cat(processed_videos, dim=0)
         video_grid_thw = torch.tensor(processed_grids)
-        data = {
-            "pixel_values_videos": pixel_values_videos,
-            "video_grid_thw": video_grid_thw,
-        }
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(
+            data={"pixel_values_videos": pixel_values_videos, "video_grid_thw": video_grid_thw},
+            tensor_type=return_tensors,
+        )
+
+    def get_num_of_video_patches(self, num_frames: int, height: int, width: int, videos_kwargs=None):
+        """
+        A utility that returns number of video patches a given video size.
+
+        Args:
+            num_frames (`int`):
+                Number of frames in the input video.
+            height (`int`):
+                Height of the input video.
+            width (`int`):
+                Width of the input video.
+            videos_kwargs (`dict`, *optional*)
+                Any kwargs to override defaults of the video processor.
+        Returns:
+            `Tuple(int, int)`: Number of placeholder tokens required and number of patches per image.
+        """
+        videos_kwargs = videos_kwargs if videos_kwargs is not None else {}
+        min_pixels = videos_kwargs.get("min_pixels", None) or self.size["shortest_edge"]
+        max_pixels = videos_kwargs.get("max_pixels", None) or self.size["longest_edge"]
+        patch_size = videos_kwargs.get("patch_size", None) or self.patch_size
+        merge_size = videos_kwargs.get("merge_size", None) or self.merge_size
+        temporal_patch_size = videos_kwargs.get("temporal_patch_size", None) or self.temporal_patch_size
+        cap_pixels_per_frame = videos_kwargs.get("cap_pixels_per_frame", None) or self.cap_pixels_per_frame
+
+        factor = patch_size * merge_size
+        if cap_pixels_per_frame:
+            # Keep the count in sync with `resize` when the per-frame cap is active.
+            frame_cap = self.max_video_tokens * factor * factor
+            pixels_per_frame = max(min(frame_cap, max_pixels // num_frames), int(min_pixels * 1.05))
+            max_pixels = pixels_per_frame * num_frames
+
+        resized_height, resized_width = smart_resize(
+            num_frames,
+            height,
+            width,
+            temporal_factor=temporal_patch_size,
+            factor=factor,
+            min_pixels=min_pixels,
+            max_pixels=max_pixels,
+        )
+        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
+        grid_t = num_frames // temporal_patch_size
+        return grid_t * grid_h * grid_w
 
 
 __all__ = ["Qwen3VLVideoProcessor"]
