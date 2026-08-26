@@ -1757,6 +1757,18 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming("post_mlp_layernorm", "mlp.post_mlp_layernorm"),
     ]
 
+    mapping["qwen4_exp_text"] = mapping["qwen3_5_moe_text"].copy()
+    mapping["qwen4_exp_text"] += [
+        WeightConverter(
+            source_patterns="ngram_embedding.shard_*.weight",
+            target_patterns="ngram_embedding.weight",
+            operations=[Concatenate(dim=0, num_shards_attribute="split_ngram_parts")],
+            # The size of the embedding is ~95 GiB, so we cannot afford to perform the Cat on device, as it will need
+            # a temporary memory buffer of the same size
+            force_cpu=True,
+        ),
+    ]
+
     mapping["MtpModel"] = [
         PrefixChange(prefix_to_remove="model"),
         PrefixChange(prefix_to_remove="mtp"),
@@ -1920,7 +1932,7 @@ def get_model_conversion_mapping(
             # arbitrary add/remove base_model_prefix to load ForXXX model from BaseModel and the opposite
             # Note that we need 2 removeprefix calls here, as only one level of nesting would not have the ending dot to module_name
             scope_prefix = module_name.removeprefix(model.base_model_prefix)
-            scope_prefix = module_name.removeprefix(".")
+            scope_prefix = scope_prefix.removeprefix(".")
             for transform in conversions:
                 transform.scope_prefix = scope_prefix
                 transform.base_model_prefix = model.base_model_prefix
