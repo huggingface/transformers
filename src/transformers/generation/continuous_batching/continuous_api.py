@@ -127,6 +127,13 @@ class OutputRouter:
 
             loop.call_soon_threadsafe(_run_batch)
 
+    def fail_and_deliver(self, state: RequestState, error: Exception) -> None:
+        """Fail the request and deliver the output to the output router. This is made from the OutputRouter so that it
+        can be called even when a batch processor could not be created."""
+        state.status = RequestStatus.FAILED
+        state.error = str(error)
+        self.deliver(state.to_generation_output())
+
 
 class BackgroundThreadStatus:
     """Tracks the status of the background thread locally and in its TP group. The status is an int that can only
@@ -363,16 +370,13 @@ class ContinuousBatchProcessor:
 
     def _handle_request_error(self, error: Exception, state: RequestState) -> None:
         """Handle general request processing error."""
-        state.status = RequestStatus.FAILED
-        state.error = str(error)
-
         # Include any generated tokens if this is an active request
         if isinstance(state.request_id, str):
             state.generated_tokens = self.scheduler.get_active_request_static_outputs(state.request_id)
         else:
             state.generated_tokens = []
-
-        self.output_router.deliver(state.to_generation_output())
+        # Actual failing of the request
+        self.output_router.fail_and_deliver(state, error)
 
     def prepare_next_batch(self) -> bool:
         """Prepare tensors and metadata for the next model forward pass. Returns True if there are requests to process,
@@ -1090,6 +1094,8 @@ class ContinuousBatchingManager:
                 req_data = self.input_queue.get_nowait()
                 if batch_processor is not None:
                     batch_processor._handle_request_error(error, req_data)
+                else:
+                    self.output_router.fail_and_deliver(req_data, error)
         except queue.Empty:
             pass
         # Fail active and waiting requests
