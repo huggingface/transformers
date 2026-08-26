@@ -549,7 +549,7 @@ diff = '''
 [rules.TRF029]
 description = "A module taking `config` must not also take arguments that live on the config."
 default_enabled = true
-allowlist_models = ["kosmos2"]
+allowlist_models = ["kosmos2", "glm5_next"]
 cutoff_date = "2026-06-20"
 
 [rules.TRF029.explanation]
@@ -646,7 +646,7 @@ default_enabled = true
 # Real (5 models), left for a follow-up: `dinov3_convnext` (`DINOv3ConvNextLayer`), `openai` (`Block`),
 # `tipsv2_dpt` (3 DPT head layers), `x_clip` (`PromptGeneratorLayer`), `xcodec2` (`Xcodec2ResNetBlock`) --
 # x_clip and xcodec2 are in both groups, hence still listed.
-allowlist_models = ["cohere_compass", "cosmos3_edge", "dinov3_convnext", "granite_swa", "granitemoe_swa", "hunyuan_vl", "kimi_k25", "muse_glimmer", "muse_glimmer_assistant", "openai", "radio", "step3p7", "tipsv2", "tipsv2_dpt", "x_clip", "xcodec2"]
+allowlist_models = ["cohere_compass", "cosmos3_edge", "dinov3_convnext", "granite_swa", "granitemoe_swa", "hunyuan_vl", "kimi_k25", "muse_glimmer", "muse_glimmer_assistant", "openai", "radio", "step3p7", "tipsv2", "tipsv2_dpt", "x_clip", "xcodec2", "glm5_next"]
 cutoff_date = "2026-06-20"
 
 [rules.TRF034.explanation]
@@ -671,7 +671,7 @@ default_enabled = true
 #   `zaya`            `modular_zaya.py:287`            F821, `del op_size` drops a name that only exists in
 #                                                      the inherited parent body
 # The last three are modular-converter mechanics, so the fix belongs upstream, not in the model files.
-allowlist_models = ["hunyuan_vl", "nemotron3_5_asr", "step3p7", "zaya"]
+allowlist_models = ["hunyuan_vl", "nemotron3_5_asr", "step3p7", "zaya", "glm5_next"]
 cutoff_date = "2026-06-20"
 
 [rules.TRF035.explanation]
@@ -724,7 +724,7 @@ default_enabled = true
 # has a processor / feature extractor but no dedicated test for it is flagged even though the model itself
 # is tested. Agreed in review: enforce for new models, backfill the old families opportunistically, rather
 # than block this PR on ~30 test files. `sam2` no longer fires and was dropped.
-allowlist_models = ["bros", "cohere_asr", "emu3", "exaone4_5", "gemma4", "glm46v", "glm_image", "glmga", "granite_speech", "granite_speech5", "higgs_audio_v2", "inkling", "kyutai_speech_to_text", "lasr", "minimax_m3_vl", "moonshine_streaming", "nemotron_asr_streaming", "nemotron3_5_asr", "nougat", "paddleocr_vl", "pe_audio", "pe_video", "pe_audio_video", "pi0", "pp_formulanet", "rf_detr", "sam2_video", "sam3_tracker", "sam3_tracker_video", "sam3_video", "siglip", "siglip2", "tvp", "video_llava", "vilt", "vjepa2", "voxtral", "voxtral_realtime", "x_clip"]
+allowlist_models = ["bros", "cohere_asr", "emu3", "exaone4_5", "gemma4", "glm46v", "glm_image", "glmga", "granite_speech", "granite_speech5", "higgs_audio_v2", "inkling", "kyutai_speech_to_text", "lasr", "minimax_m3_vl", "moonshine_streaming", "nemotron_asr_streaming", "nemotron3_5_asr", "nougat", "paddleocr_vl", "pe_audio", "pe_video", "pe_audio_video", "pi0", "pp_formulanet", "rf_detr", "sam2_video", "sam3_tracker", "sam3_tracker_video", "sam3_video", "siglip", "siglip2", "tvp", "video_llava", "vilt", "vjepa2", "voxtral", "voxtral_realtime", "x_clip", "glm5_next"]
 
 [rules.TRF038.explanation]
 what_it_does = "For each modeling_*.py, processing_*.py, image_processing_*.py, video_processing_*.py and feature_extraction_*.py file, checks that a corresponding tests/models/<model>/test_*.py file exists (e.g. modeling_acme.py -> tests/models/acme/test_modeling_acme.py). configuration_*.py is exempt since config classes are conventionally covered by ConfigTester inside the companion test_modeling_*.py file. modular_*.py files are handled separately: since a single modular file can define modeling, processing, image/video-processor and config classes together, the classes it defines are classified by name suffix (XxxModel/XxxPreTrainedModel/XxxForCausalLM -> modeling, XxxImageProcessor(Fast) -> image processing, XxxProcessor -> processing, XxxVideoProcessor -> video processing, XxxFeatureExtractor -> feature extraction, XxxConfig -> skipped), and one violation is reported per missing test file, not just one per source file. There is no `# trf-ignore: TRF038` support for this rule: use `allowlist_models` if a model genuinely cannot ship a test yet, so the exemption is visible in review."
@@ -772,7 +772,7 @@ default_enabled = true
 # vitpose_backbone(1), x_clip(1). Every one needs its `# CODEPATH:` note to name the checkpoints that take
 # each path, which only the model owner knows -- guessing would be worse than the missing note -- so they
 # go out as per-model follow-ups. `mimo_v2_flash` no longer fires and was dropped.
-allowlist_models = ["axk2", "cohere_compass", "dinov3_vit", "inkling", "kimi_k25", "kosmos2", "muse_glimmer", "openai", "timm_backbone", "timm_wrapper", "tipsv2", "vitpose_backbone", "x_clip"]
+allowlist_models = ["axk2", "cohere_compass", "dinov3_vit", "inkling", "kimi_k25", "kosmos2", "muse_glimmer", "openai", "timm_backbone", "timm_wrapper", "tipsv2", "vitpose_backbone", "x_clip", "glm5_next"]
 cutoff_date = "2026-06-20"
 
 [rules.TRF041.explanation]
@@ -972,7 +972,7 @@ default_enabled = true
 # attention-interface owner. Legacy dispatch in plain `modeling_*.py`: decision_transformer, falcon, gpt2.
 # Backend-conditional tensor handling in modular MLA/DSA-style models the interface cannot express yet:
 # axk2, deepseek_v32, diffusion_gemma, glm_moe_dsa, minimax_m3_vl, qwen2_5_omni. Follow-ups either way.
-allowlist_models = ["axk2", "decision_transformer", "deepseek_v32", "diffusion_gemma", "falcon", "glm_moe_dsa", "gpt2", "minimax_m3_vl", "qwen2_5_omni"]
+allowlist_models = ["axk2", "decision_transformer", "deepseek_v32", "diffusion_gemma", "falcon", "glm_moe_dsa", "gpt2", "minimax_m3_vl", "qwen2_5_omni", "glm5_next"]
 
 [rules.TRF051.explanation]
 what_it_does = "Checks modeling_*.py and modular_*.py for comparisons against a _attn_implementation attribute."
