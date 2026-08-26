@@ -56,7 +56,7 @@ class PhimoeIntegrationTest(unittest.TestCase):
             # Cap CPU memory to 60 GiB during loading so device_map="auto" is forced to offload some
             # layers to disk. Without the cap, device_map may assign too many layers to GPU+CPU and
             # cause GPU OOM at inference time. The cap is restored after from_pretrained returns.
-            with cap_psutil_cpu_memory(60 * 1024**3):
+            with cap_psutil_cpu_memory(80 * 1024**3):
                 cls.model = PhimoeForCausalLM.from_pretrained(
                     "microsoft/Phi-3.5-MoE-instruct",
                     experts_implementation="eager",
