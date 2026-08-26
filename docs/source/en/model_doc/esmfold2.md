@@ -32,11 +32,9 @@ The model checkpoints are available on the Hugging Face Hub at
 ```python
 import torch
 
-from transformers import EsmFold2Model
+from transformers import AutoModelForProteinFolding
 
-# The ESMC backbone is bundled in the checkpoint and loaded with the model.
-# bf16 is the recommended inference precision.
-model = EsmFold2Model.from_pretrained("biohub/ESMFold2", dtype=torch.bfloat16, device_map="auto")
+model = AutoModelForProteinFolding.from_pretrained("biohub/ESMFold2", dtype=torch.bfloat16, device_map="auto")
 
 pdb_string = model.infer_protein_as_pdb("MKTAYIAKQRQISFVKSHFSRQLEERLGLIEVQ")
 print(pdb_string)
@@ -81,9 +79,9 @@ Make sure the model is on a CUDA device when kernelization happens (e.g. with `d
 ```python
 import torch
 
-from transformers import EsmFold2Model
+from transformers import AutoModelForProteinFolding
 
-model = EsmFold2Model.from_pretrained(
+model = AutoModelForProteinFolding.from_pretrained(
     "biohub/ESMFold2", dtype=torch.bfloat16, device_map="cuda", use_kernels=True
 )
 
