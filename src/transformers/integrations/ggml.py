@@ -174,6 +174,20 @@ GGUF_CONFIG_MAPPING = {
         "attention.layer_norm_rms_epsilon": "rms_norm_eps",
         "vocab_size": "vocab_size",
     },
+    "phi2": {
+        "context_length": "max_position_embeddings",
+        "block_count": "num_hidden_layers",
+        "feed_forward_length": "intermediate_size",
+        "embedding_length": "hidden_size",
+        # NOTE: rope.dimension_count is turned into partial_rotary_factor in `load_gguf_checkpoint`
+        # since Phi-2 uses partial rotary embeddings.
+        "rope.dimension_count": None,
+        "rope.freq_base": "rope_theta",
+        "attention.head_count": "num_attention_heads",
+        "attention.head_count_kv": "num_key_value_heads",
+        "attention.layer_norm_epsilon": "layer_norm_eps",
+        "vocab_size": "vocab_size",
+    },
     "bloom": {
         "block_count": "n_layer",
         "embedding_length": "hidden_size",
@@ -809,6 +823,7 @@ GGUF_TO_FAST_CONVERTERS = {
     "qwen3": GGUFQwen2Converter,
     "qwen3_moe": GGUFQwen2Converter,
     "phi3": GGUFPhi3Converter,
+    "phi": GGUFGPTConverter,
     "bloom": GGUFGPTConverter,
     "falcon": GGUFGPTConverter,
     "stablelm": GGUFGPTConverter,
