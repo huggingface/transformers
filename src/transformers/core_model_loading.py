@@ -1150,13 +1150,18 @@ _INTERNAL_MANY_TO_MANY_CONVERSIONS = (
 
 
 class WeightConverter(WeightTransform):
-    __slots__ = ("operations",)
+    __slots__ = ("operations", "force_cpu")
 
     def __init__(
-        self, source_patterns: str | list[str], target_patterns: str | list[str], operations: list[ConversionOps]
+        self,
+        source_patterns: str | list[str],
+        target_patterns: str | list[str],
+        operations: list[ConversionOps],
+        force_cpu: bool = False,
     ):
         super().__init__(source_patterns, target_patterns)
         self.operations: list[ConversionOps] = operations
+        self.force_cpu = force_cpu
 
         if bool(len(self.source_patterns) - 1) + bool(len(self.target_patterns) - 1) >= 2:
             # We allow many-to-many only if we use an internal operation that can handle it
@@ -1684,15 +1689,21 @@ def convert_and_load_state_dict_in_model(
             # 4. Handle DTensor sharding or device_map placement
             param_device = get_device(device_map, renamed_key, valid_torch_device=True)
             sharding_op = None
-            materialize_device = param_device
-
             if is_dtensor(empty_param):
                 sharding_op = DtensorShardOperation(empty_param)
+
+            # Some parameters are so large (qwen4_exp ple_embedding is about ~95 GiB) that we cannot afford to perform the Operations
+            # directly on the device, as it will completely blow up the memory during the ops memory spike. So defer to "cpu", then
+            # accelerate will take care of putting back on correct device after loading
+            # Note that we only do it with `device_map` but not with `tp_plan`, as tp will perform local sharding before, so memory
+            # spike during conversion ops should be fine
+            if sharding_op is None and isinstance(mapping, WeightConverter) and mapping.force_cpu:
+                param_device = "cpu"
 
             future_or_tensor = spawn_materialize(
                 thread_pool,
                 tensor,
-                materialize_device,
+                param_device,
                 _dtype,
                 sharding_op=sharding_op,
                 tensor_idx=tensor_idx,
