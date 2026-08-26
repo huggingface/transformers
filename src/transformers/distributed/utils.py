@@ -14,12 +14,14 @@
 from __future__ import annotations
 
 import os
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeGuard
 
 from ..utils import is_torch_available, is_torch_distributed_available, is_torch_greater_or_equal
 
 
 if TYPE_CHECKING:
+    from torch.distributed.tensor import DTensor
+
     from .configuration_utils import DistributedConfig
 
 
@@ -33,7 +35,7 @@ def _is_torch_distributed_initialized() -> bool:
     return torch.distributed.is_initialized()
 
 
-def is_dtensor(obj) -> bool:
+def is_dtensor(obj: object) -> TypeGuard[DTensor]:
     if not is_torch_distributed_available():
         return False
     from torch.distributed.tensor import DTensor
@@ -113,6 +115,51 @@ def _distributed_barrier():
         torch.distributed.barrier()
 
 
+# TODO(3outeille): unify initialization across parallelism
+def initialize_tensor_parallelism(
+    tp_plan: str | dict[str, str] | None, tp_size: int | None = None, device_mesh=None, device_map=None
+):
+    r"""
+    Sets up the device mesh and initialized the backend for tensor parallelism.
+    This function is called when the model is loaded and the TP plan is set to 'auto'.
+    """
+    if tp_size is not None and tp_plan is None:
+        raise ValueError("tp_plan has to be set when tp_size is passed.")
+    if tp_plan is not None and device_map is not None:
+        raise ValueError("`tp_plan` and `device_map` are mutually exclusive. Choose either one for parallelization.")
+    if device_mesh is None:
+        if not is_torch_greater_or_equal("2.5"):
+            raise OSError("Tensor parallel is only supported for `torch>=2.5`.")
+
+        # Detect the accelerator on the machine. If no accelerator is available, it returns CPU.
+        device_type = torch._C._get_accelerator().type
+        if device_type == "mps":
+            raise RuntimeError("Tensor parallelism is not supported on MPS devices.")
+        current_device = getattr(torch, device_type)
+
+        if device_type != "cpu":
+            current_device.set_device(int(os.environ["LOCAL_RANK"]))
+            index = current_device.current_device()
+            tp_device = torch.device(device_type, index)
+            device_map = tp_device
+        else:
+            tp_device = torch.device(device_type)
+            device_map = device_type or {}
+
+        device_mesh = torch.distributed.init_device_mesh(tp_device.type, (tp_size,))
+    else:
+        if device_mesh.ndim > 1:
+            if "tp" not in device_mesh.mesh_dim_names:
+                raise ValueError(
+                    "When using `tp_plan` and n-d `device_mesh`, it must contain a 'tp' dimension. "
+                    "Please provide a valid `device_mesh`."
+                )
+            device_mesh = device_mesh["tp"]
+        device_map = torch.device(f"{device_mesh.device_type}:{int(os.environ['LOCAL_RANK'])}")
+
+    return device_map, device_mesh
+
+
 def initialize_fully_sharded_data_parallelism(distributed_config: DistributedConfig):
     # `fully_shard` itself only needs torch>=2.6, but distributed checkpoint save/load
     # (DCP + HuggingFaceStorageWriter) needs 2.7, so that is the effective requirement.
@@ -140,6 +187,33 @@ def initialize_fully_sharded_data_parallelism(distributed_config: DistributedCon
     # If N > 1, create a flattened sub-mesh so all-reduces across the world mesh ae done in one collective
     if len(dims) > 1:
         mesh._flatten("_".join(names))
+
+    return device_map, mesh
+
+
+def initialize_pipeline_parallelism(
+    distributed_config: DistributedConfig,
+):
+    if not is_torch_greater_or_equal("2.5"):
+        raise OSError("Pipeline parallelism with DistributedConfig requires `torch>=2.5`.")
+
+    device_type = torch._C._get_accelerator().type
+    _ensure_torch_distributed(device_type)
+
+    world_size = torch.distributed.get_world_size()
+    pp_size = distributed_config.pp_size
+    if world_size != pp_size:
+        raise RuntimeError(f"world_size ({world_size}) must be equal to pp_size ({pp_size})")
+
+    if device_type != "cpu":
+        local_rank = int(os.environ.get("LOCAL_RANK", 0))
+        getattr(torch, device_type).set_device(local_rank)
+        device_map = torch.device(device_type, local_rank)
+    else:
+        device_map = torch.device(device_type)
+
+    assert world_size == pp_size, f"world_size ({world_size}) must be equal to pp_size ({pp_size})"
+    mesh = torch.distributed.init_device_mesh(device_type, (pp_size,), mesh_dim_names=("pp",))
 
     return device_map, mesh
 
