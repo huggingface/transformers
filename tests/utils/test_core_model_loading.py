@@ -242,15 +242,6 @@ class DummyRoot(PreTrainedModel):
         self.post_init()
 
 
-class DummyShardedModel(PreTrainedModel):
-    base_model_prefix = ""
-
-    def __init__(self, config, shape):
-        super().__init__(config)
-        self.weight = nn.Parameter(torch.zeros(shape))
-        self.post_init()
-
-
 class TestConvertAndLoadStateDict(unittest.TestCase):
     def test_dtensor_shard_aware_mixtral_conversion_uses_only_local_experts(self):
         """Integration test: FSDP-sharded expert loading + WeightConverter.
