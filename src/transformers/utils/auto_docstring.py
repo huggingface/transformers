@@ -2324,7 +2324,7 @@ class ModelForArgs:
             "description": """
     Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
     config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
-    loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
+    loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
     """,
             "shape": "of shape `(batch_size, sequence_length)`",
             "type": "torch.LongTensor",

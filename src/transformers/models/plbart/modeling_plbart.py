@@ -955,9 +955,6 @@ class PLBartForSequenceClassification(PLBartPreTrainedModel):
             obj:*torch.LongTensor* of shape `(batch_size, target_sequence_length)`, *optional*):
             Default behavior:
             generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also be used by default.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         if labels is not None:
             use_cache = False
