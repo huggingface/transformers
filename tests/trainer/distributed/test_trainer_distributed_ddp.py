@@ -176,35 +176,6 @@ class TestTrainerDistributedDDP(DDPCommandsMixin, TestCasePlus):
         )
         execute_subprocess_async(cmd, env=self.get_env())
 
-    def test_batch_rebalance_no_double_sharding(self):
-        """Regression for BatchRebalanceSampler double-sharding under real DDP.
-
-        ``accelerator.prepare`` wraps the already rank-aware ``BatchRebalanceSampler`` in
-        accelerate's ``BatchSamplerShard``, which would re-shard on top of it and silently
-        drop most samples each epoch. The Trainer neutralises that wrapper. Unlike the
-        unit test, this exercises the full path end-to-end -- ``Trainer.get_train_dataloader``
-        -> ``accelerator.prepare(DataLoader(...))`` -> patch ``prepared_dataloader.batch_sampler``
-        -- under a real multi-process launch, and checks the structure-dependent detection as
-        well as exact global sample coverage."""
-        output_dir = self.get_auto_remove_tmp_dir()
-        script = os.path.join(SCRIPTS_DIR, "batch_rebalance_ddp.py")
-        num_processes = backend_device_count(torch_device)
-        cmd = self.get_accelerate_cmd(
-            script,
-            DDP_CONFIG_FILE,
-            script_args=["--output_dir", output_dir],
-            num_processes=num_processes,
-        )
-        execute_subprocess_async(cmd, env=self.get_env())
-
-        with open(os.path.join(output_dir, "result.json")) as f:
-            result = json.load(f)
-        self.assertTrue(
-            result["ok"],
-            msg="double-sharding regression checks failed:\n" + json.dumps(result, indent=2, sort_keys=True),
-        )
-        self.assertEqual(result["world_size"], num_processes)
-
     # -----------------------------------------------------------------------
     # torchrun vs accelerate env parity
     # -----------------------------------------------------------------------
@@ -327,3 +298,25 @@ class TestTrainerDistributedDDPCommon(DDPCommandsMixin, TrainerDistributedCommon
 
     def test_eval(self):
         self.check_eval(config_file=DDP_CONFIG_FILE)
+
+    @parameterized.expand([("no_accum", 1), ("with_accum", 2)])
+    def test_training_with_batch_rebalance_sampler(self, _name, gradient_accumulation_steps):
+        """Training runs end to end under DDP with ``train_sampling_strategy="batch_rebalance"``.
+
+        ``--padding do_not_pad`` gives the variable-length data the sampler rebalances.
+        """
+        output_dir = self.get_auto_remove_tmp_dir()
+        script = os.path.join(SCRIPTS_DIR, "train.py")
+        args = self._get_default_script_args(output_dir, num_epochs=2) + [
+            "--bf16",
+            "--padding",
+            "do_not_pad",
+            "--train_sampling_strategy",
+            "batch_rebalance",
+            "--gradient_accumulation_steps",
+            str(gradient_accumulation_steps),
+        ]
+        execute_subprocess_async(
+            self.get_accelerate_cmd(script, DDP_CONFIG_FILE, script_args=args),
+            env=self.get_env(),
+        )
