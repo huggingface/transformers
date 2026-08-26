@@ -119,6 +119,8 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("emu3", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("ernie", "BertTokenizer" if is_tokenizers_available() else None),
         ("esm", "EsmTokenizer"),
+        ("esmc", "EsmcTokenizer" if is_tokenizers_available() else None),
+        ("esmfold2", "EsmcTokenizer" if is_tokenizers_available() else None),
         ("falcon_mamba", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
         ("fastspeech2_conformer", "FastSpeech2ConformerTokenizer" if is_g2p_en_available() else None),
         ("flaubert", "FlaubertTokenizer"),
@@ -152,6 +154,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("gpt_neox_japanese", "GPTNeoXJapaneseTokenizer"),
         ("gptj", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("granite", "TokenizersBackend" if is_tokenizers_available() else None),
+        ("granite_speech5_ctc", "ParakeetTokenizer" if is_tokenizers_available() else None),
         ("granitemoe", "TokenizersBackend" if is_tokenizers_available() else None),
         ("granitemoehybrid", "TokenizersBackend" if is_tokenizers_available() else None),
         ("granitemoeshared", "TokenizersBackend" if is_tokenizers_available() else None),
@@ -427,6 +430,7 @@ MODEL_IDS_TO_TOKENIZERS_BACKEND = [
     "salesforce/blip2-opt-*",
     "salesforce/blip2-flan-t5-*",
     "salesforce/instructblip-flan-t5-*",
+    "stepfun-ai/step-3.7-*",
 ]
 
 

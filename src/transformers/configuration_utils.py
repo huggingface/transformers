@@ -64,6 +64,7 @@ ALLOWED_ATTN_LAYER_TYPES = (
     "full_attention",
     "sliding_attention",
     "chunked_attention",
+    "window_attention",  # non-overlapping windows usually in ViT
     "compressed_sparse_attention",  # CSA, used in deepseek_v4
     "heavily_compressed_attention",  # HCA, used in deepseek_v4
     "minimax_m3_sparse",  # lightning-index sparse attention, used in minimax_m3_vl
@@ -1411,6 +1412,10 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
 
         # This is needed to be correct in several places, e.g. when creating the cache
         text_config.num_hidden_layers = num_mtp_layers
+
+        # In some models this is used to discriminate between MLP or MoE layers, but MTP layers always use MoE -> artifically set to 0
+        if hasattr(text_config, "first_k_dense_replace"):
+            text_config.first_k_dense_replace = 0
 
         return text_config
 
