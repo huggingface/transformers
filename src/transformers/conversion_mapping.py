@@ -146,6 +146,7 @@ def _build_checkpoint_conversion_mapping():
         # HYV4 checkpoints store Hyper-Connection weights under a `hc_pre.` sub-prefix; drop it.
         "hy_v4": [
             WeightRenaming(source_patterns=r"\.hc_pre\.hc_", target_patterns=r".hc_"),
+            WeightRenaming(source_patterns=r"\.learnable_sink_param$", target_patterns=r".sinks"),
         ],
         # Cosmos3 Edge's composite checkpoint stores its dense reasoner text tower as conventional attention + MLP
         # blocks. The visual/projector tensors already use their native module names and intentionally need no mapping.

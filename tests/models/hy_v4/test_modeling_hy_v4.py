@@ -26,6 +26,8 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 if is_torch_available():
     from transformers import HYV4ForCausalLM, HYV4Model
+    from transformers.conversion_mapping import get_checkpoint_conversion_mapping
+    from transformers.models.hy_v4.modeling_hy_v4 import HYV4Experts, HYV4UnweightedRMSNorm
 
 
 class HYV4ModelTester(CausalLMModelTester):
@@ -85,8 +87,10 @@ class HYV4ModelTest(CausalLMModelTest, unittest.TestCase):
             ["full", "full", "shared", "shared", "shared", "full", "shared", "shared"],
         )
 
-    def test_lm_head_is_kept_in_fp32(self):
+    def test_fp32_modules(self):
         self.assertIn("lm_head", HYV4ForCausalLM._keep_in_fp32_modules_strict)
+        for module_name in ("sinks", "weights_proj", "k_norm"):
+            self.assertIn(module_name, HYV4ForCausalLM._keep_in_fp32_modules_strict)
 
     def test_mtp_weights_are_ignored_on_load(self):
         # Other runtimes (e.g. vLLM) keep the MTP tensors in the shared checkpoint; Transformers ignores them.
@@ -119,9 +123,23 @@ class HYV4ModelTest(CausalLMModelTest, unittest.TestCase):
 
     def test_sink_parameter_layout(self):
         config = self.model_tester.get_config()
-        attention = HYV4Model(config).eval().layers[0].self_attn
-        self.assertEqual(attention.learnable_sink_param.shape, (config.num_attention_heads,))
-        self.assertEqual(attention.learnable_sink_param.dtype, torch.float32)
+        model = HYV4Model(config).eval()
+        attention = model.layers[0].self_attn
+        self.assertEqual(attention.sinks.shape, (config.num_attention_heads,))
+        self.assertEqual(attention.sinks.dtype, torch.float32)
+        self.assertNotIn("layers.0.self_attn.learnable_sink_param", model.state_dict())
+        self.assertIn("layers.0.self_attn.sinks", model.state_dict())
+
+    def test_sink_checkpoint_renaming(self):
+        sink_mapping = get_checkpoint_conversion_mapping("hy_v4")[1]
+        checkpoint_key = "model.layers.0.self_attn.learnable_sink_param"
+        runtime_key, matched_pattern = sink_mapping.rename_source_key(checkpoint_key)
+        self.assertEqual(runtime_key, "model.layers.0.self_attn.sinks")
+        self.assertIsNotNone(matched_pattern)
+
+        save_key, matched_pattern = sink_mapping.reverse_transform().rename_source_key(runtime_key)
+        self.assertEqual(save_key, checkpoint_key)
+        self.assertIsNotNone(matched_pattern)
 
     def test_full_and_shared_indexer_layers(self):
         config = self.model_tester.get_config()
@@ -136,14 +154,95 @@ class HYV4ModelTest(CausalLMModelTest, unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Shared DSA layers require top-k indices"):
             model(input_ids=torch.tensor([[1, 2, 3]]), use_cache=False)
 
-    def test_dsa_sentinel_does_not_select_last_token(self):
+    def test_dsa_indices_use_standard_int32_layout(self):
         config = self.model_tester.get_config()
-        attention = HYV4Model(config).eval().layers[0].self_attn
-        sparse_mask = attention._build_sparse_mask(
-            torch.tensor([[[-1, 0]]]), attention_mask=None, key_length=3, dtype=torch.float32
+        model = HYV4Model(config).eval()
+        captured_indices = []
+        handle = model.layers[0].self_attn.indexer.register_forward_hook(
+            lambda _module, _inputs, output: captured_indices.append(output)
         )
-        self.assertEqual(sparse_mask[0, 0, 0, 0].item(), 0.0)
-        self.assertLess(sparse_mask[0, 0, 0, 2].item(), -1e30)
+        try:
+            with torch.no_grad():
+                model(input_ids=torch.tensor([[1, 2, 3]]), use_cache=False)
+        finally:
+            handle.remove()
+
+        self.assertEqual(captured_indices[0].dtype, torch.int32)
+        self.assertGreaterEqual(captured_indices[0].min().item(), 0)
+        self.assertLess(captured_indices[0].max().item(), 3)
+
+    def test_experts_preserve_clamp_and_skip_ep_sentinel(self):
+        config = HYV4Config(hidden_size=1, moe_intermediate_size=1, n_routed_experts=1, swiglu_limit=10.0)
+        experts = HYV4Experts(config)
+        with torch.no_grad():
+            experts.gate_up_proj.copy_(torch.tensor([[[20.0], [20.0]]]))
+            experts.down_proj.fill_(1.0)
+
+        output = experts(
+            torch.tensor([[1.0], [2.0]]),
+            torch.tensor([[0], [1]]),
+            torch.tensor([[1.0], [0.0]]),
+        )
+        expected = torch.nn.functional.silu(torch.tensor(10.0)) * 10.0
+        torch.testing.assert_close(output[0, 0], expected)
+        self.assertEqual(output[1, 0].item(), 0.0)
+        torch.testing.assert_close(experts._apply_gate(torch.tensor([[20.0, 20.0]]))[0, 0], expected)
+
+        experts.config._experts_implementation = "batched_mm"
+        optimized_output = experts(torch.tensor([[1.0]]), torch.tensor([[0]]), torch.tensor([[1.0]]))
+        torch.testing.assert_close(optimized_output[0, 0], expected)
+
+    def test_unsupported_sonicmoe_backend_is_rejected(self):
+        config = self.model_tester.get_config()
+        config._experts_implementation = "sonicmoe"
+        with self.assertRaisesRegex(ValueError, "fused SwiGLU omits `swiglu_limit`"):
+            HYV4Experts(config)
+
+    def test_ep_plan_matches_glm4_moe_lite(self):
+        self.assertEqual(
+            HYV4Config.base_model_ep_plan,
+            {
+                "layers.*.mlp.gate": "ep_router",
+                "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+                "layers.*.mlp.experts.down_proj": "grouped_gemm",
+                "layers.*.mlp.experts": "moe_tp_experts",
+            },
+        )
+
+    def test_standard_unweighted_rms_norm_is_used_for_ihc(self):
+        config = self.model_tester.get_config()
+        model = HYV4Model(config).eval()
+        hyperconnection = model.layers[0].hc_attn_layer
+        self.assertIsInstance(hyperconnection.input_norm, HYV4UnweightedRMSNorm)
+        self.assertIsInstance(model.hc_head.input_norm, HYV4UnweightedRMSNorm)
+        self.assertEqual(hyperconnection.input_norm.state_dict(), {})
+
+        hidden_states = torch.randn(1, 2, config.hc_mult, config.hidden_size)
+        with torch.no_grad():
+            post_gates, collapsed, _ = hyperconnection(hidden_states)
+            flat = hidden_states.flatten(2).float()
+            inverse_rms = torch.rsqrt(flat.square().mean(-1, keepdim=True) + config.rms_norm_eps)
+            mixes = torch.nn.functional.linear(flat, hyperconnection.hc_fn.float()) * inverse_rms
+            pre_logits, post_logits = mixes.split(config.hc_mult, dim=-1)
+            expected_pre = (
+                torch.sigmoid(
+                    pre_logits * hyperconnection.hc_scale[0].float()
+                    + hyperconnection.hc_base[: config.hc_mult].float()
+                )
+                + config.hc_eps
+            )
+            expected_post = (
+                config.hc_magnitude
+                * torch.sigmoid(
+                    post_logits * hyperconnection.hc_scale[1].float()
+                    + hyperconnection.hc_base[config.hc_mult :].float()
+                )
+                + config.hc_eps
+            )
+            expected_collapsed = torch.sum(expected_pre.unsqueeze(-1) * hidden_states, dim=2)
+
+        self.assertTrue(torch.equal(post_gates, expected_post))
+        self.assertTrue(torch.equal(collapsed, expected_collapsed))
 
     def test_hidden_states_output(self):
         # HYV4 decoder layers carry a 4D `[batch, seq, hc_mult, hidden]` iHC stream; the
