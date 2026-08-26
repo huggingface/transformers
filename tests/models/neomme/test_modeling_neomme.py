@@ -298,11 +298,18 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
         config = NeoMMEConfig(num_hidden_layers=3, layer_types=pattern)
         self.assertEqual(config.layer_types, pattern)
 
+    def test_default_per_layer_windows(self):
+        config = NeoMMEConfig()
+        self.assertEqual(
+            [layer.sliding_window for layer in config.per_layer_config],
+            [256, 1024, 256, 1024, 256, None, 1024, 256, 1024, 256, 1024, None, 256, 1024, 256, 1024, None],
+        )
+
     def test_window_widths_validated(self):
         """Global and per-layer windows must be positive; `None` selects full attention."""
         base = {"num_hidden_layers": 3, "layer_types": _layer_types(3, 3)}
         default = NeoMMEConfig(**base)
-        self.assertEqual([layer.sliding_window for layer in default.per_layer_config], [256, 256, 256])
+        self.assertEqual([layer.sliding_window for layer in default.per_layer_config], [256, 1024, None])
 
         configured = NeoMMEConfig(**base, per_layer_config={1: {"sliding_window": 1024}, 2: {"sliding_window": None}})
         self.assertEqual([layer.sliding_window for layer in configured.per_layer_config], [256, 1024, None])

@@ -69,6 +69,7 @@ class NeoMMEConfig(PreTrainedConfig):
     # at long range and leave the rest of each head unrotated for content matching.
     default_theta = {"full_attention": 1_000_000.0, "sliding_attention": 10_000.0}
     default_partial_rotary_factor = {"full_attention": 0.25, "sliding_attention": 1.0}
+    default_long_sliding_window = 1024
 
     vocab_size: int = positive_int_field(default=131072)
     embedding_rank: int = positive_int_field(default=256)
@@ -102,6 +103,17 @@ class NeoMMEConfig(PreTrainedConfig):
                 "full_attention" if (i + 1) % 6 == 0 or i == self.num_hidden_layers - 1 else "sliding_attention"
                 for i in range(self.num_hidden_layers)
             ]
+        if "per_layer_config" not in kwargs:
+            sliding_idx = 0
+            kwargs["per_layer_config"] = {}
+            for layer_idx, layer_type in enumerate(self.layer_types):
+                if layer_type == "full_attention":
+                    kwargs["per_layer_config"][layer_idx] = {"sliding_window": None}
+                elif layer_type == "sliding_attention":
+                    # Alternate short and long windows by sliding-layer index.
+                    if sliding_idx % 2:
+                        kwargs["per_layer_config"][layer_idx] = {"sliding_window": self.default_long_sliding_window}
+                    sliding_idx += 1
         if self.residual_multiplier is None:
             self.residual_multiplier = (2 * self.num_hidden_layers) ** -0.5
 
