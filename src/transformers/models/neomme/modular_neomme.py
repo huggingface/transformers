@@ -657,6 +657,7 @@ class NeoMMEForMaskedLM(NeoMMEPreTrainedModel):
             **kwargs,
         )
         hidden_states = outputs.last_hidden_state
+        # Reuse the input projection's weight for hidden-to-rank decoding (ALBERT-style factorization).
         hidden_states = hidden_states @ self.model.embed_tokens.embedding_projection.weight
         logits = self.lm_head(hidden_states)
 
