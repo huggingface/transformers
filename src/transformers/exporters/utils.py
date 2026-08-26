@@ -481,9 +481,9 @@ def _prepare_grid_thw_vision_inputs(config, inputs: dict[str, Any]) -> None:
     inputs["cu_seqlens"], inputs["max_seqlen"] = get_vision_attention_seqlens(
         grid_thw, config, merge_temporal=temporal_encoder, kwargs=inputs
     )
-    # 3-axis (t, h, w) rotary encoders declare it on their config (minimax_m3_vl's
-    # `include_temporal_position_ids`); the 2-axis (h, w) default covers qwen2_5_vl / qwen3_vl / glm4v /
-    # paddleocr_vl. Config rather than the module's `axis_dim`, so this runs without a model.
+    # 3-axis (t, h, w) rotary encoders expose `include_temporal_position_ids` as a config property
+    # (minimax_m3_vl); the 2-axis (h, w) default covers qwen2_5_vl / qwen3_vl / glm4v / paddleocr_vl. A
+    # property, not a field: it is fixed per encoder, and reading it here needs no model.
     include_temporal = _config_attr(config, "include_temporal_position_ids") is True
     inputs["position_ids"] = get_vision_position_ids(grid_thw, spatial_merge_size, include_temporal=include_temporal)
 

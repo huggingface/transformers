@@ -61,8 +61,6 @@ class MuseGlimmerVisionConfig(PreTrainedConfig):
     patch_temporal: int = 2
     merge_size: int = 2
     interpolation_padding: str = "zeros"
-    # unlike kimi_k25, this encoder attends per frame rather than over the whole clip
-    attribute_map = {"spatial_merge_size": "merge_size"}
     layer_norm_eps: float = 1e-05
     layer_types: list[str] | None = None
 
@@ -73,8 +71,11 @@ class MuseGlimmerVisionConfig(PreTrainedConfig):
 
     @property
     def spatial_merge_size(self) -> int:
-        """Spatial merge factor under the name every other vision config uses for it."""
-        return self.merge_kernel_size[0]
+        """Spatial merge factor under the name every other vision config uses for it.
+
+        Overrides kimi_k25's, which indexes a `merge_kernel_size` tuple this config does not have.
+        """
+        return self.merge_size
 
     @property
     def window_size(self) -> int:

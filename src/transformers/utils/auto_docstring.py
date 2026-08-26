@@ -1705,13 +1705,6 @@ class ConfigArgs:
     """,
     }
 
-    include_temporal_position_ids = {
-        "description": """
-    Whether the vision position ids carry a temporal axis in addition to height and width, i.e. the
-    encoder's rotary embedding rotates all three.
-    """,
-    }
-
     vision_start_token_id = {
         "description": """
     Token ID that marks the start of a visual segment in the multimodal input sequence.

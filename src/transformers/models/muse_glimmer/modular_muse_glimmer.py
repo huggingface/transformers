@@ -540,8 +540,14 @@ class MuseGlimmerVisionConfig(Kimi_K25VisionConfig):
     pos_emb_width: int = 32
     interpolation_mode: str = "bilinear"
     interpolation_padding: str = "zeros"
-    # unlike kimi_k25, this encoder attends per frame rather than over the whole clip
-    attribute_map = {"spatial_merge_size": "merge_size"}
+
+    @property
+    def spatial_merge_size(self) -> int:
+        """Spatial merge factor under the name every other vision config uses for it.
+
+        Overrides kimi_k25's, which indexes a `merge_kernel_size` tuple this config does not have.
+        """
+        return self.merge_size
 
     @property
     def window_size(self) -> int:

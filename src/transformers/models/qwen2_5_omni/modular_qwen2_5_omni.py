@@ -1023,16 +1023,10 @@ def get_rope_index(
 @auto_docstring
 @dataclass
 class Qwen2_5OmniThinkerCausalLMOutputWithPast(CausalLMOutputWithPast):
-    """3-axis M-RoPE over image, video **and audio** spans, audio-in-video interleaved in time chunks.
-
-    Qwen2.5-Omni's layout. Spans are located by scanning `input_ids` for placeholder tokens rather than by
-    grouping `mm_token_type_ids` (which this family does not produce): at each step the *nearest* upcoming
-    image/video/audio placeholder wins, and its span contributes a one-position `bos` block, the modality's
-    own positions, and a one-position `eos` block, each starting one past the previous block's maximum.
-    Audio is 1D in time, images and videos are 3D, and the temporal axis
-    counts `position_id_per_seconds` positions per second of media. With `use_audio_in_video`, a video and
-    its soundtrack share one span: both are cut into `seconds_per_chunk` chunks by
-    [`_mrope_temporal_chunks`] and emitted video-chunk-then-audio-chunk, wrapped in doubled bos/eos blocks.
+    r"""
+    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
+        The rope index difference between sequence length and multimodal rope.
+        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
     """
 
     rope_deltas: torch.LongTensor | None = None

@@ -175,14 +175,18 @@ class MiniMaxM3VLVisionConfig(PreTrainedConfig):
     patch_size: int = 14
     temporal_patch_size: int = 2
     spatial_merge_size: int = 2
-    # This encoder's rotary embedding rotates T/H/W, so `vision_utils.get_vision_position_ids` must
-    # prepend a temporal column
-    include_temporal_position_ids: bool = True
     hidden_act: str = "gelu"
     layer_norm_eps: float = 1e-05
     attention_dropout: float = 0.0
     rope_parameters: RopeParameters | dict | None = None
     initializer_range: float = 0.02
+
+    @property
+    def include_temporal_position_ids(self) -> bool:
+        """Whether vision position ids carry a leading temporal column, fixed for this encoder because
+        its rotary embedding rotates T/H/W. On the config because input preparation reads it without a
+        model: `exporters.utils` precomputes the vision position ids."""
+        return True
 
 
 @auto_docstring(checkpoint="MiniMaxAI/MiniMax-M3")
