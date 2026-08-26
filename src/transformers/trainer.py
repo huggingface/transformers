@@ -1700,13 +1700,15 @@ class Trainer:
             train_dataloader.set_epoch(epoch)
         epoch_iterator = iter(train_dataloader)
 
-        # Neuron profiling
+        # Profiling
         import contextlib
 
         from torch.profiler import ProfilerActivity, profile, record_function
         from torch.profiler import schedule as profiler_schedule
 
         use_neuron_profiler = is_torch_neuron_available(check_device=True)
+        use_cuda_profiler = not use_neuron_profiler and torch.cuda.is_available()
+        use_profiler = use_neuron_profiler or use_cuda_profiler
         if use_neuron_profiler:
             import torch_neuronx
             from torch_neuronx.profiling import NeuronConfig, NeuronProfiler, ProfileMode
@@ -1722,6 +1724,18 @@ class Trainer:
                 experimental_config=exp_config,
                 with_stack=True,
                 on_trace_ready=exporter.export_trace,
+                schedule=profiler_schedule(wait=0, warmup=3, active=1, repeat=1),
+            )
+            prof.start()
+        elif use_cuda_profiler:
+            prof = profile(
+                activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
+                with_stack=True,
+                profile_memory=True,
+                record_shapes=True,
+                on_trace_ready=torch.profiler.tensorboard_trace_handler(
+                    os.environ.get("CUDA_PROFILER_OUTPUT_DIR", "./cuda_profiler_output")
+                ),
                 schedule=profiler_schedule(wait=0, warmup=3, active=1, repeat=1),
             )
             prof.start()
@@ -1816,7 +1830,7 @@ class Trainer:
 
                         model.zero_grad()
                         self.state.global_step += 1
-                        if use_neuron_profiler:
+                        if use_profiler:
                             prof.step()
                         self.state.epoch = epoch + (step + 1) / steps_in_epoch
                         self.control = self.callback_handler.on_step_end(self.args, self.state, self.control)
@@ -1841,6 +1855,9 @@ class Trainer:
         if use_neuron_profiler:
             # Waiting for profiling.
             torch_neuronx.synchronize()
+            prof.stop()
+        elif use_cuda_profiler:
+            torch.cuda.synchronize()
             prof.stop()
 
         # PyTorch/XLA relies on the dataloader to insert mark_step each iteration.

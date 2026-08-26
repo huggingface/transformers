@@ -7,8 +7,8 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 # Parallelism
 # ---------------------------------------------------------------------------
-export TP_SIZE=${TP_SIZE:-2}
-NUM_PROC=${NUM_PROC:-2}
+export TP_SIZE=${TP_SIZE:-1}
+NUM_PROC=${NUM_PROC:-1}
 
 # ---------------------------------------------------------------------------
 # Neuron runtime environment
@@ -32,6 +32,7 @@ export TORCH_NEURONX_NEFF_CACHE_DIR=$NEURON_PROFILER_OUTPUT_DIR
 export XLA_IR_DEBUG=1
 export XLA_HLO_DEBUG=1
 export NEURON_FRAMEWORK_DEBUG=1
+export NEURON_RT_ENABLE_DGE_NOTIFICATIONS=1
 
 # ---------------------------------------------------------------------------
 # Model / data / hyperparameters
@@ -81,7 +82,7 @@ $LAUNCHER \
     --num_train_epochs $NUM_EPOCHS \
     --packing false \
     --bf16 true \
-    --loss-type nll \
+    --loss-type chunked_nll \
     --compute_token_metrics false \
     --max_length $MAX_SEQ_LENGTH \
     --pad_to_multiple_of $MAX_SEQ_LENGTH \
