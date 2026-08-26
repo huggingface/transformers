@@ -785,15 +785,19 @@ class ParallelInterface(GeneralInterface):
 ALL_PARALLEL_STYLES: ParallelInterface = ParallelInterface()
 
 
+def _validate_tp_plan_styles(tp_plan: dict[str, str] | None) -> None:
+    unsupported_styles = {style for style in (tp_plan or {}).values() if style not in ALL_PARALLEL_STYLES}
+    if unsupported_styles:
+        raise ValueError(
+            f"Unsupported tensor parallel styles: {unsupported_styles}. "
+            f"Supported styles are {list(ALL_PARALLEL_STYLES.keys())}"
+        )
+
+
 def apply_tensor_parallelism(model, tp_mesh):
     """DTensor backend: shard params as placeholders and install TP forward hooks."""
 
-    for layer_pattern, style in (model.tp_plan or {}).items():
-        if style not in ALL_PARALLEL_STYLES:
-            raise ValueError(
-                f"Unsupported tensor parallel style '{style}' for layer '{layer_pattern}'. "
-                f"Supported styles are {list(ALL_PARALLEL_STYLES.keys())}"
-            )
+    _validate_tp_plan_styles(model.tp_plan)
 
     for name, module in model.named_modules():
         # Create DTensor placeholders so the loader knows which shard belongs to this rank.
