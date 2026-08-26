@@ -233,9 +233,9 @@ class EdgeTamVideoConfig(PreTrainedConfig):
     memory_attention_rope_feat_sizes: list | None = None
     memory_attention_rope_k_sizes: list | None = None
     memory_attention_rope_dropout: float | int = 0.1
-    max_position_embeddings: int | None = None
     # ig should be `memory_rope_parameters` though not sure if the utilities will catch up
     rope_parameters: dict | None = None
+    max_position_embeddings: int | None = None
 
     # spatial perceiver resampler
     perceiver_resampler_num_latents: int = 256
@@ -651,7 +651,6 @@ class EdgeTamVideoMemoryAttentionLayer(nn.Module):
 class EdgeTamVideoMemoryAttention(Sam2VideoMemoryAttention):
     def __init__(self, config: EdgeTamVideoConfig):
         super().__init__()
-        self.rotary_emb_k = EdgeTamVideoVisionRotaryEmbedding(config)
         self.grid_thw_k = (1, config.memory_attention_rope_k_sizes[1], config.memory_attention_rope_k_sizes[0])
 
     def forward(

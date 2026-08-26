@@ -137,7 +137,6 @@ class EdgeTamVideoVisionEncoderOutput(BaseModelOutputWithPooling):
     fpn_position_encoding: torch.FloatTensor | None = None
 
 
-# Simple axial 2D rope as in sam3/edgetam/etc with same freq of head-dim//2 for H and W
 class EdgeTamVideoVisionRotaryEmbedding(nn.Module):
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: EdgeTamVideoConfig, device=None):
@@ -194,11 +193,12 @@ class EdgeTamVideoVisionRotaryEmbedding(nn.Module):
         sin = self.recomposition_to_2d(sin)
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
+    # Ignore copy
     def recomposition_to_2d(self, freq):
         # take each grid's (N, D), the full frequency range
         freq_h, freq_w = freq[:, 0], freq[:, 1]
-        freq_hw = torch.cat([freq_h, freq_w], dim=-1)
-        return torch.cat([freq_hw, freq_hw], dim=-1)
+        freq_hw = torch.cat([freq_h, freq_w], dim=-1)[None, ...]
+        return freq_hw.repeat_interleave(2, dim=-1)
 
 
 def eager_attention_forward(
@@ -1253,7 +1253,6 @@ class EdgeTamVideoMemoryAttention(nn.Module):
         self.layer_norm = nn.LayerNorm(config.memory_attention_hidden_size)
         self.rotary_emb = EdgeTamVideoVisionRotaryEmbedding(config=config)
         self.grid_thw = (1, config.memory_attention_rope_feat_sizes[1], config.memory_attention_rope_feat_sizes[0])
-        self.rotary_emb_k = EdgeTamVideoVisionRotaryEmbedding(config)
         self.grid_thw_k = (1, config.memory_attention_rope_k_sizes[1], config.memory_attention_rope_k_sizes[0])
 
     def forward(

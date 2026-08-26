@@ -34,17 +34,12 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ProcessorMixin, Unpack
-from ...utils import (
-    ModelOutput,
-    auto_docstring,
-    logging,
-)
+from ...utils import ModelOutput, auto_docstring, logging
 from ...utils.generic import TransformersKwargs
 from ...utils.output_capturing import OutputRecorder
 from ...video_utils import VideoInput
 from ...vision_utils import get_vision_position_ids
 from ..auto import CONFIG_MAPPING, AutoConfig
-from ..qwen2_vl.modeling_qwen2_vl import Qwen2VLVisionRotaryEmbedding
 from ..sam2.configuration_sam2 import (
     Sam2MaskDecoderConfig,
     Sam2PromptEncoderConfig,
@@ -60,6 +55,7 @@ from ..sam2.modeling_sam2 import (
     eager_attention_forward,
 )
 from ..sam2.processing_sam2 import Sam2Processor
+from ..sam3.modeling_sam3 import Sam3ViTRotaryEmbedding
 
 
 logger = logging.get_logger(__name__)
@@ -219,6 +215,7 @@ class Sam2VideoConfig(PreTrainedConfig):
     memory_encoder_output_channels: int = 64
     # ig should be `memory_rope_parameters` though not sure if the utilities will catch up
     rope_parameters: dict | None = None
+    max_position_embeddings: int | None = None
 
     mask_downsampler_embed_dim: int = 256
     mask_downsampler_kernel_size: int = 3
@@ -943,7 +940,7 @@ class Sam2VideoPreTrainedModel(PreTrainedModel):
             init.normal_(module.positional_embedding, std=module.scale)
 
 
-class Sam2VideoVisionRotaryEmbedding(Qwen2VLVisionRotaryEmbedding):
+class Sam2VideoVisionRotaryEmbedding(Sam3ViTRotaryEmbedding):
     def __init__(self, config: Sam2VideoConfig, device=None):
         super().__init__(config, device=device)
 

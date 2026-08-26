@@ -40,7 +40,12 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
-from ...utils import ModelOutput, auto_docstring, can_return_tuple, logging
+from ...utils import (
+    ModelOutput,
+    auto_docstring,
+    can_return_tuple,
+    logging,
+)
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import TransformersKwargs, is_flash_attention_requested, maybe_autocast
 from ...utils.output_capturing import OutputRecorder
@@ -737,7 +742,6 @@ class Sam2VideoPreTrainedModel(PreTrainedModel):
             init.normal_(module.positional_embedding, std=module.scale)
 
 
-# Simple axial 2D rope as in sam3/edgetam/etc with same freq of head-dim//2 for H and W
 class Sam2VideoVisionRotaryEmbedding(nn.Module):
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Sam2VideoConfig, device=None):
@@ -792,11 +796,12 @@ class Sam2VideoVisionRotaryEmbedding(nn.Module):
         sin = self.recomposition_to_2d(sin)
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
+    # Ignore copy
     def recomposition_to_2d(self, freq):
         # take each grid's (N, D), the full frequency range
         freq_h, freq_w = freq[:, 0], freq[:, 1]
-        freq_hw = torch.cat([freq_h, freq_w], dim=-1)
-        return torch.cat([freq_hw, freq_hw], dim=-1)
+        freq_hw = torch.cat([freq_h, freq_w], dim=-1)[None, ...]
+        return freq_hw.repeat_interleave(2, dim=-1)
 
 
 def rotate_pairwise(x):

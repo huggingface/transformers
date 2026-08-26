@@ -232,6 +232,7 @@ class Sam2VideoConfig(PreTrainedConfig):
     memory_encoder_output_channels: int = 64
     # ig should be `memory_rope_parameters` though not sure if the utilities will catch up
     rope_parameters: dict | None = None
+    max_position_embeddings: int | None = None
 
     mask_downsampler_embed_dim: int = 256
     mask_downsampler_kernel_size: int = 3
