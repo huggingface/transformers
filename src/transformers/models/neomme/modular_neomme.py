@@ -721,7 +721,6 @@ class NeoMMEDenseHead(nn.Module):
         return F.normalize(pooled[..., :dense_dim], dim=-1)
 
 
-# FIXME: ask Tom if we need it, iiuc it is supported natively in ST from v6.0
 @auto_docstring(
     custom_intro="""
     The NeoMME model with multi-vector and dense retrieval heads. One forward pass can return token embeddings for
