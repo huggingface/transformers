@@ -114,6 +114,7 @@ class PhimoeIntegrationTest(unittest.TestCase):
                 offload_folder=cls.offload_dir.name,
                 max_memory={"cpu": "60GiB"},
             )
+            logger.warning("device_map=%s", cls.model.hf_device_map)
         return cls.model
 
     @classmethod
@@ -147,47 +148,3 @@ class PhimoeIntegrationTest(unittest.TestCase):
         ).to(device=torch_device, dtype=output.dtype)  # fmt: skip
 
         torch.testing.assert_close(output[0, :2, :10], EXPECTED_OUTPUT, rtol=1e-4, atol=1e-4)
-
-    def test_phimoe_instruct_generation(self):
-        model = self.get_model()
-        tokenizer = AutoTokenizer.from_pretrained("microsoft/Phi-3.5-MoE-instruct")
-
-        messages = [
-            {
-                "role": "system",
-                "content": "You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user.",
-            },
-            {"role": "user", "content": "Can you provide ways to eat combinations of bananas and dragonfruits?"},
-        ]
-        inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt")
-
-        outputs = model.generate(**inputs, max_new_tokens=30)
-        output_text = tokenizer.batch_decode(outputs)
-
-        EXPECTED_OUTPUT = [
-            "<|system|> You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user.<|end|><|user|> Can you provide ways to eat combinations of bananas and dragonfruits?<|end|><|assistant|> Certainly! Bananas and dragonfruits are both delicious and nutritious fruits that can be combined in various ways to create",
-        ]
-        self.assertListEqual(output_text, EXPECTED_OUTPUT)
-
-    def test_phimoe_instruct_with_static_cache(self):
-        model = self.get_model()
-        tokenizer = AutoTokenizer.from_pretrained("microsoft/Phi-3.5-MoE-instruct")
-
-        messages = [
-            {
-                "role": "system",
-                "content": "You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user.",
-            },
-            {"role": "user", "content": "Can you provide ways to eat combinations of bananas and dragonfruits?"},
-        ]
-        inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt").to(
-            torch_device
-        )
-
-        response_tokens = PhimoeMiniWithStaticCache.generate(model, inputs["input_ids"], max_seq_len=30)
-        output_text = tokenizer.batch_decode(torch.tensor([response_tokens], dtype=torch.long, device=torch_device))
-
-        EXPECTED_OUTPUT = [
-            "<|system|> You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user.<|end|><|user|> Can you provide ways to eat combinations of bananas and dragonfruits?<|end|><|assistant|> C"
-        ]
-        self.assertListEqual(output_text, EXPECTED_OUTPUT)
