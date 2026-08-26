@@ -16,6 +16,7 @@
 import logging
 import tempfile
 import unittest
+import unittest.mock
 
 from transformers import BigBirdPegasusConfig, is_torch_available, set_seed
 from transformers.modeling_layers import GradientCheckpointingLayer
