@@ -364,8 +364,9 @@ class EsmSelfAttention(nn.Module):
         is_cross_attention = encoder_hidden_states is not None
         current_states = encoder_hidden_states if is_cross_attention else hidden_states
         attention_mask = encoder_attention_mask if is_cross_attention else attention_mask
-        key_layer = self.key(current_states).view(hidden_shape).transpose(1, 2)
-        value_layer = self.value(current_states).view(hidden_shape).transpose(1, 2)
+        kv_shape = (*current_states.shape[:-1], -1, self.attention_head_size)
+        key_layer = self.key(current_states).view(kv_shape).transpose(1, 2)
+        value_layer = self.value(current_states).view(kv_shape).transpose(1, 2)
 
         # Matt: Our BERT model (which this code was derived from) scales attention logits down by sqrt(head_dim).
         # ESM scales the query down by the same factor instead. Modulo numerical stability these are equivalent,
