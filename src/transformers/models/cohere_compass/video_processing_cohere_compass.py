@@ -122,36 +122,16 @@ class CohereCompassVideoProcessor(BaseVideoProcessor):
     max_frames = 768
     do_sample_frames = True
     cap_pixels_per_frame = None
+    max_video_tokens = 768
     valid_kwargs = CohereCompassVideoProcessorInitKwargs
     model_input_names = ["pixel_values_videos", "video_grid_thw"]
     max_image_size = {"longest_edge": 28 * 28 * 2 * 30000}
     max_duration = None
     num_frames = None
     fps = 2
-    max_video_tokens = 768
 
     def __init__(self, **kwargs: Unpack[CohereCompassVideoProcessorInitKwargs]):
-        # backward compatibility: override size with min_pixels and max_pixels if they are provided
-        size = kwargs.pop("size", None)
-        size = self.size if size is None else size
-        if (min_pixels := kwargs.pop("min_pixels", None)) is not None:
-            size["shortest_edge"] = min_pixels
-            size.pop("min_pixels", None)
-        if (max_pixels := kwargs.pop("max_pixels", None)) is not None:
-            size["longest_edge"] = max_pixels
-            size.pop("max_pixels", None)
-        super().__init__(size=size, **kwargs)
-
-    def _standardize_kwargs(
-        self,
-        size: SizeDict | None = None,
-        min_pixels: int | None = None,
-        max_pixels: int | None = None,
-        **kwargs,
-    ) -> dict:
-        if min_pixels is not None and max_pixels is not None:
-            size = SizeDict(shortest_edge=min_pixels, longest_edge=max_pixels)
-        return super()._standardize_kwargs(size=size, **kwargs)
+        super().__init__(**kwargs)
 
     def sample_frames(
         self,
@@ -219,10 +199,7 @@ class CohereCompassVideoProcessor(BaseVideoProcessor):
         num_frames = videos.shape[1]
         max_pixels = size.longest_edge
         if cap_pixels_per_frame:
-            # Mirrors qwen-vl-utils vision_process.py: per-frame pixels are capped at
-            # `max_video_tokens` patches (VIDEO_MAX_TOKEN_NUM) or the budget's even share per
-            # frame, whichever is smaller, and floored just above min_pixels so tiny clips keep a
-            # usable resolution.
+            # per-frame pixels are capped at `max_video_tokens` patches or the budget's even share per frame
             frame_cap = self.max_video_tokens * factor * factor
             pixels_per_frame = max(min(frame_cap, size.longest_edge // num_frames), int(size.shortest_edge * 1.05))
             max_pixels = pixels_per_frame * num_frames
@@ -382,16 +359,15 @@ class CohereCompassVideoProcessor(BaseVideoProcessor):
         patch_size = videos_kwargs.get("patch_size", None) or self.patch_size
         merge_size = videos_kwargs.get("merge_size", None) or self.merge_size
         temporal_patch_size = videos_kwargs.get("temporal_patch_size", None) or self.temporal_patch_size
+        cap_pixels_per_frame = videos_kwargs.get("cap_pixels_per_frame", None) or self.cap_pixels_per_frame
 
         factor = patch_size * merge_size
-        cap_pixels_per_frame = videos_kwargs.get("cap_pixels_per_frame", None)
-        if cap_pixels_per_frame is None:
-            cap_pixels_per_frame = bool(self.cap_pixels_per_frame)
         if cap_pixels_per_frame:
             # Keep the count in sync with `resize` when the per-frame cap is active.
             frame_cap = self.max_video_tokens * factor * factor
             pixels_per_frame = max(min(frame_cap, max_pixels // num_frames), int(min_pixels * 1.05))
             max_pixels = pixels_per_frame * num_frames
+
         resized_height, resized_width = smart_resize(
             num_frames,
             height,

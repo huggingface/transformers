@@ -1153,7 +1153,12 @@ class Qwen3VLVideoProcessor(Qwen2VLVideoProcessor):
     fps = 2
     cap_pixels_per_frame = None
     max_video_tokens = 768
-    video_total_seq_len = AttributeError()
+
+    def __init__(self, **kwargs: Unpack[Qwen3VLVideoProcessorInitKwargs]):
+        BaseVideoProcessor.__init__(self, **kwargs)
+
+    def _standardize_kwargs(self, **super_kwargs):
+        raise NotImplementedError("No need to override, fallback to base class implementation")
 
     def resize(
         self,
@@ -1172,10 +1177,7 @@ class Qwen3VLVideoProcessor(Qwen2VLVideoProcessor):
         num_frames = videos.shape[1]
         max_pixels = size.longest_edge
         if cap_pixels_per_frame:
-            # Mirrors qwen-vl-utils vision_process.py: per-frame pixels are capped at
-            # `max_video_tokens` patches (VIDEO_MAX_TOKEN_NUM) or the budget's even share per
-            # frame, whichever is smaller, and floored just above min_pixels so tiny clips keep a
-            # usable resolution.
+            # per-frame pixels are capped at `max_video_tokens` patches or the budget's even share per frame
             frame_cap = self.max_video_tokens * factor * factor
             pixels_per_frame = max(min(frame_cap, size.longest_edge // num_frames), int(size.shortest_edge * 1.05))
             max_pixels = pixels_per_frame * num_frames
@@ -1219,16 +1221,15 @@ class Qwen3VLVideoProcessor(Qwen2VLVideoProcessor):
         patch_size = videos_kwargs.get("patch_size", None) or self.patch_size
         merge_size = videos_kwargs.get("merge_size", None) or self.merge_size
         temporal_patch_size = videos_kwargs.get("temporal_patch_size", None) or self.temporal_patch_size
+        cap_pixels_per_frame = videos_kwargs.get("cap_pixels_per_frame", None) or self.cap_pixels_per_frame
 
         factor = patch_size * merge_size
-        cap_pixels_per_frame = videos_kwargs.get("cap_pixels_per_frame", None)
-        if cap_pixels_per_frame is None:
-            cap_pixels_per_frame = bool(self.cap_pixels_per_frame)
         if cap_pixels_per_frame:
             # Keep the count in sync with `resize` when the per-frame cap is active.
             frame_cap = self.max_video_tokens * factor * factor
             pixels_per_frame = max(min(frame_cap, max_pixels // num_frames), int(min_pixels * 1.05))
             max_pixels = pixels_per_frame * num_frames
+
         resized_height, resized_width = smart_resize(
             num_frames,
             height,

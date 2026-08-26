@@ -420,13 +420,13 @@ class Qwen2VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
 
     def test_cap_pixels_per_frame_bounds_dense_videos(self):
         # With the total budget binding, each frame is held to the budget's even share instead of
-        # the per-frame `longest_edge` cap. The budget is shrunk via `video_total_seq_len` so the
+        # the per-frame `longest_edge` cap. The budget is shrunk via `max_video_tokens` so the
         # test does not need hundreds of frames to make the bound bind.
         size = {"longest_edge": 768 * 28 * 28 * 100, "shortest_edge": 400}
         for video_processing_class in self.video_processor_list:
             uncapped = self._process_frames(video_processing_class, 8, size)
             capped = self._process_frames(
-                video_processing_class, 8, size, cap_pixels_per_frame=True, video_total_seq_len=128
+                video_processing_class, 8, size, cap_pixels_per_frame=True, max_video_tokens=128
             )
             self.assertEqual(capped.shape[0], self._expected_capped_seq_len(8, 256, size, total_seq_len=128))
             self.assertLess(capped.shape[0], uncapped.shape[0])
@@ -437,7 +437,7 @@ class Qwen2VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
         size = {"longest_edge": 768 * 28 * 28 * 100, "shortest_edge": 40000}
         for video_processing_class in self.video_processor_list:
             capped = self._process_frames(
-                video_processing_class, 8, size, cap_pixels_per_frame=True, video_total_seq_len=128
+                video_processing_class, 8, size, cap_pixels_per_frame=True, max_video_tokens=128
             )
             self.assertEqual(capped.shape[0], self._expected_capped_seq_len(8, 256, size, total_seq_len=128))
 
@@ -457,7 +457,7 @@ class Qwen2VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
             video_processor_dict.pop("max_pixels", None)
             video_processor_dict["size"] = size
             video_processor_dict["do_sample_frames"] = False
-            video_processor_dict["video_total_seq_len"] = 128
+            video_processor_dict["max_video_tokens"] = 128
             video_processing = video_processing_class(**video_processor_dict)
             video = [np.random.randint(0, 256, (256, 256, 3), dtype=np.uint8) for _ in range(8)]
 

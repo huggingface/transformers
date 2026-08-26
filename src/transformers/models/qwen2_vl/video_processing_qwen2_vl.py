@@ -90,14 +90,14 @@ class Qwen2VLVideoProcessorInitKwargs(VideosKwargs, total=False):
     cap_pixels_per_frame (`bool`, *optional*):
         Whether to bound a video's total pixel cost the way the reference implementation
         (qwen-vl-utils) does: on top of the per-frame `size["longest_edge"]` cap, each frame is
-        limited to an even share of the total-video pixel budget (`video_total_seq_len` tokens'
+        limited to an even share of the total-video pixel budget (`max_video_tokens` tokens'
         worth of pixels), floored at `1.05 * size["shortest_edge"]`, so densely sampled videos
         cannot grow without bound. If unset, the current behavior (no total bound) is kept and a
         warning is emitted: the default will change to `True` in v5.22, after which the argument
         will be removed.
-    video_total_seq_len (`int`, *optional*, defaults to 128000):
+    max_video_tokens (`int`, *optional*, defaults to 128000):
         The model context length assumed when deriving the total-video pixel budget used by
-        `cap_pixels_per_frame` (the budget is 90% of this many tokens, following qwen-vl-utils).
+        `cap_pixels_per_frame` (the budget is 90% of this many tokens.
     """
 
     min_pixels: int
@@ -108,7 +108,7 @@ class Qwen2VLVideoProcessorInitKwargs(VideosKwargs, total=False):
     min_frames: int
     max_frames: int
     cap_pixels_per_frame: bool
-    video_total_seq_len: int
+    max_video_tokens: int
 
 
 @auto_docstring
@@ -128,7 +128,7 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
     max_frames = 768
     do_sample_frames = False  # Set to False for BC, recommended to set `True` in new models
     cap_pixels_per_frame = None
-    video_total_seq_len = 128000
+    max_video_tokens = 128000
     valid_kwargs = Qwen2VLVideoProcessorInitKwargs
     model_input_names = ["pixel_values_videos", "video_grid_thw"]
 
@@ -241,12 +241,9 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
 
         max_pixels = size.longest_edge
         if cap_pixels_per_frame:
-            # Mirrors qwen-vl-utils vision_process.py: the per-frame cap (`size.longest_edge`) is
-            # additionally bounded by an even share of the total-video pixel budget (90% of
-            # `video_total_seq_len` tokens), floored just above min_pixels so densely sampled
-            # videos keep a usable per-frame resolution.
+            # the per-frame cap (`size.longest_edge`) is bounded by an even share of the `max_video_tokens`
             num_frames = videos.shape[1]
-            total_pixels = int(self.video_total_seq_len * factor * factor * 0.9)
+            total_pixels = int(self.max_video_tokens * factor * factor * 0.9)
             max_pixels = max(
                 min(max_pixels, total_pixels * temporal_factor // num_frames), int(size.shortest_edge * 1.05)
             )
