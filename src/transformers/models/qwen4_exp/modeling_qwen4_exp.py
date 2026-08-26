@@ -1110,7 +1110,8 @@ class Qwen4ExpTextNGramEmbedding(nn.Module):
             blocks.append(ngram_ids + head_offsets.view(1, 1, -1))
 
         ngram_ids = torch.cat(blocks, dim=-1)[:, -input_ids.shape[1] :]
-        return self.ngram_embedding(ngram_ids).flatten(-2)
+        # We need explicit device placement here, as the embedding may be skipped from device_map completely
+        return self.ngram_embedding(ngram_ids.to(self.ngram_embedding.weight.device)).to(ngram_ids.device).flatten(-2)
 
 
 class Qwen4ExpTextPLELayer(nn.Module):
@@ -1257,6 +1258,10 @@ class Qwen4ExpPreTrainedModel(PreTrainedModel):
     _is_stateful = True
     _can_compile_fullgraph = True
     _supports_flex_attn = False
+    # This embedding is so big (~95 GiB) that on most hardware setups, we must completely skip it from the `device_map` as otherwise
+    # it will lead to full model offloading, and memory OOM as accelerate tries to put cpu-offloaded params back on accelerator
+    # during forward. Note that if it fits on accelerator (e.g. huge B200 gpus), then it will not be skipped, and will be put on device
+    _no_placement_params = ["ple.ple_embedding.ngram_embedding.weight"]
 
     @torch.no_grad()
     def _init_weights(self, module):
