@@ -19,9 +19,10 @@ import tempfile
 import unittest
 
 from huggingface_hub.errors import StrictDataclassClassValidationError
+from parameterized import parameterized
 
 from transformers import is_torch_available
-from transformers.testing_utils import require_torch, torch_device
+from transformers.testing_utils import is_fsdp_test, require_torch, require_torch_greater_or_equal, torch_device
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...test_modeling_common import floats_tensor
@@ -101,6 +102,7 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
 
     # QSA indexer parameters are trained through a separate objective rather than the causal-LM loss.
     test_all_params_have_gradient = False
+    test_torch_exportable = False  # QSA index selection has data-dependent control flow
 
     def _get_conv_state_shape(self, batch_size: int, config):
         intermediate_size = (
@@ -390,6 +392,25 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
             self.model_tester.ple_layer_ids = []
             self.model_tester.split_ngram_parts = 4
 
+    @require_torch_greater_or_equal("2.7")
+    @is_fsdp_test
+    @unittest.skip(reason="FIXME: Cyril or Ferdinand")
+    def test_fsdp2_save_load(self):
+        pass
+
+    @require_torch_greater_or_equal("2.7")
+    @is_fsdp_test
+    @unittest.skip(reason="FIXME: Cyril or Ferdinand")
+    def test_fsdp2_save_load_dcp(self):
+        pass
+
+    @parameterized.expand(["untied", "tied"])
+    @require_torch_greater_or_equal("2.7")
+    @is_fsdp_test
+    @unittest.skip(reason="FIXME: Cyril or Ferdinand")
+    def test_fsdp2_plan_vs_ddp(self, label):
+        pass
+
 
 class Qwen4ExpVisionText2TextModelTester(VLMModelTester):
     base_model_class = Qwen4ExpModel
@@ -508,6 +529,7 @@ class Qwen4ExpVisionText2TextModelTester(VLMModelTester):
 class Qwen4ExpCompositeModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = Qwen4ExpVisionText2TextModelTester
     test_all_params_have_gradient = False
+    test_torch_exportable = False  # QSA index selection has data-dependent control flow
 
     def get_config(self):
         return self.model_tester.get_config(ple_layer_ids=[1])
