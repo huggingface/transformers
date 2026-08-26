@@ -227,16 +227,17 @@ class VibeVoiceGenerationMixin(GenerationMixin):
             inputs_tensor=negative_kwargs["input_ids"],
             input_ids_length=negative_input_ids.shape[1],
         )
-        # Allocate/prepare the negative branch's own KV cache, sized to the positive max length. We store it
-        # under `_negative_cache` (rather than the positive branch's `_cache`) via the `cache_attr_name` argument
-        # of our `_prepare_cache_for_generation` override, so the two branches keep independent caches.
+        # Allocate the negative branch's own KV cache. Its length is memorized under
+        # `_previous_max_negative_cache_length` (rather than the positive branch's `_previous_max_cache_length`) via
+        # the `max_length_attr_name` argument of our `_prepare_cache_for_generation` override, so the negative cache
+        # is not over-allocated to the positive branch's (much longer, prompt-sized) length.
         self._prepare_cache_for_generation(
             negative_generation_config,
             negative_model_kwargs,
             None,
             batch_size,
             negative_generation_config.max_length - 1,
-            cache_attr_name="_negative_cache",
+            max_length_attr_name="_previous_max_negative_cache_length",
         )
         return negative_input_ids, negative_model_kwargs
 
@@ -247,16 +248,20 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         generation_mode: Any,
         batch_size: int,
         max_cache_length: int,
-        cache_attr_name: str = "_cache",
+        max_length_attr_name: str = "_previous_max_cache_length",
     ) -> None:
         """
         This method overrides [~generation.utils.GenerationMixin._prepare_cache_for_generation].
 
-        The base implementation always persists the generation cache on the fixed `self._cache` attribute.
-        VibeVoice runs a second, independent generation pass for the classifier-free guidance negative branch,
-        which needs its own persistent cache. The added `cache_attr_name` argument lets the caller pick which
-        attribute the cache lives on (`"_cache"` for the positive branch, `"_negative_cache"` for the negative
-        one). Only the code paths exercised by VibeVoice are kept: decoder-only dynamic and static caches.
+        The base implementation memorizes the longest static cache length requested so far on the fixed
+        `self._previous_max_cache_length` attribute, so that later calls are served by a cache of that same shape
+        (avoiding a `torch.compile` recompilation). VibeVoice runs a second, independent generation pass for the
+        classifier-free guidance negative branch, whose cache is much shorter than the positive branch's (the
+        negative branch starts from a single token instead of the full prompt). The added `max_length_attr_name`
+        argument lets the caller pick which attribute holds that memo (`"_previous_max_cache_length"` for the
+        positive branch, `"_previous_max_negative_cache_length"` for the negative one), so the negative cache is
+        not over-allocated to the positive branch's length. Only the code paths exercised by VibeVoice are kept:
+        decoder-only dynamic and static caches.
         """
         cache_name = "past_key_values"
 
@@ -290,7 +295,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 batch_size=cache_batch_size,
                 max_cache_len=max_cache_length,
                 prefill_chunk_size=generation_config.prefill_chunk_size,
-                cache_attr_name=cache_attr_name,
+                max_length_attr_name=max_length_attr_name,
             )
         else:
             # i.e. `cache_implementation` in [None, "dynamic", "offloaded"]
@@ -305,53 +310,44 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         batch_size: int,
         max_cache_len: int,
         prefill_chunk_size: int | None,
-        cache_attr_name: str = "_cache",
+        max_length_attr_name: str = "_previous_max_cache_length",
     ) -> StaticCache:
         """
         This method overrides [~generation.utils.GenerationMixin._prepare_static_cache].
 
-        Same behavior as the base method (a persistent `StaticCache` reused across `generate` calls, only
-        reallocated when a larger cache or different batch size is required), except the cache is stored under the
-        attribute named by `cache_attr_name` instead of always `self._cache`. This lets the CFG negative branch
-        keep an independent `self._negative_cache`. Only the decoder-only path used by VibeVoice is kept.
+        Same behavior as the base method (a fresh `StaticCache` per call, sized to the longest length requested so
+        far so that `torch.compile` does not recompile on later calls), except the memorized length is stored under
+        the attribute named by `max_length_attr_name` instead of always `self._previous_max_cache_length`. This lets
+        the CFG negative branch track its own (much shorter) length. Only the decoder-only path used by VibeVoice
+        is kept.
 
         Returns the resulting cache object.
         """
         offload_cache = "offloaded" in cache_implementation
+        previous_max_len = getattr(self, max_length_attr_name, -1)
+        effective_length = max(max_cache_len, previous_max_len)
 
-        existing_cache = getattr(self, cache_attr_name, None)
-        cache_to_check = existing_cache if isinstance(existing_cache, StaticCache) else None
-
-        need_new_cache = (
-            cache_to_check is None
-            or cache_to_check.offloading != offload_cache
-            or cache_to_check.batch_size != batch_size
-            or cache_to_check.get_max_length() < max_cache_len
+        cache = StaticCache(
+            config=self.config.get_text_config(decoder=True),
+            max_cache_len=effective_length,
+            offloading=offload_cache,
         )
+        if prefill_chunk_size is not None:
+            # Chunked prefill compiles the prefill, so eagerly init the fresh cache to avoid a recompile next
+            # call (#46421). Skipped (-> lazy init) when it can't be initialized on a single device.
+            init_shape = self._get_static_cache_init_shape()
+            if init_shape is not None:
+                num_heads, head_dim = init_shape
+                cache.early_initialization(
+                    batch_size=batch_size,
+                    num_heads=num_heads,
+                    head_dim=head_dim,
+                    dtype=self.dtype,
+                    device=self.device,
+                )
 
-        if need_new_cache:
-            cache = StaticCache(
-                config=self.config.get_text_config(decoder=True),
-                max_cache_len=max_cache_len,
-                offloading=offload_cache,
-            )
-            if prefill_chunk_size is not None:
-                # Chunked prefill compiles the prefill, so eagerly init the fresh cache to avoid a recompile next
-                # call (#46421). Skipped (-> lazy init) when it can't be initialized on a single device.
-                init_shape = self._get_static_cache_init_shape()
-                if init_shape is not None:
-                    num_heads, head_dim = init_shape
-                    cache.early_initialization(
-                        batch_size=batch_size,
-                        num_heads=num_heads,
-                        head_dim=head_dim,
-                        dtype=self.dtype,
-                        device=self.device,
-                    )
-        else:
-            cache = existing_cache
-            cache.reset()
-        setattr(self, cache_attr_name, cache)
+        # Memorize the current length, to avoid a recompilation on later calls if we can
+        setattr(self, max_length_attr_name, effective_length)
         return cache
 
     def _get_negative_compiled_call(self, compile_config: GenerationConfig | None):
@@ -360,7 +356,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
 
         This mirrors [`~PreTrainedModel.get_compiled_call`] but stores the compiled callable under a
         separate attribute (`self._negative_compiled_call`). The negative branch keeps its own
-        `StaticCache` (`self._negative_cache`) with a different length than the positive branch.
+        `StaticCache`, with a different length than the positive branch's.
         """
         compile_config = compile_config or self._default_compile_config()
         if (
