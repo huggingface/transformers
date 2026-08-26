@@ -31,7 +31,9 @@ def get_daily_ci_runs(token, num_runs=7, workflow_id=None):
     workflow_runs = result["workflow_runs"]
     print(f"[DEBUG get_daily_ci_runs] event=schedule returned {len(workflow_runs)} runs:")
     for r in workflow_runs:
-        print(f"  id={r['id']} status={r['status']} conclusion={r.get('conclusion')} created_at={r['created_at']} event={r['event']}")
+        print(
+            f"  id={r['id']} status={r['status']} conclusion={r.get('conclusion')} created_at={r['created_at']} event={r['event']}"
+        )
     if len(workflow_runs) == 0:
         workflow_run_url = f"{url}&event=workflow_run"
         print(f"[DEBUG get_daily_ci_runs] Falling back to: {workflow_run_url}")
@@ -39,7 +41,9 @@ def get_daily_ci_runs(token, num_runs=7, workflow_id=None):
         workflow_runs = result["workflow_runs"]
         print(f"[DEBUG get_daily_ci_runs] event=workflow_run returned {len(workflow_runs)} runs:")
         for r in workflow_runs:
-            print(f"  id={r['id']} status={r['status']} conclusion={r.get('conclusion')} created_at={r['created_at']} event={r['event']}")
+            print(
+                f"  id={r['id']} status={r['status']} conclusion={r.get('conclusion')} created_at={r['created_at']} event={r['event']}"
+            )
 
     return workflow_runs
 
@@ -61,7 +65,9 @@ def get_last_daily_ci_run(token, workflow_run_id=None, workflow_id=None, commit_
     workflow_runs = get_daily_ci_runs(token, workflow_id=workflow_id)
     print(f"[DEBUG get_last_daily_ci_run] Iterating {len(workflow_runs)} runs (commit_sha={commit_sha!r}):")
     for run in workflow_runs:
-        print(f"  checking id={run['id']} status={run['status']} conclusion={run.get('conclusion')} created_at={run['created_at']} head_sha={run['head_sha']}")
+        print(
+            f"  checking id={run['id']} status={run['status']} conclusion={run.get('conclusion')} created_at={run['created_at']} head_sha={run['head_sha']}"
+        )
         if commit_sha in [None, ""] and run["status"] == "completed":
             workflow_run = run
             break
@@ -76,7 +82,9 @@ def get_last_daily_ci_run(token, workflow_run_id=None, workflow_id=None, commit_
 
 def get_last_daily_ci_workflow_run_id(token, workflow_run_id=None, workflow_id=None, commit_sha=None):
     """Get the last completed workflow run id of the scheduled (daily) CI."""
-    print(f"[DEBUG get_last_daily_ci_workflow_run_id] called with workflow_run_id={workflow_run_id!r} workflow_id={workflow_id!r} commit_sha={commit_sha!r}")
+    print(
+        f"[DEBUG get_last_daily_ci_workflow_run_id] called with workflow_run_id={workflow_run_id!r} workflow_id={workflow_id!r} commit_sha={commit_sha!r}"
+    )
     if workflow_run_id is not None and workflow_run_id != "":
         print(f"[DEBUG get_last_daily_ci_workflow_run_id] returning early with workflow_run_id={workflow_run_id!r}")
         return workflow_run_id
