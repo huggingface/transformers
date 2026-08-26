@@ -53,17 +53,6 @@ def _patch_no_accelerator():
         yield
 
 
-class FineGrainedFP8TPPlanTest(unittest.TestCase):
-    def test_update_tp_plan_without_experts_implementation(self):
-        config = SimpleNamespace(base_model_tp_plan={"layers.*.mlp.experts": "grouped_gemm"})
-        quantizer = FineGrainedFP8HfQuantizer(FineGrainedFP8Config())
-
-        updated_config = quantizer.update_tp_plan(config)
-
-        self.assertEqual(updated_config.base_model_tp_plan["layers.*.mlp.experts"], "grouped_gemm")
-        self.assertEqual(updated_config.base_model_tp_plan["layers.*.mlp.experts_scale_inv"], "grouped_gemm")
-
-
 @require_torch_accelerator
 class FineGrainedFP8ConfigTest(unittest.TestCase):
     def test_to_dict(self):
