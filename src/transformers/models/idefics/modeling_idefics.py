@@ -365,7 +365,7 @@ class IdeficsEmbedding(torch.nn.Module):
             self.base
             ** (torch.arange(0, self.dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / self.dim)
         )
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
 
         # Build here to make `torch.jit.trace` work.
         self._set_cos_sin_cache(
@@ -379,8 +379,8 @@ class IdeficsEmbedding(torch.nn.Module):
         freqs = torch.einsum("i,j->ij", t, self.inv_freq)
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
         emb = torch.cat((freqs, freqs), dim=-1)
-        self.register_buffer("cos_cached", emb.cos().to(dtype), persistent=False)
-        self.register_buffer("sin_cached", emb.sin().to(dtype), persistent=False)
+        self.cos_cached = nn.Buffer(emb.cos().to(dtype), persistent=False)
+        self.sin_cached = nn.Buffer(emb.sin().to(dtype), persistent=False)
 
     def forward(self, x, seq_len=None):
         # x: [bs, num_attention_heads, seq_len, head_size]
@@ -1022,7 +1022,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
         )
         image_attention_mask = torch.where(
             image_attention_mask[:, None, :, :].bool(),
-            torch.tensor(0.0, device=device, dtype=image_hidden_states.dtype),
+            torch.full((), 0.0, device=device, dtype=image_hidden_states.dtype),
             torch.finfo(image_hidden_states.dtype).min,
         )
 
@@ -1208,17 +1208,6 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
         **kwargs,
     ):
         # Overwritten -- custom processing based on `config.use_resampler`
-
-        images_kwargs = {}
-        if image_hidden_states is not None:
-            if self.config.use_resampler:
-                images_kwargs["perceiver_embeddings"] = image_hidden_states
-            else:
-                images_kwargs["image_encoder_embeddings"] = image_hidden_states
-        else:
-            images_kwargs["pixel_values"] = pixel_values
-        images_kwargs["interpolate_pos_encoding"] = kwargs.pop("interpolate_pos_encoding", False)
-
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
@@ -1227,9 +1216,17 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
             position_ids=position_ids,
             use_cache=use_cache,
             image_attention_mask=image_attention_mask,
-            **images_kwargs,
             **kwargs,
         )
+
+        if image_hidden_states is not None:
+            if self.config.use_resampler:
+                model_inputs["perceiver_embeddings"] = image_hidden_states
+            else:
+                model_inputs["image_encoder_embeddings"] = image_hidden_states
+        else:
+            model_inputs["pixel_values"] = pixel_values
+        model_inputs["interpolate_pos_encoding"] = kwargs.pop("interpolate_pos_encoding", False)
 
         if image_attention_mask is not None and inputs_embeds is None:
             seq_length = model_inputs["input_ids"].shape[1]

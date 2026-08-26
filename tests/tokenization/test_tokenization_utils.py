@@ -28,6 +28,7 @@ from transformers import (
     BertTokenizer,
     LlamaTokenizer,
     PreTrainedTokenizerFast,
+    ProphetNetTokenizer,
     PythonBackend,
     TensorType,
     TokenSpan,
@@ -83,6 +84,33 @@ class TokenizerUtilsTest(unittest.TestCase):
         self.assertEqual(encoded.word_to_tokens(0), TokenSpan(start=1, end=2))
         self.assertEqual(encoded.word_to_tokens(1), None)
         self.assertEqual(encoded.word_to_tokens(2), TokenSpan(start=2, end=3))
+
+    def test_batch_pretokenized_documents_of_two_words_are_not_pairs(self):
+        tokenizer = ProphetNetTokenizer.from_pretrained("microsoft/prophetnet-large-uncased")
+
+        encoded = tokenizer([["want", "hello"], ["want", "hello", "x"]], is_split_into_words=True)
+        self.assertEqual(encoded["input_ids"][0], tokenizer(["want", "hello"], is_split_into_words=True)["input_ids"])
+        self.assertEqual(
+            encoded["input_ids"][1], tokenizer(["want", "hello", "x"], is_split_into_words=True)["input_ids"]
+        )
+        sep_token_id = tokenizer.convert_tokens_to_ids(tokenizer.sep_token)
+        self.assertEqual(encoded["input_ids"][0].count(sep_token_id), 1)
+
+    def test_batch_pretokenized_tuples_are_still_pairs(self):
+        tokenizer = ProphetNetTokenizer.from_pretrained("microsoft/prophetnet-large-uncased")
+
+        # Mirrors the batch shape fed by TokenizerUtilsCommonTest.test_pretokenized_inputs: tuples of word
+        # lists are sequence pairs under is_split_into_words, while lists stay single pretokenized documents
+        encoded = tokenizer([(("want", "hello"), ("x",)), ["want", "hello"]], is_split_into_words=True)
+        self.assertEqual(encoded["input_ids"][0], tokenizer("want hello", "x")["input_ids"])
+        self.assertEqual(encoded["input_ids"][1], tokenizer(["want", "hello"], is_split_into_words=True)["input_ids"])
+
+    def test_batch_pair_detection_without_split_into_words(self):
+        tokenizer = ProphetNetTokenizer.from_pretrained("microsoft/prophetnet-large-uncased")
+
+        encoded = tokenizer([["hello", "world"], ["want", "x"]])
+        self.assertEqual(encoded["input_ids"][0], tokenizer("hello", "world")["input_ids"])
+        self.assertEqual(encoded["input_ids"][1], tokenizer("want", "x")["input_ids"])
 
     def test_batch_encoding_with_labels(self):
         batch = BatchEncoding({"inputs": [[1, 2, 3], [4, 5, 6]], "labels": [0, 1]})

@@ -91,6 +91,7 @@ from transformers.testing_utils import (
     get_device_properties,
     hub_retry,
     is_flaky,
+    preserve_module_forwards,
     require_accelerate,
     require_bitsandbytes,
     require_deepspeed,
@@ -105,6 +106,7 @@ from transformers.testing_utils import (
     require_torch_mps,
     require_torch_multi_accelerator,
     require_torch_multi_gpu,
+    rocm_has_sdpa_flash_backend,
     run_first,
     run_test_using_subprocess,
     set_config_for_less_flaky_test,
@@ -135,8 +137,8 @@ if is_torch_available():
     from torch import nn
 
     from transformers import MODEL_MAPPING
+    from transformers.distributed.tensor_parallel import _get_parameter_tp_plan
     from transformers.integrations.accelerate import compute_module_sizes
-    from transformers.integrations.tensor_parallel import _get_parameter_tp_plan
     from transformers.modeling_utils import load_state_dict
     from transformers.pytorch_utils import id_tensor_storage
 
@@ -3804,8 +3806,8 @@ class ModelTesterMixin(ExportTesterMixin):
         device_type, major, minor = get_device_properties()
         if device_type == "cuda" and major < 8:
             self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
-        elif device_type == "rocm" and major < 9:
-            self.skipTest(reason="This test requires an AMD GPU with compute capability >= 9.0")
+        elif device_type == "rocm" and not rocm_has_sdpa_flash_backend(major):
+            self.skipTest(reason="This AMD GPU has no SDPA flash backend available")
         elif device_type not in ["cuda", "rocm", "xpu"]:
             self.skipTest(reason="This test requires a Nvidia or AMD GPU, or an Intel XPU")
 
@@ -3825,6 +3827,10 @@ class ModelTesterMixin(ExportTesterMixin):
                 "evolla",
                 "modernbert",
                 "gemma3",
+                # gemma4: the block-overlay mask in create_masks_for_vision_model forces mask
+                # materialization unconditionally, so SDPA can never use the FA backend when the
+                # vision portion is involved. This is by design and not fixable on the modeling side.
+                "gemma4",
                 "t5gemma",
                 "diffllama",
                 "dpr",
@@ -4334,6 +4340,8 @@ class ModelTesterMixin(ExportTesterMixin):
                 config.attention_dropout = 0.0
             if hasattr(config, "attention_probs_dropout_prob"):
                 config.attention_probs_dropout_prob = 0.0
+            if hasattr(config, "dropout_rate"):
+                config.dropout_rate = 0.0
 
             # Update the head dim and try to update hidden size as well if present in config
             # NOTE: some models may have none if the values in sub-config, thus we check for `Noneness`
@@ -4364,14 +4372,14 @@ class ModelTesterMixin(ExportTesterMixin):
                 num_attn_heads = getattr(config, "num_attention_heads")
                 num_attn_heads = num_attn_heads if isinstance(num_attn_heads, int) else max(num_attn_heads)
                 head_dim = head_dim if head_dim is not None else config.hidden_size // num_attn_heads
-                config.hidden_size *= max(requested_dim // head_dim, 1)
+                config.hidden_size *= max(math.ceil(requested_dim / head_dim), 1)
 
             if (
                 getattr(config, "decoder_hidden_size", None) is not None
                 and getattr(config, "decoder_num_attention_heads", None) is not None
             ):
                 decoder_head_dim = config.decoder_hidden_size // config.decoder_num_attention_heads
-                config.decoder_hidden_size *= max(requested_dim // decoder_head_dim, 1)
+                config.decoder_hidden_size *= max(math.ceil(requested_dim / decoder_head_dim), 1)
 
             if (
                 getattr(config, "cross_hidden_size", None) is not None
@@ -4382,7 +4390,7 @@ class ModelTesterMixin(ExportTesterMixin):
                     if cross_head_dim is not None
                     else config.cross_hidden_size // config.cross_num_attention_heads
                 )
-                config.cross_hidden_size *= max(requested_dim // cross_head_dim, 1)
+                config.cross_hidden_size *= max(math.ceil(requested_dim / cross_head_dim), 1)
 
             # 3d rope also depends on the head dim
             # (we assume easy shapes here where we get to the requested head dim at least)
@@ -5114,15 +5122,6 @@ class ModelTesterMixin(ExportTesterMixin):
                     hasattr(outputs, "pooler_output"),
                     "get_text_features() must return a BaseModelOutput with pooler_output",
                 )
-                self.assertTrue(
-                    hasattr(outputs, "hidden_states"),
-                    "get_text_features() must return a BaseModelOutput with hidden_states",
-                )
-                if self.has_attentions:
-                    self.assertTrue(
-                        hasattr(outputs, "attentions"),
-                        "get_text_features() must return a BaseModelOutput with attentions",
-                    )
 
                 # Test against (batch_size, seq_len, hidden_size)
                 last_hidden_state = outputs.last_hidden_state
@@ -5145,6 +5144,11 @@ class ModelTesterMixin(ExportTesterMixin):
 
             with torch.no_grad():
                 outputs = model.get_text_features(**inputs_dict)
+            self.assertTrue(
+                hasattr(outputs, "hidden_states"),
+                "get_text_features() must return a BaseModelOutput with hidden_states",
+            )
+
             # hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
             hidden_states = outputs.hidden_states
             expected_num_hidden_states = self._text_features_get_expected_num_hidden_states()
@@ -5178,6 +5182,11 @@ class ModelTesterMixin(ExportTesterMixin):
 
             with torch.no_grad():
                 outputs = model.get_text_features(**inputs_dict)
+            self.assertTrue(
+                hasattr(outputs, "attentions"),
+                "get_text_features() must return a BaseModelOutput with attentions",
+            )
+
             attentions = outputs.attentions
             # model.text_model(**inputs_dict) also no attentions for aimv2
             expected_num_attentions = self._text_features_get_expected_num_attentions()
@@ -5232,16 +5241,6 @@ class ModelTesterMixin(ExportTesterMixin):
                     hasattr(outputs, "pooler_output"),
                     "get_image_features() must return a BaseModelOutput with pooler_output",
                 )
-                self.assertTrue(
-                    hasattr(outputs, "hidden_states"),
-                    "get_image_features() must return a BaseModelOutput with hidden_states",
-                )
-                if self.has_attentions:
-                    self.assertTrue(
-                        hasattr(outputs, "attentions"),
-                        "get_image_features() must return a BaseModelOutput with attentions",
-                    )
-
                 if getattr(self, "skip_test_image_features_output_shape", False):
                     return
 
@@ -5270,6 +5269,7 @@ class ModelTesterMixin(ExportTesterMixin):
                     "out_hidden_size",
                     "hidden_size",
                     "hidden_dim",
+                    "mm_embed_dim",  # gemma4-only
                 ]
                 hidden_size = None
                 for attr in attribute_candidates:
@@ -5315,6 +5315,11 @@ class ModelTesterMixin(ExportTesterMixin):
             with torch.no_grad():
                 outputs = model.get_image_features(**inputs_dict)
             # hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+            self.assertTrue(
+                hasattr(outputs, "hidden_states"),
+                "get_image_features() must return a BaseModelOutput with hidden_states",
+            )
+
             hidden_states = outputs.hidden_states
             expected_num_hidden_states = self._image_features_get_expected_num_hidden_states()
             self.assertIsNotNone(hidden_states, "hidden_states should not be None")
@@ -5350,6 +5355,11 @@ class ModelTesterMixin(ExportTesterMixin):
 
             with torch.no_grad():
                 outputs = model.get_image_features(**inputs_dict)
+
+            self.assertTrue(
+                hasattr(outputs, "attentions"),
+                "get_image_features() must return a BaseModelOutput with attentions",
+            )
             attentions = outputs.attentions
             # model.text_model(**inputs_dict) also no attentions for aimv2
             expected_num_attentions = self._image_features_get_expected_num_attentions()
@@ -5409,16 +5419,6 @@ class ModelTesterMixin(ExportTesterMixin):
                     hasattr(outputs, "pooler_output"),
                     "get_audio_features() must return a BaseModelOutputWithPooling with pooler_output",
                 )
-                self.assertTrue(
-                    hasattr(outputs, "hidden_states"),
-                    "get_audio_features() must return a BaseModelOutputWithPooling with hidden_states",
-                )
-                if self.has_attentions:
-                    self.assertTrue(
-                        hasattr(outputs, "attentions"),
-                        "get_audio_features() must return a BaseModelOutputWithPooling with attentions",
-                    )
-
                 if getattr(self, "skip_test_audio_features_output_shape", False):
                     return
 
@@ -5463,6 +5463,11 @@ class ModelTesterMixin(ExportTesterMixin):
 
             with torch.no_grad():
                 outputs = model.get_audio_features(**inputs_dict)
+
+            self.assertTrue(
+                hasattr(outputs, "hidden_states"),
+                "get_audio_features() must return a BaseModelOutputWithPooling with hidden_states",
+            )
             hidden_states = outputs.hidden_states
             expected_num_hidden_states = self._audio_features_get_expected_num_hidden_states()
             self.assertIsNotNone(hidden_states, "hidden_states should not be None")
@@ -5495,6 +5500,12 @@ class ModelTesterMixin(ExportTesterMixin):
 
             with torch.no_grad():
                 outputs = model.get_audio_features(**inputs_dict)
+
+            self.assertTrue(
+                hasattr(outputs, "attentions"),
+                "get_audio_features() must return a BaseModelOutputWithPooling with attentions",
+            )
+
             attentions = outputs.attentions
             expected_num_attentions = self._audio_features_get_expected_num_attentions()
             self.assertIsNotNone(attentions, "attentions should not be None")
@@ -5548,16 +5559,6 @@ class ModelTesterMixin(ExportTesterMixin):
                     hasattr(outputs, "pooler_output"),
                     "get_video_features() must return a BaseModelOutput with pooler_output",
                 )
-                self.assertTrue(
-                    hasattr(outputs, "hidden_states"),
-                    "get_video_features() must return a BaseModelOutput with hidden_states",
-                )
-                if self.has_attentions:
-                    self.assertTrue(
-                        hasattr(outputs, "attentions"),
-                        "get_video_features() must return a BaseModelOutput with attentions",
-                    )
-
                 if getattr(self, "skip_test_video_features_output_shape", False):
                     return
 
@@ -5612,6 +5613,12 @@ class ModelTesterMixin(ExportTesterMixin):
 
             with torch.no_grad():
                 outputs = model.get_video_features(**inputs_dict)
+
+            self.assertTrue(
+                hasattr(outputs, "hidden_states"),
+                "get_video_features() must return a BaseModelOutput with hidden_states",
+            )
+
             hidden_states = outputs.hidden_states
             expected_num_hidden_states = self._video_features_get_expected_num_hidden_states()
             self.assertIsNotNone(hidden_states, "hidden_states should not be None")
@@ -5644,6 +5651,12 @@ class ModelTesterMixin(ExportTesterMixin):
 
             with torch.no_grad():
                 outputs = model.get_video_features(**inputs_dict)
+
+            self.assertTrue(
+                hasattr(outputs, "attentions"),
+                "get_video_features() must return a BaseModelOutput with attentions",
+            )
+
             attentions = outputs.attentions
             expected_num_attentions = self._video_features_get_expected_num_attentions()
             self.assertIsNotNone(attentions, "attentions should not be None")
@@ -5784,8 +5797,269 @@ class ModelTesterMixin(ExportTesterMixin):
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
 
-            # Using kernels should not raise a `ValueError`
-            model.use_kernels = True
+            # `kernelize` mutates module-level singletons, so restore them to keep later tests kernel-free
+            with preserve_module_forwards(model):
+                # Using kernels should not raise a `ValueError`
+                model.use_kernels = True
+
+    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
+    def test_model_rope_scaling_from_config(self, scaling_type):
+        """
+        Tests that we can initialize a model with RoPE scaling in the config, that it can run a forward pass, and
+        that a few basic model output properties are honored.
+        """
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        text_config = config.get_text_config(decoder=True)
+        base_model_class = None
+        for model_class in self.all_model_classes:
+            if model_class.__name__ in [
+                *get_values(MODEL_MAPPING_NAMES),
+            ]:
+                base_model_class = model_class
+                break
+
+        if base_model_class is None:
+            self.skipTest("This model has no `base_model_class` defined in tester.")
+
+        if not _config_supports_rope_scaling(text_config):
+            self.skipTest("This model does not support RoPE scaling")
+
+        # TODO: raushan, add separate tests for mrope in MultimodalTester
+        if text_config.rope_parameters.get("mrope_section") is not None:
+            self.skipTest("This model uses 3D multimodal RoPE, the test uses 2D position ids.")
+
+        if not hasattr(text_config, "vocab_size"):
+            self.skipTest("This model has no vocab size defined and the test doesn't yet support non-text modalities.")
+
+        n_required_args = sum(
+            p.default is inspect.Parameter.empty
+            and p.kind in (p.POSITIONAL_OR_KEYWORD, p.KEYWORD_ONLY, p.POSITIONAL_ONLY)
+            and p.name != "self"
+            for p in inspect.signature(base_model_class.forward).parameters.values()
+        )
+        if n_required_args > 1:
+            self.skipTest("This model requires more than single main input, skip for now as it's not supported")
+
+        short_input = ids_tensor([1, 10], text_config.vocab_size)
+        long_input = ids_tensor([1, int(text_config.max_position_embeddings * 1.5)], text_config.vocab_size)
+        short_model_kwargs = long_model_kwargs = {}
+
+        if config.is_encoder_decoder:
+            short_model_kwargs = {"decoder_input_ids": short_input.clone()}
+            long_model_kwargs = {"decoder_input_ids": long_input.clone()}
+
+        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
+        _set_config_rope_params(
+            text_config,
+            {
+                "rope_type": "default",
+                "rope_theta": 10_000.0,
+                "original_max_position_embeddings": 16384,
+            },
+        )
+        original_model = base_model_class(config)
+        original_model.to(torch_device)
+        original_model.eval()
+        original_short_output = original_model(short_input, **short_model_kwargs)
+        original_long_output = original_model(long_input, **long_model_kwargs)
+
+        original_short_output = original_short_output.last_hidden_state
+        original_long_output = original_long_output.last_hidden_state
+
+        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
+        _set_config_rope_params(
+            text_config,
+            {
+                "rope_type": scaling_type,
+                "factor": 10.0,
+                "rope_theta": 10_000.0,
+            },
+        )
+        scaled_model = base_model_class(config)
+        scaled_model.to(torch_device)
+        scaled_model.eval()
+        scaled_short_output = scaled_model(short_input, **short_model_kwargs).last_hidden_state
+        scaled_long_output = scaled_model(long_input, **long_model_kwargs).last_hidden_state
+
+        # Dynamic scaling does not change the RoPE embeddings until it receives an input longer than the original
+        # maximum sequence length, so the outputs for the short input should match.
+        if scaling_type == "dynamic":
+            torch.testing.assert_close(original_short_output, scaled_short_output, rtol=1e-5, atol=1e-5)
+        else:
+            self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
+
+        # The output should be different for long inputs
+        self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
+
+    def test_model_rope_scaling_frequencies(self):
+        """Tests the frequency properties of the different RoPE scaling types on the model RoPE layer."""
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        text_config = config.get_text_config(decoder=True)
+        base_model_class = None
+        for model_class in self.all_model_classes:
+            if model_class.__name__ in [
+                *get_values(MODEL_MAPPING_NAMES),
+            ]:
+                base_model_class = model_class
+                break
+
+        if base_model_class is None:
+            self.skipTest("This model has no `base_model_class` defined in tester.")
+
+        if not _config_supports_rope_scaling(text_config):
+            self.skipTest("This model does not support RoPE scaling")
+
+        # Retrieves the RoPE layer class from the base model class. Uses `.named_modules()` to avoid hardcoding the
+        # named location of the RoPE layer class.
+        base_model = base_model_class(config)
+        possible_rope_attributes = [
+            "pos_emb",
+            "rotary_emb",  # most common case
+        ]
+        rope_class = None
+        for name, module in base_model.named_modules():
+            if (
+                any(potential_name in name for potential_name in possible_rope_attributes)
+                # skip if module doesn't accept config - old API/model
+                and (
+                    len(params := list(inspect.signature(module.__init__).parameters.values())) > 1
+                    and params[0].name == "config"
+                )
+                # FIXME: raushan, vision RoPE layers are not standard and can't be tested here
+                # thus skip if modules doesn't operate on config. See https://github.com/huggingface/transformers/issues/46443
+                and "Vision" not in module.__class__.__name__
+            ):
+                rope_class = type(module)
+                break
+
+        if rope_class is None:
+            self.skipTest("This model has no standardized RoPE module found.")
+
+        # TODO: raushan, add separate tests for mrope in MultimodalTester
+        is_nested_rope = (
+            "rope_theta" not in text_config.rope_parameters.keys()
+            and "rope_theta" in list(text_config.rope_parameters.values())[0]
+        )
+        if (not is_nested_rope and text_config.rope_parameters.get("mrope_section") is not None) or (
+            is_nested_rope
+            and any(
+                layer_rope.get("mrope_section") is not None
+                for layer_rope in text_config.rope_parameters.values()
+                if layer_rope is not None
+            )
+        ):
+            self.skipTest("This model uses 3D multimodal RoPE, the test uses 2D position ids.")
+
+        scaling_factor = 10
+        short_input_length = 10
+        partial_rotary_factor = text_config.rope_parameters.get(
+            "partial_rotary_factor", getattr(text_config, "partial_rotary_factor", 1.0)
+        )
+        long_input_length = int(text_config.max_position_embeddings * 1.5)
+
+        kwargs = {}
+        if is_nested_rope:
+            kwargs = {"layer_type": list(text_config.rope_parameters.keys())[0]}
+
+        # Inputs
+        x = torch.randn(
+            1, dtype=torch.float32, device=torch_device
+        )  # used exclusively to get the dtype and the device
+        position_ids_short = torch.arange(short_input_length, dtype=torch.long, device=torch_device)
+        position_ids_short = position_ids_short.unsqueeze(0)
+        position_ids_long = torch.arange(long_input_length, dtype=torch.long, device=torch_device)
+        position_ids_long = position_ids_long.unsqueeze(0)
+
+        # Sanity check original RoPE
+        _set_config_rope_params(
+            text_config,
+            {"rope_type": "default", "rope_theta": 10_000.0, "partial_rotary_factor": partial_rotary_factor},
+        )
+        original_rope = rope_class(config=text_config, device=torch_device)
+        original_cos_short, original_sin_short = original_rope(x, position_ids_short, **kwargs)
+        original_cos_long, original_sin_long = original_rope(x, position_ids_long, **kwargs)
+        torch.testing.assert_close(original_cos_short, original_cos_long[:, :short_input_length, :])
+        torch.testing.assert_close(original_sin_short, original_sin_long[:, :short_input_length, :])
+
+        # Sanity check linear RoPE scaling
+        # New position "x" should match original position with index "x/scaling_factor"
+        _set_config_rope_params(
+            text_config,
+            {
+                "rope_type": "linear",
+                "factor": scaling_factor,
+                "rope_theta": 10_000.0,
+                "partial_rotary_factor": partial_rotary_factor,
+            },
+        )
+        linear_scaling_rope = rope_class(config=text_config, device=torch_device)
+        linear_cos_short, linear_sin_short = linear_scaling_rope(x, position_ids_short, **kwargs)
+        linear_cos_long, linear_sin_long = linear_scaling_rope(x, position_ids_long, **kwargs)
+        torch.testing.assert_close(linear_cos_short, linear_cos_long[:, :short_input_length, :])
+        torch.testing.assert_close(linear_sin_short, linear_sin_long[:, :short_input_length, :])
+        for new_position in range(0, long_input_length, scaling_factor):
+            original_position = int(new_position // scaling_factor)
+            torch.testing.assert_close(linear_cos_long[:, new_position, :], original_cos_long[:, original_position, :])
+            torch.testing.assert_close(linear_sin_long[:, new_position, :], original_sin_long[:, original_position, :])
+
+        # Sanity check Dynamic NTK RoPE scaling
+        # Scaling should only be observed after a long input is fed. We can observe that the frequencies increase
+        # with scaling_factor (or that `inv_freq` decreases)
+        _set_config_rope_params(
+            text_config,
+            {
+                "rope_type": "dynamic",
+                "factor": scaling_factor,
+                "rope_theta": 10_000.0,
+                "partial_rotary_factor": partial_rotary_factor,
+            },
+        )
+        ntk_scaling_rope = rope_class(config=text_config, device=torch_device)
+        ntk_cos_short, ntk_sin_short = ntk_scaling_rope(x, position_ids_short, **kwargs)
+        ntk_cos_long, ntk_sin_long = ntk_scaling_rope(x, position_ids_long, **kwargs)
+        torch.testing.assert_close(ntk_cos_short, original_cos_short)
+        torch.testing.assert_close(ntk_sin_short, original_sin_short)
+        with self.assertRaises(AssertionError):
+            torch.testing.assert_close(ntk_cos_long, original_cos_long)
+        with self.assertRaises(AssertionError):
+            torch.testing.assert_close(ntk_sin_long, original_sin_long)
+        # CHeck each layer type for nested RoPE configs
+        if not is_nested_rope:
+            self.assertTrue((ntk_scaling_rope.inv_freq <= original_rope.inv_freq).all())
+        else:
+            layer_types = getattr(text_config, "_rope_type_labels", getattr(text_config, "layer_types"))
+            for layer_type in layer_types:
+                self.assertTrue(
+                    (
+                        getattr(ntk_scaling_rope, f"{layer_type}_inv_freq")
+                        <= getattr(original_rope, f"{layer_type}_inv_freq")
+                    ).all()
+                )
+
+        # Sanity check Yarn RoPE scaling
+        # Scaling should be over the entire input
+        _set_config_rope_params(
+            text_config,
+            {
+                "rope_type": "yarn",
+                "factor": scaling_factor,
+                "rope_theta": 10_000.0,
+                "partial_rotary_factor": partial_rotary_factor,
+            },
+        )
+        yarn_scaling_rope = rope_class(config=text_config, device=torch_device)
+        yarn_cos_short, yarn_sin_short = yarn_scaling_rope(x, position_ids_short, **kwargs)
+        yarn_cos_long, yarn_sin_long = yarn_scaling_rope(x, position_ids_long, **kwargs)
+        torch.testing.assert_close(yarn_cos_short, yarn_cos_long[:, :short_input_length, :])
+        torch.testing.assert_close(yarn_sin_short, yarn_sin_long[:, :short_input_length, :])
+        with self.assertRaises(AssertionError):
+            torch.testing.assert_close(yarn_cos_short, original_cos_short)
+        with self.assertRaises(AssertionError):
+            torch.testing.assert_close(yarn_sin_short, original_sin_short)
+        with self.assertRaises(AssertionError):
+            torch.testing.assert_close(yarn_cos_long, original_cos_long)
+        with self.assertRaises(AssertionError):
+            torch.testing.assert_close(yarn_sin_long, original_sin_long)
 
 
 global_rng = random.Random()
@@ -5907,3 +6181,35 @@ def floats_tensor(shape, scale=1.0, rng=None, name=None):
         values.append(rng.random() * scale)
 
     return torch.tensor(data=values, dtype=torch.float, device=torch_device).view(shape).contiguous()
+
+
+def _config_supports_rope_scaling(config: PreTrainedConfig) -> bool:
+    """Returns whether a certain model config supports RoPE scaling parameterization."""
+    # Has rope_scaling -> model was designed with rope scaling in mind
+    # Has rope_theta (and no rope_scaling) -> probably an older model, but should support rope scaling as well
+    main_config_has_rope = hasattr(config, "rope_parameters")
+    return main_config_has_rope
+
+
+def _set_config_rope_params(config: PreTrainedConfig, rope_params: dict) -> bool:
+    """Recursively sets RoPE parameters on configs and subconfigs, by duplicating the same RoPE values."""
+    config.rope_parameters = getattr(config, "rope_parameters", {}) or {}
+
+    # Nested rope parameters per layer type, not all models with `layer-types` use different RoPE thus we check `issubset`
+    # Deepseekv4 has `layer_types` which are different from `_rope_type_labels`
+    layer_types = getattr(config, "_rope_type_labels", getattr(config, "layer_types", None))
+    if layer_types is not None and set(config.rope_parameters.keys()).issubset(layer_types):
+        for layer_type in layer_types:
+            # skip NoPE layers if any
+            if config.rope_parameters[layer_type] is None:
+                continue
+            # Don't update gemma4 proportional rope, it is quite special and return `dim // 4` freqs
+            if config.rope_parameters[layer_type].get("rope_type") != "proportional":
+                config.rope_parameters.setdefault(layer_type, {})
+                config.rope_parameters[layer_type].update(rope_params)
+    else:
+        config.rope_parameters.update(rope_params)
+
+    for sub_config in config.sub_configs.keys():
+        _set_config_rope_params(getattr(config, sub_config), rope_params)
+    return config

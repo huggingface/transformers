@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
 *This model was published in HF papers on 2024-02-02 and contributed to Hugging Face Transformers on 2026-04-02.*
@@ -33,6 +33,9 @@ The abstract from the paper is the following:
 
 This model was contributed by community member ([Sonny Cooper](https://github.com/ed22699)).
 The original code for nomic-embed-text-v1.5 and nomic-embed-text-v1 can be found [here](https://github.com/nomic-ai/contrastors).
+
+> [!TIP]
+> Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Refer to [Loading kernels](../kernel_doc/loading_kernels) to learn more.
 
 ## Usage examples
 The examples below demonstrate how to generate dense vector embeddings for different tasks using `[AutoModel]`. Each task requires a specific instruction prefix to optimize the embedding space for that use case.

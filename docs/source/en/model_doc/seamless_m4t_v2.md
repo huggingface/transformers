@@ -11,6 +11,12 @@ specific language governing permissions and limitations under the License.
 -->
 *This model was published in HF papers on 2023-12-08 and contributed to Hugging Face Transformers on 2023-11-30.*
 
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
+
 # SeamlessM4T-v2
 
 
@@ -48,7 +54,7 @@ processor = AutoProcessor.from_pretrained("facebook/seamless-m4t-v2-large")
 model = SeamlessM4Tv2Model.from_pretrained("facebook/seamless-m4t-v2-large", device_map="auto")
 ```
 
-You can seamlessly use this model on text or on audio, to generated either translated text or translated audio.
+You can seamlessly use this model on text or on audio, to generate either translated text or translated audio.
 
 Here is how to use the processor to process text and audio:
 
@@ -153,7 +159,7 @@ The second seq2seq model, named text-to-unit model, is now non-auto regressive, 
 The speech encoder, which is used during the first-pass generation process to predict the translated text, differs mainly from the previous speech encoder through these mechanisms:
 
 - the use of chunked attention mask to prevent attention across chunks, ensuring that each position attends only to positions within its own chunk and a fixed number of previous chunks.
-- the use of relative position embeddings which only considers distance between sequence elements rather than absolute positions. Please refer to [Self-Attentionwith Relative Position Representations (Shaw et al.)](https://huggingface.co/papers/1803.02155) for more details.
+- the use of relative position embeddings which only considers distance between sequence elements rather than absolute positions. Please refer to [Self-Attention with Relative Position Representations (Shaw et al.)](https://huggingface.co/papers/1803.02155) for more details.
 - the use of a causal depth-wise convolution instead of a non-causal one.
 
 ### Generation process

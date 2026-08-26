@@ -198,7 +198,7 @@ class EomtEmbeddings(Dinov2Embeddings):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.num_prefix_tokens = 1 + config.num_register_tokens  # 1 for [CLS]
         self.position_embeddings = nn.Embedding(num_patches, config.hidden_size)
-        self.register_buffer("position_ids", torch.arange(num_patches).expand((1, -1)), persistent=False)
+        self.position_ids = nn.Buffer(torch.arange(num_patches).expand((1, -1)), persistent=False)
 
     def interpolate_pos_encoding(self):
         raise AttributeError("Not needed for Eomt Model")
@@ -395,7 +395,7 @@ class EomtForUniversalSegmentation(Mask2FormerForUniversalSegmentation):
 
         self.criterion = EomtLoss(config=config, weight_dict=self.weight_dict)
 
-        self.register_buffer("attn_mask_probs", torch.ones(config.num_blocks))
+        self.attn_mask_probs = nn.Buffer(torch.ones(config.num_blocks))
 
         self.post_init()
 

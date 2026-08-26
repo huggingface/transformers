@@ -106,15 +106,6 @@ class Gemma4UnifiedTextModelTest(CausalLMModelTest, unittest.TestCase):
     def test_num_layers_is_small(self):
         pass
 
-    @unittest.skip("Gemma4Unified uses different rope per layer type, which is not compatible with this test")
-    def test_model_rope_scaling_frequencies(self):
-        pass
-
-    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
-    @unittest.skip("Gemma4Unified uses different rope per layer type, which is not compatible with this test")
-    def test_model_rope_scaling_from_config(self):
-        pass
-
     @unittest.skip(
         "Flaky on CI, but not locally on Mac. If model is set to fp32 instead of bf16, not flaky anymore."
         "TODO Cyril/Anton: investigate where the loss of precision between bf16 and fp32 comes from."
@@ -248,15 +239,17 @@ class Gemma4UnifiedAudio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, 
         self.skip_mm_output_format()
 
     def skip_mm_output_format(self):
+        # This test doesn't have any images/videos in input
         skippable_tests = [
             "test_get_image_features_hidden_states",
             "test_get_image_features_attentions",
+            "test_get_image_features_output",
             "test_get_video_features_hidden_states",
             "test_get_video_features_attentions",
+            "test_get_video_features_output",
             "test_get_audio_features_hidden_states",
             "test_get_audio_features_attentions",
-            "test_get_image_features_output",
-            "test_get_video_features_output",
+            # no last-hidden-states returned, only pooler output
             "test_get_audio_features_output",
         ]
 
@@ -405,15 +398,15 @@ class Gemma4UnifiedVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin,
         self.skip_mm_output_format()
 
     def skip_mm_output_format(self):
+        # This test doesn't have any audio/videos in input
         skippable_tests = [
             "test_get_image_features_hidden_states",
             "test_get_image_features_attentions",
             "test_get_video_features_hidden_states",
             "test_get_video_features_attentions",
+            "test_get_video_features_output",
             "test_get_audio_features_hidden_states",
             "test_get_audio_features_attentions",
-            "test_get_image_features_output",
-            "test_get_video_features_output",
             "test_get_audio_features_output",
         ]
 
