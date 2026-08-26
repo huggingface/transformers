@@ -45,7 +45,7 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto import AutoModel
 from ..gemma3.configuration_gemma3 import Gemma3Config, Gemma3TextConfig
@@ -231,6 +231,7 @@ class T5Gemma2RMSNorm(Gemma3RMSNorm):
     pass
 
 
+@no_inherit_decorator
 class T5Gemma2MLP(Gemma3MLP):
     def __init__(self, config: T5Gemma2TextConfig):
         super().__init__(config)
