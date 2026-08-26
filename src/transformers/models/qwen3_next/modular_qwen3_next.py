@@ -270,7 +270,6 @@ def torch_chunk_gated_delta_rule(
     # state influence the old state. Beta is often normalized to (0, 1) where 0 = no update; 1 = overwrite old state.
     v_beta = value * beta.unsqueeze(-1)
     k_beta = key * beta.unsqueeze(-1)
-    value = None  # since this function needs quite a bit of VRAM, we rm the intermediate tensors as soon as possible
 
     # Reshape all tensors to chunk the sequence dimension (adds a new dimension of size chunk_size)
     query, key, k_beta, v_beta = [
@@ -296,7 +295,6 @@ def torch_chunk_gated_delta_rule(
     ut_system = (k_beta @ key.transpose(-1, -2)) * pairwise_decay
     intra_chunk_attn = (query @ key.transpose(-1, -2)) * pairwise_decay
     decayed_k_beta = k_beta * cum_decay.exp().unsqueeze(-1)
-    k_beta, pairwise_decay = None, None
 
     # Gated delta attention uses a UT transform to condense several delta rule updates into a few matmuls. After the UT
     # system is solved, we can then compute the new_values (called "u" in the DeltaNet paper) and the decayed keys
@@ -315,7 +313,6 @@ def torch_chunk_gated_delta_rule(
             ut_system[..., i, :i] = row + (row.unsqueeze(-1) * sub).sum(-2)
         ut_system = ut_system + torch.eye(chunk_size, dtype=ut_system.dtype, device=ut_system.device)
         new_values, k_cumdecay = ut_system @ v_beta, ut_system @ decayed_k_beta
-    ut_system, decayed_k_beta, v_beta = None, None, None
 
     if initial_state is None:
         last_recurrent_state = torch.zeros(recurrent_state_shape, dtype=new_values.dtype, device=new_values.device)
