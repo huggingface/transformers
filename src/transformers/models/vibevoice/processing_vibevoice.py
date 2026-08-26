@@ -42,6 +42,7 @@ class VibeVoiceProcessorKwargs(ProcessingKwargs, total=False):
 
 
 @requires(backends=("torch",))
+@auto_docstring
 class VibeVoiceProcessor(ProcessorMixin):
     valid_processor_kwargs = VibeVoiceProcessorKwargs
 

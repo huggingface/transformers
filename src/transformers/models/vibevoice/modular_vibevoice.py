@@ -85,8 +85,6 @@ class VibeVoiceDiffusionHeadSinusoidalEmbedding(nn.Module):
     def forward(self, timesteps):
         freq = timesteps[:, None].float() * self.freq[None].to(timesteps.device)
         embedding = torch.cat([torch.cos(freq), torch.sin(freq)], dim=-1)
-        if self.config.frequency_embedding_size % 2:
-            embedding = nn.functional.pad(embedding, (0, 1))
         return embedding
 
 
@@ -326,7 +324,7 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
         if latent_size > 0 and ddpm_batch_multiplier > 0 and audio_len > 0:
             diffusion_loss = diffusion_loss / (latent_size * ddpm_batch_multiplier * audio_len)
         else:
-            diffusion_loss = torch.tensor(0.0, device=diffusion_loss.device)
+            diffusion_loss = torch.full((), 0.0, dtype=diffusion_loss.dtype, device=diffusion_loss.device)
         return diffusion_loss
 
     @can_return_tuple
@@ -378,6 +376,8 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
+        # `diffusion_loss_weight` weights the two training losses against each other, and does not affect the architecture
+        # trf-ignore: TRF041 config.diffusion_loss_weight
         if (
             acoustic_loss_mask is not None
             and outputs.audio_features is not None
