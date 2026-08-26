@@ -134,8 +134,8 @@ class CapPsutilCpuMemoryTest(unittest.TestCase):
         import psutil
 
         before = psutil.virtual_memory
-        with cap_psutil_cpu_memory(8 * GIB):
-            self.assertEqual(psutil.virtual_memory().total, 8 * GIB)
+        with cap_psutil_cpu_memory(int(0.5 * GIB)):
+            self.assertEqual(psutil.virtual_memory().total, int(0.5 * GIB))
         self.assertIs(psutil.virtual_memory, before)
 
     def test_restores_on_exception(self):
@@ -143,7 +143,7 @@ class CapPsutilCpuMemoryTest(unittest.TestCase):
 
         before = psutil.virtual_memory
         try:
-            with cap_psutil_cpu_memory(8 * GIB):
+            with cap_psutil_cpu_memory(int(0.5 * GIB)):
                 raise RuntimeError("deliberate test error")
         except RuntimeError:
             pass
@@ -153,11 +153,11 @@ class CapPsutilCpuMemoryTest(unittest.TestCase):
         import psutil
 
         original = psutil.virtual_memory
-        with cap_psutil_cpu_memory(16 * GIB):
-            self.assertEqual(psutil.virtual_memory().total, 16 * GIB)
-            with cap_psutil_cpu_memory(8 * GIB):
-                self.assertEqual(psutil.virtual_memory().total, 8 * GIB)
+        with cap_psutil_cpu_memory(int(0.5 * GIB)):
+            self.assertEqual(psutil.virtual_memory().total, int(0.5 * GIB))
+            with cap_psutil_cpu_memory(int(0.2 * GIB)):
+                self.assertEqual(psutil.virtual_memory().total, int(0.2 * GIB))
             # Inner block exited: should be back to the outer cap
-            self.assertEqual(psutil.virtual_memory().total, 16 * GIB)
+            self.assertEqual(psutil.virtual_memory().total, int(0.5 * GIB))
         # Outer block exited: should be back to the original callable
         self.assertIs(psutil.virtual_memory, original)
