@@ -2547,6 +2547,13 @@ class ModelUtilsTest(TestCasePlus):
         `kernels` refuses to swap in a layer whose forward signature does not match the one it replaces. The
         `force_accelerate_hooks` wrapper must therefore keep the signature of the forward it decorates, otherwise
         every mixer carrying it looks like `(self, *args, **kwargs)` and can never be kernelized.
+
+        This is based on one concrete case: `Qwen3_5GatedDeltaNet` is kernelized as a whole layer
+        (`@use_kernel_forward_from_hub("Qwen3_5GatedDeltaNet")`, mapped to `Atlas-Inference/gdn` on GB10/SM121)
+        while its `forward` also carries `@force_accelerate_hooks("conv1d")` -- it is the one class where both
+        decorators meet. See #48089 for the report and #48156 for the fix.
+
+        The signature check is driven directly, so this needs neither the kernel nor the hardware to be available.
         """
         from kernels.layer.layer import _validate_layer
 
