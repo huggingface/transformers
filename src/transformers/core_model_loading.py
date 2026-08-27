@@ -868,9 +868,6 @@ class WeightTransform:
             branches.append(f"(?P<{group_name}>{pattern})")
         self.compiled_sources = re.compile("|".join(branches))
 
-    def get_source_dim_mapping(self, tensor: Any, target_param: torch.Tensor) -> dict[int, int] | None:
-        return None
-
     def __repr__(self):
         return f"{self.__class__.__name__}(source_patterns={self.source_patterns}, target_patterns={self.target_patterns})"
 
@@ -1197,8 +1194,12 @@ class WeightConverter(WeightTransform):
         if len(self.source_patterns) != 1 or len(self.target_patterns) != 1 or len(self.operations) != 1:
             return None
 
+        operation = self.operations[0]
+        if not isinstance(operation, Transpose):
+            return None
+
         source_shape = tuple(tensor.shape) if isinstance(tensor, torch.Tensor) else tuple(tensor.get_shape())
-        return self.operations[0].get_source_dim_mapping(source_shape, tuple(target_param.shape))
+        return operation.get_source_dim_mapping(source_shape, tuple(target_param.shape))
 
     def convert(
         self,
@@ -1295,6 +1296,7 @@ def spawn_materialize(
         # Return the Callable here, not the Tensor itself, so we actually delay loading to avoid saturating cpu
         # memory during Conversion
         return _job
+
 def dot_natural_key(s: str):
     """
     Sort key for state-dict names: split on `"."` and sort digits numerically and strings alphabetically. It emits a
@@ -1743,7 +1745,11 @@ def convert_and_load_state_dict_in_model(
             param_device = get_device(device_map, renamed_key, valid_torch_device=True)
             sharding_op = None
             if is_dtensor(empty_param):
-                source_dim_mapping = mapping.get_source_dim_mapping(tensor, empty_param)
+                source_dim_mapping = (
+                    mapping.get_source_dim_mapping(tensor, empty_param)
+                    if isinstance(mapping, WeightConverter)
+                    else None
+                )
                 sharding_op = DtensorShardOperation(empty_param, source_dim_mapping=source_dim_mapping)
 
             # Some parameters are so large (qwen4_exp ple_embedding is about ~95 GiB) that we cannot afford to perform the Operations
