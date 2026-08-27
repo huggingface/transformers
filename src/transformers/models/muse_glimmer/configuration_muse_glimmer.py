@@ -52,7 +52,7 @@ class MuseGlimmerVisionConfig(PreTrainedConfig):
     hidden_size: int = 1536
     intermediate_size: int = 8960
     hidden_act: str = "gelu"
-    rope_parameters: dict | None = None  # defaults set by `RopeConfigMixin`
+    rope_parameters: dict | None = None
     patch_temporal: int = 2
     merge_size: int = 2
     max_position_embeddings: int = 32 * 32  # == `pos_h * pos_w`

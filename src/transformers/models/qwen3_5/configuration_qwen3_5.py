@@ -147,8 +147,12 @@ class Qwen3_5VisionConfig(PreTrainedConfig):
     out_hidden_size: int = 3584
     num_position_embeddings: int = 2304
     initializer_range: float = 0.02
-
     rope_parameters: dict | None = None
+
+    def __post_init__(self, **kwargs):
+        if self.rope_parameters is None:
+            self.rope_parameters = {"rope_type": "axial", "rope_theta": self.default_theta}
+        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3.5-27B")

@@ -80,8 +80,12 @@ class VideoLlama3VisionConfig(SiglipVisionConfig):
     base_config_key = "vision_config"
     image_size = AttributeError()
     initializer_range: float = 0.02
-
     rope_parameters: dict | None = None
+
+    def __post_init__(self, **kwargs):
+        if self.rope_parameters is None:
+            self.rope_parameters = {"rope_type": "axial", "rope_theta": self.default_theta}
+        PreTrainedConfig.__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="lkhl/VideoLLaMA3-2B-Image-HF")

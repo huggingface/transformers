@@ -53,8 +53,12 @@ class CohereCompassVisionConfig(PreTrainedConfig):
     num_position_embeddings: int = 2304
     deepstack_visual_indexes: list[int] | tuple[int, ...] = (8, 16, 24)
     initializer_range: float = 0.02
-
     rope_parameters: dict | None = None
+
+    def __post_init__(self, **kwargs):
+        if self.rope_parameters is None:
+            self.rope_parameters = {"rope_type": "axial", "rope_theta": self.default_theta}
+        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="CohereLabs/North-Micro-Vision-Instruct")

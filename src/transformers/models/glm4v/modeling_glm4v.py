@@ -121,7 +121,7 @@ class Glm4vVisionRotaryEmbedding(nn.Module):
 
         self.rope_type = self.config.rope_parameters["rope_type"]
         rope_init_fn: Callable = self.compute_default_rope_parameters
-        if self.rope_type != "axial":
+        if self.rope_type not in ["axial", "default"]:
             raise ValueError(f"{self.__class__.__name__} supports only axial rope, but requested {self.rope_type}")
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 

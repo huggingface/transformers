@@ -50,7 +50,12 @@ class Kimi_K25VisionConfig(PreTrainedConfig):
     intermediate_size: int = 4304
     hidden_act: str = "gelu_pytorch_tanh"
     merge_kernel_size: tuple[int, int] | list[int] = (2, 2)
-    rope_parameters: dict | None = None  # defaults set by `RopeConfigMixin`
+    rope_parameters: dict | None = None
+
+    def __post_init__(self, **kwargs):
+        if self.rope_parameters is None:
+            self.rope_parameters = {"rope_type": "axial", "rope_theta": self.default_theta}
+        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="moonshotai/Kimi-K2.6")
