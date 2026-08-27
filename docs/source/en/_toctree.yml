@@ -309,7 +309,7 @@
       title: BitNet
     - local: quantization/compressed_tensors
       title: compressed-tensors
-    - local: gguf
+    - local: quantization/gguf
       title: GGUF
     - local: quantization/spqr
       title: SpQR

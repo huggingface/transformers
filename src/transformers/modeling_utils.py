@@ -4374,6 +4374,7 @@ class PreTrainedModel(
 
         # Obtain the weight conversion mapping for this model if any are registered and apply to all submodels recursively
         weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)
+
         model = cls.maybe_distribute_model(model, distributed_config, device_mesh)
 
         # Prepare the full device map

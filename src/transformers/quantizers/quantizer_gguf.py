@@ -33,7 +33,7 @@ from ..integrations.gguf.utils import (
     is_gguf_arch_supported,
     replace_with_gguf_modules,
 )
-from ..utils import is_gguf_available, is_torch_mps_available, logging
+from ..utils import is_torch_mps_available, logging
 from ..utils.quantization_config import GgufConfig
 from .base import HfQuantizer
 
@@ -52,7 +52,6 @@ class GgufHfQuantizer(HfQuantizer):
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
         self.pre_quantized = True
-        self.gguf_file = quantization_config.gguf_file
         self.packed_modules = {}
         self.input_permutations = {}
         self.quantized = {}
@@ -67,8 +66,6 @@ class GgufHfQuantizer(HfQuantizer):
     def validate_environment(self, *args, **kwargs):
         if not self.supported:
             return
-        if not is_gguf_available():
-            raise ImportError("Loading a GGUF checkpoint requires the `gguf` package. Run `pip install gguf`.")
         if self.quantization_config.dequantize:
             return
         if not is_torch_mps_available():
@@ -115,7 +112,6 @@ class GgufHfQuantizer(HfQuantizer):
         The full header is only built for an architecture this path handles: sizing the tensor table
         rejects a quantization this reader cannot unpack, and the legacy loader may well handle it.
         """
-        self.gguf_file = gguf_file
         metadata, _ = read_gguf_metadata(gguf_file)
         self.supported = is_gguf_arch_supported(metadata["general.architecture"])
         if self.supported:

@@ -49,12 +49,16 @@ DENSE_DECODER_RENAMINGS = [
 ]
 
 
-def _tiled_to_grouped(num_k_heads: int, heads_per_k: int, head_dim: int) -> torch.Tensor:
-    """Inverse of llama.cpp's v-head reorder.
+def tiled_to_grouped(num_k_heads: int, heads_per_k: int, head_dim: int = 1) -> torch.Tensor:
+    """Inverse of llama.cpp's head reorder, as a permutation.
 
-    llama.cpp stores value heads *tiled* (`v0k0 v0k1 ... v0k15 v1k0 ...`) while transformers groups
-    them by key head (`k0v0 k0v1 k1v0 ...`). Indexing with this permutation converts the former to
-    the latter. `head_dim=1` gives the permutation over head indices alone (for `A_log`, `dt_bias`).
+    llama.cpp stores head-indexed axes *tiled* (`v0k0 v0k1 ... v0k15 v1k0 ...`) while transformers
+    groups them by key head (`k0v0 k0v1 k1v0 ...`). Indexing with this permutation converts the
+    former to the latter. `head_dim` defaults to 1, giving the permutation over head indices alone
+    (what a per-head vector like `A_log` or `dt_bias` needs).
+
+    A convention of llama.cpp's converter rather than of any one architecture, so every model whose
+    heads it tiles reorders them with this -- see `TiledToGroupedRows`/`TiledToGroupedInputs`.
     """
     total = num_k_heads * heads_per_k * head_dim
     # On the CPU explicitly: a mapping may be built inside the model's init context, where the default
@@ -98,8 +102,9 @@ def _qwen35(config) -> list[WeightTransform]:
 
     # The same reorder at two granularities: over the flattened value dimension for tensors with a
     # row (or column) per value element, and over head indices alone for the per-head vectors.
-    value_perm = _tiled_to_grouped(num_key_heads, value_heads_per_key_head, value_head_dim)
-    value_head_perm = _tiled_to_grouped(num_key_heads, value_heads_per_key_head, 1)
+    heads = (num_key_heads, value_heads_per_key_head)
+    per_value = TiledToGroupedRows(*heads, value_head_dim)
+    per_head = TiledToGroupedRows(*heads)
 
     renamings = DENSE_DECODER_RENAMINGS + [
         WeightRenaming(r"\.attn_qkv\.", ".linear_attn.in_proj_qkv."),
@@ -148,22 +153,22 @@ def _qwen35(config) -> list[WeightTransform]:
         WeightConverter(
             source_patterns="linear_attn.A_log",
             target_patterns="linear_attn.A_log",
-            operations=[LogNegate(), PermuteRows(value_head_perm)],
+            operations=[LogNegate(), per_head],
         ),
         WeightConverter(
             source_patterns="linear_attn.dt_bias",
             target_patterns="linear_attn.dt_bias",
-            operations=[PermuteRows(value_head_perm)],
+            operations=[per_head],
         ),
         WeightConverter(
             source_patterns="linear_attn.in_proj_a.weight",
             target_patterns="linear_attn.in_proj_a.weight",
-            operations=[PermuteRows(value_head_perm)],
+            operations=[per_head],
         ),
         WeightConverter(
             source_patterns="linear_attn.in_proj_b.weight",
             target_patterns="linear_attn.in_proj_b.weight",
-            operations=[PermuteRows(value_head_perm)],
+            operations=[per_head],
         ),
     ]
 
@@ -172,24 +177,24 @@ def _qwen35(config) -> list[WeightTransform]:
         WeightConverter(
             source_patterns="linear_attn.in_proj_z.weight",
             target_patterns="linear_attn.in_proj_z.weight",
-            operations=[PermuteRows(value_perm)],
+            operations=[per_value],
         ),
         WeightConverter(
             source_patterns="linear_attn.in_proj_qkv.weight",
             target_patterns="linear_attn.in_proj_qkv.weight",
-            operations=[PermuteRows(value_perm, offset=query_key_rows)],
+            operations=[TiledToGroupedRows(*heads, value_head_dim, offset=query_key_rows)],
         ),
         WeightConverter(
             source_patterns="linear_attn.conv1d.weight",
             target_patterns="linear_attn.conv1d.weight",
-            operations=[PermuteRows(value_perm, offset=query_key_rows), Unsqueeze(1)],
+            operations=[TiledToGroupedRows(*heads, value_head_dim, offset=query_key_rows), Unsqueeze(1)],
         ),
         # The only tensor that *consumes* the value dimension, so the reorder is on its columns. Columns
         # cross quantization blocks, so when it stays packed the reorder is applied to its input instead.
         WeightConverter(
             source_patterns="linear_attn.out_proj.weight",
             target_patterns="linear_attn.out_proj.weight",
-            operations=[PermuteInputFeatures(value_perm)],
+            operations=[TiledToGroupedInputs(*heads, value_head_dim)],
         ),
     ]
 
@@ -215,10 +220,6 @@ class SubtractOne(ConversionOps):
         tensor = _single_tensor(input_dict)
         return {target_patterns[0]: (tensor.float() - self.offset).to(tensor.dtype)}
 
-    @property
-    def reverse_op(self) -> ConversionOps:
-        return SubtractOne(offset=-self.offset)
-
 
 class LogNegate(ConversionOps):
     """`A_log = log(-a)`, undoing llama.cpp storing `ssm_a = -exp(A_log)`."""
@@ -243,24 +244,6 @@ class Unsqueeze(ConversionOps):
     ) -> dict[str, torch.Tensor]:
         tensor = _single_tensor(input_dict)
         return {target_patterns[0]: tensor.unsqueeze(self.dim)}
-
-    @property
-    def reverse_op(self) -> ConversionOps:
-        return Squeeze(dim=self.dim)
-
-
-class Squeeze(ConversionOps):
-    """Reverse of `Unsqueeze`."""
-
-    def __init__(self, dim: int):
-        self.dim = dim
-
-    @torch.no_grad
-    def convert(
-        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
-    ) -> dict[str, torch.Tensor]:
-        tensor = _single_tensor(input_dict)
-        return {target_patterns[0]: tensor.squeeze(self.dim)}
 
 
 class PermuteRows(ConversionOps):
@@ -294,10 +277,6 @@ class PermuteRows(ConversionOps):
         else:
             tensor = tensor[perm]
         return {target_patterns[0]: tensor.contiguous()}
-
-    @property
-    def reverse_op(self) -> ConversionOps:
-        return PermuteRows(torch.argsort(self.permutation), offset=self.offset)
 
 
 class PermuteInputFeatures(ConversionOps):
@@ -344,9 +323,19 @@ class PermuteInputFeatures(ConversionOps):
         perm = self.permutation.to(tensor.device)
         return {target_patterns[0]: tensor[:, perm].contiguous()}
 
-    @property
-    def reverse_op(self) -> ConversionOps:
-        return PermuteInputFeatures(torch.argsort(self.permutation))
+
+class TiledToGroupedRows(PermuteRows):
+    """`PermuteRows` with llama.cpp's head reorder, for a tensor that *produces* the head axis."""
+
+    def __init__(self, num_k_heads: int, heads_per_k: int, head_dim: int = 1, offset: int = 0):
+        super().__init__(tiled_to_grouped(num_k_heads, heads_per_k, head_dim), offset=offset)
+
+
+class TiledToGroupedInputs(PermuteInputFeatures):
+    """`PermuteInputFeatures` with llama.cpp's head reorder, for a tensor that *consumes* it."""
+
+    def __init__(self, num_k_heads: int, heads_per_k: int, head_dim: int = 1):
+        super().__init__(tiled_to_grouped(num_k_heads, heads_per_k, head_dim))
 
 
 class Dequantize(ConversionOps):

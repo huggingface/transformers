@@ -32,9 +32,8 @@ import unittest.mock
 
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, Qwen3_5ForCausalLM
 from transformers.testing_utils import (
-    require_gguf,
     require_torch_accelerator,
-    require_torch_multi_accelerator,
+    require_torch_mps,
     slow,
     torch_device,
 )
@@ -188,15 +187,18 @@ class GgufModelIntegrationTesterMixin:
 # ---------------------------------------------------------------------------------------------
 
 
-@require_gguf
-@require_torch_accelerator
+@require_torch_mps
 @slow
 class GgufIntegrationTest(unittest.TestCase):
     """How a quantized file behaves under each way of loading it, on one model.
 
     These are properties of the integration rather than of an architecture — whether the weights stay
-    packed, what dtype the rest of them land in, where they can be placed — so one checkpoint covers
-    them for every model that follows.
+    packed and what dtype the rest of them land in — so one checkpoint covers them for every model
+    that follows.
+
+    Metal, specifically: keeping blocks packed needs a published matmul kernel, and metal is the only
+    backend one is built for. The architecture tests below are not restricted this way -- they read a
+    non-quantized file, so they exercise the reader and the conversion mapping on any accelerator.
     """
 
     gguf_repo = "bartowski/Qwen_Qwen3.5-4B-GGUF"
@@ -233,17 +235,14 @@ class GgufIntegrationTest(unittest.TestCase):
 
         packed = self.packed_modules(model)
         self.assertTrue(packed, "a kernel is available but no module kept its blocks")
-        self.assertTrue(all(getattr(m, "gemv", True) for m in packed), "the fused gemv went unused")
         self.assertIn("Berlin", self.generates(model))
 
     def test_runs_without_a_kernel(self):
-        """No kernel: the weights still stay packed, and the forward unpacks them instead."""
-        with unittest.mock.patch("transformers.quantizers.quantizer_gguf.get_gguf_kernel", return_value=None):
+        """No kernel: nothing can compute on blocks, so the whole model is unpacked at load."""
+        with unittest.mock.patch("transformers.quantizers.quantizer_gguf.get_gguf_kernel", return_value=False):
             model = self.load(device_map=torch_device)
 
-        packed = self.packed_modules(model)
-        self.assertTrue(packed, "the memory saving was given up when no kernel was found")
-        self.assertFalse(any(getattr(m, "gemv", False) for m in packed), "a gemv was used without a kernel")
+        self.assertEqual(self.packed_modules(model), [], "blocks were kept with nothing able to read them")
         self.assertIn("Berlin", self.generates(model))
 
     def test_dequantize_gives_a_dense_model(self):
@@ -285,32 +284,7 @@ class GgufIntegrationTest(unittest.TestCase):
         self.assertIn(torch.uint8, dtypes, "no parameter kept its blocks")
         self.assertEqual(dtypes - {torch.uint8}, {torch.bfloat16}, "an unpacked parameter is not in `dtype`")
 
-    def test_cpu_offload(self):
-        """Blocks the accelerator cannot reach are unpacked wherever they are, so offload still runs."""
-        # One device with room for part of the model, every other device excluded, and the host taking
-        # the rest. `max_memory` leaves out what it does not mention, so listing every device is what
-        # makes this a split rather than "wherever it happens to fit".
-        budget = dict.fromkeys(range(torch.cuda.device_count()), "0GiB")
-        budget[0] = "1GiB"
-        model = self.load(device_map="auto", max_memory={**budget, "cpu": "24GiB"})
 
-        # what `accelerate` decided, not where the parameters are: an offloaded one reads as meta until
-        # its hook streams it in
-        placed = set(model.hf_device_map.values())
-        self.assertIn("cpu", placed, f"nothing was offloaded, so this proves nothing: {placed}")
-        self.assertIn("Berlin", self.generates(model))
-
-    @require_torch_multi_accelerator
-    def test_multi_accelerator(self):
-        """Split across devices, a tied packed weight has to end up on one of them, with its module."""
-        model = self.load(device_map="auto", max_memory={0: "3GiB", 1: "20GiB"})
-
-        devices = {str(p.device) for p in model.parameters()}
-        self.assertGreater(len(devices), 1, f"the model was not split: {devices}")
-        self.assertIn("Berlin", self.generates(model))
-
-
-@require_gguf
 @require_torch_accelerator
 @slow
 class Qwen35GgufModelTest(GgufModelIntegrationTesterMixin, unittest.TestCase):

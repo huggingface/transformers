@@ -14,9 +14,8 @@
 """Reading a GGUF file: architecture, tensor types, and tensors keyed by their GGUF names.
 
 Nothing is read eagerly: each name maps to a `LazyGgufTensor` that the loading pipeline materializes
-when it gets to that parameter. Quantized tensors are dequantized there (see `dequant.py`), so
-everything downstream — the per-arch renamings and converters — works on dense tensors and does not
-care how the file stored them.
+when it gets to that parameter. A quantized tensor comes back as its raw blocks; unpacking is a
+conversion op (`Dequantize`), applied only to the tensors whose module cannot hold blocks.
 
 Renaming and any conversion are *not* done here — they are `WeightConverter`s in
 `gguf_conversion_mapping.py`, run by the normal loading pipeline. This module only turns a file into
