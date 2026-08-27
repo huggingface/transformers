@@ -23,7 +23,6 @@ from transformers import LongcatFlashConfig, is_torch_available
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
-    require_large_cpu_ram,
     require_torch,
     require_torch_accelerator,
     require_torch_accelerator_memory,
