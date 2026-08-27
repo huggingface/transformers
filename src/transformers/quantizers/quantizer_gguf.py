@@ -60,43 +60,41 @@ class GgufHfQuantizer(HfQuantizer):
         self.kernel = None
         self.header = None
         self.dtype = None
-        # TODO: only for the legacy loader — drop this, and the two checks that read it, once every
-        # architecture goes through this path and there is no fallback left
+        # TODO: only for the legacy loader — drop this, and every hook that guards on it, once all
+        # architectures go through this path and there is no fallback left
         self.supported = False
 
     def validate_environment(self, *args, **kwargs):
+        if not self.supported:
+            return
         if not is_gguf_available():
             raise ImportError("Loading a GGUF checkpoint requires the `gguf` package. Run `pip install gguf`.")
         if self.quantization_config.dequantize:
-            return  # dense weights were asked for, and unpacking them at load needs no device kernel
-        # Blocks are only worth keeping where something can compute on them, so there has to be a backend
-        # to compute on. Where the weights then go is the caller's business: the torch unpacking path runs
-        # on the host too, and `update_device_map` only picks the device when no `device_map` says.
-        if not torch.cuda.is_available() and not is_torch_mps_available():
-            raise RuntimeError(
-                "Loading a GGUF checkpoint with its weights left quantized requires a CUDA or MPS backend. "
-                "Pass `dequantize=True` in the quantization config to unpack the weights once at load "
-                "instead, which runs anywhere and costs the memory of an unquantized model."
+            return
+        if not is_torch_mps_available():
+            self.quantization_config.dequantize = True
+            logger.warning(
+                "Loading a GGUF checkpoint with its weights left quantized requires an MPS backend. "
+                "We will dequantize the entire model."
             )
+            return
         self.kernel = get_gguf_kernel()
         if not self.kernel:
-            # The weights still stay packed: torch can unpack a block, so only the speed goes. Every
-            # forward unpacks its own weight instead of computing on the blocks — about a third of the
-            # speed here, for a third of the memory.
-            logger.warning(
-                "No GGUF matmul kernel is available for this device. The weights stay quantized, so the "
-                "memory saving holds, but every forward unpacks them, which costs speed. Pass "
-                "`GgufConfig(dequantize=True)` to unpack once at load and trade the memory back."
-            )
+            self.quantization_config.dequantize = True
+            logger.warning("No GGUF matmul kernel is available for this device. We will dequantize the entire model.")
+            return
 
     def update_device_map(self, device_map):
         """Default to the backend the blocks are computed on, rather than the host.
 
-        Only when the caller named none: an explicit `device_map` is left alone, host included.
-        `validate_environment` has already established that one of these backends is there.
+        Only when the caller named none. An explicit `device_map` is left alone, host included -- but
+        warned about, because the blocks it leaves there are memory an accelerator build cannot read,
+        and the forward that finds out is a long way from the call that decided it.
         """
-        if device_map is None and not self.quantization_config.dequantize:
-            device_map = {"": torch.device("cuda" if torch.cuda.is_available() else "mps")}
+        if self.quantization_config.dequantize:
+            return device_map
+        if device_map is None and is_torch_mps_available():
+            device_map = {"": torch.device("mps")}
             logger.info(f"No `device_map` was passed; loading the GGUF weights on {device_map['']}.")
         return device_map
 
@@ -115,24 +113,22 @@ class GgufHfQuantizer(HfQuantizer):
         self.supported = is_gguf_arch_supported(metadata["general.architecture"])
         if self.supported:
             self.header = GgufHeader.from_file(gguf_file)
+            self.validate_environment()
 
     def update_dtype(self, dtype):
         """Settle the dtype the model is loaded in, and keep it.
 
-        `None` arrives from a `dtype="auto"` load: nothing outside the file can answer it, since the
-        config is rebuilt from that same file and carries no dtype. A file written in one float type is
-        loaded in that type — the checkpoint decides, as `auto` does everywhere else.
+        `None` arrives whenever the caller named no dtype -- unset and `"auto"` both land here, because
+        the config is rebuilt from the file itself and carries no dtype for either to read. A file
+        written in one float type is loaded in that type: the checkpoint decides, as `auto` does
+        everywhere else.
 
         Kept because `update_weight_conversions` needs it for the tensors it has to dequantize.
         """
         if dtype is None:
             if not self.supported:
-                # No header on the legacy path, and nothing else says what the file holds, so those
-                # loads keep the dtype-less default they have always had.
                 self.dtype = torch.get_default_dtype()
                 return self.dtype
-            # A `None` here means the file is quantized, so it has no float type of its own. f32 is what
-            # the matmul kernels write and what its norms are stored in, so nothing has to be converted.
             dtype = self.header.dtype if self.header.dtype is not None else torch.float32
         self.dtype = dtype
         return dtype
@@ -141,9 +137,6 @@ class GgufHfQuantizer(HfQuantizer):
         """Swap in `GgufLinear` wherever the weight can stay packed."""
         if not self.supported:
             return
-        # Built here, where the config is in scope, and kept for `update_weight_conversions`: it is the
-        # same mapping both need, and the plan has to read a converter's operations before the unpacking
-        # op is inserted into them.
         self.mapping = get_gguf_conversion_mapping(self.header.architecture, model.config)
         self.quantized, packable, self.input_permutations = get_gguf_plan(self.header, self.mapping)
         if self.quantization_config.dequantize:
@@ -152,6 +145,8 @@ class GgufHfQuantizer(HfQuantizer):
 
     def _process_model_after_weight_loading(self, model, **kwargs):
         """Fill in what needs the weights already in place: the input permutations, then the layer kernels."""
+        if not self.supported:
+            return model
         from ..integrations.gguf.kernels import kernelize_ggml_layers
 
         for param_name, module in self.packed_modules.items():

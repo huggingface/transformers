@@ -39,25 +39,33 @@ def mul_mat_vec(weight: torch.Tensor, x: torch.Tensor, ggml_type: int, out_featu
 def kernel_can_read(tensor) -> bool:
     """Whether the resolved kernel can read this tensor's memory.
 
-    False when there is no kernel, or when a `device_map` left this weight on the host: a build is
-    always for an accelerator, so host memory is the one place its ops cannot reach. Asked instead of
-    naming a backend, so whichever accelerator was built for is used without saying which.
+    False when there is no kernel -- only reachable while converting weights at load, since a module
+    that holds blocks is only built where a kernel can compute on them -- or when an explicit
+    `device_map` left this weight on the host, which is the one place an accelerator build cannot
+    reach. Asked instead of naming a backend, so whichever one was built for is used without saying
+    which.
 
-    Compared against the `False` sentinel rather than asked for truthiness: this runs inside the
-    forward, and dynamo cannot trace `bool()` on a `GgufKernel`, which breaks the graph at every
-    embedding lookup and makes `fullgraph=True` a hard error.
+    Compared against the `False` sentinel rather than asked for truthiness: an embedding asks this in
+    its forward, and dynamo cannot trace `bool()` on a `GgufKernel`, which breaks the graph at every
+    lookup and makes `fullgraph=True` a hard error.
     """
     return get_gguf_kernel() is not False and tensor.device.type != "cpu"
 
 
-def dequantize_blocks(weight, ggml_type: int, rows: int, cols: int, dtype):
+def dequantize_blocks(weight, ggml_type: int, rows: int, cols: int, dtype, indices=None):
     """(rows, bytes_per_row) uint8 -> (rows, cols) `dtype`, a row chunk at a time.
+
+    `indices` unpacks only the rows it names, gathering as it goes -- ggml's `get_rows`. A caller
+    reading a handful of rows out of a large table should pass them rather than slicing first, which
+    would copy their packed bytes for nothing.
 
     ggml's kernel when the blocks are on its device: it writes `dtype` straight out, where the torch
     dequantizer produces f32 and leaves the caller to cast — fewer ops and half the transient for a
     bf16 model. The torch path covers the blocks no kernel can read, which is how a device with no
     kernel published for it still loads and runs.
     """
+    if indices is not None:
+        return _dequantize_chunk(weight, ggml_type, rows, cols, dtype, indices)
     rows_per_chunk = max(1, DEQUANT_CHUNK_ELEMS // cols)
     if rows <= rows_per_chunk:
         return _dequantize_chunk(weight, ggml_type, rows, cols, dtype)
@@ -68,9 +76,14 @@ def dequantize_blocks(weight, ggml_type: int, rows: int, cols: int, dtype):
     return out
 
 
-def _dequantize_chunk(weight, ggml_type: int, rows: int, cols: int, dtype):
+def _dequantize_chunk(weight, ggml_type: int, rows: int, cols: int, dtype, indices=None):
     if kernel_can_read(weight):
+        if indices is not None:
+            return _gguf_kernel.get_rows(weight, indices, ggml_type, cols, dtype)
         return _gguf_kernel.dequantize(weight, ggml_type, rows, cols, dtype)
+    # No kernel: gather the packed rows first, then unpack the copy.
+    if indices is not None:
+        weight = weight.index_select(0, indices)
     return dequantize(weight, ggml_type, dtype).reshape(rows, cols)
 
 
@@ -80,6 +93,7 @@ class GgufKernel:
     def __init__(self, module):
         self.mul_mat_vec = module.mul_mat_vec
         self.dequantize = module.dequantize
+        self.get_rows = module.get_rows
         self.gemv_types = module.GEMV_TYPES
 
     def supports(self, ggml_type: int) -> bool:

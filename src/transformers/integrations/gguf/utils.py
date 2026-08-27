@@ -104,19 +104,11 @@ def add_gguf_dequantize_ops(mapping: list[WeightTransform], to_unpack: dict[str,
 class GgufLinear(nn.Module):
     """`nn.Linear` whose weight stays as GGUF blocks: `(out_features, bytes_per_row)` uint8."""
 
-    def __init__(
-        self,
-        in_features: int,
-        out_features: int,
-        ggml_type: int,
-        bias: bool = False,
-        gemv: bool = False,
-    ):
+    def __init__(self, in_features: int, out_features: int, ggml_type: int, bias: bool = False):
         super().__init__()
         self.in_features = in_features
         self.out_features = out_features
         self.ggml_type = ggml_type
-        self.gemv = gemv
         block_elems, block_bytes = GGML_BLOCK[ggml_type]
         bytes_per_row = in_features // block_elems * block_bytes
         self.weight = nn.Parameter(torch.empty((out_features, bytes_per_row), dtype=torch.uint8), requires_grad=False)
@@ -131,9 +123,7 @@ class GgufLinear(nn.Module):
         flat = x.reshape(-1, self.in_features)
         if self.input_permutation is not None:
             flat = flat.index_select(1, self.input_permutation)
-        # `gemv` says the kernel implements one for this quantization. Where the weight sits is not checked:
-        # running the gemv on a weight the kernel cannot read is a misconfiguration, and it faults there.
-        if self.gemv and flat.shape[0] <= MAX_GEMV_ROWS:
+        if flat.shape[0] <= MAX_GEMV_ROWS:
             out = mul_mat_vec(self.weight, flat, self.ggml_type, self.out_features)
         else:
             out = self._unpack_matmul(flat)
@@ -157,7 +147,7 @@ class GgufLinear(nn.Module):
     def extra_repr(self) -> str:
         return (
             f"in_features={self.in_features}, out_features={self.out_features}, "
-            f"bias={self.bias is not None}, ggml_type={self.ggml_type}, gemv={self.gemv}, "
+            f"bias={self.bias is not None}, ggml_type={self.ggml_type}, "
             f"permuted_input={self.input_permutation is not None}"
         )
 
@@ -178,10 +168,11 @@ class GgufEmbedding(nn.Module):
         )
 
     def forward(self, input_ids: torch.Tensor) -> torch.Tensor:
-        """Gather these ids' rows out of the packed bytes, then dequantize only those."""
+        """Unpack these ids' rows out of the packed table, gathering as it goes."""
         flat = input_ids.reshape(-1)
-        rows = self.weight.index_select(0, flat).contiguous()
-        out = dequantize_blocks(rows, self.ggml_type, flat.numel(), self.embedding_dim, self.compute_dtype)
+        out = dequantize_blocks(
+            self.weight, self.ggml_type, flat.numel(), self.embedding_dim, self.compute_dtype, indices=flat
+        )
         return out.reshape(*input_ids.shape, self.embedding_dim)
 
     def extra_repr(self) -> str:
@@ -200,16 +191,17 @@ def replace_with_gguf_modules(model, plan: dict[str, int], kernel, dtype=None) -
         if source in plan and target not in plan:
             plan[target] = plan[source]
 
-    replaced = {}
+    replaced, unsupported = {}, set()
     for module_name, module in model.named_modules():
         param_name = f"{module_name}.weight"
         ggml_type = plan.get(param_name)
         if ggml_type is None:
             continue
+        if not kernel.supports(ggml_type):
+            unsupported.add(ggml_type)
+            continue
         if type(module) is nn.Linear:
-            # the fused gemv is used only where one exists; without it the forward unpacks instead
-            gemv = bool(kernel) and kernel.supports(ggml_type)
-            new_module = GgufLinear(module.in_features, module.out_features, ggml_type, module.bias is not None, gemv)
+            new_module = GgufLinear(module.in_features, module.out_features, ggml_type, module.bias is not None)
         elif type(module) is nn.Embedding:
             new_module = GgufEmbedding(module.num_embeddings, module.embedding_dim, ggml_type, dtype)
         else:
@@ -223,5 +215,11 @@ def replace_with_gguf_modules(model, plan: dict[str, int], kernel, dtype=None) -
         logger.warning(
             "You are loading your model from a GGUF file but no module could keep its weights packed."
             " Every quantized tensor will be dequantized at load time."
+        )
+    elif unsupported:
+        # Partial otherwise passes unremarked, and the only symptom is memory the caller cannot account for.
+        logger.warning(
+            f"No GGUF kernel for ggml types {sorted(unsupported)}, so those tensors are dequantized at "
+            f"load while the rest stay packed."
         )
     return replaced
