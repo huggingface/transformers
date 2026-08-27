@@ -42,7 +42,9 @@ def get_daily_ci_runs(token, num_runs=7, workflow_id=None, current_run_id=None):
         print(f"[DEBUG get_daily_ci_runs] Querying (attempt {attempt}/{max_attempts}): {schedule_url}")
         result = get_github_json(schedule_url, token=token)
         workflow_runs = result["workflow_runs"]
-        print(f"[DEBUG get_daily_ci_runs] event=schedule returned {len(workflow_runs)} runs (total_count={result.get('total_count')}):")
+        print(
+            f"[DEBUG get_daily_ci_runs] event=schedule returned {len(workflow_runs)} runs (total_count={result.get('total_count')}):"
+        )
         for r in workflow_runs:
             print(
                 f"  id={r['id']} status={r['status']} conclusion={r.get('conclusion')} created_at={r['created_at']} event={r['event']}"
