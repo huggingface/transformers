@@ -308,6 +308,9 @@ class EdgeTamVideoConfig(PreTrainedConfig):
             self.mask_decoder_config = EdgeTamVideoMaskDecoderConfig(**self.mask_decoder_config)
         elif self.mask_decoder_config is None:
             self.mask_decoder_config = EdgeTamVideoMaskDecoderConfig()
+
+        if self.rope_parameters is None:
+            self.rope_parameters = {"rope_type": "axial", "rope_theta": self.default_theta}
         super().__post_init__(**kwargs)
 
     @property
