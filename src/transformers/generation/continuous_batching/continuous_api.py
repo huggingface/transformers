@@ -919,17 +919,16 @@ class ContinuousBatchingManager:
 
     # ---------------------------------------- BACKGROUND THREAD ONLY METHODS ---------------------------------------- #
 
-    def _generation_loop_body(self, bootstrapping: bool) -> None:
+    def _generation_loop_body(self, batch_processor: ContinuousBatchProcessor, bootstrapping: bool) -> bool:
         """Body of the generation loop. Returns True if the loop should continue, False otherwise. Behaves differently
-        if this is for bootsrapping an async run: in that case, there is no need to update the batch, and the first step
-        should exit the bootstrapping loop."""
-        batch_processor: ContinuousBatchProcessor = self.batch_processor  # always the case, here for ty
+        if this is for bootstrapping an async run: in that case, there is no need to update the batch, and the first
+        step should exit the bootstrapping loop."""
         # If some request is available, perform a generation step
         requests_available = batch_processor.prepare_next_batch()
         if requests_available:
             self._generation_step()
             self.current_batch += 1
-            if bootstrapping:  # no update when bootstraping an async batching generation
+            if bootstrapping:  # no update when bootstrapping an async batching generation
                 return False
             else:
                 batch_processor.update_batch()
@@ -963,14 +962,12 @@ class ContinuousBatchingManager:
 
             # If using the async API, we bootstrap the first batch w/out update
             if batch_processor.use_async_batching:
-                running = True
-                while running:
-                    running = self._generation_loop_body(bootstrapping=True)
+                while self._generation_loop_body(batch_processor, bootstrapping=True):
+                    pass
 
             # The loop continues until a stop signal has been broadcasted in the TP group
-            running = True
-            while running:
-                running = self._generation_loop_body(bootstrapping=False)
+            while self._generation_loop_body(batch_processor, bootstrapping=False):
+                pass
 
             # In async mode, the last batch's results are still in flight: switch to the right IO pair and process them
             # Also happens for a hard stop, since the results are already available on the device
