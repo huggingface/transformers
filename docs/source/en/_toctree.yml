@@ -871,6 +871,8 @@
         title: Qwen3MoE
       - local: model_doc/qwen3_next
         title: Qwen3Next
+      - local: model_doc/qwen4_exp
+        title: Qwen4-Exp
       - local: model_doc/rag
         title: RAG
       - local: model_doc/recurrent_gemma
@@ -1191,6 +1193,8 @@
         title: UniSpeech-SAT
       - local: model_doc/univnet
         title: UnivNet
+      - local: model_doc/vibevoice
+        title: VibeVoice
       - local: model_doc/vibevoice_acoustic_tokenizer
         title: VibeVoice Acoustic Tokenizer
       - local: model_doc/vibevoice_asr
@@ -1323,6 +1327,8 @@
         title: Gemma4 Unified
       - local: model_doc/git
         title: GIT
+      - local: model_doc/glm5_next
+        title: GLM-5.3-Flash
       - local: model_doc/glm46v
         title: Glm46V
       - local: model_doc/glm4v
