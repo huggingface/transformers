@@ -41,8 +41,11 @@ def get_gguf_conversion_mapping(gguf_arch: str, config) -> list[WeightTransform]
     return GGUF_ARCHS[gguf_arch](config)
 
 
-def get_gguf_plan(header: GgufHeader, mapping: list[WeightTransform]) -> tuple[dict[str, int], dict[str, int]]:
-    """`{param_name: ggml_type}` for the file's quantized tensors, and the subset that can stay packed.
+def get_gguf_plan(
+    header: GgufHeader, mapping: list[WeightTransform]
+) -> tuple[dict[str, int], dict[str, int], dict[str, torch.Tensor]]:
+    """`{param_name: ggml_type}` for the file's quantized tensors, the subset that can stay packed, and
+    the input permutation each of those needs -- see `PermuteInputFeatures`.
 
     Reads `mapping` as it is before `add_gguf_dequantize_ops` has touched it: what a converter does to a
     tensor decides whether it can stay packed, so the answer has to be taken before the unpacking op is
@@ -54,7 +57,7 @@ def get_gguf_plan(header: GgufHeader, mapping: list[WeightTransform]) -> tuple[d
     renamings = [entry for entry in mapping if isinstance(entry, WeightRenaming)]
     converters = [entry for entry in mapping if isinstance(entry, WeightConverter)]
 
-    quantized, packable = {}, {}
+    quantized, packable, permutations = {}, {}, {}
     for gguf_name, ggml_type in header.ggml_types.items():
         if ggml_type not in GGML_BLOCK:
             continue
@@ -62,11 +65,16 @@ def get_gguf_plan(header: GgufHeader, mapping: list[WeightTransform]) -> tuple[d
         for renaming in renamings:
             param_name, _ = renaming.rename_source_key(param_name)
         quantized[param_name] = ggml_type
-        # every conversion applied to this tensor must be safe on packed bytes
         converter = next((entry for entry in converters if entry.rename_source_key(param_name)[1]), None)
-        if converter is None or all(getattr(op, "supports_packed", False) for op in converter.operations):
+        operations = getattr(converter, "operations", ())
+        # every conversion applied to this tensor must be safe on packed bytes
+        if converter is None or all(getattr(op, "supports_packed", False) for op in operations):
             packable[param_name] = ggml_type
-    return quantized, packable
+            # an op that cannot reorder packed columns asks for its input to be reordered instead
+            for operation in operations:
+                if (permutation := getattr(operation, "input_permutation", None)) is not None:
+                    permutations[param_name] = permutation
+    return quantized, packable, permutations
 
 
 def add_gguf_dequantize_ops(mapping: list[WeightTransform], to_unpack: dict[str, int], dtype) -> list:
@@ -117,9 +125,12 @@ class GgufLinear(nn.Module):
         self.bias = None
         if bias:
             self.bias = nn.Parameter(torch.empty(out_features), requires_grad=False)
+        self.register_buffer("input_permutation", None, persistent=False)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         flat = x.reshape(-1, self.in_features)
+        if self.input_permutation is not None:
+            flat = flat.index_select(1, self.input_permutation)
         # `gemv` says the kernel implements one for this quantization. Where the weight sits is not checked:
         # running the gemv on a weight the kernel cannot read is a misconfiguration, and it faults there.
         if self.gemv and flat.shape[0] <= MAX_GEMV_ROWS:
@@ -146,7 +157,8 @@ class GgufLinear(nn.Module):
     def extra_repr(self) -> str:
         return (
             f"in_features={self.in_features}, out_features={self.out_features}, "
-            f"bias={self.bias is not None}, ggml_type={self.ggml_type}, gemv={self.gemv}"
+            f"bias={self.bias is not None}, ggml_type={self.ggml_type}, gemv={self.gemv}, "
+            f"permuted_input={self.input_permutation is not None}"
         )
 
 

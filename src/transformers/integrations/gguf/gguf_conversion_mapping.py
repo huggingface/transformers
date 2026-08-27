@@ -184,8 +184,8 @@ def _qwen35(config) -> list[WeightTransform]:
             target_patterns="linear_attn.conv1d.weight",
             operations=[PermuteRows(value_perm, offset=query_key_rows), Unsqueeze(1)],
         ),
-        # The only tensor that *consumes* the value dimension, so the reorder is on its columns —
-        # which cannot be done on blocks, so this weight is always dequantized at load.
+        # The only tensor that *consumes* the value dimension, so the reorder is on its columns. Columns
+        # cross quantization blocks, so when it stays packed the reorder is applied to its input instead.
         WeightConverter(
             source_patterns="linear_attn.out_proj.weight",
             target_patterns="linear_attn.out_proj.weight",
@@ -303,24 +303,44 @@ class PermuteRows(ConversionOps):
 class PermuteInputFeatures(ConversionOps):
     """Reorder columns (dim 1), for a tensor that *consumes* an axis llama.cpp reordered.
 
-    Same logical reordering as `PermuteRows`, but it lands on `in_features` because this tensor is
-    on the consuming side (Qwen3.5's `linear_attn.out_proj`).
+    Same logical reordering as `PermuteRows`, but on `in_features`, because this tensor reads the axis
+    the others produce (Qwen3.5's `linear_attn.out_proj`).
 
-    Cannot be applied to packed GGUF blocks: it moves values between blocks, which would mean
-    re-picking scales and re-rounding, i.e. a requantization. Tensors needing it are therefore always
-    dequantized at load.
+    Columns cross quantization blocks, so reordering them in packed bytes would mean re-picking scales
+    and re-rounding -- a requantization. It does not have to happen on the weight at all:
+
+        x @ W[:, p].T  ==  x[:, argsort(p)] @ W.T
+
+    both sides pairing `x[j]` with `W[p[j]]`. So a packed weight is left exactly as the file stores it
+    and the module gathers its *input* instead -- one row of activations, against tens of megabytes of
+    weight. `GgufLinear` reads `input_permutation` for that.
+
+    A tensor that arrives dense still has its columns permuted here, so the dequantized path is unchanged.
     """
 
-    supports_packed = False
+    supports_packed = True
 
     def __init__(self, permutation: torch.Tensor):
         self.permutation = permutation
+
+    @property
+    def input_permutation(self) -> torch.Tensor:
+        """The reordering to apply to the input of the module holding this weight, when it stays packed.
+
+        The inverse of the column permutation, not the permutation itself: `x @ W[:, p].T` sums
+        `x[j] * W[p[j]]`, which is `x[argsort(p)] @ W.T`. Getting it backwards is not an error, it is
+        fluent nonsense.
+        """
+        return torch.argsort(self.permutation)
 
     @torch.no_grad
     def convert(
         self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
     ) -> dict[str, torch.Tensor]:
         tensor = _single_tensor(input_dict)
+        if tensor.dtype == torch.uint8:
+            # Packed: the reorder rides on the input instead, so the blocks pass through untouched.
+            return {target_patterns[0]: tensor}
         perm = self.permutation.to(tensor.device)
         return {target_patterns[0]: tensor[:, perm].contiguous()}
 

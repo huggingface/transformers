@@ -236,13 +236,7 @@ class ModelManager:
 
         model_id, revision = model_id_and_revision.split("@", 1)
         if self.tokenizer is not None:
-            # A GGUF-only repo ships no tokenizer files, and building one from the file's metadata is
-            # not implemented for every architecture, so the caller can name where it comes from.
-            # A tokenizer rather than a processor: the reference repo for a text GGUF is often the
-            # multimodal checkpoint, whose processor emits vision kwargs a text model will reject.
-            from transformers import AutoTokenizer
-
-            return AutoTokenizer.from_pretrained(self.tokenizer, trust_remote_code=self.trust_remote_code)
+            return AutoProcessor.from_pretrained(self.tokenizer, trust_remote_code=self.trust_remote_code)
         return AutoProcessor.from_pretrained(model_id, revision=revision, trust_remote_code=self.trust_remote_code)
 
     def _load_model(
@@ -275,8 +269,6 @@ class ModelManager:
             model_kwargs["quantization_config"] = quantization_config
 
         if self.gguf_file is not None:
-            # A GGUF-only repo carries no `config.json`, so the config comes from the file's own
-            # metadata -- which means the config lookup below needs to know which file to read.
             model_kwargs["gguf_file"] = self.gguf_file
 
         if progress_callback is not None:

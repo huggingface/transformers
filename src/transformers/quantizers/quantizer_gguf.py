@@ -53,7 +53,8 @@ class GgufHfQuantizer(HfQuantizer):
         super().__init__(quantization_config, **kwargs)
         self.pre_quantized = True
         self.gguf_file = quantization_config.gguf_file
-        self.keep_packed = set()
+        self.packed_modules = {}
+        self.input_permutations = {}
         self.quantized = {}
         self.mapping = []
         self.kernel = None
@@ -144,15 +145,19 @@ class GgufHfQuantizer(HfQuantizer):
         # same mapping both need, and the plan has to read a converter's operations before the unpacking
         # op is inserted into them.
         self.mapping = get_gguf_conversion_mapping(self.header.architecture, model.config)
-        self.quantized, packable = get_gguf_plan(self.header, self.mapping)
+        self.quantized, packable, self.input_permutations = get_gguf_plan(self.header, self.mapping)
         if self.quantization_config.dequantize:
             return
-        self.keep_packed = set(replace_with_gguf_modules(model, packable, self.kernel, self.dtype))
+        self.packed_modules = replace_with_gguf_modules(model, packable, self.kernel, self.dtype)
 
     def _process_model_after_weight_loading(self, model, **kwargs):
-        """Graft ggml's fused layer kernels, which needs the weights already in place."""
+        """Fill in what needs the weights already in place: the input permutations, then the layer kernels."""
         from ..integrations.gguf.kernels import kernelize_ggml_layers
 
+        for param_name, module in self.packed_modules.items():
+            permutation = self.input_permutations.get(param_name)
+            if permutation is not None:
+                module.input_permutation = permutation.to(module.weight.device)
         kernelize_ggml_layers(model)
         return model
 
@@ -165,7 +170,7 @@ class GgufHfQuantizer(HfQuantizer):
         """
         if not self.supported:
             return weight_conversions
-        to_unpack = {name: t for name, t in self.quantized.items() if name not in self.keep_packed}
+        to_unpack = {name: t for name, t in self.quantized.items() if name not in self.packed_modules}
         return add_gguf_dequantize_ops(self.mapping + weight_conversions, to_unpack, self.dtype)
 
     def param_needs_quantization(self, model, param_name: str, **kwargs) -> bool:
