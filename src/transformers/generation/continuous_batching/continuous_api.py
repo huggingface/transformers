@@ -675,7 +675,7 @@ class ContinuousBatchingManager:
                     "If you need to use eager or sdpa, use paged|eager or paged|sdpa as the `attn_implementation`."
                 )
             else:
-                logger.warning(f"{msg} Consider using a flash `attn_implementation` when loading the model.")
+                logger.info(f"{msg} Consider using a flash `attn_implementation` when loading the model.")
 
         # Switch to a paged implementation (always entered if conversion to flash happened)
         if "paged|" not in target_implem:
@@ -942,6 +942,35 @@ class ContinuousBatchingManager:
 
     # ---------------------------------------- BACKGROUND THREAD ONLY METHODS ---------------------------------------- #
 
+    def _generation_loop_body(self, batch_processor: ContinuousBatchProcessor, bootstrapping: bool) -> bool:
+        """Body of the generation loop. Returns True if the loop should continue, False otherwise. Behaves differently
+        if this is for bootstrapping an async run: in that case, there is no need to update the batch, and the first
+        step should exit the bootstrapping loop."""
+        # If some request is available, perform a generation step
+        requests_available = batch_processor.prepare_next_batch()
+        if requests_available:
+            self._generation_step()
+            self.current_batch += 1
+            if bootstrapping:  # no update when bootstrapping an async batching generation
+                return False
+            else:
+                batch_processor.update_batch()
+                return True
+        # Stop waiting if the TP group is hard-stopping
+        elif self.background_thread_status.tp_status == BackgroundThreadStatus.HARD_STOP:
+            return False
+        # Stop waiting if the TP group is flushing and there are no pending requests
+        elif (
+            self.background_thread_status.tp_status == BackgroundThreadStatus.FLUSH_AND_STOP
+            and not batch_processor.has_pending_requests()
+        ):
+            return False
+        # Otherwise, we wait for new requests and retry
+        else:
+            self._has_new_requests.wait(timeout=0.1)  # wait for new requests instead of busy-spinning.
+            self._has_new_requests.clear()
+            return True
+
     @torch.no_grad()
     def _run_generation_loop(self) -> None:
         """Main processing loop running in the background thread."""
@@ -956,35 +985,12 @@ class ContinuousBatchingManager:
 
             # If using the async API, we bootstrap the first batch w/out update
             if batch_processor.use_async_batching:
-                if not batch_processor.prepare_next_batch():
-                    raise RuntimeError("Failed to bootstrap the first batch.")
-                self._generation_step()
-                self.current_batch += 1
+                while self._generation_loop_body(batch_processor, bootstrapping=True):
+                    pass
 
             # The loop continues until a stop signal has been broadcasted in the TP group
-            while True:
-                requests_available = batch_processor.prepare_next_batch()  # this is where the TP group communicates
-
-                # This only happens if the TP group is not stopping (any kind of stop) so we can check the status after
-                if requests_available:
-                    self._generation_step()
-                    batch_processor.update_batch()
-                    self.current_batch += 1
-
-                # Stop the loop if the TP group is hard-stopping
-                elif self.background_thread_status.tp_status == BackgroundThreadStatus.HARD_STOP:
-                    break
-                # Stop the loop if the TP group is flushing and there are no pending requests
-                elif (
-                    self.background_thread_status.tp_status == BackgroundThreadStatus.FLUSH_AND_STOP
-                    and not batch_processor.has_pending_requests()
-                ):
-                    break
-
-                # Otherwise, we wait for new requests and re-enter the loop
-                else:
-                    self._has_new_requests.wait(timeout=0.1)  # wait for new requests instead of busy-spinning.
-                    self._has_new_requests.clear()
+            while self._generation_loop_body(batch_processor, bootstrapping=False):
+                pass
 
             # In async mode, the last batch's results are still in flight: switch to the right IO pair and process them
             # Also happens for a hard stop, since the results are already available on the device
@@ -1207,11 +1213,11 @@ class ContinuousMixin:
             workload_hints=workload_hints,
         )
         if warmup and not manager.warmed_up:
-            # Warmup is long (~30 sec): best to signal the user it's happening than let them think the manager is stuck
-            logger.warning("Warming up for continuous batching...")
+            # TODO: have a progress bar for the warmup as well, like other inference engine
+            logger.info("Warming up for continuous batching...")
             start = perf_counter()
             manager.warmup()
-            logger.warning(f"Warming up completed in {perf_counter() - start:.2f}s.")
+            logger.info(f"Warming up completed in {perf_counter() - start:.2f}s.")
         manager.start()
         try:
             yield manager
@@ -1230,7 +1236,7 @@ class ContinuousMixin:
         generation_config: GenerationConfig | None = None,
         continuous_batching_config: ContinuousBatchingConfig | None = None,
         record_timestamps: bool = False,
-        progress_bar: bool = True,
+        progress_bar: bool = False,
         persistent_manager: bool = False,
         warmup: bool = True,
         **kwargs,
@@ -1254,7 +1260,7 @@ class ContinuousMixin:
 
         # If the logger level is less than DEBUG, disable the progress bar
         if logger.getEffectiveLevel() <= logging.DEBUG:
-            logger.warning("Progress bar is disabled when logger level is less than DEBUG")
+            logger.info("Progress bar is disabled when logger level is less than DEBUG")
             progress_bar = False
 
         # Compute the total number of requests
