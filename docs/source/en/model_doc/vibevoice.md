@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was published in HF papers on 2025-08-26 and contributed to Hugging Face Transformers on 2026-08-26.*
+*This model was published in HF papers on 2025-08-26 and contributed to Hugging Face Transformers on 2026-08-27.*
 
 
 # VibeVoice
@@ -28,8 +28,8 @@ rendered properly in your Markdown viewer.
 [VibeVoice](https://huggingface.co/papers/2508.19205) is a novel framework for synthesizing high-fidelity, long-form speech with multiple speakers by employing a next-token diffusion approach within a Large Language Model (LLM) structure. It's designed to capture the authentic conversational "vibe" and is particularly suited for generating audio content like podcasts and multi-participant audiobooks.
 
 Two model checkpoint are available at:
-- [bezzam/VibeVoice-1.5B-hf](https://huggingface.co/bezzam/VibeVoice-1.5B-hf)
-- [bezzam/VibeVoice-7B-hf](https://huggingface.co/bezzam/VibeVoice-7B-hf)
+- [vibevoice/VibeVoice-1.5B-hf](https://huggingface.co/vibevoice/VibeVoice-1.5B-hf)
+- [vibevoice/VibeVoice-7B-hf](https://huggingface.co/vibevoice/VibeVoice-7B-hf)
 
 This model was contributed by [Eric Bezzam](https://huggingface.co/bezzam).
 
@@ -71,7 +71,7 @@ pip install soundfile   # for saving audio
 ```python
 from transformers import AutoProcessor, AutoModelForTextToWaveform
 
-model_id = "bezzam/VibeVoice-1.5B-hf"  # "bezzam/VibeVoice-7B-hf"
+model_id = "vibevoice/VibeVoice-1.5B-hf"  # "vibevoice/VibeVoice-7B-hf"
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForTextToWaveform.from_pretrained(model_id)
 ```
@@ -82,7 +82,7 @@ model = AutoModelForTextToWaveform.from_pretrained(model_id)
 import os
 from transformers import AutoProcessor, AutoModelForTextToWaveform
 
-model_id = "bezzam/VibeVoice-1.5B-hf"   # "bezzam/VibeVoice-7B-hf"
+model_id = "vibevoice/VibeVoice-1.5B-hf"   # "vibevoice/VibeVoice-7B-hf"
 text = "Hello, nice to meet you. How are you?"
 
 # Load model
@@ -112,7 +112,7 @@ A voice can be cloned by providing a reference audio alongside the text within t
 import os
 from transformers import AutoProcessor, AutoModelForTextToWaveform, set_seed
 
-model_id = "bezzam/VibeVoice-1.5B-hf"   # "bezzam/VibeVoice-7B-hf"
+model_id = "vibevoice/VibeVoice-1.5B-hf"   # "vibevoice/VibeVoice-7B-hf"
 text = "Hello, nice to meet you. How are you?"
 set_seed(42)  # for deterministic results
 
@@ -158,7 +158,7 @@ import os
 import time
 from transformers import AutoProcessor, AutoModelForTextToWaveform
 
-model_id = "bezzam/VibeVoice-1.5B-hf"   # "bezzam/VibeVoice-7B-hf"
+model_id = "vibevoice/VibeVoice-1.5B-hf"   # "vibevoice/VibeVoice-7B-hf"
 max_new_tokens = 400  # `None` to ensure full generation
 
 # create conversation with an audio for the first time a speaker appears to clone that particular voice
@@ -234,7 +234,7 @@ import os
 import time
 from transformers import AutoProcessor, AutoModelForTextToWaveform
 
-model_id = "bezzam/VibeVoice-1.5B-hf"   # "bezzam/VibeVoice-7B-hf"
+model_id = "vibevoice/VibeVoice-1.5B-hf"   # "vibevoice/VibeVoice-7B-hf"
 max_new_tokens = 400  # `None` to ensure full generation
 
 conversation = [
@@ -336,7 +336,7 @@ import os
 import soundfile as sf
 from transformers import pipeline
 
-model_id = "bezzam/VibeVoice-1.5B-hf"   # "bezzam/VibeVoice-7B-hf"
+model_id = "vibevoice/VibeVoice-1.5B-hf"   # "vibevoice/VibeVoice-7B-hf"
 text = "Hello, nice to meet you. How are you?"
 pipe = pipeline("text-to-speech", model=model_id)
 
@@ -370,7 +370,7 @@ VibeVoice can be trained with the loss outputted by the model.
 from transformers import AutoProcessor, AutoModelForTextToWaveform
 
 
-model_id = "bezzam/VibeVoice-1.5B-hf"   # "bezzam/VibeVoice-7B-hf"
+model_id = "vibevoice/VibeVoice-1.5B-hf"   # "vibevoice/VibeVoice-7B-hf"
 
 # Load model and processor
 processor = AutoProcessor.from_pretrained(model_id)
@@ -442,7 +442,7 @@ import torch
 from transformers import AutoModelForTextToWaveform, AutoProcessor, CompileConfig
 
 
-model_id = "bezzam/VibeVoice-1.5B-hf"   # "bezzam/VibeVoice-7B-hf"
+model_id = "vibevoice/VibeVoice-1.5B-hf"   # "vibevoice/VibeVoice-7B-hf"
 num_warmup = 5
 max_new_tokens = 128
 

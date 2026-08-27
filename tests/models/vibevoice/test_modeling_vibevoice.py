@@ -299,7 +299,7 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
 
 class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.model_checkpoint = "bezzam/VibeVoice-1.5B-hf"  # TODO change
+        self.model_checkpoint = "vibevoice/VibeVoice-1.5B-hf"
         self.sampling_rate = 24000
         self.fixtures_path = Path(__file__).parent.parent.parent / "fixtures/vibevoice"
 
