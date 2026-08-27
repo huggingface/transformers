@@ -729,7 +729,12 @@ def _fix_sort_stable(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
 
 @functools.cache
 def _integral_scalar_promotion_ops() -> frozenset:
-    """Ops where torch 2.13 mishandles a Python float meeting an integral tensor.
+    """Ops where a Python float meeting an integral tensor needs the tensor promoted first.
+
+    Named for torch 2.13, where the mishandling appeared, but applied on every version: both rewrites are
+    semantics-preserving — a cast to the dtype the op already produces, and an overload swap with the same
+    meaning — so gating them on a version would add a branch that changes nothing except which torch the
+    path is exercised on.
 
     `sub`/`rsub` and `mul` are what the affected models spell (`1.0 - attention_mask`, `mask * 2.0`); both
     overloads appear, since decomposition rewrites `.Tensor` to `.Scalar` when the operand is a constant.
@@ -800,12 +805,21 @@ def _fix_mul_scalar_symbolic(gm: torch.fx.GraphModule, node: torch.fx.Node) -> b
     cannot address, since there is no Python constant to promote against. `mul.Tensor` has the two-operand
     translation, which is the same rewrite `_fix_remainder_scalar` makes for the same reason.
 
+    That operand is a `SymFloat`, not a tensor: across the affected families every one of the 33 sites is
+    an `operator.truediv` result. `mul.Tensor`'s translation takes a symbolic scalar there — it becomes a
+    graph value like any other — so the rewrite is sound, but the guard below names both accepted forms
+    rather than trusting that a `Node` implies a tensor. Anything else (a nested list, an unbacked value
+    with no `val`) is left as `mul.Scalar` to fail visibly in translation instead of silently here.
+
     Reached because the FX fixes run a second time right after `run_decompositions`, where this overload
     appears.
     """
     if node.target is not torch.ops.aten.mul.Scalar:
         return False
     if len(node.args) < 2 or not isinstance(node.args[1], torch.fx.Node):
+        return False
+    other = node.args[1].meta.get("val")
+    if not isinstance(other, (torch.Tensor, torch.SymFloat, torch.SymInt, torch.SymBool)):
         return False
     with gm.graph.inserting_before(node):
         new = gm.graph.call_function(torch.ops.aten.mul.Tensor, args=node.args)
