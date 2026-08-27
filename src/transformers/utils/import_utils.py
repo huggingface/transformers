@@ -961,7 +961,7 @@ def is_mamba_2_ssm_available() -> bool:
 def is_flash_linear_attention_available():
     is_available, fla_version = _is_package_available("fla", return_version=True)
     return (
-        (is_torch_cuda_available() or is_torch_xpu_available())
+        (is_torch_cuda_available() or is_torch_xpu_available() or is_torch_mlu_available())
         and is_available
         and version.parse(fla_version) >= version.parse("0.2.2")
     )
@@ -1082,6 +1082,12 @@ def is_detectron2_available() -> bool:
         return True
     except Exception:
         return False
+
+
+@lru_cache
+@_make_compile_constant
+def is_diffusers_available() -> bool:
+    return _is_package_available("diffusers")[0]
 
 
 @lru_cache
@@ -1702,9 +1708,7 @@ def is_torchdynamo_compiling() -> bool:
     try:
         import torch
 
-        if hasattr(torch, "compiler"):
-            return torch.compiler.is_compiling()
-        return False
+        return torch.compiler.is_compiling()
     except Exception:
         return False
 
@@ -1713,9 +1717,7 @@ def is_torchdynamo_exporting() -> bool:
     try:
         import torch
 
-        if hasattr(torch, "compiler"):
-            return torch.compiler.is_exporting()
-        return False
+        return torch.compiler.is_exporting()
     except Exception:
         return False
 
@@ -2219,6 +2221,13 @@ Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore
+DIFFUSERS_IMPORT_ERROR = """
+{0} requires the diffusers library. But that was not found in your environment. You can install them with pip:
+`pip install diffusers`
+Please note that you may need to restart your runtime after installation.
+"""
+
+# docstyle-ignore
 SOUNDFILE_IMPORT_ERROR = """
 {0} requires the soundfile library. But that was not found in your environment. You can install it with pip:
 `pip install soundfile`
@@ -2271,6 +2280,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("datasets", (is_datasets_available, DATASETS_IMPORT_ERROR)),
         ("decord", (is_decord_available, DECORD_IMPORT_ERROR)),
         ("detectron2", (is_detectron2_available, DETECTRON2_IMPORT_ERROR)),
+        ("diffusers", (is_diffusers_available, DIFFUSERS_IMPORT_ERROR)),
         ("essentia", (is_essentia_available, ESSENTIA_IMPORT_ERROR)),
         ("faiss", (is_faiss_available, FAISS_IMPORT_ERROR)),
         ("g2p_en", (is_g2p_en_available, G2P_EN_IMPORT_ERROR)),

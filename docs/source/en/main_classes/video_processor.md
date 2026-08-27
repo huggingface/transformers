@@ -85,15 +85,15 @@ from transformers.video_utils import VideoMetadata
 device = torch.accelerator.current_accelerator().type if torch.accelerator.is_available() else "cpu"
 
 processor = AutoVideoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-0.5b-ov-hf", device=device)
-my_decodec_video = torch.randint(0, 255, size=(100, 3, 1280, 1280)) # short video of 100 frames
+decoded_video = torch.randint(0, 255, size=(100, 3, 1280, 1280)) # short video of 100 frames
 video_metadata = VideoMetadata(
     total_num_frames=100,
     fps=24,
     duration=4.1, # in seconds
 )
-processed_video_inputs = processor(videos=["video_path.mp4"], video_metadata=video_metadata, do_sample_frames=True, num_frames=10, return_tensors="pt")
+processed_video_inputs = processor(videos=[decoded_video], video_metadata=video_metadata, do_sample_frames=True, num_frames=10, return_tensors="pt")
 print(processed_video_inputs.pixel_values_videos.shape)
->>> [10, 3, 384, 384]
+[10, 3, 384, 384]
 ```
 
 ## BaseVideoProcessor

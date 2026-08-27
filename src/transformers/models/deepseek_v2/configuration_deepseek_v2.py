@@ -73,7 +73,7 @@ class DeepseekV2Config(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
 
-    vocab_size: int = 32000
+    vocab_size: int = 102400
     hidden_size: int = 4096
     intermediate_size: int = 11008
     num_hidden_layers: int = 32

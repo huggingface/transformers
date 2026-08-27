@@ -736,7 +736,18 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralRealtimePreTrainedModel, Ge
         encoder_inputs_embeds: torch.Tensor | None = None,
         **kwargs,
     ):
+        input_features = kwargs.get("input_features")
+        input_features_generator = kwargs.get("input_features_generator")
         model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
+        # In streaming mode, `input_features` is a generator yielding audio chunks one at a time.
+        # The base prepare_inputs_for_generation drops multimodal inputs outside the prefill step,
+        # but VoxtralRealtime needs each new chunk for its streaming encoder, so restore it here.
+        if (
+            input_features_generator is not None
+            and input_features is not None
+            and "input_features" not in model_inputs
+        ):
+            model_inputs["input_features"] = input_features
 
         if encoder_inputs_embeds is not None:
             past_key_values = model_inputs.get("past_key_values")

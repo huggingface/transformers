@@ -81,6 +81,7 @@ HARDCODED_CONFIG_FOR_MODELS = {
     "parakeet": "ParakeetCTCConfig",
     "privacy-filter": "OpenAIPrivacyFilterConfig",
     "lasr": "LasrCTCConfig",
+    "granite-speech5": "GraniteSpeech5CTCConfig",
     "wav2vec2-with-lm": "Wav2Vec2Config",
     "radio": "RADIOConfig",
     "cosmos3-edge": "Cosmos3EdgeConfig",
