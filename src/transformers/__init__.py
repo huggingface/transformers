@@ -104,7 +104,7 @@ _import_structure = {
     "debug_utils": [],
     "dependency_versions_check": [],
     "dependency_versions_table": [],
-    "distributed": [],
+    "distributed": ["DistributedConfig"],
     "dynamic_module_utils": [],
     "exporters": [],
     "feature_extraction_sequence_utils": ["SequenceFeatureExtractor"],
@@ -556,6 +556,7 @@ if TYPE_CHECKING:
     from .data.datasets import GlueDataTrainingArguments as GlueDataTrainingArguments
     from .data.datasets import SquadDataset as SquadDataset
     from .data.datasets import SquadDataTrainingArguments as SquadDataTrainingArguments
+    from .distributed import DistributedConfig as DistributedConfig
     from .feature_extraction_sequence_utils import SequenceFeatureExtractor as SequenceFeatureExtractor
 
     # Feature Extractor

@@ -442,7 +442,7 @@ def torch_chunk_gated_delta_rule(
     return core_attn_out, last_recurrent_state
 
 
-@use_kernel_func_from_hub_with_fallback("recurrent_gated_delta_rule", "fla")
+@use_kernel_func_from_hub_with_fallback("fused_recurrent_gated_delta_rule", "fla")
 def torch_recurrent_gated_delta_rule(
     query,
     key,

@@ -337,7 +337,7 @@ def _grouped_mm(
         elif hasattr(torch, "_grouped_mm"):
             return torch._grouped_mm(input.to(weight.dtype), weight, offs=offs)
 
-    return torch.ops.transformers.grouped_mm_fallback(input, weight, offs=offs)
+    return torch.ops.transformers.grouped_mm_fallback(input.to(weight.dtype), weight, offs=offs)
 
 
 def _grouped_linear(
