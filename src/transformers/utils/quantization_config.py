@@ -2063,6 +2063,7 @@ class GemmaQuantizationConfig(QuantizationConfigMixin):
         self.module_quant_configs = module_quant_configs
         self.modules_to_not_convert = modules_to_not_convert
 
+
 class NVFP4Config(QuantizationConfigMixin):
     """Configuration for on-the-fly NVFP4 weight quantization.
 
@@ -2079,7 +2080,9 @@ class NVFP4Config(QuantizationConfigMixin):
         if kwargs:
             logger.info(
                 f"Unused kwargs: {list(kwargs.keys())}. These kwargs are not used in {self.__class__.__name__}."
-            )    
+            )
+
+
 @dataclass
 class GgufConfig(QuantizationConfigMixin):
     """Load a quantized GGUF checkpoint with its weights left in GGUF blocks.
@@ -2096,4 +2099,3 @@ class GgufConfig(QuantizationConfigMixin):
         self.quant_method = QuantizationMethod.GGUF
         self.gguf_file = gguf_file
         self.dequantize = dequantize
-
