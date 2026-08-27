@@ -173,7 +173,7 @@ class Qwen3_5MoeRMSNormGated(nn.Module):
         self.variance_epsilon = eps
         self.activation = "silu"
 
-    def forward(self, hidden_states, gate=None):
+    def forward(self, hidden_states: torch.Tensor, gate: torch.Tensor):
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
