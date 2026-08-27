@@ -6,7 +6,7 @@ on:
     - cron: "17 2 * * *"
   push:
     branches:
-      - run_nvidia_ci*
+      - fix_stale_github_api_cache
   workflow_dispatch:
     inputs:
       prev_workflow_run_id:
@@ -31,108 +31,30 @@ permissions:
   contents: read
 
 jobs:
-  setup:
-    name: Setup
+  debug_api_consistency:
+    name: "[debug] Poll GitHub API for schedule runs"
     runs-on: ubuntu-22.04
     steps:
-      - name: Setup
+      - name: Poll workflow runs endpoint 10 times (1 min apart)
         env:
-          prev_workflow_run_id: ${{ inputs.prev_workflow_run_id || env.prev_workflow_run_id }}
-          other_workflow_run_id: ${{ inputs.other_workflow_run_id || env.other_workflow_run_id }}
+          TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
         run: |
-          mkdir "setup_values"
-          echo "$prev_workflow_run_id" > "setup_values/prev_workflow_run_id.txt"
-          echo "$other_workflow_run_id" > "setup_values/other_workflow_run_id.txt"
+          URL="https://api.github.com/repos/huggingface/transformers/actions/workflows/90575235/runs?branch=main&exclude_pull_requests=true&per_page=7&event=schedule"
+          for i in $(seq 1 10); do
+            echo "========== Attempt $i / 10 — $(date -u '+%Y-%m-%dT%H:%M:%SZ') =========="
+            RESPONSE=$(curl -s -H "Authorization: Bearer $TOKEN" -H "Accept: application/vnd.github+json" "$URL")
+            TOTAL=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('total_count','N/A'))")
+            echo "total_count: $TOTAL"
+            echo "--- run[0] ---"
+            echo "$RESPONSE" | python3 -c "
+          import sys, json
+          runs = json.load(sys.stdin).get('workflow_runs', [])
+          for r in runs[:2]:
+              print(f\"  id={r['id']} run_number={r['run_number']} status={r['status']} conclusion={r['conclusion']} created_at={r['created_at']} event={r['event']}\")
+          "
+            if [ $i -lt 10 ]; then
+              echo "Sleeping 60s..."
+              sleep 60
+            fi
+          done
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: setup_values
-          path: setup_values
-
-  model-ci:
-    name: Model CI
-    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@main
-    with:
-      job: run_models_gpu
-      slack_report_channel: "#transformers-ci-daily-models"
-      docker: huggingface/transformers-all-latest-gpu
-      ci_event: Daily CI
-      runner_type: "a10"
-      report_repo_id: hf-internal-testing/transformers_daily_ci
-      commit_sha: ${{ github.sha }}
-    secrets: inherit
-
-  torch-pipeline:
-    name: Torch pipeline CI
-    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@main
-    with:
-      job: run_pipelines_torch_gpu
-      slack_report_channel: "#transformers-ci-daily-pipeline-torch"
-      docker: huggingface/transformers-all-latest-gpu
-      ci_event: Daily CI
-      report_repo_id: hf-internal-testing/transformers_daily_ci
-      commit_sha: ${{ github.sha }}
-    secrets: inherit
-
-  example-ci:
-    name: Example CI
-    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@main
-    with:
-      job: run_examples_gpu
-      slack_report_channel: "#transformers-ci-daily-examples"
-      docker: huggingface/transformers-all-latest-gpu
-      ci_event: Daily CI
-      report_repo_id: hf-internal-testing/transformers_daily_ci
-      commit_sha: ${{ github.sha }}
-    secrets: inherit
-
-  trainer-fsdp-ci:
-    name: Trainer/FSDP CI
-    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@main
-    with:
-      job: run_trainer_and_fsdp_gpu
-      slack_report_channel: "#transformers-ci-daily-training"
-      docker: huggingface/transformers-all-latest-gpu
-      runner_type: "a10"
-      ci_event: Daily CI
-      report_repo_id: hf-internal-testing/transformers_daily_ci
-      commit_sha: ${{ github.sha }}
-    secrets: inherit
-
-  deepspeed-ci:
-    name: DeepSpeed CI
-    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@main
-    with:
-      job: run_torch_cuda_extensions_gpu
-      slack_report_channel: "#transformers-ci-daily-training"
-      docker: huggingface/transformers-pytorch-deepspeed-latest-gpu
-      ci_event: Daily CI
-      working-directory-prefix: /workspace
-      report_repo_id: hf-internal-testing/transformers_daily_ci
-      commit_sha: ${{ github.sha }}
-    secrets: inherit
-
-  quantization-ci:
-    name: Quantization CI
-    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@main
-    with:
-      job: run_quantization_torch_gpu
-      slack_report_channel: "#transformers-ci-daily-quantization"
-      docker: huggingface/transformers-quantization-latest-gpu
-      ci_event: Daily CI
-      report_repo_id: hf-internal-testing/transformers_daily_ci
-      commit_sha: ${{ github.sha }}
-    secrets: inherit
-
-  kernels-ci:
-    name: Kernels CI
-    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@main
-    with:
-      job: run_kernels_gpu
-      slack_report_channel: "#transformers-ci-daily-kernels"
-      docker: huggingface/transformers-all-latest-gpu
-      ci_event: Daily CI
-      report_repo_id: hf-internal-testing/transformers_daily_ci
-      commit_sha: ${{ github.sha }}
-    secrets: inherit
