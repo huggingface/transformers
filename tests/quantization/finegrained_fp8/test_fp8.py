@@ -494,3 +494,27 @@ class FP8DeepGEMMMultiDeviceTest(unittest.TestCase):
         _disable_deepgemm_on_multi_device(model)
         self.assertFalse(model.a._deepgemm_disabled)
         self.assertFalse(model.b._deepgemm_disabled)
+
+
+class FineGrainedFP8QuantizerTpPlanTest(unittest.TestCase):
+    def test_update_tp_plan_no_tp_plan(self):
+        from transformers.configuration_utils import PretrainedConfig
+        from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
+
+        quantizer = FineGrainedFP8HfQuantizer(FineGrainedFP8Config())
+        config = PretrainedConfig()
+        updated_config = quantizer.update_tp_plan(config)
+        self.assertIsNone(getattr(updated_config, "base_model_tp_plan", None))
+        self.assertIsNone(getattr(updated_config, "base_model_ep_plan", None))
+
+    def test_update_tp_plan_with_overrides(self):
+        from transformers.configuration_utils import PretrainedConfig
+        from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
+
+        quantizer = FineGrainedFP8HfQuantizer(FineGrainedFP8Config())
+        config = PretrainedConfig()
+        config._experts_implementation = "deepgemm_megamoe"
+        config.base_model_tp_plan = {"moe": "moe_tp_experts"}
+        updated_config = quantizer.update_tp_plan(config)
+        self.assertEqual(updated_config.base_model_tp_plan, {"moe": "megamoe_experts"})
+
