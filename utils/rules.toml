@@ -68,7 +68,7 @@ diff = '''
 [rules.TRF004]
 description = "Models must never override tie_weights. Use _tied_weights_keys instead."
 default_enabled = true
-allowlist_models = ["data2vec", "hubert", "sew", "sew_d", "unispeech", "unispeech_sat", "wav2vec2", "wav2vec2_conformer", "wavlm"]
+allowlist_models = ["apertus1p5", "data2vec", "hubert", "sew", "sew_d", "unispeech", "unispeech_sat", "wav2vec2", "wav2vec2_conformer", "wavlm"]
 
 [rules.TRF004.explanation]
 what_it_does = "Checks that no model class defines a tie_weights method."

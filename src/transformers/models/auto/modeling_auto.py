@@ -48,6 +48,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("align", "AlignModel"),
         ("altclip", "AltCLIPModel"),
         ("apertus", "ApertusModel"),
+        ("apertus1p5", "Apertus1p5Model"),
+        ("apertus1p5_text", "Apertus1p5TextModel"),
         ("arcee", "ArceeModel"),
         ("aria", "AriaModel"),
         ("aria_text", "AriaTextModel"),
@@ -567,6 +569,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("wav2vec2-bert", "Wav2Vec2BertModel"),
         ("wav2vec2-conformer", "Wav2Vec2ConformerModel"),
         ("wavlm", "WavLMModel"),
+        ("wavtokenizer", "WavTokenizerModel"),
         ("whisper", "WhisperModel"),
         ("xclip", "XCLIPModel"),
         ("xcodec", "XcodecModel"),
@@ -694,6 +697,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         # Model for Causal LM mapping
         ("afmoe", "AfmoeForCausalLM"),
         ("apertus", "ApertusForCausalLM"),
+        ("apertus1p5_text", "Apertus1p5TextForCausalLM"),
         ("arcee", "ArceeForCausalLM"),
         ("aria_text", "AriaTextForCausalLM"),
         ("axk1", "AXK1ForCausalLM"),
@@ -1079,6 +1083,7 @@ MODEL_FOR_RETRIEVAL_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
     [
+        ("apertus1p5", "Apertus1p5ForConditionalGeneration"),
         ("aria", "AriaForConditionalGeneration"),
         ("aya_vision", "AyaVisionForConditionalGeneration"),
         ("blip", "BlipForConditionalGeneration"),
@@ -2023,6 +2028,7 @@ MODEL_FOR_AUDIO_TOKENIZATION_NAMES = OrderedDict(
         ("dac", "DacModel"),
         ("higgs_audio_v2_tokenizer", "HiggsAudioV2TokenizerModel"),
         ("vibevoice_acoustic_tokenizer", "VibeVoiceAcousticTokenizerModel"),
+        ("wavtokenizer", "WavTokenizerModel"),
         ("xcodec2", "Xcodec2Model"),
     ]
 )
