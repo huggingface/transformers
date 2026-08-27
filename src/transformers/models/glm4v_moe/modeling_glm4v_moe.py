@@ -496,7 +496,7 @@ class Glm4vMoeVisionRotaryEmbedding(nn.Module):
 
         cos = self.recomposition_frequencies(cos)
         sin = self.recomposition_frequencies(sin)
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+        return cos, sin
 
     def recomposition_frequencies(self, freq):
         """
