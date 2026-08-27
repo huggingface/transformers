@@ -27,7 +27,6 @@
 """PyTorch Fairseq model, ported from https://github.com/pytorch/fairseq/tree/master/examples/wmt19"""
 
 import math
-from collections.abc import Callable
 from typing import Any
 
 import torch
@@ -44,9 +43,8 @@ from ...modeling_outputs import (
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, logging
+from ...modeling_utils import PreTrainedModel
+from ...utils import auto_docstring, logging
 from .configuration_fsmt import FSMTConfig
 
 
@@ -280,9 +278,7 @@ class EncoderLayer(nn.Module):
     def __init__(self, config: FSMTConfig):
         super().__init__()
         self.embed_dim = config.d_model
-        self.self_attn = Attention(
-            self.embed_dim, config.encoder_attention_heads, dropout=config.attention_dropout, config=config
-        )
+        self.self_attn = Attention(self.embed_dim, config.encoder_attention_heads, dropout=config.attention_dropout)
         self.self_attn_layer_norm = LayerNorm(self.embed_dim)
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
@@ -440,7 +436,6 @@ class DecoderLayer(nn.Module):
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
-            config=config,
             layer_idx=layer_idx,
         )
         self.dropout = config.dropout
@@ -453,7 +448,6 @@ class DecoderLayer(nn.Module):
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
             encoder_decoder_attention=True,
-            config=config,
             layer_idx=layer_idx,
         )
         self.encoder_attn_layer_norm = LayerNorm(self.embed_dim)
@@ -667,35 +661,6 @@ def _reorder_buffer(attn_cache, new_order):
     return attn_cache
 
 
-# Copied from transformers.models.bart.modeling_bart.eager_attention_forward
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    scaling: float | None = None,
-    dropout: float = 0.0,
-    **kwargs: Unpack[TransformersKwargs],
-):
-    if scaling is None:
-        scaling = query.size(-1) ** -0.5
-
-    # Take the dot product between "query" and "key" to get the raw attention scores.
-    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
-
-    if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-
-    attn_output = torch.matmul(attn_weights, value)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
-
-
 class Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -706,21 +671,15 @@ class Attention(nn.Module):
         dropout=0.0,
         bias=True,
         encoder_decoder_attention=False,  # otherwise self_attention
-        config=None,
         layer_idx=None,
     ):
         super().__init__()
-        self.config = config
         self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.dropout = dropout
         self.head_dim = embed_dim // num_heads
         assert self.head_dim * num_heads == self.embed_dim, "embed_dim must be divisible by num_heads"
         self.scaling = self.head_dim**-0.5
-        # FSMT always passes causality in explicitly through `attn_mask`, and genuinely runs
-        # non-causal attention when that mask is absent (e.g. the `use_cache` path). Keeping this
-        # `False` is what makes the non-eager backends agree with the eager implementation.
-        self.is_causal = False
         self.layer_idx = layer_idx
 
         self.encoder_decoder_attention = encoder_decoder_attention
@@ -737,7 +696,8 @@ class Attention(nn.Module):
         key_padding_mask: Tensor | None = None,
         layer_state: Cache | None = None,
         attn_mask: Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
+        output_attentions: bool | None = False,
+        **kwargs,
     ) -> tuple[Tensor, Tensor | None]:
         """Input shape: Time(SeqLen) x Batch x Channel"""
         tgt_len, bsz, embed_dim = query.size()
@@ -774,53 +734,58 @@ class Attention(nn.Module):
                 if self.encoder_decoder_attention:
                     layer_state.is_updated[self.layer_idx] = True
 
-        # NOTE: FSMT keeps the (seq_len, batch, embed_dim) layout, so permute into the
-        # (batch, heads, seq_len, head_dim) layout the attention interface expects.
-        query_states = self.q_proj(query).view(tgt_len, bsz, -1, self.head_dim).permute(1, 2, 0, 3)
+        query_states = self.q_proj(query) * self.scaling
+
+        # Reshape back to 3D tensors for `bmm`
+        query_states = query_states.view(-1, bsz * self.num_heads, self.head_dim).transpose(0, 1)
+        key_states = key_states.reshape(bsz * self.num_heads, -1, self.head_dim)
+        value_states = value_states.reshape(bsz * self.num_heads, -1, self.head_dim)
+
+        assert key_states is not None
+        src_len = key_states.size(1)
+        attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
+        assert attn_weights.size() == (bsz * self.num_heads, tgt_len, src_len)
+
+        if attn_mask is not None:
+            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attn_mask
+            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         # This is part of a workaround to get around fork/join parallelism not supporting Optional types.
         if key_padding_mask is not None and key_padding_mask.dim() == 0:
             key_padding_mask = None
-
-        src_len = key_states.shape[2]
         assert key_padding_mask is None or key_padding_mask.size()[:2] == (
             bsz,
             src_len,
         )
 
-        # FSMT carries the causal mask (`attn_mask`) and the boolean key padding mask separately,
-        # while the attention interface takes a single additive mask, so merge them here.
-        attention_mask = attn_mask
-        if attention_mask is not None:
-            attention_mask = attention_mask.view(1, 1, *attention_mask.shape[-2:])
-        if key_padding_mask is not None:
-            padding_mask = key_padding_mask[:, None, None, :]
-            if attention_mask is None:
-                attention_mask = torch.zeros_like(padding_mask, dtype=query_states.dtype)
-            else:
-                attention_mask = attention_mask.expand(bsz, 1, attention_mask.shape[-2], src_len)
-            attention_mask = attention_mask.masked_fill(padding_mask, torch.finfo(query_states.dtype).min)
+        if key_padding_mask is not None:  # don't attend to padding symbols
+            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+            reshaped = key_padding_mask.unsqueeze(1).unsqueeze(2)
+            attn_weights = attn_weights.masked_fill(reshaped, torch.finfo(attn_weights.dtype).min)
+            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+
+        if output_attentions:
+            # make sure that attn_weights are included in graph
+            attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+            attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
+        else:
+            attn_weights_reshaped = None
+
+        attn_probs = nn.functional.dropout(
+            attn_weights,
+            p=self.dropout,
+            training=self.training,
         )
 
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.dropout,
-            scaling=self.scaling,
-            **kwargs,
-        )
-
-        # back to FSMT's (seq_len, batch, embed_dim) layout
-        attn_output = attn_output.permute(1, 0, 2, 3).reshape(tgt_len, bsz, embed_dim)
+        assert value_states is not None
+        attn_output = torch.bmm(attn_probs, value_states)
+        assert attn_output.size() == (bsz * self.num_heads, tgt_len, self.head_dim)
+        attn_output = attn_output.transpose(0, 1).contiguous().view(tgt_len, bsz, embed_dim)
         attn_output = self.out_proj(attn_output)
 
-        return attn_output, attn_weights
+        return attn_output, attn_weights_reshaped
 
 
 def fill_with_neg_inf(t):
