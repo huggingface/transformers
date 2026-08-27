@@ -28,7 +28,6 @@ from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ...vision_utils import get_vision_position_ids
 from .configuration_pixtral import PixtralVisionConfig
 
 
@@ -432,8 +431,16 @@ class PixtralVisionModel(PixtralPreTrainedModel):
         patch_embeds = torch.cat([p.flatten(1).T for p in patch_embeds_list], dim=0).unsqueeze(0)
         patch_embeds = self.ln_pre(patch_embeds)
 
-        grid_thw = torch.tensor([[1, *patch.shape[-2:]] for patch in patch_embeds_list], device=patch_embeds.device)
-        position_ids = get_vision_position_ids(grid_thw, spatial_merge_size=1, kwargs=kwargs)
+        # Create 2D positions for axial rotations
+        position_ids = []
+        for patch in patch_embeds_list:
+            hpos_ids, wpos_ids = torch.meshgrid(
+                torch.arange(patch.shape[-1], device=patch.device),
+                torch.arange(patch.shape[-2], device=patch.device),
+                indexing="ij",
+            )
+            position_ids.append(torch.stack([hpos_ids, wpos_ids], dim=-1))
+        position_ids = torch.cat(position_ids, dim=0)
         kwargs["position_ids"] = position_ids
         position_embeddings = self.patch_positional_embedding(patch_embeds, position_ids)
 

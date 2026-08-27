@@ -20,8 +20,11 @@
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring
+from ...utils import auto_docstring, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
+
+
+logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="yonigozlan/EdgeTAM-hf")
@@ -250,7 +253,6 @@ class EdgeTamVideoConfig(PreTrainedConfig):
     memory_attention_rope_feat_sizes: list | None = None
     memory_attention_rope_k_sizes: list | None = None
     memory_attention_rope_dropout: float | int = 0.1
-    # ig should be `memory_rope_parameters` though not sure if the utilities will catch up
     rope_parameters: dict | None = None
     max_position_embeddings: int | None = None
 
@@ -308,6 +310,13 @@ class EdgeTamVideoConfig(PreTrainedConfig):
         elif self.mask_decoder_config is None:
             self.mask_decoder_config = EdgeTamVideoMaskDecoderConfig()
         super().__post_init__(**kwargs)
+
+    @property
+    def memory_attention_rope_theta(self):
+        logger.warning(
+            "`self.memory_attention_rope_theta` is deprecated, use `self.rope_parameters['rope_theta']` instead"
+        )
+        return getattr(self, "memory_attention_rope_theta", 10_000)
 
 
 __all__ = ["EdgeTamVideoMaskDecoderConfig", "EdgeTamVideoPromptEncoderConfig", "EdgeTamVideoConfig"]

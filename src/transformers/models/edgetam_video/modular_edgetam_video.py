@@ -28,7 +28,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
-from ...utils import auto_docstring
+from ...utils import auto_docstring, logging
 from ...utils.output_capturing import OutputRecorder
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..sam2.modeling_sam2 import eager_attention_forward, window_partition
@@ -54,6 +54,9 @@ from ..sam2_video.modeling_sam2_video import (
     Sam2VideoVisionRotaryEmbedding,
     rotate_pairwise,
 )
+
+
+logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="yonigozlan/EdgeTAM-hf")
@@ -232,7 +235,6 @@ class EdgeTamVideoConfig(PreTrainedConfig):
     memory_attention_rope_feat_sizes: list | None = None
     memory_attention_rope_k_sizes: list | None = None
     memory_attention_rope_dropout: float | int = 0.1
-    # ig should be `memory_rope_parameters` though not sure if the utilities will catch up
     rope_parameters: dict | None = None
     max_position_embeddings: int | None = None
 
@@ -290,6 +292,13 @@ class EdgeTamVideoConfig(PreTrainedConfig):
         elif self.mask_decoder_config is None:
             self.mask_decoder_config = EdgeTamVideoMaskDecoderConfig()
         super().__post_init__(**kwargs)
+
+    @property
+    def memory_attention_rope_theta(self):
+        logger.warning(
+            "`self.memory_attention_rope_theta` is deprecated, use `self.rope_parameters['rope_theta']` instead"
+        )
+        return getattr(self, "memory_attention_rope_theta", 10_000)
 
 
 class EdgeTamVideoLayerNorm(Sam2VideoLayerNorm):

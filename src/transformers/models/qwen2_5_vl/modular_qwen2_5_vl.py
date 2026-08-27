@@ -231,6 +231,12 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
 
         self.post_init()
 
+    def permute_input_for_window_attn(self, input_tensor: torch.Tensor, window_index: torch.Tensor, seq_len: int):
+        input_tensor = input_tensor.reshape(seq_len // self.spatial_merge_unit, self.spatial_merge_unit, -1)
+        input_tensor = input_tensor[window_index, :, :]
+        input_tensor = input_tensor.reshape(seq_len, -1)
+        return input_tensor
+
     @merge_with_config_defaults
     @capture_outputs
     def forward(
@@ -262,16 +268,12 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
         hidden_states = self.patch_embed(hidden_states)
 
         seq_len, _ = hidden_states.size()
-        hidden_states = hidden_states.reshape(seq_len // self.spatial_merge_unit, self.spatial_merge_unit, -1)
-        hidden_states = hidden_states[window_index, :, :]
-        hidden_states = hidden_states.reshape(seq_len, -1)
+        hidden_states = self.permute_input_for_window_attn(hidden_states, window_index, seq_len=seq_len)
 
         position_embeddings = self.rotary_pos_emb(hidden_states, position_ids)
-        window_position_embeddings = ()
-        for freq in position_embeddings:
-            freq = freq.reshape(seq_len // self.spatial_merge_unit, self.spatial_merge_unit, -1)
-            freq = freq[window_index, ...].reshape(seq_len, -1)
-            window_position_embeddings += (freq,)
+        position_embeddings = (
+            self.permute_input_for_window_attn(freq, window_index, seq_len=seq_len) for freq in position_embeddings
+        )
 
         for layer_num, blk in enumerate(self.blocks):
             if layer_num in self.fullatt_block_indexes:
@@ -285,7 +287,7 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
                 hidden_states,
                 cu_seqlens=cu_seqlens_now,
                 max_seqlen=max_seqlen_now,
-                position_embeddings=window_position_embeddings,
+                position_embeddings=position_embeddings,
                 **kwargs,
             )
 

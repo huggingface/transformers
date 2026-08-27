@@ -212,7 +212,6 @@ class Sam2VideoConfig(PreTrainedConfig):
     memory_attention_rope_dropout: float | int = 0.1
     memory_encoder_hidden_size: int = 256
     memory_encoder_output_channels: int = 64
-    # ig should be `memory_rope_parameters` though not sure if the utilities will catch up
     rope_parameters: dict | None = None
     max_position_embeddings: int | None = None
 
@@ -252,6 +251,13 @@ class Sam2VideoConfig(PreTrainedConfig):
             self.mask_decoder_config = Sam2VideoMaskDecoderConfig()
 
         super().__post_init__(**kwargs)
+
+    @property
+    def memory_attention_rope_theta(self):
+        logger.warning(
+            "`self.memory_attention_rope_theta` is deprecated, use `self.rope_parameters['rope_theta']` instead"
+        )
+        return getattr(self, "memory_attention_rope_theta", 10_000)
 
 
 class Sam2VideoInferenceCache:
