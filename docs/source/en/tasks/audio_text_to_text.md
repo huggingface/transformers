@@ -139,7 +139,7 @@ Create a data collator that processes audio-text pairs into the format expected 
 ...                     "role": "user",
 ...                     "content": [
 ...                         {"type": "text", "text": "Describe the audio."},
-...                         {"type": "audio", "audio": feature["audio"].get_all_samples().data},
+...                         {"type": "audio", "audio": feature["audio"].get_all_samples().data[0].numpy()},
 ...                     ],
 ...                 },
 ...                 {
@@ -300,7 +300,7 @@ Load an audio sample for inference:
 >>> dataset = dataset.cast_column("audio", Audio(sampling_rate=16000))
 >>> sample = next(iter(dataset))
 >>> audio = sample["audio"]
->>> audio_array = audio.get_all_samples().data if hasattr(audio, "get_all_samples") else audio["array"]
+>>> audio_array = audio.get_all_samples().data[0].numpy() if hasattr(audio, "get_all_samples") else audio["array"]
 ```
 
 Prepare the input with a conversation format:
@@ -334,28 +334,6 @@ Generate a response:
 >>> print(response)
 ## A sewing machine is running while people are talking
 ```
-
-## Pipeline
-
-You can also use the [`Pipeline`] API for quick inference. Pass the fine-tuned PEFT model directly to the pipeline:
-
-```py
->>> from transformers import pipeline
->>> pipe = pipeline(
-...     "audio-text-to-text",
-...     model=model,
-...     processor=processor,
-... )
->>> result = pipe(
-...     audio_array,
-...     generate_kwargs={"max_new_tokens": 100},
-... )
->>> print(result[0]["generated_text"])
-```
-
-> [!TIP]
-> For more advanced use cases like multi-turn conversations with audio, you can structure your messages with alternating user and assistant roles, similar to [image-text-to-text](./image_text_to_text) models.
-
 
 ## Further Reading
 
