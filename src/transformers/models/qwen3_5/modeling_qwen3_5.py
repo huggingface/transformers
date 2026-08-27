@@ -301,7 +301,8 @@ def torch_chunk_gated_delta_rule(
         query = l2norm(query, dim=-1, eps=1e-6)
         key = l2norm(key, dim=-1, eps=1e-6)
     # And always normalize queries by the head dimension
-    query = query / (query.shape[-1] ** 0.5)
+    scaling = query.shape[-1] ** -0.5
+    query = query * scaling
 
     # Pad sequence length to be a multiple of chunk_size. Padding is described as (left_pad, right_pad) for each dim.
     pad_size = (chunk_size - sequence_length % chunk_size) % chunk_size
@@ -377,7 +378,7 @@ def torch_chunk_gated_delta_rule(
         v_new = new_values[:, :, i] - k_cumdecay[:, :, i] @ last_recurrent_state
         inter_chunk_attn = query[:, :, i] @ last_recurrent_state
         core_attn_out[:, :, i] = inter_chunk_attn + intra_chunk_attn[:, :, i] @ v_new
-        # Update the recurrent state: new recurrent state is decayed old state + update
+        # Update the recurrent state: new recurrent state (S_t+1) = decayed old state (S_t * (I-βkk^T)) + update (βvk^T)
         last_recurrent_state = last_recurrent_state * chunk_decay[:, :, i] + key[:, :, i].transpose(-1, -2) @ v_new
 
     # Discard the final state if not requested
