@@ -107,7 +107,9 @@ class ReformerConfig(PreTrainedConfig):
 
     model_type = "reformer"
     keys_to_ignore_at_inference = ["past_buckets_states"]
-    attribute_map = {}
+    # `attention_head_size` is this model's spelling of the standard `head_dim`; without the mapping
+    # the base config would derive head_dim as hidden_size // num_attention_heads (256 // 12 = 21).
+    attribute_map = {"head_dim": "attention_head_size"}
 
     attention_head_size: int = 64
     attn_layers: list[str] | tuple[str, ...] = ("local", "lsh", "local", "lsh", "local", "lsh")
