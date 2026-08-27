@@ -369,6 +369,16 @@ class GlmMoeDsaModel(DeepseekV32Model):
             }
             causal_mask_mapping = {"deepseek_sparse_attention": create_causal_mask(**mask_kwargs)}
 
+        # We need a float mask (additive bias) for DSA indexer
+        if causal_mask_mapping["deepseek_sparse_attention"].dtype == torch.bool:
+            min_dtype = torch.finfo(inputs_embeds.dtype).min
+            # we need 0s where the tokens should be taken into account, and -inf otherwise
+            causal_mask_mapping["deepseek_sparse_attention"] = torch.where(
+                causal_mask_mapping["deepseek_sparse_attention"],
+                torch.full((), 0.0, device=inputs_embeds.device, dtype=inputs_embeds.dtype),
+                min_dtype,
+            )
+
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
