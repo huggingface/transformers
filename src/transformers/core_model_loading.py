@@ -332,7 +332,8 @@ class Transpose(ConversionOps):
         # In this case, check the shapes before transposing
         else:
             # NOTE: this rely on the first param name, so cannot be used for many-to-one operation
-            expected_shape = kwargs["model"].get_parameter(kwargs["full_layer_name"]).shape
+            expected_param = kwargs["model"].get_parameter(kwargs["full_layer_name"])
+            expected_shape = expected_param.to_local().shape if is_dtensor(expected_param) else expected_param.shape
             # The shapes are the same: do NOT transpose
             if tensor.shape == expected_shape:
                 return {target_pattern: tensor}
@@ -1269,6 +1270,27 @@ def spawn_materialize(
         return _job
 
 
+def _get_single_transpose_source_dim_mapping(mapping, tensor, empty_param) -> dict[int, int] | None:
+    """Map target parameter dimensions to checkpoint dimensions for a one-to-one transpose conversion."""
+    if (
+        not isinstance(mapping, WeightConverter)
+        or len(mapping.operations) != 1
+        or not isinstance(mapping.operations[0], Transpose)
+    ):
+        return None
+
+    operation = mapping.operations[0]
+    source_shape = tuple(tensor.shape) if isinstance(tensor, torch.Tensor) else tuple(tensor.get_shape())
+    target_shape = tuple(empty_param.shape)
+    if operation.check_dims and source_shape == target_shape:
+        return None
+
+    ndim = len(target_shape)
+    dim0 = operation.dim0 % ndim
+    dim1 = operation.dim1 % ndim
+    return {dim0: dim1, dim1: dim0}
+
+
 def dot_natural_key(s: str):
     """
     Sort key for state-dict names: split on `"."` and sort digits numerically and strings alphabetically. It emits a
@@ -1717,7 +1739,8 @@ def convert_and_load_state_dict_in_model(
             param_device = get_device(device_map, renamed_key, valid_torch_device=True)
             sharding_op = None
             if is_dtensor(empty_param):
-                sharding_op = DtensorShardOperation(empty_param)
+                source_dim_mapping = _get_single_transpose_source_dim_mapping(mapping, tensor, empty_param)
+                sharding_op = DtensorShardOperation(empty_param, source_dim_mapping=source_dim_mapping)
 
             # Some parameters are so large (qwen4_exp ple_embedding is about ~95 GiB) that we cannot afford to perform the Operations
             # directly on the device, as it will completely blow up the memory during the ops memory spike. So defer to "cpu", then
