@@ -432,7 +432,7 @@ class EsmcForSequenceClassification(EsmForSequenceClassification):
 
 
 class EsmcForTokenClassification(GenericForTokenClassification, EsmcPreTrainedModel):
-    pass
+    base_model_prefix = "esmc"
 
 
 __all__ = [
