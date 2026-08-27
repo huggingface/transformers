@@ -61,8 +61,7 @@ class Sam3ViTConfig(PreTrainedConfig):
     def __post_init__(self, **kwargs):
         if self.global_attn_indexes is None:
             self.global_attn_indexes = [7, 15, 23, 31]
-        if self.rope_parameters is None:
-            self.rope_parameters = {"rope_type": "axial", "rope_theta": self.default_theta}
+
         super().__post_init__(**kwargs)
 
 
