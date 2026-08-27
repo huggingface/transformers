@@ -844,7 +844,12 @@ class Qwen4ExpPreTrainedModel(Qwen3_5MoePreTrainedModel):
     # This embedding is so big (~95 GiB) that on most hardware setups, we must completely skip it from the `device_map` as otherwise
     # it will lead to full model offloading, and memory OOM as accelerate tries to put cpu-offloaded params back on accelerator
     # during forward. Note that if it fits on accelerator (e.g. huge B200 gpus), then it will not be skipped, and will be put on device
-    _no_placement_params = ["ple.ple_embedding.ngram_embedding.weight"]
+    _no_placement_params = [
+        "ple.ple_embedding.ngram_embedding.weight",
+        "ple.ple_embedding.ngram_embedding.weight_scale",
+    ]
+    # FP8 releases ship this table quantized with one per-tensor scale.
+    _quantizable_embeddings = ["ple.ple_embedding.ngram_embedding"]
 
     @torch.no_grad()
     def _init_weights(self, module):

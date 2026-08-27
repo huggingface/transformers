@@ -118,14 +118,21 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
+        dtype: "torch.dtype | None" = None,
         **kwargs,
     ):
-        from ..integrations.finegrained_fp8 import replace_with_fp8_linear
+        from ..integrations.finegrained_fp8 import replace_with_fp8_embedding, replace_with_fp8_linear
 
         self._normalize_modules_to_not_convert(model)
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
+
+        # A few checkpoints quantize an embedding table too (Qwen4-Exp's n-gram table); a plain
+        # `nn.Embedding` has nowhere to keep its scale, so the model names the ones that may be FP8.
+        quantizable_embeddings = getattr(model, "_quantizable_embeddings", None)
+        if self.pre_quantized and quantizable_embeddings:
+            replace_with_fp8_embedding(model, quantizable_embeddings, self.modules_to_not_convert, dtype)
 
         model = replace_with_fp8_linear(
             model,
