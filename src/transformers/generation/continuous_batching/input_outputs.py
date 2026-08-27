@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from contextlib import nullcontext
 from functools import partial
 from itertools import repeat
 from typing import Any, TypedDict
@@ -30,6 +29,7 @@ from .utils import (
     aligned_divide,
     attn_mask_is_needed,
     build_attention_mask,
+    device_stream_ctx,
     get_torch_device_module,
     pad_to_pow2,
 )
@@ -217,9 +217,7 @@ class ContinuousBatchingIOs:
         )
         # For read index, the +T is because there are sentinel indices for seqlen_q when model uses a sliding window
 
-    def _transfer_inputs(
-        self, other: "ContinuousBatchingIOs", stream: Any, non_blocking: bool = False
-    ) -> None:
+    def _transfer_inputs(self, other: "ContinuousBatchingIOs", stream: Any, non_blocking: bool = False) -> None:
         # Transfer accumulators
         other.num_q_tokens = self.num_q_tokens
         other.max_kv_read = self.max_kv_read
@@ -233,7 +231,7 @@ class ContinuousBatchingIOs:
         other.max_seqlen_q = self.max_seqlen_q
         other.max_seqlen_k = dict(self.max_seqlen_k)
         # Transfer static tensors
-        maybe_stream = other.device_module.stream(stream) if stream is not None else nullcontext()
+        maybe_stream = device_stream_ctx(other.device_module, stream)
         with maybe_stream:
             other._bulk_input_tensor.copy_(self._bulk_input_tensor, non_blocking=non_blocking)  # fast bulk transfer
             # Only transfer block_table for decode-only batches (when it's actually used)
@@ -611,7 +609,7 @@ class HostDeviceIOPair:
         self.host_io._transfer_inputs(self.device_io, stream=stream, non_blocking=True)
 
     def transfer_outputs_d2h(self, stream: Any | None) -> None:
-        maybe_stream = self.device_module.stream(stream) if stream is not None else nullcontext()
+        maybe_stream = device_stream_ctx(self.device_module, stream)
         with maybe_stream:
             self.host_io.output_ids.copy_(self.device_io.output_ids, non_blocking=True)
 

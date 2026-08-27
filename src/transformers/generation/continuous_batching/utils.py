@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import queue
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from math import ceil, log2
 from typing import Any
@@ -42,6 +42,14 @@ def get_torch_device_module(device: torch.device) -> Any:
     if device_type == "xpu" and hasattr(torch, "xpu"):
         return torch.xpu
     raise RuntimeError(f"Expected one of {SUPPORTED_GRAPH_ACCELERATOR_TYPES}, but got {device_type = }.")
+
+
+def device_stream_ctx(device_module: Any | None, stream: Any):
+    if stream is None:
+        return nullcontext()
+    if device_module is None:
+        raise RuntimeError("Expected an accelerator device module when a stream is provided.")
+    return device_module.stream(stream)
 
 
 def is_accelerator_graph_available(device: torch.device | None = None) -> bool:

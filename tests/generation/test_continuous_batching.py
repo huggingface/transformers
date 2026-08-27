@@ -773,6 +773,7 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
             else:
                 os.environ["WORLD_SIZE"] = original_ws
 
+
 @require_torch_accelerator
 class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     # -----------------------------------------------Parity tests----------------------------------------------- #
@@ -796,7 +797,10 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         if is_fa and not is_flash_attn_2_available(kernels_fallback_ok=True):
             self.skipTest("Flash Attention is not available and neither is the kernels library. Skipping test.")
         # Skip the test if accelerator graph is on but the device does not support graph capture.
-        if any(continuous_batching_config.accelerator_graph_booleans) and torch_device not in SUPPORTED_GRAPH_ACCELERATOR_TYPES:
+        if (
+            any(continuous_batching_config.accelerator_graph_booleans)
+            and torch_device not in SUPPORTED_GRAPH_ACCELERATOR_TYPES
+        ):
             self.skipTest("Accelerator graph is only supported on CUDA or XPU devices. Skipping test.")
 
         # If the config turns on compile, change the generation config to use the default mode instead of

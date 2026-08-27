@@ -13,7 +13,6 @@
 # limitations under the License.
 import time
 from collections.abc import Callable
-from contextlib import nullcontext
 from typing import Any
 
 import torch
@@ -26,6 +25,7 @@ from .input_outputs import ContinuousBatchingAsyncIOs, ContinuousBatchingIOs
 from .requests import RequestStatus, logger
 from .utils import (
     create_warmup_future_states,
+    device_stream_ctx,
     get_accelerator_graph,
     get_accelerator_pools,
     graph_capture_ctx,
@@ -131,7 +131,7 @@ class ModelRunner:
 
         # If we are not using accelerator graphs, we perform the generation step and return
         if not use_accelerator_graph:
-            maybe_stream = self.device_module.stream(compute_stream) if compute_stream is not None else nullcontext()
+            maybe_stream = device_stream_ctx(self.device_module, compute_stream)
             with maybe_stream:
                 forward_fn(model, batch_data, carry_over_ids, prev_output_ids, output_ids)
 
@@ -140,7 +140,7 @@ class ModelRunner:
             graph = self.inputs_and_outputs.get_graph()
             # Case: the graph already exists, so we replay it
             if graph is not None:
-                with self.device_module.stream(compute_stream):
+                with device_stream_ctx(self.device_module, compute_stream):
                     graph.replay()
             # Otherwise, the graph does not exist, so we create it
             else:
@@ -160,7 +160,7 @@ class ModelRunner:
     def _capture_graph(self, forward_fn: Callable, compute_stream: Any, *args) -> None:
         """Helper function to capture and store a graph for a given forward function."""
         # Warmup (ensures the right result is computed before capturing the graph)
-        with self.device_module.stream(compute_stream), mem_pool_ctx(self.device, self.mem_pool):
+        with device_stream_ctx(self.device_module, compute_stream), mem_pool_ctx(self.device, self.mem_pool):
             forward_fn(*args)
         # Capture using a thread-local capture mode to avoid capturing GPU operations from outside the model forward
         graph = get_accelerator_graph(self.device)
