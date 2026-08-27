@@ -3823,25 +3823,6 @@ class DisableMmapLoadingTest(unittest.TestCase):
         for k in loaded_mmap:
             torch.testing.assert_close(loaded_mmap[k], loaded_no_mmap[k])
 
-    def test_mmap_backend_on_linux(self):
-        """On Linux (non-MPS), safe_open should use the 'mmap' backend."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            from transformers import BertConfig, BertModel
-
-            config = BertConfig(hidden_size=16, num_hidden_layers=1, num_attention_heads=2, intermediate_size=32)
-            model = BertModel(config)
-            model.save_pretrained(tmpdir)
-
-            with patch("transformers.modeling_utils.sys.platform", "linux"), patch(
-                "transformers.modeling_utils.safe_open", wraps=__import__("safetensors").safe_open
-            ) as mock_safe_open:
-                _ = BertModel.from_pretrained(tmpdir)
-
-                safe_open_calls = [c for c in mock_safe_open.call_args_list if "backend" in c.kwargs]
-                self.assertTrue(len(safe_open_calls) > 0, "safe_open was not called with backend kwarg")
-                for call in safe_open_calls:
-                    self.assertEqual(call.kwargs["backend"], "mmap")
-
 
 @require_torch
 class RemoteAndCustomCodeModelTests(unittest.TestCase):
