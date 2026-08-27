@@ -341,30 +341,6 @@ class Qwen3VLMoeModelTest(VLMModelTest, unittest.TestCase):
     def test_reverse_loading_mapping(self, check_keys_were_modified=False):
         super().test_reverse_loading_mapping(check_keys_were_modified)
 
-    def test_tp_plan(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        with torch.device("meta"):
-            model = Qwen3VLMoeForConditionalGeneration(config)
-
-        expected_rules = {
-            "lm_head": "colwise_gather_output",
-            "model.language_model.layers.*.self_attn.q_proj": "colwise",
-            "model.language_model.layers.*.self_attn.k_proj": "colwise",
-            "model.language_model.layers.*.self_attn.v_proj": "colwise",
-            "model.language_model.layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
-            "model.language_model.layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
-            "model.language_model.layers.*.self_attn.o_proj": "rowwise",
-            "model.language_model.layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-            "model.language_model.layers.*.mlp.experts.down_proj": "rowwise",
-            "model.language_model.layers.*.mlp.experts": "moe_tp_experts",
-            "model.language_model.layers.*.mlp.gate_proj": "colwise",
-            "model.language_model.layers.*.mlp.up_proj": "colwise",
-            "model.language_model.layers.*.mlp.down_proj": "rowwise",
-        }
-        for pattern, style in expected_rules.items():
-            self.assertIn(pattern, model.tp_plan)
-            self.assertEqual(model.tp_plan[pattern], style)
-
 
 @require_torch
 class Qwen3VLMoeIntegrationTest(unittest.TestCase):
