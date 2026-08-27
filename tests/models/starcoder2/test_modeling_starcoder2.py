@@ -61,7 +61,7 @@ class Starcoder2IntegrationTest(unittest.TestCase):
     def test_starcoder2_batched_generation_sdpa(self):
         EXPECTED_TEXT = [
             "Hello my name is Younes and I am a student at the University of Liverpool. I am currently studying for my MSc in Computer Science. I am interested in the field of Machine Learning and I am currently working on",
-            "def hello_world():\n\treturn 'Hello World!'\n\n@app.route('/hello/<name>')\ndef hello_name(name):\n\treturn 'Hello %s!' % name\n\n@app",
+            "def hello_world(): hello_world():\n    return 'Hello World!'\n\n@app.route('/hello/<name>')\ndef hello_name(name):\n    return 'Hello %s!' % name\n\n",
         ]
         model_id = "bigcode/starcoder2-7b"
 
@@ -81,7 +81,7 @@ class Starcoder2IntegrationTest(unittest.TestCase):
     def test_starcoder2_batched_generation_eager(self):
         EXPECTED_TEXT = [
             "Hello my name is Younes and I am a student at the University of Liverpool. I am currently studying for my MSc in Computer Science. I am interested in the field of Machine Learning and I am currently working on",
-            "def hello_world():\n\treturn 'Hello World!'\n\n@app.route('/hello/<name>')\ndef hello_name(name):\n\treturn 'Hello %s!' % name\n\n@app",
+            "def hello_world(): hello_world():\n    return 'Hello World!'\n\n@app.route('/hello/<name>')\ndef hello_name(name):\n    return 'Hello %s!' % name\n\n",
         ]
         model_id = "bigcode/starcoder2-7b"
 
@@ -103,7 +103,7 @@ class Starcoder2IntegrationTest(unittest.TestCase):
     def test_starcoder2_batched_generation_fa2(self):
         EXPECTED_TEXT = [
             "Hello my name is Younes and I am a student at the University of Liverpool. I am currently studying for my MSc in Computer Science. I am interested in the field of Machine Learning and I am currently working on",
-            "def hello_world():\n\treturn 'Hello World!'\n\n@app.route('/hello/<name>')\ndef hello_name(name):\n\treturn 'Hello %s!' % name\n\n@app",
+            "def hello_world(): hello_world():\n    return 'Hello World!'\n\n@app.route('/hello/<name>')\ndef hello_name(name):\n    return 'Hello %s!' % name\n\n",
         ]
         model_id = "bigcode/starcoder2-7b"
 
@@ -130,7 +130,7 @@ class Starcoder2IntegrationTest(unittest.TestCase):
                 ],
                 ("cuda", 8): [
                     "Hello my name is Younes and I am a student at the University of Maryland. I am currently working on a project that is aimed at creating a new way of learning. I am hoping to create a new way of",
-                    'def hello_world():\n\treturn "Hello World"\n\n@app.route(\'/hello/<name>\')\ndef hello_name(name):\n\treturn "Hello " + name\n\n@app.route',
+                    'def hello_world(): hello_world():\n    return "Hello World!"\n\n@app.route(\'/hello/<name>\')\ndef hello_name(name):\n    return "Hello %s!" % name\n\n',
                 ],
             }
         )
