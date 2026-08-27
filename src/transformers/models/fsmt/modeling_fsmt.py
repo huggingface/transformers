@@ -1106,12 +1106,7 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
         return (torch.cumsum(mask, dim=1).type_as(mask) * mask).long() + padding_idx
 
     def forward(self, input, *, past_key_values_length: int = 0):
-        """Input is expected to be of size [bsz x seqlen].
-
-        `past_key_values_length` is keyword-only: this signature replaced `(input, incremental_state,
-        timestep)`, and a caller passing the old second positional argument would otherwise have it read
-        as a cache length instead of raising.
-        """
+        """Input is expected to be of size [bsz x seqlen]."""
         bsz, seq_len = input.shape[:2]
         max_pos = self.padding_idx + 1 + past_key_values_length + seq_len
         if max_pos > self.weight.size(0):
