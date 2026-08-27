@@ -783,6 +783,77 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                 torch.allclose(outputs_from_unconditional.audio_sequences, outputs_from_none.audio_sequences)
             )
 
+    def test_forward_output_fields(self):
+        for model_class in self.all_generative_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+            model = model_class(config).to(torch_device).eval()
+
+            inputs_dict = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            inputs_dict["audio_labels"] = inputs_dict["moshi_audio_codes"]
+            inputs_dict["attention_mask"] = None
+
+            outputs = model(
+                **inputs_dict,
+                use_cache=True,
+                output_attentions=True,
+                output_hidden_states=True,
+                depth_decoder_use_cache=True,
+                depth_decoder_output_attentions=True,
+                depth_decoder_output_hidden_states=True,
+            )
+
+            self.assertIsNotNone(outputs.depth_past_key_values)
+            self.assertIsNotNone(outputs.depth_hidden_states)
+            self.assertIsNotNone(outputs.depth_attentions)
+
+            self.assertIsNot(outputs.depth_past_key_values, outputs.past_key_values)
+            self.assertIsNot(outputs.depth_hidden_states, outputs.hidden_states)
+            self.assertIsNot(outputs.depth_attentions, outputs.attentions)
+
+            self.assertIsNot(outputs.depth_past_key_values, outputs.depth_hidden_states)
+
+    def test_forward_audio_encoder_kwargs(self):
+        for model_class in self.all_generative_model_classes:
+            config, input_ids, _, _ = self._get_input_ids_and_config()
+
+            model = model_class(config).to(torch_device).eval()
+
+            input_values_length = int(
+                self.model_tester.seq_length * config.sampling_rate / config.audio_encoder_config.frame_rate
+            )
+
+            user_input_values = floats_tensor((input_ids.shape[0], 1, input_values_length))
+            moshi_input_values = floats_tensor((input_ids.shape[0], 1, input_values_length))
+
+            outputs = model(
+                input_ids=input_ids,
+                user_input_values=user_input_values,
+                moshi_input_values=moshi_input_values,
+                audio_encoder_return_dict=False,
+            )
+
+            self.assertIsNotNone(outputs)
+
+    def test_prepare_inputs_embeds_for_generation_user_audio_codes_only(self):
+        for model_class in self.all_generative_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+            model = model_class(config).to(torch_device).eval()
+
+            user_audio_codes = inputs_dict["user_audio_codes"]
+
+            inputs_embeds, *_ = model._prepare_inputs_embeds_for_generation(
+                user_audio_codes=user_audio_codes,
+            )
+
+            expected_inputs_embeds = sum(
+                model.embed_tokens[codebook + model.num_codebooks](user_audio_codes[:, codebook])
+                for codebook in range(user_audio_codes.shape[1])
+            )
+
+            torch.testing.assert_close(inputs_embeds, expected_inputs_embeds)
+
     @unittest.skip(reason="Compile not yet supported because in Moshi models")
     def test_sdpa_can_dispatch_on_flash(self):
         pass
