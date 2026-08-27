@@ -3733,10 +3733,14 @@ def patch_psutil_cpu_memory(limit_bytes: int):
 
     import psutil
 
-    _original_virtual_memory = psutil.virtual_memory
-    # Keep the honest reader reachable: the cap above is a `device_map="auto"` planning budget, but a guard that
-    # asks "will this OOM-kill the container?" needs the machine's real RAM. See `get_physical_cpu_ram_gib`.
-    if _UNPATCHED_VIRTUAL_MEMORY is None:
+    # Keep the honest reader reachable: the cap described in the docstring is a `device_map="auto"` planning budget,
+    # but a guard that asks "will this OOM-kill the container?" needs the machine's real RAM.
+    # See `get_physical_cpu_ram_gib`.
+    # If already patched, always use the stored original so a second call doesn't chain patches on top of each other.
+    if _UNPATCHED_VIRTUAL_MEMORY is not None:
+        _original_virtual_memory = _UNPATCHED_VIRTUAL_MEMORY
+    else:
+        _original_virtual_memory = psutil.virtual_memory
         _UNPATCHED_VIRTUAL_MEMORY = _original_virtual_memory
 
     def _capped_virtual_memory():
@@ -3748,6 +3752,26 @@ def patch_psutil_cpu_memory(limit_bytes: int):
         return mem._replace(total=total, available=available, used=used, percent=percent)
 
     psutil.virtual_memory = _capped_virtual_memory
+
+
+@contextlib.contextmanager
+def cap_psutil_cpu_memory(limit_bytes: int):
+    """
+    Context manager that temporarily caps `psutil.virtual_memory` to `limit_bytes`, then restores the
+    previous value on exit.
+
+    Use this inside individual tests that need a tighter CPU memory budget than the session-wide cap set
+    by conftest (e.g. to force `device_map="auto"` to use disk offload during `from_pretrained`), without
+    affecting the rest of the test session.
+    """
+    import psutil
+
+    prev = psutil.virtual_memory
+    patch_psutil_cpu_memory(limit_bytes)
+    try:
+        yield
+    finally:
+        psutil.virtual_memory = prev
 
 
 def _get_test_info():
