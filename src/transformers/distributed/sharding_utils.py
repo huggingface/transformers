@@ -318,7 +318,9 @@ class DtensorShardOperation:
     def _map_param_dim_to_source_dim(self, param_dim: int) -> int:
         # if dim is negative, it should be normalized to the last axis
         param_dim = param_dim if param_dim >= 0 else self.param_ndim + param_dim
-        return self.source_dim_mapping.get(param_dim, param_dim)
+        if param_dim in self.source_dim_mapping:
+            return self.source_dim_mapping[param_dim]
+        return param_dim
 
 
 def _dtensor_from_local_like(local_tensor: torch.Tensor, ref: DTensor) -> DTensor:
