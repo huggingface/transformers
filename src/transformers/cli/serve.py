@@ -76,6 +76,9 @@ class Serve:
         device: Annotated[str, typer.Option(help="Device for inference (e.g. 'auto', 'cuda:0', 'cpu').")] = "auto",
         dtype: Annotated[str | None, typer.Option(help="Override model dtype. 'auto' derives from weights.")] = "auto",
         trust_remote_code: Annotated[bool, typer.Option(help="Trust remote code when loading.")] = False,
+        experts_implementation: Annotated[
+            str | None, typer.Option(help="MoE experts implementation (e.g. 'deepgemm_megamoe').")
+        ] = None,
         model_timeout: Annotated[
             int, typer.Option(help="Seconds before idle model is unloaded. Ignored when force_model is set.")
         ] = 300,
@@ -132,6 +135,7 @@ class Serve:
             trust_remote_code=trust_remote_code,
             attn_implementation=attn_implementation,
             quantization=quantization,
+            experts_implementation=experts_implementation,
             model_timeout=model_timeout,
             force_model=force_model,
         )
