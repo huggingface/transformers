@@ -153,7 +153,7 @@ class Qwen3OmniMoePreTrainedModel(PreTrainedModel):
             init.copy_(module.inv_freq, inv_freq)
 
 
-def get_rope_index(
+def get_mrope_position_ids(
     config,
     input_ids: torch.LongTensor,
     mm_token_type_ids: torch.IntTensor | None = None,
@@ -170,11 +170,11 @@ def get_rope_index(
     """
     if input_ids is None or (image_grid_thw is None and video_grid_thw is None):
         # No vision span to lay out: every token counts up on all three axes, padded slots keeping 1.
-        text_positions = attention_mask.to(torch.float).cumsum(-1) - 1
-        text_positions.masked_fill_(attention_mask == 0, 1)
-        text_positions = text_positions.unsqueeze(0).expand(3, -1, -1)
-        highest = text_positions.max(0, keepdim=False)[0].max(-1, keepdim=True)[0]
-        return text_positions, highest + 1 - attention_mask.sum(dim=-1, keepdim=True)
+        text_position_ids = attention_mask.to(torch.float).cumsum(-1) - 1
+        text_position_ids.masked_fill_(attention_mask == 0, 1)
+        text_position_ids = text_position_ids.unsqueeze(0).expand(3, -1, -1)
+        highest = text_position_ids.max(0, keepdim=False)[0].max(-1, keepdim=True)[0]
+        return text_position_ids, highest + 1 - attention_mask.sum(dim=-1, keepdim=True)
     spatial_merge_size = config.vision_config.spatial_merge_size
     image_token_id = config.image_token_id
     video_token_id = config.video_token_id
@@ -344,7 +344,7 @@ class Qwen3OmniMoePreTrainedModelForConditionalGeneration(Qwen3OmniMoePreTrained
         audio_seqlens: torch.LongTensor | None = None,
         second_per_grids: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        return get_rope_index(
+        return get_mrope_position_ids(
             self.config,
             input_ids,
             attention_mask=attention_mask,
@@ -1005,7 +1005,7 @@ class Qwen3OmniMoeVisionEncoder(Qwen3OmniMoePreTrainedModel):
 
         self.pos_embed = nn.Embedding(config.num_position_embeddings, config.hidden_size)
         # How the (square) learned position grid is resampled to each image's grid.
-        self.num_grid_per_side = config.num_grid_per_side
+        self.num_grid_per_side = int(config.num_position_embeddings**0.5)
         self.interpolation_align_corners = config.interpolation_align_corners
         self.interpolation_mode = config.interpolation_mode
 
@@ -2140,14 +2140,14 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
         # Overwritten -- requires 3D position ids
 
-        text_positions = super()._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
+        text_position_ids = super()._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
 
         # Early exit in case we are continuing generation from past kv
         past_length = 0
         if (cache := model_kwargs.get("past_key_values")) is not None:
             past_length = cache.get_seq_length()
         if past_length != 0 and self.rope_deltas is not None:
-            position_ids = text_positions[None, ...] + self.rope_deltas
+            position_ids = text_position_ids[None, ...] + self.rope_deltas
             return position_ids
 
         # Otherwise compute 3d position ids for audio/vision tokens and concat with text position ids
@@ -2171,12 +2171,12 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
             )
             self.rope_deltas = rope_deltas
         else:
-            vision_positions = text_positions.unsqueeze(0).expand(3, -1, -1)
+            vision_positions = text_position_ids.unsqueeze(0).expand(3, -1, -1)
             self.rope_deltas = torch.zeros(inputs_tensor.shape[0], 1, dtype=torch.long, device=inputs_tensor.device)
 
         # Concatenate "text + vision" positions into [4, bs, seq-len]
-        text_positions = text_positions[None, ...]
-        position_ids = torch.cat([text_positions, vision_positions], dim=0)
+        text_position_ids = text_position_ids[None, ...]
+        position_ids = torch.cat([text_position_ids, vision_positions], dim=0)
 
         return position_ids
 
@@ -3045,7 +3045,7 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3OmniMoeThinkerTextPreTrain
         audio_seqlens: torch.LongTensor | None = None,
         second_per_grids: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        return get_rope_index(
+        return get_mrope_position_ids(
             self.config,
             input_ids,
             attention_mask=attention_mask,

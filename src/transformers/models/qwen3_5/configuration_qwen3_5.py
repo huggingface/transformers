@@ -145,16 +145,9 @@ class Qwen3_5VisionConfig(PreTrainedConfig):
     temporal_patch_size: int | list[int] | tuple[int, int] = 2
     out_hidden_size: int = 3584
     num_position_embeddings: int = 2304
-    # How the vision embedding resamples its learned position-embedding grid, so that
-    # `vision_utils.get_vision_interpolation_indices_and_weights` can be called from the config alone.
     interpolation_mode: str = "bilinear"
     interpolation_align_corners: bool = True
     initializer_range: float = 0.02
-
-    @property
-    def num_grid_per_side(self) -> int:
-        """Side length of the square learned position-embedding grid, as the vision module derives it."""
-        return int(self.num_position_embeddings**0.5)
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3.5-27B")

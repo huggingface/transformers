@@ -133,7 +133,7 @@ class Kimi_K25VisionPositionEmbeddings(nn.Module):
             torch.zeros(config.pos_emb_height, config.pos_emb_width, config.hidden_size)
         )
         # How the (square) learned position grid is resampled to each image's grid.
-        self.num_grid_per_side = config.num_grid_per_side
+        self.num_grid_per_side = config.pos_emb_height
         self.interpolation_align_corners = config.interpolation_align_corners
         self.interpolation_mode = config.interpolation_mode
 

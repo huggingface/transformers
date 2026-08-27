@@ -63,7 +63,7 @@ from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 logger = logging.get_logger(__name__)
 
 
-def get_rope_index(
+def get_mrope_position_ids(
     config,
     input_ids: torch.LongTensor,
     mm_token_type_ids: torch.IntTensor,
@@ -80,7 +80,7 @@ def get_rope_index(
     video's temporal axis is scaled by this family's clock, `tokens_per_second * second_per_grid_ts`.
     Returns `(position_ids, rope_deltas)`, the deltas being what `generate` advances decode positions by.
     """
-    vision_config = getattr(config, "vision_config", config)
+    vision_config = config.vision_config
     spatial_merge_size = vision_config.spatial_merge_size
     tokens_per_second = vision_config.tokens_per_second
     grids = {1: image_grid_thw, 2: video_grid_thw}
@@ -90,15 +90,16 @@ def get_rope_index(
     )
     rope_deltas = []
     for batch_idx, token_ids in enumerate(input_ids):
-        token_types = mm_token_type_ids[batch_idx]
+        input_token_type = mm_token_type_ids[batch_idx]
         valid_tokens = None
         if attention_mask is not None:
             valid_tokens = attention_mask[batch_idx].bool()
-            token_ids, token_types = token_ids[valid_tokens], token_types[valid_tokens]
+            token_ids, input_token_type = token_ids[valid_tokens], input_token_type[valid_tokens]
 
         counter, current_position, blocks = defaultdict(int), 0, []
-        for modality_type, group in itertools.groupby(enumerate(token_types.tolist()), lambda x: x[1]):
+        for modality_type, group in itertools.groupby(enumerate(input_token_type.tolist()), lambda x: x[1]):
             length = len(list(group))
+            # 0 is a text run; 1 and 2 are image and video spans.
             if modality_type == 0:
                 positions = torch.arange(current_position, current_position + length, device=token_ids.device)
                 blocks.append(positions.expand(3, length))
@@ -441,7 +442,7 @@ class Qwen2_5_VLModel(Qwen2VLModel):
             position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
             mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
         """
-        return get_rope_index(
+        return get_mrope_position_ids(
             self.config,
             input_ids,
             mm_token_type_ids,

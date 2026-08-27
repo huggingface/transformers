@@ -117,14 +117,13 @@ class MultiModalGenerationMixin:
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
         # Overwritten -- requires multi-axis position ids
 
-        text_positions = super()._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
+        text_position_ids = super()._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
         if not uses_mrope(self.config):
-            # Multimodal, but keeping 1D text positions: the text path already produced what this model wants.
-            return text_positions
-        return self._prepare_mrope_position_ids_for_generation(text_positions, inputs_tensor, model_kwargs)
+            return text_position_ids
+        return self._prepare_mrope_position_ids_for_generation(text_position_ids, inputs_tensor, model_kwargs)
 
-    def _prepare_mrope_position_ids_for_generation(self, text_positions, inputs_tensor, model_kwargs):
-        """Multi-axis position ids for one generation step, given the 1D `text_positions`.
+    def _prepare_mrope_position_ids_for_generation(self, text_position_ids, inputs_tensor, model_kwargs):
+        """Multi-axis position ids for one generation step, given the 1D `text_position_ids`.
 
         Override this rather than [`_prepare_position_ids_for_generation`] when a family lays its axes out
         differently: the text positions arrive as an argument, so an override never has to reason about where
@@ -135,7 +134,7 @@ class MultiModalGenerationMixin:
         if (cache := model_kwargs.get("past_key_values")) is not None:
             past_length = cache.get_seq_length()
         if past_length != 0 and self.model.rope_deltas is not None:
-            position_ids = text_positions[None, ...] + self.model.rope_deltas
+            position_ids = text_position_ids[None, ...] + self.model.rope_deltas
             return position_ids
 
         # Otherwise compute 3d position ids for vision tokens and concat with text position ids
@@ -152,21 +151,15 @@ class MultiModalGenerationMixin:
             vision_positions, rope_deltas = self.model.get_rope_index(inputs_tensor, **model_kwargs)
             self.model.rope_deltas = rope_deltas
         else:
-            vision_positions = text_positions.unsqueeze(0).expand(3, -1, -1)
+            vision_positions = text_position_ids.unsqueeze(0).expand(3, -1, -1)
             self.model.rope_deltas = torch.zeros(
                 inputs_tensor.shape[0], 1, dtype=torch.long, device=inputs_tensor.device
             )
 
         # Concatenate "text + vision" positions into [4, bs, seq-len]
-        text_positions = text_positions[None, ...]
-        position_ids = torch.cat([text_positions, vision_positions], dim=0)
+        position_ids = torch.cat([text_position_ids[None, ...], vision_positions], dim=0)
 
         return position_ids
-
-
-# ── Multimodal (M-RoPE) decoder positions ────────────────────────────────────────────────────────────
-# The pieces every layout shares. Each model's own `get_rope_index` — a module-level function in its
-# `modeling_*.py`, pure in `(config, inputs)` — builds its spans out of these.
 
 
 def uses_mrope(config) -> bool:
@@ -174,7 +167,6 @@ def uses_mrope(config) -> bool:
     per-axis head split only multi-axis models have). `False` for plain decoders and for VLMs that keep 1D
     text positions (Llava & co.), which is the signal to leave `position_ids` alone."""
     text_config = config.get_text_config()
-    rope_parameters = getattr(text_config, "rope_parameters", None)
-    if isinstance(rope_parameters, dict) and "mrope_section" in rope_parameters:
+    if "mrope_section" in (getattr(text_config, "rope_parameters", None) or {}):
         return True
     return "mrope_section" in (getattr(text_config, "ignore_keys_at_rope_validation", None) or ())

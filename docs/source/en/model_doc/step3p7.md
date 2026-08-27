@@ -17,7 +17,6 @@ limitations under the License.
 
 -->
 *This model was contributed to Hugging Face Transformers on 2026-08-16.*
-*This model was contributed to Hugging Face Transformers on .*
 
 # Step3p7 (Step-3.7-Flash)
 

@@ -423,9 +423,28 @@ def _config_attr(config, name: str) -> Any | None:
     return None
 
 
+def _grid_side(config) -> int | None:
+    """Side of the square learned position-embedding grid, however this encoder spells it.
+
+    Three spellings across the families that resample such a grid, and each config carries exactly one:
+    a count to take the root of (`num_position_embeddings`, the qwen3_vl / qwen3_5 / cohere_compass
+    families), the side itself (`pos_emb_height`, kimi_k25 / muse_glimmer), or the patch count implied by
+    the input (`image_size // patch_size`, paddleocr_vl). Only reached for an encoder that declares
+    `interpolation_mode`, so the last spelling cannot catch a config that merely has an image size.
+    """
+    if (count := _config_attr(config, "num_position_embeddings")) is not None:
+        return int(count**0.5)
+    if (side := _config_attr(config, "pos_emb_height")) is not None:
+        return side
+    image_size, patch_size = _config_attr(config, "image_size"), _config_attr(config, "patch_size")
+    if image_size is not None and isinstance(patch_size, int):
+        return image_size // patch_size
+    return None
+
+
 def _model_module(config):
     """The `modeling_*` module of `config`'s architecture, for the per-model precompute helpers that live
-    beside the model (`get_rope_index`, `get_vision_frame_index`, `chunk_and_pad_features`, …). Resolved from
+    beside the model (`get_mrope_position_ids`, `get_vision_frame_index`, `chunk_and_pad_features`, …). Resolved from
     `model_type` so no model instance is needed; `None` when it cannot be imported."""
     from ..models.auto.configuration_auto import model_type_to_module_name
 
@@ -462,7 +481,7 @@ def _prepare_grid_thw_vision_inputs(config, inputs: dict[str, Any]) -> None:
     `bilinear_indices`/`bilinear_weights` (interpolation-based merging).
 
     Optional helpers are gated by a submodule attribute (`window_size`+`patch_size` for window
-    attention, `num_grid_per_side` for bilinear) or, for model-specific ones, by the encoder's
+    attention, `interpolation_mode` for a resampled grid) or, for model-specific ones, by the encoder's
     modeling module defining the helper (`get_vision_frame_index` / `get_vision_temporal_merge_index`
     for kimi_k25) — so a model that doesn't use a feature won't get its kwarg injected.
     """
@@ -497,13 +516,13 @@ def _prepare_grid_thw_vision_inputs(config, inputs: dict[str, Any]) -> None:
             inputs["cu_window_seqlens"], config, kwargs=inputs, kwarg_name="max_window_seqlen"
         )
 
-    num_grid_per_side = _config_attr(config, "num_grid_per_side")
+    # `interpolation_mode` marks an encoder that resamples a learned grid, and says how (kimi_k25
+    # bicubic, the qwen3_vl / qwen3_5 / paddleocr_vl families bilinear, muse_glimmer grid_sample-style
+    # zeros padding). The flags are read rather than inferred, so the precomputed tensors match exactly
+    # what the model computes.
+    mode = _config_attr(config, "interpolation_mode")
+    num_grid_per_side = _grid_side(config) if mode is not None else None
     if num_grid_per_side is not None:
-        # The vision embedding module declares how it resamples its learned grid (kimi_k25 uses
-        # bicubic, the qwen3_vl / qwen3_5 / paddleocr_vl families use bilinear, muse_glimmer uses a
-        # grid_sample-style zeros padding); read the flags rather than inferring, so the precomputed
-        # tensors match exactly what the model computes.
-        mode = _config_attr(config, "interpolation_mode") or "bilinear"
         padding = _config_attr(config, "interpolation_padding") or "border"
         align_corners = _config_attr(config, "interpolation_align_corners") is True
         inputs["interp_indices"], inputs["interp_weights"] = get_vision_interpolation_indices_and_weights(
@@ -621,22 +640,22 @@ def precompute_export_inputs(config, inputs: dict[str, Any]) -> None:
     """Inject precomputed tensors for data-dependent ops the model would otherwise hit during tracing.
 
     Two layers:
-    - Outer LLM rope index (`get_rope_index`) — generic `hasattr` probe; covers Qwen-VL / GLM-4V etc.
+    - Outer LLM M-RoPE positions (`get_mrope_position_ids`) — generic `hasattr` probe; covers Qwen-VL / GLM-4V etc.
     - Per-encoder preparer dispatched by marker kwargs present in `inputs` (e.g. `grid_thw`,
       `target_sizes`, `(input_features, feature_lens)`) — see `register_export_input_preparer`.
       A preparer fires only when every one of its markers is present in `inputs`.
     """
-    # Outer-model: M-RoPE decoder positions. Every family that lays them out defines `get_rope_index` as a
+    # Outer-model: M-RoPE decoder positions. Every family that lays them out defines `get_mrope_position_ids` as a
     # module-level function in its own `modeling_*.py`, pure in `(config, inputs)` — so this takes it from
     # there rather than off the model, and needs nothing but the config to run. Absent means the model has no
     # M-RoPE (`exaone4_5`, `video_llama_3` only carry a method that raises), so there is nothing to prepare.
     if config is None:
         return
 
-    rope_index = getattr(_model_module(config), "get_rope_index", None)
+    rope_index = getattr(_model_module(config), "get_mrope_position_ids", None)
     if inputs.get("position_ids") is None and rope_index is not None:
         parameters = inspect.signature(rope_index).parameters
-        # The module is the whole family's, so it carries `get_rope_index` even while a *component* is being
+        # The module is the whole family's, so it carries `get_mrope_position_ids` even while a *component* is being
         # prepared (a vision tower gets `pixel_values`, no `input_ids`). Run only when the inputs actually
         # carry everything the layout requires.
         required = [

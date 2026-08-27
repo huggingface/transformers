@@ -65,11 +65,6 @@ class MuseGlimmerVisionConfig(PreTrainedConfig):
     layer_types: list[str] | None = None
 
     @property
-    def num_grid_per_side(self) -> int:
-        """Side length of the learned position-embedding grid, as the vision module derives it."""
-        return self.pos_emb_height
-
-    @property
     def spatial_merge_size(self) -> int:
         """Spatial merge factor under the name every other vision config uses for it.
 

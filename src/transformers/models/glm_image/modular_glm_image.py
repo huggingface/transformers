@@ -538,7 +538,7 @@ class GlmImageModel(Glm4vModel):
         image_end_token_id = self.config.image_end_token_id
 
         position_ids = torch.ones(3, batch_size, seq_len, dtype=dtype, device=device)
-        text_positions = torch.arange(seq_len, device=device)[None, :].repeat(3, 1)
+        text_position_ids = torch.arange(seq_len, device=device)[None, :].repeat(3, 1)
 
         # Split image_grid_thw by sample if images_per_sample is provided
         if image_grid_thw is not None and images_per_sample is not None:
@@ -580,7 +580,7 @@ class GlmImageModel(Glm4vModel):
 
                 # Text tokens before this image
                 llm_pos_length = start - prev_image_end
-                llm_position_ids = text_positions[:, current_pos : current_pos + llm_pos_length].to(device=device)
+                llm_position_ids = text_position_ids[:, current_pos : current_pos + llm_pos_length].to(device=device)
                 current_pos += llm_position_ids.shape[-1]
 
                 # Image tokens with 2D spatial encoding
@@ -601,7 +601,7 @@ class GlmImageModel(Glm4vModel):
 
             # Remaining text tokens (including the final image_start token for generation)
             end_position = len(curr_input_ids_valid) - prev_image_end
-            llm_position_ids = text_positions[:, current_pos : current_pos + end_position].to(device=device)
+            llm_position_ids = text_position_ids[:, current_pos : current_pos + end_position].to(device=device)
             current_pos += llm_position_ids.shape[-1]
             curr_position_ids.append(llm_position_ids)
 

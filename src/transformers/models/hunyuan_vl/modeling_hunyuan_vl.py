@@ -877,7 +877,7 @@ def get_mrope_image_positions(
     return torch.stack([position_width.flatten(), position_height.flatten()], dim=0)
 
 
-def get_rope_index(
+def get_mrope_position_ids(
     config,
     input_ids: torch.LongTensor,
     mm_token_type_ids: torch.IntTensor,
@@ -904,11 +904,11 @@ def get_rope_index(
     )
     rope_deltas = []
     for batch_idx, token_ids in enumerate(input_ids):
-        token_types = mm_token_type_ids[batch_idx]
+        input_token_type = mm_token_type_ids[batch_idx]
         valid_tokens = None
         if attention_mask is not None:
             valid_tokens = attention_mask[batch_idx].bool()
-            token_ids, token_types = token_ids[valid_tokens], token_types[valid_tokens]
+            token_ids, input_token_type = token_ids[valid_tokens], input_token_type[valid_tokens]
 
         current_position_ids = torch.arange(token_ids.shape[-1], dtype=input_ids.dtype, device=token_ids.device)
         current_position_ids = current_position_ids.view(1, -1).expand(num_axes, -1).clone()
@@ -920,7 +920,7 @@ def get_rope_index(
             rope_deltas.append(current_position_ids.max() + 1 - len(token_ids))
             continue
 
-        for modality_type, group in itertools.groupby(enumerate(token_types.tolist()), lambda x: x[1]):
+        for modality_type, group in itertools.groupby(enumerate(input_token_type.tolist()), lambda x: x[1]):
             if modality_type != 1:  # image == 1; this layout has no video/audio modality
                 continue
             group = list(group)
@@ -994,8 +994,8 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel, MultiModalPreTrainedModelMixin):
         attention_mask: torch.Tensor | None = None,
     ) -> tuple[torch.LongTensor, torch.LongTensor]:
         """M-RoPE decoder position ids: `(position_ids, rope_deltas)`, laid out span by span over
-        `mm_token_type_ids` by [`get_rope_index`] above."""
-        return get_rope_index(
+        `mm_token_type_ids` by [`get_mrope_position_ids`] above."""
+        return get_mrope_position_ids(
             self.config,
             input_ids,
             mm_token_type_ids,
@@ -1289,7 +1289,7 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixi
 
         return model_inputs
 
-    def _prepare_mrope_position_ids_for_generation(self, text_positions, inputs_tensor, model_kwargs):
+    def _prepare_mrope_position_ids_for_generation(self, text_position_ids, inputs_tensor, model_kwargs):
         # Same as the shared layout, with a variable `num_mrope_axes` read off the config
 
         rope_parameters = self.config.text_config.rope_parameters or {}
@@ -1299,7 +1299,7 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixi
         if (cache := model_kwargs.get("past_key_values")) is not None:
             past_length = cache.get_seq_length()
         if past_length != 0 and self.model.rope_deltas is not None:
-            return (text_positions + self.model.rope_deltas).unsqueeze(0).expand(num_mrope_axes, -1, -1)
+            return (text_position_ids + self.model.rope_deltas).unsqueeze(0).expand(num_mrope_axes, -1, -1)
 
         if "input_ids" in model_kwargs and model_kwargs["input_ids"].shape[1] > 0:
             inputs_tensor = model_kwargs["input_ids"]
@@ -1318,7 +1318,7 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixi
             )
             self.model.rope_deltas = rope_deltas
         else:
-            rope_positions = text_positions.unsqueeze(0).expand(num_mrope_axes, -1, -1)
+            rope_positions = text_position_ids.unsqueeze(0).expand(num_mrope_axes, -1, -1)
             self.model.rope_deltas = torch.zeros(
                 inputs_tensor.shape[0], 1, dtype=torch.long, device=inputs_tensor.device
             )

@@ -770,7 +770,7 @@ class Cosmos3EdgePatchMerger(nn.Module):
         return x
 
 
-def get_rope_index(
+def get_mrope_position_ids(
     config,
     input_ids: torch.LongTensor,
     mm_token_type_ids: torch.IntTensor,
@@ -782,13 +782,8 @@ def get_rope_index(
 
     This family's processor separates video frames with timestamp text, so each frame is its own visual
     span: the video grids are expanded to one `T=1` row per frame first.
-
-    Per batch row, over the unpadded tokens, walk `mm_token_type_ids` span by span (0=text, 1=image,
-    2=video): a text run counts 1D positions on all three axes, and a vision span lays a
-    `(temporal, height, width)` grid then advances the text position by its largest spatial extent.
-    Returns `(position_ids, rope_deltas)`, the deltas being what `generate` advances decode positions by.
     """
-    vision_config = getattr(config, "vision_config", config)
+    vision_config = config.vision_config
     spatial_merge_size = vision_config.spatial_merge_size
     if video_grid_thw is not None:
         video_grid_thw = torch.repeat_interleave(video_grid_thw, video_grid_thw[:, 0], dim=0)
@@ -800,15 +795,16 @@ def get_rope_index(
     )
     rope_deltas = []
     for batch_idx, token_ids in enumerate(input_ids):
-        token_types = mm_token_type_ids[batch_idx]
+        input_token_type = mm_token_type_ids[batch_idx]
         valid_tokens = None
         if attention_mask is not None:
             valid_tokens = attention_mask[batch_idx].bool()
-            token_ids, token_types = token_ids[valid_tokens], token_types[valid_tokens]
+            token_ids, input_token_type = token_ids[valid_tokens], input_token_type[valid_tokens]
 
         counter, current_position, blocks = defaultdict(int), 0, []
-        for modality_type, group in itertools.groupby(enumerate(token_types.tolist()), lambda x: x[1]):
+        for modality_type, group in itertools.groupby(enumerate(input_token_type.tolist()), lambda x: x[1]):
             length = len(list(group))
+            # 0 is a text run; 1 and 2 are image and video spans.
             if modality_type == 0:
                 positions = torch.arange(current_position, current_position + length, device=token_ids.device)
                 blocks.append(positions.expand(3, length))
@@ -852,11 +848,17 @@ class Cosmos3EdgeModel(Cosmos3EdgePreTrainedModel, MultiModalPreTrainedModelMixi
         self.post_init()
 
     def get_rope_index(
-        self, input_ids, mm_token_type_ids, image_grid_thw=None, video_grid_thw=None, attention_mask=None, **kwargs
+        self,
+        input_ids: torch.LongTensor,
+        mm_token_type_ids: torch.IntTensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """M-RoPE decoder position ids: `(position_ids, rope_deltas)`, laid out span by span over
-        `mm_token_type_ids` by [`get_rope_index`] above."""
-        return get_rope_index(
+        `mm_token_type_ids` by [`get_mrope_position_ids`] above."""
+        return get_mrope_position_ids(
             self.config,
             input_ids,
             mm_token_type_ids,
@@ -1254,7 +1256,7 @@ class Cosmos3EdgeForConditionalGeneration(Cosmos3EdgePreTrainedModel, MultiModal
 
         return input_ids, model_kwargs
 
-    def _prepare_mrope_position_ids_for_generation(self, text_positions, inputs_tensor, model_kwargs):
+    def _prepare_mrope_position_ids_for_generation(self, text_position_ids, inputs_tensor, model_kwargs):
         # Qwen2-VL exposes four axes (text plus three visual axes). Edge's interleaved M-RoPE consumes the three
         # visual axes directly, so it returns those three rather than the shared four-axis layout.
 
@@ -1263,7 +1265,7 @@ class Cosmos3EdgeForConditionalGeneration(Cosmos3EdgePreTrainedModel, MultiModal
         if (cache := model_kwargs.get("past_key_values")) is not None:
             past_length = cache.get_seq_length()
         if past_length != 0 and self.model.rope_deltas is not None:
-            position_ids = text_positions[None, ...] + self.model.rope_deltas
+            position_ids = text_position_ids[None, ...] + self.model.rope_deltas
             return position_ids
 
         # Otherwise compute 3D position ids for vision tokens.
@@ -1286,7 +1288,7 @@ class Cosmos3EdgeForConditionalGeneration(Cosmos3EdgePreTrainedModel, MultiModal
             position_ids, rope_deltas = self.model.get_rope_index(inputs_tensor, **model_kwargs)
             self.model.rope_deltas = rope_deltas
         else:
-            position_ids = text_positions.unsqueeze(0).expand(3, -1, -1)
+            position_ids = text_position_ids.unsqueeze(0).expand(3, -1, -1)
             self.model.rope_deltas = torch.zeros(
                 inputs_tensor.shape[0], 1, dtype=torch.long, device=inputs_tensor.device
             )

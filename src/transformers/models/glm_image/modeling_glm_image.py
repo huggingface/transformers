@@ -18,9 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import itertools
 import warnings
-from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -893,71 +891,6 @@ class GlmImageTextModel(GlmImagePreTrainedModel):
         )
 
 
-def get_rope_index(
-    config,
-    input_ids: torch.LongTensor,
-    mm_token_type_ids: torch.IntTensor,
-    attention_mask: torch.Tensor | None = None,
-    image_grid_thw: torch.LongTensor | None = None,
-    video_grid_thw: torch.LongTensor | None = None,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """M-RoPE decoder positions for a sequence of interleaved text and vision runs.
-
-    This family's processor separates video frames with timestamp text, so each frame is its own visual
-    span: the video grids are expanded to one `T=1` row per frame first.
-
-    Per batch row, over the unpadded tokens, walk `mm_token_type_ids` span by span (0=text, 1=image,
-    2=video): a text run counts 1D positions on all three axes, and a vision span lays a
-    `(temporal, height, width)` grid then advances the text position by its largest spatial extent.
-    Returns `(position_ids, rope_deltas)`, the deltas being what `generate` advances decode positions by.
-    """
-    vision_config = getattr(config, "vision_config", config)
-    spatial_merge_size = vision_config.spatial_merge_size
-    if video_grid_thw is not None:
-        video_grid_thw = torch.repeat_interleave(video_grid_thw, video_grid_thw[:, 0], dim=0)
-        video_grid_thw[:, 0] = 1
-    grids = {1: image_grid_thw, 2: video_grid_thw}
-
-    position_ids = torch.full(
-        (3, input_ids.shape[0], input_ids.shape[1]), 0, dtype=input_ids.dtype, device=input_ids.device
-    )
-    rope_deltas = []
-    for batch_idx, token_ids in enumerate(input_ids):
-        token_types = mm_token_type_ids[batch_idx]
-        valid_tokens = None
-        if attention_mask is not None:
-            valid_tokens = attention_mask[batch_idx].bool()
-            token_ids, token_types = token_ids[valid_tokens], token_types[valid_tokens]
-
-        counter, current_position, blocks = defaultdict(int), 0, []
-        for modality_type, group in itertools.groupby(enumerate(token_types.tolist()), lambda x: x[1]):
-            length = len(list(group))
-            if modality_type == 0:
-                positions = torch.arange(current_position, current_position + length, device=token_ids.device)
-                blocks.append(positions.expand(3, length))
-                current_position += length
-                continue
-
-            grid_thw = grids[modality_type][counter[modality_type]]
-            counter[modality_type] += 1
-            grid_t = grid_thw[0].item()
-            grid_h, grid_w = grid_thw[1].item() // spatial_merge_size, grid_thw[2].item() // spatial_merge_size
-            temporal = torch.arange(grid_t, device=token_ids.device) + current_position
-            height = torch.arange(grid_h, device=token_ids.device) + current_position
-            width = torch.arange(grid_w, device=token_ids.device) + current_position
-            axes = torch.meshgrid(temporal, height, width, indexing="ij")
-            blocks.append(torch.stack(axes, dim=0).reshape(3, -1))
-            current_position += int(max(grid_thw[1], grid_thw[2])) // spatial_merge_size
-
-        positions = torch.cat(blocks, dim=1).to(device=position_ids.device, dtype=position_ids.dtype)
-        if valid_tokens is not None:
-            position_ids[:, batch_idx, valid_tokens] = positions
-        else:
-            position_ids[:, batch_idx] = positions
-        rope_deltas.append(positions.max() + 1 - len(token_ids))
-    return position_ids, torch.tensor(rope_deltas, device=input_ids.device).unsqueeze(1)
-
-
 @auto_docstring
 class GlmImageModel(GlmImagePreTrainedModel, MultiModalPreTrainedModelMixin):
     base_model_prefix = "model"
@@ -1017,7 +950,7 @@ class GlmImageModel(GlmImagePreTrainedModel, MultiModalPreTrainedModelMixin):
         image_end_token_id = self.config.image_end_token_id
 
         position_ids = torch.ones(3, batch_size, seq_len, dtype=dtype, device=device)
-        text_positions = torch.arange(seq_len, device=device)[None, :].repeat(3, 1)
+        text_position_ids = torch.arange(seq_len, device=device)[None, :].repeat(3, 1)
 
         # Split image_grid_thw by sample if images_per_sample is provided
         if image_grid_thw is not None and images_per_sample is not None:
@@ -1059,7 +992,7 @@ class GlmImageModel(GlmImagePreTrainedModel, MultiModalPreTrainedModelMixin):
 
                 # Text tokens before this image
                 llm_pos_length = start - prev_image_end
-                llm_position_ids = text_positions[:, current_pos : current_pos + llm_pos_length].to(device=device)
+                llm_position_ids = text_position_ids[:, current_pos : current_pos + llm_pos_length].to(device=device)
                 current_pos += llm_position_ids.shape[-1]
 
                 # Image tokens with 2D spatial encoding
@@ -1080,7 +1013,7 @@ class GlmImageModel(GlmImagePreTrainedModel, MultiModalPreTrainedModelMixin):
 
             # Remaining text tokens (including the final image_start token for generation)
             end_position = len(curr_input_ids_valid) - prev_image_end
-            llm_position_ids = text_positions[:, current_pos : current_pos + end_position].to(device=device)
+            llm_position_ids = text_position_ids[:, current_pos : current_pos + end_position].to(device=device)
             current_pos += llm_position_ids.shape[-1]
             curr_position_ids.append(llm_position_ids)
 

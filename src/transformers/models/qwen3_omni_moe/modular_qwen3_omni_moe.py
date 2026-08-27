@@ -224,7 +224,7 @@ class BaseModelOutputWithDeepstackFeatures(BaseModelOutputWithPooling):
     deepstack_features: list[torch.FloatTensor] | None = None
 
 
-def get_rope_index(
+def get_mrope_position_ids(
     config,
     input_ids: torch.LongTensor,
     mm_token_type_ids: torch.IntTensor | None = None,
@@ -241,11 +241,11 @@ def get_rope_index(
     """
     if input_ids is None or (image_grid_thw is None and video_grid_thw is None):
         # No vision span to lay out: every token counts up on all three axes, padded slots keeping 1.
-        text_positions = attention_mask.to(torch.float).cumsum(-1) - 1
-        text_positions.masked_fill_(attention_mask == 0, 1)
-        text_positions = text_positions.unsqueeze(0).expand(3, -1, -1)
-        highest = text_positions.max(0, keepdim=False)[0].max(-1, keepdim=True)[0]
-        return text_positions, highest + 1 - attention_mask.sum(dim=-1, keepdim=True)
+        text_position_ids = attention_mask.to(torch.float).cumsum(-1) - 1
+        text_position_ids.masked_fill_(attention_mask == 0, 1)
+        text_position_ids = text_position_ids.unsqueeze(0).expand(3, -1, -1)
+        highest = text_position_ids.max(0, keepdim=False)[0].max(-1, keepdim=True)[0]
+        return text_position_ids, highest + 1 - attention_mask.sum(dim=-1, keepdim=True)
     spatial_merge_size = config.vision_config.spatial_merge_size
     image_token_id = config.image_token_id
     video_token_id = config.video_token_id
@@ -903,7 +903,7 @@ class Qwen3OmniMoePreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedM
         audio_seqlens: torch.LongTensor | None = None,
         second_per_grids: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        return get_rope_index(
+        return get_mrope_position_ids(
             self.config,
             input_ids,
             attention_mask=attention_mask,
@@ -1643,7 +1643,7 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3MoeForCausalLM):
         audio_seqlens: torch.LongTensor | None = None,
         second_per_grids: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        return get_rope_index(
+        return get_mrope_position_ids(
             self.config,
             input_ids,
             attention_mask=attention_mask,

@@ -69,11 +69,6 @@ class PaddleOCRVisionConfig(PreTrainedConfig):
     interpolation_mode: str = "bilinear"
     interpolation_align_corners: bool = True
 
-    @property
-    def num_grid_per_side(self) -> int:
-        """Side length of the square learned position grid (`num_positions = (image_size // patch_size) ** 2`)."""
-        return self.image_size // self.patch_size
-
 
 @auto_docstring(checkpoint="PaddlePaddle/PaddleOCR-VL")
 @strict

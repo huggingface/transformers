@@ -683,7 +683,7 @@ class MuseGlimmerVisionPatchEmbedder(nn.Module):
         self.position_embedding_table = nn.Embedding(config.pos_emb_height * config.pos_emb_width, self.hidden_size)
         # FIXME: only if square images - vision utils don't yet support non-square
         # For now assume pos_emb_height == pos_emb_width always, i.e. as in shared ckpt
-        self.num_grid_per_side = config.num_grid_per_side
+        self.num_grid_per_side = config.pos_emb_height
         # muse_glimmer resamples its position grid with `F.grid_sample(align_corners=False, padding_mode="zeros")`
         self.interpolation_mode = config.interpolation_mode
         self.interpolation_align_corners = config.interpolation_align_corners

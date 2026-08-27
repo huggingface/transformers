@@ -625,7 +625,7 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
 
         self.pos_embed = nn.Embedding(config.num_position_embeddings, config.hidden_size)
         # How the (square) learned position grid is resampled to each image's grid.
-        self.num_grid_per_side = config.num_grid_per_side
+        self.num_grid_per_side = int(config.num_position_embeddings**0.5)
         self.interpolation_align_corners = config.interpolation_align_corners
         self.interpolation_mode = config.interpolation_mode
 
@@ -864,7 +864,7 @@ class Qwen3VLTextModel(Qwen3VLPreTrainedModel):
         return hidden_states
 
 
-def get_rope_index(
+def get_mrope_position_ids(
     config,
     input_ids: torch.LongTensor,
     mm_token_type_ids: torch.IntTensor,
@@ -876,13 +876,8 @@ def get_rope_index(
 
     This family's processor separates video frames with timestamp text, so each frame is its own visual
     span: the video grids are expanded to one `T=1` row per frame first.
-
-    Per batch row, over the unpadded tokens, walk `mm_token_type_ids` span by span (0=text, 1=image,
-    2=video): a text run counts 1D positions on all three axes, and a vision span lays a
-    `(temporal, height, width)` grid then advances the text position by its largest spatial extent.
-    Returns `(position_ids, rope_deltas)`, the deltas being what `generate` advances decode positions by.
     """
-    vision_config = getattr(config, "vision_config", config)
+    vision_config = config.vision_config
     spatial_merge_size = vision_config.spatial_merge_size
     if video_grid_thw is not None:
         video_grid_thw = torch.repeat_interleave(video_grid_thw, video_grid_thw[:, 0], dim=0)
@@ -894,15 +889,16 @@ def get_rope_index(
     )
     rope_deltas = []
     for batch_idx, token_ids in enumerate(input_ids):
-        token_types = mm_token_type_ids[batch_idx]
+        input_token_type = mm_token_type_ids[batch_idx]
         valid_tokens = None
         if attention_mask is not None:
             valid_tokens = attention_mask[batch_idx].bool()
-            token_ids, token_types = token_ids[valid_tokens], token_types[valid_tokens]
+            token_ids, input_token_type = token_ids[valid_tokens], input_token_type[valid_tokens]
 
         counter, current_position, blocks = defaultdict(int), 0, []
-        for modality_type, group in itertools.groupby(enumerate(token_types.tolist()), lambda x: x[1]):
+        for modality_type, group in itertools.groupby(enumerate(input_token_type.tolist()), lambda x: x[1]):
             length = len(list(group))
+            # 0 is a text run; 1 and 2 are image and video spans.
             if modality_type == 0:
                 positions = torch.arange(current_position, current_position + length, device=token_ids.device)
                 blocks.append(positions.expand(3, length))
@@ -945,11 +941,17 @@ class Qwen3VLModel(Qwen3VLPreTrainedModel, MultiModalPreTrainedModelMixin):
         self.post_init()
 
     def get_rope_index(
-        self, input_ids, mm_token_type_ids, image_grid_thw=None, video_grid_thw=None, attention_mask=None, **kwargs
+        self,
+        input_ids: torch.LongTensor,
+        mm_token_type_ids: torch.IntTensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """M-RoPE decoder position ids: `(position_ids, rope_deltas)`, laid out span by span over
-        `mm_token_type_ids` by [`get_rope_index`] above."""
-        return get_rope_index(
+        `mm_token_type_ids` by [`get_mrope_position_ids`] above."""
+        return get_mrope_position_ids(
             self.config,
             input_ids,
             mm_token_type_ids,

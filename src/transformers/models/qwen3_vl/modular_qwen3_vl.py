@@ -48,7 +48,7 @@ from ...vision_utils import (
     get_vision_position_ids,
 )
 from ..auto.modeling_auto import AutoModel
-from ..glm4v.modeling_glm4v import get_rope_index
+from ..glm4v.modeling_glm4v import get_mrope_position_ids
 from ..glm4v.video_processing_glm4v import Glm4vVideoProcessor
 from ..llama.modeling_llama import LlamaRotaryEmbedding
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
@@ -97,6 +97,10 @@ class Qwen3VLVisionConfig(PreTrainedConfig):
         The output hidden size of the vision model.
     num_position_embeddings (`int`, *optional*, defaults to 2304):
         The maximum sequence length that this model might ever be used with
+    interpolation_mode (`str`, *optional*, defaults to `"bilinear"`):
+        How the vision embedding resamples its learned position-embedding grid.
+    interpolation_align_corners (`bool`, *optional*, defaults to `True`):
+        Whether that resampling aligns corner samples.
     deepstack_visual_indexes (`list[int]`, *optional*, defaults to `[8, 16, 24]`):
         Indexed of layers for deepstack embeddings.
     """
@@ -115,17 +119,10 @@ class Qwen3VLVisionConfig(PreTrainedConfig):
     temporal_patch_size: int | list[int] | tuple[int, int] = 2
     out_hidden_size: int = 3584
     num_position_embeddings: int = 2304
-    # How the vision embedding resamples its learned position-embedding grid, so that
-    # `vision_utils.get_vision_interpolation_indices_and_weights` can be called from the config alone.
     interpolation_mode: str = "bilinear"
     interpolation_align_corners: bool = True
     deepstack_visual_indexes: list[int] | tuple[int, ...] = (8, 16, 24)
     initializer_range: float = 0.02
-
-    @property
-    def num_grid_per_side(self) -> int:
-        """Side length of the square learned position-embedding grid, as the vision module derives it."""
-        return int(self.num_position_embeddings**0.5)
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-VL-4B-Instruct")
@@ -441,7 +438,7 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
 
         self.pos_embed = nn.Embedding(config.num_position_embeddings, config.hidden_size)
         # How the (square) learned position grid is resampled to each image's grid.
-        self.num_grid_per_side = config.num_grid_per_side
+        self.num_grid_per_side = int(config.num_position_embeddings**0.5)
         self.interpolation_align_corners = config.interpolation_align_corners
         self.interpolation_mode = config.interpolation_mode
 
@@ -676,9 +673,15 @@ class Qwen3VLModel(Qwen2VLModel):
         self.language_model = AutoModel.from_config(config.text_config)
 
     def get_rope_index(
-        self, input_ids, mm_token_type_ids, image_grid_thw=None, video_grid_thw=None, attention_mask=None, **kwargs
+        self,
+        input_ids: torch.LongTensor,
+        mm_token_type_ids: torch.IntTensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs,
     ):
-        return get_rope_index(
+        return get_mrope_position_ids(
             self.config,
             input_ids,
             mm_token_type_ids,

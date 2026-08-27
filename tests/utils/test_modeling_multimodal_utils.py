@@ -30,11 +30,17 @@ if is_torch_available():
         Qwen3VLConfig,
     )
     from transformers.models.ernie4_5_vl_moe.modeling_ernie4_5_vl_moe import Ernie4_5_VLMoeModel
-    from transformers.models.hunyuan_vl.modeling_hunyuan_vl import get_rope_index as hunyuan_get_rope_index
-    from transformers.models.qwen2_5_omni.modeling_qwen2_5_omni import get_rope_index as qwen2_5_omni_get_rope_index
+    from transformers.models.hunyuan_vl.modeling_hunyuan_vl import (
+        get_mrope_position_ids as hunyuan_get_mrope_position_ids,
+    )
+    from transformers.models.qwen2_5_omni.modeling_qwen2_5_omni import (
+        get_mrope_position_ids as qwen2_5_omni_get_mrope_position_ids,
+    )
     from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLModel
     from transformers.models.qwen2_vl.modeling_qwen2_vl import Qwen2VLModel
-    from transformers.models.qwen3_omni_moe.modeling_qwen3_omni_moe import get_rope_index as qwen3_omni_get_rope_index
+    from transformers.models.qwen3_omni_moe.modeling_qwen3_omni_moe import (
+        get_mrope_position_ids as qwen3_omni_get_mrope_position_ids,
+    )
     from transformers.models.qwen3_vl.modeling_qwen3_vl import Qwen3VLModel
 
 
@@ -187,7 +193,7 @@ class GetRopeIndexTest(unittest.TestCase):
         # 8 image-span tokens for a 6-token grid (2 rows x (2 width + 1 newline)): the span carries the two
         # image-boundary tokens, which keep their 1D positions
         input_ids, token_types = self.modality_runs([(0, 1), (1, 8), (0, 1)])
-        position_ids, deltas = hunyuan_get_rope_index(
+        position_ids, deltas = hunyuan_get_mrope_position_ids(
             self.hunyuan_config(),
             input_ids,
             token_types,
@@ -207,7 +213,7 @@ class GetRopeIndexTest(unittest.TestCase):
         # with 4 axes only the last three are replaced; two bare spans consume both grids and the ordinal
         # counts up per image
         input_ids, token_types = self.modality_runs([(0, 1), (1, 6), (0, 1), (1, 6)])
-        position_ids, deltas = hunyuan_get_rope_index(
+        position_ids, deltas = hunyuan_get_mrope_position_ids(
             self.hunyuan_config(num_axes=4),
             input_ids,
             token_types,
@@ -227,7 +233,7 @@ class GetRopeIndexTest(unittest.TestCase):
     def test_hunyuan_vl_rejects_span_grid_mismatch(self):
         input_ids, token_types = self.modality_runs([(0, 1), (1, 5)])
         with self.assertRaises(ValueError):
-            hunyuan_get_rope_index(
+            hunyuan_get_mrope_position_ids(
                 self.hunyuan_config(),
                 input_ids,
                 token_types,
@@ -246,7 +252,7 @@ class GetRopeIndexTest(unittest.TestCase):
 
     def test_qwen2_5_omni_audio_then_image(self):
         input_ids = self.audio_then_image_ids()
-        position_ids, deltas = qwen2_5_omni_get_rope_index(
+        position_ids, deltas = qwen2_5_omni_get_mrope_position_ids(
             self.omni_config(Qwen2_5OmniThinkerConfig(), position_id_per_seconds=25, seconds_per_chunk=2),
             input_ids,
             image_grid_thw=torch.tensor([[1, 2, 2]]),
@@ -265,7 +271,7 @@ class GetRopeIndexTest(unittest.TestCase):
 
     def test_qwen2_5_omni_audio_in_video(self):
         input_ids = self.audio_in_video_ids()
-        position_ids, deltas = qwen2_5_omni_get_rope_index(
+        position_ids, deltas = qwen2_5_omni_get_mrope_position_ids(
             self.omni_config(Qwen2_5OmniThinkerConfig(), position_id_per_seconds=25, seconds_per_chunk=2),
             input_ids,
             video_grid_thw=torch.tensor([[2, 2, 2]]),
@@ -288,7 +294,7 @@ class GetRopeIndexTest(unittest.TestCase):
 
     def test_qwen3_omni_audio_then_image(self):
         input_ids = self.audio_then_image_ids()
-        position_ids, deltas = qwen3_omni_get_rope_index(
+        position_ids, deltas = qwen3_omni_get_mrope_position_ids(
             self.omni_config(Qwen3OmniMoeThinkerConfig(), position_id_per_seconds=25),
             input_ids,
             image_grid_thw=torch.tensor([[1, 2, 2]]),
@@ -308,7 +314,7 @@ class GetRopeIndexTest(unittest.TestCase):
 
     def test_qwen3_omni_audio_in_video(self):
         input_ids = self.audio_in_video_ids()
-        position_ids, deltas = qwen3_omni_get_rope_index(
+        position_ids, deltas = qwen3_omni_get_mrope_position_ids(
             self.omni_config(Qwen3OmniMoeThinkerConfig(), position_id_per_seconds=25),
             input_ids,
             video_grid_thw=torch.tensor([[2, 2, 2]]),
@@ -331,7 +337,7 @@ class GetRopeIndexTest(unittest.TestCase):
     def test_text_only_positions_count_up(self):
         # No vision grids: the layout falls back to plain 1D positions on every axis.
         attention_mask = torch.tensor([[0, 0, 1, 1, 1]])
-        position_ids, deltas = qwen2_5_omni_get_rope_index(
+        position_ids, deltas = qwen2_5_omni_get_mrope_position_ids(
             self.omni_config(Qwen2_5OmniThinkerConfig()), None, None, attention_mask=attention_mask
         )
         # padded slots keep position 1, the rest count up from 0

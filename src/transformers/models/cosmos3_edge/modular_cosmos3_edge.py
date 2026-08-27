@@ -54,7 +54,7 @@ from ...vision_utils import get_vision_attention_seqlens
 from ..clip.modeling_clip import CLIPMLP
 from ..glm4v.image_processing_glm4v import Glm4vImageProcessor, Glm4vImageProcessorKwargs
 from ..glm4v.image_processing_pil_glm4v import Glm4vImageProcessorPil
-from ..glm4v.modeling_glm4v import get_rope_index
+from ..glm4v.modeling_glm4v import get_mrope_position_ids
 from ..glm4v.video_processing_glm4v import Glm4vVideoProcessor
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
@@ -624,9 +624,15 @@ class Cosmos3EdgeModel(Qwen2VLModel, Cosmos3EdgePreTrainedModel):
         self.post_init()
 
     def get_rope_index(
-        self, input_ids, mm_token_type_ids, image_grid_thw=None, video_grid_thw=None, attention_mask=None, **kwargs
+        self,
+        input_ids: torch.LongTensor,
+        mm_token_type_ids: torch.IntTensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs,
     ):
-        return get_rope_index(
+        return get_mrope_position_ids(
             self.config,
             input_ids,
             mm_token_type_ids,
@@ -728,7 +734,7 @@ class Cosmos3EdgeForConditionalGeneration(Qwen2VLForConditionalGeneration, Cosmo
     _tied_weights_keys = {}
     accepts_loss_kwargs = False
 
-    def _prepare_mrope_position_ids_for_generation(self, text_positions, inputs_tensor, model_kwargs):
+    def _prepare_mrope_position_ids_for_generation(self, text_position_ids, inputs_tensor, model_kwargs):
         # Qwen2-VL exposes four axes (text plus three visual axes). Edge's interleaved M-RoPE consumes the three
         # visual axes directly, so it returns those three rather than the shared four-axis layout.
 
@@ -737,7 +743,7 @@ class Cosmos3EdgeForConditionalGeneration(Qwen2VLForConditionalGeneration, Cosmo
         if (cache := model_kwargs.get("past_key_values")) is not None:
             past_length = cache.get_seq_length()
         if past_length != 0 and self.model.rope_deltas is not None:
-            position_ids = text_positions[None, ...] + self.model.rope_deltas
+            position_ids = text_position_ids[None, ...] + self.model.rope_deltas
             return position_ids
 
         # Otherwise compute 3D position ids for vision tokens.
@@ -760,7 +766,7 @@ class Cosmos3EdgeForConditionalGeneration(Qwen2VLForConditionalGeneration, Cosmo
             position_ids, rope_deltas = self.model.get_rope_index(inputs_tensor, **model_kwargs)
             self.model.rope_deltas = rope_deltas
         else:
-            position_ids = text_positions.unsqueeze(0).expand(3, -1, -1)
+            position_ids = text_position_ids.unsqueeze(0).expand(3, -1, -1)
             self.model.rope_deltas = torch.zeros(
                 inputs_tensor.shape[0], 1, dtype=torch.long, device=inputs_tensor.device
             )

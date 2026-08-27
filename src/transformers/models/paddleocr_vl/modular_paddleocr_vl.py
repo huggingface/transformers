@@ -281,11 +281,6 @@ class PaddleOCRVisionConfig(SiglipVisionConfig):
     interpolation_mode: str = "bilinear"
     interpolation_align_corners: bool = True
 
-    @property
-    def num_grid_per_side(self) -> int:
-        """Side length of the square learned position grid (`num_positions = (image_size // patch_size) ** 2`)."""
-        return self.image_size // self.patch_size
-
 
 @auto_docstring(checkpoint="PaddlePaddle/PaddleOCR-VL")
 @strict
@@ -490,7 +485,7 @@ class PaddleOCRVisionEmbeddings(SiglipVisionEmbeddings):
     def __init__(self, config: PaddleOCRVisionConfig):
         super().__init__()
         # How the (square) learned position grid is resampled to each image's grid.
-        self.num_grid_per_side = config.num_grid_per_side
+        self.num_grid_per_side = int(self.num_positions**0.5)
         self.interpolation_align_corners = config.interpolation_align_corners
         self.interpolation_mode = config.interpolation_mode
 

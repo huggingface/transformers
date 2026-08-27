@@ -1045,7 +1045,7 @@ class Ernie4_5_VLMoeVariableResolutionResamplerModel(nn.Module):
         return hidden_states
 
 
-def get_rope_index(
+def get_mrope_position_ids(
     config,
     input_ids: torch.LongTensor,
     mm_token_type_ids: torch.IntTensor,
@@ -1176,16 +1176,16 @@ class Ernie4_5_VLMoeModel(Ernie4_5_VLMoePreTrainedModel, MultiModalPreTrainedMod
 
     def get_rope_index(
         self,
-        input_ids,
-        mm_token_type_ids=None,
-        image_grid_thw=None,
-        video_grid_thw=None,
-        attention_mask=None,
+        input_ids: torch.LongTensor,
+        mm_token_type_ids: torch.IntTensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """M-RoPE decoder position ids: `(position_ids, rope_deltas)`, laid out span by span over
-        `mm_token_type_ids` by [`get_rope_index`] above."""
-        return get_rope_index(
+        `mm_token_type_ids` by [`get_mrope_position_ids`] above."""
+        return get_mrope_position_ids(
             self.config,
             input_ids=input_ids,
             mm_token_type_ids=mm_token_type_ids,
