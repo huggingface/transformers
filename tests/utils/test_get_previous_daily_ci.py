@@ -25,6 +25,15 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "utils"))
 from get_previous_daily_ci import get_daily_ci_runs  # noqa: E402
 
 
+_WORKFLOW_ID = 90575235
+_CURRENT_RUN_ID = 33038227895
+
+# Simulates get_github_json("/runs/{GITHUB_RUN_ID}") — same workflow as the one being queried.
+_CURRENT_RUN_RESPONSE = {"id": _CURRENT_RUN_ID, "workflow_id": _WORKFLOW_ID}
+
+# Simulates a current run belonging to a *different* workflow (e.g. AMD CI querying Nvidia).
+_DIFFERENT_WORKFLOW_RUN_RESPONSE = {"id": 11111111111, "workflow_id": 99999}
+
 _STALE_RESPONSE = {
     "total_count": 209,
     "workflow_runs": [
@@ -49,7 +58,7 @@ _FRESH_RESPONSE = {
     "total_count": 413,
     "workflow_runs": [
         {
-            "id": 33038227895,
+            "id": _CURRENT_RUN_ID,
             "status": "completed",
             "conclusion": "failure",
             "created_at": "2026-08-27T04:03:26Z",
@@ -65,63 +74,91 @@ _FRESH_RESPONSE = {
     ],
 }
 
-_CURRENT_RUN_ID = 33038227895
-_WORKFLOW_ID = 90575235
-
 
 class GetDailyCiRunsRetryTest(unittest.TestCase):
-    """Unit tests for the stale-cache retry logic in get_daily_ci_runs."""
+    """Unit tests for the stale-cache retry logic in get_daily_ci_runs.
+
+    get_github_json is called once up-front to fetch the current run's workflow_id
+    (for stale-check eligibility), then once per schedule-query attempt.  Tests use
+    side_effect lists ordered as: [current-run lookup, attempt-1, attempt-2, ...].
+    """
 
     def test_fresh_on_first_attempt_no_retry(self):
-        """When the first response contains current_run_id, return immediately without retrying."""
+        """When the first response contains the current run, return immediately without retrying."""
         with (
-            patch("get_previous_daily_ci.get_github_json", return_value=_FRESH_RESPONSE) as mock_api,
+            patch("get_previous_daily_ci.get_github_json", side_effect=[_CURRENT_RUN_RESPONSE, _FRESH_RESPONSE]),
             patch("get_previous_daily_ci.time.sleep") as mock_sleep,
+            patch.dict("os.environ", {"GITHUB_RUN_ID": str(_CURRENT_RUN_ID)}),
         ):
-            runs = get_daily_ci_runs(token="tok", workflow_id=_WORKFLOW_ID, current_run_id=_CURRENT_RUN_ID)
+            runs = get_daily_ci_runs(token="tok", workflow_id=_WORKFLOW_ID)
 
-        mock_api.assert_called_once()
         mock_sleep.assert_not_called()
         self.assertEqual(runs[0]["id"], _CURRENT_RUN_ID)
 
     def test_stale_then_fresh_retries_once(self):
         """A stale first response triggers one retry that returns fresh data."""
         with (
-            patch("get_previous_daily_ci.get_github_json", side_effect=[_STALE_RESPONSE, _FRESH_RESPONSE]) as mock_api,
+            patch(
+                "get_previous_daily_ci.get_github_json",
+                side_effect=[_CURRENT_RUN_RESPONSE, _STALE_RESPONSE, _FRESH_RESPONSE],
+            ),
             patch("get_previous_daily_ci.time.sleep") as mock_sleep,
+            patch.dict("os.environ", {"GITHUB_RUN_ID": str(_CURRENT_RUN_ID)}),
         ):
-            runs = get_daily_ci_runs(token="tok", workflow_id=_WORKFLOW_ID, current_run_id=_CURRENT_RUN_ID)
+            runs = get_daily_ci_runs(token="tok", workflow_id=_WORKFLOW_ID)
 
-        self.assertEqual(mock_api.call_count, 2)
         mock_sleep.assert_called_once_with(30)
         self.assertEqual(runs[0]["id"], _CURRENT_RUN_ID)
 
     def test_all_stale_exhausts_max_attempts(self):
         """When all attempts return stale data, proceed after max_attempts with the last result."""
         with (
-            patch("get_previous_daily_ci.get_github_json", return_value=_STALE_RESPONSE) as mock_api,
+            patch(
+                "get_previous_daily_ci.get_github_json",
+                side_effect=[_CURRENT_RUN_RESPONSE] + [_STALE_RESPONSE] * 5,
+            ) as mock_api,
             patch("get_previous_daily_ci.time.sleep") as mock_sleep,
+            patch.dict("os.environ", {"GITHUB_RUN_ID": str(_CURRENT_RUN_ID)}),
         ):
-            runs = get_daily_ci_runs(token="tok", workflow_id=_WORKFLOW_ID, current_run_id=_CURRENT_RUN_ID)
+            runs = get_daily_ci_runs(token="tok", workflow_id=_WORKFLOW_ID)
 
-        # max_attempts=5 → 5 API calls, 4 sleeps (between consecutive attempts, not after the last)
-        self.assertEqual(mock_api.call_count, 5)
+        # 1 current-run lookup + 5 schedule queries (max_attempts=5)
+        self.assertEqual(mock_api.call_count, 6)
+        # sleep between attempts 1-2, 2-3, 3-4, 4-5 — not after the last attempt
         self.assertEqual(mock_sleep.call_count, 4)
         mock_sleep.assert_called_with(30)
         # Stale data is returned as a graceful fallback
         self.assertEqual(runs[0]["id"], 30781855254)
 
-    def test_no_current_run_id_skips_stale_check(self):
-        """With current_run_id=0 (GITHUB_RUN_ID unset) the stale check is skipped entirely."""
+    def test_different_workflow_skips_stale_check(self):
+        """When workflow_id differs from the current run's, stale check is skipped entirely."""
         with (
-            patch("get_previous_daily_ci.get_github_json", return_value=_STALE_RESPONSE) as mock_api,
+            patch(
+                "get_previous_daily_ci.get_github_json",
+                side_effect=[_DIFFERENT_WORKFLOW_RUN_RESPONSE, _STALE_RESPONSE],
+            ) as mock_api,
+            patch("get_previous_daily_ci.time.sleep") as mock_sleep,
+            patch.dict("os.environ", {"GITHUB_RUN_ID": "11111111111"}),
+        ):
+            runs = get_daily_ci_runs(token="tok", workflow_id=_WORKFLOW_ID)
+
+        # 1 current-run lookup + 1 schedule query (max_attempts=1, no retries)
+        self.assertEqual(mock_api.call_count, 2)
+        mock_sleep.assert_not_called()
+        # Returns whatever the single attempt gave (stale in this case)
+        self.assertEqual(runs[0]["id"], 30781855254)
+
+    def test_no_github_run_id_skips_stale_check(self):
+        """With GITHUB_RUN_ID unset, the current-run lookup is skipped and no retry is done."""
+        with (
+            patch("get_previous_daily_ci.get_github_json", side_effect=[_STALE_RESPONSE]) as mock_api,
             patch("get_previous_daily_ci.time.sleep") as mock_sleep,
             patch.dict("os.environ", {}, clear=False),
         ):
             os.environ.pop("GITHUB_RUN_ID", None)
-            # Don't pass current_run_id → defaults to int(os.environ.get("GITHUB_RUN_ID", 0)) = 0
             runs = get_daily_ci_runs(token="tok", workflow_id=_WORKFLOW_ID)
 
+        # No current-run lookup, 1 schedule query, no retries
         mock_api.assert_called_once()
         mock_sleep.assert_not_called()
         self.assertEqual(runs[0]["id"], 30781855254)
@@ -132,7 +169,7 @@ class GetDailyCiRunsRetryTest(unittest.TestCase):
             "total_count": 5,
             "workflow_runs": [
                 {
-                    "id": 33038227895,
+                    "id": _CURRENT_RUN_ID,
                     "status": "completed",
                     "conclusion": "failure",
                     "created_at": "2026-08-27T04:03:26Z",
@@ -143,11 +180,12 @@ class GetDailyCiRunsRetryTest(unittest.TestCase):
         with (
             patch(
                 "get_previous_daily_ci.get_github_json",
-                side_effect=[{"total_count": 0, "workflow_runs": []}, fallback_response],
+                side_effect=[_CURRENT_RUN_RESPONSE, {"total_count": 0, "workflow_runs": []}, fallback_response],
             ),
             patch("get_previous_daily_ci.time.sleep") as mock_sleep,
+            patch.dict("os.environ", {"GITHUB_RUN_ID": str(_CURRENT_RUN_ID)}),
         ):
-            runs = get_daily_ci_runs(token="tok", workflow_id=_WORKFLOW_ID, current_run_id=_CURRENT_RUN_ID)
+            runs = get_daily_ci_runs(token="tok", workflow_id=_WORKFLOW_ID)
 
         mock_sleep.assert_not_called()
         self.assertEqual(len(runs), 1)

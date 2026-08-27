@@ -5,7 +5,7 @@ import zipfile
 from get_ci_error_statistics import download_artifact, get_artifacts_links, get_github_json
 
 
-def get_daily_ci_runs(token, num_runs=7, workflow_id=None, current_run_id=None):
+def get_daily_ci_runs(token, num_runs=7, workflow_id=None):
     """Get the workflow runs of the scheduled (daily) CI.
 
     This only selects the runs triggered by the `schedule` event on the `main` branch.
@@ -15,12 +15,18 @@ def get_daily_ci_runs(token, num_runs=7, workflow_id=None, current_run_id=None):
     # https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id}
     # and check the `workflow_id` key.
 
-    if not workflow_id:
-        workflow_run_id = os.environ["GITHUB_RUN_ID"]
-        workflow_run = get_github_json(
-            f"https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id}", token=token
+    # Always fetch the current run's metadata: it resolves workflow_id when not provided, and lets
+    # us compare the requested workflow_id against the current run's workflow_id to decide whether
+    # stale-cache detection applies (see below).
+    current_run_id = int(os.environ.get("GITHUB_RUN_ID", 0))
+    current_workflow_id = None
+    if current_run_id:
+        current_run = get_github_json(
+            f"https://api.github.com/repos/huggingface/transformers/actions/runs/{current_run_id}", token=token
         )
-        workflow_id = workflow_run["workflow_id"]
+        current_workflow_id = current_run["workflow_id"]
+        if not workflow_id:
+            workflow_id = current_workflow_id
 
     url = f"https://api.github.com/repos/huggingface/transformers/actions/workflows/{workflow_id}/runs"
     # On `main` branch + event being `schedule` + not returning PRs + only `num_runs` results
@@ -29,13 +35,15 @@ def get_daily_ci_runs(token, num_runs=7, workflow_id=None, current_run_id=None):
     # The GitHub Actions API uses a search index for filtered queries (event=, branch=, etc.) that
     # can lag significantly behind the database — different backend nodes may return wildly different
     # total_count values (e.g. 190, 238, 311, 413 observed for the same URL within minutes).  When
-    # the index is stale the most-recent runs are missing from the results.  We detect this by
-    # checking whether a known recent run appears in the returned list: if it doesn't, the response
-    # is stale and we retry.  `current_run_id` defaults to GITHUB_RUN_ID (the run that is currently
-    # executing this script and therefore must always be present in a fresh response).
-    if current_run_id is None:
-        current_run_id = int(os.environ.get("GITHUB_RUN_ID", 0))
-    max_attempts = 5
+    # the index is stale the most-recent runs are missing from the results.
+    #
+    # Stale-cache detection: check whether the current run (GITHUB_RUN_ID) appears in the results.
+    # It must always be present in a fresh response when we are querying the same workflow.
+    # When the requested workflow_id differs from the current run's (e.g. AMD CI querying Nvidia CI
+    # historical runs), skip the check — it would be valid but requires a different anchor run and
+    # is left for a follow-up PR once the same-workflow case is confirmed stable.
+    stale_check = current_workflow_id is not None and int(workflow_id) == int(current_workflow_id)
+    max_attempts = 5 if stale_check else 1
 
     for attempt in range(1, max_attempts + 1):
         schedule_url = f"{url}&event=schedule"
@@ -51,6 +59,9 @@ def get_daily_ci_runs(token, num_runs=7, workflow_id=None, current_run_id=None):
             )
 
         if len(workflow_runs) == 0:
+            # AMD CI runs are triggered via a workflow_run event, so their historical runs are
+            # indexed under event=workflow_run rather than event=schedule.
+            # TODO: add stale-cache detection for this fallback path once the schedule path is stable.
             workflow_run_url = f"{url}&event=workflow_run"
             print(f"[DEBUG get_daily_ci_runs] Falling back to: {workflow_run_url}")
             result = get_github_json(workflow_run_url, token=token)
@@ -62,9 +73,7 @@ def get_daily_ci_runs(token, num_runs=7, workflow_id=None, current_run_id=None):
                 )
             break
 
-        # Stale-cache check: the current run must appear in the results (it always exists and belongs
-        # to this workflow).  If it's absent the index is behind; wait and retry.
-        if current_run_id and current_run_id not in {r["id"] for r in workflow_runs}:
+        if stale_check and current_run_id not in {r["id"] for r in workflow_runs}:
             if attempt < max_attempts:
                 print(
                     f"[WARN get_daily_ci_runs] Current run {current_run_id} not found in results — "
