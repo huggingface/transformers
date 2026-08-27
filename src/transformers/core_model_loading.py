@@ -96,7 +96,12 @@ class ConversionOps(ABC):
     def get_source_dim_mapping(
         self, source_shape: tuple[int, ...], target_shape: tuple[int, ...]
     ) -> dict[int, int] | None:
-        """Return target-to-source dimension mappings needed to shard before conversion."""
+        """Return target-to-source dimension mappings for shard-on-read.
+
+        DTensor placements describe target dimensions, but shard-on-read slices the checkpoint before conversion.
+        For example, "Transpose" ops overrides this method so target shard dimensions can be translated to the corresponding
+        checkpoint dimensions. "None" means the source and target dimension indices are identical.
+        """
         return None
 
     @property
@@ -364,6 +369,14 @@ class Transpose(ConversionOps):
     def get_source_dim_mapping(
         self, source_shape: tuple[int, ...], target_shape: tuple[int, ...]
     ) -> dict[int, int] | None:
+        """Map target model dimensions to source checkpoint dimensions for shard-on-read.
+
+        DTensor placements describe the target parameter, but the loader slices the raw checkpoint before this
+        transpose runs, avoiding full tensor materialization. Qwen3-VL-MoE uses this for its expert weights:
+        packed-colwise `gate_up_proj` shards target dim 1 in `[E, 2I, H]`, stored at checkpoint dim 2 in `[E, H, 2I]`.
+        This method swaps those axes otherwise we end up sharding the wrong dimensions. When `check_dims` finds matching shapes,
+        conversion skips both transpose and remapping.
+        """
         if self.check_dims and source_shape == target_shape:
             return None
 
