@@ -1807,7 +1807,7 @@ def _build_checkpoint_conversion_mapping():
     mapping["qwen4_exp_text"] += [
         WeightConverter(
             source_patterns="ngram_embedding.shard_*.weight",
-            target_patterns="ngram_embedding.weight",
+            target_patterns="ngram_embedding.weight$",
             operations=[Concatenate(dim=0, num_shards_attribute="split_ngram_parts")],
             # The size of the embedding is ~95 GiB, so we cannot afford to perform the Cat on device, as it will need
             # a temporary memory buffer of the same size
