@@ -28,6 +28,7 @@ from transformers import (
 )
 from transformers.models.qwen3_vl.configuration_qwen3_vl import Qwen3VLTextConfig, Qwen3VLVisionConfig
 from transformers.testing_utils import (
+    Expectations,
     backend_empty_cache,
     require_torch,
     slow,
@@ -521,6 +522,12 @@ class Qwen3VLIntegrationTest(unittest.TestCase):
 
     def test_small_model_integration_test(self):
         model = Qwen3VLForConditionalGeneration.from_pretrained("Qwen/Qwen3-VL-4B-Instruct", device_map="auto")
+        expected_texts = Expectations(
+            {
+                ("cuda", None): "user\nWhat kind of dog is this?\nassistant\nBased on the image, this appears to be a **Labrador Retriever**.\n\nHere’s why:\n\n- **Build and Size**: The dog has a large, muscular, and sturdy build, which is characteristic of Labradors.\n- **",
+            }
+        )  # fmt: skip
+        EXPECTED_TEXT = expected_texts.get_expectation()
 
         inputs = self.processor.apply_chat_template(
             self.messages,
@@ -531,9 +538,8 @@ class Qwen3VLIntegrationTest(unittest.TestCase):
         ).to(torch_device, dtype=model.dtype)
 
         output = model.generate(**inputs, max_new_tokens=50, do_sample=False)
-        EXPECTED_DECODED_TEXT = "user\nWhat kind of dog is this?\nassistant\nBased on the image, this appears to be a **Labrador Retriever**.\n\nHere’s why:\n\n- **Build and Size**: The dog has a large, muscular, and sturdy build, which is characteristic of Labradors.\n- **"
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
+            EXPECTED_TEXT,
         )

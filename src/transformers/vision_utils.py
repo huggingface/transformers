@@ -109,7 +109,7 @@ def get_vision_position_ids(
         spatial_merge_size = torch.tensor([spatial_merge_size], device=device).expand(len(grid_thw))
 
     position_ids = []
-    for (t, h, w), merge_size in zip(grid_thw, spatial_merge_size):
+    for (t, h, w), merge_size in zip(grid_thw.tolist(), spatial_merge_size.tolist()):
         hpos_ids, wpos_ids = torch.meshgrid(
             torch.arange(h, device=device),
             torch.arange(w, device=device),

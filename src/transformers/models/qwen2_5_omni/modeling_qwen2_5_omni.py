@@ -1377,7 +1377,7 @@ class Qwen2_5OmniRotaryEmbedding(nn.Module):
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
-        self.mrope_section = self.config.rope_parameters.get("mrope_section", [16, 24, 24])
+        self.mrope_section = config.rope_parameters.get("mrope_section", [16, 24, 24])
 
     @staticmethod
     @deprecate_kwarg("device", version="5.18")

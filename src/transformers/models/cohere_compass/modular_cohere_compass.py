@@ -209,7 +209,7 @@ class CohereCompassRotaryEmbedding(Gemma3RotaryEmbedding):
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
 
-        # Special to ernie, we prerotate on the hw dim
+        # Special to cohere-compass, we prerotate on the hw dim
         mrope_section = config.rope_parameters[layer_type].get("mrope_section", [22, 22, 20])
         hw_dim = mrope_section[0] + mrope_section[1]
         t_dim = mrope_section[2]
@@ -244,6 +244,9 @@ class CohereCompassRotaryEmbedding(Gemma3RotaryEmbedding):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
     def recomposition_frequencies(self, freq, layer_type):
+        """
+        Recompose the frequencies into the final spatial layout used per each grid.
+        """
         freq_h, freq_w, freq_t = (
             m[(i + 1) % 3] for i, m in enumerate(freq.split([*self.mrope_section[layer_type]], dim=-1))
         )
