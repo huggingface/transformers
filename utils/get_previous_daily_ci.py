@@ -1,4 +1,5 @@
 import os
+import time
 import zipfile
 
 from get_ci_error_statistics import download_artifact, get_artifacts_links, get_github_json
@@ -25,25 +26,55 @@ def get_daily_ci_runs(token, num_runs=7, workflow_id=None):
     # On `main` branch + event being `schedule` + not returning PRs + only `num_runs` results
     url += f"?branch=main&exclude_pull_requests=true&per_page={num_runs}"
 
-    schedule_url = f"{url}&event=schedule"
-    print(f"[DEBUG get_daily_ci_runs] Querying: {schedule_url}")
-    result = get_github_json(schedule_url, token=token)
-    workflow_runs = result["workflow_runs"]
-    print(f"[DEBUG get_daily_ci_runs] event=schedule returned {len(workflow_runs)} runs:")
-    for r in workflow_runs:
-        print(
-            f"  id={r['id']} status={r['status']} conclusion={r.get('conclusion')} created_at={r['created_at']} event={r['event']}"
-        )
-    if len(workflow_runs) == 0:
-        workflow_run_url = f"{url}&event=workflow_run"
-        print(f"[DEBUG get_daily_ci_runs] Falling back to: {workflow_run_url}")
-        result = get_github_json(workflow_run_url, token=token)
+    # The GitHub Actions API uses a search index for filtered queries (event=, branch=, etc.) that
+    # can lag significantly behind the database — different backend nodes may return wildly different
+    # total_count values (e.g. 190, 238, 311, 413 observed for the same URL within minutes).  When
+    # the index is stale the most-recent runs are missing from the results.  We detect this by
+    # checking whether the current run itself appears in the returned list: if it doesn't, the
+    # response is stale and we retry.
+    current_run_id = int(os.environ.get("GITHUB_RUN_ID", 0))
+    max_attempts = 3
+
+    for attempt in range(1, max_attempts + 1):
+        schedule_url = f"{url}&event=schedule"
+        print(f"[DEBUG get_daily_ci_runs] Querying (attempt {attempt}/{max_attempts}): {schedule_url}")
+        result = get_github_json(schedule_url, token=token)
         workflow_runs = result["workflow_runs"]
-        print(f"[DEBUG get_daily_ci_runs] event=workflow_run returned {len(workflow_runs)} runs:")
+        print(f"[DEBUG get_daily_ci_runs] event=schedule returned {len(workflow_runs)} runs (total_count={result.get('total_count')}):")
         for r in workflow_runs:
             print(
                 f"  id={r['id']} status={r['status']} conclusion={r.get('conclusion')} created_at={r['created_at']} event={r['event']}"
             )
+
+        if len(workflow_runs) == 0:
+            workflow_run_url = f"{url}&event=workflow_run"
+            print(f"[DEBUG get_daily_ci_runs] Falling back to: {workflow_run_url}")
+            result = get_github_json(workflow_run_url, token=token)
+            workflow_runs = result["workflow_runs"]
+            print(f"[DEBUG get_daily_ci_runs] event=workflow_run returned {len(workflow_runs)} runs:")
+            for r in workflow_runs:
+                print(
+                    f"  id={r['id']} status={r['status']} conclusion={r.get('conclusion')} created_at={r['created_at']} event={r['event']}"
+                )
+            break
+
+        # Stale-cache check: the current run must appear in the results (it always exists and belongs
+        # to this workflow).  If it's absent the index is behind; wait and retry.
+        if current_run_id and current_run_id not in {r["id"] for r in workflow_runs}:
+            if attempt < max_attempts:
+                print(
+                    f"[WARN get_daily_ci_runs] Current run {current_run_id} not found in results — "
+                    f"likely a stale GitHub API cache (total_count={result.get('total_count')}). "
+                    f"Retrying in 30s..."
+                )
+                time.sleep(30)
+                continue
+            else:
+                print(
+                    f"[WARN get_daily_ci_runs] Current run {current_run_id} still not found after "
+                    f"{max_attempts} attempts — proceeding with stale results."
+                )
+        break
 
     return workflow_runs
 
