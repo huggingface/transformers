@@ -15,6 +15,9 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
+# Compile is disabled because the cache update mutates in place aliased views of the cache tensor, which compile's
+# functionalization handles by making a copy of the full cache for every layer.
+@torch.compiler.disable
 def sdpa_attention_paged_forward(
     module: torch.nn.Module,
     query: torch.Tensor,
