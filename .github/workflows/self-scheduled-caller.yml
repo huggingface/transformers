@@ -46,11 +46,9 @@ jobs:
           sys.path.insert(0, 'utils')
           from get_previous_daily_ci import get_daily_ci_runs
           token = os.environ['ACCESS_REPO_INFO_TOKEN']
-          # Use a non-existent run ID to force the retry path every time, so we can
-          # verify the retry mechanism fires and the stale data is visible in the logs.
-          # After max_attempts the function proceeds with the last response (which is
-          # fresh/correct data), demonstrating graceful fallback.
-          known_schedule_run_id = 99999999999
+          # Pass the most recent known Nvidia CI schedule run as the staleness anchor.
+          # (GITHUB_RUN_ID in this push-triggered job would never appear in event=schedule results.)
+          known_schedule_run_id = 33038227895
           for i in range(1, 3):
               print(f'========== Call {i}/2 ==========')
               runs = get_daily_ci_runs(token=token, workflow_id=90575235, current_run_id=known_schedule_run_id)
