@@ -5,7 +5,7 @@ import zipfile
 from get_ci_error_statistics import download_artifact, get_artifacts_links, get_github_json
 
 
-def get_daily_ci_runs(token, num_runs=7, workflow_id=None):
+def get_daily_ci_runs(token, num_runs=7, workflow_id=None, current_run_id=None):
     """Get the workflow runs of the scheduled (daily) CI.
 
     This only selects the runs triggered by the `schedule` event on the `main` branch.
@@ -30,9 +30,11 @@ def get_daily_ci_runs(token, num_runs=7, workflow_id=None):
     # can lag significantly behind the database — different backend nodes may return wildly different
     # total_count values (e.g. 190, 238, 311, 413 observed for the same URL within minutes).  When
     # the index is stale the most-recent runs are missing from the results.  We detect this by
-    # checking whether the current run itself appears in the returned list: if it doesn't, the
-    # response is stale and we retry.
-    current_run_id = int(os.environ.get("GITHUB_RUN_ID", 0))
+    # checking whether a known recent run appears in the returned list: if it doesn't, the response
+    # is stale and we retry.  `current_run_id` defaults to GITHUB_RUN_ID (the run that is currently
+    # executing this script and therefore must always be present in a fresh response).
+    if current_run_id is None:
+        current_run_id = int(os.environ.get("GITHUB_RUN_ID", 0))
     max_attempts = 3
 
     for attempt in range(1, max_attempts + 1):

@@ -32,29 +32,28 @@ permissions:
 
 jobs:
   debug_api_consistency:
-    name: "[debug] Poll GitHub API for schedule runs"
+    name: "[debug] Test get_daily_ci_runs retry logic"
     runs-on: ubuntu-22.04
     steps:
-      - name: Poll workflow runs endpoint 10 times (1 min apart)
+      - uses: actions/checkout@v4
+
+      - name: Call get_daily_ci_runs twice
         env:
-          TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
+          ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
         run: |
-          URL="https://api.github.com/repos/huggingface/transformers/actions/workflows/90575235/runs?branch=main&exclude_pull_requests=true&per_page=7&event=schedule"
-          for i in $(seq 1 10); do
-            echo "========== Attempt $i / 10 — $(date -u '+%Y-%m-%dT%H:%M:%SZ') =========="
-            RESPONSE=$(curl -s -H "Authorization: Bearer $TOKEN" -H "Accept: application/vnd.github+json" "$URL")
-            TOTAL=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('total_count','N/A'))")
-            echo "total_count: $TOTAL"
-            echo "--- run[0] ---"
-            echo "$RESPONSE" | python3 -c "
-          import sys, json
-          runs = json.load(sys.stdin).get('workflow_runs', [])
-          for r in runs[:2]:
-              print(f\"  id={r['id']} run_number={r['run_number']} status={r['status']} conclusion={r['conclusion']} created_at={r['created_at']} event={r['event']}\")
+          python3 -c "
+          import sys, os
+          sys.path.insert(0, 'utils')
+          from get_previous_daily_ci import get_daily_ci_runs
+          token = os.environ['ACCESS_REPO_INFO_TOKEN']
+          # Pass the most recent known Nvidia CI schedule run as the staleness anchor.
+          # (GITHUB_RUN_ID in this push-triggered job would never appear in event=schedule results.)
+          known_schedule_run_id = 33038227895
+          for i in range(1, 3):
+              print(f'========== Call {i}/2 ==========')
+              runs = get_daily_ci_runs(token=token, workflow_id=90575235, current_run_id=known_schedule_run_id)
+              print(f'=== Final result: {len(runs)} runs ===')
+              for r in runs[:2]:
+                  print(f'  id={r[\"id\"]} run_number={r.get(\"run_number\")} status={r[\"status\"]} created_at={r[\"created_at\"]}')
           "
-            if [ $i -lt 10 ]; then
-              echo "Sleeping 60s..."
-              sleep 60
-            fi
-          done
 
