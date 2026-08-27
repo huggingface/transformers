@@ -80,7 +80,7 @@ For more examples on what CSM and other pretrained TTS models can do, refer to o
 [Audio course](https://huggingface.co/learn/audio-course/chapter6/pre-trained_models).
 
 If you are looking to fine-tune a TTS model, the only text-to-speech models currently available in 🤗 Transformers
-are [SpeechT5](model_doc/speecht5), [FastSpeech2Conformer](model_doc/fastspeech2_conformer), [Dia](model_doc/dia) and [CSM](model_doc/csm) though more will be added in the future. SpeechT5 is pre-trained on a combination of speech-to-text and text-to-speech data, allowing it to learn a unified space of hidden representations shared by both text and speech. This means that the same pre-trained model can be fine-tuned for different tasks. Furthermore, SpeechT5 supports multiple speakers through x-vector speaker embeddings.
+are [SpeechT5](../model_doc/speecht5), [FastSpeech2Conformer](../model_doc/fastspeech2_conformer), [Dia](../model_doc/dia) and [CSM](../model_doc/csm) though more will be added in the future. SpeechT5 is pre-trained on a combination of speech-to-text and text-to-speech data, allowing it to learn a unified space of hidden representations shared by both text and speech. This means that the same pre-trained model can be fine-tuned for different tasks. Furthermore, SpeechT5 supports multiple speakers through x-vector speaker embeddings.
 
 The remainder of this guide illustrates how to:
 
