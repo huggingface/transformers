@@ -87,10 +87,17 @@ class GgufHfQuantizer(HfQuantizer):
     def update_device_map(self, device_map):
         """Default to the backend the blocks are computed on, rather than the host.
 
-        Only when the caller named none. An explicit `device_map` is left alone, host included -- but
-        warned about, because the blocks it leaves there are memory an accelerator build cannot read,
-        and the forward that finds out is a long way from the call that decided it.
+        Only when the caller named none. An explicit `device_map` is left alone, host included -- with
+        the one exception of disk, which this format cannot honour at all.
         """
+        # Rejected whatever the caller asked for, dequantized loads included, because this is not about
+        # the blocks: a GGUF is one memory-mapped file, so there is no per-layer shard for the offload
+        # machinery to leave on disk and page back in.
+        if "disk" in {str(place) for place in getattr(device_map, "values", lambda: [device_map])()}:
+            raise RuntimeError(
+                "One or more modules is configured to be mapped to disk. Disk offload is not supported "
+                "for models loaded from GGUF files."
+            )
         if self.quantization_config.dequantize:
             return device_map
         if device_map is None and is_torch_mps_available():
