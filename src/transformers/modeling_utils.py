@@ -4044,7 +4044,8 @@ class PreTrainedModel(
                 GPU and the available CPU RAM if unset.
             distributed_config ([`~transformers.distributed.configuration_utils.DistributedConfig`], *optional*):
                 Configuration for native distributed loading with tensor parallelism or FSDP2. Pass
-                `DistributedConfig(tp_size=N)` for tensor parallelism, or
+                `DistributedConfig(tp_size=N)` to use a model's predefined tensor parallel plan,
+                `DistributedConfig(tp_plan=...)` to specify a tensor parallel plan, or
                 `DistributedConfig(fsdp_size=N)` for FSDP2. Requires `torchrun` and an initialized
                 process group when `tp_size > 1` or `fsdp_size > 1`. Mutually exclusive with `device_map`.
             device_mesh (`torch.distributed.DeviceMesh`, *optional*):
@@ -4142,6 +4143,8 @@ class PreTrainedModel(
         gguf_file = kwargs.pop("gguf_file", None)
         distributed_config: DistributedConfig = kwargs.pop("distributed_config", None)
         device_mesh = kwargs.pop("device_mesh", None)
+        tp_plan = kwargs.pop("tp_plan", None)
+        tp_size = kwargs.pop("tp_size", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         allow_all_kernels = kwargs.pop("allow_all_kernels", False)
         use_kernels = kwargs.pop("use_kernels", False)
@@ -4183,6 +4186,26 @@ class PreTrainedModel(
                 "If your plan is to load the model on each device, you should set device_map={"
                 ": PartialState().process_index} where PartialState comes from accelerate library"
             )
+
+        has_standalone_tp_args = tp_plan is not None or tp_size is not None
+
+        if distributed_config is not None and has_standalone_tp_args:
+            raise ValueError(
+                "Pass either `distributed_config` or the standalone `tp_plan`/`tp_size` arguments, not both. "
+                "Set tensor-parallel options on `DistributedConfig` when using it."
+            )
+
+        if tp_plan is not None:
+            warnings.warn(
+                "Passing `tp_plan` directly to `from_pretrained` is deprecated and will be removed in v5.18. "
+                "Pass it in `distributed_config=DistributedConfig(tp_plan=...)` instead.",
+                FutureWarning,
+                stacklevel=2,
+            )
+
+        if has_standalone_tp_args:
+            # For backwards compatibility, we still support passing `tp_plan` and `tp_size` directly to `from_pretrained`.
+            distributed_config = DistributedConfig(tp_plan=tp_plan, tp_size=tp_size)
 
         if distributed_config is not None:
             distributed_config, device_map, device_mesh = cls.prepare_distribute_model(
