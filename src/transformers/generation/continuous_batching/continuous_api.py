@@ -675,7 +675,7 @@ class ContinuousBatchingManager:
                     "If you need to use eager or sdpa, use paged|eager or paged|sdpa as the `attn_implementation`."
                 )
             else:
-                logger.warning(f"{msg} Consider using a flash `attn_implementation` when loading the model.")
+                logger.info(f"{msg} Consider using a flash `attn_implementation` when loading the model.")
 
         # Switch to a paged implementation (always entered if conversion to flash happened)
         if "paged|" not in target_implem:
@@ -1213,11 +1213,11 @@ class ContinuousMixin:
             workload_hints=workload_hints,
         )
         if warmup and not manager.warmed_up:
-            # Warmup is long (~30 sec): best to signal the user it's happening than let them think the manager is stuck
-            logger.warning("Warming up for continuous batching...")
+            # TODO: have a progress bar for the warmup as well, like other inference engine
+            logger.info("Warming up for continuous batching...")
             start = perf_counter()
             manager.warmup()
-            logger.warning(f"Warming up completed in {perf_counter() - start:.2f}s.")
+            logger.info(f"Warming up completed in {perf_counter() - start:.2f}s.")
         manager.start()
         try:
             yield manager
@@ -1236,7 +1236,7 @@ class ContinuousMixin:
         generation_config: GenerationConfig | None = None,
         continuous_batching_config: ContinuousBatchingConfig | None = None,
         record_timestamps: bool = False,
-        progress_bar: bool = True,
+        progress_bar: bool = False,
         persistent_manager: bool = False,
         warmup: bool = True,
         **kwargs,
@@ -1260,7 +1260,7 @@ class ContinuousMixin:
 
         # If the logger level is less than DEBUG, disable the progress bar
         if logger.getEffectiveLevel() <= logging.DEBUG:
-            logger.warning("Progress bar is disabled when logger level is less than DEBUG")
+            logger.info("Progress bar is disabled when logger level is less than DEBUG")
             progress_bar = False
 
         # Compute the total number of requests
