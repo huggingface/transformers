@@ -92,7 +92,10 @@ class Swin2SRModelTester:
         # here we set some attributes to make tests pass
         self.num_hidden_layers = len(depths)
         self.hidden_size = embed_dim
-        self.seq_length = (image_size // patch_size) ** 2
+        # num_patches and seq_length used by SDPA equivalence tests
+        num_patches = (image_size // patch_size) ** 2
+        self.seq_length = num_patches
+        self.num_masks = num_patches // 2
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -174,6 +177,23 @@ class Swin2SRModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             common_properties=["image_size", "patch_size", "num_channels"],
         )
 
+    @staticmethod
+    def _prepare_config_headdim(config, requested_dim):
+        import copy
+
+        config = copy.deepcopy(config)
+        if hasattr(config, "attention_probs_dropout_prob"):
+            config.attention_probs_dropout_prob = 0
+        # Swin2SR uses embed_dim and num_heads (list). Ensure head_dim >= requested_dim by scaling embed_dim.
+        if hasattr(config, "embed_dim") and hasattr(config, "num_heads"):
+            num_heads = config.num_heads
+            min_heads = min(num_heads) if isinstance(num_heads, (list, tuple)) else num_heads
+            head_dim = config.embed_dim // min_heads
+            if head_dim < requested_dim:
+                scale = max(requested_dim // head_dim, 1)
+                config.embed_dim *= scale
+        return config
+
     def test_config(self):
         self.config_tester.run_common_tests()
 
@@ -188,6 +208,14 @@ class Swin2SRModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     # TODO: check if this works again for PyTorch 2.x.y
     @unittest.skip(reason="Got `CUDA error: misaligned address` with PyTorch 2.0.0.")
     def test_multi_gpu_data_parallel_forward(self):
+        pass
+
+    @unittest.skip(
+        reason="Swin2SR always passes a non-null combined attention mask (continuous relative position bias + optional "
+        "cyclic-shift mask) to the attention interface. Flash attention does not support non-null "
+        "additive attn_mask, so this kernel cannot be used with Swin2SR."
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
         pass
 
     @unittest.skip(reason="Swin2SR does not use inputs_embeds")
