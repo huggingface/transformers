@@ -123,7 +123,7 @@ class DtensorShardOperation:
             for mesh_dim, placement in dim_placements:
                 sub_mesh = self._get_sub_mesh(mesh_dim)
                 rank, world_size = sub_mesh.get_local_rank(), sub_mesh.size()
-                dim_idx = self._get_source_dim(placement.dim)
+                dim_idx = self._map_param_dim_to_source_dim(placement.dim)
                 planned_ops_by_dim[dim_idx].append((placement, rank, world_size))
 
             # prepare the slices to fetch on disk for each tensor dimension.
@@ -154,7 +154,8 @@ class DtensorShardOperation:
         # MoE path
         # tensor_idx identifies the axis-0 piece in param space (not in source.shape).
         normalized_dim_placements = [
-            (mesh_dim, placement, self._get_source_dim(placement.dim)) for mesh_dim, placement in dim_placements
+            (mesh_dim, placement, self._map_param_dim_to_source_dim(placement.dim))
+            for mesh_dim, placement in dim_placements
         ]
 
         # if this rank owns expert `tensor_idx` along axis 0, we need to slice the inner dimensions, else we drop it
@@ -318,7 +319,7 @@ class DtensorShardOperation:
         # if dim is negative, it should be normalized to the last axis
         return dim if dim >= 0 else self.param_ndim + dim
 
-    def _get_source_dim(self, param_dim: int) -> int:
+    def _map_param_dim_to_source_dim(self, param_dim: int) -> int:
         param_dim = self._normalize_param_dim(param_dim)
         return getattr(self, "source_dim_mapping", {}).get(param_dim, param_dim)
 

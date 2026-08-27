@@ -40,7 +40,6 @@ from transformers.core_model_loading import (
     VisionUnfuseAndPermuteForRope,
     WeightConverter,
     WeightRenaming,
-    _get_single_transpose_source_dim_mapping,
     build_glob_alternation,
     convert_and_load_state_dict_in_model,
     rename_source_key,
@@ -248,10 +247,13 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
     def test_dtensor_sharding_follows_transposed_checkpoint_dimensions(self):
         target = torch.arange(48).reshape(2, 6, 4).float()
         source = target.transpose(1, 2).contiguous()
-        converter = WeightConverter("experts.weight", "experts.weight", operations=[Transpose(1, 2)])
-        source_dim_mapping = _get_single_transpose_source_dim_mapping(converter, source, target)
+        converter = WeightConverter(
+            "experts.weight", "experts.weight", operations=[Transpose(1, 2, check_dims=True)]
+        )
+        source_dim_mapping = converter.get_source_dim_mapping(source, target)
 
         self.assertEqual(source_dim_mapping, {1: 2, 2: 1})
+        self.assertIsNone(converter.get_source_dim_mapping(target, target))
         for rank in range(2):
             shard_op = _make_dtensor_shard_op(
                 FakeMesh(shape=(2,), rank=rank),

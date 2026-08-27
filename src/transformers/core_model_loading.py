@@ -93,6 +93,12 @@ class ConversionOps(ABC):
     ) -> dict[str, list[torch.Tensor]]:
         raise NotImplementedError
 
+    def get_source_dim_mapping(
+        self, source_shape: tuple[int, ...], target_shape: tuple[int, ...]
+    ) -> dict[int, int] | None:
+        """Return target-to-source dimension mappings needed to shard before conversion."""
+        return None
+
     @property
     def reverse_op(self) -> ConversionOps:
         raise NotImplementedError
@@ -354,6 +360,17 @@ class Transpose(ConversionOps):
         # Here it's the only operation, or the last operation in a chain, so we return the target
         else:
             return target_patterns[0]
+
+    def get_source_dim_mapping(
+        self, source_shape: tuple[int, ...], target_shape: tuple[int, ...]
+    ) -> dict[int, int] | None:
+        if self.check_dims and source_shape == target_shape:
+            return None
+
+        ndim = len(target_shape)
+        dim0 = self.dim0 % ndim
+        dim1 = self.dim1 % ndim
+        return {dim0: dim1, dim1: dim0}
 
     @property
     def reverse_op(self) -> ConversionOps:
@@ -851,6 +868,9 @@ class WeightTransform:
             branches.append(f"(?P<{group_name}>{pattern})")
         self.compiled_sources = re.compile("|".join(branches))
 
+    def get_source_dim_mapping(self, tensor: Any, target_param: torch.Tensor) -> dict[int, int] | None:
+        return None
+
     def __repr__(self):
         return f"{self.__class__.__name__}(source_patterns={self.source_patterns}, target_patterns={self.target_patterns})"
 
@@ -1173,6 +1193,13 @@ class WeightConverter(WeightTransform):
         if not self.operations:
             raise ValueError("WeightConverter requires at least one operation.")
 
+    def get_source_dim_mapping(self, tensor: Any, target_param: torch.Tensor) -> dict[int, int] | None:
+        if len(self.source_patterns) != 1 or len(self.target_patterns) != 1 or len(self.operations) != 1:
+            return None
+
+        source_shape = tuple(tensor.shape) if isinstance(tensor, torch.Tensor) else tuple(tensor.get_shape())
+        return self.operations[0].get_source_dim_mapping(source_shape, tuple(target_param.shape))
+
     def convert(
         self,
         layer_name: str,
@@ -1268,29 +1295,6 @@ def spawn_materialize(
         # Return the Callable here, not the Tensor itself, so we actually delay loading to avoid saturating cpu
         # memory during Conversion
         return _job
-
-
-def _get_single_transpose_source_dim_mapping(mapping, tensor, empty_param) -> dict[int, int] | None:
-    """Map target parameter dimensions to checkpoint dimensions for a one-to-one transpose conversion."""
-    if (
-        not isinstance(mapping, WeightConverter)
-        or len(mapping.operations) != 1
-        or not isinstance(mapping.operations[0], Transpose)
-    ):
-        return None
-
-    operation = mapping.operations[0]
-    source_shape = tuple(tensor.shape) if isinstance(tensor, torch.Tensor) else tuple(tensor.get_shape())
-    target_shape = tuple(empty_param.shape)
-    if operation.check_dims and source_shape == target_shape:
-        return None
-
-    ndim = len(target_shape)
-    dim0 = operation.dim0 % ndim
-    dim1 = operation.dim1 % ndim
-    return {dim0: dim1, dim1: dim0}
-
-
 def dot_natural_key(s: str):
     """
     Sort key for state-dict names: split on `"."` and sort digits numerically and strings alphabetically. It emits a
@@ -1739,7 +1743,7 @@ def convert_and_load_state_dict_in_model(
             param_device = get_device(device_map, renamed_key, valid_torch_device=True)
             sharding_op = None
             if is_dtensor(empty_param):
-                source_dim_mapping = _get_single_transpose_source_dim_mapping(mapping, tensor, empty_param)
+                source_dim_mapping = mapping.get_source_dim_mapping(tensor, empty_param)
                 sharding_op = DtensorShardOperation(empty_param, source_dim_mapping=source_dim_mapping)
 
             # Some parameters are so large (qwen4_exp ple_embedding is about ~95 GiB) that we cannot afford to perform the Operations
