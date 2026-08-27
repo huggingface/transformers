@@ -576,7 +576,7 @@ class FSMTDecoder(nn.Module):
         elif input_ids is not None:
             # Embed positions, accounting for the tokens already in the cache
             past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
-            positions = self.embed_positions(input_ids, past_key_values_length)
+            positions = self.embed_positions(input_ids, past_key_values_length=past_key_values_length)
             x = self.embed_tokens(input_ids) * self.embed_scale
         elif inputs_embeds is not None:
             # We assume zeros hidden states correspond to padding tokens
@@ -1105,8 +1105,13 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
         mask = tensor.ne(padding_idx).int()
         return (torch.cumsum(mask, dim=1).type_as(mask) * mask).long() + padding_idx
 
-    def forward(self, input, past_key_values_length: int = 0):
-        """Input is expected to be of size [bsz x seqlen]."""
+    def forward(self, input, *, past_key_values_length: int = 0):
+        """Input is expected to be of size [bsz x seqlen].
+
+        `past_key_values_length` is keyword-only: this signature replaced `(input, incremental_state,
+        timestep)`, and a caller passing the old second positional argument would otherwise have it read
+        as a cache length instead of raising.
+        """
         bsz, seq_len = input.shape[:2]
         max_pos = self.padding_idx + 1 + past_key_values_length + seq_len
         if max_pos > self.weight.size(0):
