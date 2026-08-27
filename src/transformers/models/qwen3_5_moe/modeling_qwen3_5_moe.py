@@ -392,7 +392,7 @@ def torch_chunk_gated_delta_rule(
     return core_attn_out, last_recurrent_state
 
 
-@use_kernel_func_from_hub_with_fallback("recurrent_gated_delta_rule", "fla")
+@use_kernel_func_from_hub_with_fallback("fused_recurrent_gated_delta_rule", "fla")
 def torch_recurrent_gated_delta_rule(
     query: torch.Tensor,
     key: torch.Tensor,
@@ -513,7 +513,9 @@ class Qwen3_5MoeGatedDeltaNet(nn.Module):
 
         # Set up dimensions for reshapes later
         batch_size, seq_len, _ = hidden_states.shape
-        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
+        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(
+            self.layer_idx, state_idx=0
+        )
 
         mixed_qkv = self.in_proj_qkv(hidden_states)
         mixed_qkv = mixed_qkv.transpose(1, 2)

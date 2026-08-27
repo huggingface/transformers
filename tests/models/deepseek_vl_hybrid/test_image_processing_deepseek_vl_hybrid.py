@@ -20,9 +20,9 @@ from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import (
+    ImageProcessingTester,
     ImageProcessingTestMixin,
     load_coco_image,
-    prepare_image_inputs,
 )
 
 
@@ -33,7 +33,7 @@ if is_vision_available():
     from PIL import Image
 
 
-class DeepseekVLHybridImageProcessingTester:
+class DeepseekVLHybridImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -87,17 +87,6 @@ class DeepseekVLHybridImageProcessingTester:
     def expected_output_high_res_image_shape(self, images):
         max_size = max(self.high_res_size["height"], self.high_res_size["width"])
         return self.num_channels, max_size, max_size
-
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
 
 
 @require_torch

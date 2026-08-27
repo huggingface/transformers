@@ -52,7 +52,7 @@ from ..nomic_bert.modeling_nomic_bert import NomicBertPreTrainedModel
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="biohub/ESMC-6B")
+@auto_docstring(checkpoint="biohub/ESMC-6B-hf")
 @strict
 class EsmcConfig(LlamaConfig):
     r"""
@@ -66,7 +66,7 @@ class EsmcConfig(LlamaConfig):
     ```python
     >>> from transformers import EsmcConfig, EsmcModel
 
-    >>> # Initializing an ESMC biohub/ESMC-6B style configuration
+    >>> # Initializing an ESMC biohub/ESMC-6B-hf style configuration
     >>> configuration = EsmcConfig()
 
     >>> # Initializing a model (with random weights) from the configuration
@@ -280,8 +280,8 @@ class EsmcModel(EsmcPreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, EsmcModel
 
-        >>> model = EsmcModel.from_pretrained("biohub/ESMC-300M")
-        >>> tokenizer = AutoTokenizer.from_pretrained("biohub/ESMC-300M")
+        >>> model = EsmcModel.from_pretrained("biohub/ESMC-300M-hf")
+        >>> tokenizer = AutoTokenizer.from_pretrained("biohub/ESMC-300M-hf")
         >>> inputs = tokenizer(["MLKNVQVQLV"], return_tensors="pt")
         >>> outputs = model(**inputs)
         >>> outputs.last_hidden_state.shape
@@ -383,8 +383,8 @@ class EsmcForMaskedLM(EsmcPreTrainedModel):
         >>> from transformers import AutoTokenizer, EsmcForMaskedLM
         >>> import torch
 
-        >>> model = EsmcForMaskedLM.from_pretrained("biohub/ESMC-300M")
-        >>> tokenizer = AutoTokenizer.from_pretrained("biohub/ESMC-300M")
+        >>> model = EsmcForMaskedLM.from_pretrained("biohub/ESMC-300M-hf")
+        >>> tokenizer = AutoTokenizer.from_pretrained("biohub/ESMC-300M-hf")
         >>> inputs = tokenizer(["MLKNVQ<mask>LV"], return_tensors="pt")
         >>> outputs = model(**inputs)
         >>> outputs.logits.shape
@@ -432,7 +432,7 @@ class EsmcForSequenceClassification(EsmForSequenceClassification):
 
 
 class EsmcForTokenClassification(GenericForTokenClassification, EsmcPreTrainedModel):
-    pass
+    base_model_prefix = "esmc"
 
 
 __all__ = [
