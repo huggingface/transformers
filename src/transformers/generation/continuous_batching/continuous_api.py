@@ -650,7 +650,7 @@ class ContinuousBatchingManager:
             msg = "Continuous batching is much better when using flash attention."
             if version is not None:
                 target_implem = f"flash_attention_{version}"  # no "paged|" prefix here to enter the branch below
-                logger.info(
+                logger.warning(
                     f"{msg} Switching from {original_attn_impl} to {target_implem}. "
                     "If you need to use eager or sdpa, use paged|eager or paged|sdpa as the `attn_implementation`."
                 )
@@ -1182,7 +1182,7 @@ class ContinuousMixin:
             workload_hints=workload_hints,
         )
         if warmup and not manager.warmed_up:
-            # Warmup is long (~30 sec): best to signal the user it's happening than let them think the manager is stuck
+            # TODO: have a progress bar for the warmup as well, like other inference engine
             logger.info("Warming up for continuous batching...")
             start = perf_counter()
             manager.warmup()
