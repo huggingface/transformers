@@ -130,22 +130,22 @@ def convert_state_dict(orig_state_dict, config):
             dim = config.embed_dim
 
             if "weight" in key:
-                orig_state_dict[
-                    f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.q_proj.weight"
-                ] = val[:dim, :]
+                orig_state_dict[f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.q_proj.weight"] = (
+                    val[:dim, :]
+                )
                 orig_state_dict[f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.k_proj.weight"] = (
                     val[dim : dim * 2, :]
                 )
-                orig_state_dict[
-                    f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.v_proj.weight"
-                ] = val[-dim:, :]
+                orig_state_dict[f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.v_proj.weight"] = (
+                    val[-dim:, :]
+                )
             else:
-                orig_state_dict[f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.q_proj.bias"] = (
-                    val[:dim]
-                )
-                orig_state_dict[f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.v_proj.bias"] = (
-                    val[-dim:]
-                )
+                orig_state_dict[f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.q_proj.bias"] = val[
+                    :dim
+                ]
+                orig_state_dict[f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.v_proj.bias"] = val[
+                    -dim:
+                ]
         else:
             orig_state_dict[rename_key(key, config)] = val
 

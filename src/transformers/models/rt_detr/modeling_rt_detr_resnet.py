@@ -318,6 +318,7 @@ class RTDetrResNetEncoder(RTDetrResNetPreTrainedModel):
         in_out_channels = zip(config.hidden_sizes, config.hidden_sizes[1:])
         for (in_channels, out_channels), depth in zip(in_out_channels, config.depths[1:]):
             self.stages.append(RTDetrResNetStage(config, in_channels, out_channels, depth=depth))
+        self.post_init()
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
