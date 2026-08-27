@@ -60,11 +60,6 @@ class Ernie4_5_VLMoeVisionConfig(PreTrainedConfig):
     temporal_merge_size: int = 2
     rms_norm_eps: float = 1e-6
 
-    def __post_init__(self, **kwargs):
-        if self.rope_parameters is None:
-            self.rope_parameters = {"rope_type": "axial", "rope_theta": self.default_theta}
-        super().__post_init__(**kwargs)
-
 
 @auto_docstring(checkpoint="baidu/ERNIE-4.5-VL-28B-A3B-PT")
 @strict
