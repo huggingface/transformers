@@ -400,60 +400,6 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
 
-    def test_num_mem_blocks_mixed_residue_hybrid_layout(self):
-        # Regression test for #47994: `block_id` was derived from the global layer index while the
-        # weight-tie cycle and the adapter slots follow hybrid-layer order, so every config whose
-        # hybrid layer indices are not all congruent modulo `num_mem_blocks` (all published
-        # `num_mem_blocks=2` checkpoints, e.g. Zamba2-2.7B with hybrid layers `[6, 12, ..., 47, 51]`)
-        # raised at construction. An evenly spaced hybrid layout does not trigger the bug, so this
-        # test must keep a mixed-residue layout: hybrid layers `[2, 4, 7]` have residues `[0, 0, 1]`
-        # modulo 2 while the tie cycle assigns blocks `[0, 1, 0]`.
-        config = Zamba2Config(
-            vocab_size=99,
-            hidden_size=16,
-            num_hidden_layers=8,
-            layers_block_type=["mamba", "mamba", "hybrid", "mamba", "hybrid", "mamba", "mamba", "hybrid"],
-            num_mem_blocks=2,
-            use_shared_attention_adapter=True,
-            adapter_rank=2,
-            num_attention_heads=2,
-            n_mamba_heads=8,
-            mamba_ngroups=8,
-            mamba_d_state=2,
-            chunk_size=8,
-            intermediate_size=4,
-            max_position_embeddings=512,
-            is_decoder=True,
-            use_mamba_kernels=False,
-        )
-        model = Zamba2ForCausalLM(config).eval()
-
-        # The third hybrid layer ties to the first (both block 0), skipping the second (block 1).
-        first_block = model.model.layers[2].shared_transformer
-        second_block = model.model.layers[4].shared_transformer
-        third_block = model.model.layers[7].shared_transformer
-        self.assertIs(third_block.feed_forward.gate_up_proj.weight, first_block.feed_forward.gate_up_proj.weight)
-        self.assertIsNot(third_block.feed_forward.gate_up_proj.weight, second_block.feed_forward.gate_up_proj.weight)
-
-        # Each block holds real (parametrized) adapters exactly at the slots of the hybrid layers
-        # assigned to it, which is the layout the published checkpoints store.
-        def real_adapter_slots(block):
-            return [len(list(adapter.parameters())) > 0 for adapter in block.feed_forward.gate_up_proj_adapter_list]
-
-        self.assertEqual(real_adapter_slots(first_block), [True, False, True])
-        self.assertEqual(real_adapter_slots(second_block), [False, True, False])
-
-        # The full save -> load round trip resolves all ties.
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir)
-            _, loading_info = Zamba2ForCausalLM.from_pretrained(tmp_dir, output_loading_info=True)
-        self.assertSetEqual(set(loading_info["missing_keys"]), set())
-        self.assertSetEqual(set(loading_info["unexpected_keys"]), set())
-
-        with torch.no_grad():
-            logits = model(input_ids=ids_tensor([1, 6], config.vocab_size)).logits
-        self.assertTrue(torch.isfinite(logits).all())
-
     def test_mamba2_chunked_prefill_cpu(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_zamba2_chunked_prefill(*config_and_inputs, device="cpu")
@@ -720,17 +666,29 @@ class Zamba2ModelIntegrationTest(unittest.TestCase):
     def test_num_mem_blocks_2_official_checkpoint(self):
         # Regression test for #47994: every published `num_mem_blocks=2` checkpoint (the Zamba2-2.7B
         # and Zamba2-7B families) raised at construction, before any weight was read, because
-        # `block_id` followed the global layer index while the weight-tie cycle follows
-        # hybrid-layer order.
+        # `block_id` followed the global layer index while the weight-tie cycle follows hybrid-layer
+        # order. The layout is what makes this checkpoint the right one to test: its hybrid layers
+        # `[6, 12, 18, 24, 30, 36, 42, 47, 51]` are not all congruent modulo `num_mem_blocks`, and an
+        # evenly spaced layout constructs fine even without the fix.
         model_id = "Zyphra/Zamba2-2.7B-instruct"
         model, loading_info = Zamba2ForCausalLM.from_pretrained(
             model_id, dtype=torch.bfloat16, output_loading_info=True
         )
         self.assertSetEqual(set(loading_info["missing_keys"]), set())
         self.assertSetEqual(set(loading_info["unexpected_keys"]), set())
+        model.to(torch_device)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        input_ids = tokenizer("Hey how are you doing?", return_tensors="pt")["input_ids"]
-        with torch.no_grad():
-            logits = model(input_ids=input_ids).logits
-        self.assertTrue(torch.isfinite(logits.float()).all())
+        messages = [{"role": "user", "content": "Hey how are you doing on this lovely evening?"}]
+        inputs = tokenizer.apply_chat_template(
+            messages, add_generation_prompt=True, return_tensors="pt", return_dict=True
+        ).to(torch_device)
+        out = model.generate(**inputs, do_sample=False, max_new_tokens=20)
+        output_sentence = tokenizer.decode(out[0, :])
+
+        EXPECTED_TEXTS = Expectations(
+            {
+                (None, None): "<|im_start|> user\nHey how are you doing on this lovely evening?<|im_end|> \n<|im_start|> assistant\nHello! I'm just a computer program, so I don't have feelings or experiences,",
+            }
+        )  # fmt: skip
+        self.assertEqual(output_sentence, EXPECTED_TEXTS.get_expectation())
