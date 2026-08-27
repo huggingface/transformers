@@ -28,6 +28,7 @@ tensor table.
 """
 
 import struct
+from collections.abc import Container
 from math import prod
 from typing import NamedTuple
 
@@ -114,18 +115,20 @@ class GgufHeader(NamedTuple):
         return cls(gguf_path, architecture, infos, data_start)
 
 
-def read_gguf_metadata(gguf_path: str) -> tuple[dict, tuple[str, ...]]:
+def read_gguf_metadata(gguf_path: str, string_arrays: "Container[str]" = ()) -> tuple[dict, tuple[str, ...]]:
     """A file's metadata keys and tensor names, without reading any tensor data.
 
     What the config is rebuilt from. Separate from `GgufHeader.from_file` because that one sizes every
     tensor, which rejects a file holding a quantization this reader cannot unpack — and the legacy
     loader can still handle those.
 
-    A string array comes back as its length: the only thing a config takes from the vocabulary is its
-    size, and materializing a few hundred thousand Python strings is what makes `gguf.GGUFReader` slow.
+    A string array comes back as its length, unless its key is named in `string_arrays`: the only
+    thing a config takes from the vocabulary is its size, and materializing a few hundred thousand
+    Python strings is what makes `gguf.GGUFReader` slow. A tokenizer does want them, and names the
+    two or three keys it needs rather than paying for every array in the file.
     """
     blob = _mapped(gguf_path)
-    metadata, tensor_count, pos = _read_metadata(blob, gguf_path)
+    metadata, tensor_count, pos = _read_metadata(blob, gguf_path, string_arrays)
     entries, _ = _read_tensor_table(blob, tensor_count, pos)
     return metadata, tuple(name for name, *_ in entries)
 
@@ -146,7 +149,7 @@ def _read_tensor_table(blob: np.ndarray, tensor_count: int, pos: int) -> tuple[l
     return entries, pos
 
 
-def _read_metadata(blob: np.ndarray, gguf_path: str) -> tuple[dict, int, int]:
+def _read_metadata(blob: np.ndarray, gguf_path: str, string_arrays: "Container[str]" = ()) -> tuple[dict, int, int]:
     """`(metadata, tensor_count, offset of the tensor table)`."""
     if bytes(blob[:4]) != b"GGUF":
         raise ValueError(f"{gguf_path} does not start with the GGUF magic bytes, so it is not a GGUF file.")
@@ -161,14 +164,17 @@ def _read_metadata(blob: np.ndarray, gguf_path: str) -> tuple[dict, int, int]:
     for _ in range(metadata_count):
         key, pos = _read_string(blob, pos)
         (value_type,) = struct.unpack_from("<I", blob, pos)
-        metadata[key], pos = _read_value(blob, pos + 4, value_type)
+        metadata[key], pos = _read_value(blob, pos + 4, value_type, key in string_arrays)
     if "general.architecture" not in metadata:
         raise ValueError(f"{gguf_path} has no `general.architecture` in its metadata.")
     return metadata, tensor_count, pos
 
 
-def _read_value(blob: np.ndarray, pos: int, value_type: int):
-    """One metadata value, and the offset just past it. Arrays of strings yield their length."""
+def _read_value(blob: np.ndarray, pos: int, value_type: int, keep_strings: bool = False):
+    """One metadata value, and the offset just past it.
+
+    An array of strings yields its length unless `keep_strings`, which reads them out.
+    """
     if value_type in _KV_WIDTH:
         (value,) = struct.unpack_from(_KV_FORMAT[value_type], blob, pos)
         return value, pos + _KV_WIDTH[value_type]
@@ -182,7 +188,13 @@ def _read_value(blob: np.ndarray, pos: int, value_type: int):
             return list(values), pos + count * _KV_WIDTH[element_type]
         if element_type != 8:
             raise ValueError(f"GGUF metadata holds an array of type {element_type}, which this reader cannot read.")
-        for _ in range(count):  # the vocabulary: variable-length, so there is nothing to do but walk it
+        if keep_strings:  # asked for: a vocabulary or a merge table
+            values = []
+            for _ in range(count):
+                value, pos = _read_string(blob, pos)
+                values.append(value)
+            return values, pos
+        for _ in range(count):  # variable-length, so there is nothing to do but walk it
             (length,) = struct.unpack_from("<Q", blob, pos)
             pos += 8 + length
         return count, pos

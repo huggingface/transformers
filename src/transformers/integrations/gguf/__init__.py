@@ -13,6 +13,7 @@
 # limitations under the License.
 from .gguf_config_mapping import GGUF_CONFIG_ARCHS, get_gguf_config
 from .gguf_conversion_mapping import GGUF_ARCHS
+from .gguf_tokenizer_mapping import GGUF_TOKENIZER_ARCHS, get_gguf_tokenizer
 from .reader import (
     GgufHeader,
     load_gguf_state_dict,
@@ -29,6 +30,8 @@ from .utils import (
 __all__ = [
     "GGUF_ARCHS",
     "GGUF_CONFIG_ARCHS",
+    "GGUF_TOKENIZER_ARCHS",
+    "get_gguf_tokenizer",
     "get_gguf_config",
     "get_gguf_conversion_mapping",
     "get_gguf_plan",

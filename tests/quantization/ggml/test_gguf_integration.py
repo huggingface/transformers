@@ -53,11 +53,27 @@ class GgufModelIntegrationTesterMixin:
     `inexact_params` tolerances.
     """
 
+    tokenizer_texts = (
+        "The capital of France is Paris.",
+        "def f(x):\n    return x ** 2\n",
+        "  leading and trailing  ",
+        "\u65e5\u672c\u8a9e \U0001f680 \u00fcn\u00efc\u00f4de",
+        "<|im_start|>user\nhi<|im_end|>",
+    )
+
+    chat = (
+        {"role": "user", "content": "hi"},
+        {"role": "assistant", "content": "hello"},
+        {"role": "user", "content": "bye"},
+    )
+
     @classmethod
     def setUpClass(cls):
         # One load for the whole class: these checkpoints are several GB. No dtype is passed, so this
         # covers `auto` resolving to the one the file was written in.
         cls.model = cls.load_gguf_model(cls.gguf_file)
+        # Built once too: a vocabulary of a few hundred thousand tokens is not free to assemble.
+        cls.tokenizer = AutoTokenizer.from_pretrained(cls.gguf_repo, gguf_file=cls.quantized_gguf_file)
 
     @classmethod
     def tearDownClass(cls):
@@ -101,6 +117,35 @@ class GgufModelIntegrationTesterMixin:
         with torch.inference_mode():
             output = model.to(torch_device).generate(**inputs, max_new_tokens=8, do_sample=False)
         return tokenizer.decode(output[0, inputs.input_ids.shape[1] :])
+
+    def test_tokenizer_matches_transformers(self):
+        """A GGUF repo ships no tokenizer files either, so the one built from the metadata is the same.
+
+        `pad_token` and the chat template with a generation prompt are left out: llama.cpp's converter
+        makes its own choice for both, and the file is what a self-contained load should follow.
+        """
+        from_gguf, reference = self.tokenizer, AutoTokenizer.from_pretrained(self.reference_repo)
+
+        # Not the vocabulary sizes: a GGUF states one flat token list, where the reference keeps its
+        # special tokens as additions on top of a smaller base. What has to agree is what they encode to.
+        for text in self.tokenizer_texts:
+            with self.subTest(text=text):
+                self.assertEqual(from_gguf(text).input_ids, reference(text).input_ids)
+
+        # Stated by id in the file, so only the vocabulary turns them back into strings. Encodings
+        # cannot catch this: a tokenizer handed no special tokens invents a sentencepiece pair and
+        # appends it, which agrees with the reference on every text and puts two ids past the end of
+        # the embedding -- hence the bound below rather than another comparison.
+        self.assertEqual(from_gguf.eos_token, reference.eos_token)
+        self.assertEqual(from_gguf.bos_token, reference.bos_token)
+        self.assertLessEqual(len(from_gguf), self.model.get_input_embeddings().weight.shape[0])
+
+        # The template rides along in the metadata, and formats a conversation the same way.
+        self.assertIsNotNone(from_gguf.chat_template)
+        self.assertEqual(
+            from_gguf.apply_chat_template(self.chat, tokenize=False),
+            reference.apply_chat_template(self.chat, tokenize=False),
+        )
 
     def test_state_dict_matches_transformers(self):
         """The headline test: same values as the safetensors checkpoint, tensor by tensor.
@@ -177,17 +222,6 @@ class GgufModelIntegrationTesterMixin:
         )
 
 
-# ---------------------------------------------------------------------------------------------
-# Qwen3.5 — hybrid GatedDeltaNet + full attention
-# ---------------------------------------------------------------------------------------------
-
-
-# ---------------------------------------------------------------------------------------------
-# integration tests: the features, checked once rather than per architecture
-# ---------------------------------------------------------------------------------------------
-
-
-@require_torch_mps
 @slow
 class GgufIntegrationTest(unittest.TestCase):
     """How a quantized file behaves under each way of loading it, on one model.
@@ -196,9 +230,9 @@ class GgufIntegrationTest(unittest.TestCase):
     packed and what dtype the rest of them land in — so one checkpoint covers them for every model
     that follows.
 
-    Metal, specifically: keeping blocks packed needs a published matmul kernel, and metal is the only
-    backend one is built for. The architecture tests below are not restricted this way -- they read a
-    non-quantized file, so they exercise the reader and the conversion mapping on any accelerator.
+    Only the two that need the weights *packed* are restricted to Metal, which is the only backend a
+    matmul kernel is built for. Everywhere else the load falls back to dequantizing, and what that
+    produces is a dense model that runs anywhere.
     """
 
     gguf_repo = "bartowski/Qwen_Qwen3.5-4B-GGUF"
@@ -224,6 +258,7 @@ class GgufIntegrationTest(unittest.TestCase):
             output = model.generate(**inputs, max_new_tokens=4, do_sample=False)
         return tokenizer.decode(output[0, inputs.input_ids.shape[1] :])
 
+    @require_torch_mps
     def test_kernel_keeps_the_weights_packed(self):
         """With a matmul kernel, the blocks are what the modules hold and compute on."""
         from transformers.integrations.gguf.kernels import get_gguf_kernel
@@ -276,6 +311,7 @@ class GgufIntegrationTest(unittest.TestCase):
                 self.assertEqual({p.dtype for p in model.parameters()}, {dtype})
                 del model
 
+    @require_torch_mps
     def test_dtype_of_what_a_packed_model_unpacks(self):
         """A packed model still has dense parameters — the ones no module could hold — in `dtype`."""
         model = self.load(dtype=torch.bfloat16, device_map=torch_device)
