@@ -1491,33 +1491,25 @@ class Mask2FormerAttention(nn.Module):
     keys (as explained in the DETR paper).
     """
 
-    def __init__(
-        self,
-        embed_dim: int,
-        num_heads: int,
-        dropout: float = 0.0,
-        is_decoder: bool = False,
-        bias: bool = True,
-        config: Mask2FormerConfig | None = None,
-    ):
+    def __init__(self, config: Mask2FormerConfig):
         super().__init__()
         self.config = config
         self.is_causal = False
-        self.embed_dim = embed_dim
-        self.num_heads = num_heads
-        self.dropout = dropout
-        self.head_dim = embed_dim // num_heads
-        if self.head_dim * num_heads != self.embed_dim:
+        self.embed_dim = config.hidden_dim
+        self.num_heads = config.num_attention_heads
+        self.dropout = config.dropout
+        self.head_dim = self.embed_dim // self.num_heads
+        if self.head_dim * self.num_heads != self.embed_dim:
             raise ValueError(
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
-                f" {num_heads})."
+                f" {self.num_heads})."
             )
         self.scaling = self.head_dim**-0.5
 
-        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
 
     def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Tensor | None):
         return tensor if position_embeddings is None else tensor + position_embeddings
@@ -1606,13 +1598,7 @@ class Mask2FormerMaskedAttentionDecoderLayer(GradientCheckpointingLayer):
         self.config = config
         self.embed_dim = self.config.hidden_dim
         self.pre_norm = self.config.pre_norm
-        self.self_attn = Mask2FormerAttention(
-            embed_dim=self.embed_dim,
-            num_heads=config.num_attention_heads,
-            dropout=config.dropout,
-            is_decoder=True,
-            config=config,
-        )
+        self.self_attn = Mask2FormerAttention(config)
 
         self.dropout = self.config.dropout
         self.activation_fn = ACT2FN[self.config.activation_function]

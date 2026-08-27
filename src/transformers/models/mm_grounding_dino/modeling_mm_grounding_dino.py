@@ -712,8 +712,11 @@ class MMGroundingDinoEncoderOutput(ModelOutput):
 class MMGroundingDinoMultiheadAttention(nn.Module):
     """Equivalent implementation of nn.MultiheadAttention with `batch_first=True`."""
 
-    def __init__(self, config, num_attention_heads=None):
+    def __init__(self, config, num_attention_heads: int | None = None):
         super().__init__()
+        # the text enhancer runs on half the heads, everything else uses the decoder head count
+        if num_attention_heads is None:
+            num_attention_heads = config.decoder_attention_heads
         if config.hidden_size % num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
                 f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
@@ -1282,7 +1285,7 @@ class MMGroundingDinoDecoderLayer(nn.Module):
         self.embed_dim = config.d_model
 
         # self-attention
-        self.self_attn = MMGroundingDinoMultiheadAttention(config, num_attention_heads=config.decoder_attention_heads)
+        self.self_attn = MMGroundingDinoMultiheadAttention(config)
 
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
@@ -1290,9 +1293,7 @@ class MMGroundingDinoDecoderLayer(nn.Module):
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim, config.layer_norm_eps)
         # cross-attention text
-        self.encoder_attn_text = MMGroundingDinoMultiheadAttention(
-            config, num_attention_heads=config.decoder_attention_heads
-        )
+        self.encoder_attn_text = MMGroundingDinoMultiheadAttention(config)
         self.encoder_attn_text_layer_norm = nn.LayerNorm(self.embed_dim, config.layer_norm_eps)
         # cross-attention
         self.encoder_attn = MMGroundingDinoMultiscaleDeformableAttention(

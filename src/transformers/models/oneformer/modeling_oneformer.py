@@ -1510,33 +1510,26 @@ class OneFormerAttention(nn.Module):
     keys (as explained in the DETR paper).
     """
 
-    def __init__(
-        self,
-        embed_dim: int,
-        num_heads: int,
-        dropout: float = 0.0,
-        is_decoder: bool = False,
-        bias: bool = True,
-        config: OneFormerConfig | None = None,
-    ):
+    def __init__(self, config: OneFormerConfig):
         super().__init__()
         self.config = config
         self.is_causal = False
-        self.embed_dim = embed_dim
-        self.num_heads = num_heads
-        self.dropout = dropout
-        self.head_dim = embed_dim // num_heads
-        if self.head_dim * num_heads != self.embed_dim:
+        self.embed_dim = config.hidden_dim
+        self.num_heads = config.num_attention_heads
+        # the transformer decoder runs its attention without dropout, unlike `config.dropout` used elsewhere
+        self.dropout = 0.0
+        self.head_dim = self.embed_dim // self.num_heads
+        if self.head_dim * self.num_heads != self.embed_dim:
             raise ValueError(
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
-                f" {num_heads})."
+                f" {self.num_heads})."
             )
         self.scaling = self.head_dim**-0.5
 
-        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
 
     def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Tensor | None):
         return tensor if position_embeddings is None else tensor + position_embeddings
@@ -1609,18 +1602,15 @@ class OneFormerAttention(nn.Module):
 class OneFormerTransformerDecoderSelfAttentionLayer(nn.Module):
     def __init__(
         self,
+        config: OneFormerConfig,
         embed_dim,
-        num_heads,
         dropout=0.0,
         activation="relu",
         normalize_before=False,
         layer_norm_eps=1e-05,
-        config=None,
     ):
         super().__init__()
-        self.self_attn = OneFormerAttention(
-            embed_dim=embed_dim, num_heads=num_heads, dropout=dropout, is_decoder=True, config=config
-        )
+        self.self_attn = OneFormerAttention(config)
 
         self.norm = nn.LayerNorm(embed_dim, eps=layer_norm_eps)
         self.dropout = nn.Dropout(dropout)
@@ -1834,12 +1824,11 @@ class OneFormerTransformerDecoderLayer(nn.Module):
         )
 
         self.self_attn = OneFormerTransformerDecoderSelfAttentionLayer(
+            config=config,
             embed_dim=self.embed_dim,
-            num_heads=config.num_attention_heads,
             dropout=0.0,
             normalize_before=config.pre_norm,
             layer_norm_eps=config.layer_norm_eps,
-            config=config,
         )
 
         self.ffn = OneFormerTransformerDecoderFFNLayer(

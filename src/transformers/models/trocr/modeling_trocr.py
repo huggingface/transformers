@@ -171,41 +171,37 @@ class TrOCRAttention(nn.Module):
 
     def __init__(
         self,
-        config,
-        embed_dim: int,
-        num_heads: int,
-        kdim: int | None = None,
-        vdim: int | None = None,
-        dropout: float | None = 0.0,
-        is_decoder: bool | None = False,
-        bias: bool | None = True,
+        config: TrOCRConfig,
         is_causal: bool = False,
-        is_cross_attention: bool | None = False,
-        layer_idx: bool | None = None,
+        is_cross_attention: bool = False,
+        layer_idx: int | None = None,
     ):
         super().__init__()
         self.config = config
-        self.embed_dim = embed_dim
-        self.kdim = kdim if kdim is not None else embed_dim
-        self.vdim = vdim if vdim is not None else embed_dim
-        self.num_heads = num_heads
-        self.dropout = dropout
-        self.head_dim = embed_dim // num_heads
-        if not (self.head_dim * num_heads == self.embed_dim):
+        self.embed_dim = config.hidden_size
+        # only the cross-attention reads from the encoder, which may have its own hidden size
+        kv_dim = self.embed_dim
+        if is_cross_attention and config.cross_attention_hidden_size is not None:
+            kv_dim = config.cross_attention_hidden_size
+        self.kdim = kv_dim
+        self.vdim = kv_dim
+        self.num_heads = config.decoder_attention_heads
+        self.dropout = config.attention_dropout
+        self.head_dim = self.embed_dim // self.num_heads
+        if not (self.head_dim * self.num_heads == self.embed_dim):
             raise ValueError(
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
-                f" {num_heads})."
+                f" {self.num_heads})."
             )
         self.scaling = self.head_dim**-0.5
-        self.is_decoder = is_decoder
         self.is_causal = is_causal
         self.layer_idx = layer_idx
 
-        self.k_proj = nn.Linear(self.kdim, embed_dim, bias=bias)
-        self.v_proj = nn.Linear(self.vdim, embed_dim, bias=bias)
-        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.k_proj = nn.Linear(self.kdim, self.embed_dim)
+        self.v_proj = nn.Linear(self.vdim, self.embed_dim)
+        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
 
-        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
 
     def forward(
         self,
@@ -285,15 +281,7 @@ class TrOCRDecoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.embed_dim = config.hidden_size
 
-        self.self_attn = TrOCRAttention(
-            config,
-            embed_dim=self.embed_dim,
-            num_heads=config.decoder_attention_heads,
-            dropout=config.attention_dropout,
-            is_decoder=True,
-            is_causal=True,
-            layer_idx=layer_idx,
-        )
+        self.self_attn = TrOCRAttention(config, is_causal=True, layer_idx=layer_idx)
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
@@ -301,17 +289,7 @@ class TrOCRDecoderLayer(GradientCheckpointingLayer):
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
 
         if config.is_decoder:
-            self.encoder_attn = TrOCRAttention(
-                config,
-                embed_dim=self.embed_dim,
-                num_heads=config.decoder_attention_heads,
-                kdim=config.cross_attention_hidden_size,
-                vdim=config.cross_attention_hidden_size,
-                dropout=config.attention_dropout,
-                is_decoder=True,
-                is_cross_attention=True,
-                layer_idx=layer_idx,
-            )
+            self.encoder_attn = TrOCRAttention(config, is_cross_attention=True, layer_idx=layer_idx)
             self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
 
         self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)

@@ -807,8 +807,10 @@ class ZoeDepthMultiheadAttention(nn.Module):
     """Equivalent implementation of nn.MultiheadAttention with `batch_first=True`."""
 
     # Ignore copy
-    def __init__(self, config, hidden_size, num_attention_heads, dropout):
+    def __init__(self, config, dropout: float = 0.1):
         super().__init__()
+        hidden_size = config.patch_transformer_hidden_size
+        num_attention_heads = config.patch_transformer_num_attention_heads
         if hidden_size % num_attention_heads != 0:
             raise ValueError(
                 f"The hidden size ({hidden_size}) is not a multiple of the number of attention "
@@ -870,9 +872,8 @@ class ZoeDepthTransformerEncoderLayer(nn.Module):
 
         hidden_size = config.patch_transformer_hidden_size
         intermediate_size = config.patch_transformer_intermediate_size
-        num_attention_heads = config.patch_transformer_num_attention_heads
 
-        self.self_attn = ZoeDepthMultiheadAttention(config, hidden_size, num_attention_heads, dropout=dropout)
+        self.self_attn = ZoeDepthMultiheadAttention(config, dropout=dropout)
 
         self.linear1 = nn.Linear(hidden_size, intermediate_size)
         self.dropout = nn.Dropout(dropout)

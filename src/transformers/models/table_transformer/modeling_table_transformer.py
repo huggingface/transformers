@@ -375,32 +375,25 @@ class TableTransformerAttention(nn.Module):
     Here, we add position embeddings to the queries and keys (as explained in the TABLE_TRANSFORMER paper).
     """
 
-    def __init__(
-        self,
-        embed_dim: int,
-        num_heads: int,
-        dropout: float = 0.0,
-        bias: bool = True,
-        config: TableTransformerConfig | None = None,
-    ):
+    def __init__(self, config: TableTransformerConfig, is_decoder: bool = False):
         super().__init__()
         self.config = config
-        self.embed_dim = embed_dim
-        self.num_heads = num_heads
-        self.dropout = dropout
-        self.head_dim = embed_dim // num_heads
+        self.embed_dim = config.d_model
+        self.num_heads = config.decoder_attention_heads if is_decoder else config.encoder_attention_heads
+        self.dropout = config.attention_dropout
+        self.head_dim = self.embed_dim // self.num_heads
         self.is_causal = False
-        if self.head_dim * num_heads != self.embed_dim:
+        if self.head_dim * self.num_heads != self.embed_dim:
             raise ValueError(
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
-                f" {num_heads})."
+                f" {self.num_heads})."
             )
         self.scaling = self.head_dim**-0.5
 
-        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
 
     def with_pos_embed(self, tensor: torch.Tensor, object_queries: Tensor | None):
         return tensor if object_queries is None else tensor + object_queries
@@ -467,12 +460,7 @@ class TableTransformerEncoderLayer(nn.Module):
     def __init__(self, config: TableTransformerConfig):
         super().__init__()
         self.embed_dim = config.d_model
-        self.self_attn = TableTransformerAttention(
-            embed_dim=self.embed_dim,
-            num_heads=config.encoder_attention_heads,
-            dropout=config.attention_dropout,
-            config=config,
-        )
+        self.self_attn = TableTransformerAttention(config)
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
@@ -542,23 +530,13 @@ class TableTransformerDecoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.embed_dim = config.d_model
 
-        self.self_attn = TableTransformerAttention(
-            embed_dim=self.embed_dim,
-            num_heads=config.decoder_attention_heads,
-            dropout=config.attention_dropout,
-            config=config,
-        )
+        self.self_attn = TableTransformerAttention(config, is_decoder=True)
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.encoder_attn = TableTransformerAttention(
-            self.embed_dim,
-            config.decoder_attention_heads,
-            dropout=config.attention_dropout,
-            config=config,
-        )
+        self.encoder_attn = TableTransformerAttention(config, is_decoder=True)
         self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
         self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)

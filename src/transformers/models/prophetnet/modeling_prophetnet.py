@@ -416,25 +416,30 @@ def eager_attention_forward(
 class ProphetNetAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: ProphetNetConfig, num_attn_heads: int, layer_idx: int | None = None):
+    def __init__(self, config: ProphetNetConfig, is_cross_attention: bool = False, layer_idx: int | None = None):
         super().__init__()
         hidden_size = config.hidden_size
 
         self.config = config
         self.attention_dropout = config.attention_dropout
         self.dropout = config.dropout
-        self.num_attn_heads = num_attn_heads
-        self.head_dim = hidden_size // num_attn_heads
+        # this module backs the encoder self-attention and the decoder cross-attention, which size their heads
+        # from opposite ends of the config
+        self.num_attn_heads = (
+            config.num_decoder_attention_heads if is_cross_attention else config.num_encoder_attention_heads
+        )
+        self.head_dim = hidden_size // self.num_attn_heads
         self.scaling = self.head_dim**-0.5
         # `ProphetNetAttention` is only used for the (bidirectional) encoder self-attention and for the
         # decoder cross-attention, so it is never causal.
         self.is_causal = False
         self.layer_idx = layer_idx
 
-        assert self.head_dim * num_attn_heads == hidden_size, (
-            "`config.hidden_size` must be divisible by `config.num_encoder_attention_heads` and"
-            " `config.num_decoder_attention_heads`"
-        )
+        if self.head_dim * self.num_attn_heads != hidden_size:
+            raise ValueError(
+                "`config.hidden_size` must be divisible by `config.num_encoder_attention_heads` and"
+                " `config.num_decoder_attention_heads`"
+            )
 
         self.key_proj = nn.Linear(hidden_size, hidden_size)
         self.value_proj = nn.Linear(hidden_size, hidden_size)
@@ -855,7 +860,7 @@ class ProphetNetEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: ProphetNetConfig):
         super().__init__()
         # 1st residual block
-        self.self_attn = ProphetNetAttention(config, config.num_encoder_attention_heads)
+        self.self_attn = ProphetNetAttention(config)
         self.self_attn_layer_norm = LayerNorm(config.hidden_size)
 
         # 2nd residual block
@@ -901,7 +906,7 @@ class ProphetNetDecoderLayer(GradientCheckpointingLayer):
 
         # 2nd residual block
         if config.add_cross_attention:
-            self.cross_attn = ProphetNetAttention(config, config.num_decoder_attention_heads, layer_idx=layer_idx)
+            self.cross_attn = ProphetNetAttention(config, is_cross_attention=True, layer_idx=layer_idx)
             self.cross_attn_layer_norm = LayerNorm(config.hidden_size)
 
         # 3rd residual block

@@ -135,38 +135,27 @@ def eager_attention_forward(
 class XGLMAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(
-        self,
-        embed_dim: int,
-        num_heads: int,
-        dropout: float | None = 0.0,
-        is_decoder: bool | None = False,
-        bias: bool | None = True,
-        is_causal: bool = False,
-        config: XGLMConfig | None = None,
-        layer_idx: bool | None = None,
-    ):
+    def __init__(self, config: XGLMConfig, is_causal: bool = False, layer_idx: int | None = None):
         super().__init__()
-        self.embed_dim = embed_dim
-        self.num_heads = num_heads
-        self.dropout = dropout
-        self.head_dim = embed_dim // num_heads
         self.config = config
+        self.embed_dim = config.d_model
+        self.num_heads = config.attention_heads
+        self.dropout = config.attention_dropout
+        self.head_dim = self.embed_dim // self.num_heads
 
-        if (self.head_dim * num_heads) != self.embed_dim:
+        if (self.head_dim * self.num_heads) != self.embed_dim:
             raise ValueError(
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
-                f" and `num_heads`: {num_heads})."
+                f" and `num_heads`: {self.num_heads})."
             )
         self.scaling = self.head_dim**-0.5
-        self.is_decoder = is_decoder
         self.is_causal = is_causal
         self.layer_idx = layer_idx
 
-        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
 
     def forward(
         self,
@@ -246,28 +235,13 @@ class XGLMDecoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.embed_dim = config.d_model
 
-        self.self_attn = XGLMAttention(
-            embed_dim=self.embed_dim,
-            num_heads=config.attention_heads,
-            dropout=config.attention_dropout,
-            is_decoder=True,
-            is_causal=True,
-            config=config,
-            layer_idx=layer_idx,
-        )
+        self.self_attn = XGLMAttention(config, is_causal=True, layer_idx=layer_idx)
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
 
         if config.add_cross_attention:
-            self.encoder_attn = XGLMAttention(
-                embed_dim=self.embed_dim,
-                num_heads=config.attention_heads,
-                dropout=config.attention_dropout,
-                is_decoder=True,
-                config=config,
-                layer_idx=layer_idx,
-            )
+            self.encoder_attn = XGLMAttention(config, layer_idx=layer_idx)
             self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)

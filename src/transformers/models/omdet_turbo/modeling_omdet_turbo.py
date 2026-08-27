@@ -508,8 +508,16 @@ def eager_attention_forward(
 class OmDetTurboMultiheadAttention(nn.Module):
     """Equivalent implementation of nn.MultiheadAttention with `batch_first=True`."""
 
-    def __init__(self, config, hidden_size, num_attention_heads, dropout):
+    def __init__(self, config, is_decoder: bool = False):
         super().__init__()
+        if is_decoder:
+            hidden_size = config.decoder_hidden_dim
+            num_attention_heads = config.decoder_num_heads
+            dropout = config.decoder_dropout
+        else:
+            hidden_size = config.encoder_hidden_dim
+            num_attention_heads = config.num_attention_heads
+            dropout = config.encoder_dropout
         if hidden_size % num_attention_heads != 0:
             raise ValueError(
                 f"The hidden size ({hidden_size}) is not a multiple of the number of attention "
@@ -564,12 +572,7 @@ class OmDetTurboMultiheadAttention(nn.Module):
 class OmDetTurboEncoderLayer(nn.Module):
     def __init__(self, config: OmDetTurboConfig):
         super().__init__()
-        self.self_attn = OmDetTurboMultiheadAttention(
-            config,
-            hidden_size=config.encoder_hidden_dim,
-            num_attention_heads=config.num_attention_heads,
-            dropout=config.encoder_dropout,
-        )
+        self.self_attn = OmDetTurboMultiheadAttention(config)
         self.self_attn_layer_norm = nn.LayerNorm(config.encoder_hidden_dim, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.encoder_dropout)
         self.activation_fn = ACT2FN[config.encoder_feedforward_activation]
@@ -898,12 +901,7 @@ class OmDetTurboDeformableTransformerDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         # self attention
-        self.self_attn = OmDetTurboMultiheadAttention(
-            config,
-            hidden_size=config.decoder_hidden_dim,
-            num_attention_heads=config.decoder_num_heads,
-            dropout=config.decoder_dropout,
-        )
+        self.self_attn = OmDetTurboMultiheadAttention(config, is_decoder=True)
         self.dropout1 = nn.Dropout(config.decoder_dropout)
         self.norm1 = nn.LayerNorm(config.decoder_hidden_dim, eps=config.layer_norm_eps)
 
