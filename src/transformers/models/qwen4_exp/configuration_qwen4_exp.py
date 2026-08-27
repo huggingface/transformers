@@ -269,6 +269,7 @@ class Qwen4ExpVisionConfig(PreTrainedConfig):
 
     model_type = "qwen4_exp_vision"
     base_config_key = "vision_config"
+    attribute_map = {"num_attention_heads": "num_heads"}
 
     depth: int = 27
     hidden_size: int = 1152
@@ -282,6 +283,8 @@ class Qwen4ExpVisionConfig(PreTrainedConfig):
     out_hidden_size: int = 3584
     num_position_embeddings: int = 2304
     initializer_range: float = 0.02
+    max_position_embeddings: int | None = None
+    rope_parameters: dict | None = None
     base_model_fsdp_plan = None
 
 

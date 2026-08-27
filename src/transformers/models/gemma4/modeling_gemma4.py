@@ -705,6 +705,12 @@ class Gemma4VisionMLP(nn.Module):
 
 
 class Gemma4VisionRotaryEmbedding(nn.Module):
+    """
+    Simple axial 2D rope with same freqs used for H and W grids. The freqs are
+    pre-computed using `head-dim//4` which is later used to concat H and W positions.
+    The final angles rotate over the whole head dim, no partial rotation involved.
+    """
+
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Gemma4VisionConfig, device=None):
         super().__init__()
@@ -756,12 +762,15 @@ class Gemma4VisionRotaryEmbedding(nn.Module):
             cos = freqs.cos() * self.attention_scaling
             sin = freqs.sin() * self.attention_scaling
 
-        cos = self.recomposition_to_2d(cos)
-        sin = self.recomposition_to_2d(sin)
+        cos = self.recomposition_frequencies(cos)
+        sin = self.recomposition_frequencies(sin)
         return cos.to(x.dtype), sin.to(x.dtype)
 
     # Ignore copy
-    def recomposition_to_2d(self, freq):
+    def recomposition_frequencies(self, freq):
+        """
+        Recompose the frequencies into the final spatial layout used per each grid.
+        """
         # in contrast to other 2D rope modules, interleave grids as H-H-W-W
         freq_h, freq_w = freq[:, :, 0], freq[:, :, 1]
         return torch.cat([freq_h, freq_h, freq_w, freq_w], dim=-1)

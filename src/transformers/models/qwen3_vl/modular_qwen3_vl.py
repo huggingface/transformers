@@ -290,7 +290,10 @@ class Qwen3VLTextRotaryEmbedding(Qwen2_5_VLRotaryEmbedding):
     ) -> tuple[torch.Tensor, float]:
         return super().compute_default_rope_parameters(config, device, **kwargs)
 
-    def recomposition_to_3d(self, freq):
+    def recomposition_frequencies(self, freq):
+        """
+        Recompose the frequencies into the final spatial layout used per each grid.
+        """
         freqs_thw = freq[0]  # just overwrite the first dimension T
         for dim, offset in enumerate((1, 2), start=1):  # H, W
             length = self.mrope_section[dim] * 3

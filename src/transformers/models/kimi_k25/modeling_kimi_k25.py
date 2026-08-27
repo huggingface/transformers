@@ -176,8 +176,13 @@ class Kimi_K25VisionPatchEmbed(nn.Module):
         return hidden_states
 
 
-# Simple axial 2D rope as in sam3/edgetam/etc with same freq of head-dim//2 for H and W
 class Kimi_K25VisionRotaryEmbedding(nn.Module):
+    """
+    Simple axial 2D rope with same freqs used for H and W grids. The freqs are
+    pre-computed using `head-dim//4` which is later used to concat H and W positions.
+    The final angles rotate over the whole head dim, no partial rotation involved.
+    """
+
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Kimi_K25VisionConfig, device=None):
         super().__init__()
@@ -227,11 +232,14 @@ class Kimi_K25VisionRotaryEmbedding(nn.Module):
             cos = freqs.cos() * self.attention_scaling
             sin = freqs.sin() * self.attention_scaling
 
-        cos = self.recomposition_to_2d(cos)
-        sin = self.recomposition_to_2d(sin)
+        cos = self.recomposition_frequencies(cos)
+        sin = self.recomposition_frequencies(sin)
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
-    def recomposition_to_2d(self, freq):
+    def recomposition_frequencies(self, freq):
+        """
+        Recompose the frequencies into the final spatial layout used per each grid.
+        """
         # interleave within the head dim for HW
         freq_hw = freq.permute(1, 2, 0).flatten(1)
         return torch.cat([freq_hw, freq_hw], dim=-1)

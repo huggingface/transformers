@@ -91,12 +91,15 @@ class PixtralVisionRotaryEmbedding(nn.Module):
             cos = freqs.cos() * self.attention_scaling
             sin = freqs.sin() * self.attention_scaling
 
-        cos = self.recomposition_to_2d(cos)
-        sin = self.recomposition_to_2d(sin)
+        cos = self.recomposition_frequencies(cos)
+        sin = self.recomposition_frequencies(sin)
         return cos.to(x.dtype), sin.to(x.dtype)
 
     # Ignore copy
-    def recomposition_to_2d(self, freq):
+    def recomposition_frequencies(self, freq):
+        """
+        Recompose the frequencies into the final spatial layout used per each grid.
+        """
         # block-concat grids as H-W-H-W
         freq_h, freq_w = (m[:, i % 2] for i, m in enumerate(freq.chunk(2, dim=-1)))
         freq_hw = torch.cat([freq_h, freq_w], dim=-1)

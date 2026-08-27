@@ -796,11 +796,14 @@ class Gemma4VisionRotaryEmbedding(Sam3ViTRotaryEmbedding):
             cos = freqs.cos() * self.attention_scaling
             sin = freqs.sin() * self.attention_scaling
 
-        cos = self.recomposition_to_2d(cos)
-        sin = self.recomposition_to_2d(sin)
+        cos = self.recomposition_frequencies(cos)
+        sin = self.recomposition_frequencies(sin)
         return cos.to(x.dtype), sin.to(x.dtype)
 
-    def recomposition_to_2d(self, freq):
+    def recomposition_frequencies(self, freq):
+        """
+        Recompose the frequencies into the final spatial layout used per each grid.
+        """
         # in contrast to other 2D rope modules, interleave grids as H-H-W-W
         freq_h, freq_w = freq[:, :, 0], freq[:, :, 1]
         return torch.cat([freq_h, freq_h, freq_w, freq_w], dim=-1)

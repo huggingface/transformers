@@ -238,12 +238,12 @@ class CohereCompassRotaryEmbedding(Gemma3RotaryEmbedding):
             cos = freqs.cos() * attention_scaling
             sin = freqs.sin() * attention_scaling
 
-        sin = self.recomposition_to_3d(sin, layer_type)
-        cos = self.recomposition_to_3d(cos, layer_type)
+        sin = self.recomposition_frequencies(sin, layer_type)
+        cos = self.recomposition_frequencies(cos, layer_type)
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
-    def recomposition_to_3d(self, freq, layer_type):
+    def recomposition_frequencies(self, freq, layer_type):
         freq_h, freq_w, freq_t = (
             m[(i + 1) % 3] for i, m in enumerate(freq.split([*self.mrope_section[layer_type]], dim=-1))
         )

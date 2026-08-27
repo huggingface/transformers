@@ -36,7 +36,7 @@ from ... import initialization as init
 from ...activations import ACT2FN, GELUActivation
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub
+from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -106,8 +106,13 @@ class PaddleOCRProjector(nn.Module):
         return torch.cat(processed_features, dim=0)
 
 
-# Simple axial 2D rope as in sam3/edgetam/etc with same freq of head-dim//2 for H and W
 class PaddleOCRVisionRotaryEmbedding(nn.Module):
+    """
+    Simple axial 2D rope with same freqs used for H and W grids. The freqs are
+    pre-computed using `head-dim//4` which is later used to concat H and W positions.
+    The final angles rotate over the whole head dim, no partial rotation involved.
+    """
+
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: PaddleOCRVisionConfig, device=None):
         super().__init__()
@@ -157,12 +162,14 @@ class PaddleOCRVisionRotaryEmbedding(nn.Module):
             cos = freqs.cos() * self.attention_scaling
             sin = freqs.sin() * self.attention_scaling
 
-        cos = self.recomposition_to_2d(cos)
-        sin = self.recomposition_to_2d(sin)
+        cos = self.recomposition_frequencies(cos)
+        sin = self.recomposition_frequencies(sin)
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
-    def recomposition_to_2d(self, freq):
-        # take each grid's (N, D), the full frequency range
+    def recomposition_frequencies(self, freq):
+        """
+        Recompose the frequencies into the final spatial layout used per each grid.
+        """
         freq_h, freq_w = freq[:, 0], freq[:, 1]
         freq_hw = torch.cat([freq_h, freq_w], dim=-1)
         return torch.cat([freq_hw, freq_hw], dim=-1)
@@ -185,7 +192,6 @@ class PaddleOCRRotaryEmbedding(nn.Module):
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
-        # Ignore copy
         self.mrope_section = self.config.rope_parameters.get("mrope_section", [16, 24, 24])
 
     @staticmethod
@@ -210,7 +216,6 @@ class PaddleOCRRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq.to(device), attention_factor
 
-    # Ignore copy
     def forward(self, x, position_ids):
         # In contrast to other models, PaddleOCR has different position ids for the grids
         # So we expand the inv_freq to shape (3, ...)
@@ -223,12 +228,14 @@ class PaddleOCRRotaryEmbedding(nn.Module):
             cos = freqs.cos() * self.attention_scaling
             sin = freqs.sin() * self.attention_scaling
 
-        sin = self.recomposition_to_3d(sin)
-        cos = self.recomposition_to_3d(cos)
+        sin = self.recomposition_frequencies(sin)
+        cos = self.recomposition_frequencies(cos)
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
-    # Ignore copy
-    def recomposition_to_3d(self, freq):
+    def recomposition_frequencies(self, freq):
+        """
+        Recompose the frequencies into the final spatial layout used per each grid.
+        """
         freq = torch.cat([m[i % 3] for i, m in enumerate(freq.split(self.mrope_section, dim=-1))], dim=-1)
         return torch.cat((freq, freq), dim=-1)
 
@@ -320,6 +327,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
+@use_kernelized_func(apply_rotary_pos_emb)
 class PaddleOCRAttention(nn.Module):
     """
     Multi-headed attention from 'Attention Is All You Need' paper. Modified to use sliding window attention: Longformer

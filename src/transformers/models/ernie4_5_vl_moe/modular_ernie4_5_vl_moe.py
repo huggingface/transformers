@@ -285,12 +285,15 @@ class Ernie4_5_VLMoeTextRotaryEmbedding(nn.Module):
             cos = freqs.cos() * self.attention_scaling
             sin = freqs.sin() * self.attention_scaling
 
-        sin = self.recomposition_to_3d(sin)
-        cos = self.recomposition_to_3d(cos)
+        sin = self.recomposition_frequencies(sin)
+        cos = self.recomposition_frequencies(cos)
 
         return cos, sin
 
-    def recomposition_to_3d(self, freq):
+    def recomposition_frequencies(self, freq):
+        """
+        Recompose the frequencies into the final spatial layout used per each grid.
+        """
         freq_h, freq_w, freq_t = (m[(i + 1) % 3] for i, m in enumerate(freq.split([*self.mrope_section], dim=-1)))
         freq_hw = torch.stack([freq_h, freq_w], dim=-1).flatten(-2)
         freq_hwt = torch.cat([freq_hw, freq_t], dim=-1)

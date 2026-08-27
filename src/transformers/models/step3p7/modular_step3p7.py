@@ -588,7 +588,10 @@ class Step3p7ImageProcessor(TorchvisionBackend):
 
 
 class Step3p7VisionRotaryEmbedding(Gemma4VisionRotaryEmbedding):
-    def recomposition_to_2d(self, freq):
+    def recomposition_frequencies(self, freq):
+        """
+        Recompose the frequencies into the final spatial layout used per each grid.
+        """
         freq = freq.flatten(-2)
         return torch.cat((freq, freq), dim=-1)
 
