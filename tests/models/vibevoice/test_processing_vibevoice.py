@@ -35,7 +35,7 @@ class VibeVoiceProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.checkpoint = "bezzam/VibeVoice-1.5B-hf"
+        cls.checkpoint = "vibevoice/VibeVoice-1.5B-hf"
         processor = VibeVoiceProcessor.from_pretrained(cls.checkpoint)
         cls.tmpdirname = tempfile.mkdtemp()
         processor.save_pretrained(cls.tmpdirname)

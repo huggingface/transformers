@@ -442,13 +442,13 @@ Conversion script to convert original VibeVoice model into a checkpoint for `Vib
 python src/transformers/models/vibevoice/convert_vibevoice_to_hf.py \
     --checkpoint microsoft/VibeVoice-1.5B \
     --output_dir ./hf_vibevoice \
-    --push_to_hub your-username/VibeVoice-1.5B
+    --push_to_hub vibevoice/VibeVoice-1.5B-hf
 
 # 7B
 python src/transformers/models/vibevoice/convert_vibevoice_to_hf.py \
     --checkpoint aoi-ot/VibeVoice-Large \
     --output_dir  /raid/eric/vibevoice/hf_vibevoice \
-    --push_to_hub bezzam/VibeVoice-7B-hf
+    --push_to_hub vibevoice/VibeVoice-7B-hf
 ```
 
 """

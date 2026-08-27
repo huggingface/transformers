@@ -19,7 +19,7 @@ from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-@auto_docstring(checkpoint="bezzam/VibeVoice-1.5B-hf")
+@auto_docstring(checkpoint="vibevoice/VibeVoice-1.5B-hf")
 @strict
 class VibeVoiceDiffusionHeadConfig(PreTrainedConfig):
     r"""
@@ -42,7 +42,7 @@ class VibeVoiceDiffusionHeadConfig(PreTrainedConfig):
     mlp_bias: bool = False
 
 
-@auto_docstring(checkpoint="bezzam/VibeVoice-1.5B-hf")
+@auto_docstring(checkpoint="vibevoice/VibeVoice-1.5B-hf")
 @strict
 class VibeVoiceConfig(PreTrainedConfig):
     r"""
