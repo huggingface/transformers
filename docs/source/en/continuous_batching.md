@@ -195,7 +195,7 @@ for chunk in manager.request_id_iter(request_id="streamed"):
 
 ## ContinuousBatchingConfig
 
-[`ContinuousBatchingConfig`] controls the KV cache, scheduling, CUDA graphs, memory usage, and more. Pass it alongside [`GenerationConfig`] to customize continuous batching.
+[`ContinuousBatchingConfig`] controls the KV cache, scheduling, accelerator graphs, memory usage, and more. Pass it alongside [`GenerationConfig`] to customize continuous batching.
 
 By default, `max_batch_tokens` is `8192`, bounded by available GPU memory and never below `256`, while `num_blocks` fills the remaining memory. Use the table below to help you pick the appropriate features.
 
@@ -204,7 +204,7 @@ By default, `max_batch_tokens` is `8192`, bounded by available GPU memory and ne
 | `max_memory_percent` / `block_size` | ✓ controls KV budget | | |
 | `max_batch_tokens` | ↑ larger input buffers | ✓ bigger prefill batches | ✓ TTFT when prefill-bound |
 | `scheduler` | | ✓ scheduling policy | ✓ TTFT |
-| CUDA graphs | ↑ graph storage | ✓ less dispatch overhead | ✓ |
+| Accelerator graphs | ↑ graph storage | ✓ less dispatch overhead | ✓ |
 | Async batching | ↑ ~2× I/O buffers | ✓ overlaps CPU/GPU | |
 | Compilation | ↑ warmup-time only | ✓ faster forward passes | ✓ |
 | Decode fast path | ↑ block table per request | ✓ faster decode-only steps | ✓ |
@@ -283,19 +283,19 @@ for request_id, output in outputs.items():
         print(f"{token} | logprob: {log_prob}")
 ```
 
-### CUDA graphs
+### Accelerator graphs
 
-CUDA graphs eliminate CPU dispatch overhead by recording the GPU execution graph once and replaying it for batches with matching shapes. Enable them explicitly with `use_cuda_graph=True`.
+Accelerator graphs eliminate CPU dispatch overhead by recording the device execution graph once and replaying it for batches with matching shapes. Enable them explicitly with `use_accelerator_graph=True`. The legacy `use_cuda_graph` option is still accepted for backward compatibility.
 
 ```py
-cb_config = ContinuousBatchingConfig(use_cuda_graph=True)
+cb_config = ContinuousBatchingConfig(use_accelerator_graph=True)
 ```
 
 When active, the manager pads query and KV lengths to fixed intervals so shapes repeat and graphs reuse. Smaller values of `q_padding_interval_size` and `kv_padding_interval_size` reduce wasted compute on padding, but this means there are more unique shapes the graph has to record and store which costs more memory.
 
 ```py
 cb_config = ContinuousBatchingConfig(
-    use_cuda_graph=True,
+    use_accelerator_graph=True,
     q_padding_interval_size=64,
     kv_padding_interval_size=16384,
 )
@@ -303,11 +303,11 @@ cb_config = ContinuousBatchingConfig(
 
 ### Async batching
 
-Async batching overlaps CPU scheduling of the next batch with GPU computation of the current one. It requires CUDA graphs and roughly doubles the VRAM used for input tensors.
+Async batching overlaps CPU scheduling of the next batch with accelerator computation of the current one. It requires accelerator graphs and roughly doubles the device memory used for input tensors.
 
 ```py
 cb_config = ContinuousBatchingConfig(
-    use_cuda_graph=True,
+    use_accelerator_graph=True,
     use_async_batching=True,
 )
 ```

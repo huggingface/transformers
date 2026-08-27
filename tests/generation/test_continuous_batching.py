@@ -51,6 +51,9 @@ from transformers.generation.continuous_batching.requests import (
     RequestStatus,
     get_device_and_memory_breakdown,
 )
+from transformers.generation.continuous_batching.utils import (
+    SUPPORTED_GRAPH_ACCELERATOR_TYPES,
+)
 from transformers.testing_utils import (
     backend_empty_cache,
     backend_memory_allocated,
@@ -770,7 +773,6 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
             else:
                 os.environ["WORLD_SIZE"] = original_ws
 
-
 @require_torch_accelerator
 class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     # -----------------------------------------------Parity tests----------------------------------------------- #
@@ -793,9 +795,9 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         is_fa = is_flash_attention_requested(requested_attention_implementation=attn_implementation)
         if is_fa and not is_flash_attn_2_available(kernels_fallback_ok=True):
             self.skipTest("Flash Attention is not available and neither is the kernels library. Skipping test.")
-        # Skip the test if cuda graph is on but the device is not CUDA
-        if continuous_batching_config.use_cuda_graph and torch_device != "cuda":
-            self.skipTest("CUDA graph is only supported on CUDA devices. Skipping test.")
+        # Skip the test if accelerator graph is on but the device does not support graph capture.
+        if any(continuous_batching_config.accelerator_graph_booleans) and torch_device not in SUPPORTED_GRAPH_ACCELERATOR_TYPES:
+            self.skipTest("Accelerator graph is only supported on CUDA or XPU devices. Skipping test.")
 
         # If the config turns on compile, change the generation config to use the default mode instead of
         # max-autotune-no-cudagraphs which can change the kernels between generate_batch and generate
@@ -855,7 +857,9 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         # can flip an early greedy tie in bf16, whereas eager float32 tracks the true greedy path.
         past_key_values = None
         if not compare_to_fp32_eager:
-            model.generation_config.use_cuda_graph = continuous_batching_config.use_cuda_graph
+            model.generation_config.use_cuda_graph = (
+                any(continuous_batching_config.accelerator_graph_booleans) if torch_device == "cuda" else False
+            )
             model.generation_config.compile_config = continuous_batching_config.varlen_compile_config
             # Create a static cache if compile_config is set, because regular generate requires a compileable cache
             if model.generation_config.compile_config is not None:
@@ -911,7 +915,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
         continuous_batching_config = ContinuousBatchingConfig(
             allow_block_sharing=allow_block_sharing,
-            use_cuda_graph=use_cuda_graph,
+            use_accelerator_graph=use_cuda_graph,
             default_compile_level=0,
         )
         self._test_continuous_batching_parity(
@@ -1418,7 +1422,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             ("flash_attention_2", False, True),
             ("flash_attention_2", True, False),
             ("flash_attention_2", True, True),
-            # FA3: always turn on CUDA graphs
+            # FA3: always turn on accelerator graphs
             ("flash_attention_3", True, False),
             ("flash_attention_3", True, True),
         ]
@@ -1501,7 +1505,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         # 12 requests but only 4 blocks per request: the decode batch is wider than max_blocks_per_request
         input_ids = get_generation_inputs(_DEFAULT_USER_MESSAGES * 4, tokenizer, for_continuous_batching=True)
         gen_config = GenerationConfig(do_sample=False, max_new_tokens=20)
-        # CUDA graphs enable input padding, which is where the truncation happened
+        # Accelerator graphs enable input padding, which is where the truncation happened
         cb_config = ContinuousBatchingConfig(block_size=256, num_blocks=64, use_cuda_graph=True)
 
         cb_config.max_blocks_per_request = 0  # varlen reference
@@ -2054,13 +2058,13 @@ class ContinuousBatchingTensorParallelTest(unittest.TestCase):
 
     @slow
     def test_continuous_batching_tp_with_cuda_graph(self) -> None:
-        """Test that continuous batching with TP and CUDA graphs is reproducible across runs and that all TP ranks
+        """Test that continuous batching with TP and accelerator graphs is reproducible across runs and that all TP ranks
         agree on the generated tokens — captured-graph collectives must stay in sync across ranks."""
         self._run_cb_worker(use_cuda_graph=True)
 
     @slow
     def test_continuous_batching_tp_with_cuda_graph_and_async(self) -> None:
-        """Test that continuous batching with TP, CUDA graphs, and async batching is reproducible across runs and
+        """Test that continuous batching with TP, accelerator graphs, and async batching is reproducible across runs and
         that all TP ranks agree on the generated tokens — the toughest combination, exercising both captured-graph
         collectives and the async producer/consumer split."""
         self._run_cb_worker(use_cuda_graph=True, use_async_batching=True)

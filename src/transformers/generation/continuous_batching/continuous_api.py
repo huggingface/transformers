@@ -46,7 +46,7 @@ from .utils import WorkloadHints, drain_queue
 
 
 """
-To enable cuda graphs, we need the dimensions of all tensors to be static, which is counter-intuitive for CB. In CB, as
+To enable accelerator graphs, we need the dimensions of all tensors to be static, which is counter-intuitive for CB. In CB, as
 generation goes on, there are two dimensions that change:
 - the number of queries tokens (Q), which can vary from batch to batch
 - the number of keys/values tokens (KV), which grows as the cache does
@@ -317,10 +317,11 @@ class ContinuousBatchProcessor:
         )
 
     def __del__(self) -> None:
-        self.inputs_and_outputs = None  # clean up CUDA graphs in priority
+        device_module = self.inputs_and_outputs.device_module if self.inputs_and_outputs is not None else None
+        self.inputs_and_outputs = None  # clean up accelerator graphs in priority
         gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+        if device_module is not None and device_module.is_available():
+            device_module.empty_cache()
 
     def reset(self) -> None:
         """Reset the batch processor for a new generation loop."""
@@ -515,7 +516,8 @@ class ContinuousBatchProcessor:
             # FIXME: this will avoid any race condition, but it can cause issue when using async batching with a sliding
             # window model. Fix will be fixed in a PR in the near future (tempfix, v5.3)
             compute_stream = self.inputs_and_outputs.compute_stream
-            maybe_stream = torch.cuda.stream(compute_stream) if compute_stream is not None else nullcontext()
+            device_module = self.inputs_and_outputs.device_module
+            maybe_stream = device_module.stream(compute_stream) if compute_stream is not None else nullcontext()
             with maybe_stream:
                 self.cache.copy_cache(copy_source, copy_destination)
 
@@ -564,7 +566,7 @@ class ContinuousBatchProcessor:
 
     @torch.no_grad()
     def warmup(self, model: nn.Module) -> None:
-        """Pre-capture CUDA graphs (or trigger compile warmup) for varlen and decode paths. In async mode, both IO
+        """Pre-capture accelerator graphs (or trigger compile warmup) for varlen and decode paths. In async mode, both IO
         pairs are warmed up since each has its own graph buffer and static tensors. The varlen path is warmed up at
         the largest possible `(q, kv)` sizes so subsequent captures fit inside it without growing the pool."""
         self.model_runner.warmup(model)
@@ -683,7 +685,7 @@ class ContinuousBatchingManager:
             self._original_attn_impl = original_attn_impl
 
     def warmup(self) -> None:
-        """Pre-capture CUDA graphs for varlen and decode paths by running dummy batches. Initializes the batch
+        """Pre-capture accelerator graphs for varlen and decode paths by running dummy batches. Initializes the batch
         processor if not already done."""
         if self.batch_processor is None:
             self.batch_processor = self._create_batch_processor()
@@ -720,6 +722,7 @@ class ContinuousBatchingManager:
         # We expect the batch processor to be initialized at this point. Warn otherwise.
         if self.batch_processor is None:
             logger.warning("\nBatch processor was not initialized.")
+        device_module = None if self.batch_processor is None else self.batch_processor.inputs_and_outputs.device_module
 
         # If the manager is not started, warn and return.
         if self._generation_thread is None:
@@ -752,8 +755,8 @@ class ContinuousBatchingManager:
 
         # In all cases, a little cleanup is good
         gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+        if device_module is not None and device_module.is_available():
+            device_module.empty_cache()
 
     def join(self, stop_trigger_time: float, timeout: float | None = None) -> None:
         """Wait for the background thread to finish. Wait can be capped using the timeout argument (in seconds)."""
@@ -1007,7 +1010,7 @@ class ContinuousBatchingManager:
             logger.info("Generation loop finished and background thread exited successfully.")
 
     def _generation_step(self) -> None:
-        """Perform a single generation step. This is mostly cuda graphed"""
+        """Perform a single generation step. This is mostly accelerator graphed"""
         if self.batch_processor is None:
             raise RuntimeError("Tried to perform a generation step before the batch processor was initialized.")
         self.batch_processor._generation_step(self.model)
@@ -1199,7 +1202,7 @@ class ContinuousMixin:
         `init_continuous_batching`, except for:
             - block: whether to block the thread when stopping the manager. Default is True.
             - timeout: maximum time to wait for the thread to stop. Default is None (no timeout).
-            - warmup: whether to pre-capture CUDA graphs at the largest sizes before running. Default is True.
+            - warmup: whether to pre-capture accelerator graphs at the largest sizes before running. Default is True.
         """
         manager = self.init_continuous_batching(
             generation_config=generation_config,
@@ -1244,7 +1247,7 @@ class ContinuousMixin:
             record_timestamps: If set to true, the requests will have a timestamp for each token generated
             progress_bar: If set to true, a progress bar will be displayed
             persistent_manager: whether to persist the manager after the generation is finished. Default is False.
-            warmup: whether to pre-capture CUDA graphs before processing requests. Default is True.
+            warmup: whether to pre-capture accelerator graphs before processing requests. Default is True.
         Returns:
             `dict[str, GenerationOutput]`: a dictionary of request ids to GenerationOutput objects
         """

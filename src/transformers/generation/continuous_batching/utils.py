@@ -24,21 +24,68 @@ from transformers.configuration_utils import PretrainedConfig
 from .requests import FutureRequestState, RequestState, RequestStatus
 
 
-class CudaGraphBuffer:
-    """A dict for CUDA graphs with a special __del__ method to make sure the graphs are properly reset."""
+SUPPORTED_GRAPH_ACCELERATOR_TYPES = ("cuda", "xpu")
+
+
+def _get_graph_class_name(device_type: str) -> str:
+    if device_type == "cuda":
+        return "CUDAGraph"
+    if device_type == "xpu":
+        return "XPUGraph"
+    raise RuntimeError(f"Expected one of {SUPPORTED_GRAPH_ACCELERATOR_TYPES}, but got {device_type = }.")
+
+
+def get_torch_device_module(device: torch.device) -> Any:
+    device_type = torch.device(device).type
+    if device_type == "cuda":
+        return torch.cuda
+    if device_type == "xpu" and hasattr(torch, "xpu"):
+        return torch.xpu
+    raise RuntimeError(f"Expected one of {SUPPORTED_GRAPH_ACCELERATOR_TYPES}, but got {device_type = }.")
+
+
+def is_accelerator_graph_available(device: torch.device | None = None) -> bool:
+    device_types = SUPPORTED_GRAPH_ACCELERATOR_TYPES if device is None else (torch.device(device).type,)
+    for device_type in device_types:
+        try:
+            device_module = get_torch_device_module(torch.device(device_type))
+        except RuntimeError:
+            continue
+        is_available = getattr(device_module, "is_available", None)
+        required_attrs = (_get_graph_class_name(device_type), "graph", "MemPool", "use_mem_pool")
+        if callable(is_available) and is_available() and all(hasattr(device_module, attr) for attr in required_attrs):
+            return True
+    return False
+
+
+def get_accelerator_graph(device: torch.device) -> Any:
+    device_type = torch.device(device).type
+    device_module = get_torch_device_module(device)
+    graph_class_name = _get_graph_class_name(device_type)
+    graph_class = getattr(device_module, graph_class_name, None)
+    if graph_class is None:
+        raise RuntimeError(f"Graph capture on {device_type} requires torch.{device_type}.{graph_class_name}.")
+    return graph_class()
+
+
+class AcceleratorGraphBuffer:
+    """A dict for accelerator graphs with a special __del__ method to make sure the graphs are properly reset."""
 
     def __init__(self) -> None:
-        self._storage: dict[tuple[int, ...], torch.cuda.CUDAGraph] = {}
+        self._storage: dict[tuple[int, ...], Any] = {}
 
     def __del__(self) -> None:
+        self.clear()
+
+    def clear(self) -> None:
         while self._storage:
             _, graph = self._storage.popitem()
             graph.reset()
 
-    def get_graph(self, key: tuple[int, ...]) -> torch.cuda.CUDAGraph | None:
+    def get_graph(self, key: tuple[int, ...]) -> Any | None:
         return self._storage.get(key)
 
-    def set_graph(self, key: tuple[int, ...], graph: torch.cuda.CUDAGraph) -> None:
+    def set_graph(self, key: tuple[int, ...], graph: Any) -> None:
         self._storage[key] = graph
 
 
@@ -205,15 +252,28 @@ def drain_queue(request_queue: queue.Queue) -> list[RequestState]:
     return new_states
 
 
-def get_cuda_pools() -> tuple:
-    """Returns a tuple of (mem_pool, graph_pool_id) for CUDA graphs."""
-    mem_pool = torch.cuda.MemPool()
+def get_accelerator_pools(device: torch.device) -> tuple:
+    """Returns a tuple of (mem_pool, graph_pool_id) for accelerator graphs."""
+    device_module = get_torch_device_module(device)
+    mem_pool = device_module.MemPool()
     graph_pool_id = mem_pool.id
     return mem_pool, graph_pool_id
 
 
 @contextmanager
-def mem_pool_ctx(mem_pool):
-    """A context manager to use a CUDA mem pool."""
-    with torch.cuda.use_mem_pool(mem_pool):
+def mem_pool_ctx(device: torch.device, mem_pool):
+    """A context manager to use an accelerator mem pool."""
+    device_module = get_torch_device_module(device)
+    with device_module.use_mem_pool(mem_pool):
+        yield
+
+
+@contextmanager
+def graph_capture_ctx(device: torch.device, graph, stream, graph_pool_id):
+    device_type = torch.device(device).type
+    device_module = get_torch_device_module(device)
+    kwargs = {"stream": stream, "pool": graph_pool_id}
+    if device_type == "cuda":
+        kwargs["capture_error_mode"] = "thread_local"
+    with device_module.graph(graph, **kwargs):
         yield
