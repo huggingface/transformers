@@ -87,7 +87,7 @@ _deps = [
     "fugashi>=1.0",
     "GitPython<3.1.19",
     "hf-doc-builder",
-    "huggingface-hub>=1.5.0,<2.0",
+    "huggingface-hub==1.29.0.rc1",
     "ipadic>=1.0.0,<2.0",
     "jinja2>=3.1.0",
     "kenlm",
