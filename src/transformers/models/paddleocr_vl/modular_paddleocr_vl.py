@@ -490,6 +490,9 @@ class PaddleOCRVisionEmbeddings(SiglipVisionEmbeddings):
         self.interpolation_align_corners = True
         self.interpolation_mode = "bilinear"
 
+    def interpolate_pos_encoding(self, **super_kwargs):
+        raise NotImplementedError("Not needed - positions are interpolated in `forward`")
+
     def forward(
         self,
         pixel_values: torch.FloatTensor,
