@@ -350,11 +350,16 @@ class LongcatFlashIntegrationTest(unittest.TestCase):
     @require_large_cpu_ram
     def test_longcat_generation_cpu(self):
         # takes absolutely forever and a lot RAM, but allows to test the output in the CI
-        model = LongcatFlashForCausalLM.from_pretrained(self.model_id, device_map="auto", dtype=torch.bfloat16)
+        # device_map="cpu" avoids disk offloading, which breaks MoE weight shapes in accelerate
+        model = LongcatFlashForCausalLM.from_pretrained(
+            self.model_id, device_map="cpu", dtype=torch.bfloat16
+        )
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
 
         chat = [{"role": "user", "content": "Paris is..."}]
-        inputs = tokenizer.apply_chat_template(chat, tokenize=True, add_generation_prompt=True, return_tensors="pt")
+        inputs = tokenizer.apply_chat_template(
+            chat, tokenize=True, add_generation_prompt=True, return_tensors="pt"
+        )
 
         with torch.no_grad():
             outputs = model.generate(inputs["input_ids"], max_new_tokens=3, do_sample=False)
