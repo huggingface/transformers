@@ -265,6 +265,14 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             source_shard = shard_op.shard_tensor(source)
             torch.testing.assert_close(source_shard.transpose(1, 2), target[:, rank * 3 : (rank + 1) * 3])
 
+    def test_transpose_source_dim_mapping_rejects_invalid_dimensions(self):
+        source_shape = (2, 4, 6)
+        target_shape = (2, 6, 4)
+
+        for invalid_dim in (-4, 3):
+            with self.subTest(invalid_dim=invalid_dim), self.assertRaisesRegex(IndexError, "Dimension out of range"):
+                Transpose(1, invalid_dim).get_source_dim_mapping(source_shape, target_shape)
+
     def test_dtensor_shard_aware_mixtral_conversion_uses_only_local_experts(self):
         """Integration test: FSDP-sharded expert loading + WeightConverter.
 
