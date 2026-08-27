@@ -35,7 +35,7 @@ def get_daily_ci_runs(token, num_runs=7, workflow_id=None, current_run_id=None):
     # executing this script and therefore must always be present in a fresh response).
     if current_run_id is None:
         current_run_id = int(os.environ.get("GITHUB_RUN_ID", 0))
-    max_attempts = 3
+    max_attempts = 5
 
     for attempt in range(1, max_attempts + 1):
         schedule_url = f"{url}&event=schedule"
