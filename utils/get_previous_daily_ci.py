@@ -6,18 +6,14 @@ from get_ci_error_statistics import download_artifact, get_artifacts_links, get_
 
 
 def get_daily_ci_runs(token, num_runs=7, workflow_id=None):
-    """Get the workflow runs of the scheduled (daily) CI.
+    """Get the most recent workflow runs of the scheduled (daily) CI on the main branch.
 
-    This only selects the runs triggered by the `schedule` event on the `main` branch.
+    Queries event=schedule; falls back to event=workflow_run when no results are found
+    (AMD CI is triggered via workflow_run, not schedule).  Retries on stale GitHub API
+    responses — see PR #48374 for background.
     """
-    # The id of a workflow (not of a workflow run).
-    # From a given workflow run (where we have workflow run id), we can get the workflow id by going to
-    # https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id}
-    # and check the `workflow_id` key.
-
-    # Always fetch the current run's metadata: it resolves workflow_id when not provided, and lets
-    # us compare the requested workflow_id against the current run's workflow_id to decide whether
-    # stale-cache detection applies (see below).
+    # Fetch current run metadata to (1) resolve workflow_id when not given, and (2) compare
+    # workflow IDs to decide whether stale-cache detection applies (see stale_check below).
     current_run_id = int(os.environ.get("GITHUB_RUN_ID", 0))
     current_workflow_id = None
     if current_run_id:
@@ -29,19 +25,20 @@ def get_daily_ci_runs(token, num_runs=7, workflow_id=None):
             workflow_id = current_workflow_id
 
     url = f"https://api.github.com/repos/huggingface/transformers/actions/workflows/{workflow_id}/runs"
-    # On `main` branch + event being `schedule` + not returning PRs + only `num_runs` results
     url += f"?branch=main&exclude_pull_requests=true&per_page={num_runs}"
 
-    # The GitHub Actions API uses a search index for filtered queries (event=, branch=, etc.) that
-    # can lag significantly behind the database — different backend nodes may return wildly different
-    # total_count values (e.g. 190, 238, 311, 413 observed for the same URL within minutes).  When
-    # the index is stale the most-recent runs are missing from the results.
+    # The GitHub Actions search index (used for event=/branch= filters) can lag badly:
+    # the same URL has returned total_count values of 190, 238, 311, and 413 within minutes
+    # from different backend nodes (PR #48374).  We detect a stale response by checking
+    # that GITHUB_RUN_ID appears in the results; if absent we retry.
     #
-    # Stale-cache detection: check whether the current run (GITHUB_RUN_ID) appears in the results.
-    # It must always be present in a fresh response when we are querying the same workflow.
-    # When the requested workflow_id differs from the current run's (e.g. AMD CI querying Nvidia CI
-    # historical runs), skip the check — it would be valid but requires a different anchor run and
-    # is left for a follow-up PR once the same-workflow case is confirmed stable.
+    # Stale-check is only active when querying the *same* workflow as the current run AND
+    # the current run is schedule-triggered (so GITHUB_RUN_ID is guaranteed to be in the
+    # results when the API is fresh).  The two remaining uncovered paths are left for a
+    # follow-up PR once this path is confirmed stable:
+    #   • AMD CI querying its own history → falls into the event=workflow_run fallback below
+    #     (AMD CI is triggered via workflow_run, not schedule).
+    #   • AMD CI querying the matching Nvidia run (different workflow_id) → stale_check=False.
     stale_check = (
         current_workflow_id is not None
         and int(workflow_id) == int(current_workflow_id)
@@ -63,9 +60,8 @@ def get_daily_ci_runs(token, num_runs=7, workflow_id=None):
             )
 
         if len(workflow_runs) == 0:
-            # AMD CI runs are triggered via a workflow_run event, so their historical runs are
-            # indexed under event=workflow_run rather than event=schedule.
-            # TODO: add stale-cache detection for this fallback path once the schedule path is stable.
+            # AMD CI runs appear under event=workflow_run (triggered via the workflow_run
+            # event, not schedule).  Stale-check for this path is TODO (see above).
             workflow_run_url = f"{url}&event=workflow_run"
             print(f"[DEBUG get_daily_ci_runs] Falling back to: {workflow_run_url}")
             result = get_github_json(workflow_run_url, token=token)
