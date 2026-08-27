@@ -127,6 +127,13 @@ class OutputRouter:
 
             loop.call_soon_threadsafe(_run_batch)
 
+    def fail_and_deliver(self, state: RequestState, error: Exception) -> None:
+        """Fail the request and deliver the output to the output router. This is made from the OutputRouter so that it
+        can be called even when a batch processor could not be created."""
+        state.status = RequestStatus.FAILED
+        state.error = str(error)
+        self.deliver(state.to_generation_output())
+
 
 class BackgroundThreadStatus:
     """Tracks the status of the background thread locally and in its TP group. The status is an int that can only
@@ -141,6 +148,7 @@ class BackgroundThreadStatus:
         self._local_status_lock = threading.Lock()
         self._local_status = self.DONT_STOP
         self._tp_status = self.DONT_STOP
+        self.fatal_error = None
 
     def clear(self) -> None:
         """Clear the local and TP statuses. This method should ONLY be called by the main thread itself BEFORE starting
@@ -148,6 +156,7 @@ class BackgroundThreadStatus:
         self._tp_status = self.DONT_STOP
         with self._local_status_lock:
             self._local_status = self.DONT_STOP
+        self.fatal_error = None
 
     def request_stop(self, status: int, global_rank: int) -> None:
         """Request the background thread to stop. This does not take effect immediately, only after the TP group has
@@ -159,6 +168,13 @@ class BackgroundThreadStatus:
         logger.info(
             f"Rank {global_rank} requested background thread to stop with {status = }. Now {self._local_status = }"
         )
+
+    def record_fatal_error(self, error: Exception) -> None:
+        """Record a fatal error if none has been recorded yet."""
+        if self.fatal_error is not None:
+            logger.error(f"A fatal error was already recorded, ignoring later error: {error}")
+        else:
+            self.fatal_error = error
 
     def mark_as_stopped(self) -> None:
         """Mark the background thread as stopped. This should be called by the main thread when the generation loop
@@ -174,6 +190,14 @@ class BackgroundThreadStatus:
         # We need to use the lock here because main thread might change the local status after the comm
         with self._local_status_lock:
             self._local_status = max(self._local_status, tp_status)
+
+    def can_accept_new_requests(self) -> str | None:
+        """If the background thread cannot accept new requests, return the reason why. Otherwise, returns None."""
+        if self.fatal_error is not None:
+            return "The background thread died with a fatal error."
+        if self.local_status != self.DONT_STOP:
+            return "The background thread is stopping."
+        return None
 
     @property
     def local_status(self) -> int:
@@ -346,16 +370,13 @@ class ContinuousBatchProcessor:
 
     def _handle_request_error(self, error: Exception, state: RequestState) -> None:
         """Handle general request processing error."""
-        state.status = RequestStatus.FAILED
-        state.error = str(error)
-
         # Include any generated tokens if this is an active request
         if isinstance(state.request_id, str):
             state.generated_tokens = self.scheduler.get_active_request_static_outputs(state.request_id)
         else:
             state.generated_tokens = []
-
-        self.output_router.deliver(state.to_generation_output())
+        # Actual failing of the request
+        self.output_router.fail_and_deliver(state, error)
 
     def prepare_next_batch(self) -> bool:
         """Prepare tensors and metadata for the next model forward pass. Returns True if there are requests to process,
@@ -588,7 +609,6 @@ class ContinuousBatchingManager:
         self._generation_thread = None
 
         # Control flow attributes
-        self.fatal_error: Exception | None = None
         self.warmed_up = False  # Set to True after warmup is completed. Useful for persistent managers.
 
         # Model-related attributes
@@ -684,7 +704,6 @@ class ContinuousBatchingManager:
             logger.warning("Manager thread is already running.")
             return None
         self.background_thread_status.clear()
-        self.fatal_error = None
         self._generation_thread = threading.Thread(target=self._run_generation_loop)
         self._generation_thread.start()
 
@@ -789,16 +808,11 @@ class ContinuousBatchingManager:
         # If this process is not a TP driver, request submission is a no-op
         if not self.is_tp_driver:
             return None
-        # If the background thread died on a fatal error, submitting is pointless: fail fast instead of letting
-        # the caller wait forever on results that will never come
-        if self.fatal_error is not None:
-            raise RuntimeError(
-                "The continuous batching background thread died with a fatal error."
-            ) from self.fatal_error
-        # If the manager is not accepting new requests, throw a warning and return None
-        if self.background_thread_status.local_status >= BackgroundThreadStatus.FLUSH_AND_STOP:
+        # If the manager is not accepting new requests, stop here.
+        denial_msg = self.background_thread_status.can_accept_new_requests()
+        if denial_msg is not None:
             preview = f"{input_ids[:3]}"[:-1] + ", ..., " + f"{input_ids[-3:]}"[1:]
-            logger.warning(f"Background thread is stopping. Request with ids {preview} will be dropped.")
+            logger.warning(f"{denial_msg}. Request with ids {preview} will be dropped.")
             return None
 
         if request_id is None:
@@ -867,36 +881,24 @@ class ContinuousBatchingManager:
             self.cancel_queue.put(request_id)
             self._has_new_requests.set()
 
-    # TODO:handle benchmarking properly when updating / fixing the requeue logic
+    # TODO (remi-or) : handle benchmarking properly when updating / fixing the requeue logic
     # TODO (remi-or) : this NEEDS to get fixed in a future PR -- it's quite wasteful
     def get_result(self, request_id: str | None = None, timeout: float | None = None) -> GenerationOutput | None:
         """Retrieve one result from the output queue. If an ID is provided, returns the first matching request. If a
         timeout is provided, returns None after the timeout (in seconds)."""
-        # The wait is chunked so that a background thread dying mid-wait is noticed within a second instead of
-        # after the caller's full timeout
-        deadline = None if timeout is None else perf_counter() + timeout
-        while True:
-            # If the background thread died on a fatal error and the remaining results are drained, waiting is
-            # pointless: fail fast instead of returning None until the caller's timeout
-            if self.fatal_error is not None and self.output_router.output_queue.empty():
-                raise RuntimeError(
-                    "The continuous batching background thread died with a fatal error."
-                ) from self.fatal_error
-            if self._generation_thread is None and self.output_router.output_queue.empty():
+        # Stop if the output queue is empty and the bg thread is not going to produce new results (crashed or stopped)
+        if self.output_router.output_queue.empty():
+            if self._generation_thread is None or self.background_thread_status.fatal_error is not None:
                 return None
-            remaining = None if deadline is None else deadline - perf_counter()
-            if remaining is not None and remaining <= 0:
-                return None
-            try:
-                result = self.output_router.output_queue.get(
-                    block=True, timeout=1.0 if remaining is None else min(remaining, 1.0)
-                )
-            except queue.Empty:
-                continue
+        # Otherwise, wait for a result from the output queue
+        try:
+            result = self.output_router.output_queue.get(block=True, timeout=timeout)
             if request_id is not None and result.request_id != request_id:
                 self.output_router.output_queue.put(result)
                 return None
             return result
+        except queue.Empty:
+            return None
 
     def __iter__(self):
         """Iterate over results as they become available."""
@@ -1094,8 +1096,6 @@ class ContinuousBatchingManager:
 
     def _handle_critical_error(self, error: Exception, batch_processor: ContinuousBatchProcessor | None) -> None:
         """Handle critical errors that terminate the generation loop."""
-        # Record the error so callers (e.g. the serving layer) can fail fast on subsequent requests
-        self.fatal_error = error
         # Request a hard stop
         self.background_thread_status.request_stop(
             status=BackgroundThreadStatus.HARD_STOP, global_rank=self.distributed_helper.global_rank
@@ -1105,6 +1105,8 @@ class ContinuousBatchingManager:
         self.distributed_helper.tp_all_reduce_state(0, BackgroundThreadStatus.HARD_STOP)
         # Fail all remaining requests
         self._fail_all_remaining_requests(error, batch_processor)
+        # After failing the remaining requests (and so retrieving their partial outputs), record the fatal error
+        self.background_thread_status.record_fatal_error(error)
 
     def _fail_all_remaining_requests(self, error: Exception, batch_processor: ContinuousBatchProcessor | None) -> None:
         """Fail all remaining requests in the input queue and active requests."""
@@ -1114,6 +1116,8 @@ class ContinuousBatchingManager:
                 req_data = self.input_queue.get_nowait()
                 if batch_processor is not None:
                     batch_processor._handle_request_error(error, req_data)
+                else:
+                    self.output_router.fail_and_deliver(req_data, error)
         except queue.Empty:
             pass
         # Fail active and waiting requests
@@ -1317,6 +1321,7 @@ class ContinuousMixin:
         # Main loop
         results = {}
         finished_count = 0
+        request_ids = []  # if the manager fails before add_requests returns, request_ids should not be unbounded
         with manager_cm as manager, logging_cm, pbar_cm as pbar:
             try:
                 request_ids = manager.add_requests(
@@ -1341,13 +1346,18 @@ class ContinuousMixin:
 
         # Re-order requests to match the order of the inputs
         reordered_results = {}
-        missing_keys = []
+        missing_keys, failed_keys = [], []
         for req_id in request_ids:
             result = results.get(req_id)
             if result is not None:
                 reordered_results[req_id] = result
+                if result.error is not None:
+                    failed_keys.append(req_id)
             else:
                 missing_keys.append(req_id)
+
         if missing_keys:
             logger.error(f"Requests {missing_keys} not found in results.")
+        if failed_keys:
+            logger.error(f"Requests {failed_keys} failed during generation.")
         return reordered_results
