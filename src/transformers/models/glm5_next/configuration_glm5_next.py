@@ -259,7 +259,6 @@ class Glm5NextVisionConfig(PreTrainedConfig):
     out_hidden_size: int = 1536
     intermediate_size: int = 4096
     initializer_range: float = 0.02
-    max_position_embeddings: int | None = None
     rope_parameters: dict | None = None
     projection_intermediate_size: int = 10240
     swiglu_limit: float = 10.0

@@ -65,7 +65,6 @@ class Glm4vVisionConfig(PreTrainedConfig):
     out_hidden_size: int = 4096
     intermediate_size: int = 13696
     initializer_range: float = 0.02
-    max_position_embeddings: int | None = None
     rope_parameters: dict | None = None
 
 

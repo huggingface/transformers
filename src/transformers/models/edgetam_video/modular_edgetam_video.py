@@ -236,7 +236,6 @@ class EdgeTamVideoConfig(PreTrainedConfig):
     memory_attention_rope_k_sizes: list | None = None
     memory_attention_rope_dropout: float | int = 0.1
     rope_parameters: dict | None = None
-    max_position_embeddings: int | None = None
 
     # spatial perceiver resampler
     perceiver_resampler_num_latents: int = 256

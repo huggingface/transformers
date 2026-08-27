@@ -147,7 +147,7 @@ class Qwen3_5VisionConfig(PreTrainedConfig):
     out_hidden_size: int = 3584
     num_position_embeddings: int = 2304
     initializer_range: float = 0.02
-    max_position_embeddings: int | None = None
+
     rope_parameters: dict | None = None
 
 

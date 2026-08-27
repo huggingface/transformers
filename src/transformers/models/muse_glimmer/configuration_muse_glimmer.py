@@ -53,9 +53,9 @@ class MuseGlimmerVisionConfig(PreTrainedConfig):
     intermediate_size: int = 8960
     hidden_act: str = "gelu"
     rope_parameters: dict | None = None  # defaults set by `RopeConfigMixin`
-    max_position_embeddings: int = 32 * 32  # == `pos_h * pos_w`
     patch_temporal: int = 2
     merge_size: int = 2
+    max_position_embeddings: int = 32 * 32  # == `pos_h * pos_w`
     layer_norm_eps: float = 1e-05
     layer_types: list[str] | None = None
 

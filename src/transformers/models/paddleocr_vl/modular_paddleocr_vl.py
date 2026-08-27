@@ -282,7 +282,6 @@ class PaddleOCRVisionConfig(SiglipVisionConfig):
     image_size: int = 384
     patch_size: int = 14
     spatial_merge_size: int = 2
-    max_position_embeddings: int | None = None
     rope_parameters: dict | None = None
 
 

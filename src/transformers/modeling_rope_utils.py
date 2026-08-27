@@ -847,6 +847,9 @@ class RotaryEmbeddingConfigMixin:
                     f"Missing validation function in 'RotaryEmbeddingConfigMixin' for 'rope_type'='{rope_type}'"
                 )
 
+    def _validate_axial_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
+        self._validate_default_rope_parameters(rope_parameters, ignore_keys=ignore_keys)
+
     def _validate_default_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
         required_keys = {"rope_type"}
         optional_keys = {"rope_theta"}

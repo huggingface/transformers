@@ -56,7 +56,7 @@ class VideoLlama3VisionConfig(PreTrainedConfig):
     layer_norm_eps: float = 1e-6
     attention_dropout: float | int = 0.0
     initializer_range: float = 0.02
-    max_position_embeddings: int | None = None
+
     rope_parameters: dict | None = None
 
 

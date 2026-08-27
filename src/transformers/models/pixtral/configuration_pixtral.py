@@ -50,7 +50,6 @@ class PixtralVisionConfig(PreTrainedConfig):
     hidden_act: str = "gelu"
     attention_dropout: float | int = 0.0
     rope_parameters: RopeParameters | dict | None = None
-    max_position_embeddings: int | None = None
     initializer_range: float = 0.02
 
     def __post_init__(self, **kwargs):

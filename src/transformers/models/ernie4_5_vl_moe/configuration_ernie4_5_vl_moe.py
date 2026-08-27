@@ -48,7 +48,6 @@ class Ernie4_5_VLMoeVisionConfig(PreTrainedConfig):
     patch_size: int | list[int] | tuple[int, int] = 14
     spatial_merge_size: int = 2
     initializer_range: float = 0.02
-    max_position_embeddings: int | None = None
     rope_parameters: dict | None = None
 
     base_model_tp_plan = {
@@ -60,6 +59,11 @@ class Ernie4_5_VLMoeVisionConfig(PreTrainedConfig):
     intermediate_size: int = 4 * 1280
     temporal_merge_size: int = 2
     rms_norm_eps: float = 1e-6
+
+    def __post_init__(self, **kwargs):
+        if self.rope_parameters is None:
+            self.rope_parameters = {"rope_type": "axial", "rope_theta": self.default_theta}
+        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="baidu/ERNIE-4.5-VL-28B-A3B-PT")

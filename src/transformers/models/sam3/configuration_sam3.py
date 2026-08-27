@@ -55,7 +55,7 @@ class Sam3ViTConfig(PreTrainedConfig):
     pretrain_image_size: int | list[int] | tuple[int, int] = 336
     hidden_dropout: float | int = 0.0
     initializer_range: float = 0.02
-    max_position_embeddings: int | None = None
+
     rope_parameters: dict | None = None
 
     def __post_init__(self, **kwargs):

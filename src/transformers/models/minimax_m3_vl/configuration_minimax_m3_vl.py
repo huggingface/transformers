@@ -181,7 +181,6 @@ class MiniMaxM3VLVisionConfig(PreTrainedConfig):
     attention_dropout: float = 0.0
     rope_parameters: RopeParameters | dict | None = None
     initializer_range: float = 0.02
-    max_position_embeddings: int | None = None
 
 
 @auto_docstring(checkpoint="MiniMaxAI/MiniMax-M3")
