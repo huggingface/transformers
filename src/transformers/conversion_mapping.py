@@ -420,6 +420,32 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming("intermediate.dense", "mlp.fc1"),
             WeightRenaming("output.dense", "mlp.fc2"),
         ],
+        "swinv2": [
+            WeightRenaming("attention.self.query", "attention.q_proj"),
+            WeightRenaming("attention.self.key", "attention.k_proj"),
+            WeightRenaming("attention.self.value", "attention.v_proj"),
+            WeightRenaming("attention.self.logit_scale", "attention.logit_scale"),
+            WeightRenaming(
+                "attention.self.continuous_position_bias_mlp",
+                "attention.continuous_position_bias_mlp",
+            ),
+            WeightRenaming("attention.output.dense", "attention.o_proj"),
+            WeightRenaming("intermediate.dense", "mlp.fc1"),
+            WeightRenaming("output.dense", "mlp.fc2"),
+        ],
+        "swin2sr": [
+            WeightRenaming("attention.self.query", "attention.q_proj"),
+            WeightRenaming("attention.self.key", "attention.k_proj"),
+            WeightRenaming("attention.self.value", "attention.v_proj"),
+            WeightRenaming("attention.self.logit_scale", "attention.logit_scale"),
+            WeightRenaming(
+                "attention.self.continuous_position_bias_mlp",
+                "attention.continuous_position_bias_mlp",
+            ),
+            WeightRenaming("attention.output.dense", "attention.o_proj"),
+            WeightRenaming("intermediate.dense", "mlp.fc1"),
+            WeightRenaming("output.dense", "mlp.fc2"),
+        ],
         "SwinBackbone": [
             WeightRenaming(r"^encoder\.", "swin.encoder."),
             WeightRenaming(r"^embeddings\.", "swin.embeddings."),
