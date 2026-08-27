@@ -1733,8 +1733,7 @@ class ModelTesterMixin(ExportTesterMixin):
                     # Observed flakiness (see #48332): a parameter's gradient is exactly 0.0 in one
                     # run and a tiny value (≤1e-6, orders of magnitude below real gradients) in the
                     # other. Either side can be the near-zero one. Treat such pairs as not a mismatch.
-                    # fmt: off
-                    _fp_noise = 1e-6  # see #48332
+                    _fp_noise = 1e-6
                     only_in_normal = {
                         n
                         for n in only_in_normal
@@ -1745,8 +1744,6 @@ class ModelTesterMixin(ExportTesterMixin):
                         for n in only_in_gradcp
                         if not (normal_grad_sums[n] == 0.0 and gradcp_grad_sums[n] <= _fp_noise)
                     }
-                    # fmt: on
-
                     self.assertEqual(
                         # set union
                         only_in_gradcp | only_in_normal,
