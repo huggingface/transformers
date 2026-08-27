@@ -88,7 +88,7 @@ class GetDailyCiRunsRetryTest(unittest.TestCase):
         with (
             patch("get_previous_daily_ci.get_github_json", side_effect=[_CURRENT_RUN_RESPONSE, _FRESH_RESPONSE]),
             patch("get_previous_daily_ci.time.sleep") as mock_sleep,
-            patch.dict("os.environ", {"GITHUB_RUN_ID": str(_CURRENT_RUN_ID)}),
+            patch.dict("os.environ", {"GITHUB_RUN_ID": str(_CURRENT_RUN_ID), "GITHUB_EVENT_NAME": "schedule"}),
         ):
             runs = get_daily_ci_runs(token="tok", workflow_id=_WORKFLOW_ID)
 
@@ -103,7 +103,7 @@ class GetDailyCiRunsRetryTest(unittest.TestCase):
                 side_effect=[_CURRENT_RUN_RESPONSE, _STALE_RESPONSE, _FRESH_RESPONSE],
             ),
             patch("get_previous_daily_ci.time.sleep") as mock_sleep,
-            patch.dict("os.environ", {"GITHUB_RUN_ID": str(_CURRENT_RUN_ID)}),
+            patch.dict("os.environ", {"GITHUB_RUN_ID": str(_CURRENT_RUN_ID), "GITHUB_EVENT_NAME": "schedule"}),
         ):
             runs = get_daily_ci_runs(token="tok", workflow_id=_WORKFLOW_ID)
 
@@ -118,7 +118,7 @@ class GetDailyCiRunsRetryTest(unittest.TestCase):
                 side_effect=[_CURRENT_RUN_RESPONSE] + [_STALE_RESPONSE] * 5,
             ) as mock_api,
             patch("get_previous_daily_ci.time.sleep") as mock_sleep,
-            patch.dict("os.environ", {"GITHUB_RUN_ID": str(_CURRENT_RUN_ID)}),
+            patch.dict("os.environ", {"GITHUB_RUN_ID": str(_CURRENT_RUN_ID), "GITHUB_EVENT_NAME": "schedule"}),
         ):
             runs = get_daily_ci_runs(token="tok", workflow_id=_WORKFLOW_ID)
 
@@ -138,7 +138,7 @@ class GetDailyCiRunsRetryTest(unittest.TestCase):
                 side_effect=[_DIFFERENT_WORKFLOW_RUN_RESPONSE, _STALE_RESPONSE],
             ) as mock_api,
             patch("get_previous_daily_ci.time.sleep") as mock_sleep,
-            patch.dict("os.environ", {"GITHUB_RUN_ID": "11111111111"}),
+            patch.dict("os.environ", {"GITHUB_RUN_ID": "11111111111", "GITHUB_EVENT_NAME": "schedule"}),
         ):
             runs = get_daily_ci_runs(token="tok", workflow_id=_WORKFLOW_ID)
 
@@ -146,6 +146,23 @@ class GetDailyCiRunsRetryTest(unittest.TestCase):
         self.assertEqual(mock_api.call_count, 2)
         mock_sleep.assert_not_called()
         # Returns whatever the single attempt gave (stale in this case)
+        self.assertEqual(runs[0]["id"], 30781855254)
+
+    def test_non_schedule_event_skips_stale_check(self):
+        """When the triggering event is not 'schedule' (e.g. push), stale check is skipped."""
+        with (
+            patch(
+                "get_previous_daily_ci.get_github_json",
+                side_effect=[_CURRENT_RUN_RESPONSE, _STALE_RESPONSE],
+            ) as mock_api,
+            patch("get_previous_daily_ci.time.sleep") as mock_sleep,
+            patch.dict("os.environ", {"GITHUB_RUN_ID": str(_CURRENT_RUN_ID), "GITHUB_EVENT_NAME": "push"}),
+        ):
+            runs = get_daily_ci_runs(token="tok", workflow_id=_WORKFLOW_ID)
+
+        # 1 current-run lookup + 1 schedule query (max_attempts=1, no retries)
+        self.assertEqual(mock_api.call_count, 2)
+        mock_sleep.assert_not_called()
         self.assertEqual(runs[0]["id"], 30781855254)
 
     def test_no_github_run_id_skips_stale_check(self):

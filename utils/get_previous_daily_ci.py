@@ -42,7 +42,11 @@ def get_daily_ci_runs(token, num_runs=7, workflow_id=None):
     # When the requested workflow_id differs from the current run's (e.g. AMD CI querying Nvidia CI
     # historical runs), skip the check — it would be valid but requires a different anchor run and
     # is left for a follow-up PR once the same-workflow case is confirmed stable.
-    stale_check = current_workflow_id is not None and int(workflow_id) == int(current_workflow_id)
+    stale_check = (
+        current_workflow_id is not None
+        and int(workflow_id) == int(current_workflow_id)
+        and os.environ.get("GITHUB_EVENT_NAME") == "schedule"
+    )
     max_attempts = 5 if stale_check else 1
 
     for attempt in range(1, max_attempts + 1):
