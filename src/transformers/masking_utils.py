@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import copy
 from collections.abc import Callable
 
 import torch
@@ -758,25 +757,6 @@ def find_packed_sequence_indices(position_ids: torch.Tensor) -> torch.Tensor | N
     return packed_sequence_mask
 
 
-def _non_paged_config_fallback(config: PreTrainedConfig, attention_mask) -> PreTrainedConfig:
-    """Continuous batching switches models to a `paged|` attention implementation and prepares its own masks,
-    passed to the model as already-4D tensors (returned as-is downstream). A standard forward on such a model
-    (a 2D padding mask, or no mask at all) still needs the mask of the underlying implementation: e.g. a
-    training forward on the same weights a continuous batching manager generates with. Redirect mask creation
-    to the base implementation in that case. Flash continuous batching calls also pass no mask, but their base
-    mask function returns `None` for a `None` input, so the redirect keeps them unchanged."""
-    if (
-        config._attn_implementation is not None
-        and config._attn_implementation.startswith("paged|")
-        and (attention_mask is None or (isinstance(attention_mask, torch.Tensor) and attention_mask.ndim == 2))
-    ):
-        config = copy.copy(config)
-        # Set the internal attribute directly: the property setter would recurse into sub-configs, which are
-        # shared with the original config after the shallow copy.
-        config._attn_implementation_internal = config._attn_implementation.removeprefix("paged|")
-    return config
-
-
 def _preprocess_mask_arguments(
     config: PreTrainedConfig,
     inputs_embeds: torch.Tensor,
@@ -932,8 +912,6 @@ def create_causal_mask(
             plain causal mask. Set to `False` to always materialize the mask, e.g. when it is later concatenated with
             another mask. Defaults to `True`.
     """
-    config = _non_paged_config_fallback(config, attention_mask)
-
     # Power feature: if `is_causal` is False, then fallback to bi-directional mask for bi-directional attention.
     # It allows to use decoder-only models with bi-directional attention as well
     if not getattr(config, "is_causal", True):
@@ -1173,8 +1151,6 @@ def create_sliding_window_causal_mask(
             plain causal mask. Set to `False` to always materialize the mask, e.g. when it is later concatenated with
             another mask. Defaults to `True`.
     """
-    config = _non_paged_config_fallback(config, attention_mask)
-
     # Power feature: if `is_causal` is False, then fallback to bi-directional mask for bi-directional attention
     # It allows to use decoder-only models with bi-directional attention as well
     if not getattr(config, "is_causal", True):

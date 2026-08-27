@@ -2,7 +2,6 @@ import torch
 
 from ..generation.continuous_batching import PagedAttentionCache
 from ..modeling_flash_attention_utils import lazy_import_paged_flash_attention
-from .flash_attention import flash_attention_forward
 
 
 def paged_attention_forward(
@@ -11,12 +10,12 @@ def paged_attention_forward(
     k: torch.Tensor,
     v: torch.Tensor,
     attention_mask: torch.Tensor | None,  # Unused in flash
-    cache: PagedAttentionCache | None = None,
-    cu_seq_lens_q: torch.Tensor | None = None,
-    cu_seq_lens_k: torch.Tensor | dict[str, torch.Tensor] | None = None,
-    max_seqlen_q: int | None = None,
-    max_seqlen_k: int | dict[str, int] | None = None,
-    block_table: torch.Tensor | None = None,
+    cache: PagedAttentionCache,
+    cu_seq_lens_q: torch.Tensor,
+    cu_seq_lens_k: torch.Tensor | dict[str, torch.Tensor],
+    max_seqlen_q: int,
+    max_seqlen_k: int | dict[str, int],
+    block_table: torch.Tensor | None,
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
     """Performs the forward pass of attention with paged key-value cache. This function handles the cache updates and
@@ -41,12 +40,6 @@ def paged_attention_forward(
             read and dispatches the read using the block table. Same for the write. If a request has fewer than
             max_blocks_per_seq blocks, the block table is padded with -1s to indicate that the block is not allocated.
     """
-    # Without a paged cache, this is not a continuous batching call: behave like the base flash implementation.
-    # This happens when a standard forward runs on a model whose attention was switched to a paged implementation,
-    # e.g. a training forward on the same weights a continuous batching manager generates with.
-    if cache is None:
-        return flash_attention_forward(module, q, k, v, attention_mask, **kwargs)
-
     # FlashAttention requires the query and value to share a head dim; pad `value` up to the
     # query head dim (e.g. MLA, where `v_head_dim < qk_head_dim`) and crop the output below.
     head_dim, v_head_dim = q.shape[-1], v.shape[-1]
