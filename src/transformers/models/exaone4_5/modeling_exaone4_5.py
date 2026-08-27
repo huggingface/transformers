@@ -605,7 +605,7 @@ class Exaone4_5_VisionModel(Exaone4_5_PreTrainedModel):
         hidden_states = self.permute_input_for_window_attn(hidden_states, window_index, seq_len=seq_len)
 
         position_embeddings = self.rotary_pos_emb(hidden_states, position_ids)
-        position_embeddings = (
+        position_embeddings = tuple(
             self.permute_input_for_window_attn(freq, window_index, seq_len=seq_len) for freq in position_embeddings
         )
 

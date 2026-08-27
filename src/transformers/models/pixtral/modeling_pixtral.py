@@ -438,13 +438,12 @@ class PixtralVisionModel(PixtralPreTrainedModel):
         position_ids = []
         for patch in patch_embeds_list:
             hpos_ids, wpos_ids = torch.meshgrid(
-                torch.arange(patch.shape[-1], device=patch.device),
                 torch.arange(patch.shape[-2], device=patch.device),
+                torch.arange(patch.shape[-1], device=patch.device),
                 indexing="ij",
             )
-            position_ids.append(torch.stack([hpos_ids, wpos_ids], dim=-1))
+            position_ids.append(torch.stack([hpos_ids.flatten(), wpos_ids.flatten()], dim=-1))
         position_ids = torch.cat(position_ids, dim=0)
-        kwargs["position_ids"] = position_ids
         position_embeddings = self.patch_positional_embedding(patch_embeds, position_ids)
 
         if is_flash_attention_requested(self.config):
@@ -459,6 +458,7 @@ class PixtralVisionModel(PixtralPreTrainedModel):
             patch_embeds,
             attention_mask=attention_mask,
             position_embeddings=position_embeddings,
+            position_ids=position_ids,
             **kwargs,
         )
 
