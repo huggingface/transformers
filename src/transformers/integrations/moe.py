@@ -257,6 +257,19 @@ if is_torch_available():
     )
 
 
+def _has_valid_grouped_mm_strides(tensor: torch.Tensor) -> bool:
+    """Return whether the last two tensor dimensions satisfy grouped_mm's 16-byte stride requirements."""
+    strides = tensor.stride()
+    sizes = tensor.size()
+    alignment = 16 // tensor.element_size()
+
+    if strides[-2] == 1 and strides[-1] >= max(1, sizes[-2]):
+        return strides[-1] % alignment == 0
+    if strides[-1] == 1 and strides[-2] >= max(1, sizes[-1]):
+        return strides[-2] % alignment == 0
+    return False
+
+
 def _can_use_grouped_mm(input: torch.Tensor, weight: torch.Tensor, offs: torch.Tensor) -> bool:
     """
     Check if torch.nn.functional.grouped_mm or torch._grouped_mm can be used based on availability and compatibility with torch.compile.
@@ -271,6 +284,9 @@ def _can_use_grouped_mm(input: torch.Tensor, weight: torch.Tensor, offs: torch.T
     Returns:
         `bool`: True if grouped_mm can be used, False otherwise.
     """
+    if not _has_valid_grouped_mm_strides(input) or not _has_valid_grouped_mm_strides(weight):
+        return False
+
     # accept_dev=True is necessary for "+cpu"/"+xpu" etc.
     if (
         (is_torchdynamo_compiling() and weight.dtype != torch.bfloat16)
