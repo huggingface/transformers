@@ -624,13 +624,6 @@ class AXK2Attention(nn.Module):
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
-        # Both the indexer's scores and the sparse fold below *add* into this mask, so it has to be
-        # additive. `create_causal_mask` hands back a boolean mask on the sdpa path, where `masked_fill`
-        # writes `True` — i.e. *attend* — into every key the indexer's top-k dropped.
-        if attention_mask is not None and attention_mask.dtype == torch.bool:
-            attention_mask = torch.zeros_like(attention_mask, dtype=hidden_states.dtype).masked_fill_(
-                ~attention_mask, torch.finfo(hidden_states.dtype).min
-            )
         # The indexer scores against a 3D `[B, S, T]` mask; the attention mask is 4D `[B, 1, S, T]`.
         indexer_mask = attention_mask[:, 0, :, :] if attention_mask is not None else None
         topk_indices = self.indexer(
