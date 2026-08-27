@@ -106,11 +106,15 @@ class DecompressExperts(ConversionOps):
         compressor = BaseCompressor.get_value_from_registry(format)
 
         class DummyModule(nn.Module):
-            def __init__(self, weight, scale, shape):
+            def __init__(self, weight, scale, shape, global_scale=None):
                 super().__init__()
                 self.weight_packed = nn.Parameter(weight, requires_grad=False)
                 self.weight_scale = nn.Parameter(scale, requires_grad=False)
                 self.weight_shape = nn.Parameter(shape, requires_grad=False)
+                if global_scale is not None:
+                    # `tensor_group` schemes (NVFP4) only. The compressor reads this with
+                    # `.get(..., None)`, so omitting it dequantizes without raising.
+                    self.weight_global_scale = nn.Parameter(global_scale, requires_grad=False)
 
         # `pack_factor` low-bit weights are packed per int32 along the packed dim.
         # Used only as a fallback for `weight_shape` (see below): rebuilding the
@@ -126,6 +130,7 @@ class DecompressExperts(ConversionOps):
             quantized = value
             scales = input_dict[key.replace("weight_packed", "weight_scale")]
             shapes = input_dict.get(key.replace("weight_packed", "weight_shape"))
+            global_scales = input_dict.get(key.replace("weight_packed", "weight_global_scale"))
 
             # Pre-allocate the stacked output buffer to reduce cuda mem fragmentation
             # Without pre-allocation the loop accumulates N tensors per expert and next
@@ -141,7 +146,7 @@ class DecompressExperts(ConversionOps):
                     shape = stored_shape
                 else:
                     shape = torch.tensor([quant.shape[0], quant.shape[1] * pack_factor])
-                module = DummyModule(quant, scale, shape)
+                module = DummyModule(quant, scale, shape, None if global_scales is None else global_scales[i])
                 module.quantization_scheme = quantization_scheme
                 compressor.decompress_module(module)
 
