@@ -548,32 +548,71 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
 # nothing — the ModernVBert family's vision encoder and sam3_lite_text fail to load with `0x21` whether
 # delegated or not (that code is an arena the plan cannot allocate, not a refusal), and sam3_lite_text goes
 # on to fail at execute with `0x12` once undelegated.
-EXECUTORCH_DISABLE_PARTITION: dict[str, dict[str, str]] = {
-    # Dynamic shapes only — measured there; the static variant fails earlier, for its own reasons.
+# Per-op partitioner configs to withhold from XNNPACK, keyed like `EXECUTORCH_DISABLE_PARTITION` and
+# preferred over it: withholding one config leaves that op to the portable kernels and keeps every other op
+# delegated, where disabling the partitioner costs the whole graph its acceleration. An entry belongs here
+# once *removing that one config* is shown to make the program run — measured by re-exporting with each of
+# the 52 configs withheld in turn and keeping the ones that come back with no tolerance warning. Where no
+# single config suffices (univnet and perceiver: all 52 refused individually), the coarse
+# `EXECUTORCH_DISABLE_PARTITION` below is still the only way past.
+EXECUTORCH_PARTITION_EXCLUDE: dict[str, dict[str, tuple[str, ...]]] = {
+    # Dynamic shapes only — the static variants lower and run fully delegated.
     "dynamic": {
-        "MuseGlimmerForConditionalGeneration": (
-            "XNNPACK cannot propagate the vision encoder's runtime shapes: its inputs are dynamic on every "
-            "axis (`pixel_values (None, None)`, `cu_seqlens (None,)`, `window_index (None,)`), and the "
-            "delegate refuses at execute with `Propagating input shapes failed with code: "
-            "xnn_status_invalid_parameter` (`0x1` at `CALL_DELEGATE`). Undelegated, the same graph generates."
-        ),
-        # The base model decomposes to the same vision encoder, so the per-component run hits it too.
-        "MuseGlimmerModel": "Same vision encoder as `MuseGlimmerForConditionalGeneration`.",
+        # The vision encoder's inputs are dynamic on every axis, and XNNPACK gives up propagating shapes
+        # through `unsqueeze_copy` (`Propagating input shapes failed with code:
+        # xnn_status_invalid_parameter`). `_patch_unsqueeze` cannot reach these: they come from
+        # decompositions, below any Python-level patch, so the config has to be withheld instead.
+        "MuseGlimmerForConditionalGeneration": ("UnsqueezeCopyConfig",),
+        "MuseGlimmerModel": ("UnsqueezeCopyConfig",),
     },
+    # Both shape variants.
+    "all": {
+        # Rank-7 activations from the location-variable convolution — `(2, 16, 7, 256, 1, 1, 1)`, past the
+        # 6 dimensions XNNPACK can define. Every config claiming an op that touches them must be withheld.
+        "UnivNetModel": ("CloneDimOrderConfig", "PermuteConfig", "UnsqueezeCopyConfig", "ViewCopyConfig"),
+    },
+    # Static shapes only — the dynamic variants lower and run fully delegated.
+    "static": {
+        # XNNPACK claims `aten.view_copy` and its compiler then refuses the partition it claimed (`0x1` at
+        # method load). Withholding `ViewCopyConfig` alone lets these run; each of the other 51 configs
+        # changes nothing, so it is that op pattern and not the graph. Both families share the GatedDeltaNet
+        # backbone the refusal comes from.
+        "Qwen3_5Model": ("ViewCopyConfig",),
+        "Qwen3_5TextModel": ("ViewCopyConfig",),
+        "Qwen3_5ForCausalLM": ("ViewCopyConfig",),
+        "Qwen3_5ForConditionalGeneration": ("ViewCopyConfig",),
+        "Qwen3_5ForSequenceClassification": ("ViewCopyConfig",),
+        "Qwen3_5ForTokenClassification": ("ViewCopyConfig",),
+        "Qwen3_5TextForSequenceClassification": ("ViewCopyConfig",),
+        "Qwen3NextModel": ("ViewCopyConfig",),
+        "Qwen3NextForCausalLM": ("ViewCopyConfig",),
+        "Qwen3NextForQuestionAnswering": ("ViewCopyConfig",),
+        "Qwen3NextForSequenceClassification": ("ViewCopyConfig",),
+        "Qwen3NextForTokenClassification": ("ViewCopyConfig",),
+        "Qwen3_5MoeModel": ("ViewCopyConfig",),
+        "Qwen3_5MoeTextModel": ("ViewCopyConfig",),
+        "Qwen3_5MoeForCausalLM": ("ViewCopyConfig",),
+        "Qwen3_5MoeForConditionalGeneration": ("ViewCopyConfig",),
+        "OlmoHybridModel": ("ViewCopyConfig",),
+        "OlmoHybridForCausalLM": ("ViewCopyConfig",),
+        "PerceiverModel": ("ViewCopyConfig",),
+        # The flow head's rank-heavy activations: XNNPACK cannot define them, and the three configs that
+        # claim the ops touching them have to be withheld together (measured — no smaller set runs).
+        "PerceiverForOpticalFlow": ("CloneConfig", "PermuteConfig", "ViewCopyConfig"),
+    },
+}
+
+
+EXECUTORCH_DISABLE_PARTITION: dict[str, dict[str, str]] = {
     # Static shapes only — the dynamic variants lower and run delegated.
     "static": {
-        "Qwen3_5Model": (
-            "XNNPACK's own compiler rejects the partition its partitioner claimed — "
-            "`XNNCompiler::compileModel failed: 0x1` at method load, on the GatedDeltaNet layers' "
-            "conv-state tensors. The portable kernels serve the same graph."
+        "PerceiverForMultimodalAutoencoding": (
+            "The only entry left that no per-op exclusion reaches: withholding all 52 partitioner configs "
+            "still does not get this program running, because what it needs is a kernel ExecuTorch does not "
+            "ship (`aten::rand_like.out`, from the `torch.bernoulli` masking its preprocessor runs at "
+            "inference). Disabling the partitioner turns the delegate's `0x1` into that missing-kernel "
+            "`0x14`, which is tolerated and reported — the honest end state until the kernel exists."
         ),
-        "Qwen3_5ForConditionalGeneration": "Same GatedDeltaNet backbone as `Qwen3_5Model`.",
-        "Qwen3_5ForSequenceClassification": "Same GatedDeltaNet backbone as `Qwen3_5Model`.",
-        "Qwen3_5ForTokenClassification": "Same GatedDeltaNet backbone as `Qwen3_5Model`.",
-        # The text-only tester drives its own classes, which carry the same layers.
-        "Qwen3_5TextModel": "Same GatedDeltaNet backbone as `Qwen3_5Model`.",
-        "Qwen3_5ForCausalLM": "Same GatedDeltaNet backbone as `Qwen3_5Model`.",
-        "Qwen3_5TextForSequenceClassification": "Same GatedDeltaNet backbone as `Qwen3_5Model`.",
     },
 }
 
@@ -800,8 +839,16 @@ def _executorch_log_detail(log: str) -> str:
     # Prefer the line that says *why* over the one that says where it gave up: a delegate refusal logs its
     # `xnn_status_*` first and then a generic `CALL_DELEGATE execute failed` last, and only the first is
     # actionable.
-    causes = [line for line in complaints if re.search(r"xnn_status|Internal Error|Attempted to resize", line)]
-    return (causes or complaints)[-1] if (causes or complaints) else ""
+    # `method.cpp` dumps one `arg N with type id` line per operand after a kernel failure; they are the
+    # last lines but say nothing about the cause, so they never win.
+    complaints = [line for line in complaints if not re.search(r"arg \d+ with type id", line)]
+    causes = [
+        line for line in complaints if re.search(r"xnn_status|Internal Error|Attempted to resize|Check failed", line)
+    ]
+    # The *first* cause, not the last: a kernel logs the specific complaint
+    # (`tensor_util_portable.cpp: 4 input tensors have different dim orders`) before the wrapper check that
+    # gave up on it (`op_where.cpp: tensors_have_same_dim_order(...)`), and only the first names the reason.
+    return (causes or complaints)[0] if (causes or complaints) else ""
 
 
 @contextmanager
@@ -819,7 +866,17 @@ def _tolerating_executorch_limits(label: str):
             yield
         except (RuntimeError, MemoryError) as error:
             if not _is_executorch_runtime_limit(error):
-                raise
+                # A visible failure needs its log too: ExecuTorch's exception carries only the code, while
+                # the kernel and the shapes it refused live in the C++ log this context captured. Dropping it
+                # here left `0x12` (never tolerated, so never written) reported as a bare code.
+                log = executorch_log()
+                detail = _executorch_log_detail(log)
+                written = _write_executorch_log(label, log)
+                if not (detail or written):
+                    raise
+                raise type(error)(
+                    f"{error}\n[executorch] {label}: {detail}" + (f" (full log: {written})" if written else "")
+                ) from error
             # A tolerated failure still reports the test as passed, so say so — otherwise a green run is
             # indistinguishable from one where the program actually ran. The log detail is what makes the
             # warning actionable: the error code alone cannot tell a platform ceiling from an op the export
@@ -881,6 +938,16 @@ def _onnx_optimize_enabled(model_class, dynamic: bool) -> bool:
     name = model_class.__name__
     scopes = ["all"] + (["dynamic"] if dynamic else [])
     return not any(name in ONNX_DISABLE_OPTIMIZE.get(scope, {}) for scope in scopes)
+
+
+def _executorch_partition_exclude(model_class, dynamic: bool) -> tuple[str, ...]:
+    """The partitioner configs to withhold for this class, by the same scope walk as
+    ``_executorch_partition_enabled``. Empty means hand the partitioner everything."""
+    name = model_class.__name__
+    excluded: tuple[str, ...] = ()
+    for scope in ("all", "dynamic" if dynamic else "static"):
+        excluded += EXECUTORCH_PARTITION_EXCLUDE.get(scope, {}).get(name, ())
+    return excluded
 
 
 def _executorch_partition_enabled(model_class, dynamic: bool) -> bool:
@@ -1301,7 +1368,11 @@ class ExportTesterMixin:
                 continue
 
             # Per class: a graph whose delegate refuses its own partitioner's claim lowers undelegated.
-            config = ExecutorchConfig(dynamic=dynamic, partition=_executorch_partition_enabled(model_class, dynamic))
+            config = ExecutorchConfig(
+                dynamic=dynamic,
+                partition=_executorch_partition_enabled(model_class, dynamic),
+                partition_exclude=_executorch_partition_exclude(model_class, dynamic),
+            )
 
             # Trace on CPU: XNNPACK targets CPU, and CPU tracing yields device-consistent graphs.
             # Tracing on CUDA surfaces per-model device bugs — models create in-`forward` tensors
@@ -1538,7 +1609,11 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                 continue
 
             # Per class: a graph whose delegate refuses its own partitioner's claim lowers undelegated.
-            config = ExecutorchConfig(dynamic=dynamic, partition=_executorch_partition_enabled(model_class, dynamic))
+            config = ExecutorchConfig(
+                dynamic=dynamic,
+                partition=_executorch_partition_enabled(model_class, dynamic),
+                partition_exclude=_executorch_partition_exclude(model_class, dynamic),
+            )
 
             components = self._prepare_export_generate_model_and_inputs(
                 model_class,

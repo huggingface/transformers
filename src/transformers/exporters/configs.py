@@ -180,12 +180,19 @@ class ExecutorchConfig(DynamoConfig):
             lowers to the portable kernels — slower, and the way past a backend whose compiler refuses a
             partition its own partitioner claimed (XNNPACK does this at method load, so the refusal only
             shows up when the program is run).
+        partition_exclude (`tuple[str, ...]`, *optional*):
+            Names of the backend partitioner's per-op configs to withhold, e.g.
+            `("ViewCopyConfig",)`. Those ops lower to the portable kernels while everything else stays
+            delegated — the targeted form of `partition=False`, for a backend that refuses a partition
+            because of one op pattern rather than the whole graph. XNNPACK only; names come from
+            `executorch.backends.xnnpack.partition.config.ALL_PARTITIONER_CONFIGS`.
     """
 
     export_format: ExportFormat = ExportFormat.EXECUTORCH
 
     backend: str = "xnnpack"
     partition: bool = True
+    partition_exclude: tuple[str, ...] = ()
     alloc_graph_input: bool = True
     alloc_graph_output: bool = True
     alloc_mutable_buffers: bool = True

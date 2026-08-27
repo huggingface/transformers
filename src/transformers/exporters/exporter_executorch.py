@@ -147,7 +147,9 @@ class ExecutorchExporter(DynamoExporter):
         if prepare_for_backend is None:
             raise ValueError(f"Unsupported backend {config.backend} for ExecuTorch export")
 
-        model, sample_inputs, partitioner = prepare_for_backend(model, sample_inputs)
+        model, sample_inputs, partitioner = prepare_for_backend(
+            model, sample_inputs, exclude=tuple(config.partition_exclude)
+        )
         partitioner = partitioner if config.partition else []
 
         with (
@@ -325,7 +327,7 @@ def _make_contiguous(sample_inputs: dict[str, Any]) -> dict[str, Any]:
     return torch.utils._pytree.tree_map_only(torch.Tensor, lambda t: t.contiguous(), sample_inputs)
 
 
-def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any]):
+def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any], exclude: tuple[str, ...] = ()):
     """CPU inference via XNNPACK.
 
     Moves the model to CPU: XNNPACK's partitioner/serializer and the edge-lowering passes all
@@ -339,11 +341,27 @@ def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any]):
     # XNNPACK has no `_grouped_mm.out` kernel — force MoE experts to `batched_mm`.
     if isinstance(model, PreTrainedModel) and model._can_set_experts_implementation():
         model.set_experts_implementation("batched_mm")
-    partitioner = [XnnpackPartitioner()]
+    # Withholding a config leaves its ops to the portable kernels and keeps the rest delegated: XNNPACK
+    # can claim a partition its compiler then refuses over a single op pattern (`ViewCopyConfig` for
+    # qwen3_next), where dropping the whole partition would cost every other op its acceleration.
+    if exclude:
+        from executorch.backends.xnnpack.partition.config import ALL_PARTITIONER_CONFIGS
+
+        unknown = set(exclude) - {config.__name__ for config in ALL_PARTITIONER_CONFIGS}
+        if unknown:
+            raise ValueError(f"Unknown XNNPACK partitioner config(s): {sorted(unknown)}")
+        configs = [config for config in ALL_PARTITIONER_CONFIGS if config.__name__ not in exclude]
+        if not configs:
+            # `XnnpackPartitioner` reads `configs or ALL_PARTITIONER_CONFIGS`, so an empty list means
+            # *every* config, the opposite of what excluding all of them asks for. Say so instead.
+            raise ValueError("partition_exclude removes every partitioner config; pass partition=False instead")
+        partitioner = [XnnpackPartitioner(configs=configs)]
+    else:
+        partitioner = [XnnpackPartitioner()]
     return model, _make_contiguous(sample_inputs), partitioner
 
 
-def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any]):
+def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any], exclude: tuple[str, ...] = ()):
     """GPU inference via the ExecuTorch CUDA backend, decoupled from the model's device.
 
     The backend requires bfloat16 (upcast here) and a visible GPU — it delegates ops to Triton
@@ -512,6 +530,77 @@ def _patch_argsort(original):
 
     def patch(input, dim=-1, descending=False, stable=False):
         return torch.topk(input, input.shape[dim], dim=dim, largest=descending, sorted=True).indices
+
+    return patch
+
+
+@register_patch("executorch", "transformers.models.deepseek_v2.modeling_deepseek_v2.DeepseekV2RotaryEmbedding.forward")
+def _patch_deepseek_v2_rotary_forward(original):
+    """Carry deepseek_v2's rotary frequencies as a real `[cos, sin]` pair rather than a complex tensor.
+
+    ExecuTorch's portable registry ships neither `aten::polar.out` nor `aten::view_as_complex_copy.out`, so
+    a graph building `torch.polar(ones, freqs)` produces a `.pte` that cannot load (`0x14`). The pair is the
+    same numbers — `polar(1, θ)` is `cos θ + i sin θ` — and `_patch_deepseek_v2_apply_rotary_emb` consumes
+    it, so no complex tensor is created. The two are a set: neither works without the other.
+
+    `@dynamic_rope_update` on the original updates `inv_freq` for the dynamic RoPE types before the body
+    runs; it is kept by wrapping the original rather than reimplementing that, and only the complex tail
+    differs.
+    """
+
+    def patch(self, x, position_ids):
+        from ..utils.generic import maybe_autocast
+
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        position_ids_expanded = position_ids[:, None, :].float()
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with maybe_autocast(device_type=device_type, enabled=False):
+            freqs = (inv_freq_expanded.to(x.device) @ position_ids_expanded).transpose(1, 2)
+            freqs_cis = torch.stack((torch.cos(freqs), torch.sin(freqs)), dim=-1)
+            freqs_cis = freqs_cis * self.attention_scaling
+        return freqs_cis
+
+    return patch
+
+
+@register_patch("executorch", "transformers.models.deepseek_v2.modeling_deepseek_v2.apply_rotary_emb")
+def _patch_deepseek_v2_apply_rotary_emb(original):
+    """deepseek_v2's rotary as real arithmetic, against the pair the patch above produces.
+
+    A complex multiply is two real multiplies: `(a + bi)(c + di)` is `(ac - bd) + (ad + bc)i`. Writing it
+    out keeps the same float operations in the same order, so the result matches the complex path rather
+    than approximating it."""
+
+    def patch(xq, xk, freqs_cis):
+        cos = freqs_cis[..., 0].unsqueeze(1).to(xq.device)
+        sin = freqs_cis[..., 1].unsqueeze(1).to(xq.device)
+
+        def rotate(x):
+            paired = x.float().reshape(*x.shape[:-1], -1, 2)
+            real, imaginary = paired[..., 0], paired[..., 1]
+            rotated = torch.stack((real * cos - imaginary * sin, real * sin + imaginary * cos), dim=-1)
+            return rotated.flatten(3).type_as(x)
+
+        return rotate(xq), rotate(xk)
+
+    return patch
+
+
+@register_patch("executorch", "torch.unsqueeze", "torch.Tensor.unsqueeze")
+def _patch_unsqueeze(original):
+    """Insert the axis with a reshape, so XNNPACK never sees an `unsqueeze_copy` to refuse.
+
+    XNNPACK's partitioner claims `aten.unsqueeze_copy` and its compiler then rejects the partition on a
+    dynamic graph (`0x1`, `Propagating input shapes failed with code: xnn_status_invalid_parameter`). It is
+    the only one of the 52 partitioner configs that does: excluding `UnsqueezeCopyConfig` alone lets
+    deepseek_v2's dynamic export run delegated, and excluding any of the other 51 changes nothing. A reshape
+    to the same shape is the same operation and is claimed by a config XNNPACK honours.
+    """
+
+    def patch(input, dim):
+        shape = list(input.shape)
+        shape.insert(dim if dim >= 0 else dim + len(shape) + 1, 1)
+        return input.reshape(shape)
 
     return patch
 
