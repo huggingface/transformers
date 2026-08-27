@@ -381,6 +381,9 @@ class Transpose(ConversionOps):
             return None
 
         ndim = len(target_shape)
+        if not (-ndim <= self.dim0 < ndim and -ndim <= self.dim1 < ndim):
+            raise IndexError(f"Dimension out of range for a {ndim}D tensor: {(self.dim0, self.dim1)}")
+
         dim0 = self.dim0 % ndim
         dim1 = self.dim1 % ndim
         return {dim0: dim1, dim1: dim0}
@@ -1309,6 +1312,7 @@ def spawn_materialize(
         # Return the Callable here, not the Tensor itself, so we actually delay loading to avoid saturating cpu
         # memory during Conversion
         return _job
+
 
 def dot_natural_key(s: str):
     """
