@@ -31,7 +31,7 @@ if is_torch_available():
     import torch
 
     from ..integrations.gguf.kernels import get_gguf_kernel
-    from ..integrations.gguf.reader import GgufHeader, read_gguf_metadata
+    from ..integrations.gguf.reader import GgufHeader, load_gguf_state_dict, read_gguf_metadata
     from ..integrations.gguf.utils import (
         add_gguf_dequantize_ops,
         get_gguf_conversion_mapping,
@@ -129,7 +129,8 @@ class GgufHfQuantizer(HfQuantizer):
         written in one float type is loaded in that type: the checkpoint decides, as `auto` does
         everywhere else.
 
-        Kept because `update_weight_conversions` needs it for the tensors it has to dequantize.
+        Kept because `get_state_dict` and `update_weight_conversions` need it for the tensors they
+        have to dequantize.
         """
         if dtype is None:
             if not self.supported:
@@ -138,6 +139,22 @@ class GgufHfQuantizer(HfQuantizer):
             dtype = self.header.dtype if self.header.dtype is not None else torch.float32
         self.dtype = dtype
         return dtype
+
+    def get_state_dict(self, checkpoint_file: str, model):
+        """The file's tensors, quantized ones kept as raw blocks.
+
+        Architectures with no mapping yet go to the legacy loader instead, which renames and
+        dequantizes everything itself.
+        """
+        if self.supported:
+            return load_gguf_state_dict(self.header, dtype=self.dtype)
+
+        from ..modeling_gguf_pytorch_utils import load_gguf_checkpoint
+
+        legacy = load_gguf_checkpoint(
+            checkpoint_file, return_tensors=True, model_to_load=model, torch_dtype=self.dtype
+        )
+        return legacy["tensors"]
 
     def _process_model_before_weight_loading(self, model, **kwargs):
         """Swap in `GgufLinear` wherever the weight can stay packed."""
