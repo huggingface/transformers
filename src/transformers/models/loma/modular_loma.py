@@ -16,17 +16,21 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
+from ...backbone_utils import consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, can_return_tuple
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoBackbone, AutoConfig
 from ..auto.modeling_auto import AutoModelForKeypointDetection
 from ..lightglue.configuration_lightglue import LightGlueConfig
 from ..lightglue.image_processing_lightglue import LightGlueImageProcessor, LightGlueImageProcessorKwargs
-from ..lightglue.image_processing_pil_lightglue import LightGlueImageProcessorPil
 from ..lightglue.modeling_lightglue import (
+    LightGlueAttention,
     LightGlueKeypointMatchingOutput,
+    LightGlueMatchAssignmentLayer,
+    LightGlueMLP,
+    LightGluePositionalEncoder,
     LightGluePreTrainedModel,
-    LightGlueTokenConfidenceLayer,
+    LightGlueTransformerLayer,
 )
 
 
@@ -38,7 +42,7 @@ class LoMaConfig(LightGlueConfig):
         Dimension of the local descriptors supplied by the descriptor network.
     descriptor_dim (`int`, *optional*, defaults to 256):
         Dimension of the descriptors used by the matching transformer.
-    attention_head_dim (`int`, *optional*, defaults to 64):
+    head_dim (`int`, *optional*, defaults to 64):
         Dimension of each attention head. The number of attention heads is derived from `descriptor_dim` when it is
         not specified.
     num_hidden_layers (`int`, *optional*, defaults to 9):
@@ -52,8 +56,8 @@ class LoMaConfig(LightGlueConfig):
         Frequency scale used by the Fourier positional encoding.
     descriptor_hidden_blocks (`int`, *optional*, defaults to 5):
         Number of depthwise refinement blocks at each decoder scale in the local descriptor network.
-    dinov2_dim (`int`, *optional*, defaults to 1024):
-        Hidden dimension of the DINOv2 encoder.
+    backbone_config (`Union[AutoConfig, dict]`, *optional*):
+        Configuration for the auxiliary backbone encoder (DINOv2 by default) used in the descriptor network.
 
     Examples:
         ```python
@@ -66,41 +70,39 @@ class LoMaConfig(LightGlueConfig):
     """
 
     model_type = "loma"
+    sub_configs = {"keypoint_detector_config": AutoConfig, "backbone_config": AutoConfig}
 
     input_descriptor_dim: int = 256
     descriptor_dim: int = 256
-    attention_head_dim: int | None = None
+    head_dim: int | None = None
     num_hidden_layers: int = 9
     num_attention_heads: int | None = None
     filter_threshold: float = 0.1
     positional_encoding_type: str = "learnable"
     positional_encoding_gamma: float = 1.0
     descriptor_hidden_blocks: int = 5
-    dinov2_dim: int = 1024
+    hidden_act: str = "gelu"
+    backbone_config: dict | PreTrainedConfig | None = None
 
     # Fields inherited from LightGlueConfig but not used by LoMa's matching architecture.
-    attention_dropout = AttributeError()
     depth_confidence = AttributeError()
-    hidden_act = AttributeError()
-    num_key_value_heads = AttributeError()
     width_confidence = AttributeError()
 
     def __post_init__(self, **kwargs):
         if self.num_attention_heads is None:
-            if self.attention_head_dim is None:
-                self.attention_head_dim = 64
-            if self.descriptor_dim % self.attention_head_dim != 0:
-                raise ValueError("descriptor_dim must be divisible by attention_head_dim")
-            self.num_attention_heads = self.descriptor_dim // self.attention_head_dim
-        elif self.attention_head_dim is None:
-            self.attention_head_dim = self.descriptor_dim // self.num_attention_heads
-        elif self.descriptor_dim // self.num_attention_heads != self.attention_head_dim:
-            raise ValueError("descriptor_dim / num_attention_heads must equal attention_head_dim")
+            if self.head_dim is None:
+                self.head_dim = 64
+            if self.descriptor_dim % self.head_dim != 0:
+                raise ValueError("descriptor_dim must be divisible by head_dim")
+            self.num_attention_heads = self.descriptor_dim // self.head_dim
+        elif self.head_dim is None:
+            self.head_dim = self.descriptor_dim // self.num_attention_heads
+        elif self.descriptor_dim // self.num_attention_heads != self.head_dim:
+            raise ValueError("descriptor_dim / num_attention_heads must equal head_dim")
 
         if self.positional_encoding_type not in {"learnable", "fixed"}:
             raise ValueError("positional_encoding_type must be either 'learnable' or 'fixed'")
 
-        # Keep the keypoint detector setup from LightGlueConfig without retaining its attention-specific fields.
         if isinstance(self.keypoint_detector_config, dict):
             self.keypoint_detector_config["model_type"] = self.keypoint_detector_config.get("model_type", "superpoint")
             self.keypoint_detector_config = CONFIG_MAPPING[self.keypoint_detector_config["model_type"]](
@@ -109,9 +111,48 @@ class LoMaConfig(LightGlueConfig):
         elif self.keypoint_detector_config is None:
             self.keypoint_detector_config = CONFIG_MAPPING["superpoint"](attn_implementation="eager")
 
+        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
+            backbone_config=self.backbone_config,
+            default_config_type="dinov2",
+            default_config_kwargs={
+                "hidden_size": 1024,
+                "num_hidden_layers": 24,
+                "num_attention_heads": 16,
+                "patch_size": 14,
+                "image_size": 518,
+                "out_features": ["stage24"],
+                "reshape_hidden_states": False,
+            },
+            **kwargs,
+        )
+
+        self.num_key_value_heads = self.num_attention_heads
         self.intermediate_size = self.descriptor_dim * 2
         self.hidden_size = self.descriptor_dim
         PreTrainedConfig.__post_init__(self, **kwargs)
+
+
+class LoMaConvBlock(nn.Module):
+    """A single convolution block: Conv2d → BatchNorm2d → ReLU → Conv2d (1x1)."""
+
+    def __init__(self, in_channels: int, out_channels: int, depthwise: bool, kernel_size: int) -> None:
+        super().__init__()
+        if depthwise and out_channels % in_channels != 0:
+            raise ValueError("The output channels of a depthwise block must be divisible by its input channels")
+        groups = in_channels if depthwise else 1
+        self.conv = nn.Conv2d(
+            in_channels, out_channels, kernel_size=kernel_size, padding=kernel_size // 2, groups=groups
+        )
+        self.norm = nn.BatchNorm2d(out_channels)
+        self.activation = nn.ReLU(inplace=True)
+        self.pointwise = nn.Conv2d(out_channels, out_channels, kernel_size=1)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.conv(hidden_states)
+        hidden_states = self.norm(hidden_states)
+        hidden_states = self.activation(hidden_states)
+        hidden_states = self.pointwise(hidden_states)
+        return hidden_states
 
 
 class LoMaConvRefiner(nn.Module):
@@ -123,49 +164,34 @@ class LoMaConvRefiner(nn.Module):
         hidden_blocks: int,
     ) -> None:
         super().__init__()
-        self.block1 = self._make_block(in_channels, hidden_channels, depthwise=False, kernel_size=1)
-        self.hidden_blocks = nn.Sequential(
-            *(
-                self._make_block(hidden_channels, hidden_channels, depthwise=True, kernel_size=5)
+        self.block1 = LoMaConvBlock(in_channels, hidden_channels, depthwise=False, kernel_size=1)
+        self.hidden_blocks = nn.ModuleList(
+            [
+                LoMaConvBlock(hidden_channels, hidden_channels, depthwise=True, kernel_size=5)
                 for _ in range(hidden_blocks)
-            )
+            ]
         )
         self.out_conv = nn.Conv2d(hidden_channels, out_channels, kernel_size=1)
 
-    @staticmethod
-    def _make_block(in_channels: int, out_channels: int, depthwise: bool, kernel_size: int) -> nn.Sequential:
-        if depthwise and out_channels % in_channels != 0:
-            raise ValueError("The output channels of a depthwise block must be divisible by its input channels")
-
-        groups = in_channels if depthwise else 1
-        return nn.Sequential(
-            nn.Conv2d(
-                in_channels,
-                out_channels,
-                kernel_size=kernel_size,
-                padding=kernel_size // 2,
-                groups=groups,
-            ),
-            nn.BatchNorm2d(out_channels),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(out_channels, out_channels, kernel_size=1),
-        )
-
     def forward(self, feature_map: torch.Tensor) -> torch.Tensor:
         initial_features = self.block1(feature_map)
-        refined_features = self.hidden_blocks(initial_features)
+        refined_features = initial_features
+        for block in self.hidden_blocks:
+            refined_features = block(refined_features)
         return self.out_conv((refined_features + initial_features) / 1.4)
 
 
 class LoMaVgg19Encoder(nn.Module):
     """VGG-19 with batch normalization that returns feature maps before each pooling operation."""
 
+    # Channel specification for VGG-19: integers are Conv2d output channels, "pool" is MaxPool2d.
+    VGG19_CHANNELS = [64, 64, "pool", 128, 128, "pool", 256, 256, 256, 256, "pool", 512, 512, 512, 512, "pool"]
+
     def __init__(self) -> None:
         super().__init__()
-        channels = [64, 64, "pool", 128, 128, "pool", 256, 256, 256, 256, "pool", 512, 512, 512, 512, "pool"]
         layers = []
         in_channels = 3
-        for out_channels in channels:
+        for out_channels in self.VGG19_CHANNELS:
             if out_channels == "pool":
                 layers.append(nn.MaxPool2d(kernel_size=2, stride=2))
             else:
@@ -189,13 +215,16 @@ class LoMaVgg19Encoder(nn.Module):
 
 
 class LoMaDescriptorDecoder(nn.Module):
-    def __init__(self, descriptor_dim: int, hidden_blocks: int, dinov2_dim: int = 1024) -> None:
+    def __init__(self, config: "LoMaConfig") -> None:
         super().__init__()
+        descriptor_dim = config.input_descriptor_dim
+        hidden_blocks = config.descriptor_hidden_blocks
+        backbone_hidden_size = config.backbone_config.hidden_size
         self.descriptor_dim = descriptor_dim
         self.scales = ("14", "8", "4", "2", "1")
         self.layers = nn.ModuleDict(
             {
-                "14": LoMaConvRefiner(dinov2_dim, 768, 512 + descriptor_dim, hidden_blocks),
+                "14": LoMaConvRefiner(backbone_hidden_size, 768, 512 + descriptor_dim, hidden_blocks),
                 "8": LoMaConvRefiner(512 + 512, 512, 256 + descriptor_dim, hidden_blocks),
                 "4": LoMaConvRefiner(512, 256, 128 + descriptor_dim, hidden_blocks),
                 "2": LoMaConvRefiner(256, 64, 32 + descriptor_dim, hidden_blocks),
@@ -219,22 +248,11 @@ class LoMaDescriptorNetwork(nn.Module):
     at normalized keypoint coordinates in the `[-1, 1]` range used by `torch.nn.functional.grid_sample`.
     """
 
-    def __init__(self, config: LoMaConfig) -> None:
+    def __init__(self, config: "LoMaConfig") -> None:
         super().__init__()
         self.encoder = LoMaVgg19Encoder()
-
-        from ..dinov2.configuration_dinov2 import Dinov2Config
-        from ..dinov2.modeling_dinov2 import Dinov2Model
-
-        dinov2_config = Dinov2Config(
-            hidden_size=config.dinov2_dim, num_hidden_layers=24, num_attention_heads=16, patch_size=14, image_size=518
-        )
-        self.dinov2_encoder = Dinov2Model(dinov2_config)
-        self.dinov2_encoder.requires_grad_(False)
-
-        self.decoder = LoMaDescriptorDecoder(
-            config.input_descriptor_dim, config.descriptor_hidden_blocks, config.dinov2_dim
-        )
+        self.auxiliary_backbone = AutoBackbone.from_config(config.backbone_config)
+        self.decoder = LoMaDescriptorDecoder(config)
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         if pixel_values.shape[1] == 1:
@@ -244,14 +262,21 @@ class LoMaDescriptorNetwork(nn.Module):
 
         feature_maps = self.encoder(pixel_values)
 
-        dinov2_outputs = self.dinov2_encoder(pixel_values)
-        sequence_output = dinov2_outputs.last_hidden_state
-        batch_size, _, hidden_size = sequence_output.shape
-        patch_seq = sequence_output[:, 1:, :]
-        h = pixel_values.shape[2] // 14
-        w = pixel_values.shape[3] // 14
-        dinov2_features = patch_seq.transpose(1, 2).reshape(batch_size, hidden_size, h, w)
-        feature_maps.append(dinov2_features)
+        # Frozen auxiliary backbone (DINOv2) provides high-level features at stride 14
+        self.auxiliary_backbone.eval()
+        with torch.no_grad():
+            backbone_output = self.auxiliary_backbone(pixel_values)
+        backbone_features = backbone_output.feature_maps[-1]
+        # Reshape from (batch, seq, hidden) to (batch, hidden, h, w) spatial format
+        if backbone_features.ndim == 3:
+            batch_size, seq_len, hidden_size = backbone_features.shape
+            h = pixel_values.shape[2] // self.auxiliary_backbone.config.patch_size
+            w = pixel_values.shape[3] // self.auxiliary_backbone.config.patch_size
+            # Strip CLS token if present (seq_len = h*w + 1 with CLS, h*w without)
+            if seq_len == h * w + 1:
+                backbone_features = backbone_features[:, 1:]
+            backbone_features = backbone_features.transpose(1, 2).reshape(batch_size, hidden_size, h, w)
+        feature_maps.append(backbone_features)
 
         descriptor_grid = pixel_values.new_zeros(
             pixel_values.shape[0], self.decoder.descriptor_dim, *feature_maps[-1].shape[-2:]
@@ -282,147 +307,59 @@ class LoMaKeypointMatchingOutput(LightGlueKeypointMatchingOutput):
     pass
 
 
-def _rotate_half(hidden_states: torch.Tensor) -> torch.Tensor:
-    hidden_states = hidden_states.unflatten(-1, (-1, 2))
-    first_half, second_half = hidden_states.unbind(dim=-1)
-    return torch.stack((-second_half, first_half), dim=-1).flatten(start_dim=-2)
-
-
-class LoMaPositionalEncoder(nn.Module):
-    def __init__(self, config: LoMaConfig) -> None:
-        super().__init__()
+class LoMaPositionalEncoder(LightGluePositionalEncoder):
+    def __init__(self, config: "LoMaConfig") -> None:
+        super().__init__(config)
+        self.positional_encoding_type = config.positional_encoding_type
         self.gamma = config.positional_encoding_gamma
-        self.projector = nn.Linear(2, config.attention_head_dim // 2, bias=False)
-        if config.positional_encoding_type == "fixed":
-            nn.init.normal_(self.projector.weight, mean=0, std=self.gamma**-2)
-            self.projector.weight.requires_grad_(False)
-
-    def forward(self, keypoints: torch.Tensor) -> torch.Tensor:
-        projected_keypoints = self.projector(keypoints)
-        cosines, sines = torch.cos(projected_keypoints), torch.sin(projected_keypoints)
-        return torch.stack((cosines, sines), dim=0).unsqueeze(-3).repeat_interleave(2, dim=-1)
 
 
-class LoMaMLP(nn.Module):
-    def __init__(self, config: LoMaConfig) -> None:
-        super().__init__()
-        self.layers = nn.Sequential(
-            nn.Linear(config.descriptor_dim * 2, config.descriptor_dim * 2),
-            nn.LayerNorm(config.descriptor_dim * 2),
-            nn.GELU(),
-            nn.Linear(config.descriptor_dim * 2, config.descriptor_dim),
-        )
-
-    def forward(self, hidden_states: torch.Tensor, message: torch.Tensor) -> torch.Tensor:
-        return hidden_states + self.layers(torch.cat((hidden_states, message), dim=-1))
+class LoMaAttention(LightGlueAttention):
+    def __init__(self, config: "LoMaConfig", layer_idx: int) -> None:
+        super().__init__(config, layer_idx)
+        self.is_causal = False
 
 
-class LoMaAttention(nn.Module):
-    def __init__(self, config: LoMaConfig) -> None:
-        super().__init__()
-        self.num_attention_heads = config.num_attention_heads
-        self.attention_head_dim = config.attention_head_dim
-        self.qkv = nn.Linear(config.descriptor_dim, config.descriptor_dim * 3, bias=config.attention_bias)
-        self.output = nn.Linear(config.descriptor_dim, config.descriptor_dim, bias=config.attention_bias)
-        self.mlp = LoMaMLP(config)
-
-    def forward(self, hidden_states: torch.Tensor, position_embeddings: torch.Tensor) -> torch.Tensor:
-        query_key_value = self.qkv(hidden_states)
-        query_key_value = query_key_value.unflatten(
-            -1, (self.num_attention_heads, self.attention_head_dim, 3)
-        ).transpose(1, 2)
-        query_states, key_states, value_states = query_key_value.unbind(dim=-1)
-        query_states = query_states * position_embeddings[0] + _rotate_half(query_states) * position_embeddings[1]
-        key_states = key_states * position_embeddings[0] + _rotate_half(key_states) * position_embeddings[1]
-        attention_output = F.scaled_dot_product_attention(query_states, key_states, value_states)
-        attention_output = attention_output.transpose(1, 2).flatten(start_dim=-2)
-        return self.mlp(hidden_states, self.output(attention_output))
+class LoMaMLP(LightGlueMLP):
+    pass
 
 
-class LoMaCrossAttention(nn.Module):
-    def __init__(self, config: LoMaConfig) -> None:
-        super().__init__()
-        self.num_attention_heads = config.num_attention_heads
-        self.attention_head_dim = config.attention_head_dim
-        self.query_key = nn.Linear(config.descriptor_dim, config.descriptor_dim, bias=config.attention_bias)
-        self.value = nn.Linear(config.descriptor_dim, config.descriptor_dim, bias=config.attention_bias)
-        self.output = nn.Linear(config.descriptor_dim, config.descriptor_dim, bias=config.attention_bias)
-        self.mlp = LoMaMLP(config)
-
-    def _split_heads(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return hidden_states.unflatten(-1, (self.num_attention_heads, self.attention_head_dim)).transpose(1, 2)
-
-    def forward(
-        self, hidden_states_0: torch.Tensor, hidden_states_1: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        query_key_0, query_key_1 = self.query_key(hidden_states_0), self.query_key(hidden_states_1)
-        value_0, value_1 = self.value(hidden_states_0), self.value(hidden_states_1)
-        query_key_0, query_key_1, value_0, value_1 = (
-            self._split_heads(tensor) for tensor in (query_key_0, query_key_1, value_0, value_1)
-        )
-        message_0 = F.scaled_dot_product_attention(query_key_0, query_key_1, value_1)
-        message_1 = F.scaled_dot_product_attention(query_key_1, query_key_0, value_0)
-        message_0 = self.output(message_0.transpose(1, 2).flatten(start_dim=-2))
-        message_1 = self.output(message_1.transpose(1, 2).flatten(start_dim=-2))
-        return self.mlp(hidden_states_0, message_0), self.mlp(hidden_states_1, message_1)
+class LoMaTransformerLayer(LightGlueTransformerLayer):
+    pass
 
 
-class LoMaTransformerLayer(nn.Module):
-    def __init__(self, config: LoMaConfig, layer_idx: int) -> None:
-        super().__init__()
-        self.layer_idx = layer_idx
-        self.self_attention = LoMaAttention(config)
-        self.cross_attention = LoMaCrossAttention(config)
-
+class LoMaMatchAssignmentLayer(LightGlueMatchAssignmentLayer):
     def forward(
         self,
-        descriptors_0: torch.Tensor,
-        descriptors_1: torch.Tensor,
-        position_embeddings_0: torch.Tensor,
-        position_embeddings_1: torch.Tensor,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        descriptors_0 = self.self_attention(descriptors_0, position_embeddings_0)
-        descriptors_1 = self.self_attention(descriptors_1, position_embeddings_1)
-        return self.cross_attention(descriptors_0, descriptors_1)
-
-
-class LoMaMatchAssignmentLayer(nn.Module):
-    def __init__(self, config: LoMaConfig) -> None:
-        super().__init__()
-        self.descriptor_dim = config.descriptor_dim
-        self.final_projection = nn.Linear(self.descriptor_dim, self.descriptor_dim, bias=True)
-        self.matchability = nn.Linear(self.descriptor_dim, 1, bias=True)
-
-    def forward(
-        self,
-        descriptors_0: torch.Tensor,
-        descriptors_1: torch.Tensor,
-        mask_0: torch.Tensor | None = None,
-        mask_1: torch.Tensor | None = None,
+        descriptors: torch.Tensor,
+        mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        descriptors_0 = self.final_projection(descriptors_0) / self.descriptor_dim**0.25
-        descriptors_1 = self.final_projection(descriptors_1) / self.descriptor_dim**0.25
+        batch_size, num_keypoints, descriptor_dim = descriptors.shape
+        m_descriptors = self.final_projection(descriptors) / self.descriptor_dim**0.25
+        m_descriptors = m_descriptors.reshape(batch_size // 2, 2, num_keypoints, descriptor_dim)
+        descriptors_0, descriptors_1 = m_descriptors[:, 0], m_descriptors[:, 1]
+
         similarity = descriptors_0 @ descriptors_1.transpose(-1, -2)
-        if mask_0 is not None and mask_1 is not None:
+        if mask is not None:
+            mask = mask.reshape(batch_size // 2, 2, num_keypoints)
+            mask_0, mask_1 = mask[:, 0], mask[:, 1]
             similarity = similarity.masked_fill(
-                ~(mask_0.unsqueeze(-1) & mask_1.unsqueeze(-2)), torch.finfo(similarity.dtype).min
+                ~(mask_0.unsqueeze(-1).bool() & mask_1.unsqueeze(-2).bool()), torch.finfo(similarity.dtype).min
             )
+
         if self.training:
-            matchability_0 = self.matchability(descriptors_0)
-            matchability_1 = self.matchability(descriptors_1)
+            matchability = self.matchability(descriptors)
+            matchability = matchability.reshape(batch_size // 2, 2, num_keypoints, 1)
+            matchability_0, matchability_1 = matchability[:, 0], matchability[:, 1]
             scores_0 = F.log_softmax(similarity, dim=2)
             scores_1 = F.log_softmax(similarity.transpose(-1, -2), dim=2).transpose(-1, -2)
-            batch_size, num_keypoints_0, num_keypoints_1 = similarity.shape
-            scores = similarity.new_zeros((batch_size, num_keypoints_0 + 1, num_keypoints_1 + 1))
+            half_batch = batch_size // 2
+            scores = similarity.new_zeros((half_batch, num_keypoints + 1, num_keypoints + 1))
             scores[:, :-1, :-1] = scores_0 + scores_1
             scores[:, :-1, -1] = matchability_0.squeeze(-1)
             scores[:, -1, :-1] = matchability_1.squeeze(-1)
             return scores
         return F.softmax(similarity, dim=2) * F.softmax(similarity, dim=1)
-
-
-class LoMaTokenConfidenceLayer(LightGlueTokenConfidenceLayer):
-    pass
 
 
 class LoMaPreTrainedModel(LightGluePreTrainedModel):
@@ -440,24 +377,20 @@ class LoMaForKeypointMatching(LoMaPreTrainedModel):
         super().__init__(config)
         self.keypoint_detector = AutoModelForKeypointDetection.from_config(config.keypoint_detector_config)
         self.descriptor_network = LoMaDescriptorNetwork(config)
+        # CODEPATH: input_descriptor_dim != descriptor_dim → all released LoMa checkpoints use 256 for both
         self.input_projection = (
             nn.Identity()
             if config.input_descriptor_dim == config.descriptor_dim
             else nn.Linear(config.input_descriptor_dim, config.descriptor_dim, bias=config.attention_bias)
         )
         self.positional_encoder = LoMaPositionalEncoder(config)
-        self.transformer_layers = nn.ModuleList(
+        self.layers = nn.ModuleList(
             [LoMaTransformerLayer(config, layer_idx=layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.match_assignment = LoMaMatchAssignmentLayer(config)
         self.filter_threshold = config.filter_threshold
         self.num_hidden_layers = config.num_hidden_layers
         self.post_init()
-
-    @staticmethod
-    def _normalize_keypoints(keypoints: torch.Tensor, height: int, width: int) -> torch.Tensor:
-        image_size = keypoints.new_tensor((width, height))
-        return (keypoints - image_size / 2) / (image_size.max() / 2)
 
     def _match_image_pair(
         self,
@@ -466,29 +399,40 @@ class LoMaForKeypointMatching(LoMaPreTrainedModel):
         mask: torch.Tensor,
         output_hidden_states: bool,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, tuple[torch.Tensor, ...] | None]:
-        batch_size, _, num_keypoints, _ = descriptors.shape
-        descriptors_0 = self.input_projection(descriptors[:, 0].contiguous())
-        descriptors_1 = self.input_projection(descriptors[:, 1].contiguous())
-        position_embeddings_0 = self.positional_encoder(keypoints[:, 0])
-        position_embeddings_1 = self.positional_encoder(keypoints[:, 1])
+        batch_size, _, num_keypoints, descriptor_dim = descriptors.shape
+
+        # Interleave image pairs into (batch*2, num_keypoints, dim) for LightGlue-compatible layers
+        descriptors = self.input_projection(descriptors.reshape(batch_size * 2, num_keypoints, descriptor_dim))
+        keypoints_flat = keypoints.reshape(batch_size * 2, num_keypoints, 2)
+        position_embeddings = self.positional_encoder(keypoints_flat)
+        position_embeddings = position_embeddings[0]  # (cos, sin) tuple
+
+        mask_flat = mask.reshape(batch_size * 2, num_keypoints)
+        # Build 4D attention mask: (batch*2, 1, 1, num_keypoints)
+        attention_mask = mask_flat[:, None, None, :].to(dtype=descriptors.dtype)
+        attention_mask = (1.0 - attention_mask) * torch.finfo(descriptors.dtype).min
+
         all_hidden_states = () if output_hidden_states else None
 
-        for layer in self.transformer_layers:
-            descriptors_0, descriptors_1 = layer(
-                descriptors_0, descriptors_1, position_embeddings_0, position_embeddings_1
+        for layer in self.layers:
+            descriptors, hidden_states, _ = layer(
+                descriptors, position_embeddings, attention_mask, output_hidden_states=output_hidden_states
             )
             if output_hidden_states:
-                all_hidden_states = all_hidden_states + (torch.stack((descriptors_0, descriptors_1), dim=1),)
+                all_hidden_states = all_hidden_states + hidden_states
 
-        scores = self.match_assignment(descriptors_0, descriptors_1, mask[:, 0], mask[:, 1])
+        scores = self.match_assignment(descriptors, mask_flat)
+
+        # Extract mutual matches from the score matrix
         maximum_scores_0, maximum_scores_1 = scores.max(dim=2), scores.max(dim=1)
         matches_0, matches_1 = maximum_scores_0.indices, maximum_scores_1.indices
-        indices_0 = torch.arange(num_keypoints, device=scores.device)[None]
-        indices_1 = torch.arange(num_keypoints, device=scores.device)[None]
-        mutual_0 = indices_0 == matches_1.gather(1, matches_0)
-        mutual_1 = indices_1 == matches_0.gather(1, matches_1)
-        valid_0 = mutual_0 & (maximum_scores_0.values > self.filter_threshold) & mask[:, 0]
-        valid_1 = mutual_1 & valid_0.gather(1, matches_1) & mask[:, 1]
+        indices = torch.arange(num_keypoints, device=scores.device)[None]
+        mutual_0 = indices == matches_1.gather(1, matches_0)
+        mutual_1 = indices == matches_0.gather(1, matches_1)
+
+        mask_paired = mask.reshape(batch_size, 2, num_keypoints)
+        valid_0 = mutual_0 & (maximum_scores_0.values > self.filter_threshold) & mask_paired[:, 0].bool()
+        valid_1 = mutual_1 & valid_0.gather(1, matches_1) & mask_paired[:, 1].bool()
         matching_scores_0 = torch.where(valid_0, maximum_scores_0.values, torch.zeros_like(maximum_scores_0.values))
         matching_scores_1 = torch.where(valid_1, maximum_scores_1.values, torch.zeros_like(maximum_scores_1.values))
         matches_0 = torch.where(valid_0, matches_0, torch.full_like(matches_0, -1))
@@ -503,31 +447,28 @@ class LoMaForKeypointMatching(LoMaPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        labels: torch.LongTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
         **kwargs,
     ) -> tuple | LoMaKeypointMatchingOutput:
-        if labels is not None:
-            raise ValueError("LoMa is not trainable, no labels should be provided.")
         if pixel_values.ndim != 5 or pixel_values.size(1) != 2:
             raise ValueError("pixel_values must have shape (batch_size, 2, num_channels, height, width)")
 
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+        output_hidden_states = kwargs.get("output_hidden_states", self.config.output_hidden_states)
         batch_size, _, num_channels, height, width = pixel_values.shape
-        keypoint_detections = self.keypoint_detector(pixel_values.reshape(batch_size * 2, num_channels, height, width))
+        pixel_values_flat = pixel_values.reshape(batch_size * 2, num_channels, height, width)
+
+        keypoint_detections = self.keypoint_detector(pixel_values_flat)
         keypoints, _, _, mask = keypoint_detections[:4]
         keypoints = keypoints.reshape(batch_size, 2, -1, 2).to(pixel_values)
-        mask = mask.reshape(batch_size, 2, -1).bool()
+        mask = mask.reshape(batch_size, 2, -1)
+
         descriptor_keypoints = keypoints.reshape(batch_size * 2, -1, 2) * 2 - 1
-        descriptors = self.descriptor_network.describe_keypoints(
-            pixel_values.reshape(batch_size * 2, num_channels, height, width), descriptor_keypoints
-        )
+        descriptors = self.descriptor_network.describe_keypoints(pixel_values_flat, descriptor_keypoints)
         descriptors = descriptors.reshape(batch_size, 2, -1, self.config.input_descriptor_dim).to(pixel_values)
-        absolute_keypoints = keypoints * keypoints.new_tensor((width, height))
-        normalized_keypoints = self._normalize_keypoints(absolute_keypoints, height, width)
+
+        image_size = keypoints.new_tensor((width, height))
+        absolute_keypoints = keypoints * image_size
+        normalized_keypoints = (absolute_keypoints - image_size / 2) / (image_size.max() / 2)
+
         matches, matching_scores, prune, hidden_states = self._match_image_pair(
             normalized_keypoints, descriptors, mask, output_hidden_states
         )
@@ -551,14 +492,9 @@ class LoMaImageProcessor(LightGlueImageProcessor):
     pass
 
 
-class LoMaImageProcessorPil(LightGlueImageProcessorPil):
-    pass
-
-
 __all__ = [
     "LoMaConfig",
     "LoMaPreTrainedModel",
     "LoMaForKeypointMatching",
     "LoMaImageProcessor",
-    "LoMaImageProcessorPil",
 ]
