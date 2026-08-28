@@ -897,12 +897,6 @@ class ProcessorTesterMixin:
         prepare_fn = getattr(self, f"prepare_{modality}_inputs")
         return prepare_fn(batch_size=batch_size) if batch_size is not None else prepare_fn()
 
-    def _call_processor(self, processor, modality, text, modal_input, **kwargs):
-        config = MODALITY_TEST_SPECS[modality]
-        call_kwargs = dict(config["call_time_kwargs"])
-        call_kwargs.update(kwargs)
-        return processor(text=text, **{modality: modal_input}, **call_kwargs)
-
     def _check_modality_outputs(self, inputs: dict, modality: str):
         # to be overriden by special models if needed
         input_key = getattr(self, f"{modality}_input_name")
@@ -929,7 +923,10 @@ class ProcessorTesterMixin:
 
         input_str = self.prepare_text_inputs(modalities=modality)
         modal_input = self._prepare_modality_input(modality)
-        inputs = self._call_processor(processor, modality, input_str, modal_input, return_tensors="pt")
+
+        call_kwargs = MODALITY_TEST_SPECS[modality]["call_time_kwargs"]
+        inputs = processor(text=input_str, **{modality: modal_input, **call_kwargs})
+
         self._check_modality_outputs(inputs, modality)
         self.assertEqual(len(inputs[self.text_input_name][0]), max_length)
 
@@ -948,16 +945,15 @@ class ProcessorTesterMixin:
         max_length = getattr(self, f"{modality}_text_kwargs_max_length")
         input_str = self.prepare_text_inputs(modalities=modality)
         modal_input = self._prepare_modality_input(modality)
-        inputs = self._call_processor(
-            processor,
-            modality,
-            input_str,
-            modal_input,
-            return_tensors="pt",
+
+        call_kwargs = MODALITY_TEST_SPECS[modality]["call_time_kwargs"]
+        inputs = processor(
+            text=input_str,
             max_length=max_length,
             padding="max_length",
-            **init_time_kwargs,
+            **{modality: modal_input, **call_kwargs, **init_time_kwargs},
         )
+
         self._check_modality_outputs(inputs, modality)
         self.assertEqual(len(inputs[self.text_input_name][0]), max_length)
 
@@ -972,16 +968,15 @@ class ProcessorTesterMixin:
         max_length = getattr(self, f"{modality}_unstructured_max_length")
 
         init_time_kwargs = MODALITY_TEST_SPECS[modality]["init_time_kwargs"]
-        inputs = self._call_processor(
-            processor,
-            modality,
-            input_str,
-            modal_input,
-            return_tensors="pt",
-            padding="max_length",
+
+        call_kwargs = MODALITY_TEST_SPECS[modality]["call_time_kwargs"]
+        inputs = processor(
+            text=input_str,
             max_length=max_length,
-            **init_time_kwargs,
+            padding="max_length",
+            **{modality: modal_input, **call_kwargs, **init_time_kwargs},
         )
+
         self._check_modality_outputs(inputs, modality)
         self.assertEqual(inputs[self.text_input_name].shape[-1], max_length)
 
@@ -995,16 +990,15 @@ class ProcessorTesterMixin:
         modal_input = self._prepare_modality_input(modality, batch_size=2)
         max_length = getattr(self, f"{modality}_unstructured_max_length")
         init_time_kwargs = MODALITY_TEST_SPECS[modality]["init_time_kwargs"]
-        inputs = self._call_processor(
-            processor,
-            modality,
-            input_str,
-            modal_input,
-            return_tensors="pt",
-            padding="longest",
+
+        call_kwargs = MODALITY_TEST_SPECS[modality]["call_time_kwargs"]
+        inputs = processor(
+            text=input_str,
             max_length=max_length,
-            **init_time_kwargs,
+            padding="longest",
+            **{modality: modal_input, **call_kwargs, **init_time_kwargs},
         )
+
         self._check_modality_outputs(inputs, modality)
         self.assertTrue(
             len(inputs[self.text_input_name][0]) == len(inputs[self.text_input_name][1])
@@ -1022,14 +1016,8 @@ class ProcessorTesterMixin:
         modality_kwargs_key = f"{modality}_kwargs"
         init_time_kwargs = MODALITY_TEST_SPECS[modality]["init_time_kwargs"]
         with self.assertRaises(ValueError):
-            self._call_processor(
-                processor,
-                modality,
-                input_str,
-                modal_input,
-                **{modality_kwargs_key: init_time_kwargs},
-                **init_time_kwargs,
-                return_tensors="pt",
+            processor(
+                text=input_str, **{modality: modal_input, modality_kwargs_key: init_time_kwargs, **init_time_kwargs}
             )
 
     def _test_structured_kwargs_nested(self, modality, from_dict=False):
@@ -1070,14 +1058,12 @@ class ProcessorTesterMixin:
         modal_input = self._prepare_modality_input(modality)
 
         with self.assertRaises(ValueError):
-            self._call_processor(
-                processor,
-                modality,
-                input_str,
-                modal_input,
-                return_tensors="pt",
-                padding="max_length",
+            call_kwargs = MODALITY_TEST_SPECS[modality]["call_time_kwargs"]
+            processor(
+                text=input_str,
                 text_kwargs={"padding": "do_not_pad"},
+                padding="max_length",
+                **{modality: modal_input, **call_kwargs},
             )
 
     # ------------------------------------------------------------------

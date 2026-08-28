@@ -384,14 +384,13 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         modal_input = self._prepare_modality_input("images", batch_size=2)
         max_length = getattr(self, "images_unstructured_max_length")
         init_time_kwargs = MODALITY_TEST_SPECS["images"]["init_time_kwargs"]
-        inputs = self._call_processor(
-            processor,
-            "images",
-            input_str,
-            modal_input,
-            return_tensors="pt",
-            padding="longest",
+        call_kwargs = MODALITY_TEST_SPECS["images"]["call_time_kwargs"]
+
+        inputs = processor(
+            text=input_str,
             max_length=max_length,
+            padding="longest",
+            images=modal_input**call_kwargs,
             **init_time_kwargs,
         )
         self._check_modality_outputs(inputs, "images")
