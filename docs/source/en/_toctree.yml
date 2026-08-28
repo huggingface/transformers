@@ -667,8 +667,6 @@
         title: GLM-4.5, GLM-4.6, GLM-4.7
       - local: model_doc/glm4_moe_lite
         title: GLM-4.7-Flash
-      - local: model_doc/glm5_next
-        title: GLM-5.3-Flash
       - local: model_doc/glm_image
         title: GLM-Image
       - local: model_doc/glm_moe_dsa
@@ -1195,6 +1193,8 @@
         title: UniSpeech-SAT
       - local: model_doc/univnet
         title: UnivNet
+      - local: model_doc/vibevoice
+        title: VibeVoice
       - local: model_doc/vibevoice_acoustic_tokenizer
         title: VibeVoice Acoustic Tokenizer
       - local: model_doc/vibevoice_asr
@@ -1327,6 +1327,8 @@
         title: Gemma4 Unified
       - local: model_doc/git
         title: GIT
+      - local: model_doc/glm5_next
+        title: GLM-5.3-Flash
       - local: model_doc/glm46v
         title: Glm46V
       - local: model_doc/glm4v

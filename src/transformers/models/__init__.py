@@ -484,6 +484,7 @@ if TYPE_CHECKING:
     from .upernet import *
     from .uvdoc import *
     from .vaultgemma import *
+    from .vibevoice import *
     from .vibevoice_acoustic_tokenizer import *
     from .vibevoice_asr import *
     from .video_llama_3 import *
