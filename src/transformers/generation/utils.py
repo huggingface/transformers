@@ -358,28 +358,45 @@ GenerateOutput = GenerateNonBeamOutput | GenerateBeamOutput
 
 
 class PipelinedStopCheck:
-    """Reads "are all sequences finished?" off the device one step late, so the host never waits for it."""
+    """Reads "are all sequences finished?" off the device one step late, so the host never waits for it.
 
-    def __init__(self, device: torch.device, max_length: int):
+    A streamer needs the same thing for the tokens themselves -- `streamer.put(next_tokens.cpu())` is a host
+    read per step, the very stall this exists to avoid -- so the tokens ride in the same slot behind the same
+    event, and come back through `streamed` one step behind. That is the whole cost: a streamer emits each
+    token one step later. It never emits one *past* the stop, because the token that overshoots is the one
+    left in flight when the loop breaks, and is dropped by `drain` exactly as it is dropped from `input_ids`.
+    """
+
+    def __init__(self, device: torch.device, max_length: int, batch_size: int = 0):
         self.max_length = max_length
         pinned = device.type == "cuda"
         self.slots = deque(
             (
                 torch.zeros((), dtype=torch.bool, pin_memory=pinned),
+                torch.zeros(batch_size, dtype=torch.long, pin_memory=pinned),
                 torch.Event(device=device.type, blocking=True),
             )
             for _ in range(2)
         )
+        self.streaming = batch_size > 0
+        self.primed = False  # whether the slot being read has ever been written to
         self.reported = False  # whether a read has come back saying every sequence was finished
+        self.streamed = None  # the previous step's tokens, on the host, or `None` before there is one
 
-    def __call__(self, unfinished_sequences: torch.Tensor, length: int) -> bool:
-        all_finished, copy_done = self.slots[0]
+    def __call__(self, unfinished_sequences: torch.Tensor, length: int, tokens: torch.Tensor | None = None) -> bool:
+        all_finished, streamed, copy_done = self.slots[0]
         all_finished.copy_(unfinished_sequences.max() == 0, non_blocking=True)
+        if tokens is not None:
+            streamed.copy_(tokens, non_blocking=True)
         copy_done.record()
 
         self.slots.rotate(-1)  # what was just started is what gets read next step
-        all_finished, copy_done = self.slots[0]
+        all_finished, streamed, copy_done = self.slots[0]
         copy_done.synchronize()
+        # The first read comes from a slot nothing was ever copied into: there is no previous step yet. The
+        # clone is because the slot is written again next step, while a streamer may still hold what it got.
+        self.streamed = streamed.clone() if self.streaming and self.primed else None
+        self.primed = True
         self.reported = bool(all_finished)
         # `max_length` is the one stop condition the host already knows, and the only one this pipeline may
         # not run past: a `StaticCache` is allocated to exactly that many positions.
@@ -387,9 +404,18 @@ class PipelinedStopCheck:
 
     def drain(self) -> int:
         """Wait out the copy still in flight, and report how many tokens ran past the stopping one."""
-        for _, copy_done in self.slots:
+        for *_, copy_done in self.slots:
             copy_done.synchronize()
         return 1 if self.reported else 0
+
+    @property
+    def pending(self) -> "torch.Tensor | None":
+        """The tokens still in flight when the loop ended, which a streamer has not been given yet.
+
+        `None` once `reported` is set: that copy is the token that ran past the stop, and it is dropped from
+        `input_ids` too.
+        """
+        return None if self.reported else self.slots[1][1]
 
 
 class GenerationMixin(ContinuousMixin):
@@ -2889,8 +2915,10 @@ class GenerationMixin(ContinuousMixin):
 
         host_max_length = max((c.max_length for c in stopping_criteria if hasattr(c, "max_length")), default=None)
         stop_check = None
-        if host_max_length is not None and streamer is None and input_ids.device.type != "cpu":
-            stop_check = PipelinedStopCheck(input_ids.device, host_max_length)
+        if host_max_length is not None and input_ids.device.type != "cpu":
+            # A streamer asks for the tokens on the host every step, so they are pipelined alongside the stop
+            # decision rather than read synchronously.
+            stop_check = PipelinedStopCheck(input_ids.device, host_max_length, batch_size if streamer else 0)
 
         # `pad_token_id` is created on `inputs_tensor.device` in `_prepare_special_tokens`. For multimodal models
         # (e.g. BLIP-2, LLaVA) sharded across devices via `device_map="auto"`, `inputs_tensor` (e.g. `pixel_values`
@@ -2971,7 +2999,7 @@ class GenerationMixin(ContinuousMixin):
 
                 # update generated ids, model inputs, and length for next step
                 input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
-                if streamer is not None:
+                if streamer is not None and stop_check is None:
                     streamer.put(next_tokens.cpu())
 
                 unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
@@ -2979,7 +3007,9 @@ class GenerationMixin(ContinuousMixin):
                 if stop_check is None:
                     this_peer_finished = unfinished_sequences.max() == 0
                 else:
-                    this_peer_finished = stop_check(unfinished_sequences, input_ids.shape[1])
+                    this_peer_finished = stop_check(unfinished_sequences, input_ids.shape[1], next_tokens)
+                    if stop_check.streamed is not None:
+                        streamer.put(stop_check.streamed)
 
                 # This is needed to properly delete outputs.logits which may be very large for first iteration
                 # Otherwise a reference to outputs is kept which keeps the logits alive in the next iteration
@@ -2989,6 +3019,8 @@ class GenerationMixin(ContinuousMixin):
             overshoot = stop_check.drain()
             if overshoot:
                 input_ids = input_ids[:, :-overshoot]
+            elif streamer is not None and stop_check.pending is not None:
+                streamer.put(stop_check.pending)  # the last token, still in flight when the loop ended
 
         if streamer is not None:
             streamer.end()
