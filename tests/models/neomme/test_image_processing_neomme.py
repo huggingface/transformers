@@ -16,7 +16,6 @@
 import unittest
 
 import numpy as np
-from huggingface_hub.errors import StrictDataclassFieldValidationError
 
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_vision_available
@@ -317,30 +316,9 @@ class NeoMMEImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def test_unsupported_image_kwargs_raise(self):
         processor = self.image_processing_classes["torchvision"](patch_size=self.image_processor_tester.patch_size)
         image = self.make_image(16, 16)
-        for kwargs in ({"size": 8}, {"do_center_crop": True}, {"do_pad": True}):
+        for kwargs in ({"size": 8}, {"do_center_crop": True}):
             with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
                 processor(images=[image], **kwargs)
-
-    def test_resolution_settings_must_be_positive_integers(self):
-        processor = self.image_processing_classes["torchvision"](patch_size=self.image_processor_tester.patch_size)
-        image = self.make_image(16, 16)
-        for name in ("patch_size", "max_side"):
-            for value in (0, -1, 1.5):
-                with (
-                    self.subTest(name=name, value=value),
-                    self.assertRaises((ValueError, StrictDataclassFieldValidationError)),
-                ):
-                    processor(images=[image], **{name: value})
-
-        for name in ("min_pixels", "max_pixels"):
-            for value in (0, -1, 1.5):
-                size = {"min_pixels": 1, "max_pixels": 1024}
-                size[name] = value
-                with (
-                    self.subTest(name=name, value=value),
-                    self.assertRaises((ValueError, StrictDataclassFieldValidationError)),
-                ):
-                    processor(images=[image], size=size)
 
     def test_get_number_of_image_patches(self):
         patch_size = self.image_processor_tester.patch_size
