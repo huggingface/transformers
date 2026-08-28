@@ -47,7 +47,7 @@ class NeoMMEConfig(PreTrainedConfig):
     document_token_id (`int`, *optional*, defaults to 5):
         Token ID for the `<doc>` marker.
     tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-        Whether the masked token decoder reuses the token embedding table.
+        Whether the masked token decoder reuses both factorized token embedding weights.
 
     ```python
     >>> from transformers import NeoMMEModel, NeoMMEConfig

@@ -559,6 +559,9 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
 
         self.assertEqual(model.num_parameters(), NeoMMEModel(config).num_parameters())
         self.assertIs(model.get_output_embeddings().weight, model.model.embed_tokens.word_embeddings.weight)
+        self.assertIs(
+            model.unembedding_projection.weight, model.model.embed_tokens.embedding_projection.weight
+        )
 
         with torch.no_grad():
             hidden_states = model.model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
@@ -575,14 +578,17 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
         input_ids, attention_mask = input_ids.to(torch_device), attention_mask.to(torch_device)
 
         self.assertIsNot(model.lm_head.weight, model.model.embed_tokens.word_embeddings.weight)
+        self.assertIsNot(
+            model.unembedding_projection.weight, model.model.embed_tokens.embedding_projection.weight
+        )
         self.assertEqual(
             model.num_parameters() - NeoMMEModel(config).num_parameters(),
-            config.embedding_rank * config.vocab_size,
+            config.embedding_rank * (config.vocab_size + config.hidden_size),
         )
 
         with torch.no_grad():
             hidden_states = model.model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
-            expected = model.lm_head(hidden_states @ model.model.embed_tokens.embedding_projection.weight)
+            expected = model.lm_head(model.unembedding_projection(hidden_states))
             actual = model(input_ids=input_ids, attention_mask=attention_mask).logits
         torch.testing.assert_close(actual, expected)
 

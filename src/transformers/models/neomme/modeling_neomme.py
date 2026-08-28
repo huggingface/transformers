@@ -74,6 +74,13 @@ class NeoMMEEmbeddings(nn.Module):
         return self.embedding_projection(self.word_embeddings(input_ids))
 
 
+class NeoMMEUnembeddingProjection(nn.Linear):
+    """Apply the transpose-tied embedding projection from hidden size back to embedding rank."""
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return hidden_states @ self.weight
+
+
 class NeoMMEPatchEmbeddings(nn.Module):
     """Patch stem that maps flattened image patches to hidden size."""
 
@@ -611,11 +618,17 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
     """
 )
 class NeoMMEForMaskedLM(NeoMMEPreTrainedModel):
-    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.word_embeddings.weight"}
+    _tied_weights_keys = {
+        "lm_head.weight": "model.embed_tokens.word_embeddings.weight",
+        "unembedding_projection.weight": "model.embed_tokens.embedding_projection.weight",
+    }
 
     def __init__(self, config: NeoMMEConfig):
         super().__init__(config)
         self.model = NeoMMEModel(config)
+        self.unembedding_projection = NeoMMEUnembeddingProjection(
+            config.embedding_rank, config.hidden_size, bias=False
+        )
         self.lm_head = nn.Linear(config.embedding_rank, config.vocab_size, bias=False)
         self.post_init()
 
@@ -643,8 +656,7 @@ class NeoMMEForMaskedLM(NeoMMEPreTrainedModel):
             **kwargs,
         )
         hidden_states = outputs.last_hidden_state
-        # Reuse the input projection's weight for hidden-to-rank decoding (ALBERT-style factorization).
-        hidden_states = hidden_states @ self.model.embed_tokens.embedding_projection.weight
+        hidden_states = self.unembedding_projection(hidden_states)
         logits = self.lm_head(hidden_states)
 
         loss = None
