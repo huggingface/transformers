@@ -454,7 +454,7 @@ class LoMaMatchAssignmentLayer(LightGlueMatchAssignmentLayer):
 
 class LoMaPreTrainedModel(LightGluePreTrainedModel):
     config: LoMaConfig
-    base_model_prefix = "loma"
+    base_model_prefix = "model"
 
 
 @auto_docstring(
