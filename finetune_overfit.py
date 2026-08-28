@@ -139,7 +139,7 @@ def main(script_args, training_args, model_args):
 
 
     # We can start training.
-    # trainer.train()
+    trainer.train()
 
 
 
