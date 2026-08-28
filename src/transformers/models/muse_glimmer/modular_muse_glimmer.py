@@ -541,12 +541,6 @@ class MuseGlimmerVisionConfig(Kimi_K25VisionConfig):
     interpolation_mode: str = "bilinear"
     interpolation_padding: str = "zeros"
 
-    @property
-    def window_size(self) -> int:
-        """Attention window in pixels. On the config because input preparation needs it without a model:
-        `exporters.utils` reads it to precompute this encoder's window index."""
-        return self.pos_emb_height * self.patch_size
-
     hidden_act: str = "gelu"
     max_position_embeddings: int = 32 * 32  # == `pos_h * pos_w`
     layer_norm_eps: float = 1e-05
@@ -1005,7 +999,7 @@ class MuseGlimmerVisionModel(MuseGlimmerPreTrainedModel):
         # window/position/interpolation run un-merged, the merge is deferred to `pixel_shuffle`.
         self.spatial_merge_size = 1
         self.patch_size = config.patch_size
-        self.window_size = config.window_size
+        self.window_size = config.pos_emb_height * config.patch_size
         self.merge_size = config.merge_size
         self.post_init()
 

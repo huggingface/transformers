@@ -858,7 +858,7 @@ class MuseGlimmerVisionModel(MuseGlimmerPreTrainedModel):
         # window/position/interpolation run un-merged, the merge is deferred to `pixel_shuffle`.
         self.spatial_merge_size = 1
         self.patch_size = config.patch_size
-        self.window_size = config.window_size
+        self.window_size = config.pos_emb_height * config.patch_size
         self.merge_size = config.merge_size
         self.post_init()
 

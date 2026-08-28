@@ -423,6 +423,21 @@ def _config_attr(config, name: str) -> Any | None:
     return None
 
 
+def _window_size(config) -> int | None:
+    """The attention window in pixels, however this encoder states it.
+
+    Most windowed configs carry `window_size` directly. muse_glimmer states it as the side of its position
+    grid instead, so the window is that many patches — the same product its vision module takes. Whether
+    the encoder windows at all is the caller's question, not this one's.
+    """
+    if (size := _config_attr(config, "window_size")) is not None:
+        return size
+    pos_emb_height, patch_size = _config_attr(config, "pos_emb_height"), _config_attr(config, "patch_size")
+    if pos_emb_height is None or patch_size is None:
+        return None
+    return pos_emb_height * patch_size
+
+
 def _spatial_merge_size(config) -> int | None:
     """The spatial merge factor, however this encoder spells it.
 
@@ -515,14 +530,16 @@ def _prepare_grid_thw_vision_inputs(config, inputs: dict[str, Any]) -> None:
     inputs["cu_seqlens"], inputs["max_seqlen"] = get_vision_attention_seqlens(
         grid_thw, config, merge_temporal=temporal_encoder, kwargs=inputs
     )
-    # 3-axis (t, h, w) rotary encoders expose `include_temporal_position_ids` as a config property
-    # (minimax_m3_vl); the 2-axis (h, w) default covers qwen2_5_vl / qwen3_vl / glm4v / paddleocr_vl. A
-    # property, not a field: it is fixed per encoder, and reading it here needs no model.
+    # 3-axis (t, h, w) rotary encoders declare `include_temporal_position_ids` (minimax_m3_vl); the
+    # 2-axis (h, w) default covers qwen2_5_vl / qwen3_vl / glm4v / paddleocr_vl.
     include_temporal = _config_attr(config, "include_temporal_position_ids") is True
     inputs["position_ids"] = get_vision_position_ids(grid_thw, spatial_merge_size, include_temporal=include_temporal)
 
-    window_size = _config_attr(config, "window_size")
+    # Windowed encoders only: the module that builds the window index is the one that consumes these, and a
+    # config can carry the fields the size is derived from while attending globally (kimi_k25).
     patch_size = _config_attr(config, "patch_size")
+    windows = hasattr(module, "get_vision_window_index")
+    window_size = _window_size(config) if windows else None
     if window_size is not None and patch_size is not None:
         inputs["window_index"], inputs["cu_window_seqlens"] = get_vision_window_index(
             grid_thw, spatial_merge_size, window_size, patch_size

@@ -64,12 +64,6 @@ class MuseGlimmerVisionConfig(PreTrainedConfig):
     layer_norm_eps: float = 1e-05
     layer_types: list[str] | None = None
 
-    @property
-    def window_size(self) -> int:
-        """Attention window in pixels. On the config because input preparation needs it without a model:
-        `exporters.utils` reads it to precompute this encoder's window index."""
-        return self.pos_emb_height * self.patch_size
-
     def __post_init__(self, **kwargs):
         if self.layer_types is None:
             self.layer_types = [
