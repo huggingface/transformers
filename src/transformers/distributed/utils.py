@@ -122,14 +122,10 @@ _tp_mesh_count = 0
 def _build_tp_mesh(device_type: str, tp_size: int):
     """Build a tensor parallel mesh that no other model in this process shares.
 
-    Two meshes over the same ranks are interchangeable as far as torch is concerned: the process
-    group behind a `DeviceMesh` is not part of its identity, so the meshes compare and hash equal,
-    and a 1-D mesh that spans the whole world reuses the default process group outright. A second
-    model would therefore collide with the first in DTensor's sharding propagation cache, come out
-    holding the first model's mesh, and issue its collectives on the first model's communicator.
-    That stays invisible until the two models are used at the same time, at which point their
-    collectives interleave on one communicator and the run hangs. Every mesh after the first gets
-    its own process group and its own dimension name.
+    A `DeviceMesh`'s identity does not include the process group behind it, so two meshes over the
+    same ranks are interchangeable to torch, and a 1-D whole-world mesh reuses the default group.
+    A second model would silently end up on the first one's communicator, which hangs as soon as
+    both are in use.
     """
     from torch.distributed.device_mesh import DeviceMesh
 
