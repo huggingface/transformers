@@ -258,7 +258,7 @@ class FunAsrNanoProcessor(ProcessorMixin):
             return [None] * batch_size
         if isinstance(keywords, str):
             return [[keywords]] * batch_size
-        if not isinstance(keywords, (list, tuple)):
+        if not isinstance(keywords, list | tuple):
             raise TypeError("`keywords` must be a string, a sequence of strings, or a nested sequence of strings.")
         if all(isinstance(item, str) for item in keywords):
             return [list(keywords)] * batch_size
@@ -271,7 +271,7 @@ class FunAsrNanoProcessor(ProcessorMixin):
         for items in keywords:
             if items is None:
                 prepared.append(None)
-            elif isinstance(items, (list, tuple)) and all(isinstance(item, str) for item in items):
+            elif isinstance(items, list | tuple) and all(isinstance(item, str) for item in items):
                 prepared.append(list(items))
             else:
                 raise TypeError("Each per-sample keyword value must be a sequence of strings or `None`.")

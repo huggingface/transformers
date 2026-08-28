@@ -221,7 +221,7 @@ def build_config_from_yaml(config_yaml_path: str, qwen3_config_path: str) -> Fun
     encoder_config = FunAsrNanoEncoderConfig(
         num_mel_bins=80,
         num_stacked_frames=7,
-        d_model=enc_conf.get("output_size", 512),
+        hidden_size=enc_conf.get("output_size", 512),
         encoder_attention_heads=enc_conf.get("attention_heads", 4),
         encoder_ffn_dim=enc_conf.get("linear_units", 2048),
         encoder_layers=enc_conf.get("num_blocks", 50),
