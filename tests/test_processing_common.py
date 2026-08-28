@@ -461,7 +461,7 @@ class ProcessorTesterMixin:
         special_token_to_add = ""
         if modalities is not None:
             for modality in modalities:
-                # we hae non-uniform naming conventions for image/videos
+                # we have non-uniform naming conventions for image/videos
                 if modality == "images":
                     modality = "image"
                 elif modality == "videos":
