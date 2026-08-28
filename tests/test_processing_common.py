@@ -886,8 +886,6 @@ class ProcessorTesterMixin:
         component_key = self.get_subprocessor_name(modality, attributes)
         if component_key not in attributes:
             self.skipTest(f"{component_key} attribute not present in {self.processor_class}")
-        if "tokenizer" not in attributes:
-            self.skipTest(f"tokenizer attribute not present in {self.processor_class}")
 
     def get_subprocessor_name(self, modality: str, attributes: list):
         if modality == "audio":
@@ -913,6 +911,9 @@ class ProcessorTesterMixin:
 
     def _test_modality_processor_defaults_preserved_by_modality_kwargs(self, modality):
         attributes = self.processor_class.get_attributes()
+        if "tokenizer" not in attributes:
+            self.skipTest(f"tokenizer attribute not present in {self.processor_class}")
+
         component_key = self.get_subprocessor_name(modality, attributes)
         processor_components = self.prepare_components()
 
@@ -940,6 +941,8 @@ class ProcessorTesterMixin:
     def _test_kwargs_overrides_default_modality_processor_kwargs(self, modality):
         attributes = self.processor_class.get_attributes()
         component_key = self.get_subprocessor_name(modality, attributes)
+        if "tokenizer" not in attributes:
+            self.skipTest(f"tokenizer attribute not present in {self.processor_class}")
 
         processor_components = self.prepare_components()
         processor_components[component_key] = self.get_component(component_key)
@@ -967,6 +970,8 @@ class ProcessorTesterMixin:
     def _test_unstructured_kwargs(self, modality):
         attributes = self.processor_class.get_attributes()
         processor = self.get_processor()
+        if "tokenizer" not in attributes:
+            self.skipTest(f"tokenizer attribute not present in {self.processor_class}")
         self.maybe_skip_typed_test_for_modality(modality, attributes, processor)
 
         input_str = self.prepare_text_inputs(modalities=modality)
@@ -989,6 +994,8 @@ class ProcessorTesterMixin:
     def _test_unstructured_kwargs_batched(self, modality):
         attributes = self.processor_class.get_attributes()
         processor = self.get_processor()
+        if "tokenizer" not in attributes:
+            self.skipTest(f"tokenizer attribute not present in {self.processor_class}")
         self.maybe_skip_typed_test_for_modality(modality, attributes, processor)
 
         input_str = self.prepare_text_inputs(batch_size=2, modalities=modality)
@@ -1013,6 +1020,8 @@ class ProcessorTesterMixin:
     def _test_doubly_passed_kwargs(self, modality):
         attributes = self.processor_class.get_attributes()
         processor = self.get_processor()
+        if "tokenizer" not in attributes:
+            self.skipTest(f"tokenizer attribute not present in {self.processor_class}")
         self.maybe_skip_typed_test_for_modality(modality, attributes, processor)
 
         input_str = [self.prepare_text_inputs(modalities=modality)]
@@ -1027,6 +1036,8 @@ class ProcessorTesterMixin:
     def _test_structured_kwargs_nested_from_dict(self, modality):
         attributes = self.processor_class.get_attributes()
         processor = self.get_processor()
+        if "tokenizer" not in attributes:
+            self.skipTest(f"tokenizer attribute not present in {self.processor_class}")
         self.maybe_skip_typed_test_for_modality(modality, attributes, processor)
 
         input_str = self.prepare_text_inputs(modalities=modality)
@@ -1051,6 +1062,8 @@ class ProcessorTesterMixin:
     def _test_overlapping_text_modality_kwargs_handling(self, modality):
         attributes = self.processor_class.get_attributes()
         processor = self.get_processor()
+        if "tokenizer" not in attributes:
+            self.skipTest(f"tokenizer attribute not present in {self.processor_class}")
         self.maybe_skip_typed_test_for_modality(modality, attributes, processor)
 
         input_str = self.prepare_text_inputs(modalities=modality)

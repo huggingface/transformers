@@ -390,7 +390,8 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             text=input_str,
             max_length=max_length,
             padding="longest",
-            images=modal_input**call_kwargs,
+            images=modal_input,
+            **call_kwargs,
             **init_time_kwargs,
         )
         self._check_modality_outputs(inputs, modality)
