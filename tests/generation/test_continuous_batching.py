@@ -1255,6 +1255,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             def on_result(output):
                 token_counts.append(len(output.generated_tokens))
                 if output.is_finished():
+                    self.assertEqual(output.status, RequestStatus.FINISHED)  # fail if the request failed
                     future.set_result(True)
 
             request_id = manager.add_request(inputs, max_new_tokens=max_new_tokens, streaming=True)
@@ -1410,6 +1411,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             while requests_left:
                 result = manager.get_result(timeout=1)
                 if result and result.is_finished():
+                    self.assertEqual(result.status, RequestStatus.FINISHED)  # fail if the request failed
                     results.append(result)
                     requests_left -= 1
                 else:
@@ -1589,6 +1591,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             while len(results) < 2:
                 result = manager.get_result(timeout=1)
                 if result is not None and result.is_finished():
+                    self.assertEqual(result.status, RequestStatus.FINISHED)  # fail if the request failed
                     results[result.request_id] = result
                 elif not manager.is_running():
                     break
