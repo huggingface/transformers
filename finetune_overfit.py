@@ -1,6 +1,5 @@
 import os
 from dataclasses import dataclass
-from typing import Optional
 
 import torch
 from accelerate import ParallelismConfig
@@ -22,7 +21,7 @@ from transformers.utils import is_torch_neuron_available
 @dataclass
 class ScriptArguments:
     dataset_name: str
-    dataset_config: Optional[str] = None
+    dataset_config: str | None = None
     dataset_split: str = "train"
     num_examples: int = 16  # tiny fixed subset to overfit on
     max_length: int = 1024
@@ -111,8 +110,6 @@ def main(script_args, training_args, model_args):
 
     # Check that the model can be saved and reloaded correctly, even when sharded.
     rank = int(os.environ.get("RANK", "0"))
-    distributed_config = kwargs.get("distributed_config")
-
     trainer.save_model(training_args.output_dir)
 
     if rank == 0:
@@ -121,7 +118,7 @@ def main(script_args, training_args, model_args):
 
         unsharded_model = AutoModelForCausalLM.from_pretrained(training_args.output_dir, torch_dtype=dtype)
         unsharded_state_dict = unsharded_model.state_dict()
-        
+
 
         mismatches = []
         for key, expected_value in unsharded_state_dict.items():
