@@ -51,6 +51,7 @@ MISSING_FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("lasr_encoder", "LasrFeatureExtractor"),
         ("mimi", "EncodecFeatureExtractor"),
         ("moonshine", "Wav2Vec2FeatureExtractor"),
+        ("moss_transcribe_diarize", "WhisperFeatureExtractor"),
         ("moshi", "EncodecFeatureExtractor"),
         ("musicgen", "EncodecFeatureExtractor"),
         ("nemotron3_5_asr", "NemotronAsrStreamingFeatureExtractor"),
