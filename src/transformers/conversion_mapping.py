@@ -69,6 +69,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "rt_detr_v2": "rt_detr",
     "pp_doclayout_v2": "rt_detr",
     "pp_doclayout_v3": "rt_detr",
+    "pp_doclayout_v4": "rt_detr",
     "sam3_tracker_video": "sam3_tracker",
     "AltCLIPVisionModel": "CLIPVisionModel",
     "ChineseCLIPVisionModel": "CLIPVisionModel",
