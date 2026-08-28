@@ -861,6 +861,13 @@ class Glm4vModel(Qwen2VLModel):
         attention_mask: torch.Tensor | None = None,
         **kwargs,
     ):
+        warnings.warn(
+            f"`{self.__class__.__name__}.get_rope_index` is deprecated and will be removed in v5.22. Use "
+            "`get_mrope_position_ids` from this model's modeling module, which takes the config as its first "
+            "argument.",
+            FutureWarning,
+            stacklevel=2,
+        )
         return get_mrope_position_ids(
             self.config,
             input_ids,

@@ -16,6 +16,7 @@
 
 import math
 import re
+import warnings
 from dataclasses import dataclass
 
 import numpy as np
@@ -903,6 +904,13 @@ class Qwen3OmniMoePreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedM
         audio_seqlens: torch.LongTensor | None = None,
         second_per_grids: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
+        warnings.warn(
+            f"`{self.__class__.__name__}.get_rope_index` is deprecated and will be removed in v5.22. Use "
+            "`get_mrope_position_ids` from this model's modeling module, which takes the config as its first "
+            "argument.",
+            FutureWarning,
+            stacklevel=2,
+        )
         return get_mrope_position_ids(
             self.config,
             input_ids,
@@ -1643,6 +1651,13 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3MoeForCausalLM):
         audio_seqlens: torch.LongTensor | None = None,
         second_per_grids: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
+        warnings.warn(
+            f"`{self.__class__.__name__}.get_rope_index` is deprecated and will be removed in v5.22. Use "
+            "`get_mrope_position_ids` from this model's modeling module, which takes the config as its first "
+            "argument.",
+            FutureWarning,
+            stacklevel=2,
+        )
         return get_mrope_position_ids(
             self.config,
             input_ids,

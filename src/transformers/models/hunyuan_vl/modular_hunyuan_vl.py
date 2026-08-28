@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import itertools
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -1190,6 +1191,13 @@ class HunYuanVLModel(Qwen2VLModel):
         image_grid_thw: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
     ) -> tuple[torch.LongTensor, torch.LongTensor]:
+        warnings.warn(
+            f"`{self.__class__.__name__}.get_rope_index` is deprecated and will be removed in v5.22. Use "
+            "`get_mrope_position_ids` from this model's modeling module, which takes the config as its first "
+            "argument.",
+            FutureWarning,
+            stacklevel=2,
+        )
         return get_mrope_position_ids(
             self.config,
             input_ids,
