@@ -264,6 +264,29 @@ those weights cannot move. This matches the original implementation, which names
   run comfortably on a much smaller GPU.
 - Model weights are released by Google DeepMind under CC-BY-4.0, separately from the Apache-2.0 code.
 
+## Faster inference with a fused kernel
+
+Banded mesh attention is the model's dominant cost. Passing `use_kernels=True` to
+[`~PreTrainedModel.from_pretrained`] swaps it for a Triton kernel loaded from the Hub via the
+[`kernels`](https://github.com/huggingface/kernels) library, which walks the three neighbouring blocks itself instead of
+tripling the keys and values and expanding the mask. It is inference-only: the kernel has no backward, so training
+always uses the PyTorch path, and on CPU or without the kernel installed the model falls back to it too. CUDA, ROCm and
+XPU are supported. Make sure the model is on an accelerator when kernelization happens (e.g. with `device_map`).
+
+Keep `attn_implementation` at `sdpa` or `eager`. `flex_attention` hands the layer a `BlockMask` rather than the banded
+mask the kernel reads, so it falls back silently and you lose the speedup without any error.
+
+```python
+from transformers import WeatherNext2ForWeatherForecasting
+
+model = WeatherNext2ForWeatherForecasting.from_pretrained(
+    "kashif/weathernext2", device_map="auto", use_kernels=True
+)
+```
+
+The kernel computes in TF32 where the PyTorch path uses fp32, so a forecast will differ from it in the last few digits.
+Against the reference JAX implementation both agree to within 1e-4 relative on every output variable.
+
 ## WeatherNext2Config
 
 [[autodoc]] WeatherNext2Config

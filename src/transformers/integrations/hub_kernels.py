@@ -293,9 +293,12 @@ if is_kernels_available():
                 },
             },
             # Inference only: the Triton kernel has no backward, so training keeps the
-            # gather-and-sdpa path the layer falls back to.
+            # gather-and-sdpa path the layer falls back to. It is pure Triton with no
+            # backend-specific code beyond the autotune sweep, so it is registered for every
+            # backend its `build.toml` declares rather than CUDA alone; verified on CUDA (H100)
+            # and ROCm (gfx1150), XPU builds but is untested.
             "WeatherNext2Attention": {
-                "cuda": {
+                device: {
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-staging/weathernext2-banded-attention",
                         layer_name="WeatherNext2Attention",
@@ -303,7 +306,8 @@ if is_kernels_available():
                         # TODO: point at kernels-community once the PR lands and drop this.
                         trust_remote_code=True,
                     ),
-                },
+                }
+                for device in ("cuda", "rocm", "xpu")
             },
             "EsmFold2TriangleMultiplication": {
                 "cuda": {
