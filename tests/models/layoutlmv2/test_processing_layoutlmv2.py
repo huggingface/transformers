@@ -142,6 +142,11 @@ class LayoutLMv2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertEqual(len(train_data["image"]), len(train_data["input_ids"]))
 
+    def skip_unless_modality_and_tokenizer_present(
+        self, modality: str, attributes: list, require_tokenizer: bool = True
+    ):
+        self.skipTest("Processor doesn't accept typed kwargs!")
+
 
 # different use cases tests
 @require_torch

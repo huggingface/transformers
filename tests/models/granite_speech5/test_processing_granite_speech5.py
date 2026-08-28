@@ -27,6 +27,7 @@ class GraniteSpeech5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     text_input_name = "labels"
 
     audio_text_kwargs_max_length = 1001
+    audio_unstructured_max_length = 301
 
     @classmethod
     def _setup_tokenizer(cls):

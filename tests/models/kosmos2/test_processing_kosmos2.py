@@ -377,14 +377,14 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     # Rewrite as Kosmos-2 supports custom padding only when image is None.
     def _test_unstructured_kwargs_batched(self, modality):
         attributes = self.processor_class.get_attributes()
-        self.skip_unless_modality_and_tokenizer_present("images", attributes)
+        self.skip_unless_modality_and_tokenizer_present(modality, attributes)
         processor = self.get_processor()
 
-        input_str = self.prepare_text_inputs(batch_size=2, modalities="image")
-        modal_input = self._prepare_modality_input("images", batch_size=2)
+        input_str = self.prepare_text_inputs(batch_size=2, modalities=modality)
+        modal_input = self._prepare_modality_input(modality, batch_size=2)
         max_length = getattr(self, "images_unstructured_max_length")
-        init_time_kwargs = MODALITY_TEST_SPECS["images"]["init_time_kwargs"]
-        call_kwargs = MODALITY_TEST_SPECS["images"]["call_time_kwargs"]
+        init_time_kwargs = MODALITY_TEST_SPECS[modality]["init_time_kwargs"]
+        call_kwargs = MODALITY_TEST_SPECS[modality]["call_time_kwargs"]
 
         inputs = processor(
             text=input_str,
@@ -393,7 +393,7 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             images=modal_input**call_kwargs,
             **init_time_kwargs,
         )
-        self._check_modality_outputs(inputs, "images")
+        self._check_modality_outputs(inputs, modality)
         self.assertTrue(
             len(inputs[self.text_input_name][0]) == len(inputs[self.text_input_name][1])
             and len(inputs[self.text_input_name][1]) == 76

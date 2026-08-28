@@ -64,6 +64,11 @@ class LayoutLMv3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_subprocessor_defaults_0_text(self):
         pass
 
+    def skip_unless_modality_and_tokenizer_present(
+        self, modality: str, attributes: list, require_tokenizer: bool = True
+    ):
+        self.skipTest("Processor doesn't accept typed kwargs!")
+
 
 # different use cases tests
 @require_torch
