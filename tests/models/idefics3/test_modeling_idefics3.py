@@ -365,11 +365,28 @@ class Idefics3ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
     def test_sdpa_can_compile_dynamic(self):
         pass
 
-    def test_generate_from_image_hidden_states_and_pixel_values(self):
-        # Regression test: `generate()` must accept `image_hidden_states` reused from a previous
-        # forward/generate call even while `pixel_values` is still present in kwargs (e.g. a caller
-        # reusing the same processor output dict across turns) instead of raising
-        # "You cannot specify both pixel_values and image_hidden_states at the same time".
+    def test_generate_raises_on_both_pixel_values_and_image_hidden_states(self):
+        # Passing both at once is caller error, not something the model should silently resolve: the caller
+        # must clear `pixel_values` from the inputs to reuse a previous call's `image_hidden_states`.
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Idefics3ForConditionalGeneration(config).to(torch_device).eval()
+
+        with torch.no_grad():
+            outputs = model(**inputs_dict)
+
+        with self.assertRaises(ValueError):
+            model.generate(
+                input_ids=inputs_dict["input_ids"],
+                attention_mask=inputs_dict["attention_mask"],
+                pixel_values=inputs_dict["pixel_values"],
+                image_hidden_states=outputs.image_hidden_states,
+                max_new_tokens=2,
+                do_sample=False,
+            )
+
+    def test_generate_from_image_hidden_states_without_pixel_values(self):
+        # The correct way to reuse a previous call's vision-tower output and skip recomputing it: pass
+        # `image_hidden_states` alone, with `pixel_values` cleared from the inputs.
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         model = Idefics3ForConditionalGeneration(config).to(torch_device).eval()
 
@@ -379,7 +396,6 @@ class Idefics3ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
         model.generate(
             input_ids=inputs_dict["input_ids"],
             attention_mask=inputs_dict["attention_mask"],
-            pixel_values=inputs_dict["pixel_values"],
             image_hidden_states=outputs.image_hidden_states,
             max_new_tokens=2,
             do_sample=False,
