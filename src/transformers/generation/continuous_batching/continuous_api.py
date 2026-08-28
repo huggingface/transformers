@@ -28,7 +28,6 @@ from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
 from ...configuration_utils import PretrainedConfig
-from ...distributed.tensor_parallel import set_all_reduce_backend
 from ...generation.configuration_utils import ContinuousBatchingConfig, GenerationConfig
 from ...utils.generic import is_flash_attention_requested
 from ...utils.import_utils import is_flash_attn_2_available, is_flash_attn_3_available
@@ -954,9 +953,6 @@ class ContinuousBatchingManager:
         using the model deadlocks: this loop's collectives wait for their peer, and the main
         thread's work sits behind them in the same stream, so the peer can never get there.
         """
-        # This loop's tensor parallel collectives, if it was given a backend of its own. Without one
-        # they go through NCCL, which a thread sharing the model cannot do safely.
-        set_all_reduce_backend(getattr(self, "all_reduce_backend", None))
         if torch.cuda.is_available() and self.model.device.type == "cuda":
             torch.cuda.set_device(self.model.device)
             # High priority: decode is latency-bound and its collectives wait on the peer rank, so
@@ -977,11 +973,11 @@ class ContinuousBatchingManager:
 
         Do not use this while the background thread is running; it is an alternative to `start`.
         """
-        if getattr(self, "batch_processor", None) is None:
-            self.batch_processor = self._create_batch_processor()
-        if not hasattr(self, "current_batch"):
-            self.current_batch = 0
-        batch_processor = self.batch_processor
+        # `warmup` may already have built one, in which case the counter has not been set yet.
+        batch_processor = getattr(self, "batch_processor", None)
+        if batch_processor is None:
+            batch_processor = self.batch_processor = self._create_batch_processor()
+        self.current_batch = getattr(self, "current_batch", 0)
         if not batch_processor.prepare_next_batch():
             return False
         self._generation_step()
@@ -1071,12 +1067,6 @@ class ContinuousBatchingManager:
 
     def _generation_step(self) -> None:
         """Perform a single generation step. This is mostly cuda graphed"""
-        import os as _os
-
-        if _os.environ.get("CB_STEP_DEBUG"):
-            self._dbg = getattr(self, "_dbg", 0) + 1
-            if self._dbg <= 6:
-                print(f"[cb-debug rank {self.distributed_helper.global_rank}] generation step {self._dbg}", flush=True)
         if self.batch_processor is None:
             raise RuntimeError("Tried to perform a generation step before the batch processor was initialized.")
         self.batch_processor._generation_step(self.model)
