@@ -56,7 +56,6 @@ from transformers.generation.continuous_batching.utils import (
 )
 from transformers.integrations.eager_paged import eager_paged_attention_forward
 from transformers.integrations.sdpa_paged import sdpa_attention_paged_forward
-
 from transformers.testing_utils import (
     backend_empty_cache,
     backend_memory_allocated,
