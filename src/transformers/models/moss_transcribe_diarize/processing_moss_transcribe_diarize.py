@@ -24,12 +24,10 @@ import torch
 
 from ...audio_utils import AudioInput, make_list_of_audio_chat_template
 from ...feature_extraction_utils import BatchFeature
-from ...processing_utils import ProcessorMixin, Unpack, prepare_prompt_input
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, prepare_prompt_input
+from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring
 from ...utils.import_utils import requires
-from ...utils import is_torch_available
-from ...processing_utils import ProcessingKwargs
-from ...tokenization_utils_base import TextInput
 
 
 class MossTranscribeDiarizeProcessorKwargs(ProcessingKwargs, total=False):
@@ -186,7 +184,6 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
         if self.enable_time_marker and self.time_marker_every_seconds > 0:
             return self._build_time_marker_span(num_tokens)
         return self.audio_token * num_tokens
-        
 
     @property
     def model_input_names(self) -> list[str]:
@@ -287,6 +284,7 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
             stripped = stripped[1:-1].strip()
 
         return stripped
+
     def _build_time_marker_span(self, num_tokens: int) -> str:
         num_tokens = int(num_tokens)
         if num_tokens <= 0:
