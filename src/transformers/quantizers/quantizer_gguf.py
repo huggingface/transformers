@@ -78,13 +78,6 @@ class GgufHfQuantizer(HfQuantizer):
             # ordinary dense model, and no fallback happened, so there is nothing to warn about.
             self.quantization_config.dequantize = True
             return
-        if not is_torch_mps_available():
-            self.quantization_config.dequantize = True
-            logger.warning(
-                "Loading a GGUF checkpoint with its weights left quantized requires an MPS backend. "
-                "We will dequantize the entire model."
-            )
-            return
         self.kernel = get_gguf_kernel()
         if not self.kernel:
             self.quantization_config.dequantize = True
@@ -184,6 +177,12 @@ class GgufHfQuantizer(HfQuantizer):
             if permutation is not None:
                 module.input_permutation = permutation.to(module.weight.device)
         kernelize_ggml_layers(model)
+        # `save_pretrained` writes a checkpoint back by reversing whatever loaded the model, and this
+        # mapping does not reverse: `Dequantize` has no inverse worth defining, and nobody wants a GGUF
+        # written back. Dropped once the weights are in place, so saving falls back on the model's own
+        # mapping -- which is what it needs, a dequantized model being an ordinary dense one. A model
+        # that kept its blocks never reaches that code: `is_serializable` refuses it first.
+        model._weight_conversions = None
         return model
 
     def update_weight_conversions(self, weight_conversions):

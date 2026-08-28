@@ -27,6 +27,7 @@ and far too cheap to pay for an 8 GB model load in `setUpClass`.
 """
 
 import math
+import tempfile
 import unittest
 import unittest.mock
 
@@ -351,6 +352,47 @@ class GgufIntegrationTest(unittest.TestCase):
         self.assertFalse(getattr(model, "is_quantized", False))
         self.assertFalse(hasattr(model.config, "quantization_config"))
         self.assertIn("Berlin", self.generates(model))
+
+    @require_torch_mps
+    @require_kernels
+    def test_a_packed_model_cannot_be_saved(self):
+        """GGUF blocks are not a format transformers writes, so keeping a packed model is refused.
+
+        The quantizer stays attached to one, and `save_pretrained` asks it before it goes near the
+        weights -- so this fails on what the model is, rather than deep inside a conversion that cannot
+        be reversed. The refusal is the point: the counterpart below is what may be saved.
+        """
+        model = self.load(device_map=torch_device)
+        self.assertTrue(self.packed_modules(model), "a kernel is available but no module kept its blocks")
+
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(ValueError, "not serializable"):
+                model.save_pretrained(directory)
+
+    def test_a_dequantized_model_can_be_saved(self):
+        """A dequantized model is an ordinary dense one, so it saves and reloads as one.
+
+        Nothing about it is GGUF any more -- no quantization config, no `is_quantized` -- and the test
+        above says so. What that cannot see is the conversion mapping the load left on the model, which
+        `save_pretrained` tries to run backwards to write the checkpoint out. There is no running this
+        one backwards, so it has to be dropped once the weights are in place, and a model kept only in
+        memory is not where that shows.
+        """
+        model = self.load(
+            device_map="cpu",  # this saves 8 GB to disk and reads it back; a device copy buys nothing
+            dtype=torch.bfloat16,
+            quantization_config=GgufConfig(gguf_file=self.gguf_file, dequantize=True),
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            model.save_pretrained(directory)
+            reloaded = AutoModelForCausalLM.from_pretrained(directory, dtype=torch.bfloat16)
+
+        expected = dict(model.named_parameters())
+        actual = dict(reloaded.named_parameters())
+        self.assertEqual(sorted(actual), sorted(expected), "the saved model is not the one that was loaded")
+        differing = [name for name, tensor in expected.items() if not torch.equal(tensor, actual[name])]
+        self.assertEqual(differing, [], f"{len(differing)} parameters changed across a save and reload")
 
     def test_dtype_of_a_dequantized_model(self):
         """A dequantized model is an ordinary one, so `dtype` decides what it is loaded in."""
