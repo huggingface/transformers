@@ -52,8 +52,6 @@ class LoMaVgg19EncoderConfig(PreTrainedConfig):
         Stride used by the pooling layers between encoder stages.
     """
 
-    model_type = "loma_vgg19_encoder"
-
     in_channels: int = 3
     hidden_sizes: list[int] = field(default_factory=lambda: [64, 128, 256, 512])
     num_hidden_layers: list[int] = field(default_factory=lambda: [2, 2, 4, 4])
@@ -78,8 +76,6 @@ class LoMaDescriptorDecoderConfig(PreTrainedConfig):
     context_channels (`list[int]`, *optional*, defaults to `[512, 256, 128, 32, 1]`):
         Number of context channels produced by each decoder stage.
     """
-
-    model_type = "loma_descriptor_decoder"
 
     scales: list[str] = field(default_factory=lambda: ["14", "8", "4", "2", "1"])
     hidden_sizes: list[int] = field(default_factory=lambda: [768, 512, 256, 64, 32])
@@ -588,8 +584,6 @@ class LoMaImageProcessor(LightGlueImageProcessor):
 
 __all__ = [
     "LoMaConfig",
-    "LoMaVgg19EncoderConfig",
-    "LoMaDescriptorDecoderConfig",
     "LoMaPreTrainedModel",
     "LoMaForKeypointMatching",
     "LoMaImageProcessor",

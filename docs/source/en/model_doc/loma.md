@@ -72,7 +72,3 @@ with torch.no_grad():
 ## LoMaImageProcessor
 
 [[autodoc]] LoMaImageProcessor
-
-## LoMaImageProcessorPil
-
-[[autodoc]] LoMaImageProcessorPil
