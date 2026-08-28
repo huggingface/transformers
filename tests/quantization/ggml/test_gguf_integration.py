@@ -325,11 +325,14 @@ class GgufIntegrationTest(unittest.TestCase):
         """A dequantized model is an ordinary one, so `dtype` decides what it is loaded in."""
         from transformers import GgufConfig
 
-        for dtype in (torch.float32, torch.float16):
+        # On the host, and never in f32: this reads `p.dtype` and nothing else, so a device copy buys
+        # nothing, and f32 is both what `test_dequantize_gives_a_dense_model` already covers and 15.7 GB
+        # for a 4B model -- which is what made this the slowest test in the file by an order of magnitude.
+        for dtype in (torch.float16, torch.bfloat16):
             with self.subTest(dtype=dtype):
                 model = self.load(
                     dtype=dtype,
-                    device_map=torch_device,
+                    device_map="cpu",
                     quantization_config=GgufConfig(gguf_file=self.gguf_file, dequantize=True),
                 )
                 self.assertEqual({p.dtype for p in model.parameters()}, {dtype})
