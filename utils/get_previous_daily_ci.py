@@ -1,8 +1,20 @@
+import logging
 import os
 import time
 import zipfile
 
 from get_ci_error_statistics import download_artifact, get_artifacts_links, get_github_json
+
+
+logger = logging.getLogger(__name__)
+if not logger.handlers:
+    # StreamHandler defaults to stderr, keeping diagnostics visible in CI logs without polluting stdout
+    # that some workflow steps capture as machine-readable output.
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    logger.addHandler(handler)
+logger.setLevel(logging.INFO)
+logger.propagate = False
 
 
 def get_daily_ci_runs(token, num_runs=7, workflow_id=None):
@@ -48,44 +60,59 @@ def get_daily_ci_runs(token, num_runs=7, workflow_id=None):
 
     for attempt in range(1, max_attempts + 1):
         schedule_url = f"{url}&event=schedule"
-        print(f"[DEBUG get_daily_ci_runs] Querying (attempt {attempt}/{max_attempts}): {schedule_url}")
+        logger.info("[DEBUG get_daily_ci_runs] Querying (attempt %d/%d): %s", attempt, max_attempts, schedule_url)
         result = get_github_json(schedule_url, token=token)
         workflow_runs = result["workflow_runs"]
-        print(
-            f"[DEBUG get_daily_ci_runs] event=schedule returned {len(workflow_runs)} runs (total_count={result.get('total_count')}):"
+        logger.info(
+            "[DEBUG get_daily_ci_runs] event=schedule returned %d runs (total_count=%s):",
+            len(workflow_runs),
+            result.get("total_count"),
         )
         for r in workflow_runs:
-            print(
-                f"  id={r['id']} status={r['status']} conclusion={r.get('conclusion')} created_at={r['created_at']} event={r['event']}"
+            logger.info(
+                "  id=%s status=%s conclusion=%s created_at=%s event=%s",
+                r["id"],
+                r["status"],
+                r.get("conclusion"),
+                r["created_at"],
+                r["event"],
             )
 
         if len(workflow_runs) == 0:
             # AMD CI runs appear under event=workflow_run (triggered via the workflow_run
             # event, not schedule).  Stale-check for this path is TODO (see above).
             workflow_run_url = f"{url}&event=workflow_run"
-            print(f"[DEBUG get_daily_ci_runs] Falling back to: {workflow_run_url}")
+            logger.info("[DEBUG get_daily_ci_runs] Falling back to: %s", workflow_run_url)
             result = get_github_json(workflow_run_url, token=token)
             workflow_runs = result["workflow_runs"]
-            print(f"[DEBUG get_daily_ci_runs] event=workflow_run returned {len(workflow_runs)} runs:")
+            logger.info("[DEBUG get_daily_ci_runs] event=workflow_run returned %d runs:", len(workflow_runs))
             for r in workflow_runs:
-                print(
-                    f"  id={r['id']} status={r['status']} conclusion={r.get('conclusion')} created_at={r['created_at']} event={r['event']}"
+                logger.info(
+                    "  id=%s status=%s conclusion=%s created_at=%s event=%s",
+                    r["id"],
+                    r["status"],
+                    r.get("conclusion"),
+                    r["created_at"],
+                    r["event"],
                 )
             break
 
         if stale_check and current_run_id not in {r["id"] for r in workflow_runs}:
             if attempt < max_attempts:
-                print(
-                    f"[WARN get_daily_ci_runs] Current run {current_run_id} not found in results — "
-                    f"likely a stale GitHub API cache (total_count={result.get('total_count')}). "
-                    f"Retrying in 30s..."
+                logger.warning(
+                    "[WARN get_daily_ci_runs] Current run %s not found in results — "
+                    "likely a stale GitHub API cache (total_count=%s). Retrying in 30s...",
+                    current_run_id,
+                    result.get("total_count"),
                 )
                 time.sleep(30)
                 continue
             else:
-                print(
-                    f"[WARN get_daily_ci_runs] Current run {current_run_id} still not found after "
-                    f"{max_attempts} attempts — proceeding with stale results."
+                logger.warning(
+                    "[WARN get_daily_ci_runs] Current run %s still not found after %d attempts — "
+                    "proceeding with stale results.",
+                    current_run_id,
+                    max_attempts,
                 )
         break
 
@@ -107,10 +134,15 @@ def get_last_daily_ci_run(token, workflow_run_id=None, workflow_id=None, commit_
         return workflow_run
 
     workflow_runs = get_daily_ci_runs(token, workflow_id=workflow_id)
-    print(f"[DEBUG get_last_daily_ci_run] Iterating {len(workflow_runs)} runs (commit_sha={commit_sha!r}):")
+    logger.info("[DEBUG get_last_daily_ci_run] Iterating %d runs (commit_sha=%r):", len(workflow_runs), commit_sha)
     for run in workflow_runs:
-        print(
-            f"  checking id={run['id']} status={run['status']} conclusion={run.get('conclusion')} created_at={run['created_at']} head_sha={run['head_sha']}"
+        logger.info(
+            "  checking id=%s status=%s conclusion=%s created_at=%s head_sha=%s",
+            run["id"],
+            run["status"],
+            run.get("conclusion"),
+            run["created_at"],
+            run["head_sha"],
         )
         if commit_sha in [None, ""] and run["status"] == "completed":
             workflow_run = run
@@ -120,17 +152,22 @@ def get_last_daily_ci_run(token, workflow_run_id=None, workflow_id=None, commit_
             workflow_run = run
             break
 
-    print(f"[DEBUG get_last_daily_ci_run] Selected run: {workflow_run['id'] if workflow_run else None}")
+    logger.info("[DEBUG get_last_daily_ci_run] Selected run: %s", workflow_run["id"] if workflow_run else None)
     return workflow_run
 
 
 def get_last_daily_ci_workflow_run_id(token, workflow_run_id=None, workflow_id=None, commit_sha=None):
     """Get the last completed workflow run id of the scheduled (daily) CI."""
-    print(
-        f"[DEBUG get_last_daily_ci_workflow_run_id] called with workflow_run_id={workflow_run_id!r} workflow_id={workflow_id!r} commit_sha={commit_sha!r}"
+    logger.info(
+        "[DEBUG get_last_daily_ci_workflow_run_id] called with workflow_run_id=%r workflow_id=%r commit_sha=%r",
+        workflow_run_id,
+        workflow_id,
+        commit_sha,
     )
     if workflow_run_id is not None and workflow_run_id != "":
-        print(f"[DEBUG get_last_daily_ci_workflow_run_id] returning early with workflow_run_id={workflow_run_id!r}")
+        logger.info(
+            "[DEBUG get_last_daily_ci_workflow_run_id] returning early with workflow_run_id=%r", workflow_run_id
+        )
         return workflow_run_id
 
     workflow_run = get_last_daily_ci_run(token, workflow_id=workflow_id, commit_sha=commit_sha)
@@ -138,7 +175,7 @@ def get_last_daily_ci_workflow_run_id(token, workflow_run_id=None, workflow_id=N
     if workflow_run is not None:
         workflow_run_id = workflow_run["id"]
 
-    print(f"[DEBUG get_last_daily_ci_workflow_run_id] returning workflow_run_id={workflow_run_id!r}")
+    logger.info("[DEBUG get_last_daily_ci_workflow_run_id] returning workflow_run_id=%r", workflow_run_id)
     return workflow_run_id
 
 
