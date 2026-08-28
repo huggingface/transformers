@@ -13,7 +13,7 @@
 # limitations under the License
 """Tokenization classes for mLUKE."""
 
-import itertools
+import bisect
 import json
 import os
 from collections.abc import Mapping
@@ -358,6 +358,15 @@ class MLukeTokenizer(TokenizersBackend):
                 extra_tokens.append(token)
                 seen.add(token_str)
 
+        # Move entity markers to the front so that extra_special_tokens_ids[0/1]
+        # reliably correspond to <ent>/<ent2> even if the hub config contains
+        # other tokens (e.g. <s>, </s>) in extra_special_tokens.
+        extra_tokens = [
+            entity_token_1,
+            entity_token_2,
+            *[tok for tok in extra_tokens if str(tok) not in (str(entity_token_1), str(entity_token_2))],
+        ]
+
         # Also register entity masking/padding tokens so they survive save/load cycles.
         for token in (entity_unk_token, entity_pad_token, entity_mask_token, entity_mask2_token):
             if token not in seen:
@@ -432,13 +441,22 @@ class MLukeTokenizer(TokenizersBackend):
         token_id = self._tokenizer.token_to_id(token)
 
         # Need to return unknown token if not found (token_to_id returns None)
-        return token_id + self.fairseq_offset if token_id is not None else self.unk_token_id
+        if token_id is None:
+            return self.unk_token_id
+        # Added tokens already have their final IDs; only shift base vocab IDs.
+        if token_id >= self._vocab_size:
+            return token_id
+        return token_id + self.fairseq_offset
 
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
         if index in self.fairseq_ids_to_tokens:
             return self.fairseq_ids_to_tokens[index]
-        token = self._tokenizer.id_to_token(index - self.fairseq_offset)
+        # Added token IDs are already final; don't shift them.
+        if index >= self.vocab_size:
+            token = self._tokenizer.id_to_token(index)
+        else:
+            token = self._tokenizer.id_to_token(index - self.fairseq_offset)
         return token if token is not None else self.unk_token
 
     def convert_tokens_to_string(self, tokens):
@@ -943,28 +961,19 @@ class MLukeTokenizer(TokenizersBackend):
             if entity_spans is None:
                 return get_input_ids(text), None
 
-            cur = 0
-            input_ids = []
-            entity_token_spans = [None] * len(entity_spans)
+            # Tokenize the whole text once so that punctuation attached to an
+            # entity (e.g. "Japan.") is not tokenized as a separate word with a
+            # spurious leading space.
+            encoding = self._tokenizer.encode(text, add_special_tokens=False)
+            input_ids = self.convert_tokens_to_ids(encoding.tokens)
 
-            split_char_positions = sorted(frozenset(itertools.chain(*entity_spans)))
-            char_pos2token_pos = {}
-
-            for split_char_position in split_char_positions:
-                orig_split_char_position = split_char_position
-                if (
-                    split_char_position > 0 and text[split_char_position - 1] == " "
-                ):  # whitespace should be prepended to the following token
-                    split_char_position -= 1
-                if cur != split_char_position:
-                    input_ids += get_input_ids(text[cur:split_char_position])
-                    cur = split_char_position
-                char_pos2token_pos[orig_split_char_position] = len(input_ids)
-
-            input_ids += get_input_ids(text[cur:])
-
+            token_starts = [start for start, end in encoding.offsets]
             entity_token_spans = [
-                (char_pos2token_pos[char_start], char_pos2token_pos[char_end]) for char_start, char_end in entity_spans
+                (
+                    bisect.bisect_right(token_starts, char_start) - 1,
+                    bisect.bisect_left(token_starts, char_end),
+                )
+                for char_start, char_end in entity_spans
             ]
 
             return input_ids, entity_token_spans
