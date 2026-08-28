@@ -464,6 +464,7 @@ class Deimv2ConvEncoder(Deimv2PreTrainedModel):
 
         self.post_init()
 
+    @auto_docstring
     def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> list[torch.Tensor]:
         features = self.model(pixel_values, **kwargs).feature_maps
         return [proj(feat) for proj, feat in zip(self.encoder_input_proj, features)]
@@ -489,6 +490,7 @@ class Deimv2DINOv3ConvEncoder(Deimv2PreTrainedModel):
 
         self.post_init()
 
+    @auto_docstring
     def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> list[torch.Tensor]:
         backbone_output = self.backbone(pixel_values, **kwargs)
         feature_maps = backbone_output.feature_maps
@@ -548,6 +550,7 @@ class Deimv2LiteEncoder(Deimv2PreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(self, inputs_embeds: list[torch.Tensor], **kwargs: Unpack[TransformersKwargs]) -> Deimv2EncoderOutput:
         projected_features = [self.input_proj[i](feature) for i, feature in enumerate(inputs_embeds)]
         projected_features.append(self.down_conv1(self.down_pool1(projected_features[-1])))
@@ -607,15 +610,17 @@ class Deimv2HybridEncoder(DFineHybridEncoder):
 
         self.post_init()
 
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
+    @auto_docstring
     def forward(
         self,
         inputs_embeds: list[torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Deimv2EncoderOutput:
         r"""
-        Args:
-            inputs_embeds (`list[torch.FloatTensor]`):
-                Multi-scale feature maps from the backbone (one tensor per feature level) passed to the encoder.
+        inputs_embeds (`list[torch.FloatTensor]`):
+            Multi-scale feature maps from the backbone (one tensor per feature level) passed to the encoder.
         """
         feature_maps = inputs_embeds
 

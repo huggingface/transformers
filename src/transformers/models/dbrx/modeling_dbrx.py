@@ -436,6 +436,7 @@ class DbrxBlock(GradientCheckpointingLayer):
         return hidden_states
 
 
+@auto_docstring
 class DbrxPreTrainedModel(PreTrainedModel):
     config: DbrxConfig
     base_model_prefix = "transformer"
@@ -620,6 +621,7 @@ def load_balancing_loss_func(
     return overall_loss * num_experts
 
 
+@auto_docstring
 class DbrxForCausalLM(DbrxPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "transformer.wte.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}

@@ -1099,6 +1099,7 @@ class UdopStack(UdopPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         input_ids=None,
@@ -1117,6 +1118,20 @@ class UdopStack(UdopPreTrainedModel):
     ) -> BaseModelOutputWithAttentionMask:
         # input embeddings processing
 
+        r"""
+        bbox (`torch.LongTensor` of shape `(batch_size, sequence_length, 4)`, *optional*):
+            Bounding boxes of each input sequence tokens. Selected in the range `[0,
+            config.max_2d_position_embeddings-1]`. Each bounding box should be a normalized version in (x0, y0, x1,
+            y1) format, where (x0, y0) corresponds to the position of the upper left corner in the bounding box, and
+            (x1, y1) represents the position of the lower right corner.
+        visual_bbox (`torch.LongTensor` of shape `(batch_size, patch_sequence_length, 4)`, *optional*):
+            Bounding boxes of each patch in the image. If not provided, bounding boxes are created in the model.
+        image_embeddings (`torch.FloatTensor` of shape `(batch_size, patch_sequence_length, hidden_size)`, *optional*):
+            Pre-computed patch embeddings. When given, `pixel_values` is not needed.
+        position_bias (`torch.FloatTensor` of shape `(batch_size, num_heads, sequence_length, sequence_length)`, *optional*):
+            Relative position bias added to the attention scores. Computed from the relative positions when not
+            provided.
+        """
         if (input_ids is None) ^ (inputs_embeds is not None):
             err_msg_prefix = "decoder_" if self.is_decoder else ""
             raise ValueError(

@@ -31,10 +31,16 @@ from .configuration_shieldgemma2 import ShieldGemma2Config
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(
+    custom_intro="""
+    ShieldGemma2 classifies images as violative or not relative to a specific policy.
+    """
+)
 @dataclass
 class ShieldGemma2ImageClassifierOutputWithNoAttention(ImageClassifierOutputWithNoAttention):
-    """ShieldGemma2 classifies images as violative or not relative to a specific policy
-    Args:
+    r"""
+    probabilities (`torch.Tensor` of shape `(batch_size, 2)`, *optional*):
+        Yes/No probabilities of the image violating each checked policy.
     """
 
     probabilities: torch.Tensor | None = None

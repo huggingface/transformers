@@ -1231,6 +1231,7 @@ class SpeechT5Encoder(SpeechT5PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @auto_docstring
     def forward(
         self,
         hidden_states: torch.FloatTensor,
@@ -1240,26 +1241,23 @@ class SpeechT5Encoder(SpeechT5PreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | BaseModelOutput:
-        """
-        Args:
-            hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, feature_size)`):
-                Features extracted from the speech or text input by the encoder prenet.
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing convolution and attention on padding token indices. Mask values selected in
-                `[0, 1]`:
+        r"""
+        hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, feature_size)`):
+            Features extracted from the speech or text input by the encoder prenet.
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing convolution and attention on padding token indices. Mask values selected in
+            `[0, 1]`:
 
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
 
-                [What are attention masks?](../glossary#attention-mask)
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+            [What are attention masks?](../glossary#attention-mask)
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+            returned tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
+            for more detail.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1336,6 +1334,7 @@ class SpeechT5EncoderWithSpeechPrenet(SpeechT5PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @auto_docstring
     def forward(
         self,
         input_values: torch.FloatTensor,
@@ -1377,6 +1376,7 @@ class SpeechT5EncoderWithTextPrenet(SpeechT5PreTrainedModel):
     def set_input_embeddings(self, value):
         self.prenet.set_input_embeddings(value)
 
+    @auto_docstring
     def forward(
         self,
         input_values: torch.FloatTensor,
@@ -1412,6 +1412,7 @@ class SpeechT5EncoderWithoutPrenet(SpeechT5PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @auto_docstring
     def forward(
         self,
         input_values: torch.FloatTensor,
@@ -1446,6 +1447,7 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @auto_docstring
     def forward(
         self,
         hidden_states: torch.FloatTensor | None = None,
@@ -1460,48 +1462,38 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
         **kwargs,
     ) -> tuple | BaseModelOutputWithPastAndCrossAttentions:
         r"""
-        Args:
-            hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, feature_size)`):
-                Features extracted from the speech or text input by the decoder prenet.
-            attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+            than the model's internal embedding lookup matrix.
+        hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, feature_size)`):
+            Features extracted from the speech or text input by the decoder prenet.
+        encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
+            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
+            of the decoder.
+        encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, encoder_sequence_length)`, *optional*):
+            Mask to avoid performing cross-attention on padding tokens indices of encoder input_ids. Mask values
+            selected in `[0, 1]`:
 
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
 
-                [What are attention masks?](../glossary#attention-mask)
-            encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
-                Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
-                of the decoder.
-            encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, encoder_sequence_length)`, *optional*):
-                Mask to avoid performing cross-attention on padding tokens indices of encoder input_ids. Mask values
-                selected in `[0, 1]`:
+            [What are attention masks?](../glossary#attention-mask)
+        past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
+            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the
+            cross-attention blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
 
-                [What are attention masks?](../glossary#attention-mask)
-            past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-                It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-                Contains pre-computed hidden-states (key and values in the self-attention blocks and in the
-                cross-attention blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
-
-                If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
-                that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
-                all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
-                This is useful if you want more control over how to convert `input_ids` indices into associated vectors
-                than the model's internal embedding lookup matrix.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
+            that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
+            all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+            returned tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
+            for more detail.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1604,6 +1596,7 @@ class SpeechT5DecoderWithSpeechPrenet(SpeechT5PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @auto_docstring
     def forward(
         self,
         input_values: torch.FloatTensor | None = None,
@@ -1618,6 +1611,11 @@ class SpeechT5DecoderWithSpeechPrenet(SpeechT5PreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | BaseModelOutputWithPastAndCrossAttentions:
+        r"""
+        speaker_embeddings (`torch.FloatTensor` of shape `(batch_size, config.speaker_embedding_dim)`, *optional*):
+            Tensor containing the speaker embeddings, concatenated to the prenet output to condition the
+            generated speech on a voice.
+        """
         decoder_hidden_states = self.prenet(input_values, speaker_embeddings)
 
         outputs = self.wrapped_decoder(
@@ -1654,6 +1652,7 @@ class SpeechT5DecoderWithTextPrenet(SpeechT5PreTrainedModel):
     def set_input_embeddings(self, value):
         self.prenet.set_input_embeddings(value)
 
+    @auto_docstring
     def forward(
         self,
         input_values: torch.FloatTensor | None = None,
@@ -1697,6 +1696,7 @@ class SpeechT5DecoderWithoutPrenet(SpeechT5PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @auto_docstring
     def forward(
         self,
         input_values: torch.FloatTensor | None = None,

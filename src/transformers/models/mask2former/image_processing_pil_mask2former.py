@@ -271,6 +271,7 @@ def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_
 
 
 @requires(backends=("torch",))
+@auto_docstring
 class Mask2FormerImageProcessorPil(PilBackend):
     valid_kwargs = Mask2FormerImageProcessorKwargs
     resample = PILImageResampling.BILINEAR

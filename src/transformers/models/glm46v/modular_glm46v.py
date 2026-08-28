@@ -100,6 +100,7 @@ class Glm46VModel(Glm4vModel):
         self.language_model = AutoModel.from_config(config.text_config)
 
 
+@auto_docstring
 class Glm46VForConditionalGeneration(Glm4vForConditionalGeneration):
     pass
 

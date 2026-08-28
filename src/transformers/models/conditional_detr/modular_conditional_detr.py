@@ -778,6 +778,7 @@ class ConditionalDetrDecoder(ConditionalDetrPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         inputs_embeds=None,
@@ -789,31 +790,28 @@ class ConditionalDetrDecoder(ConditionalDetrPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> ConditionalDetrDecoderOutput:
         r"""
-        Args:
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-                The query embeddings that are passed into the decoder.
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            The query embeddings that are passed into the decoder.
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on certain queries. Mask values selected in `[0, 1]`:
 
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on certain queries. Mask values selected in `[0, 1]`:
+            - 1 for queries that are **not masked**,
+            - 0 for queries that are **masked**.
 
-                - 1 for queries that are **not masked**,
-                - 0 for queries that are **masked**.
+            [What are attention masks?](../glossary#attention-mask)
+        encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
+            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
+            of the decoder.
+        encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, encoder_sequence_length)`, *optional*):
+            Mask to avoid performing cross-attention on padding pixel_values of the encoder. Mask values selected
+            in `[0, 1]`:
 
-                [What are attention masks?](../glossary#attention-mask)
-            encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
-                Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
-                of the decoder.
-            encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, encoder_sequence_length)`, *optional*):
-                Mask to avoid performing cross-attention on padding pixel_values of the encoder. Mask values selected
-                in `[0, 1]`:
-
-                - 1 for pixels that are real (i.e. **not masked**),
-                - 0 for pixels that are padding (i.e. **masked**).
-
-            spatial_position_embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-                Spatial position embeddings that are added to the queries and keys in each cross-attention layer.
-            object_queries_position_embeddings (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
-                , *optional*): Position embeddings that are added to the queries and keys in each self-attention layer.
+            - 1 for pixels that are real (i.e. **not masked**),
+            - 0 for pixels that are padding (i.e. **masked**).
+        spatial_position_embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Spatial position embeddings that are added to the queries and keys in each cross-attention layer.
+        object_queries_position_embeddings (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
+            , *optional*): Position embeddings that are added to the queries and keys in each self-attention layer.
         """
         if inputs_embeds is not None:
             hidden_states = inputs_embeds

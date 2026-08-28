@@ -158,6 +158,7 @@ class SegformerImageProcessor(BeitImageProcessor):
 
 
 @requires(backends=("torch", "torchvision"))
+@auto_docstring
 class SegformerImageProcessorPil(BeitImageProcessorPil):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN

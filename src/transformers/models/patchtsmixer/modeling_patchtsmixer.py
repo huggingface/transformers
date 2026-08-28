@@ -1478,6 +1478,7 @@ def weighted_average(input_tensor: torch.Tensor, weights: torch.Tensor | None = 
         return input_tensor.mean(dim=dim)
 
 
+@auto_docstring
 class PatchTSMixerForPrediction(PatchTSMixerPreTrainedModel):
     r"""
     `PatchTSMixer` for forecasting application.
@@ -1704,18 +1705,12 @@ class PatchTSMixerForTimeSeriesClassificationOutput(ModelOutput):
     hidden_states: tuple[torch.FloatTensor] | None = None
 
 
-class PatchTSMixerForTimeSeriesClassification(PatchTSMixerPreTrainedModel):
-    r"""
+@auto_docstring(
+    custom_intro="""
     `PatchTSMixer` for classification application.
-
-    Args:
-        config (`PatchTSMixerConfig`):
-            Configuration.
-
-    Returns:
-        `None`.
     """
-
+)
+class PatchTSMixerForTimeSeriesClassification(PatchTSMixerPreTrainedModel):
     def __init__(self, config: PatchTSMixerConfig):
         super().__init__(config)
 

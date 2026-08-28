@@ -274,6 +274,7 @@ class TimesFm2_5PreTrainedModel(TimesFmPreTrainedModel):
     }
 
 
+@auto_docstring
 class TimesFm2_5Model(TimesFm2_5PreTrainedModel):
     def __init__(self, config: TimesFm2_5Config):
         super().__init__(config)
@@ -456,6 +457,7 @@ class TimesFm2_5Model(TimesFm2_5PreTrainedModel):
         )
 
 
+@auto_docstring
 class TimesFm2_5ModelForPrediction(TimesFmModelForPrediction):
     def __init__(self, config: TimesFm2_5Config):
         super().__init__(config)

@@ -129,10 +129,12 @@ class InstructBlipVideoPreTrainedModel(InstructBlipPreTrainedModel):
     input_modalities = ("video", "text")
 
 
+@auto_docstring
 class InstructBlipVideoVisionModel(InstructBlipVisionModel):
     input_modalities = "video"
 
 
+@auto_docstring
 class InstructBlipVideoQFormerModel(InstructBlipQFormerModel):
     pass
 

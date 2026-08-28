@@ -1267,6 +1267,7 @@ class LongT5Stack(LongT5PreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.embed_tokens = new_embeddings
 
+    @auto_docstring
     def forward(
         self,
         input_ids=None,

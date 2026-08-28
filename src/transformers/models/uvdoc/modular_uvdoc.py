@@ -495,6 +495,7 @@ class UVDocBridge(UVDocPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         hidden_states: torch.Tensor,

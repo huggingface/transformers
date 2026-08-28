@@ -220,6 +220,7 @@ class SLANeXtMLP(nn.Module):
         return hidden_states
 
 
+@auto_docstring
 class SLANeXtPreTrainedModel(PreTrainedModel):
     config: SLANeXtConfig
     base_model_prefix = "backbone"
@@ -504,6 +505,7 @@ class SLANeXtVisionEncoder(SLANeXtPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
+    @auto_docstring
     def forward(
         self, pixel_values: torch.FloatTensor | None = None, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | SLANeXtVisionEncoderOutput:
@@ -521,6 +523,7 @@ class SLANeXtVisionEncoder(SLANeXtPreTrainedModel):
         )
 
 
+@auto_docstring
 class SLANeXtBackbone(SLANeXtPreTrainedModel):
     def __init__(
         self,
@@ -534,6 +537,7 @@ class SLANeXtBackbone(SLANeXtPreTrainedModel):
         )
         self.post_init()
 
+    @auto_docstring
     def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]):
         vision_output = self.vision_tower(hidden_states, **kwargs)
         hidden_states = self.post_conv(vision_output.last_hidden_state)
@@ -567,12 +571,18 @@ class SLANeXtSLAHead(SLANeXtPreTrainedModel):
     @merge_with_config_defaults
     @capture_outputs
     @filter_output_hidden_states
+    @auto_docstring
     def forward(
         self,
         hidden_states: torch.FloatTensor,
         targets: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
+        r"""
+        targets (`torch.Tensor` of shape `(batch_size, max_text_length + 1)`, *optional*):
+            Ground-truth structure token ids. Accepted for compatibility with the original implementation,
+            which uses them for teacher forcing; this head always decodes autoregressively.
+        """
         features = torch.zeros(
             (hidden_states.shape[0], self.config.hidden_size), dtype=torch.float32, device=hidden_states.device
         )

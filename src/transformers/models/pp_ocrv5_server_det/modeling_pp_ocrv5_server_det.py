@@ -377,6 +377,7 @@ class PPOCRV5ServerDetHead(nn.Module):
         return 0.5 * (residual + hidden_states)
 
 
+@auto_docstring
 class PPOCRV5ServerDetPreTrainedModel(PreTrainedModel):
     """
     Base class for all PPOCRV5 Server Det pre-trained models. Handles model initialization,
@@ -431,6 +432,7 @@ class PPOCRV5ServerDetForObjectDetection(PPOCRV5ServerDetPreTrainedModel):
         self.post_init()
 
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,

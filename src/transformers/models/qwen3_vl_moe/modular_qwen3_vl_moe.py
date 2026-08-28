@@ -232,6 +232,7 @@ class Qwen3VLMoeVisionBlock(Qwen3VLVisionBlock):
     pass
 
 
+@auto_docstring
 class Qwen3VLMoeVisionModel(Qwen3VLVisionModel):
     _can_record_outputs = {
         "router_logits": OutputRecorder(Qwen3VLMoeTextTopKRouter, layer_name="mlp.gate", index=0),
@@ -336,6 +337,7 @@ class Qwen3VLMoeCausalLMOutputWithPast(Qwen3VLCausalLMOutputWithPast):
     aux_loss: torch.FloatTensor | None = None
 
 
+@auto_docstring
 class Qwen3VLMoeForConditionalGeneration(Qwen3VLForConditionalGeneration):
     def forward(
         self,

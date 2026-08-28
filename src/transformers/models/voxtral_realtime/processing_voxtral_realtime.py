@@ -127,6 +127,7 @@ class VoxtralRealtimeProcessor(ProcessorMixin):
     def num_samples_per_audio_chunk(self) -> int:
         return self.audio_length_per_tok * self.feature_extractor.hop_length + self.feature_extractor.win_length
 
+    @auto_docstring
     def __call__(
         self,
         audio: AudioInput | None = None,
@@ -135,20 +136,15 @@ class VoxtralRealtimeProcessor(ProcessorMixin):
         **kwargs: Unpack[VoxtralRealtimeProcessorKwargs],
     ):
         r"""
-        Main method to prepare audio input for the Voxtral Realtime model. This method encodes the audio into
-        a transcription request using `mistral_common`, tokenizes the resulting text, and extracts mel spectrogram
-        features using the feature extractor. Supports both streaming and non-streaming modes.
-
-        Args:
-            audio (`AudioInput`, *optional*):
-                Input audio or batch of audios as NumPy arrays or PyTorch tensors.
-            is_streaming (`bool`, *optional*, defaults to `False`):
-                Whether to process audio in streaming mode. When `True`, audio can be passed in chunks
-                using `is_first_audio_chunk` to distinguish the first chunk from subsequent ones.
-            is_first_audio_chunk (`bool`, *optional*, defaults to `True`):
-                Whether the current audio is the first chunk in a streaming session. When `True`, the audio
-                is encoded into a full transcription request with tokenized text. When `False`, only audio
-                features are extracted (text encoding is skipped). Must be `True` when `is_streaming=False`.
+        audio (`AudioInput`, *optional*):
+            Input audio or batch of audios as NumPy arrays or PyTorch tensors.
+        is_streaming (`bool`, *optional*, defaults to `False`):
+            Whether to process audio in streaming mode. When `True`, audio can be passed in chunks
+            using `is_first_audio_chunk` to distinguish the first chunk from subsequent ones.
+        is_first_audio_chunk (`bool`, *optional*, defaults to `True`):
+            Whether the current audio is the first chunk in a streaming session. When `True`, the audio
+            is encoded into a full transcription request with tokenized text. When `False`, only audio
+            features are extracted (text encoding is skipped). Must be `True` when `is_streaming=False`.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:

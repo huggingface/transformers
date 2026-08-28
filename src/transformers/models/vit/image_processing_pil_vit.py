@@ -15,8 +15,10 @@
 
 from ...image_processing_backends import PilBackend
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling
+from ...utils import auto_docstring
 
 
+@auto_docstring
 class ViTImageProcessorPil(PilBackend):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_STANDARD_MEAN

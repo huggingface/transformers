@@ -57,6 +57,7 @@ if is_torchvision_available():
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring
 @dataclass
 class Sam3LiteTextTextEncoderOutput(BaseModelOutputWithPooling):
     r"""
@@ -1198,6 +1199,7 @@ class Sam3LiteTextDetrEncoder(Sam3LiteTextPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         vision_features: list[torch.Tensor],
@@ -1207,15 +1209,19 @@ class Sam3LiteTextDetrEncoder(Sam3LiteTextPreTrainedModel):
         spatial_sizes: list[tuple[int, int]] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Sam3LiteTextDETREncoderOutput:
-        """
-        Forward pass for the DETR encoder.
-
-        Args:
-            vision_features: List of vision features at different levels
-            text_features: Text prompt features [batch_size, seq_len, hidden_size]
-            vision_pos_embeds: Optional list of position embeddings for each level
-            text_mask: Optional text padding mask [batch_size, seq_len]
-            spatial_sizes: Optional list of (height, width) tuples for reshaping
+        r"""
+        vision_features (`list[torch.Tensor]`):
+            Multi-level vision feature maps, either as `(batch_size, channels, height, width)` or flattened as
+            `(height * width, batch_size, channels)`, in which case `spatial_sizes` must be given.
+        text_features (`torch.Tensor` of shape `(batch_size, text_sequence_length, hidden_size)`):
+            Encoded text prompt the vision features are fused with.
+        vision_pos_embeds (`list[torch.Tensor]`, *optional*):
+            Positional embeddings of `vision_features`, one per level and with the same shape.
+        text_mask (`torch.Tensor` of shape `(batch_size, text_sequence_length)`, *optional*):
+            Mask to avoid attending to padding positions of `text_features`.
+        spatial_sizes (`list[tuple[int, int]]`, *optional*):
+            Height and width of each level of `vision_features`. Required when the features arrive flattened, so
+            that they can be reshaped back to feature maps.
 
         Returns:
             Sam3LiteTextDETREncoderOutput containing encoded features and metadata.
@@ -1504,6 +1510,7 @@ class Sam3LiteTextDetrDecoder(Sam3LiteTextPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         vision_features: torch.Tensor,
@@ -1513,15 +1520,17 @@ class Sam3LiteTextDetrDecoder(Sam3LiteTextPreTrainedModel):
         spatial_shapes: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Sam3LiteTextDETRDecoderOutput:
-        """
-        Forward pass for the DETR decoder.
-
-        Args:
-            vision_features: Vision features [batch_size, height*width, hidden_size]
-            text_features: Text features [batch_size, seq_len, hidden_size]
-            vision_pos_encoding: Vision position encoding [batch_size, height*width, hidden_size]
-            text_mask: Text padding mask [batch_size, seq_len] where True=valid, False=padding
-            spatial_shapes: Spatial shapes [num_levels, 2]
+        r"""
+        vision_features (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Flattened multi-level vision features produced by the DETR encoder.
+        text_features (`torch.Tensor` of shape `(batch_size, text_sequence_length, hidden_size)`):
+            Encoded text prompt the queries cross-attend to.
+        vision_pos_encoding (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Positional encoding of `vision_features`.
+        text_mask (`torch.Tensor` of shape `(batch_size, text_sequence_length)`, *optional*):
+            Mask to avoid attending to padding positions of `text_features`.
+        spatial_shapes (`torch.Tensor` of shape `(num_feature_levels, 2)`, *optional*):
+            Spatial shapes of the feature maps flattened into `vision_features`.
 
         Returns:
             Sam3LiteTextDETRDecoderOutput containing decoder outputs from all layers.
@@ -1821,6 +1830,7 @@ class Sam3LiteTextMaskDecoder(Sam3LiteTextPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         decoder_queries: torch.Tensor,
@@ -1830,13 +1840,16 @@ class Sam3LiteTextMaskDecoder(Sam3LiteTextPreTrainedModel):
         prompt_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Sam3LiteTextMaskDecoderOutput:
-        """
-        Args:
-            decoder_queries: Decoder output queries [batch_size, num_queries, hidden_size]
-            backbone_features: List of backbone features to process through FPN
-            encoder_hidden_states: Encoder outputs [batch_size, seq_len, hidden_size]
-            prompt_features: Prompt features (text + geometry) for cross-attention [batch_size, prompt_len, hidden_size]
-            prompt_mask: Padding mask [batch_size, prompt_len] where True=valid, False=padding
+        r"""
+        decoder_queries (`torch.Tensor` of shape `(batch_size, num_queries, hidden_size)`):
+            Object queries produced by the DETR decoder, turned into one mask each.
+        backbone_features (`list[torch.Tensor]`):
+            Multi-level backbone feature maps of shape `(batch_size, channels, height, width)`, fused by the FPN
+            into the pixel embeddings the masks are read out from.
+        prompt_features (`torch.Tensor` of shape `(batch_size, prompt_sequence_length, hidden_size)`, *optional*):
+            Encoded prompt the encoder features cross-attend to before the masks are predicted.
+        prompt_mask (`torch.Tensor` of shape `(batch_size, prompt_sequence_length)`, *optional*):
+            Mask to avoid attending to padding positions of `prompt_features`.
 
         Returns:
             Sam3LiteTextMaskDecoderOutput containing predicted masks and semantic segmentation.
@@ -1917,6 +1930,7 @@ class Sam3LiteTextMaskDecoder(Sam3LiteTextPreTrainedModel):
         return pixel_embed
 
 
+@auto_docstring
 class Sam3LiteTextModel(Sam3LiteTextPreTrainedModel):
     input_modalities = ["image", "text"]
     base_model_prefix = "detector_model"

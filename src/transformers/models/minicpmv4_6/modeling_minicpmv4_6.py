@@ -396,6 +396,7 @@ class MiniCPMV4_6ViTWindowAttentionMerger(nn.Module):
         return (hidden_state + residual).unsqueeze(0)
 
 
+@auto_docstring
 class MiniCPMV4_6VisionPreTrainedModel(PreTrainedModel):
     config_class = MiniCPMV4_6VisionConfig
     main_input_name = "pixel_values"
@@ -410,6 +411,7 @@ class MiniCPMV4_6VisionPreTrainedModel(PreTrainedModel):
     }
 
 
+@auto_docstring
 class MiniCPMV4_6VisionModel(MiniCPMV4_6VisionPreTrainedModel):
     def __init__(self, config: MiniCPMV4_6VisionConfig):
         super().__init__(config)
@@ -573,6 +575,7 @@ class MiniCPMV4_6Merger(nn.Module):
         return processed_features
 
 
+@auto_docstring
 class MiniCPMV4_6PreTrainedModel(PreTrainedModel):
     config_class = MiniCPMV4_6Config
     base_model_prefix = "model"
@@ -758,6 +761,7 @@ class MiniCPMV4_6Model(MiniCPMV4_6PreTrainedModel):
         return self.get_image_features(pixel_values, target_sizes, downsample_mode=downsample_mode)
 
 
+@auto_docstring
 class MiniCPMV4_6ForConditionalGeneration(MiniCPMV4_6PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 

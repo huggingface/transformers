@@ -1747,14 +1747,15 @@ class Gemma3nAudioEncoder(Gemma3nPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self, audio_mel: torch.Tensor, audio_mel_mask: torch.BoolTensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | Gemma3nAudioEncoderModelOutput:
-        """Encodes a batch of MELs.
-
-        Args:
-            audio_mel: a torch.Tensor of shape [batch, num_frames, num_channels,
-              mel_bins].
+        r"""
+        audio_mel (`torch.Tensor` of shape `(batch_size, num_frames, num_mel_bins)`):
+            Log-mel spectrogram of the input audio.
+        audio_mel_mask (`torch.BoolTensor` of shape `(batch_size, num_frames)`):
+            Mask marking the padded frames of `audio_mel`.
 
         Returns:
             audio_encodings: a torch.Tensor of shape
@@ -2153,6 +2154,7 @@ class Gemma3nModel(PaliGemmaModel):
         return special_image_mask, special_audio_mask
 
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,  # text inputs

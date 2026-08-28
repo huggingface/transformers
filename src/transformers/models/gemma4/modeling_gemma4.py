@@ -140,15 +140,13 @@ class Gemma4CausalLMOutputWithPast(ModelOutput):
     shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None
 
 
+@auto_docstring
 @dataclass
 class Gemma4TextModelOutputWithPast(BaseModelOutputWithPast):
-    """
-    BaseModelOutputWithPast extended with shared_kv_states for KV sharing.
-
-    Args:
-        shared_kv_states (`dict`, *optional*):
-            Dictionary mapping layer type strings to tuples of (key_states, value_states) tensors.
-            Used to pass shared KV states between layers during KV sharing.
+    r"""
+    shared_kv_states (`dict`, *optional*):
+        Dictionary mapping layer type strings to tuples of (key_states, value_states) tensors.
+        Used to pass shared KV states between layers during KV sharing.
     """
 
     shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None
@@ -1909,6 +1907,7 @@ def sliding_window_mask_function(sliding_window: tuple[int, int]) -> Callable:
     return inner_mask
 
 
+@auto_docstring
 class Gemma4AudioModel(Gemma4PreTrainedModel):
     """An audio encoder based on the [Universal Speech Model](https://huggingface.co/papers/2303.01037) architecture."""
 
@@ -1995,6 +1994,7 @@ class Gemma4AudioModel(Gemma4PreTrainedModel):
         return Gemma4AudioModelOutput(last_hidden_state=hidden_states, attention_mask=output_mask)
 
 
+@auto_docstring
 class Gemma4VisionModel(Gemma4PreTrainedModel):
     """The Gemma 4 Vision Encoder."""
 

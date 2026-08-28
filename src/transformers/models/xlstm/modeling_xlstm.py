@@ -1230,6 +1230,7 @@ def wang_init_method(n_layers, dim):
     return init_
 
 
+@auto_docstring
 class xLSTMPreTrainedModel(PreTrainedModel):
     """
     An abstract class for an interface to loading a pre-trained xLSTM model.

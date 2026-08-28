@@ -555,6 +555,7 @@ class GlmImageVQVAE(GlmImagePreTrainedModel):
         )
 
 
+@auto_docstring
 class GlmImageVisionModel(GlmImagePreTrainedModel):
     config: GlmImageVisionConfig
     input_modalities = ("image",)
@@ -1360,6 +1361,7 @@ class GlmImageCausalLMOutputWithPast(CausalLMOutputWithPast):
     rope_deltas: torch.LongTensor | None = None
 
 
+@auto_docstring
 class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin):
     _tied_weights_keys = {}
     # Reference: fix gemma3 grad acc #37208
@@ -1387,6 +1389,7 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
     def get_image_tokens(self, hidden_states: torch.FloatTensor, image_grid_thw: torch.LongTensor | None = None):
         return self.model.get_image_tokens(hidden_states, image_grid_thw)
 
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

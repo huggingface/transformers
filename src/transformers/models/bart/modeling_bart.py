@@ -444,6 +444,7 @@ class BartPreTrainedModel(PreTrainedModel):
         return dummy_inputs
 
 
+@auto_docstring
 class PretrainedBartModel(BartPreTrainedModel):
     def __init_subclass__(self):
         warnings.warn(
@@ -452,6 +453,7 @@ class PretrainedBartModel(BartPreTrainedModel):
         )
 
 
+@auto_docstring
 class BartPretrainedModel(BartPreTrainedModel):
     def __init_subclass__(self):
         warnings.warn(
@@ -1211,6 +1213,7 @@ class BartDecoderWrapper(BartPreTrainedModel):
         self.decoder = BartDecoder(config)
         self.post_init()
 
+    @auto_docstring
     def forward(self, *args, **kwargs):
         return self.decoder(*args, **kwargs)
 

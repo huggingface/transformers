@@ -462,6 +462,7 @@ class Phi4MultimodalVisionMultiheadAttentionPoolingHead(SiglipMultiheadAttention
         return hidden_state[:, 0]
 
 
+@auto_docstring
 class Phi4MultimodalVisionModel(Phi4MultimodalVisionPreTrainedModel):
     config: Phi4MultimodalVisionConfig
     main_input_name = "pixel_values"
@@ -483,12 +484,17 @@ class Phi4MultimodalVisionModel(Phi4MultimodalVisionPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
+    @auto_docstring
     def forward(
         self,
         pixel_values,
         patch_attention_mask: torch.BoolTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        patch_attention_mask (`torch.BoolTensor` of shape `(batch_size, num_patches_height, num_patches_width)`, *optional*):
+            The attention mask for the patches.
+        """
         batch_size = pixel_values.size(0)
         if patch_attention_mask is None:
             patch_attention_mask = torch.ones(
@@ -937,6 +943,7 @@ class Phi4MultimodalAudioPreTrainedModel(PreTrainedModel):
             init.ones_(module.global_invstd)
 
 
+@auto_docstring
 class Phi4MultimodalAudioModel(Phi4MultimodalAudioPreTrainedModel):
     def __init__(self, config: Phi4MultimodalAudioConfig):
         super().__init__(config)
@@ -1017,7 +1024,13 @@ class Phi4MultimodalAudioModel(Phi4MultimodalAudioPreTrainedModel):
         pad_mask = pad_mask & enc_streaming_mask
         return pad_mask
 
+    @auto_docstring
     def forward(self, hidden_states: torch.Tensor, mask: torch.Tensor | None, **kwargs):
+        r"""
+        mask (`torch.Tensor` of shape `(batch_size, audio_sequence_length)`, *optional*):
+            Mask marking the padded frames of `hidden_states`. It is subsampled together with the input and
+            used to build the attention mask of the conformer encoder.
+        """
         hidden_states = self.encoder_embedding(hidden_states)
         hidden_states, hs_mask, mask = self.forward_embeddings(hidden_states, mask)
 
@@ -1282,6 +1295,7 @@ class Phi4MultimodalModel(Phi3Model):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

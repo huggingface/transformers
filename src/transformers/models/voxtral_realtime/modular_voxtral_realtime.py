@@ -109,22 +109,29 @@ class VoxtralRealtimeConv1dPaddingCache:
         return padded_hidden_states
 
 
+@auto_docstring
 @dataclass
 class VoxtralRealtimeEncoderOutput(BaseModelOutputWithPast):
+    r"""
+    padding_cache (`VoxtralRealtimeConv1dPaddingCache`, *optional*):
+        Updated left-padding cache of the encoder's causal convolutions, returned when encoding audio with
+        `use_cache=True`. Pass it to the next chunk's forward.
+    """
+
     padding_cache: VoxtralRealtimeConv1dPaddingCache | None = None
 
 
+@auto_docstring
 @dataclass
 class VoxtralRealtimeModelOutputWithPast(BaseModelOutputWithPast):
     r"""
-    Args:
-        encoder_past_key_values (`Cache`, *optional*):
-            Pre-computed hidden-states (key and value in the self-attention blocks) for the audio encoder
-            that can be used to speed up sequential decoding.
-        padding_cache (`VoxtralRealtimeConv1dPaddingCache`, *optional*):
-            Cache for padding in convolutional layers to maintain state across streaming chunks.
-        audio_hidden_states (`torch.FloatTensor`, *optional*):
-            Projected audio hidden states before they are added to the text embeddings.
+    encoder_past_key_values (`Cache`, *optional*):
+        Pre-computed hidden-states (key and value in the self-attention blocks) for the audio encoder
+        that can be used to speed up sequential decoding.
+    padding_cache (`VoxtralRealtimeConv1dPaddingCache`, *optional*):
+        Cache for padding in convolutional layers to maintain state across streaming chunks.
+    audio_hidden_states (`torch.FloatTensor`, *optional*):
+        Projected audio hidden states before they are added to the text embeddings.
     """
 
     encoder_past_key_values: Cache | None = None
@@ -132,15 +139,15 @@ class VoxtralRealtimeModelOutputWithPast(BaseModelOutputWithPast):
     audio_hidden_states: torch.FloatTensor | None = None
 
 
+@auto_docstring
 @dataclass
 class VoxtralRealtimeCausalLMOutputWithPast(CausalLMOutputWithPast):
     r"""
-    Args:
-        encoder_past_key_values (`Cache`, *optional*):
-            Pre-computed hidden-states (key and value in the self-attention blocks) for the audio encoder
-            that can be used to speed up sequential decoding.
-        padding_cache (`VoxtralRealtimeConv1dPaddingCache`, *optional*):
-            Cache for padding in convolutional layers to maintain state across streaming chunks.
+    encoder_past_key_values (`Cache`, *optional*):
+        Pre-computed hidden-states (key and value in the self-attention blocks) for the audio encoder
+        that can be used to speed up sequential decoding.
+    padding_cache (`VoxtralRealtimeConv1dPaddingCache`, *optional*):
+        Cache for padding in convolutional layers to maintain state across streaming chunks.
     """
 
     encoder_past_key_values: Cache | None = None
@@ -633,6 +640,7 @@ class VoxtralRealtimeModel(VoxtralRealtimePreTrainedModel):
         )
 
 
+@auto_docstring
 class VoxtralRealtimeForConditionalGeneration(VoxtralRealtimePreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
@@ -642,6 +650,7 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralRealtimePreTrainedModel, Ge
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
 
+    @auto_docstring
     def get_audio_features(self, *args, **kwargs):
         return self.model.get_audio_features(*args, **kwargs)
 

@@ -782,6 +782,7 @@ class Qwen2_5OmniPreTrainedModel(Qwen2_5_VLPreTrainedModel):
             init.copy_(module.inv_freq, inv_freq)
 
 
+@auto_docstring
 class Qwen2_5OmniPreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedModel):
     input_modalities = ("image", "video", "audio", "text")
 
@@ -1580,6 +1581,11 @@ class Qwen2_5_VisionRotaryEmbedding(Qwen2_5_VisionRotaryEmbedding):
     pass
 
 
+@auto_docstring(
+    custom_intro="""
+    The vision encoder of Qwen2.5-Omni, turning images and videos into embeddings for the thinker.
+    """
+)
 class Qwen2_5OmniVisionEncoder(Qwen2_5_VisionTransformerPretrainedModel):
     config: Qwen2_5OmniVisionEncoderConfig
     input_modalities = ("image", "video")
@@ -1596,15 +1602,15 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5_VisionTransformerPretrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
-        """
-        Args:
-            hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):
-                The final hidden states of the model.
-            grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
-                The temporal, height and width of feature shape of each image in LLM.
+        r"""
+        hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):
+            The final hidden states of the model.
+        grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
+            The temporal, height and width of feature shape of each image in LLM.
 
         Returns:
             `torch.Tensor`: hidden_states.
@@ -2148,6 +2154,7 @@ class Qwen2_5OmniTalkerModel(Qwen2_5_VLTextModel):
         self.embed_tokens = nn.Embedding(config.vocab_size, config.embedding_size, self.padding_idx)
 
 
+@auto_docstring
 class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForConditionalGeneration, GenerationMixin):
     config: Qwen2_5OmniTalkerConfig
     base_model_prefix = "talker"
@@ -3253,7 +3260,12 @@ class Qwen2_5OmniToken2WavBigVGANModel(Qwen2_5OmniPreTrainedModel):
         decibel_spectrum = self.amplitude_to_db(amplitude_spectrum, -115) - 20
         return self.normalize_spectrogram(decibel_spectrum, 1, -115)
 
+    @auto_docstring
     def forward(self, mel_spectrogram, **kwargs):
+        r"""
+        mel_spectrogram (`torch.FloatTensor` of shape `(batch_size, num_mel_bins, sequence_length)`):
+            Log-mel spectrogram produced by the DiT model, converted to a waveform by the vocoder.
+        """
         processed_spectrogram = self.process_mel_spectrogram(mel_spectrogram)
         hidden_representation = self.conv_pre(processed_spectrogram)
 
@@ -3378,6 +3390,7 @@ class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
 
         return block_diff.expand(batch, self.num_attention_heads, seq_len, seq_len)
 
+    @auto_docstring
     def forward(
         self,
         hidden_states,
@@ -3390,6 +3403,24 @@ class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
         apply_cfg=True,
         **kwargs,
     ):
+        r"""
+        condition_vector (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_mel_bins)`):
+            Reference mel spectrogram the generated speech is conditioned on.
+        speaker_embedding (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Speaker conditioning vector, broadcast over the whole sequence.
+        quantized_code (`torch.LongTensor` of shape `(batch_size, code_length)`):
+            Discrete codec tokens produced by the talker, embedded as the text stream of the DiT.
+        time_step (`torch.FloatTensor` of shape `(batch_size,)` or `()`):
+            Flow-matching time step. A scalar is expanded to the batch, and duplicated when `apply_cfg=True`.
+        drop_audio_conditioning (`bool`, *optional*, defaults to `False`):
+            Whether to drop `condition_vector` and `speaker_embedding`, producing the unconditional branch.
+            Ignored when `apply_cfg=True`, which computes both branches at once.
+        drop_code (`bool`, *optional*, defaults to `False`):
+            Whether to drop `quantized_code`. Ignored when `apply_cfg=True`.
+        apply_cfg (`bool`, *optional*, defaults to `True`):
+            Whether to evaluate the conditional and unconditional branches in a single batch, as required by
+            classifier-free guidance.
+        """
         batch_size = hidden_states.shape[0]
         if time_step.ndim == 0:
             time_step = time_step.repeat(batch_size * 2 if apply_cfg else batch_size)
@@ -3532,6 +3563,7 @@ class Qwen2_5OmniToken2WavModel(Qwen2_5OmniPreTrainedModel):
 
         self.post_init()
 
+    @auto_docstring
     def forward(
         self,
         code,
@@ -3542,7 +3574,20 @@ class Qwen2_5OmniToken2WavModel(Qwen2_5OmniPreTrainedModel):
         sway_coefficient=-1.0,
         **kwargs,
     ):
-        """Generates a waveform from input code and conditioning parameters."""
+        r"""
+        code (`torch.LongTensor` of shape `(batch_size, code_length)`):
+            Discrete codec tokens produced by the talker.
+        conditioning (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+            Speaker conditioning vector of the reference voice.
+        reference_mel (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_mel_bins)`):
+            Mel spectrogram of the reference voice.
+        num_steps (`int`, *optional*, defaults to 10):
+            Number of ODE solver steps used to sample the mel spectrogram.
+        guidance_scale (`float`, *optional*, defaults to 0.5):
+            Classifier-free guidance scale. Values below `1e-5` disable guidance.
+        sway_coefficient (`float`, *optional*, defaults to -1.0):
+            Coefficient of the sway sampling schedule applied to the ODE time steps.
+        """
 
         mel_spectrogram = self.code2wav_dit_model.sample(
             conditioning,

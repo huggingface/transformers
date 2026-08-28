@@ -949,6 +949,7 @@ class T5Gemma2Model(T5Gemma2PreTrainedModel):
         )
 
 
+@auto_docstring
 class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {
         "lm_head.out_proj.weight": "model.encoder.text_model.embed_tokens.weight",

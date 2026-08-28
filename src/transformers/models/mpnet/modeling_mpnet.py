@@ -439,6 +439,7 @@ class MPNetModel(MPNetPreTrainedModel):
         )
 
 
+@auto_docstring
 class MPNetForMaskedLM(MPNetPreTrainedModel):
     _tied_weights_keys = {
         "lm_head.decoder.weight": "mpnet.embeddings.word_embeddings.weight",

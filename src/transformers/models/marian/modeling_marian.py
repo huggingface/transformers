@@ -1013,10 +1013,12 @@ class MarianDecoderWrapper(MarianPreTrainedModel):
         self.decoder = MarianDecoder(config)
         self.post_init()
 
+    @auto_docstring
     def forward(self, *args, **kwargs):
         return self.decoder(*args, **kwargs)
 
 
+@auto_docstring
 # Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->Marian, facebook/bart-base->Helsinki-NLP/opus-mt-fr-en
 class MarianForCausalLM(MarianPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {

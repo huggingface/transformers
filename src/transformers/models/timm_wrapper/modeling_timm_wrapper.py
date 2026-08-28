@@ -160,6 +160,7 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
         raise NotImplementedError("TimmWrapper models do not own token embeddings and cannot set them.")
 
 
+@auto_docstring
 class TimmWrapperModel(TimmWrapperPreTrainedModel):
     """
     Wrapper class for timm models to be used in transformers.
@@ -277,6 +278,7 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
         )
 
 
+@auto_docstring
 class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
     """
     Wrapper class for timm models to be used in transformers for image classification.

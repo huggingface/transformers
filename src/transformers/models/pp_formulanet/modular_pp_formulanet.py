@@ -268,6 +268,7 @@ class PPFormulaNetProcessor(NougatProcessor):
         return [self.post_process_generation(text) for text in generated_texts]
 
 
+@auto_docstring
 class PPFormulaNetPreTrainedModel(SLANeXtPreTrainedModel):
     _keep_in_fp32_modules_strict = []
     base_model_prefix = "model"
@@ -292,6 +293,7 @@ class PPFormulaNetPreTrainedModel(SLANeXtPreTrainedModel):
 
 
 # overrider for PPFormulaNetModel's encoder output
+@auto_docstring
 @dataclass
 class PPFormulaNetVisionEncoderOutput(BaseModelOutputWithPooling):
     pass
@@ -327,6 +329,7 @@ class PPFormulaNetMultiModalProjector(nn.Module):
         return hidden_states
 
 
+@auto_docstring
 class PPFormulaNetVisionModel(SLANeXtVisionEncoder):
     def __init__(self, config: PPFormulaNetVisionConfig):
         super().__init__()
@@ -334,6 +337,7 @@ class PPFormulaNetVisionModel(SLANeXtVisionEncoder):
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
+    @auto_docstring
     def forward(
         self, pixel_values: torch.FloatTensor | None = None, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
@@ -359,6 +363,7 @@ class PPFormulaNetTextModel(MBartDecoder):
     pass
 
 
+@auto_docstring
 class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

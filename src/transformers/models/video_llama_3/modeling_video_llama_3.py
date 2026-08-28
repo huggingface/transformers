@@ -364,6 +364,7 @@ class VideoLlama3PreTrainedModel(PreTrainedModel):
             init.copy_(module.inv_freq, inv_freq)
 
 
+@auto_docstring
 class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
     config: VideoLlama3VisionConfig
     main_input_name = "pixel_values"
@@ -712,6 +713,7 @@ class VideoLlama3CausalLMOutputWithPast(ModelOutput):
     video_hidden_states: torch.FloatTensor | None = None
 
 
+@auto_docstring
 class VideoLlama3ForConditionalGeneration(VideoLlama3PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _can_compile_fullgraph = False

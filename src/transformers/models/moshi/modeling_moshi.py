@@ -622,6 +622,7 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
 
         self.post_init()
 
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -637,63 +638,51 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
         labels: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple | BaseModelOutputWithPast:
-        """
-        Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Indices of input sequence tokens. The first element of the sequence must the text token associated to the audio codebooks.
-                The rest of the elements must be flatten audio codebooks.
-            last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-                Sequence of hidden-states at the output of the last layer of the main decoder. Used to contextualize `input_ids`
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+        r"""
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens. The first element of the sequence must the text token associated to the audio codebooks.
+            The rest of the elements must be flatten audio codebooks.
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the main decoder. Used to contextualize `input_ids`
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
 
-                [What are attention masks?](../glossary#attention-mask)
+            [What are attention masks?](../glossary#attention-mask)
 
-                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-                [`PreTrainedTokenizer.__call__`] for details.
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
 
-                If `past_key_values` is used, optionally only the last `input_ids` have to be input (see
-                `past_key_values`).
+            If `past_key_values` is used, optionally only the last `input_ids` have to be input (see
+            `past_key_values`).
 
-                If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
-                and modify to your needs. See diagram 1 in [the paper](https://huggingface.co/papers/1910.13461) for more
-                information on the default strategy.
+            If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
+            and modify to your needs. See diagram 1 in [the paper](https://huggingface.co/papers/1910.13461) for more
+            information on the default strategy.
 
-                - 1 indicates the head is **not masked**,
-                - 0 indicates the head is **masked**.
-            past_key_values (`Cache`, *optional*):
-                It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+        past_key_values (`Cache`, *optional*):
+            It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
-                If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that don't
-                have their past key value states given to this model) of shape `(batch_size, 1)` instead of all `input_ids`
-                of shape `(batch_size, sequence_length)`.
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-                is useful if you want more control over how to convert the inputs into associated vectors than the
-                model's internal embedding lookup matrix.
-            use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-                `past_key_values`).
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-                tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-                more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-            position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-                config.n_positions - 1]`.
+            If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that don't
+            have their past key value states given to this model) of shape `(batch_size, 1)` instead of all `input_ids`
+            of shape `(batch_size, sequence_length)`.
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert the inputs into associated vectors than the
+            model's internal embedding lookup matrix.
+        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.n_positions - 1]`.
 
-                [What are position IDs?](../glossary#position-ids)
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+            [What are position IDs?](../glossary#position-ids)
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (

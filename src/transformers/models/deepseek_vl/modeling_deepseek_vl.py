@@ -223,6 +223,7 @@ class DeepseekVLModel(DeepseekVLPreTrainedModel):
         )
 
 
+@auto_docstring
 class DeepseekVLForConditionalGeneration(DeepseekVLPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     output_modalities = ("text",)

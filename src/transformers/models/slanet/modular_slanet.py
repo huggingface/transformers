@@ -88,6 +88,7 @@ class SLANetConfig(SLANeXtConfig):
         PreTrainedConfig.__post_init__(**kwargs)
 
 
+@auto_docstring
 class SLANetPreTrainedModel(SLANeXtPreTrainedModel):
     _keep_in_fp32_modules_strict = []
 
@@ -323,6 +324,7 @@ class SLANetCSPPAN(nn.Module):
         return hidden_states
 
 
+@auto_docstring
 class SLANetBackbone(SLANetPreTrainedModel):
     def __init__(self, config: SLANetConfig):
         super().__init__(config)

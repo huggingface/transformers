@@ -254,6 +254,7 @@ class MusicFlamingoPreTrainedModel(AudioFlamingo3PreTrainedModel):
             init.copy_(module.position_angles, buffer_value)
 
 
+@auto_docstring
 @dataclass
 class MusicFlamingoModelOutputWithPast(AudioFlamingo3ModelOutputWithPast):
     pass
@@ -405,7 +406,12 @@ class MusicFlamingoForConditionalGeneration(AudioFlamingo3ForConditionalGenerati
         self.model = MusicFlamingoModel(config)
         self.post_init()
 
+    @auto_docstring
     def get_audio_features(self, input_features, input_features_mask, input_ids, **kwargs):
+        r"""
+        input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
+            Mask to avoid performing attention on padding feature indices.
+        """
         return self.model.get_audio_features(input_features, input_features_mask, input_ids, **kwargs)
 
 

@@ -248,6 +248,7 @@ class Ernie4_5_VLMoeImageProcessorPil(PilBackend):
         return grid_h * grid_w
 
 
+@auto_docstring
 class Ernie4_5_VL_MoeImageProcessorPil(Ernie4_5_VLMoeImageProcessorPil):
     def __init__(self, *args, **kwargs):
         logger.warning_once(

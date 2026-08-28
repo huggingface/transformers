@@ -891,6 +891,7 @@ class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -898,14 +899,13 @@ class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
         grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
-        """
-        Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, sequence_length, patch_size * patch_size * image_channels)`):
-                The tensors corresponding to the input images.
-            attention_mask (`torch.Tensor`, *optional*):
-                The attention_mask used in forward function shape [batch_size X sequence_length] if not None.
-            grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-                The temporal, height and width of feature shape of each image in LLM.
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, sequence_length, patch_size * patch_size * image_channels)`):
+            The tensors corresponding to the input images.
+        attention_mask (`torch.Tensor`, *optional*):
+            The attention_mask used in forward function shape [batch_size X sequence_length] if not None.
+        grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
         """
         hidden_states = self.embeddings(pixel_values, grid_thw=grid_thw, **kwargs)
         encoder_outputs: BaseModelOutput = self.encoder(
@@ -924,6 +924,7 @@ class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
         )
 
 
+@auto_docstring
 class PaddleOCRVisionModel(PaddleOCRVLPreTrainedModel):
     config: PaddleOCRVisionConfig
     main_input_name = "pixel_values"
@@ -937,18 +938,18 @@ class PaddleOCRVisionModel(PaddleOCRVLPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
         grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        """
-        Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, sequence_length, image_channels, patch_size, patch_size)`):
-                The tensors corresponding to the input images.
-            grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-                The temporal, height and width of feature shape of each image in LLM.
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, sequence_length, image_channels, patch_size, patch_size)`):
+            The tensors corresponding to the input images.
+        grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
         """
         return self.vision_model(pixel_values=pixel_values, grid_thw=grid_thw, **kwargs)
 
@@ -1298,6 +1299,7 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
         return output
 
 
+@auto_docstring
 class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _keys_to_ignore_on_load_unexpected = ["packing_position_embedding", "vision_model.head"]

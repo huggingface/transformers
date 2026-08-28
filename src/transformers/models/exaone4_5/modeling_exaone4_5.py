@@ -482,6 +482,7 @@ class Exaone4_5_PreTrainedModel(PreTrainedModel):
             init.copy_(module.inv_freq, inv_freq)
 
 
+@auto_docstring
 class Exaone4_5_VisionModel(Exaone4_5_PreTrainedModel):
     config: Exaone4_5_VisionConfig
     _no_split_modules = ["Exaone4_5_VisionBlock"]
@@ -543,15 +544,15 @@ class Exaone4_5_VisionModel(Exaone4_5_PreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
-        """
-        Args:
-            hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):
-                The final hidden states of the model.
-            grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
-                The temporal, height and width of feature shape of each image in LLM.
+        r"""
+        hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):
+            The final hidden states of the model.
+        grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
+            The temporal, height and width of feature shape of each image in LLM.
 
         Returns:
             `torch.Tensor`: hidden_states.
@@ -761,6 +762,7 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel):
         )
 
 
+@auto_docstring
 class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, GenerationMixin):
     """
     Main EXAONE 4.5 conditional generation class.

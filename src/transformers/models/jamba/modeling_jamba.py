@@ -775,6 +775,7 @@ class JambaMambaDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+@auto_docstring
 class JambaPreTrainedModel(PreTrainedModel):
     config: JambaConfig
     base_model_prefix = "model"

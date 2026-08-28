@@ -231,6 +231,7 @@ class PPLCNetEncoder(PPLCNetPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(self, pixel_values: torch.Tensor, **kwargs) -> BaseModelOutputWithNoAttention:
         hidden_state = self.convolution(pixel_values)
         for block in self.blocks:

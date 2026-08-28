@@ -602,6 +602,7 @@ class Qwen3VLMoeVisionPatchMerger(nn.Module):
         return x
 
 
+@auto_docstring
 class Qwen3VLMoeVisionModel(Qwen3VLMoePreTrainedModel):
     config: Qwen3VLMoeVisionConfig
     input_modalities = ("image", "video")
@@ -678,15 +679,15 @@ class Qwen3VLMoeVisionModel(Qwen3VLMoePreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithDeepstackFeatures:
-        """
-        Args:
-            hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):
-                The final hidden states of the model.
-            grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
-                The temporal, height and width of feature shape of each image in LLM.
+        r"""
+        hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):
+            The final hidden states of the model.
+        grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
+            The temporal, height and width of feature shape of each image in LLM.
 
         Returns:
             `torch.Tensor`: hidden_states.
@@ -1422,6 +1423,7 @@ def load_balancing_loss_func(
     return overall_loss * num_experts
 
 
+@auto_docstring
 class Qwen3VLMoeForConditionalGeneration(Qwen3VLMoePreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     # Reference: fix gemma3 grad acc #37208

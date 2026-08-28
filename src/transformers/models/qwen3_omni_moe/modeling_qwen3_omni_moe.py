@@ -163,6 +163,7 @@ def _get_feat_extract_output_lengths(input_lengths, n_window=50):
     return ((feat_lengths - 1) // 2 + 1 - 1) // 2 + 1 + (input_lengths // chunk_len) * 13
 
 
+@auto_docstring
 class Qwen3OmniMoePreTrainedModelForConditionalGeneration(Qwen3OmniMoePreTrainedModel):
     input_modalities = ("image", "video", "audio", "text")
 
@@ -1079,6 +1080,11 @@ class Qwen3OmniMoeVisionPatchEmbed(nn.Module):
         return hidden_states
 
 
+@auto_docstring(
+    custom_intro="""
+    The vision encoder of Qwen3-Omni MoE, turning images and videos into embeddings for the thinker.
+    """
+)
 class Qwen3OmniMoeVisionEncoder(Qwen3OmniMoePreTrainedModel):
     config: Qwen3OmniMoeVisionEncoderConfig
     input_modalities = ("image", "video")
@@ -1155,15 +1161,15 @@ class Qwen3OmniMoeVisionEncoder(Qwen3OmniMoePreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithDeepstackFeatures:
-        """
-        Args:
-            hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):
-                The final hidden states of the model.
-            grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
-                The temporal, height and width of feature shape of each image in LLM.
+        r"""
+        hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):
+            The final hidden states of the model.
+        grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
+            The temporal, height and width of feature shape of each image in LLM.
 
         Returns:
             `torch.Tensor`: hidden_states.
@@ -2296,10 +2302,11 @@ class Qwen3OmniMoeTalkerResizeMLP(nn.Module):
         return self.linear_fc2(self.act_fn(self.linear_fc1(hidden_state)))
 
 
+@auto_docstring
 @dataclass
 class Qwen3OmniMoeTalkerCodePredictorOutputWithPast(CausalLMOutputWithPast):
     r"""
-    generation_steps (`int`, *optional*)
+    generation_steps (`int`, *optional*):
         Current generation step of code predictor model.
     """
 
@@ -2699,6 +2706,7 @@ class Qwen3OmniMoeTalkerCodePredictorModelForConditionalGeneration(Qwen3OmniMoeP
         return model_kwargs
 
 
+@auto_docstring
 @dataclass
 class Qwen3OmniMoeTalkerOutputWithPast(MoeCausalLMOutputWithPast):
     r"""
@@ -3708,7 +3716,12 @@ class Qwen3OmniMoeCode2WavDecoderBlock(Qwen3OmniMoePreTrainedModel):
 
         self.post_init()
 
+    @auto_docstring
     def forward(self, hidden, **kwargs):
+        r"""
+        hidden (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`):
+            Hidden states of the waveform decoder, in channel-first layout.
+        """
         for block in self.block:
             hidden = block(hidden)
         return hidden
@@ -3750,7 +3763,12 @@ class Qwen3OmniMoeCode2Wav(Qwen3OmniMoePreTrainedModel):
 
         self.post_init()
 
+    @auto_docstring
     def forward(self, codes, **kwargs):
+        r"""
+        codes (`torch.LongTensor` of shape `(batch_size, num_quantizers, sequence_length)`):
+            Residual codec tokens to synthesize, one row per quantizer.
+        """
         if codes.shape[1] != self.config.num_quantizers:
             raise ValueError(f"Expected {self.config.num_quantizers} layer of codes, got {codes.shape[1]}")
         hidden = self.code_embedding(codes + self.code_offset).mean(1)
@@ -3777,6 +3795,7 @@ class Qwen3OmniMoeCode2Wav(Qwen3OmniMoePreTrainedModel):
         return torch.cat(wavs, dim=-1)
 
 
+@auto_docstring
 class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, GenerationMixin):
     config_class = Qwen3OmniMoeConfig
     output_modalities = ("text", "audio")

@@ -356,6 +356,7 @@ class BarkPreTrainedModel(PreTrainedModel):
 
 
 # GPT2-like autoregressive model
+@auto_docstring
 class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
     config: BarkSubModelConfig
     output_modalities = ("audio",)

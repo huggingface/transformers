@@ -236,6 +236,7 @@ class GlmOcrVisionPatchMerger(Glm4vVisionPatchMerger):
     pass
 
 
+@auto_docstring
 class GlmOcrVisionModel(Glm4vVisionModel):
     def __init__(self, config) -> None:
         super().__init__(config)
@@ -304,6 +305,7 @@ class GlmOcrModel(Glm4vModel):
     pass
 
 
+@auto_docstring
 class GlmOcrForConditionalGeneration(Glm4vForConditionalGeneration):
     pass
 

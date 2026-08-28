@@ -45,6 +45,7 @@ class VibeVoiceAsrProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class VibeVoiceAsrProcessor(ProcessorMixin):
     r"""
     Constructs a VibeVoice ASR processor which wraps [`VibeVoiceAcousticTokenizerFeatureExtractor`] and
@@ -84,6 +85,16 @@ class VibeVoiceAsrProcessor(ProcessorMixin):
         audio_eos_token="<|object_ref_end|>",
         audio_duration_token="<|AUDIO_DURATION|>",
     ):
+        r"""
+        audio_token (`str`, *optional*, defaults to `"<|box_start|>"`):
+            Placeholder token expanded into one token per audio frame.
+        audio_bos_token (`str`, *optional*, defaults to `"<|object_ref_start|>"`):
+            Token opening an audio segment.
+        audio_eos_token (`str`, *optional*, defaults to `"<|object_ref_end|>"`):
+            Token closing an audio segment.
+        audio_duration_token (`str`, *optional*, defaults to `"<|AUDIO_DURATION|>"`):
+            Placeholder token in the chat template that is replaced by the duration of the audio.
+        """
         self.audio_token = audio_token
         self.audio_token_id = tokenizer.convert_tokens_to_ids(audio_token)
         self.audio_bos_token = audio_bos_token

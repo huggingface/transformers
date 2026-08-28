@@ -1301,6 +1301,7 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
 
         return embeddings, reference_points, encoder_bboxes, encoder_class_similarity, anchors
 
+    @auto_docstring
     def forward(
         self,
         vision_features,
@@ -1312,21 +1313,27 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
         return_dict=None,
         **kwargs,
     ):
-        """
-        Args:
-            vision_features (`torch.FloatTensor`): The sequence of vision features. shape depends on the vision
-                backbone.
-            class_features (`torch.FloatTensor`): The sequence of class features of shape
-                `(class_sequence_length, batch_size, class_embed_dim)`.
-            task_features (`torch.FloatTensor`): The sequence of task features of shape
-                `(task_sequence_length, batch_size, decoder_hidden_dim)`.
-            task_mask (`torch.LongTensor`): The mask for the task features of shape `(batch_size, task_sequence_length)`.
-            output_attentions (`bool`, *optional*): Whether or not to return the attentions tensors of all attention
-                layers. See `attentions` under returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*): Whether or not to return the hidden states of all layers. See
-                `hidden_states` under returned tensors for more detail.
-            return_dict (`bool`, *optional*): Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain
-                tuple.
+        r"""
+        vision_features (`torch.FloatTensor`):
+            The sequence of vision features. shape depends on the vision
+            backbone.
+        class_features (`torch.FloatTensor`):
+            The sequence of class features of shape
+            `(class_sequence_length, batch_size, class_embed_dim)`.
+        task_features (`torch.FloatTensor`):
+            The sequence of task features of shape
+            `(task_sequence_length, batch_size, decoder_hidden_dim)`.
+        task_mask (`torch.LongTensor`):
+            The mask for the task features of shape `(batch_size, task_sequence_length)`.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention
+            layers. See `attentions` under returned tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See
+            `hidden_states` under returned tensors for more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain
+            tuple.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (

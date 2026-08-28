@@ -876,6 +876,7 @@ class EsmFoldTriangleMultiplicativeUpdate(nn.Module):
         return x
 
 
+@auto_docstring
 class EsmFoldPreTrainedModel(EsmPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained

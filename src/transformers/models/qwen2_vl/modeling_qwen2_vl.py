@@ -1204,6 +1204,7 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
         )
 
 
+@auto_docstring
 class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 

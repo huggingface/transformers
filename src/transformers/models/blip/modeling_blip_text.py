@@ -33,7 +33,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward
-from ...utils import TransformersKwargs, can_return_tuple, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_blip import BlipTextConfig
@@ -431,6 +431,7 @@ class BlipTextOnlyMLMHead(nn.Module):
 
 
 # Adapted from https://github.com/salesforce/BLIP/blob/main/models/med.py#L548
+@auto_docstring
 class BlipTextPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -457,6 +458,7 @@ class BlipTextPreTrainedModel(PreTrainedModel):
 
 
 # Adapted from https://github.com/salesforce/BLIP/blob/3a29b7410476bf5f2ba0955827390eb6ea1f4f9d/models/med.py#L571
+@auto_docstring
 class BlipTextModel(BlipTextPreTrainedModel):
     """
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
@@ -467,6 +469,10 @@ class BlipTextModel(BlipTextPreTrainedModel):
     """
 
     def __init__(self, config, add_pooling_layer=True):
+        r"""
+        add_pooling_layer (`bool`, *optional*, defaults to `True`):
+            Whether to add a pooling layer producing `pooler_output` from the first token's hidden state.
+        """
         super().__init__(config)
         self.config = config
 
@@ -484,6 +490,7 @@ class BlipTextModel(BlipTextPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.Tensor | None = None,
@@ -499,7 +506,10 @@ class BlipTextModel(BlipTextPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPoolingAndCrossAttentions:
         r"""
-        encoder_hidden_states  (`torch.FloatTensor`, *optional*):
+        encoder_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Pre-computed hidden states to feed straight to the encoder, bypassing the embedding layer. Mutually
+            exclusive with `input_ids` and `inputs_embeds`.
+        encoder_hidden_states (`torch.FloatTensor`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
             the model is configured as a decoder.
         encoder_attention_mask (`torch.FloatTensor`, *optional*):
@@ -512,9 +522,9 @@ class BlipTextModel(BlipTextPreTrainedModel):
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
             `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
+        is_decoder (`bool`, *optional*, defaults to `False`):
+            Whether the model is used as a decoder, in which case a causal mask is applied to the self-attention
+            layers.
         """
         if not is_decoder:
             use_cache = False
@@ -579,6 +589,7 @@ class BlipTextModel(BlipTextPreTrainedModel):
 
 
 # Adapted from https://github.com/salesforce/BLIP/blob/main/models/med.py#L811
+@auto_docstring
 class BlipTextLMHeadModel(BlipTextPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {
         "cls.predictions.decoder.bias": "cls.predictions.bias",
@@ -608,6 +619,7 @@ class BlipTextLMHeadModel(BlipTextPreTrainedModel, GenerationMixin):
         self.cls.predictions.bias = new_embeddings.bias
 
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.Tensor | None = None,
@@ -626,7 +638,8 @@ class BlipTextLMHeadModel(BlipTextPreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithCrossAttentions:
         r"""
-        encoder_hidden_states (`torch.FloatTensor`, *optional*): Sequence of
+        encoder_hidden_states (`torch.FloatTensor`, *optional*):
+            Sequence of
             hidden-states at the output of the last layer of the encoder. Used in the cross-attention if the model is
             configured as a decoder.
         encoder_attention_mask (`torch.FloatTensor`, *optional*):
@@ -643,9 +656,13 @@ class BlipTextLMHeadModel(BlipTextPreTrainedModel, GenerationMixin):
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
             `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
+        return_logits (`bool`, *optional*, defaults to `False`):
+            Whether to return the raw logits shifted for next-token prediction instead of a model output.
+        is_decoder (`bool`, *optional*, defaults to `True`):
+            Whether the model is used as a decoder, in which case a causal mask is applied to the self-attention
+            layers.
+        reduction (`str`, *optional*, defaults to `"mean"`):
+            Reduction applied to the language modeling loss, either `"mean"` or `"none"`.
         """
         if labels is not None:
             use_cache = False

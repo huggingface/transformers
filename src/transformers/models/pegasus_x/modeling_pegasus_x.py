@@ -788,6 +788,7 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         input_ids=None,
@@ -797,33 +798,24 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
-        Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
-                provide it.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+            returned tensors for more detail.
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
+            provide it.
 
-                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-                [`PreTrainedTokenizer.__call__`] for details.
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
 
-                [What are input IDs?](../glossary#input-ids)
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                [What are attention masks?](../glossary#attention-mask)
-
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
-                This is useful if you want more control over how to convert `input_ids` indices into associated vectors
-                than the model's internal embedding lookup matrix.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
+            [What are input IDs?](../glossary#input-ids)
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+            than the model's internal embedding lookup matrix.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
+            for more detail.
         """
         # We need to treat this special because it only adds the last global state which is unique
         output_hidden_states = (
@@ -937,6 +929,7 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
 
     @capture_outputs
     @merge_with_config_defaults
+    @auto_docstring
     def forward(
         self,
         input_ids=None,
@@ -949,56 +942,46 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
-        Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
-                provide it.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+            returned tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
+            for more detail.
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
+            provide it.
 
-                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-                [`PreTrainedTokenizer.__call__`] for details.
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
 
-                [What are input IDs?](../glossary#input-ids)
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+            [What are input IDs?](../glossary#input-ids)
+        encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
+            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
+            of the decoder.
+        encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, encoder_sequence_length)`, *optional*):
+            Mask to avoid performing cross-attention on padding tokens indices of encoder input_ids. Mask values
+            selected in `[0, 1]`:
 
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
 
-                [What are attention masks?](../glossary#attention-mask)
-            encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
-                Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
-                of the decoder.
-            encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, encoder_sequence_length)`, *optional*):
-                Mask to avoid performing cross-attention on padding tokens indices of encoder input_ids. Mask values
-                selected in `[0, 1]`:
+            [What are attention masks?](../glossary#attention-mask)
+        past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
+            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the
+            cross-attention blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
 
-                [What are attention masks?](../glossary#attention-mask)
-
-            past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-                It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-                Contains pre-computed hidden-states (key and values in the self-attention blocks and in the
-                cross-attention blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
-
-                If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
-                that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
-                all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-            inputs_embeds (`torch.FloatTensor` of
-                shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
-                `input_ids` you can choose to directly pass an embedded representation. This is useful if you want more
-                control over how to convert `input_ids` indices into associated vectors than the model's internal
-                embedding lookup matrix.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
+            that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
+            all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+        inputs_embeds (`torch.FloatTensor` of
+            shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing
+            `input_ids` you can choose to directly pass an embedded representation. This is useful if you want more
+            control over how to convert `input_ids` indices into associated vectors than the model's internal
+            embedding lookup matrix.
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
@@ -1344,6 +1327,7 @@ class PegasusXDecoderWrapper(PegasusXPreTrainedModel):
         self.decoder = PegasusXDecoder(config)
         self.post_init()
 
+    @auto_docstring
     def forward(self, *args, **kwargs):
         return self.decoder(*args, **kwargs)
 

@@ -1838,6 +1838,7 @@ class ProphetNetDecoderWrapper(ProphetNetPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @auto_docstring
     def forward(self, *args, **kwargs):
         return self.decoder(*args, **kwargs)
 

@@ -87,6 +87,7 @@ class Gemma4AssistantMaskedEmbedder(nn.Module):
         return output.scatter_(dim=-1, index=scatter_idx, src=selected_logits)
 
 
+@auto_docstring
 class Gemma4AssistantPreTrainedModel(PreTrainedModel):
     config: Gemma4AssistantConfig
     base_model_prefix = "model"

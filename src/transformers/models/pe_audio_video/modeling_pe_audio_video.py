@@ -738,13 +738,24 @@ class PeAudioVideoOutput(ModelOutput):
         return tuple(self[k] if not k.endswith("model_output") else getattr(self, k).to_tuple() for k in self.keys())
 
 
+@auto_docstring
 @dataclass
 class AudioVideoEmbeddings(ModelOutput):
+    r"""
+    audio_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`, *optional*):
+        Audio embeddings produced by the audio tower.
+    video_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`, *optional*):
+        Video embeddings produced by the video tower.
+    audio_video_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`, *optional*):
+        Joint audio-video embeddings, obtained by fusing `audio_embeds` and `video_embeds`.
+    """
+
     audio_embeds: torch.FloatTensor | None = None
     video_embeds: torch.FloatTensor | None = None
     audio_video_embeds: torch.FloatTensor | None = None
 
 
+@auto_docstring
 class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
     _tied_weights_keys = {
         r"audio_model\.text_model\.(?!rotary_emb)": r"^text_model\.(?!rotary_emb)",

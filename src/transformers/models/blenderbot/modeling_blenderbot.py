@@ -916,10 +916,12 @@ class BlenderbotDecoderWrapper(BlenderbotPreTrainedModel):
         self.decoder = BlenderbotDecoder(config)
         self.post_init()
 
+    @auto_docstring
     def forward(self, *args, **kwargs):
         return self.decoder(*args, **kwargs)
 
 
+@auto_docstring
 # Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->Blenderbot, facebook/bart-base->facebook/blenderbot-400M-distill
 class BlenderbotForCausalLM(BlenderbotPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {

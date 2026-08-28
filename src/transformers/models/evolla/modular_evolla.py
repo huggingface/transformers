@@ -187,6 +187,7 @@ class EvollaSaProtProteinEncoder(EvollaSaProtPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.Tensor | None,
@@ -710,6 +711,7 @@ class EvollaPreTrainedModel(LlamaPreTrainedModel):
             init.normal_(module.latents, mean=0.0, std=std)
 
 
+@auto_docstring
 class EvollaModel(EvollaPreTrainedModel):
     def __init__(self, config: EvollaConfig):
         super().__init__(config)
@@ -837,6 +839,12 @@ class EvollaModel(EvollaPreTrainedModel):
         return output
 
 
+@auto_docstring(
+    custom_intro="""
+    Evolla model with a language modeling head, generating natural language answers about a protein from its
+    sequence together with a text prompt.
+    """
+)
 class EvollaForProteinText2Text(EvollaPreTrainedModel, GenerationMixin):
     def __init__(self, config):
         super().__init__(config)

@@ -1042,6 +1042,7 @@ class PLBartDecoderWrapper(PLBartPreTrainedModel):
         self.decoder = PLBartDecoder(config)
         self.post_init()
 
+    @auto_docstring
     def forward(self, *args, **kwargs):
         return self.decoder(*args, **kwargs)
 

@@ -173,6 +173,7 @@ class QianfanOCRVisionEmbeddings(InternVLVisionEmbeddings):
     pass
 
 
+@auto_docstring
 class QianfanOCRVisionModelOutputWithPooling(BaseModelOutputWithPooling):
     r"""
     pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
@@ -180,8 +181,6 @@ class QianfanOCRVisionModelOutputWithPooling(BaseModelOutputWithPooling):
         *config.use_mean_pooling* is set to True. If set to False, then the final hidden state of the *[CLS]* token
         will be returned.
     """
-
-    pass
 
 
 @auto_docstring

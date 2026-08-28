@@ -914,6 +914,7 @@ class BridgeTowerPreTrainedModel(PreTrainedModel):
             init.zeros_(module.bias)
 
 
+@auto_docstring
 class BridgeTowerVisionModel(BridgeTowerPreTrainedModel):
     config: BridgeTowerVisionConfig
     input_modalities = ("image",)
@@ -927,7 +928,14 @@ class BridgeTowerVisionModel(BridgeTowerPreTrainedModel):
     def dtype(self):
         return self.visual.embeddings.patch_embedding.weight.dtype
 
+    @auto_docstring
     def forward(self, image, image_mask=None, interpolate_pos_encoding=False, **kwargs):
+        r"""
+        image (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values of the images to encode.
+        image_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding patches.
+        """
         return self.visual(image.type(self.dtype), image_mask, interpolate_pos_encoding)
 
 

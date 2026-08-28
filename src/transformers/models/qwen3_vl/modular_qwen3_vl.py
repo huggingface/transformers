@@ -417,6 +417,7 @@ class Qwen3VLPreTrainedModel(Qwen2VLPreTrainedModel):
             init.copy_(module.inv_freq, inv_freq)
 
 
+@auto_docstring
 class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
     config: Qwen3VLVisionConfig
     input_modalities = ("image", "video")
@@ -492,15 +493,15 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithDeepstackFeatures:
-        """
-        Args:
-            hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):
-                The final hidden states of the model.
-            grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
-                The temporal, height and width of feature shape of each image in LLM.
+        r"""
+        hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):
+            The final hidden states of the model.
+        grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
+            The temporal, height and width of feature shape of each image in LLM.
 
         Returns:
             `torch.Tensor`: hidden_states.
@@ -839,6 +840,7 @@ class Qwen3VLCausalLMOutputWithPast(Qwen2_5_VLCausalLMOutputWithPast):
     pass
 
 
+@auto_docstring
 class Qwen3VLForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
     @auto_docstring
     def get_image_features(self, **super_kwargs) -> tuple | BaseModelOutputWithDeepstackFeatures:

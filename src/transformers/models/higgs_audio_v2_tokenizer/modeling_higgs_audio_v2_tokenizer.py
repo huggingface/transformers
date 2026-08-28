@@ -210,37 +210,37 @@ class HiggsAudioV2TokenizerVectorQuantization(nn.Module):
         return quantize
 
 
+@auto_docstring
 @dataclass
 class HiggsAudioV2TokenizerOutput(ModelOutput):
-    """
-    Args:
-        audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`, *optional*):
-            Discrete code indices computed using `model.encode`.
-        audio_values (`torch.FloatTensor` of shape `(batch_size, channels, num_samples)`, *optional*)
-            Decoded audio values obtained using the decoder part of HiggsAudioV2Tokenizer.
+    r"""
+    audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`, *optional*):
+        Discrete code indices computed using `model.encode`.
+    audio_values (`torch.FloatTensor` of shape `(batch_size, 1, input_length)`, *optional*):
+        Reconstructed audio values, obtained using the decoder part of HiggsAudioV2Tokenizer.
     """
 
     audio_codes: torch.LongTensor | None = None
     audio_values: torch.FloatTensor | None = None
 
 
+@auto_docstring
 @dataclass
 class HiggsAudioV2TokenizerEncoderOutput(ModelOutput):
-    """
-    Args:
-        audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`, *optional*):
-            Discrete code indices computed using `model.encode`.
+    r"""
+    audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`, *optional*):
+        Discrete code indices computed using `model.encode`.
     """
 
     audio_codes: torch.LongTensor | None = None
 
 
+@auto_docstring
 @dataclass
 class HiggsAudioV2TokenizerDecoderOutput(ModelOutput):
-    """
-    Args:
-        audio_values (`torch.FloatTensor`  of shape `(batch_size, channels, num_samples)`, *optional*):
-            Decoded audio values obtained using the decoder part of HiggsAudioV2Tokenizer.
+    r"""
+    audio_values (`torch.FloatTensor`  of shape `(batch_size, channels, num_samples)`, *optional*):
+        Decoded audio values obtained using the decoder part of HiggsAudioV2Tokenizer.
     """
 
     audio_values: torch.FloatTensor | None = None

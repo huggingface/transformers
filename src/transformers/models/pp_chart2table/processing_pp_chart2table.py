@@ -31,6 +31,7 @@ class PPChart2TableProcessor(ProcessorMixin):
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
+    @auto_docstring
     def __call__(
         self,
         images: ImageInput = None,

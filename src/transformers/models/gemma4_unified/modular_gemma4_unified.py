@@ -538,6 +538,8 @@ class Gemma4UnifiedAudioModelOutput(ModelOutput):
     attention_mask: torch.BoolTensor | None = None
 
 
+@auto_docstring
+@dataclass
 class Gemma4UnifiedTextModelOutputWithPast(Gemma4TextModelOutputWithPast):
     pass
 

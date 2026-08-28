@@ -462,6 +462,7 @@ class AfmoeDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+@auto_docstring
 class AfmoePreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained

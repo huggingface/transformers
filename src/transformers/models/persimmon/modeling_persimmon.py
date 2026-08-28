@@ -453,6 +453,7 @@ class PersimmonModel(PersimmonPreTrainedModel):
         )
 
 
+@auto_docstring
 class PersimmonForCausalLM(PersimmonPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 

@@ -507,6 +507,7 @@ class RfDetrDinov2Encoder(RfDetrDinov2PreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
+    @auto_docstring
     def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutput:
         for layer_module in self.layer:
             hidden_states = layer_module(hidden_states)
@@ -1322,6 +1323,7 @@ class RfDetrDecoder(RfDetrPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         inputs_embeds: torch.Tensor | None = None,
@@ -1334,6 +1336,18 @@ class RfDetrDecoder(RfDetrPreTrainedModel):
         encoder_attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
+        r"""
+        reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`, *optional*):
+            Reference point in range `[0, 1]`, top-left (0,0), bottom-right (1, 1), including padding area.
+        spatial_shapes (`torch.LongTensor` of shape `(num_feature_levels, 2)`, *optional*):
+            Spatial shapes of the feature maps.
+        spatial_shapes_list (`list[tuple[int, int]]`):
+            Spatial shapes of each feature map (but as list for export compatibility).
+        level_start_index (`torch.LongTensor` of shape `(num_feature_levels)`, *optional*):
+            Indexes for the start of each feature level. In range `[0, sequence_length]`.
+        valid_ratios (`torch.FloatTensor` of shape `(batch_size, num_feature_levels, 2)`, *optional*):
+            Ratio of valid area in each feature level.
+        """
         intermediate = ()
         intermediate_reference_points = (reference_points,)
 
@@ -1996,6 +2010,11 @@ class RfDetrSegmentationMLPBlock(nn.Module):
         return hidden_states
 
 
+@auto_docstring(
+    custom_intro="""
+    RF-DETR object detection model with a segmentation head on top, for instance segmentation.
+    """
+)
 class RfDetrForInstanceSegmentation(RfDetrPreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
     # We can't initialize the model on meta device as some weights are modified during the initialization

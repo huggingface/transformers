@@ -1081,10 +1081,19 @@ class IdeficsModel(IdeficsPreTrainedModel):
         )
 
 
+@auto_docstring(
+    custom_intro="""
+    IDEFICS model with a language modeling head, for multimodal (image and text) generation.
+    """
+)
 class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
     def __init__(self, config, vision_model=None):
+        r"""
+        vision_model (`nn.Module`, *optional*):
+            Accepted for backward compatibility and ignored: the vision tower is always built from `config`.
+        """
         super().__init__(config)
         self.model = IdeficsModel(config)
 

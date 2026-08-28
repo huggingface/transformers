@@ -574,6 +574,7 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
         )
 
 
+@auto_docstring
 class Zamba2ForCausalLM(ZambaForCausalLM):
     pass
 

@@ -35,37 +35,37 @@ from ..auto import AutoModel
 from .configuration_xcodec import XcodecConfig
 
 
+@auto_docstring
 @dataclass
 class XcodecOutput(ModelOutput):
-    """
-    Args:
-        audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`, *optional*):
-            Discrete code indices computed using `model.encode`.
-        audio_values (`torch.FloatTensor` of shape `(batch_size, channels, num_samples)`, *optional*)
-            Decoded audio values obtained using the decoder part of Xcodec.
+    r"""
+    audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`, *optional*):
+        Discrete code indices computed using `model.encode`.
+    audio_values (`torch.FloatTensor` of shape `(batch_size, 1, input_length)`, *optional*):
+        Reconstructed audio values, obtained using the decoder part of Xcodec.
     """
 
     audio_codes: torch.LongTensor | None = None
     audio_values: torch.FloatTensor | None = None
 
 
+@auto_docstring
 @dataclass
 class XcodecEncoderOutput(ModelOutput):
-    """
-    Args:
-        audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`, *optional*):
-            Discrete code indices computed using `model.encode`.
+    r"""
+    audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`, *optional*):
+        Discrete code indices computed using `model.encode`.
     """
 
     audio_codes: torch.LongTensor | None = None
 
 
+@auto_docstring
 @dataclass
 class XcodecDecoderOutput(ModelOutput):
-    """
-    Args:
-        audio_values (`torch.FloatTensor`  of shape `(batch_size, channels, num_samples)`, *optional*):
-            Decoded audio values obtained using the decoder part of Xcodec.
+    r"""
+    audio_values (`torch.FloatTensor`  of shape `(batch_size, channels, num_samples)`, *optional*):
+        Decoded audio values obtained using the decoder part of Xcodec.
     """
 
     audio_values: torch.FloatTensor | None = None

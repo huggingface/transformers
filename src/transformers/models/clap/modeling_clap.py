@@ -1279,6 +1279,7 @@ class ClapPreTrainedModel(PreTrainedModel):
             init.copy_(module.relative_position_index, module.create_relative_position_index())
 
 
+@auto_docstring
 class ClapAudioModel(ClapPreTrainedModel):
     config: ClapAudioConfig
     main_input_name = "input_features"

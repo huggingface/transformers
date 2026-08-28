@@ -329,12 +329,17 @@ class SmolVLMVisionTransformer(SmolVLMPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
+    @auto_docstring
     def forward(
         self,
         pixel_values,
         patch_attention_mask: torch.BoolTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutput:
+        r"""
+        patch_attention_mask (`torch.BoolTensor` of shape `(batch_size, num_patches_height, num_patches_width)`, *optional*):
+            The attention mask for the patches.
+        """
         batch_size = pixel_values.size(0)
         if patch_attention_mask is None:
             patch_size = self.patch_size

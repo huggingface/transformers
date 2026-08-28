@@ -30,8 +30,8 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
-from ...utils.generic import can_return_tuple
-from ...utils.output_capturing import OutputRecorder
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto.modeling_auto import AutoModel
 from ..clip.modeling_clip import CLIPMLP
 from ..moonshine.modeling_moonshine import (
@@ -268,6 +268,9 @@ class CohereAsrDecoder(MoonshineDecoder):
         self.proj = nn.Linear(config.encoder_config.hidden_size, config.hidden_size, bias=True)
         self.post_init()
 
+    @merge_with_config_defaults
+    @capture_outputs
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

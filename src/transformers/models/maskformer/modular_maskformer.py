@@ -1236,6 +1236,12 @@ class MaskFormerModel(MaskFormerPreTrainedModel):
         return output
 
 
+@auto_docstring(
+    custom_intro="""
+    MaskFormer model with class and mask prediction heads on top, for instance, semantic and panoptic
+    segmentation.
+    """
+)
 class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
     def __init__(self, config: MaskFormerConfig):
         super().__init__(config)

@@ -26,6 +26,8 @@ from ...image_transforms import corners_to_center_format
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, torch_compilable_check
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..auto import AutoConfig
 from ..rt_detr.modeling_rt_detr import (
     RTDetrAIFILayer,
@@ -804,6 +806,9 @@ class DFineDecoder(RTDetrDecoder):
             + [DFineDecoderLayer(config) for _ in range(config.decoder_layers - self.eval_idx - 1)]
         )
 
+    @merge_with_config_defaults
+    @capture_outputs
+    @auto_docstring
     def forward(
         self,
         encoder_hidden_states: torch.Tensor,
@@ -816,6 +821,29 @@ class DFineDecoder(RTDetrDecoder):
         memory_mask=None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> DFineDecoderOutput:
+        r"""
+        encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
+            of the decoder.
+        reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)` is `as_two_stage` else `(batch_size, num_queries, 2)` or , *optional*):
+            Reference point in range `[0, 1]`, top-left (0,0), bottom-right (1, 1), including padding area.
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
+            The query embeddings that are passed into the decoder.
+        spatial_shapes (`torch.FloatTensor` of shape `(num_feature_levels, 2)`):
+            Spatial shapes of the feature maps.
+        level_start_index (`torch.LongTensor` of shape `(num_feature_levels)`, *optional*):
+            Indexes for the start of each feature level. In range `[0, sequence_length]`.
+        spatial_shapes_list (`list[tuple[int, int]]`):
+            Spatial shapes of each feature map (but as list for export compatibility).
+        encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing cross-attention on padding pixel_values of the encoder. Mask values selected
+            in `[0, 1]`:
+            - 1 for pixels that are real (i.e. **not masked**),
+            - 0 for pixels that are padding (i.e. **masked**).
+        memory_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask over the flattened encoder feature map. Accepted for compatibility with the original
+            D-FINE implementation, which does not use it either.
+        """
         if inputs_embeds is not None:
             hidden_states = inputs_embeds
 

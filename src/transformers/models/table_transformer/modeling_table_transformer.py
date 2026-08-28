@@ -698,6 +698,7 @@ class TableTransformerEncoder(TableTransformerPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @auto_docstring
     def forward(
         self,
         inputs_embeds=None,
@@ -709,29 +710,23 @@ class TableTransformerEncoder(TableTransformerPreTrainedModel):
         **kwargs,
     ):
         r"""
-        Args:
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-                Flattened feature map (output of the backbone + projection layer) that is passed to the encoder.
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Flattened feature map (output of the backbone + projection layer) that is passed to the encoder.
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding pixel features. Mask values selected in `[0, 1]`:
 
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding pixel features. Mask values selected in `[0, 1]`:
+            - 1 for pixel features that are real (i.e. **not masked**),
+            - 0 for pixel features that are padding (i.e. **masked**).
 
-                - 1 for pixel features that are real (i.e. **not masked**),
-                - 0 for pixel features that are padding (i.e. **masked**).
-
-                [What are attention masks?](../glossary#attention-mask)
-
-            object_queries (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-                Position embeddings that are added to the queries and keys in each self-attention layer.
-
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+            [What are attention masks?](../glossary#attention-mask)
+        object_queries (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Position embeddings that are added to the queries and keys in each self-attention layer.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+            returned tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
+            for more detail.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -819,6 +814,7 @@ class TableTransformerDecoder(TableTransformerPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @auto_docstring
     def forward(
         self,
         inputs_embeds=None,
@@ -833,40 +829,34 @@ class TableTransformerDecoder(TableTransformerPreTrainedModel):
         **kwargs,
     ):
         r"""
-        Args:
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-                The query embeddings that are passed into the decoder.
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            The query embeddings that are passed into the decoder.
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on certain queries. Mask values selected in `[0, 1]`:
 
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on certain queries. Mask values selected in `[0, 1]`:
+            - 1 for queries that are **not masked**,
+            - 0 for queries that are **masked**.
 
-                - 1 for queries that are **not masked**,
-                - 0 for queries that are **masked**.
+            [What are attention masks?](../glossary#attention-mask)
+        encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
+            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
+            of the decoder.
+        encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, encoder_sequence_length)`, *optional*):
+            Mask to avoid performing cross-attention on padding pixel_values of the encoder. Mask values selected
+            in `[0, 1]`:
 
-                [What are attention masks?](../glossary#attention-mask)
-            encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
-                Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
-                of the decoder.
-            encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, encoder_sequence_length)`, *optional*):
-                Mask to avoid performing cross-attention on padding pixel_values of the encoder. Mask values selected
-                in `[0, 1]`:
-
-                - 1 for pixels that are real (i.e. **not masked**),
-                - 0 for pixels that are padding (i.e. **masked**).
-
-            object_queries (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-                Object queries that are added to the queries and keys in each cross-attention layer.
-            query_position_embeddings (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
-                , *optional*): Position embeddings that are added to the values and keys in each self-attention layer.
-
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+            - 1 for pixels that are real (i.e. **not masked**),
+            - 0 for pixels that are padding (i.e. **masked**).
+        object_queries (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Object queries that are added to the queries and keys in each cross-attention layer.
+        query_position_embeddings (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
+            , *optional*): Position embeddings that are added to the values and keys in each self-attention layer.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+            returned tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
+            for more detail.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (

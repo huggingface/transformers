@@ -581,6 +581,7 @@ class Glm4vPreTrainedModel(Qwen2_5_VLPreTrainedModel):
             init.copy_(module.inv_freq, inv_freq)
 
 
+@auto_docstring
 class Glm4vVisionModel(Glm4vPreTrainedModel):
     config: Glm4vVisionConfig
     input_modalities = ("image", "video")
@@ -962,6 +963,7 @@ class Glm4vCausalLMOutputWithPast(Qwen2_5_VLCausalLMOutputWithPast):
     pass
 
 
+@auto_docstring
 class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
     def forward(
         self,

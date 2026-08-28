@@ -829,6 +829,7 @@ class JanusModel(JanusPreTrainedModel):
         )
 
 
+@auto_docstring
 class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     output_modalities = ("image", "text")

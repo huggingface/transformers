@@ -1727,15 +1727,15 @@ class PPDocLayoutV2HybridEncoder(PPDocLayoutV2PreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
+    @auto_docstring
     def forward(
         self,
         inputs_embeds=None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         r"""
-        Args:
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-                Flattened feature map (output of the backbone + projection layer) that is passed to the encoder.
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Flattened feature map (output of the backbone + projection layer) that is passed to the encoder.
         """
         feature_maps = inputs_embeds
 
@@ -1803,6 +1803,7 @@ class PPDocLayoutV2Decoder(PPDocLayoutV2PreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         inputs_embeds=None,
@@ -1815,23 +1816,24 @@ class PPDocLayoutV2Decoder(PPDocLayoutV2PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
-        Args:
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
-                The query embeddings that are passed into the decoder.
-            encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-                Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
-                of the decoder.
-            encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing cross-attention on padding pixel_values of the encoder. Mask values selected
-                in `[0, 1]`:
-                - 1 for pixels that are real (i.e. **not masked**),
-                - 0 for pixels that are padding (i.e. **masked**).
-            reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)` is `as_two_stage` else `(batch_size, num_queries, 2)` or , *optional*):
-                Reference point in range `[0, 1]`, top-left (0,0), bottom-right (1, 1), including padding area.
-            spatial_shapes (`torch.FloatTensor` of shape `(num_feature_levels, 2)`):
-                Spatial shapes of the feature maps.
-            level_start_index (`torch.LongTensor` of shape `(num_feature_levels)`, *optional*):
-                Indexes for the start of each feature level. In range `[0, sequence_length]`.
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
+            The query embeddings that are passed into the decoder.
+        encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
+            of the decoder.
+        encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing cross-attention on padding pixel_values of the encoder. Mask values selected
+            in `[0, 1]`:
+            - 1 for pixels that are real (i.e. **not masked**),
+            - 0 for pixels that are padding (i.e. **masked**).
+        reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)` is `as_two_stage` else `(batch_size, num_queries, 2)` or , *optional*):
+            Reference point in range `[0, 1]`, top-left (0,0), bottom-right (1, 1), including padding area.
+        spatial_shapes (`torch.FloatTensor` of shape `(num_feature_levels, 2)`):
+            Spatial shapes of the feature maps.
+        spatial_shapes_list (`list[tuple[int, int]]`):
+            Spatial shapes of each feature map (but as list for export compatibility).
+        level_start_index (`torch.LongTensor` of shape `(num_feature_levels)`, *optional*):
+            Indexes for the start of each feature level. In range `[0, sequence_length]`.
         """
         if inputs_embeds is not None:
             hidden_states = inputs_embeds

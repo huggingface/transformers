@@ -1072,6 +1072,7 @@ class Kosmos2TextTransformer(Kosmos2PreTrainedModel):
         )
 
 
+@auto_docstring
 class Kosmos2VisionModel(Kosmos2PreTrainedModel):
     config: Kosmos2VisionConfig
     main_input_name = "pixel_values"
@@ -1101,6 +1102,7 @@ class Kosmos2VisionModel(Kosmos2PreTrainedModel):
         )
 
 
+@auto_docstring
 class Kosmos2TextModel(Kosmos2PreTrainedModel):
     config: Kosmos2TextConfig
     input_modalities = ("text",)

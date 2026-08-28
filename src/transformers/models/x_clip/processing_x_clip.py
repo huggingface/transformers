@@ -25,6 +25,7 @@ class XCLIPProcessor(ProcessorMixin):
         super().__init__(image_processor, tokenizer)
         self.video_processor = self.image_processor
 
+    @auto_docstring
     def __call__(self, images=None, text=None, videos=None, **kwargs):
         # X-CLIP uses the image_processor for video frames. Map videos to images
         # so the base class processes them through image_processor.

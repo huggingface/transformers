@@ -36,7 +36,7 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...processing_utils import ImagesKwargs
-from ...utils import TensorType, is_vision_available, logging
+from ...utils import TensorType, auto_docstring, is_vision_available, logging
 
 
 if is_vision_available():
@@ -91,6 +91,16 @@ def smart_resize(
     return h_bar, w_bar
 
 
+@auto_docstring(
+    custom_args=r"""
+    min_pixels (`int`, *optional*, defaults to `512 * 512`):
+        The min pixels of the image to resize the image.
+    max_pixels (`int`, *optional*, defaults to `1024 * 1024`):
+        The max pixels of the image to resize the image.
+    spatial_factor (`int`, *optional*, defaults to 8):
+        The spatial downsample factor the image will be downsampled in feature extracting phase.
+    """
+)
 class Emu3ImageProcessor(BaseImageProcessor):
     r"""
     Constructs a Emu3 image processor that dynamically resizes images based on the original images.
@@ -113,8 +123,8 @@ class Emu3ImageProcessor(BaseImageProcessor):
         do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Whether to convert the image to RGB.
         do_pad (`bool`, *optional*, defaults to `True`):
-                Whether to pad the image. If `True`, will pad the patch dimension of the images in the batch to the largest
-                number of patches in the batch. Padding will be applied to the bottom and right with zeros.
+            Whether to pad the image. If `True`, will pad the patch dimension of the images in the batch to the largest
+            number of patches in the batch. Padding will be applied to the bottom and right with zeros.
         min_pixels (`int`, *optional*, defaults to `512 * 512`):
             The min pixels of the image to resize the image.
         max_pixels (`int`, *optional*, defaults to `1024 * 1024`):
@@ -295,6 +305,7 @@ class Emu3ImageProcessor(BaseImageProcessor):
         ]
         return pixel_values
 
+    @auto_docstring
     def preprocess(
         self,
         images: ImageInput,
@@ -340,8 +351,8 @@ class Emu3ImageProcessor(BaseImageProcessor):
             do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
                 Whether to convert the image to RGB.
             do_pad (`bool`, *optional*, defaults to `True`):
-                Whether to pad the image. If `True`, will pad the patch dimension of the images in the batch to the largest
-                number of patches in the batch. Padding will be applied to the bottom and right with zeros.
+            Whether to pad the image. If `True`, will pad the patch dimension of the images in the batch to the largest
+            number of patches in the batch. Padding will be applied to the bottom and right with zeros.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                 - Unset: Return a list of `np.ndarray`.

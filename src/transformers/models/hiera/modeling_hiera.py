@@ -1300,6 +1300,7 @@ class HieraBackbone(BackboneMixin, HieraPreTrainedModel):
 
     @can_return_tuple
     @filter_output_hidden_states
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor,
@@ -1308,7 +1309,7 @@ class HieraBackbone(BackboneMixin, HieraPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> BackboneOutput:
-        """
+        r"""
         Returns:
 
         Examples:

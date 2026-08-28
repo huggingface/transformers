@@ -292,6 +292,7 @@ class VibeVoiceAcousticTokenizerPreTrainedModel(PreTrainedModel):
             init.constant_(module.ffn_gamma, self.config.layer_scale_init_value)
 
 
+@auto_docstring
 class VibeVoiceAcousticTokenizerEncoderModel(VibeVoiceAcousticTokenizerPreTrainedModel):
     config: VibeVoiceAcousticTokenizerEncoderConfig
 
@@ -313,7 +314,13 @@ class VibeVoiceAcousticTokenizerEncoderModel(VibeVoiceAcousticTokenizerPreTraine
         )
         self.post_init()
 
+    @auto_docstring
     def forward(self, hidden_states, padding_cache=None, use_cache=False, **kwargs):
+        r"""
+        padding_cache (`VibeVoiceAcousticTokenizerConv1dPaddingCache`, *optional*):
+            Left-padding cache of the causal convolutions. Pass the cache returned by the previous chunk to
+            encode a stream without recomputing it from the start.
+        """
         if use_cache and padding_cache is None:
             padding_cache = VibeVoiceAcousticTokenizerConv1dPaddingCache()
 
@@ -385,6 +392,7 @@ class VibeVoiceAcousticTokenizerDecoderLayer(nn.Module):
         return hidden_states
 
 
+@auto_docstring
 class VibeVoiceAcousticTokenizerDecoderModel(VibeVoiceAcousticTokenizerPreTrainedModel):
     config: VibeVoiceAcousticTokenizerDecoderConfig
 
@@ -406,7 +414,13 @@ class VibeVoiceAcousticTokenizerDecoderModel(VibeVoiceAcousticTokenizerPreTraine
         )
         self.post_init()
 
+    @auto_docstring
     def forward(self, hidden_states, padding_cache=None, use_cache=False, **kwargs):
+        r"""
+        padding_cache (`VibeVoiceAcousticTokenizerConv1dPaddingCache`, *optional*):
+            Left-padding cache of the causal convolutions. Pass the cache returned by the previous chunk to
+            decode a stream without recomputing it from the start.
+        """
         if use_cache and padding_cache is None:
             padding_cache = VibeVoiceAcousticTokenizerConv1dPaddingCache()
 

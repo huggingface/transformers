@@ -168,6 +168,7 @@ class PeVideoEncoder(PeAudioVideoEncoder):
         )
 
 
+@auto_docstring
 class PeVideoModel(PeVideoPreTrainedModel):
     main_input_name = "input_ids"
 

@@ -347,6 +347,7 @@ class DeepseekVLHybridModel(DeepseekVLModel):
         )
 
 
+@auto_docstring
 class DeepseekVLHybridForConditionalGeneration(DeepseekVLForConditionalGeneration):
     @can_return_tuple
     @auto_docstring(custom_args=DEEPSEEK_VL_COMMON_CUSTOM_ARGS)

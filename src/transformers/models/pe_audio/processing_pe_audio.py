@@ -12,8 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from ...processing_utils import ProcessorMixin
+from ...utils import auto_docstring
 
 
+@auto_docstring
 class PeAudioProcessor(ProcessorMixin):
     attributes = ["feature_extractor", "tokenizer"]
     feature_extractor_class = "PeAudioFeatureExtractor"

@@ -718,6 +718,7 @@ class PeAudioOutput(ModelOutput):
         )
 
 
+@auto_docstring
 class PeAudioModel(PeAudioPreTrainedModel):
     def __init__(self, config: PeAudioConfig):
         super().__init__(config)
@@ -807,6 +808,7 @@ class PeAudioModel(PeAudioPreTrainedModel):
 # TODO: underline in documentation that logits output shape is
 # 1. Model: (n_audio, n_text)
 # 2. Frame-level: (n_audio, n_text, n_frames)
+@auto_docstring
 class PeAudioFrameLevelModel(PeAudioModel):
     def get_audio_embeds(self, input_values, padding_mask=None):
         audio_outputs: BaseModelOutputWithPooling = self.audio_encoder(

@@ -185,6 +185,7 @@ class Sam3LiteTextConfig(PreTrainedConfig):
         self.vision_config.image_size = value
 
 
+@auto_docstring
 @dataclass
 class Sam3LiteTextTextEncoderOutput(BaseModelOutputWithPooling):
     r"""
@@ -418,6 +419,7 @@ class Sam3LiteTextTextModel(Sam3LiteTextPreTrainedModel):
         )
 
 
+@auto_docstring
 class Sam3LiteTextModel(Sam3Model):
     # DETR components create float masks from features, so flash/flex attention cannot be dispatched safely.
     _supports_flash_attn = False

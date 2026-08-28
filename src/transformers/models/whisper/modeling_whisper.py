@@ -591,6 +591,7 @@ class WhisperEncoder(WhisperPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         input_features,
@@ -598,17 +599,16 @@ class WhisperEncoder(WhisperPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         r"""
-        Args:
-            input_features (`torch.LongTensor` of shape `(batch_size, feature_size, sequence_length)`):
-                Float values of mel features extracted from the raw speech waveform. Raw speech waveform can be
-                obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a
-                `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library (`pip install torchcodec`) or
-                the soundfile library (`pip install soundfile`). To prepare the array into
-                `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel features, padding
-                and conversion into a tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
-            attention_mask (`torch.Tensor`)`, *optional*):
-                Whisper does not support masking of the `input_features`, this argument is preserved for compatibility,
-                but it is not used. By default the silence in the input log mel spectrogram are ignored.
+        input_features (`torch.LongTensor` of shape `(batch_size, feature_size, sequence_length)`):
+            Float values of mel features extracted from the raw speech waveform. Raw speech waveform can be
+            obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a
+            `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library (`pip install torchcodec`) or
+            the soundfile library (`pip install soundfile`). To prepare the array into
+            `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel features, padding
+            and conversion into a tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
+        attention_mask (`torch.Tensor`)`, *optional*):
+            Whisper does not support masking of the `input_features`, this argument is preserved for compatibility,
+            but it is not used. By default the silence in the input log mel spectrogram are ignored.
         """
 
         expected_seq_length = self.config.max_source_positions * self.conv1.stride[0] * self.conv2.stride[0]
@@ -689,6 +689,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         input_ids=None,
@@ -701,36 +702,29 @@ class WhisperDecoder(WhisperPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPastAndCrossAttentions:
         r"""
-        Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
-                provide it.
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
+            provide it.
 
-                Indices can be obtained using [`WhisperTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-                [`PreTrainedTokenizer.__call__`] for details.
+            Indices can be obtained using [`WhisperTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
 
-                [What are input IDs?](../glossary#input-ids)
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+            [What are input IDs?](../glossary#input-ids)
+        encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
+            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
+            of the decoder.
+        past_key_values (`EncoderDecoderCache` or `tuple(tuple(torch.FloatTensor))`, *optional*):
+            It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                [What are attention masks?](../glossary#attention-mask)
-            encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
-                Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
-                of the decoder.
-            past_key_values (`EncoderDecoderCache` or `tuple(tuple(torch.FloatTensor))`, *optional*):
-                It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-                If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
-                that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
-                all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-            inputs_embeds (`torch.FloatTensor` of
-                shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
-                `input_ids` you can choose to directly pass an embedded representation. This is useful if you want more
-                control over how to convert `input_ids` indices into associated vectors than the model's internal
-                embedding lookup matrix.
+            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
+            that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
+            all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+        inputs_embeds (`torch.FloatTensor` of
+            shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing
+            `input_ids` you can choose to directly pass an embedded representation. This is useful if you want more
+            control over how to convert `input_ids` indices into associated vectors than the model's internal
+            embedding lookup matrix.
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
@@ -1164,6 +1158,7 @@ class WhisperDecoderWrapper(WhisperPreTrainedModel):
     def set_input_embeddings(self, value):
         self.decoder.embed_tokens = value
 
+    @auto_docstring
     def forward(self, *args, **kwargs):
         return self.decoder(*args, **kwargs)
 

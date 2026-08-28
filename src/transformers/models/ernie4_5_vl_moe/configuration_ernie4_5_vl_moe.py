@@ -205,6 +205,7 @@ class Ernie4_5_VLMoeConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
+@auto_docstring
 class Ernie4_5_VL_MoeConfig(Ernie4_5_VLMoeConfig):
     def __init__(self, *args, **kwargs):
         logger.warning_once(
@@ -213,6 +214,7 @@ class Ernie4_5_VL_MoeConfig(Ernie4_5_VLMoeConfig):
         super().__init__(*args, **kwargs)
 
 
+@auto_docstring
 class Ernie4_5_VL_MoeTextConfig(Ernie4_5_VLMoeTextConfig):
     def __init__(self, *args, **kwargs):
         logger.warning_once(
@@ -221,6 +223,7 @@ class Ernie4_5_VL_MoeTextConfig(Ernie4_5_VLMoeTextConfig):
         super().__init__(*args, **kwargs)
 
 
+@auto_docstring
 class Ernie4_5_VL_MoeVisionConfig(Ernie4_5_VLMoeVisionConfig):
     def __init__(self, *args, **kwargs):
         logger.warning_once(

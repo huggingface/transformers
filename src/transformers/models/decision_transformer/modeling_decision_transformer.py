@@ -341,6 +341,7 @@ class DecisionTransformerGPT2PreTrainedModel(PreTrainedModel):
                     init.normal_(p, mean=0.0, std=self.config.initializer_range / math.sqrt(2 * self.config.n_layer))
 
 
+@auto_docstring
 class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -369,6 +370,7 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -481,6 +483,7 @@ class DecisionTransformerOutput(ModelOutput):
     last_hidden_state: torch.FloatTensor | None = None
 
 
+@auto_docstring
 class DecisionTransformerPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained

@@ -888,6 +888,7 @@ class DiffusionGemmaPreTrainedModel(PreTrainedModel):
             init.ones_(module.std_scale)
 
 
+@auto_docstring
 class DiffusionGemmaEncoderTextModel(DiffusionGemmaPreTrainedModel):
     config: DiffusionGemmaTextConfig
     input_modalities = ("text",)
@@ -1190,6 +1191,7 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel):
         return create_masks_for_generate(**mask_kwargs)
 
 
+@auto_docstring
 class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
     """
     Decoder model for DiffusionGemma.
@@ -1592,14 +1594,15 @@ class DiffusionGemmaModel(DiffusionGemmaPreTrainedModel):
         )
 
 
-class DiffusionGemmaForBlockDiffusion(DiffusionGemmaPreTrainedModel, DiffusionGemmaGenerationMixin):
-    """
+@auto_docstring(
+    custom_intro="""
     DiffusionGemma model for block diffusion. It calls `DiffusionGemmaModel` to obtains the hidden states for
     the input canvas, conditioned by a prompt KV cache. Using its LM Head and self-conditioning blocks, it converts
     those hidden states into logits to sample the next canvas, as well as the self-conditioning embeddings for the
     next block diffusion step.
     """
-
+)
+class DiffusionGemmaForBlockDiffusion(DiffusionGemmaPreTrainedModel, DiffusionGemmaGenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.decoder.embed_tokens.weight"}
     generation_config_class = DiffusionGemmaGenerationConfig
 

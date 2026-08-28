@@ -35,12 +35,13 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, filter_out_non_signature_kwargs, logging
+from ...utils import TensorType, auto_docstring, filter_out_non_signature_kwargs, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring
 class VideoLlavaImageProcessor(BaseImageProcessor):
     r"""
     Constructs a CLIP image processor.
@@ -165,6 +166,7 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
         )
 
     @filter_out_non_signature_kwargs()
+    @auto_docstring
     def preprocess(
         self,
         images: list[ImageInput] | None = None,

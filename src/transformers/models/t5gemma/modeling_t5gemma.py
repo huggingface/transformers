@@ -645,6 +645,7 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -729,6 +730,7 @@ class T5GemmaDecoder(T5GemmaPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -927,6 +929,7 @@ class T5GemmaEncoderModel(T5GemmaPreTrainedModel):
         return encoder_outputs
 
 
+@auto_docstring
 class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.out_proj.weight": "model.decoder.embed_tokens.weight"}
     _tp_plan = {"lm_head.out_proj": "colwise_gather_output"}

@@ -930,6 +930,7 @@ class GroupViTTextTransformer(GroupViTPreTrainedModel):
         )
 
 
+@auto_docstring
 class GroupViTTextModel(GroupViTPreTrainedModel):
     config: GroupViTTextConfig
     input_modalities = ("text",)
@@ -1030,6 +1031,7 @@ class GroupViTVisionTransformer(nn.Module):
         )
 
 
+@auto_docstring
 class GroupViTVisionModel(GroupViTPreTrainedModel):
     config: GroupViTVisionConfig
     main_input_name = "pixel_values"

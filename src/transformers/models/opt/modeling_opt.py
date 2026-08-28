@@ -440,6 +440,7 @@ class OPTModel(OPTPreTrainedModel):
         )
 
 
+@auto_docstring
 class OPTForCausalLM(OPTPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.decoder.embed_tokens.weight"}
 

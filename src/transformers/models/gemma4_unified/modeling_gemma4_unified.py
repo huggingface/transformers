@@ -76,15 +76,13 @@ class Gemma4UnifiedAudioModelOutput(ModelOutput):
     attention_mask: torch.BoolTensor | None = None
 
 
+@auto_docstring
 @dataclass
 class Gemma4UnifiedTextModelOutputWithPast(BaseModelOutputWithPast):
-    """
-    BaseModelOutputWithPast extended with shared_kv_states for KV sharing.
-
-    Args:
-        shared_kv_states (`dict`, *optional*):
-            Dictionary mapping layer type strings to tuples of (key_states, value_states) tensors.
-            Used to pass shared KV states between layers during KV sharing.
+    r"""
+    shared_kv_states (`dict`, *optional*):
+        Dictionary mapping layer type strings to tuples of (key_states, value_states) tensors.
+        Used to pass shared KV states between layers during KV sharing.
     """
 
     shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None

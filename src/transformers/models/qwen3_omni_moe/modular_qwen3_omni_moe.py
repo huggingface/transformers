@@ -714,6 +714,7 @@ class Qwen3OmniMoePreTrainedModel(Qwen2_5OmniPreTrainedModel, PreTrainedModel):
             init.copy_(module.inv_freq, inv_freq)
 
 
+@auto_docstring
 class Qwen3OmniMoePreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedModelForConditionalGeneration):
     def get_llm_pos_ids_for_vision(
         self,
@@ -1105,6 +1106,11 @@ class Qwen3OmniMoeVisionRotaryEmbedding(Qwen3VLMoeVisionRotaryEmbedding):
     pass
 
 
+@auto_docstring(
+    custom_intro="""
+    The vision encoder of Qwen3-Omni MoE, turning images and videos into embeddings for the thinker.
+    """
+)
 class Qwen3OmniMoeVisionEncoder(Qwen3VLMoeVisionModel):
     config: Qwen3OmniMoeVisionEncoderConfig
 
@@ -1426,10 +1432,11 @@ class Qwen3OmniMoeTalkerResizeMLP(nn.Module):
         return self.linear_fc2(self.act_fn(self.linear_fc1(hidden_state)))
 
 
+@auto_docstring
 @dataclass
 class Qwen3OmniMoeTalkerCodePredictorOutputWithPast(CausalLMOutputWithPast):
     r"""
-    generation_steps (`int`, *optional*)
+    generation_steps (`int`, *optional*):
         Current generation step of code predictor model.
     """
 
@@ -1613,6 +1620,7 @@ class Qwen3OmniMoeTalkerCodePredictorModelForConditionalGeneration(Qwen3ForCausa
         return model_kwargs
 
 
+@auto_docstring
 @dataclass
 class Qwen3OmniMoeTalkerOutputWithPast(MoeCausalLMOutputWithPast):
     r"""
@@ -2185,7 +2193,12 @@ class Qwen3OmniMoeCode2WavDecoderBlock(Qwen3OmniMoePreTrainedModel):
 
         self.post_init()
 
+    @auto_docstring
     def forward(self, hidden, **kwargs):
+        r"""
+        hidden (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`):
+            Hidden states of the waveform decoder, in channel-first layout.
+        """
         for block in self.block:
             hidden = block(hidden)
         return hidden
@@ -2227,7 +2240,12 @@ class Qwen3OmniMoeCode2Wav(Qwen3OmniMoePreTrainedModel):
 
         self.post_init()
 
+    @auto_docstring
     def forward(self, codes, **kwargs):
+        r"""
+        codes (`torch.LongTensor` of shape `(batch_size, num_quantizers, sequence_length)`):
+            Residual codec tokens to synthesize, one row per quantizer.
+        """
         if codes.shape[1] != self.config.num_quantizers:
             raise ValueError(f"Expected {self.config.num_quantizers} layer of codes, got {codes.shape[1]}")
         hidden = self.code_embedding(codes + self.code_offset).mean(1)
@@ -2254,6 +2272,7 @@ class Qwen3OmniMoeCode2Wav(Qwen3OmniMoePreTrainedModel):
         return torch.cat(wavs, dim=-1)
 
 
+@auto_docstring
 class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, GenerationMixin):
     config_class = Qwen3OmniMoeConfig
     output_modalities = ("text", "audio")

@@ -24,6 +24,7 @@ import numpy as np
 
 from ...image_utils import ChannelDimension, ImageInput, get_image_size
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
+from ...utils import auto_docstring
 
 
 class LightOnOcrProcessorKwargs(ProcessingKwargs, total=False):
@@ -98,6 +99,7 @@ def get_resize_output_image_size(
     return num_height_tokens * patch_height, num_width_tokens * patch_width
 
 
+@auto_docstring
 class LightOnOcrProcessor(ProcessorMixin):
     valid_processor_kwargs = LightOnOcrProcessorKwargs
 
@@ -110,6 +112,13 @@ class LightOnOcrProcessor(ProcessorMixin):
         chat_template=None,
         **kwargs,
     ):
+        r"""
+        patch_size (`int`, *optional*, defaults to 14):
+            Patch size of the vision encoder.
+        spatial_merge_size (`int`, *optional*, defaults to 2):
+            Number of patches merged along each spatial dimension before entering the language model. Together
+            with `patch_size` it gives the effective patch size used to count image tokens.
+        """
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
         self.patch_size = patch_size

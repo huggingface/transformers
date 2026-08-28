@@ -507,6 +507,7 @@ class OlmoHybridLinearAttentionDecoderLayer(LlamaDecoderLayer):
         return hidden_states
 
 
+@auto_docstring
 class OlmoHybridPreTrainedModel(Qwen3NextPreTrainedModel):
     _is_stateful = True
     _no_split_modules = ["OlmoHybridAttentionDecoderLayer", "OlmoHybridLinearAttentionDecoderLayer"]
@@ -533,6 +534,7 @@ class OlmoHybridPreTrainedModel(Qwen3NextPreTrainedModel):
             init.copy_(module.dt_bias, inv_dt)
 
 
+@auto_docstring
 class OlmoHybridModel(Qwen3NextModel):
     def __init__(self, config: OlmoHybridConfig):
         super().__init__(config)
@@ -555,6 +557,7 @@ class OlmoHybridModel(Qwen3NextModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
