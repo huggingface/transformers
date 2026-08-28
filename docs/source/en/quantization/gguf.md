@@ -71,3 +71,12 @@ Architectures other than Qwen3.5 are read by the legacy loader which dequantize 
 
 > [!TIP]
 > The legacy loader supports Llama, Mistral, Qwen2, Qwen2Moe, Phi3, Bloom, Falcon, StableLM, GPT2, Starcoder2, and [more](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/ggml.py).
+
+## Serve
+
+[`transformers serve`](../serve-cli/serving) names a GGUF model `<repo>:<file>.gguf`, since a repository holds
+several quantizations and the id has to say which one to load. Requests name it the same way.
+
+```shell
+transformers serve unsloth/Qwen3.5-4B-GGUF:Qwen3.5-4B-Q4_K_M.gguf
+```
