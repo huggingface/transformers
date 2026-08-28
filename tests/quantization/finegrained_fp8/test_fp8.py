@@ -517,4 +517,3 @@ class FineGrainedFP8QuantizerTpPlanTest(unittest.TestCase):
         config.base_model_tp_plan = {"moe": "moe_tp_experts"}
         updated_config = quantizer.update_tp_plan(config)
         self.assertEqual(updated_config.base_model_tp_plan, {"moe": "megamoe_experts"})
-

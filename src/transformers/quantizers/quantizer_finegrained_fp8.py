@@ -80,7 +80,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         from ..integrations.finegrained_fp8 import FP8Experts, FP8Linear
 
         module, tensor_name = get_module_from_name(model, param_name)
-        if isinstance(module, (FP8Linear, FP8Experts)):
+        if isinstance(module, FP8Linear | FP8Experts):
             if self.pre_quantized or tensor_name == "bias":
                 return False
             else:
@@ -196,7 +196,9 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
             # on top of any plan written above (e.g. the Qwen3 dense plan). Models carry the
             # experts mapping under `base_model_tp_plan` and/or `base_model_ep_plan` — rewrite
             # both. See `FP8Experts._impl_tp_layer_overrides`.
-            updated_plan = {k: layer_overrides.get(v, v) for k, v in base_plan.items()} if layer_overrides else dict(base_plan)
+            updated_plan = (
+                {k: layer_overrides.get(v, v) for k, v in base_plan.items()} if layer_overrides else dict(base_plan)
+            )
 
             # Expert scales must be sharded along with their corresponding weights.
             for key, style in list(updated_plan.items()):
