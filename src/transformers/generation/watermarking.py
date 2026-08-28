@@ -386,6 +386,8 @@ class BayesianDetectorModel(PreTrainedModel):
         )
         self.prior = torch.nn.Parameter(torch.tensor([self.base_rate]))
 
+        self.post_init()
+
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
