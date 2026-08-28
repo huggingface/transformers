@@ -66,7 +66,16 @@ class LoMaModelTester:
         self.num_layers = num_layers
         self.num_heads = num_heads
         self.filter_threshold = filter_threshold
-        self.dinov2_dim = 32
+        self.backbone_config = {
+            "model_type": "dinov2",
+            "hidden_size": 32,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 2,
+            "patch_size": 14,
+            "image_size": 70,
+            "out_features": ["stage2"],
+            "reshape_hidden_states": False,
+        }
 
     def prepare_config_and_inputs(self):
         # LoMa expects a grayscale image as input
@@ -82,7 +91,7 @@ class LoMaModelTester:
             num_hidden_layers=self.num_layers,
             num_attention_heads=self.num_heads,
             filter_threshold=self.filter_threshold,
-            dinov2_dim=self.dinov2_dim,
+            backbone_config=self.backbone_config,
             attn_implementation="eager",
         )
 
@@ -142,16 +151,13 @@ class LoMaModelTest(ModelTesterMixin, unittest.TestCase):
 
         self.assertEqual(config.input_descriptor_dim, 256)
         self.assertEqual(config.descriptor_dim, 256)
-        self.assertEqual(config.attention_head_dim, 64)
+        self.assertEqual(config.head_dim, 64)
         self.assertEqual(config.num_attention_heads, 4)
         self.assertEqual(config.num_hidden_layers, 9)
         self.assertEqual(config.filter_threshold, 0.1)
 
         for attribute in (
-            "attention_dropout",
             "depth_confidence",
-            "hidden_act",
-            "num_key_value_heads",
             "width_confidence",
         ):
             self.assertFalse(hasattr(config, attribute))
@@ -160,7 +166,7 @@ class LoMaModelTest(ModelTesterMixin, unittest.TestCase):
         config = LoMaConfig(descriptor_dim=512)
         self.assertEqual(config.num_attention_heads, 8)
 
-        with self.assertRaisesRegex(ValueError, "attention_head_dim"):
+        with self.assertRaisesRegex(ValueError, "head_dim"):
             LoMaConfig(descriptor_dim=250)
 
     def test_descriptor_network(self):
@@ -192,23 +198,36 @@ class LoMaModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertEqual(descriptors.shape, (2, 3, 16))
 
     def test_matching_transformer(self):
-        config = LoMaConfig(descriptor_dim=64, num_attention_heads=4, num_hidden_layers=2)
+        config = LoMaConfig(
+            descriptor_dim=64,
+            num_attention_heads=4,
+            num_hidden_layers=2,
+            backbone_config={
+                "model_type": "dinov2",
+                "hidden_size": 32,
+                "num_hidden_layers": 2,
+                "num_attention_heads": 2,
+                "patch_size": 14,
+                "image_size": 70,
+                "out_features": ["stage2"],
+                "reshape_hidden_states": False,
+            },
+        )
         positional_encoder = LoMaPositionalEncoder(config).to(torch_device)
         transformer_layer = LoMaTransformerLayer(config, layer_idx=0).to(torch_device)
         match_assignment = LoMaMatchAssignmentLayer(config).to(torch_device).eval()
-        descriptors_0 = floats_tensor([2, 5, 64]).to(torch_device)
-        descriptors_1 = floats_tensor([2, 7, 64]).to(torch_device)
-        keypoints_0 = floats_tensor([2, 5, 2]).to(torch_device)
-        keypoints_1 = floats_tensor([2, 7, 2]).to(torch_device)
 
-        output_0, output_1 = transformer_layer(
-            descriptors_0, descriptors_1, positional_encoder(keypoints_0), positional_encoder(keypoints_1)
-        )
-        scores = match_assignment(output_0, output_1)
+        # Interleaved batch format: (batch*2, num_keypoints, dim)
+        num_kp = 5
+        descriptors = floats_tensor([4, num_kp, 64]).to(torch_device)  # batch=2, interleaved -> 4
+        keypoints = floats_tensor([4, num_kp, 2]).to(torch_device)
+        position_embeddings = positional_encoder(keypoints)
 
-        self.assertEqual(output_0.shape, (2, 5, 64))
-        self.assertEqual(output_1.shape, (2, 7, 64))
-        self.assertEqual(scores.shape, (2, 5, 7))
+        output, hidden_states, attentions = transformer_layer(descriptors, position_embeddings[0], attention_mask=None)
+        scores = match_assignment(output)
+
+        self.assertEqual(output.shape, (4, num_kp, 64))
+        self.assertEqual(scores.shape, (2, num_kp, num_kp))  # batch=2 after de-interleave
         self.assertTrue(torch.all((scores >= 0) & (scores <= 1)))
 
     def test_batching_equivalence(self, atol=1e-5, rtol=1e-5):
@@ -280,14 +299,12 @@ class LoMaModelTest(ModelTesterMixin, unittest.TestCase):
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
             hidden_states = outputs.hidden_states
-            maximum_num_matches = outputs.mask.shape[-1]
+            self.assertIsNotNone(hidden_states)
+            self.assertGreater(len(hidden_states), 0)
 
-            self.assertEqual(len(hidden_states), self.model_tester.num_layers)
+            # Each hidden state should have interleaved batch format (batch*2, n, dim)
             for hidden_state in hidden_states:
-                self.assertListEqual(
-                    list(hidden_state.shape),
-                    [self.model_tester.batch_size, 2, maximum_num_matches, self.model_tester.descriptor_dim],
-                )
+                self.assertEqual(hidden_state.shape[0], self.model_tester.batch_size * 2)
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -344,12 +361,10 @@ class LoMaModelTest(ModelTesterMixin, unittest.TestCase):
 
             with torch.no_grad():
                 model_inputs = self._prepare_for_class(inputs_dict, model_class)
-                # Provide an arbitrary sized Tensor as labels to model inputs
+                # Labels are silently ignored via **kwargs
                 model_inputs["labels"] = torch.rand((128, 128))
-
-                with self.assertRaises(ValueError) as cm:
-                    model(**model_inputs)
-                self.assertEqual(ValueError, cm.exception.__class__)
+                outputs = model(**model_inputs)
+                self.assertIsNotNone(outputs.matches)
 
 
 @require_torch
@@ -366,18 +381,17 @@ class LoMaModelIntegrationTest(unittest.TestCase):
         keypoints_0 = torch.tensor([[[-0.8, -0.6], [-0.3, 0.1], [0.2, -0.4], [0.7, 0.5]]], device=torch_device)
         keypoints_1 = torch.tensor([[[-0.7, 0.4], [-0.1, -0.2], [0.4, 0.3], [0.8, -0.5]]], device=torch_device)
         descriptors = torch.arange(2048, dtype=torch.float32, device=torch_device).reshape(1, 2, 4, 256) / 1024
-        mask = torch.ones(1, 4, dtype=torch.bool, device=torch_device)
 
         with torch.no_grad():
-            descriptors_0 = model.input_projection(descriptors[:, 0])
-            descriptors_1 = model.input_projection(descriptors[:, 1])
-            position_embeddings_0 = model.positional_encoder(keypoints_0)
-            position_embeddings_1 = model.positional_encoder(keypoints_1)
-            for layer in model.transformer_layers:
-                descriptors_0, descriptors_1 = layer(
-                    descriptors_0, descriptors_1, position_embeddings_0, position_embeddings_1
-                )
-            scores = model.match_assignment(descriptors_0, descriptors_1, mask, mask)
+            # Use interleaved batch format
+            descriptors_flat = model.input_projection(descriptors.reshape(2, 4, 256))
+            keypoints_flat = torch.cat([keypoints_0, keypoints_1], dim=0)  # (2, 4, 2)
+            position_embeddings = model.positional_encoder(keypoints_flat)
+
+            for layer in model.layers:
+                descriptors_flat, _, _ = layer(descriptors_flat, position_embeddings, attention_mask=None)
+            mask = torch.ones(2, 4, dtype=torch.bool, device=torch_device)
+            scores = model.match_assignment(descriptors_flat, mask)
 
         # Values generated with davnords/LoMa's LoMaB matcher and its official loma_B.pt checkpoint.
         expected_scores = torch.tensor(
