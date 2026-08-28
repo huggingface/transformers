@@ -20,6 +20,7 @@ if is_torch_available():
     from torch import nn
 
 from ..core_model_loading import ConversionOps, _IdentityOp
+from ..distributed.utils import _is_torch_distributed_initialized
 from ..quantizers.quantizers_utils import get_module_from_name, on_device, should_convert_module
 
 
@@ -293,12 +294,12 @@ def _convert_moe_packed_tensors(
         # out-of-bounds `lut` indices (illegal memory access on CUDA, indexing abort on XPU).
         # Aligning the active device with the tensor's device orders it correctly (no-op on CPU).
         with on_device(blk.device):
-            # This vector is only used to index into `lut`, but is hugeee in GPU memory so we delete it immediately
+            # This vector is only used to index into `lut`, but is huge in GPU memory so we delete it immediately
             idx_lo = (blk & 0x0F).to(torch.int)
             sub[:, 0::2] = lut[idx_lo]
             del idx_lo
 
-            # This vector is only used to index into `lut`, but is hugeee in GPU memory so we delete it immediately
+            # This vector is only used to index into `lut`, but is huge in GPU memory so we delete it immediately
             idx_hi = (blk >> 4).to(torch.int)
             sub[:, 1::2] = lut[idx_hi]
             del idx_hi
@@ -323,7 +324,7 @@ def convert_moe_packed_tensors(
     Convert the mxfp4 weights again, dequantizing and makes them compatible with the forward
     pass of GPT_OSS.
     """
-    # Since the intermediate ops requite A LOT of memory, in very constrained device_map="auto" settings
+    # Since the intermediate ops require A LOT of memory, in very constrained device_map="auto" settings
     # it may OOM, hence this wrapper and move back to cpu if needed
     # torch statistics are not accurate enough to estimate if we will have enough memory due to fragmentation and
     # in-place operation on non-contiguous tensors (may sometimes require more temporary copies)
@@ -473,9 +474,7 @@ def routing_torch_dist(
 
 
 def mlp_forward(self, hidden_states):
-    import torch.distributed as dist
-
-    if dist.is_available() and dist.is_initialized() and hasattr(self, "_is_hooked"):
+    if _is_torch_distributed_initialized() and hasattr(self, "_is_hooked"):
         routing = routing_torch_dist
     else:
         routing = triton_kernels_hub.routing.routing

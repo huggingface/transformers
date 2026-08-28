@@ -285,12 +285,11 @@ class DeepseekOcr2ImageProcessor(TorchvisionBackend):
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
-    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None) -> int:
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:
         """
         Returns the number of image patches for a given image size (1 global + local patches).
         """
-        if images_kwargs is None:
-            images_kwargs = {}
+        images_kwargs = images_kwargs or {}
         min_patches = images_kwargs.get("min_patches", self.min_patches)
         max_patches = images_kwargs.get("max_patches", self.max_patches)
         tile_size = images_kwargs.get("tile_size", self.tile_size)

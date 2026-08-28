@@ -283,24 +283,24 @@ class GetCiRecapTest(unittest.TestCase):
 class GithubPaginateTest(unittest.TestCase):
     def test_stops_on_short_page(self):
         page = [{"i": n} for n in range(100)]
-        with patch.object(recap_mod, "request_json", side_effect=[page, [{"i": 100}]]) as mocked:
+        with patch.object(recap_mod, "github_request", side_effect=[page, [{"i": 100}]]) as mocked:
             items = github_paginate("/repos/x/y/pulls", token="t")
         self.assertEqual(len(items), 101)
         self.assertEqual(mocked.call_count, 2)
 
     def test_stops_on_empty_first_page(self):
-        with patch.object(recap_mod, "request_json", return_value=[]) as mocked:
+        with patch.object(recap_mod, "github_request", return_value=[]) as mocked:
             items = github_paginate("/repos/x/y/pulls", token="t")
         self.assertEqual(items, [])
         self.assertEqual(mocked.call_count, 1)
 
     def test_extracts_keyed_payload(self):
-        with patch.object(recap_mod, "request_json", return_value={"jobs": [{"name": "a"}]}):
+        with patch.object(recap_mod, "github_request", return_value={"jobs": [{"name": "a"}]}):
             items = github_paginate("/repos/x/y/actions/runs/1/jobs", token="t", key="jobs")
         self.assertEqual(items, [{"name": "a"}])
 
     def test_builds_query_separator_when_path_has_query(self):
-        with patch.object(recap_mod, "request_json", return_value=[]) as mocked:
+        with patch.object(recap_mod, "github_request", return_value=[]) as mocked:
             github_paginate("/repos/x/y/pulls?state=open", token="t")
         url = mocked.call_args.args[0]
         self.assertIn("?state=open&per_page=100&page=1", url)
@@ -347,7 +347,7 @@ class DeleteOldCommentsTest(unittest.TestCase):
         ]
         with (
             patch.object(recap_mod, "github_paginate", return_value=comments),
-            patch.object(recap_mod, "request_json") as request_mock,
+            patch.object(recap_mod, "github_request") as request_mock,
         ):
             delete_old_dashboard_comments("x/y", "t", 5)
         self.assertEqual(request_mock.call_count, 1)
@@ -365,7 +365,7 @@ class RecreateCiRecapCommentTest(unittest.TestCase):
         recap = f"{RECAP_START}\nnew\n{RECAP_END}"
         with (
             patch.object(recap_mod, "github_paginate", return_value=comments),
-            patch.object(recap_mod, "request_json") as request_mock,
+            patch.object(recap_mod, "github_request") as request_mock,
         ):
             recreate_ci_recap_comment("x/y", "t", 5, recap)
 
@@ -385,7 +385,7 @@ class RecreateCiRecapCommentTest(unittest.TestCase):
         recap = f"{RECAP_START}\nnew\n{RECAP_END}"
         with (
             patch.object(recap_mod, "github_paginate", return_value=comments),
-            patch.object(recap_mod, "request_json") as request_mock,
+            patch.object(recap_mod, "github_request") as request_mock,
         ):
             recreate_ci_recap_comment("x/y", "t", 5, recap)
 
@@ -396,7 +396,7 @@ class RecreateCiRecapCommentTest(unittest.TestCase):
         recap = f"{RECAP_START}\nnew\n{RECAP_END}"
         with (
             patch.object(recap_mod, "github_paginate", return_value=[{"id": 1, "body": "unrelated"}]),
-            patch.object(recap_mod, "request_json") as request_mock,
+            patch.object(recap_mod, "github_request") as request_mock,
         ):
             recreate_ci_recap_comment("x/y", "t", 5, recap)
 

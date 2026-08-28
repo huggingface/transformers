@@ -35,6 +35,7 @@ from .utils import (
     is_torch_tensor,
     is_torchcodec_available,
     is_torchvision_available,
+    is_torchvision_greater_or_equal,
     is_vision_available,
     is_yt_dlp_available,
     logging,
@@ -507,6 +508,26 @@ def read_video_pyav(
     return video, metadata
 
 
+# `torchvision.io.read_video` removed in `torchvision==0.26` (https://github.com/pytorch/vision/releases#release-v0.26.0),
+# which ships with `torch==2.11`. As `transformers` supports `torch>=2.5`, we cannot rely on the pinned version and have to check
+# it at runtime instead. Once the minimum supported `torch` version is bumped to 2.11, the whole `torchvision` video
+# decoding backend can be deleted.
+TORCHVISION_VIDEO_DECODING_REMOVED_VERSION = "0.26.0"
+
+TORCHVISION_VIDEO_DECODING_ERROR = (
+    "Video decoding with `torchvision` is not available: `torchvision.io.read_video` was deprecated in "
+    f"`torchvision==0.22` and removed in `torchvision=={TORCHVISION_VIDEO_DECODING_REMOVED_VERSION}`. "
+    "Please install `torchcodec` (`pip install torchcodec`) and use `backend='torchcodec'` to decode videos."
+)
+
+
+def is_torchvision_video_decoding_available() -> bool:
+    """Whether the installed `torchvision` still exposes the (removed) video decoding API."""
+    return is_torchvision_available() and not is_torchvision_greater_or_equal(
+        TORCHVISION_VIDEO_DECODING_REMOVED_VERSION
+    )
+
+
 def read_video_torchvision(
     video_path: Union["URL", "Path"],
     sample_indices_fn: Callable,
@@ -531,6 +552,9 @@ def read_video_torchvision(
             - Torch tensor of frames in RGB (shape: [num_frames, height, width, 3]).
             - `VideoMetadata` object.
     """
+    if not is_torchvision_video_decoding_available():
+        raise ImportError(TORCHVISION_VIDEO_DECODING_ERROR)
+
     warnings.warn(
         "Using `torchvision` for video decoding is deprecated and will be removed in future versions. "
         "Please use `torchcodec` instead."
@@ -652,7 +676,7 @@ def load_video(
         sample_indices_fn (`Callable`, *optional*):
             A callable function that will return indices at which the video should be sampled. If the video has to be loaded using
             by a different sampling technique than provided by `num_frames` or `fps` arguments, one should provide their own `sample_indices_fn`.
-            If not provided, simple uniformt sampling with fps is performed, otherwise `sample_indices_fn` has priority over other args.
+            If not provided, simple uniform sampling with fps is performed, otherwise `sample_indices_fn` has priority over other args.
             The function expects at input the all args along with all kwargs passed to `load_video` and should output valid
             indices at which the video should be sampled. For example:
 

@@ -143,7 +143,14 @@ class FunAsrNanoAttention(nn.Module):
         query_states = self.q_proj(hidden_states).view(target_shape).transpose(1, 2)
         key_states = self.k_proj(hidden_states).view(target_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(target_shape).transpose(1, 2)
-        attn_output, attn_weights = eager_attention_forward(
+        attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+        if is_flash_attention_requested(self.config) and attention_mask is not None and attention_mask.ndim == 4:
+            # Fun-ASR-Nano is bidirectional, so every query row has the same padding mask. Flash Attention expects
+            # that mask as a 2D binary tensor rather than the additive 4D form used by eager and SDPA.
+            attention_mask = attention_mask[:, 0, 0, :] == 0
+        attn_output, attn_weights = attention_interface(
             self,
             query_states,
             key_states,
@@ -268,7 +275,7 @@ class SinusoidsPositionEmbedding(nn.Module):
         if channels % 2 != 0:
             raise ValueError("SinusoidsPositionEmbedding needs even channels input")
         position_embedding = self.compute_default_singular_positional_embedding()
-        self.register_buffer("positional_embedding", position_embedding, persistent=False)
+        self.positional_embedding = nn.Buffer(position_embedding, persistent=False)
 
     def compute_default_singular_positional_embedding(self):
         log_timescale_increment = np.log(self.max_timescale) / (self.channels // 2 - 1)
@@ -732,7 +739,7 @@ class FunAsrNanoModel(FunAsrNanoPreTrainedModel):
         """
         if input_ids is None:
             special_audio_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.audio_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.audio_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_audio_mask = special_audio_mask.all(-1)
         else:
@@ -776,7 +783,9 @@ class FunAsrNanoModel(FunAsrNanoPreTrainedModel):
             special_audio_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, audio_features=audio_embeds
             )
-            inputs_embeds = inputs_embeds.masked_scatter(special_audio_mask, audio_embeds.to(inputs_embeds.device))
+            inputs_embeds = inputs_embeds.masked_scatter(
+                special_audio_mask, audio_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            )
 
         outputs = self.language_model(
             inputs_embeds=inputs_embeds,
@@ -901,20 +910,6 @@ class FunAsrNanoForConditionalGeneration(FunAsrNanoPreTrainedModel, GenerationMi
             attentions=outputs.attentions,
             audio_hidden_states=outputs.audio_hidden_states,
         )
-
-    def prepare_inputs_for_generation(self, *args, is_first_iteration: bool = False, **kwargs):
-        input_features = kwargs.pop("input_features", None)
-        input_features_mask = kwargs.pop("input_features_mask", None)
-
-        model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
-
-        if is_first_iteration or not model_inputs.get("use_cache", False):
-            if input_features is not None:
-                model_inputs["input_features"] = input_features
-            if input_features_mask is not None:
-                model_inputs["input_features_mask"] = input_features_mask
-
-        return model_inputs
 
 
 __all__ = ["FunAsrNanoPreTrainedModel", "FunAsrNanoEncoder", "FunAsrNanoModel", "FunAsrNanoForConditionalGeneration"]

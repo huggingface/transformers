@@ -18,12 +18,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
-import numpy as np
+import re
 
 from ...image_processing_utils import BatchFeature
-from ...image_utils import ImageInput, concatenate_list, make_flat_list_of_images
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
+from ...image_utils import ImageInput
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring
 
@@ -45,6 +44,8 @@ class QianfanOCRProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class QianfanOCRProcessor(ProcessorMixin):
+    valid_processor_kwargs = QianfanOCRProcessorKwargs
+
     def __init__(
         self,
         image_processor=None,
@@ -77,48 +78,12 @@ class QianfanOCRProcessor(ProcessorMixin):
     def image_token_ids(self) -> list[int]:
         return [self.image_token_id, self.start_image_token_id, self.end_image_token_id]
 
-    def _insert_media_placeholders(
-        self,
-        text: list[str],
-        image_pixel_values,
-        video_pixel_values,
-        image_num_patches: list[int],
-        video_num_patches: list[int],
-        image_num_patches_indices: np.ndarray,
-        video_num_patches_indices: np.ndarray,
-        video_patch_indices: np.ndarray,
-    ):
-        """
-        Processes interleaved text with <image> placeholders, replacing them with appropriate image tokens.
-        """
-        image_index = 0
-        processed_text = []
-        image_patches = []
-        replace_strings = []
-        for prompt in text:
-            new_prompt = prompt
-            while self.image_placeholder_token in new_prompt:
-                start_index = image_num_patches_indices[image_index - 1] if image_index > 0 else 0
-                end_index = image_num_patches_indices[image_index]
-                image_patches.append(image_pixel_values[start_index:end_index])
-                new_prompt = new_prompt.replace(self.image_placeholder_token, "<placeholder>", 1)
-                replace_strings.append(
-                    f"{self.start_image_token}{self.image_token * self.image_seq_length * image_num_patches[image_index]}{self.end_image_token}"
-                )
-                image_index += 1
-            while "<placeholder>" in new_prompt:
-                replace_str = replace_strings.pop(0)
-                new_prompt = new_prompt.replace("<placeholder>", replace_str, 1)
-            processed_text.append(new_prompt)
-        return processed_text, image_patches, image_index, 0
-
     @auto_docstring
     def __call__(
         self,
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
-        videos=None,
-        **kwargs,
+        **kwargs: Unpack[QianfanOCRProcessorKwargs],
     ) -> BatchFeature:
         r"""
         Returns:
@@ -130,81 +95,27 @@ class QianfanOCRProcessor(ProcessorMixin):
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
-        if videos is not None:
-            raise ValueError("QianfanOCR does not support video input.")
+        # remove video from signature as well because the modality isn't supported
+        # some tests pass all modalities from signature, and stumble upon `ValueError`
+        return super().__call__(images=images, text=text, **kwargs)
+
+    def validate_inputs(
+        self,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        videos=None,
+        **kwargs: Unpack[QianfanOCRProcessorKwargs],
+    ):
+        super().validate_inputs(images=images, text=text, videos=videos, **kwargs)
         if text is None:
             raise ValueError("You have to specify text.")
 
-        output_kwargs = self._merge_kwargs(
-            QianfanOCRProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
-
-        if not isinstance(text, (list, tuple)):
-            text = [text]
-
-        # Process images and videos separately, as videos don't support crop_to_patches
-        image_num_patches = []
-        image_pixel_values = None
-        image_num_patches_indices = np.array([0])
-        if images is not None:
-            images = self.image_processor.fetch_images(images)
-            images = make_flat_list_of_images(images)
-            image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
-            image_num_patches = image_inputs.pop("num_patches")
-            image_pixel_values = image_inputs.pop("pixel_values")
-            image_num_patches_indices = np.cumsum(image_num_patches)
-
-        video_num_patches = []  # per frame
-        video_pixel_values = None
-        video_patch_indices = np.array([0])
-        video_num_patches_indices = np.array([0])
         if videos is not None:
-            video_kwargs = output_kwargs["videos_kwargs"]
-            video_inputs = self.video_processor(videos=videos, **video_kwargs)
-            video_pixel_values = video_inputs.pop("pixel_values_videos")
+            raise ValueError("QianfanOCR does not support video input.")
 
-            batch_size, num_frames, *_ = video_pixel_values.shape
-            num_frames_per_video = np.full(batch_size, num_frames)
-            num_frames = sum(num_frames_per_video)  # total
-            video_patch_indices = np.empty(batch_size + 1, int)
-            video_patch_indices[0] = 0
-            video_patch_indices[1:] = np.cumsum(num_frames_per_video)
-            video_num_patches = [1] * num_frames
-            video_num_patches_indices = np.empty(num_frames + 1, int)
-            video_num_patches_indices[0] = 0
-            video_num_patches_indices[1:] = np.cumsum(video_num_patches)
-            video_pixel_values = video_pixel_values.flatten(0, 1)
-
-        image_videos_inputs = {}
-        if images is not None or videos is not None:
-            text, image_video_patches, image_index, video_index = self._insert_media_placeholders(
-                text,
-                image_pixel_values,
-                video_pixel_values,
-                image_num_patches,
-                video_num_patches,
-                image_num_patches_indices,
-                video_num_patches_indices,
-                video_patch_indices,
-            )
-            if images is not None and image_index != len(images):
-                raise ValueError("Number of image placeholders in the prompt does not match the number of images.")
-            if videos is not None and video_index != len(num_frames_per_video):
-                raise ValueError("Number of video placeholders in the prompt does not match the number of videos.")
-
-            # Concatenate the interleaved image and video patches (function agnostic to the patches type (list, numpy array, torch tensor))
-            image_videos_inputs = {"pixel_values": concatenate_list(image_video_patches)}
-
-        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", None)
-        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
-        self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
-
-        if return_mm_token_type_ids:
-            text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
-        return BatchFeature(data={**text_inputs, **image_videos_inputs}, tensor_type=return_tensors)
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
+        image_num_patches = image_inputs["num_patches"]
+        return f"{self.start_image_token}{self.image_token * self.image_seq_length * image_num_patches[image_idx]}{self.end_image_token}"
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """
@@ -240,6 +151,102 @@ class QianfanOCRProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return tokenizer_input_names + image_processor_input_names
+
+    def get_text_with_replacements(
+        self,
+        text: list[str],
+        images_replacements: list[str] = [],
+        videos_replacements: list[str] = [],
+        audio_replacements: list[str] = [],
+    ):
+        """
+        Replace multimodal placeholder tokens in a batch of text strings with their
+        expanded representations, and return the modified texts alongside offset metadata.
+
+        This method is the core text-side preprocessing step for multimodal inputs. It
+        scans each text in the batch for special tokens (image, video, audio) and replaces
+        them in-order with the pre-computed replacement strings produced by
+        `self.replace_image_token` / `self.replace_video_token` / `self.replace_audio_token`.
+        Replacements are consumed from each modality's list sequentially, so the i-th
+        occurrence of e.g. ``self.image_token`` is replaced by ``images_replacements[i]``.
+
+        To add a new multimodal processor with placeholder tokens, you need to define a correct
+        `self.image_token` which is the same token that is embedded in input text and also used as
+        placeholder and repeated many times. Then you need to override `self.replace_image_token`
+        to return the correct replacement string for a given image at index `i`. Same goes for all
+        other supported modalities.
+
+        Args:
+            text (`list[str]`):
+                Batch of raw text strings, each potentially containing multimodal
+                placeholder tokens. Note that it will be modified in-place and returned.
+            images_replacements (`list[str]`, *optional*, defaults to `[]`):
+                Expanded replacement strings for each image, in the order they appear
+                across the batch. Produced by `self._process_images`.
+            videos_replacements (`list[str]`, *optional*, defaults to `[]`):
+                Expanded replacement strings for each video. Produced by
+                `self._process_videos`.
+            audio_replacements (`list[str]`, *optional*, defaults to `[]`):
+                Expanded replacement strings for each audio input. Produced by
+                `self._process_audio`.
+
+        Returns:
+            `tuple[list[str], list[dict[str, Any]]]`: A tuple of:
+                - The modified `text` batch with all placeholder tokens expanded.
+                - `batch_replacement_offsets`: one entry per batch item, each being a
+                list of dicts with keys:
+                    - `"type"` (`str`): modality name — `"image"`, `"video"`, or `"audio"`
+                    - `"span"` (`tuple[int, int]`): original `(start, end)` char offsets of the placeholder token
+                    - `"new_span"` (`tuple[int, int]`): `(start, end)` offsets of placeholder in the expanded string
+                    - `"text"` (`str`): the original placeholder token string that was matched
+                    - `"replacement"` (`str`): the string it was replaced with
+        """
+        # Override: model uses `image_placeholder_token` and `image_token` instead of a single token for both purposes
+        token_groups = []
+        if len(images_replacements) > 0:
+            token_groups.append(f"(?P<image>{re.escape(self.image_placeholder_token)})")
+
+        regex_special_mm_tokens = "|".join(token_groups) or r"(?!)"
+        replacements_iters = {
+            "image": iter(images_replacements),
+        }
+        batch_replacement_offsets = []
+        for batch_idx in range(len(text)):
+            last = 0
+            offset = 0
+            replacement_offsets = []
+            expanded_sample = []
+            for m in re.finditer(regex_special_mm_tokens, text[batch_idx]):
+                start, end = m.span()
+                expanded_sample.append(text[batch_idx][last:start])
+
+                # adjust spans using running offset if one sample has several MM data associated
+                start_with_offset = start + offset
+
+                mm_type = m.lastgroup
+                replacement_text = next(replacements_iters[mm_type])
+                replacement_offsets.append(
+                    {
+                        "type": mm_type,
+                        "span": (start, end),
+                        "new_span": (start_with_offset, start_with_offset + len(replacement_text)),
+                        "text": m.group(),
+                        "replacement": replacement_text,
+                    }
+                )
+                expanded_sample.append(replacement_text)
+                # update the offsets and the last position
+                offset += len(replacement_text) - (end - start)
+                last = end
+
+            expanded_sample.append(text[batch_idx][last:])
+            text[batch_idx] = "".join(expanded_sample)
+            batch_replacement_offsets.append(replacement_offsets)
+        return text, batch_replacement_offsets
+
+    @property
+    def unused_input_names(self) -> list[str]:
+        return ["num_patches"]
 
 
 __all__ = ["QianfanOCRProcessor"]

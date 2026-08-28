@@ -251,7 +251,7 @@ class BayesianDetectorConfig(PreTrainedConfig):
     Args:
         watermarking_depth (`int`, *optional*):
             The number of tournament layers.
-        base_rate (`float1`, *optional*, defaults to 0.5):
+        base_rate (`float`, *optional*, defaults to 0.5):
             Prior probability P(w) that a text is watermarked.
     """
 

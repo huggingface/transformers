@@ -70,7 +70,7 @@ class Qwen2AudioProcessor(ProcessorMixin):
             raise ValueError("You need to specify `text` input to process.")
         elif isinstance(text, str):
             text = [text]
-        elif not isinstance(text, list) and not isinstance(text[0], str):
+        elif not isinstance(text, list) or not isinstance(text[0], str):
             raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
         output_kwargs = self._merge_kwargs(

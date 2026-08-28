@@ -140,7 +140,7 @@ class Ernie4_5_VLMoeProcessor(ProcessorMixin):
         if not isinstance(text, list):
             text = [text]
 
-        text = text.copy()  # below lines change text in-place
+        text = list(text).copy()  # below lines change text in-place
 
         if images is not None:
             merge_length = self.image_processor.merge_size**2

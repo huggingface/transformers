@@ -227,13 +227,21 @@ class _PerLayerConfigView(Sequence["PreTrainedConfig"]):
                     f"Available layer types: {set(layer_types)}"
                 )
 
-            configs = [self[i] for i, layer_type in enumerate(layer_types) if layer_type == layer_idx]
-            if any(config != configs[0] for config in configs):
-                raise ValueError(
-                    f"Layer type '{layer_idx}' is not homogeneous across layers. "
-                    f"Use an integer index to access a specific layer's config."
-                )
-            return configs[0]
+            # Config is actually homogeneous so just return the global config
+            if not self._config.is_heterogeneous:
+                return self._config
+
+            # Ensure that all layers of the requested type have the same overrides
+            layer_overrides = self._config._heterogeneity_spec.per_layer_overrides
+            reference_overrides = layer_overrides.get(layer_types.index(layer_idx), {})
+            for idx, layer_type in enumerate(layer_types):
+                if layer_type == layer_idx and layer_overrides.get(idx, {}) != reference_overrides:
+                    raise ValueError(
+                        f"Layer type '{layer_idx}' is not homogeneous across layers (layer {idx} differs). "
+                        f"Use an integer index to access a specific layer's config."
+                    )
+
+            return _get_layer_config(self._config, reference_overrides)
 
         # Return a list of configs for a slice of layers
         if isinstance(layer_idx, slice):

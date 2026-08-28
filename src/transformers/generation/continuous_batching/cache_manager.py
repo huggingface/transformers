@@ -69,7 +69,7 @@ class BlockManager:
         Still, the block can be freed if no un-initialized blocks are left. In that case, we remove its hash from the
         hash table.
     If the block is not shareable, we just use the block manager as a FIFO structure where blocks are either free or in
-    use. Sharability is determined by the type of cache allocator: blocks created for full attention layers are
+    use. Shareability is determined by the type of cache allocator: blocks created for full attention layers are
     shareable, while blocks created for sliding window attention layers are not.
     There is no structure to keep track of the blocks in use: if a block is neither un-initialized nor initialized,
     it is in use.

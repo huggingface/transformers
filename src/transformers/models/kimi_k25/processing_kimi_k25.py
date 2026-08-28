@@ -66,12 +66,12 @@ class Kimi_K25Processor(ProcessorMixin):
             else tokenizer.convert_tokens_to_ids(self.video_token)
         )
 
-    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         merge_length = self.image_processor.merge_size**2
         num_image_tokens = image_inputs["image_grid_thw"][image_idx].prod() // merge_length
         return self.image_token * num_image_tokens
 
-    def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
+    def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
         merge_length = self.video_processor.merge_size**2
         temporal_patch_size = self.video_processor.temporal_patch_size
 

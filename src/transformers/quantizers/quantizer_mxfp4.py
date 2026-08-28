@@ -27,6 +27,7 @@ from ..utils import (
     is_triton_available,
     logging,
 )
+from ..utils.import_utils import KERNELS_MAX_VERSION, KERNELS_MIN_VERSION
 from .quantizers_utils import get_module_from_name
 
 
@@ -128,7 +129,8 @@ class Mxfp4HfQuantizer(HfQuantizer):
             if not kernels_installed:
                 logger.warning_once(
                     "MXFP4 quantization requires the `kernels` package: "
-                    "`pip install kernels>=0.12.0`. "
+                    f"Please install a compatible version ({KERNELS_MIN_VERSION} <= version < {KERNELS_MAX_VERSION}), "
+                    f"e.g. `pip install kernels=={KERNELS_MIN_VERSION}`"
                     "We will default to dequantizing the model to bf16."
                 )
                 self.quantization_config.dequantize = True

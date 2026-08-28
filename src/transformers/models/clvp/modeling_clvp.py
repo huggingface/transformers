@@ -249,7 +249,7 @@ class ClvpRotaryPositionalEmbedding(nn.Module):
         dim = max(config.projection_dim // (config.num_attention_heads * 2), 32)
         inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2, dtype=torch.int64).float() / dim))
 
-        self.register_buffer("inv_freq", inv_freq)
+        self.inv_freq = nn.Buffer(inv_freq)
         self.cached_sequence_length = None
         self.cached_rotary_positional_embedding = None
 
@@ -292,7 +292,7 @@ class ClvpSelfAttention(nn.Module):
             max_positions = config.max_position_embeddings
             bias = torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool))
             bias = bias.view(1, 1, max_positions, max_positions)
-            self.register_buffer("bias", bias, persistent=False)
+            self.bias = nn.Buffer(bias, persistent=False)
 
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.use_attention_bias)
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.use_attention_bias)

@@ -634,7 +634,7 @@ class PagedAttentionMemoryHandler:
         return peaks
 
     def get_available_memory(self) -> int:
-        """Calculate available GPU memory for cache allocation in bytes, accouting for the maximum memory percent limit
+        """Calculate available GPU memory for cache allocation in bytes, accounting for the maximum memory percent limit
         fixed by the continuous batching config."""
         _, total, reserved, allocated = get_device_and_memory_breakdown()
         available_memory = total - max(allocated, reserved)
@@ -680,7 +680,7 @@ class PagedAttentionMemoryHandler:
     ) -> tuple[int, int]:
         """Returns max_batch_tokens and num_blocks so that their memory footprint is within the available memory for all
         activation peaks. If neither value is given, a value must be provided for cache_fill_per_batch: this means we
-        solve for both varibles by saying each batch fill a certain percentage of the cache (eg, if cache_fill_per_batch
+        solve for both variables by saying each batch fill a certain percentage of the cache (eg, if cache_fill_per_batch
         is 0.01, each batch will fill 1% of the cache)."""
         solutions = []
 

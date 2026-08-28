@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch Gemma4 model."""
 
+import tempfile
 import unittest
 from contextlib import contextmanager
 
@@ -111,14 +112,15 @@ class Gemma4TextModelTest(CausalLMModelTest, unittest.TestCase):
     def test_num_layers_is_small(self):
         pass
 
-    @unittest.skip("Gemma4 uses different rope per layer type, which is not compatible with this test")
-    def test_model_rope_scaling_frequencies(self):
-        pass
+    def test_bidirectional_sliding_window_survives_save_and_reload(self):
+        config = Gemma4TextConfig(sliding_window=512, use_bidirectional_attention="all")
+        self.assertEqual(config.sliding_window, 257)
 
-    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
-    @unittest.skip("Gemma4 uses different rope per layer type, which is not compatible with this test")
-    def test_model_rope_scaling_from_config(self):
-        pass
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            config.save_pretrained(tmpdirname)
+            reloaded = Gemma4TextConfig.from_pretrained(tmpdirname)
+
+        self.assertEqual(reloaded.sliding_window, config.sliding_window)
 
     @unittest.skip(
         "Gemma4 cannot use random inputs_embeds, as it needs to reverse them when input_ids is not provided"
@@ -821,7 +823,7 @@ class Gemma4IntegrationTest(unittest.TestCase):
         EXPECTED_TEXTS = Expectations(
             {
                 ("cuda", 8): ['This image shows a **brown and white cow** standing on a **sandy beach** with the **ocean and a blue sky** in the background'],
-                ("xpu", 3): ['This image shows a **brown and white cow** standing on a **sandy beach** with the **ocean and a blue sky** in the background'],
+                ("xpu", 5): ['This image shows a **brown and white cow** standing on a **sandy beach** with the **ocean** in the background under a **clear'],
             }
         )  # fmt: skip
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
@@ -873,8 +875,8 @@ class Gemma4IntegrationTest(unittest.TestCase):
                     "This image shows a **brown and white cow** standing on a **sandy beach** with the **ocean and a blue sky** in the background",
                     "No, these images are **not identical**.\n\nHere's a breakdown of the differences:\n\n1.  **Image 1 (Cow on",
                 ],
-                ("xpu", 3): [
-                    "This image shows a **brown and white cow** standing on a **sandy beach** with the **ocean and a blue sky** in the background",
+                ("xpu", 5): [
+                    "This image shows a **brown and white cow** standing on a **sandy beach** with the **ocean** in the background under a **clear",
                     "No, these images are **not identical**.\n\nHere's a breakdown of the differences:\n\n1.  **Image 1 (Cow on",
                 ],
             }
@@ -913,7 +915,7 @@ class Gemma4IntegrationTest(unittest.TestCase):
             {
                 ("cuda", 8): ['Based on the image, here is a description of what I see:\n\n**Foreground & Street Scene:**\n* **Traffic Sign:** The most prominent'],
                 ("cuda", (9, 0)): ['Based on the image, here is a description of what I see:\n\n**Foreground & Street Scene:**\n* **Roadway:** There is an'],
-                ("xpu", 3): ['Based on the image, here is a description of what I see:\n\n**Foreground & Street Scene:**\n* **Roadway:** There is an'],
+                ("xpu", 5): ['Based on the image, here is a description of what I see:\n\n**Foreground & Street Scene:**\n* **Roadway:** There is an'],
             }
         )  # fmt: skip
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
@@ -969,7 +971,7 @@ class Gemma4IntegrationTest(unittest.TestCase):
                 ("cuda", (8, 0)): ['## The Algorithmic Mind\n\nA whisper starts, a seed unseen,\nOf data vast, a vibrant sheen.\nA sea of numbers,'],
                 ("cuda", (8, 6)): ['## The Algorithmic Bloom\n\nFrom silent data, a whisper starts to rise,\nA sea of numbers beneath intelligent skies.\nNo flesh and'],
                 ("cuda", (9, 0)): ['## The Algorithmic Mind\n\nA whisper starts, a seed unseen,\nOf data vast, a vibrant sheen.\nA sea of numbers,'],
-                ("xpu", 3): ['## The Algorithmic Mind\n\nA whisper starts in silicon deep,\nWhere data streams in endless sweep.\nNo flesh and blood, no beating'],
+                ("xpu", 5): ['## The Algorithmic Mind\n\nA whisper starts, a seed unseen,\nOf data vast, a vibrant sheen.\nA sea of numbers,'],
             }
         )  # fmt: skip
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
@@ -1000,7 +1002,6 @@ class Gemma4IntegrationTest(unittest.TestCase):
 
     # Note: we do not test FA2 as the head dim is 512 on some layers, which is not compatible with the kernels
     @parameterized.expand([("sdpa",), ("eager",)])
-    @require_deterministic_for_xpu
     def test_generation_beyond_sliding_window(self, attn_implementation: str):
         """Test that we can correctly generate beyond the sliding window. Outputs for every attention functions
         should be coherent and identical.
@@ -1040,7 +1041,7 @@ class Gemma4IntegrationTest(unittest.TestCase):
                     "That sounds lovely! It seems like you're really enjoying the place you'",
                     "Here are a few ways you could use or expand upon that list, depending on",
                 ],
-                ("xpu", 3): [
+                ("xpu", 5): [
                     "That sounds lovely! It seems like you're really enjoying the place you'",
                     "Here are a few ways you could use or expand upon that list, depending on",
                 ],

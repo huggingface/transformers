@@ -18,8 +18,9 @@ The main use case is a GitHub Actions workflow file calling this script to get t
 to split the list of jobs to run into multiple slices each containing a smaller number of jobs. This way, we can bypass
 the maximum of 256 jobs in a matrix.
 
-See the `setup` and `run_models_gpu` jobs defined in the workflow file `.github/workflows/self-scheduled.yml` for more
-details.
+See the `setup` and `run_models_gpu` jobs defined in the reusable workflow file
+`.github/workflows/daily-ci_reusable.yml` in the `huggingface/transformers-ci` repository (called from
+`.github/workflows/self-scheduled-caller.yml` here) for more details.
 
 Usage:
 

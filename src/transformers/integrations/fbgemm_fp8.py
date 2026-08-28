@@ -109,7 +109,7 @@ class FbgemmFp8Linear(torch.nn.Linear):
 
         self.weight = torch.nn.Parameter(torch.zeros((out_features, in_features), dtype=dtype))
         self.weight_scale = torch.nn.Parameter(torch.zeros((out_features, 1), dtype=torch.float32))
-        self.register_buffer("input_scale_ub", torch.zeros([1], dtype=torch.float), persistent=False)
+        self.input_scale_ub = nn.Buffer(torch.zeros([1], dtype=torch.float), persistent=False)
 
         if bias:
             self.bias = torch.nn.Parameter(torch.zeros((self.out_features), dtype=torch.float32))
@@ -170,7 +170,7 @@ class FbgemmFp8Llama4TextExperts(nn.Module):
             torch.zeros((self.num_experts, self.hidden_size, 1), dtype=torch.float32)
         )
         # Register input scale upper bound
-        self.register_buffer("input_scale_ub", torch.zeros([1], dtype=torch.float), persistent=False)
+        self.input_scale_ub = nn.Buffer(torch.zeros([1], dtype=torch.float), persistent=False)
 
     def forward(self, hidden_states):
         """
@@ -280,7 +280,7 @@ def replace_with_fbgemm_fp8_linear(
             Names of the modules to not convert. In practice we keep the `lm_head` in full precision for numerical stability reasons.
         quantization_config (`FbgemmFp8Config`):
             The quantization config object that contains the quantization parameters.
-        pre_quantized (`book`, defaults to `False`):
+        pre_quantized (`bool`, defaults to `False`):
             Whether the model is pre-quantized or not
     """
     global quantize_fp8_per_row

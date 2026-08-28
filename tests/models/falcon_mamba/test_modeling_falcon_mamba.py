@@ -210,7 +210,11 @@ class FalconMambaModelTester:
         self, config, input_ids, *args, gradient_checkpointing=False
     ):
         model = FalconMambaModel(config)
-        model.to(torch_device)
+
+        # force torch path in any case
+        model.to("cpu")
+        input_ids = input_ids.to("cpu")
+
         if gradient_checkpointing:
             model.gradient_checkpointing_enable()
 
@@ -220,7 +224,7 @@ class FalconMambaModelTester:
 
         # use cache
         token_emb = model.embeddings(input_ids)
-        outputs = model.layers[0].mixer.slow_forward(token_emb, cache)
+        outputs = model.layers[0].mixer(token_emb, cache)
 
         loss = torch.log1p(torch.abs(outputs.sum()))
         self.parent.assertEqual(loss.shape, ())
@@ -510,7 +514,11 @@ class FalconMambaIntegrationTests(unittest.TestCase):
                     "Hello my name is Younes and today I will be talking about the importance of the internet in our lives.\nThe internet is a global",
                 ],
                 ("cuda", (8, 6)): [
-                    "Hello today I will be talking about the “Theory of Relativity” by Albert Einstein.\nThe",
+                    "Hello today I am going to talk about the “Theory of Relativity” by Albert Einstein.\n",
+                    "Hello my name is Younes and today I will be talking about the importance of the internet in our lives.\nThe internet is a global",
+                ],
+                ("cuda", 9): [
+                    "Hello today I am going to talk about the “Theory of Relativity” by Albert Einstein.\n",
                     "Hello my name is Younes and today I will be talking about the importance of the internet in our lives.\nThe internet is a global",
                 ],
             }
@@ -543,7 +551,11 @@ class FalconMambaIntegrationTests(unittest.TestCase):
                     ' I will be talking about the importance of the internet in our lives.\nThe internet is a global'
                 ],
                 ("cuda", (8, 6)): [
-                    ' I will be talking about the “Theory of Relativity” by Albert Einstein.\nThe',
+                    ' I am going to talk about the “Theory of Relativity” by Albert Einstein.\n',
+                    ' I will be talking about the importance of the internet in our lives.\nThe internet is a global'
+                ],
+                ("cuda", 9): [
+                    ' I am going to talk about the “Theory of Relativity” by Albert Einstein.\n',
                     ' I will be talking about the importance of the internet in our lives.\nThe internet is a global'
                 ]
             }

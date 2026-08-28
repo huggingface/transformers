@@ -384,7 +384,7 @@ class Tipsv2DptFeaturesToDepth(nn.Module):
         self.max_depth = config.max_depth
         self.activation = nn.ReLU()
         bin_centers = torch.linspace(config.min_depth, config.max_depth, config.num_depth_bins)
-        self.register_buffer("bin_centers", bin_centers, persistent=False)
+        self.bin_centers = nn.Buffer(bin_centers, persistent=False)
 
     def forward(self, depth_logits: torch.Tensor) -> torch.Tensor:
         probs = self.activation(depth_logits) + self.min_depth

@@ -75,7 +75,29 @@ def get_module_source_from_name(module_name: str) -> str:
     return get_module_source_and_tree_from_name(module_name)[0]
 
 
+# Some exceptions to never replace, usually some package names that may contain model names (they may be used outside
+# `from xxx import y`)
+NAMES_TO_NEVER_REPLACE = (
+    "mamba_ssm",
+    "mamba-ssm",
+    "use_mambapy",
+    "mamba_inner_fn",
+    "mamba_selective_state_update",
+    "mamba_selective_scan",
+    "is_mambapy_available",
+    "mamba2_split_conv1d_scan_combined",
+    "mamba2_selective_state_update",
+    "mamba2_chunk_scan",
+)
+
+
 def preserve_case_replace(text, patterns: dict, default_name: str):
+    if text in NAMES_TO_NEVER_REPLACE:
+        return text
+    # For strings, node.value is the actual string INCLUDING enclosing quote characters
+    if text.strip('"') in NAMES_TO_NEVER_REPLACE:
+        return text
+
     # Create a regex pattern to match all variations
     regex_pattern = "|".join(re.escape(key) for key in patterns)
     compiled_regex = re.compile(f"(?<![a-z0-9])({regex_pattern})(.|$)", re.IGNORECASE | re.DOTALL)
@@ -636,7 +658,7 @@ class ModuleMapper(CSTVisitor, ABC):
                 self.imports.append(node)
 
     def leave_SimpleStatementLine(self, node):
-        # No need to check for the parent here -> everytime we exit one, it should be None anyway independently of where the
+        # No need to check for the parent here -> every time we exit one, it should be None anyway independently of where the
         # SimpleStatement is located
         self.current_assignment = None
 

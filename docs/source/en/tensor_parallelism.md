@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Tensor parallelism
+# Tensor parallelism for training
 
 Tensor parallelism (TP) splits weight matrices column-wise or row-wise across GPUs. Each GPU holds a shard, computes a partial result, and synchronizes with an all-reduce to produce the full output.
 

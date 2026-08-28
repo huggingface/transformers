@@ -334,7 +334,7 @@ class Gemma4UnifiedProcessorKwargs(Gemma4ProcessorKwargs):
 
 
 class Gemma4UnifiedProcessor(Gemma4Processor):
-    def replace_audio_token(self, audio_inputs: dict, audio_idx: int) -> str:
+    def replace_audio_token(self, audio_inputs: dict, audio_idx: int, **kwargs) -> str:
         """Replace the audio placeholder with the correct number of audio tokens.
 
         Unlike standard Gemma4 which has a conformer audio encoder with two stride-2
@@ -583,7 +583,7 @@ class Gemma4UnifiedTextDecoderLayer(Gemma2DecoderLayer):
         self.layer_idx = layer_idx
         self.self_attn = Gemma4UnifiedTextAttention(config=config, layer_idx=layer_idx)
         self.mlp = Gemma4UnifiedTextMLP(config, layer_idx)
-        self.register_buffer("layer_scalar", torch.ones(1))
+        self.layer_scalar = nn.Buffer(torch.ones(1))
 
     def forward(
         self,
@@ -944,13 +944,14 @@ class Gemma4UnifiedModel(Gemma4Model):
         # Strip padding patches before scattering into text sequence.
         # Padding patches have position_ids == -1 on both axes.
         # We only scatter non-padding patches into the placeholder token positions.
-        padding_mask = (image_position_ids == -1).all(dim=-1).to(vision_outputs.device)  # (batch, num_patches)
+        non_pad_mask = (image_position_ids != -1).all(dim=-1).to(vision_outputs.device)  # (batch, num_patches)
 
         # Flatten valid patches: keep only non-padding patches across the batch
-        vision_outputs = vision_outputs[~padding_mask]  # (total_valid_patches, text_hidden_size)
+        vision_outputs = vision_outputs[non_pad_mask]  # (total_valid_patches, text_hidden_size)
 
+        split_sizes = non_pad_mask.sum(dim=-1).tolist()
         return Gemma4UnifiedVisionModelOutput(
-            pooler_output=vision_outputs,
+            pooler_output=torch.split(vision_outputs, split_sizes),
         )
 
     @can_return_tuple
@@ -965,12 +966,18 @@ class Gemma4UnifiedModel(Gemma4Model):
         video_position_ids (`torch.LongTensor` of shape `(num_videos, num_frames, max_patches, 2)`, *optional*):
             2D patch position coordinates from the video processor, with `(-1, -1)` indicating padding.
         """
-        # Flatten video frames: (num_videos, num_frames, ...) → (num_videos*num_frames, ...)
-        pixel_values_videos = pixel_values_videos.flatten(0, 1)
-        video_position_ids = video_position_ids.flatten(0, 1)
+        vision_outputs = self.embed_vision(pixel_values_videos.flatten(0, 1), video_position_ids.flatten(0, 1))
 
-        # Use the same unified pipeline as images
-        return self.get_image_features(pixel_values_videos, video_position_ids, **kwargs)
+        # Strip padding patches before scattering into text sequence.
+        non_pad_mask = (video_position_ids != -1).all(dim=-1).to(vision_outputs.device)
+
+        # Flatten valid patches: keep only non-padding patches across all frames
+        vision_outputs = vision_outputs[non_pad_mask.flatten(0, 1)]  # (total_valid_patches, text_hidden_size)
+
+        split_sizes = non_pad_mask.sum(dim=(-2, -1)).tolist()
+        return Gemma4UnifiedVisionModelOutput(
+            pooler_output=torch.split(vision_outputs, split_sizes),
+        )
 
     @can_return_tuple
     @auto_docstring(
@@ -1020,7 +1027,7 @@ class Gemma4UnifiedModel(Gemma4Model):
         **kwargs: Unpack[TransformersKwargs],
     ) -> Gemma4UnifiedModelOutputWithPast:
         r"""
-        input_features_mask (`torch.FloatTensor]` of shape `(num_images, seq_length)`):
+        input_features_mask (`torch.FloatTensor` of shape `(num_images, seq_length)`):
             The attention mask for the input audio.
         image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
             2D patch position coordinates from the image processor, with `(-1, -1)` indicating padding.
@@ -1045,7 +1052,7 @@ class Gemma4UnifiedModel(Gemma4Model):
         # Merge text and images
         if pixel_values is not None:
             image_features = self.get_image_features(pixel_values, image_position_ids, return_dict=True).pooler_output
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
 
             # Confirm the number of soft tokens from the vision tower matches the number of slots in the embeddings.
             n_image_tokens = image_mask.sum()
@@ -1062,7 +1069,7 @@ class Gemma4UnifiedModel(Gemma4Model):
             video_features = self.get_video_features(
                 pixel_values_videos, video_position_ids, return_dict=True
             ).pooler_output
-            video_features = video_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            video_features = torch.cat(video_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
 
             # Confirm the number of soft tokens from the vision tower matches the number of slots in the embeddings.
             n_video_tokens = video_mask.sum()
@@ -1167,7 +1174,7 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4ForConditionalGeneration):
         **kwargs: Unpack[TransformersKwargs],
     ) -> Gemma4UnifiedCausalLMOutputWithPast:
         r"""
-        input_features_mask (`torch.FloatTensor]` of shape `(num_images, seq_length)`):
+        input_features_mask (`torch.FloatTensor` of shape `(num_images, seq_length)`):
             The attention mask for the input audio.
         image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
             2D patch position coordinates from the image processor, with `(-1, -1)` indicating padding.
@@ -1225,45 +1232,11 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4ForConditionalGeneration):
     def set_per_layer_input_embeddings(self, value):
         raise AttributeError("PLE is not used")
 
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        inputs_embeds=None,
-        position_ids=None,
-        pixel_values=None,
-        pixel_values_videos=None,
-        input_features=None,
-        attention_mask=None,
-        input_features_mask=None,
-        token_type_ids=None,
-        use_cache=True,
-        logits_to_keep=None,
-        labels=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        # Overwritten -- custom `position_ids` and `pixel_values` handling
+    def prepare_inputs_for_generation(self, input_ids, use_cache=True, is_first_iteration=False, **kwargs):
         model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            use_cache=use_cache,
-            logits_to_keep=logits_to_keep,
-            token_type_ids=token_type_ids,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
+            input_ids, use_cache=use_cache, is_first_iteration=is_first_iteration, **kwargs
         )
-
-        # If we're in cached decoding stage, multimodal inputs are already cached and can be dropped
-        if is_first_iteration or not use_cache:
-            model_inputs["pixel_values"] = pixel_values
-            model_inputs["pixel_values_videos"] = pixel_values_videos
-            model_inputs["input_features"] = input_features
-            model_inputs["input_features_mask"] = input_features_mask
-        else:
+        if not (is_first_iteration or not use_cache):
             # Don't pass to not apply bidirectional mask on top
             model_inputs["mm_token_type_ids"] = None
 
