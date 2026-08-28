@@ -103,9 +103,7 @@ class DistributedHelper:
         # Case: device mesh with no named dims => assumed TP mesh
         if device_mesh.mesh_dim_names is None:
             return device_mesh if device_mesh.size() > 1 else None
-        # Case: device mesh with named dims => extract the TP mesh. A model that is not the first
-        # one parallelized in this process gets a mesh named `tp_1`, `tp_2`, ... so that it does not
-        # share a mesh, and therefore a communicator, with the others.
+        # Case: device mesh with named dims => extract the TP mesh
         name = next((n for n in device_mesh.mesh_dim_names if n == "tp" or n.startswith("tp_")), None)
         if name is not None and device_mesh[name].size() > 1:
             return device_mesh[name]
