@@ -13,6 +13,19 @@
 # limitations under the License.
 
 from ...audio_processing_backends import TorchAudioBackend
+from ...processing_utils import AudioKwargs
+
+
+class VibevoiceAcousticTokenizerAudioProcessorKwargs(AudioKwargs, total=False):
+    r"""
+    target_dB_FS (`int`, *optional*, defaults to -25):
+        Loudness, in dBFS, the waveform is normalized to.
+    eps (`float`, *optional*, defaults to 1e-06):
+        Small constant guarding the loudness-normalization division.
+    """
+
+    target_dB_FS: int
+    eps: float
 
 
 class VibevoiceAcousticTokenizerAudioProcessorMixin:
@@ -22,6 +35,7 @@ class VibevoiceAcousticTokenizerAudioProcessorMixin:
 
     target_dB_FS = -25
     eps = 1e-6
+    valid_kwargs = VibevoiceAcousticTokenizerAudioProcessorKwargs
 
     def _process_audio(self, audio_el):
         audio_el = super()._process_audio(audio_el)

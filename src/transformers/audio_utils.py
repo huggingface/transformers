@@ -22,7 +22,6 @@ import io
 import math
 import os
 import warnings
-from collections.abc import Sequence
 from dataclasses import dataclass, field, fields
 from io import BytesIO
 from typing import TYPE_CHECKING, Any, Union
@@ -74,8 +73,6 @@ class StftConfig:
     window_fn: str = "hann_window"
     wkwargs: dict | None = None
     power: float = 2.0
-    # True: symmetric center padding; False: none; "left": semicausal (USM/Gemma),
-    # `win_length // 2` zeros prepended — forces manual framing.
     center: bool | str = True
     pad_mode: str = "reflect"
     normalized: bool = False
@@ -83,17 +80,8 @@ class StftConfig:
     periodic: bool = True
     left_align_fft: bool = False
     window_dtype: str | None = None
-    # USM-style extended framing: frame at `win_length + 1`, reduced back to `win_length`
-    # by the per-frame preemphasis. Only 1 is supported.
     frame_extension: int = 0
-    # Manual-framing FFT dtype. None: legacy rounding (numpy complex64, torch float32);
-    # "float64": both backends; "native": each backend's own (numpy float64, torch float32).
-    # Complements `computation_dtype` (which still controls magnitude dtype).
     fft_dtype: str | None = None
-    # How the complex STFT becomes a real magnitude. None: each backend's native `abs()`.
-    # "sqrt_sum_squares": `sqrt(re**2 + im**2)` via `view_as_real`, the form NeMo-derived
-    # extractors use — it differs from torch's `abs()` in the last ulp, so it is a
-    # bit-exactness knob, not a stylistic one. No-op for numpy (its `abs()` already agrees).
     magnitude_mode: str | None = None
 
     def to_dict(self) -> dict:
@@ -116,16 +104,7 @@ class MelScaleConfig:
     frequency_bin_mode: str = "rfft"
     computation_dtype: str | None = None
     bands_to_zero: int = 0
-    # Precision knob only; `_apply_mel_scale` input is always `(..., freq, time)`.
-    # "filters_first" uses each backend's ecosystem-native op (numpy `matmul`, torch
-    # `F.linear`, matching torchaudio); "filters_first_matmul" forces a plain `matmul` in
-    # both, which is what NeMo-derived extractors (`mel_filters @ magnitudes`) need — the
-    # two torch forms differ in the last ulp.
     matmul_order: str = "filters_first"
-    # Rounding order used to build the filter bank. None: each backend's ecosystem default
-    # (numpy = librosa, torch = torchaudio). "librosa": build in float64, cast to float32,
-    # then apply the slaney norm with a *second* float32 rounding — the only order that
-    # reproduces librosa's filters bit-exactly. No-op for numpy (already its default).
     bank_rounding: str | None = None
 
     def to_dict(self) -> dict:
@@ -142,24 +121,15 @@ class SpectrogramConfig:
     stft_config: StftConfig = field(default_factory=StftConfig)
     mel_scale_config: MelScaleConfig | None = None
     log_mode: str = "log10"
-    chunk_length: int | None = None
     preemphasis: float | None = None
     preemphasis_mode: str = "per_frame"
     remove_dc_offset: bool = False
     mel_floor: float = 1e-10
-    # When set, the log stage computes log(x + pre_log_offset) instead of
-    # log(clamp(x, mel_floor)) — the guard form used by NeMo-style extractors (ADR 0004).
     pre_log_offset: float | None = None
     waveform_scale: float | None = None
     computation_dtype: str | None = None
     skip_last_frame: bool = False
-    # A frame straddling the audio/padding boundary starts in real audio but ends in padding.
-    # False: only frames lying entirely within the real audio count as valid (the default).
-    # True: frames that merely *start* within it count too, i.e. `ceil(length / hop_length)` —
-    # the convention of extractors that mask by striding the sample mask (Gemma3n, Qwen3-ASR).
     count_partial_frames: bool = False
-    # Emit features as (..., frames, mels) instead of (..., mels, frames), as the ASR
-    # extractors (Parakeet/Cohere-ASR) do. Applied last, after all log-stage normalization.
     transpose_features: bool = False
     clip_max_offset: float | None = None
     post_log_shift: float | None = None

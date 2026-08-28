@@ -19,17 +19,28 @@ import torch
 
 from ...audio_processing_backends import TorchAudioBackend
 from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
+from ...processing_utils import AudioKwargs
 from ...utils import PaddingStrategy
+
+
+class ClapAudioProcessorKwargs(AudioKwargs, total=False):
+    r"""
+    truncation_mode (`str`, *optional*, defaults to `"rand_trunc"`):
+        Strategy used to truncate audio longer than `max_length`.
+    padding_mode (`str`, *optional*, defaults to `"repeatpad"`):
+        Strategy used to pad audio shorter than `max_length`.
+    """
+
+    truncation_mode: str
+    padding_mode: str
 
 
 class ClapAudioProcessorMixin:
     sampling_rate = 48000
     force_mono = True
     max_length = 480000
-    truncation_mode = "rand_trunc"
     return_padding_mask = False
     # released checkpoints use "repeatpad"; the legacy FE spelled this its `padding` argument.
-    padding_mode = "repeatpad"
     spectrogram_config = SpectrogramConfig(
         stft_config=StftConfig(n_fft=1024, hop_length=480, power=2.0),
         mel_scale_config=MelScaleConfig(
@@ -56,6 +67,10 @@ class ClapAudioProcessorMixin:
         "max_length_s": None,
     }
     extra_model_input_names = ["is_longer"]
+
+    truncation_mode = "rand_trunc"
+    padding_mode = "repeatpad"
+    valid_kwargs = ClapAudioProcessorKwargs
 
     def _set_attributes(self, **kwargs):
         if self.truncation_mode == "fusion":

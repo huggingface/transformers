@@ -17,6 +17,23 @@ import torch
 
 from ...audio_processing_backends import TorchAudioBackend
 from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig, _array_namespace
+from ...processing_utils import AudioKwargs
+
+
+class CohereAsrAudioProcessorKwargs(AudioKwargs, total=False):
+    r"""
+    max_audio_clip_s (`float`, *optional*, defaults to 35.0):
+        Maximum length, in seconds, of a single audio chunk. Longer audio is split into chunks.
+    overlap_chunk_second (`float`, *optional*, defaults to 5.0):
+        Width, in seconds, of the window at the end of each chunk searched for a split point, so a
+        boundary lands in silence rather than mid-word.
+    min_energy_window_samples (`int`, *optional*, defaults to 1600):
+        Size, in samples, of the non-overlapping windows scanned when locating the quietest split point.
+    """
+
+    max_audio_clip_s: float
+    overlap_chunk_second: float
+    min_energy_window_samples: int
 
 
 class CohereAsrAudioProcessorMixin:
@@ -24,10 +41,7 @@ class CohereAsrAudioProcessorMixin:
     force_mono = True
     padding = "longest"
     dither: float = 1e-5
-    max_audio_clip_s: float = 35.0
-    overlap_chunk_second: float = 5.0
-    min_energy_window_samples: int = 1600
-    skip_tensor_conversion = ["audio_chunk_index"]
+
     spectrogram_config = SpectrogramConfig(
         stft_config=StftConfig(
             n_fft=512,
@@ -54,14 +68,16 @@ class CohereAsrAudioProcessorMixin:
         pre_log_offset=2**-24,
         transpose_features=True,
     )
+
+    skip_tensor_conversion = ["audio_chunk_index"]
     extra_model_input_names = ["audio_chunk_index"]
 
+    max_audio_clip_s: float = 35.0
+    overlap_chunk_second: float = 5.0
+    min_energy_window_samples: int = 1600
+    valid_kwargs = CohereAsrAudioProcessorKwargs
+
     def _apply_dither(self, audio, audio_ranges=None):
-        """Deterministic per-utterance dither: each row is seeded by its own valid sample count,
-        so the noise is invariant to batch composition (matches the legacy FE). Runs before
-        `waveform_scale` and waveform preemphasis in the base `_stft` (ordering is load-bearing).
-        The two backends' RNGs differ, so they are not bit-equal here — the parity fixture sets
-        ``dither=0``."""
         if self.dither <= 0 or audio_ranges is None:
             return audio
         noise = _array_namespace(audio).zeros_like(audio)
@@ -72,7 +88,6 @@ class CohereAsrAudioProcessorMixin:
         return audio + self.dither * noise
 
     def _seeded_noise(self, length, seed, like):
-        """``length`` standard-normal samples from a freshly seeded RNG, in ``like``'s dtype/device."""
         raise NotImplementedError
 
     def _postprocess_output(self, output, audio_ranges=None, **kwargs):

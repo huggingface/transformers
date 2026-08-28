@@ -34,17 +34,6 @@ _LEGACY_KEY_MAP = {
 }
 
 
-def legacy_chunk_length_to_max_length(value, config_dict):
-    """Map a legacy `chunk_length` (seconds) to `max_length` (samples).
-
-    Not in `_legacy_field_mapping_base`: `chunk_length` is only the model's full input length
-    for some checkpoints. CLVP, for one, carries `chunk_length=30` next to a 6-second
-    `max_length`, so processors opt in through their own `legacy_field_mapping`.
-    """
-    sampling_rate = config_dict.get("sampling_rate") or 16000
-    config_dict.setdefault("max_length", value * sampling_rate)
-
-
 AudioProcessorType = TypeVar("AudioProcessorType", bound="AudioProcessingMixin")
 
 
@@ -136,8 +125,10 @@ class AudioProcessingMixin(PreprocessingMixin):
     #   - str:       dot-path to the nested target (e.g. ``"spectrogram_config.stft_config.hop_length"``)
     #                — `from_dict` walks/creates intermediate dicts and writes the value.
     #   - callable:  invoked as ``f(value, config_dict)`` and expected to mutate
-    #                ``config_dict`` in place. Used for non-1:1 mappings such as
-    #                Whisper's ``chunk_length`` → derived ``max_length = chunk_length * sampling_rate``.
+    #                ``config_dict`` in place. For non-1:1 mappings, where one legacy key has to be
+    #                spread across several modern ones. Note the callable *consumes* the legacy key:
+    #                if the modern API keeps a field of the same name, leave it out of the mapping
+    #                entirely so it passes through untranslated (see `sampling_rate` below).
     #   - None:      drop the legacy key with no translation.
     #
     # The base mapping covers both universal keys (`return_attention_mask`, `feature_extractor_type`,

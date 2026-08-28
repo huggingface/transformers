@@ -14,7 +14,26 @@
 
 from ...audio_processing_backends import TorchAudioBackend
 from ...audio_utils import SpectrogramConfig, StftConfig
+from ...processing_utils import AudioKwargs
 from ...utils.import_utils import requires
+
+
+class MusicgenMelodyAudioProcessorKwargs(AudioKwargs, total=False):
+    r"""
+    n_fft (`int`, *optional*, defaults to 16384):
+        Size of the FFT used for the chroma spectrogram.
+    hop_length (`int`, *optional*, defaults to 4096):
+        Hop between successive chroma frames, in samples.
+    n_chroma (`int`, *optional*, defaults to 12):
+        Number of chroma bins.
+    chunk_length (`int`, *optional*, defaults to 30):
+        Length, in seconds, of the audio window the model consumes.
+    """
+
+    n_fft: int
+    hop_length: int
+    n_chroma: int
+    chunk_length: int
 
 
 class MusicgenMelodyAudioProcessorMixin:
@@ -22,31 +41,36 @@ class MusicgenMelodyAudioProcessorMixin:
     force_mono = True
     do_extract_spectrogram = True
     return_padding_mask = False
+    # `chroma_filters` is an array and `power_spectrogram_config` is derived, so neither may
+    # reach `to_json_string()`
+    _excluded_dict_keys = {"mel_filters", "window", "chroma_filters", "power_spectrogram_config"}
+    # The legacy FE mapped its chroma count to `num_chroma`.
+    legacy_field_mapping = {"num_chroma": "n_chroma"}
+
     n_fft = 16384
     hop_length = 4096
     n_chroma = 12
     chunk_length = 30
-    # `chroma_filters` is an array, so it must not reach `to_json_string()`
-    _excluded_dict_keys = {"mel_filters", "window", "chroma_filters"}
-
-    # Only used by the numpy sibling; the torch one goes through `torchaudio.transforms.Spectrogram`.
-    power_spectrogram_config = SpectrogramConfig(
-        stft_config=StftConfig(
-            n_fft=16384,
-            win_length=16384,
-            hop_length=4096,
-            power=2.0,
-            center=True,
-            normalized=True,
-            window_fn="hann_window",
-            periodic=True,
-        ),
-    )
+    valid_kwargs = MusicgenMelodyAudioProcessorKwargs
 
     @requires(backends=("librosa",))
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         import librosa
+
+        # Only used by the numpy sibling; the torch one goes through `torchaudio.transforms.Spectrogram`.
+        self.power_spectrogram_config = SpectrogramConfig(
+            stft_config=StftConfig(
+                n_fft=self.n_fft,
+                win_length=self.n_fft,
+                hop_length=self.hop_length,
+                power=2.0,
+                center=True,
+                normalized=True,
+                window_fn="hann_window",
+                periodic=True,
+            ),
+        )
 
         filters = librosa.filters.chroma(sr=self.sampling_rate, n_fft=self.n_fft, tuning=0, n_chroma=self.n_chroma)
         self.chroma_filters = self._astype(self._as_backend_array(filters), "float32")

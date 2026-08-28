@@ -14,17 +14,32 @@
 
 from ...audio_processing_backends import TorchAudioBackend
 from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
+from ...processing_utils import AudioKwargs
+
+
+class AudioSpectrogramTransformerAudioProcessorKwargs(AudioKwargs, total=False):
+    r"""
+    do_normalize (`bool`, *optional*, defaults to `True`):
+        Whether to normalize the mel features with `ast_mean` and `ast_std`.
+    ast_mean (`float`, *optional*, defaults to -4.2677393):
+        Dataset mean subtracted from the features when `do_normalize` is `True`.
+    ast_std (`float`, *optional*, defaults to 4.5689974):
+        Dataset standard deviation the features are divided by when `do_normalize` is `True`.
+    max_length_frames (`int`, *optional*, defaults to 1024):
+        Number of mel frames the features are padded or truncated to.
+    """
+
+    do_normalize: bool
+    ast_mean: float
+    ast_std: float
+    max_length_frames: int
 
 
 class AudioSpectrogramTransformerAudioProcessorMixin:
-    ast_mean = -4.2677393
-    ast_std = 4.5689974
     do_batch_spectrogram = False
-    do_normalize = True
     force_mono = True
     # The legacy FE saved `feature_size=1` (a raw-audio default) and kept the real mel count in
     legacy_field_mapping = {"feature_size": None}
-    max_length_frames = 1024
     model_input_names = ["audio_values"]
     return_padding_mask = False
     sampling_rate = 16000
@@ -52,6 +67,12 @@ class AudioSpectrogramTransformerAudioProcessorMixin:
         mel_floor=1.192092955078125e-07,
         transpose_features=True,  # kaldi's (time, num_mel_bins) orientation
     )
+
+    do_normalize = True
+    ast_mean = -4.2677393
+    ast_std = 4.5689974
+    max_length_frames = 1024
+    valid_kwargs = AudioSpectrogramTransformerAudioProcessorKwargs
 
     def _pad_features(self, features, padding, max_length, truncation, pad_to_multiple_of):
         return super()._pad_features(features, "max_length", self.max_length_frames, True, pad_to_multiple_of)

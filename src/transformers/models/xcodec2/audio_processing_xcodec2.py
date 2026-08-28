@@ -16,15 +16,29 @@ import torch
 
 from ...audio_processing_backends import TorchAudioBackend
 from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
+from ...processing_utils import AudioKwargs
+
+
+class Xcodec2AudioProcessorKwargs(AudioKwargs, total=False):
+    r"""
+    hop_length (`int`, *optional*, defaults to 320):
+        Codec frame size, in samples. Distinct from the STFT hop in `spectrogram_config`.
+    stride (`int`, *optional*, defaults to 2):
+        Number of mel frames stacked into each output frame.
+    feature_padding_value (`float`, *optional*, defaults to 1.0):
+        Value used to pad the extracted features.
+    """
+
+    hop_length: int
+    stride: int
+    feature_padding_value: float
 
 
 class Xcodec2AudioProcessorMixin:
     add_channel_dim = True
     do_extract_spectrogram = False
     # Mel frames are padded with 1.0 (the legacy FE's `padding_value`), unlike the raw audio
-    feature_padding_value = 1.0
     force_mono = True
-    hop_length = 320
     # Legacy hub configs describe the fbank geometry with flat keys that are fixed
     # in the legacy config is the *mel* padding value; the raw audio is padded with 0.0.
     legacy_field_mapping = {
@@ -62,7 +76,11 @@ class Xcodec2AudioProcessorMixin:
         mel_floor=1.192092955078125e-07,
         waveform_scale=32768.0,
     )
+
+    hop_length = 320
     stride = 2
+    feature_padding_value = 1.0
+    valid_kwargs = Xcodec2AudioProcessorKwargs
 
 
 class Xcodec2AudioProcessor(Xcodec2AudioProcessorMixin, TorchAudioBackend):

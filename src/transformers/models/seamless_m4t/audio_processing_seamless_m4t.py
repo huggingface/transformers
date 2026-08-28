@@ -17,6 +17,16 @@ import torch
 
 from ...audio_processing_backends import TorchAudioBackend
 from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
+from ...processing_utils import AudioKwargs
+
+
+class SeamlessM4tAudioProcessorKwargs(AudioKwargs, total=False):
+    r"""
+    stride (`int`, *optional*, defaults to 2):
+        Number of consecutive mel frames stacked into each output frame.
+    """
+
+    stride: int
 
 
 class SeamlessM4tAudioProcessorMixin:
@@ -44,18 +54,20 @@ class SeamlessM4tAudioProcessorMixin:
         log_mode="log",
         preemphasis=0.97,
         remove_dc_offset=True,
+        waveform_scale=32768.0,
         mel_floor=1.192092955078125e-07,
         computation_dtype="float64",
     )
+
     stride = 2
-    waveform_scale = 32768.0
+    valid_kwargs = SeamlessM4tAudioProcessorKwargs
 
 
 class SeamlessM4tAudioProcessor(SeamlessM4tAudioProcessorMixin, TorchAudioBackend):
     def extract_spectrogram(self, audio, **kwargs):
         features = []
         for waveform in audio:
-            waveform = waveform.squeeze() * self.waveform_scale
+            waveform = waveform.squeeze()
             f = super().extract_spectrogram([waveform], spectrogram_config=self.spectrogram_config)
             features.append(f[0].transpose(-2, -1))
         return features

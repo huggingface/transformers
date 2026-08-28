@@ -16,6 +16,16 @@ import torch
 
 from ...audio_processing_backends import TorchAudioBackend
 from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig, _clamp_min
+from ...processing_utils import AudioKwargs
+
+
+class VoxtralRealtimeAudioProcessorKwargs(AudioKwargs, total=False):
+    r"""
+    global_log_mel_max (`float`, *optional*, defaults to 1.5):
+        Fixed ceiling used to clamp the log-mel features, in place of a per-clip maximum.
+    """
+
+    global_log_mel_max: float
 
 
 class VoxtralRealtimeAudioProcessorMixin:
@@ -36,7 +46,9 @@ class VoxtralRealtimeAudioProcessorMixin:
         log_mode="log10",
         skip_last_frame=True,
     )
+
     global_log_mel_max = 1.5
+    valid_kwargs = VoxtralRealtimeAudioProcessorKwargs
 
     def _normalize_magnitude(self, features, *, spectrogram_config, **kwargs):
         # Voxtral uses a *fixed* `global_log_mel_max` as the upper bound (rather than the

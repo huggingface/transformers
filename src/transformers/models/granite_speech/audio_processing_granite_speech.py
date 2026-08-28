@@ -18,6 +18,19 @@ import torch
 
 from ...audio_processing_backends import TorchAudioBackend
 from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
+from ...processing_utils import AudioKwargs
+
+
+class GraniteSpeechAudioProcessorKwargs(AudioKwargs, total=False):
+    r"""
+    projector_window_size (`int`, *optional*, defaults to 15):
+        Window size, in mel frames, consumed by the audio projector.
+    projector_downsample_rate (`int`, *optional*, defaults to 5):
+        Factor by which the audio projector downsamples its input.
+    """
+
+    projector_window_size: int
+    projector_downsample_rate: int
 
 
 class GraniteSpeechAudioProcessorMixin:
@@ -28,8 +41,6 @@ class GraniteSpeechAudioProcessorMixin:
     extra_model_input_names = ["audio_features_mask", "audio_embed_sizes"]
     return_padding_mask = False
     do_extract_spectrogram = True
-    projector_window_size = 15
-    projector_downsample_rate = 5
 
     # Native pipeline, bit-equal to the upstream FE's `torchaudio.transforms.MelSpectrogram`
     # + log10 + Whisper-style max-clip/rescale (ADR 0004 post-log fields).
@@ -47,6 +58,10 @@ class GraniteSpeechAudioProcessorMixin:
         post_log_shift=4.0,
         post_log_scale=0.25,
     )
+
+    projector_window_size = 15
+    projector_downsample_rate = 5
+    valid_kwargs = GraniteSpeechAudioProcessorKwargs
 
     def extract_spectrogram(self, audio, **kwargs):
         logmel = super().extract_spectrogram(audio, **kwargs).swapaxes(-1, -2)  # (batch, time, n_mels)

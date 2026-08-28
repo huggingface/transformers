@@ -17,6 +17,19 @@ import torch
 
 from ...audio_processing_backends import TorchAudioBackend
 from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
+from ...processing_utils import AudioKwargs
+
+
+class SpeechToTextAudioProcessorKwargs(AudioKwargs, total=False):
+    r"""
+    normalize_means (`bool`, *optional*, defaults to `True`):
+        Whether to mean-normalize the extracted features per utterance.
+    normalize_vars (`bool`, *optional*, defaults to `True`):
+        Whether to variance-normalize the extracted features per utterance.
+    """
+
+    normalize_means: bool
+    normalize_vars: bool
 
 
 class SpeechToTextAudioProcessorMixin:
@@ -49,10 +62,9 @@ class SpeechToTextAudioProcessorMixin:
         transpose_features=True,  # kaldi's (time, n_mels) orientation
     )
 
-    def __init__(self, normalize_means=True, normalize_vars=True, **kwargs):
-        super().__init__(**kwargs)
-        self.normalize_means = normalize_means
-        self.normalize_vars = normalize_vars
+    normalize_means = True
+    normalize_vars = True
+    valid_kwargs = SpeechToTextAudioProcessorKwargs
 
 
 class SpeechToTextAudioProcessor(SpeechToTextAudioProcessorMixin, TorchAudioBackend):

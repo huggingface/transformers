@@ -15,15 +15,24 @@
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_processing_base import legacy_chunk_length_to_max_length
 from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
+from ...processing_utils import AudioKwargs
+
+
+class WhisperAudioProcessorKwargs(AudioKwargs, total=False):
+    r"""
+    chunk_length (`int`, *optional*, defaults to 30):
+        Length, in seconds, of the window the encoder consumes. This is model geometry, not a
+        padding policy: read it for frame-rate maths (`chunk_length / max_source_positions`),
+        and use `max_length` to control how much audio is actually padded or truncated. The two
+        coincide for Whisper but need not in general.
+    """
+
+    chunk_length: int
 
 
 class WhisperAudioProcessorMixin:
     force_mono = True
-    legacy_field_mapping = {
-        "chunk_length": legacy_chunk_length_to_max_length,
-    }
     max_length = 480000
     return_padding_mask = False
     sampling_rate = 16000
@@ -46,6 +55,9 @@ class WhisperAudioProcessorMixin:
         post_log_scale=0.25,
     )
     truncation = True
+
+    chunk_length = 30
+    valid_kwargs = WhisperAudioProcessorKwargs
 
 
 class WhisperAudioProcessor(WhisperAudioProcessorMixin, TorchAudioBackend):

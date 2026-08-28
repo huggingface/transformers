@@ -16,6 +16,16 @@ import torch
 
 from ...audio_processing_backends import TorchAudioBackend
 from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
+from ...processing_utils import AudioKwargs
+
+
+class ClvpAudioProcessorKwargs(AudioKwargs, total=False):
+    r"""
+    mel_norms (`list[float]`, *optional*):
+        Per-mel-bin normalization factors the features are divided by. `None` disables it.
+    """
+
+    mel_norms: list[float] | None
 
 
 class ClvpAudioProcessorMixin:
@@ -45,9 +55,8 @@ class ClvpAudioProcessorMixin:
     )
     truncation = True
 
-    def __init__(self, mel_norms=None, **kwargs):
-        super().__init__(**kwargs)
-        self.mel_norms = mel_norms
+    mel_norms = None
+    valid_kwargs = ClvpAudioProcessorKwargs
 
 
 class ClvpAudioProcessor(ClvpAudioProcessorMixin, TorchAudioBackend):

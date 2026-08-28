@@ -15,6 +15,7 @@
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
+from ...processing_utils import AudioKwargs
 
 
 def _gemma4_unified_feature_size_to_samples_per_token(value, config_dict):
@@ -22,8 +23,16 @@ def _gemma4_unified_feature_size_to_samples_per_token(value, config_dict):
     config_dict.setdefault("audio_samples_per_token", value)
 
 
+class Gemma4UnifiedAudioProcessorKwargs(AudioKwargs, total=False):
+    r"""
+    audio_samples_per_token (`int`, *optional*, defaults to 640):
+        Number of waveform samples represented by a single audio token.
+    """
+
+    audio_samples_per_token: int
+
+
 class Gemma4UnifiedAudioProcessorMixin:
-    audio_samples_per_token = 640
     do_batch_spectrogram = False
     # for non-spectrogram models) and padded at the token level, matching the legacy
     do_extract_spectrogram = True
@@ -35,10 +44,8 @@ class Gemma4UnifiedAudioProcessorMixin:
     padding_value = 0.0
     sampling_rate = 16000
 
-    def __init__(self, audio_samples_per_token: int | None = None, **kwargs):
-        super().__init__(**kwargs)
-        if audio_samples_per_token is not None:
-            self.audio_samples_per_token = audio_samples_per_token
+    audio_samples_per_token = 640
+    valid_kwargs = Gemma4UnifiedAudioProcessorKwargs
 
     def extract_spectrogram(self, audio, **kwargs):
         return [self._chunk_waveform(waveform) for waveform in audio]

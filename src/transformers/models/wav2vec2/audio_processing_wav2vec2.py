@@ -15,12 +15,24 @@
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
+from ...processing_utils import AudioKwargs
+
+
+class Wav2Vec2AudioProcessorKwargs(AudioKwargs, total=False):
+    r"""
+    do_normalize (`bool`, *optional*, defaults to `True`):
+        Whether to zero-mean unit-variance normalize the raw waveform.
+    """
+
+    do_normalize: bool
 
 
 class Wav2Vec2AudioProcessorMixin:
-    do_normalize = True
     force_mono = True
     sampling_rate = 16000
+
+    do_normalize = True
+    valid_kwargs = Wav2Vec2AudioProcessorKwargs
 
 
 class Wav2Vec2AudioProcessor(Wav2Vec2AudioProcessorMixin, TorchAudioBackend):

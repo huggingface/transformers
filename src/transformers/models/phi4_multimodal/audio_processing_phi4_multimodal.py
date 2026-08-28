@@ -16,15 +16,28 @@ import torch
 
 from ...audio_processing_backends import TorchAudioBackend
 from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
+from ...processing_utils import AudioKwargs
+
+
+class Phi4MultimodalAudioProcessorKwargs(AudioKwargs, total=False):
+    r"""
+    audio_compression_rate (`int`, *optional*, defaults to 8):
+        Factor by which the audio encoder compresses the mel frames.
+    audio_downsample_rate (`int`, *optional*, defaults to 1):
+        Factor by which the audio projector downsamples the encoder output.
+    audio_feat_stride (`int`, *optional*, defaults to 1):
+        Stride applied to the extracted audio features.
+    """
+
+    audio_compression_rate: int
+    audio_downsample_rate: int
+    audio_feat_stride: int
 
 
 class Phi4MultimodalAudioProcessorMixin:
     sampling_rate = 16000
     force_mono = True
     extra_model_input_names = ["audio_embed_sizes"]
-    audio_compression_rate = 8
-    audio_downsample_rate = 1
-    audio_feat_stride = 1
     spectrogram_config = SpectrogramConfig(
         stft_config=StftConfig(
             n_fft=512,
@@ -49,6 +62,11 @@ class Phi4MultimodalAudioProcessorMixin:
         mel_floor=1.0,
         log_mode="log",
     )
+
+    audio_compression_rate = 8
+    audio_downsample_rate = 1
+    audio_feat_stride = 1
+    valid_kwargs = Phi4MultimodalAudioProcessorKwargs
 
     def _compute_audio_embed_size(self, audio_frames):
         integer = audio_frames // self.audio_compression_rate

@@ -22,7 +22,7 @@ class SeamlessM4tAudioProcessorNumpy(SeamlessM4tAudioProcessorMixin, NumpyAudioB
     def extract_spectrogram(self, audio, **kwargs):
         features = []
         for waveform in audio:
-            waveform = np.squeeze(waveform) * self.waveform_scale
+            waveform = np.squeeze(waveform)
             f = super().extract_spectrogram([waveform], spectrogram_config=self.spectrogram_config)
             features.append(f[0].T)
         return features

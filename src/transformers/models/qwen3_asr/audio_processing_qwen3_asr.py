@@ -15,23 +15,26 @@
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_processing_base import legacy_chunk_length_to_max_length
 from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 from ...processing_utils import AudioKwargs
 
 
-class Qwen3ASRAudioKwargs(AudioKwargs, total=False):
+class Qwen3ASRAudioProcessorKwargs(AudioKwargs, total=False):
+    r"""
+    min_length (`int`, *optional*, defaults to 8000):
+        Minimum waveform length in samples; shorter audio is padded up to this length.
+    n_window (`int`, *optional*, defaults to 50):
+        Encoder window size. Features are padded so their frame count is a multiple of
+        `2 * n_window`.
+    """
+
+    min_length: int
     n_window: int | None
 
 
 class Qwen3ASRAudioProcessorMixin:
     force_mono = True
-    legacy_field_mapping = {
-        "chunk_length": legacy_chunk_length_to_max_length,
-    }
     max_length = 480000
-    min_length = 8000
-    n_window = 50
     padding = "max_length"
     sampling_rate = 16000
     spectrogram_config = SpectrogramConfig(
@@ -53,7 +56,10 @@ class Qwen3ASRAudioProcessorMixin:
         # legacy masks by striding the sample mask -> boundary-straddling frames count as valid
         count_partial_frames=True,
     )
-    valid_kwargs = Qwen3ASRAudioKwargs
+
+    min_length = 8000
+    n_window = 50
+    valid_kwargs = Qwen3ASRAudioProcessorKwargs
 
     def _extract_spectrogram(self, audio, *, spectrogram_config, **kwargs):
         features = super()._extract_spectrogram(audio, spectrogram_config=spectrogram_config, **kwargs)
