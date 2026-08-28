@@ -1,4 +1,4 @@
-FROM intel/deep-learning-essentials:2025.1.3-0-devel-ubuntu22.04 AS base
+FROM intel/deep-learning-essentials:2026.0.0-devel-ubuntu24.04 AS base
 LABEL maintainer="Hugging Face"
 
 SHELL ["/bin/bash", "-c"]
@@ -43,16 +43,12 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 RUN apt-get update && \
-    apt-get install -y \
-        linux-headers-$(uname -r) linux-modules-extra-$(uname -r) \
-        flex bison \
-        intel-fw-gpu intel-i915-dkms xpu-smi intel-ocloc clinfo\
-        intel-opencl-icd libze-intel-gpu1 libze1 \
-        intel-media-va-driver-non-free libmfx-gen1 libvpl2 \
-        libegl-mesa0 libegl1 libegl1-mesa-dev libgbm1 libgl1-mesa-dev libgl1-mesa-dri \
-        libglapi-mesa libglx-mesa0 libigdgmm12 libxatracker2 mesa-va-drivers \
-        mesa-vdpau-drivers mesa-vulkan-drivers va-driver-all vainfo hwinfo \
-        libigc-dev intel-igc-cm libigdfcl-dev libigfxcmrt-dev libze-dev && \
+    apt-get install -y software-properties-common && \
+    add-apt-repository -y ppa:kobuk-team/intel-graphics && \
+    apt-get install -y libze-intel-gpu1 libze1 intel-metrics-discovery intel-opencl-icd clinfo intel-gsc && \
+    apt-get install -y intel-media-va-driver-non-free libmfx-gen1 libvpl2 libvpl-tools libva-glx2 va-driver-all vainfo && \
+    apt-get install -y libze-dev intel-ocloc && \
+    apt-get install -y libze-intel-gpu-raytracing &&\
     apt-get clean && \
     rm -rf  /var/lib/apt/lists/*
 
@@ -65,33 +61,35 @@ RUN uv venv --python ${PYTHON_VER} --seed ${VIRTUAL_ENV}
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 RUN pip install --upgrade pip wheel
-RUN pip install triton==3.4.0
+RUN pip install triton==3.7.1
 
-RUN pip install torch==2.8.0+xpu torchvision==0.23.0+xpu torchaudio==2.8.0+xpu --index-url https://download.pytorch.org/whl/xpu --no-cache-dir
+RUN pip install torch==2.13.0+xpu torchvision==0.28.0+xpu torchaudio==2.11.0+xpu torchao==0.17.0+xpu --index-url https://download.pytorch.org/whl/xpu --no-cache-dir
 
-RUN pip install torchcodec torchdata --no-cache-dir
+RUN pip install torchcodec==0.15.0 --index-url https://download.pytorch.org/whl/cpu
 
-RUN pip install evaluate pyctcdecode pytesseract decord galore-torch fire scipy scikit-learn sentencepiece sacremoses nltk rouge_score librosa soundfile g2p_en mpi4py requests_mock
-RUN pip install pretty_midi essentia resampy Levenshtein av sacrebleu phonemizer invisible_watermark schedulefree setuptools
-RUN pip install gptqmodel --no-build-isolation
-RUN pip install gguf hqq compressed_tensors deepspeed torchao onnx auto_round
-RUN pip install hf_transfer huggingface-hub hf-doc-builder datasets optimum-quanto timm transformers accelerate optimum peft diffusers trl kernels
+RUN pip install torchdata --no-cache-dir
+
+RUN pip install evaluate pyctcdecode pytesseract decord fire scipy scikit-learn sentencepiece sacremoses nltk rouge_score librosa soundfile g2p_en mpi4py requests_mock onnx deepspeed kenlm opencv-python albumentations --no-cache-dir
+RUN pip install pretty_midi essentia resampy Levenshtein av sacrebleu phonemizer invisible_watermark schedulefree parameterized mistral-common --no-cache-dir
+
+RUN pip install gguf hqq fp-quant compressed_tensors bitsandbytes --no-cache-dir --extra-index-url https://download.pytorch.org/whl/xpu "torch==2.13.0+xpu" "triton==3.7.1"
+RUN pip install gptqmodel --no-cache-dir
+RUN pip install auto-round --no-cache-dir
+RUN pip install hf_transfer optimum-quanto optimum hf-doc-builder transformers[all] diffusers trl sentence_transformers pytorch_msssim --no-cache-dir
+RUN pip install pydantic openai uvicorn fastapi --no-cache-dir
 
 # install liger-kernel
-RUN pip install git+https://github.com/linkedin/Liger-Kernel.git --extra-index-url https://download.pytorch.org/whl/test/xpu
+RUN pip install git+https://github.com/linkedin/Liger-Kernel.git --extra-index-url https://download.pytorch.org/whl/xpu
 
 # install mergekit
-RUN pip install --break-system-packages git+https://github.com/arcee-ai/mergekit.git@v0.1.3
-
-# install bitsandbytes
-RUN pip install git+https://github.com/bitsandbytes-foundation/bitsandbytes.git
+RUN pip install --no-deps git+https://github.com/arcee-ai/mergekit.git
 
 ENV OCL_ICD_VENDORS=/etc/OpenCL/vendors
-ENV FI_PROVIDER_PATH=${I_MPI_ROOT}/lib/libfabric/prov:/usr/lib/x86_64-linux-gnu/libfabric
-ENV CCL_ROOT=/usr/local
-ENV CCL_ATL_TRANSPORT=ofi
 ENV I_MPI_ROOT=/usr/local
-ENV CLASSPATH=${I_MPI_ROOT}/lib/mpi.jar
+ENV CCL_ROOT=/usr/local
+ENV FI_PROVIDER_PATH=/opt/intel/oneapi/2026.0/opt/mpi/libfabric/lib/prov:/opt/intel/oneapi/2026.0/opt/mpi/libfabric
+ENV CCL_ATL_TRANSPORT=ofi
+ENV CLASSPATH=/usr/local/share/java/mpi.jar
 ENV PATH=${I_MPI_ROOT}/bin/libfabric:${PATH}
 ENV LD_LIBRARY_PATH=${I_MPI_ROOT}/lib/libfabric:${LD_LIBRARY_PATH}
 

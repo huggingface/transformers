@@ -39,6 +39,7 @@ from transformers.testing_utils import (
     backend_device_count,
     require_accelerate,
     require_torch,
+    require_torch_greater_or_equal,
     torch_device,
 )
 from transformers.tokenization_utils_base import BatchEncoding
@@ -66,6 +67,7 @@ from .trainer_test_utils import (
     RegressionPreTrainedModel,
     RegressionTrainingArguments,
     SampleIterableDataset,
+    SequenceClassificationDataset,
     TrainerIntegrationCommon,
     TstLayer,
     get_regression_trainer,
@@ -242,6 +244,34 @@ class TrainerDataloaderTest(TestCasePlus):
         self.assertEqual(first_dataloader, first_dataloader_repeated)
         self.assertEqual(second_dataloader, second_dataloader_repeated)
 
+    def _build_iterable_trainer(self, **args_kwargs):
+        train_dataset = SampleIterableDataset()
+        config = GPT2Config(vocab_size=100, n_positions=128, n_embd=32, n_layer=3, n_head=4)
+        tiny_gpt2 = GPT2LMHeadModel(config)
+        args = TrainingArguments(self.get_auto_remove_tmp_dir(), max_steps=2, **args_kwargs)
+        trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
+        # Avoid the accelerator wrapping the dataloader so we can inspect the raw DataLoader kwargs.
+        trainer.accelerator.prepare = lambda x: x
+        return trainer
+
+    def test_prefetch_factor_applies_to_iterable_dataset(self):
+        # `dataloader_prefetch_factor` used to be ignored for IterableDataset (see issue #43431 / PR #34925).
+        trainer = self._build_iterable_trainer(dataloader_num_workers=2, dataloader_prefetch_factor=4)
+        dataloader = trainer.get_train_dataloader()
+        self.assertEqual(dataloader.prefetch_factor, 4)
+
+    def test_multiprocessing_context_is_forwarded(self):
+        trainer = self._build_iterable_trainer(dataloader_num_workers=2, dataloader_multiprocessing_context="spawn")
+        dataloader = trainer.get_train_dataloader()
+        # DataLoader turns the string into a multiprocessing context object.
+        self.assertEqual(dataloader.multiprocessing_context._name, "spawn")
+
+    @require_torch_greater_or_equal("2.6")
+    def test_in_order_is_forwarded(self):
+        trainer = self._build_iterable_trainer(dataloader_num_workers=2, dataloader_in_order=False)
+        dataloader = trainer.get_train_dataloader()
+        self.assertFalse(dataloader.in_order)
+
 
 # ---------------------------------------------------------------------------
 # Label smoothing tests
@@ -369,6 +399,16 @@ class TrainerSamplerTest(unittest.TestCase):
         self.assertEqual(len(data[indices[0]]["input_ids"]), 105)
         # The indices should be a permutation of range(6)
         self.assertEqual(sorted(indices), list(range(6)))
+
+    def test_eval_sampler_deterministic_with_group_by_length(self):
+        eval_dataset = SequenceClassificationDataset()
+        args = TrainingArguments(train_sampling_strategy="group_by_length")
+        trainer = Trainer(model=RegressionModel(), args=args, eval_dataset=eval_dataset)
+        order_1 = list(trainer._get_eval_sampler(eval_dataset))
+        torch.rand(100)  # get random items from global generator to simulate random number operation between two evals
+        order_2 = list(trainer._get_eval_sampler(eval_dataset))
+        self.assertEqual(sorted(order_1), list(range(len(eval_dataset))))
+        self.assertEqual(order_1, order_2)
 
     def test_distributed_length_grouped(self):
         # Get some inputs of random lengths

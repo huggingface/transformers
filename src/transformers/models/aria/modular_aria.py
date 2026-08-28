@@ -494,7 +494,7 @@ class AriaImageProcessor(TorchvisionBackend):
             tensor_type=return_tensors,
         )
 
-    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:
         """
         A utility that returns number of image patches for a given image size.
 
@@ -509,6 +509,7 @@ class AriaImageProcessor(TorchvisionBackend):
         Returns:
             `int`: Number of patches per image.
         """
+        images_kwargs = images_kwargs or {}
         split_image = images_kwargs.get("split_image", self.split_image)
         max_image_size = images_kwargs.get("max_image_size", self.max_image_size)
         split_resolutions = images_kwargs.get("split_resolutions", self.split_resolutions)
@@ -1063,38 +1064,6 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        inputs_embeds=None,
-        pixel_values=None,
-        pixel_mask=None,
-        attention_mask=None,
-        logits_to_keep=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            logits_to_keep=logits_to_keep,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
-        if is_first_iteration or not kwargs.get("use_cache", True):
-            # Pixel values are used only in the first iteration if available
-            # In subsequent iterations, they are already merged with text and cached
-            # NOTE: first iteration doesn't have to be prefill, it can be the first
-            # iteration with a question and cached system prompt (continue generate from cache)
-            model_inputs["pixel_values"] = pixel_values
-            model_inputs["pixel_mask"] = pixel_mask
-
-        return model_inputs
 
 
 __all__ = [

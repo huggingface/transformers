@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -337,13 +337,13 @@ from transformers import AutoModelForCTC, AutoProcessor, AutoModelForTokenClassi
 
 parakeet_processor = AutoProcessor.from_pretrained("nvidia/parakeet-ctc-1.1b")
 parakeet_model = AutoModelForCTC.from_pretrained(
-    "nvidia/parakeet-ctc-1.1b", dtype="auto", device_map="cuda",
+    "nvidia/parakeet-ctc-1.1b", dtype="auto", device_map="auto",
 )
 
 aligner_model_id = "Qwen/Qwen3-ForcedAligner-0.6B-hf"
 aligner_processor = AutoProcessor.from_pretrained(aligner_model_id)
 aligner_model = AutoModelForTokenClassification.from_pretrained(
-    aligner_model_id, dtype=torch.bfloat16, device_map="cuda",
+    aligner_model_id, dtype=torch.bfloat16, device_map="auto",
 )
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -411,7 +411,7 @@ aligner_inputs, word_lists = processor.prepare_forced_aligner_inputs(
     transcript=[transcript] * batch_size,
     language=["English"] * batch_size,
 )
-aligner_inputs = aligner_inputs.to("cuda", torch.bfloat16)
+aligner_inputs = aligner_inputs.to(model.device, torch.bfloat16)
 
 # Warm-up and apply model
 model = torch.compile(model)
@@ -442,7 +442,7 @@ model = AutoModelForMultimodalLM.from_pretrained(model_id, dtype=torch.bfloat16)
 audio_url = "https://huggingface.co/datasets/bezzam/audio_samples/resolve/main/librispeech_mr_quilter.wav"
 inputs = processor.apply_transcription_request(
     audio=[audio_url] * 4,  # batch of 4
-).to("cuda", torch.bfloat16)
+).to(model.device, torch.bfloat16)
 
 compile_config = CompileConfig()
 

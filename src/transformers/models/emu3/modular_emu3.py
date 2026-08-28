@@ -98,7 +98,7 @@ class Emu3VQVAEVectorQuantizer(nn.Module):
     """
     A module for vector quantization using learned embedding vectors.
 
-    This module implements the quantization process similar to te one described in
+    This module implements the quantization process similar to the one described in
     the VQ-VAE (Vector Quantized Variational AutoEncoder) paper. It quantizes continuous
     input vectors into discrete codebook vectors, which are learned during training.
     Current implementation improves over previous ones by avoiding costly matrix multiplications
@@ -758,6 +758,7 @@ class Emu3VQVAE(PreTrainedModel):
         else:
             batch_size, temporal, channels, height, width = pixel_values.shape
 
+        pixel_values = pixel_values.to(self.dtype)
         hidden_states = self.encoder(pixel_values)
 
         # b t c h w -> b c t h w
@@ -1086,6 +1087,10 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
 
+    @property
+    def vocabulary_mapping(self):
+        return self.model.vocabulary_mapping
+
     def decode_image_tokens(self, **kwargs):
         return self.model.decode_image_tokens(**kwargs)
 
@@ -1155,6 +1160,8 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
         ```"""
         outputs = self.model(
             input_ids=input_ids,
+            pixel_values=pixel_values,
+            image_sizes=image_sizes,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -1181,37 +1188,6 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        position_ids=None,
-        use_cache=True,
-        pixel_values=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
-
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            position_ids=position_ids,
-            pixel_values=pixel_values,
-            use_cache=use_cache,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
-        if not is_first_iteration and use_cache:
-            model_inputs["pixel_values"] = None
-
-        return model_inputs
 
 
 __all__ = [

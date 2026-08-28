@@ -178,7 +178,7 @@ def detokenize(idx, n_special=4, n_note=128, n_velocity=2, time_idx_offset=0):
         return "TOKEN_SPECIAL", idx
 
 
-# crate the decoder and then the encoder of the tokenizer
+# create the decoder and then the encoder of the tokenizer
 decoder = {}
 for i in range(cfg.vocab_size):
     decoder.update({i: f"{detokenize(i)[1]}_{detokenize(i)[0]}"})

@@ -10,7 +10,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -42,6 +42,8 @@ You can find all the original Gemma 3n checkpoints under the [Gemma 3n][gemma3n-
 > [!TIP]
 > Click on the Gemma 3n models in the right sidebar for more examples of how to apply Gemma to different vision, audio,
 > and language tasks.
+>
+> Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Refer to [Loading kernels](../kernel_doc/loading_kernels) to learn more.
 
 The example below demonstrates how to generate text based on an image with [`Pipeline`] or the [`AutoModel`] class.
 
@@ -139,7 +141,7 @@ print(processor.decode(output[0], skip_special_tokens=True))
     ```
 
 - Text passed to the processor should have a `<image_soft_token>` token wherever an image should be inserted.
-- Gemma 3n accept at most one target audio clip per input, though multiple audio clips can be provided in few-shot
+- Gemma 3n accepts at most one target audio clip per input, though multiple audio clips can be provided in few-shot
     prompts, for example.
 - Text passed to the processor should have a `<audio_soft_token>` token wherever an audio clip should be inserted.
 - The processor has its own [`~ProcessorMixin.apply_chat_template`] method to convert chat messages to model inputs.

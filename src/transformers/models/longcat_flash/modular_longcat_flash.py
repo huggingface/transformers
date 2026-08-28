@@ -64,7 +64,7 @@ class LongcatFlashTopkRouter(MixtralTopKRouter):
         self.n_routed_experts = config.n_routed_experts + (config.zero_expert_num or 0)
         self.routed_scaling_factor = config.routed_scaling_factor
         self.router_bias = getattr(config, "router_bias", False)
-        self.register_buffer("e_score_correction_bias", torch.zeros(self.n_routed_experts))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.n_routed_experts))
         self.classifier = nn.Linear(config.hidden_size, self.n_routed_experts, bias=self.router_bias)
 
     @torch.no_grad()
@@ -155,22 +155,12 @@ class LongcatFlashMoE(nn.Module):
 
 
 class LongcatFlashMLA(DeepseekV3Attention):
-    def __init__(self, config, layer_idx: int):
+    def __init__(self, config: LongcatFlashConfig, layer_idx: int):
         super().__init__(config, layer_idx)
+        self.qk_head_dim = config.qk_head_dim  # qk_head_dim is a settable attribute in LongcatFlashConfig
 
         self.mla_scale_q_lora = (config.hidden_size / self.q_lora_rank) ** 0.5
         self.mla_scale_kv_lora = (config.hidden_size / self.kv_lora_rank) ** 0.5
-
-    def expand_kv(self, k_nope: torch.Tensor, k_pe: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        key_shape = (*k_nope.shape[:-1], -1, self.qk_nope_head_dim + self.v_head_dim)
-
-        k_nope = self.kv_b_proj(k_nope).view(key_shape).transpose(1, 2)
-        k_nope, value_states = torch.split(k_nope, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
-
-        k_pe = k_pe.expand(*k_nope.shape[:-1], -1)
-        key_states = torch.cat((k_nope, k_pe), dim=-1)
-
-        return key_states, value_states
 
     def forward(
         self,
@@ -196,17 +186,20 @@ class LongcatFlashMLA(DeepseekV3Attention):
         q_rot = q_rot * self.mla_scale_q_lora
         k_pass = k_pass * self.mla_scale_kv_lora
 
+        # Both latents are viewed as single-head, 4D tensors so all cache layers handle them correctly
+        k_pass = k_pass.view(batch_size, 1, seq_length, self.kv_lora_rank)
         k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
 
         cos, sin = position_embeddings
         q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
 
+        # Cache read / write is performed while the latent KV is still compressed
+        if past_key_values is not None:
+            k_pass, k_rot = past_key_values.update(k_pass, k_rot, self.layer_idx)
+
         query_states = torch.cat((q_pass, q_rot), dim=-1)
 
         key_states, value_states = self.expand_kv(k_pass, k_rot)
-
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -343,7 +336,7 @@ class LongcatFlashPreTrainedModel(PreTrainedModel):
 
 
 class LongcatFlashModel(DeepseekV3Model):
-    def __init__(self, config):
+    def __init__(self, config: LongcatFlashConfig):
         super().__init__(config)
         self.layers = nn.ModuleList(
             [LongcatFlashDecoderLayer(config, layer_idx) for layer_idx in range(config.num_layers)]

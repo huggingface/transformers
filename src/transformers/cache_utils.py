@@ -12,6 +12,7 @@ from .utils import (
     is_torchdynamo_compiling,
     logging,
 )
+from .utils.deprecation import deprecate_kwarg
 
 
 if is_hqq_available():
@@ -160,19 +161,31 @@ class DynamicLayer(CacheLayerMixin):
         """Returns the maximum sequence length of the cache object. DynamicLayer does not have a maximum length."""
         return -1
 
-    def crop(self, max_length: int) -> None:
+    @deprecate_kwarg("max_length", new_name="tokens_to_remove", version="5.18")
+    def crop(self, tokens_to_remove: int) -> None:
         """
-        Crop the past key values up to a new `max_length` in terms of tokens. `max_length` can also be negative
-        to remove `max_length` tokens.
+        Remove `tokens_to_remove` tokens from the current cache layer.
         """
-        if max_length <= 0:
-            max_length = self.get_seq_length() - abs(max_length)
+        # Legacy path: `tokens_to_remove` represents the final absolute size that the cache should have
+        if tokens_to_remove > 0:
+            logger.warning_once(
+                "Calling `crop` with a positive value is deprecated and will be removed in version 5.18. Please use a negative "
+                "integer to remove that number of tokens from the cache instead."
+            )
+            current_length = self.get_seq_length()
+            # If the absolute value requested is larger than current length, just do nothing
+            if tokens_to_remove >= current_length:
+                return
+            else:
+                tokens_to_remove = self.get_seq_length() - tokens_to_remove
 
-        if self.get_seq_length() <= max_length:
+        # Nothing to do in this case
+        if tokens_to_remove == 0:
             return
 
-        self.keys = self.keys[..., :max_length, :]
-        self.values = self.values[..., :max_length, :]
+        # Crop the cache
+        self.keys = self.keys[..., : -abs(tokens_to_remove), :]
+        self.values = self.values[..., : -abs(tokens_to_remove), :]
 
     def batch_repeat_interleave(self, repeats: int) -> None:
         """Repeat the cache `repeats` times in the batch dimension."""
@@ -267,10 +280,12 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         """Return the maximum cache shape of the cache"""
         return self.sliding_window
 
-    def crop(self, max_length: int) -> None:
+    @deprecate_kwarg("max_length", new_name="tokens_to_remove", version="5.18")
+    def crop(self, tokens_to_remove: int) -> None:
         """
-        Crop the past key values up to a new `max_length` in terms of tokens. `max_length` can also be negative to remove `max_length`
-        tokens.
+        Remove `tokens_to_remove` tokens from the current cache layer. This will also restrict the size of the cached states back to their
+        minimal working size, i.e. `sliding_window - 1` if they reached the sliding window length. This means that `crop(0)` will not
+        necessarily always be a no-op, as it may still remove useless states (i.e. states that are not needed for the next `forward`).
         """
         # If we are beyond the sliding window, we need to be more careful
         if self.get_seq_length() >= self.sliding_window:
@@ -279,20 +294,25 @@ class DynamicSlidingWindowLayer(DynamicLayer):
                     "`crop` was called, but the current layer does not track past states, and the sliding window size was already "
                     "reached. Call `activate_past_recording` before `crop` to be able to rollback the cache."
                 )
-            if max_length > 0:
+            if tokens_to_remove > 0:
                 raise RuntimeError(
                     "Once the sliding window size has been reached, `DynamicSlidingWindowLayer` can only be cropped by passing a "
                     "negative int, to specify how many tokens to remove"
                 )
-            tokens_to_remove = abs(max_length)
-            # We crop, and restrict the size back to the sliding window if still larger
-            self.keys = self.keys[:, :, -self.sliding_window + 1 - tokens_to_remove : -tokens_to_remove, :]
-            self.values = self.values[:, :, -self.sliding_window + 1 - tokens_to_remove : -tokens_to_remove, :]
-            self.cumulative_length = self.cumulative_length - tokens_to_remove
+            # In this case, simply restrict the size back to sliding window without cropping
+            if tokens_to_remove == 0:
+                self.keys = self.keys[:, :, -self.sliding_window + 1 :, :]
+                self.values = self.values[:, :, -self.sliding_window + 1 :, :]
+            # In this case, we crop and restrict the size back to the sliding window if still larger
+            else:
+                tokens_to_remove = abs(tokens_to_remove)
+                self.keys = self.keys[:, :, -self.sliding_window + 1 - tokens_to_remove : -tokens_to_remove, :]
+                self.values = self.values[:, :, -self.sliding_window + 1 - tokens_to_remove : -tokens_to_remove, :]
+                self.cumulative_length = self.cumulative_length - tokens_to_remove
 
         # If we did not reach the sliding window, we can do the same as for a full attention layer
         else:
-            super().crop(max_length)
+            super().crop(tokens_to_remove)
             self.cumulative_length = self.keys.shape[-2]
 
 
@@ -350,13 +370,19 @@ class DynamicIndexedLayer(DynamicLayer):
         if self.is_indexer_initialized and self.indexer_keys.numel() > 0:
             self.indexer_keys = self.indexer_keys.index_select(0, beam_idx.to(self.indexer_keys.device))
 
-    def crop(self, max_length: int) -> None:
-        super().crop(max_length)
+    @deprecate_kwarg("max_length", new_name="tokens_to_remove", version="5.18")
+    def crop(self, tokens_to_remove: int) -> None:
+        super().crop(tokens_to_remove)
         if not self.is_indexer_initialized or self.indexer_keys.numel() == 0:
             return
-        effective = max_length if max_length >= 0 else self.indexer_keys.shape[1] - abs(max_length)
-        if self.indexer_keys.shape[1] > effective:
-            self.indexer_keys = self.indexer_keys[:, :effective, :]
+        if tokens_to_remove > 0:
+            current_length = self.indexer_keys.shape[1]
+            if tokens_to_remove >= current_length:
+                return
+            tokens_to_remove = current_length - tokens_to_remove
+        if tokens_to_remove == 0:
+            return
+        self.indexer_keys = self.indexer_keys[:, : -abs(tokens_to_remove), :]
 
     def batch_repeat_interleave(self, repeats: int) -> None:
         super().batch_repeat_interleave(repeats)
@@ -668,6 +694,11 @@ class StaticIndexedLayer(StaticLayer):
             self.indexer_keys.zero_()
             self.indexer_cumulative_length.zero_()
 
+    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
+        super().reorder_cache(beam_idx)
+        if self.is_indexer_initialized and self.indexer_keys.numel() > 0:
+            self.indexer_keys = self.indexer_keys.index_select(0, beam_idx.to(self.indexer_keys.device))
+
 
 class QuantizedLayer(DynamicLayer):
     """
@@ -860,7 +891,7 @@ class HQQQuantizedLayer(QuantizedLayer):
 class LinearAttentionCacheLayerMixin(ABC):
     """Base, abstract class for a linear attention single layer's cache."""
 
-    # All shapes are static by essence in a LinearAttention layer, so it is compileable
+    # All shapes are static by essence in a LinearAttention layer, so it is compilable
     is_compileable = True
     # Linear attention layers track their own conv/recurrent states; they don't use the key/value early-init path.
     supports_early_init = False
@@ -938,6 +969,11 @@ class LinearAttentionCacheLayerMixin(ABC):
         self.record_past = True
 
     def crop(self, tokens_to_remove: int):
+        """
+        Remove `tokens_to_remove` tokens from the current cache layer. This will also restrict the size of the cached states back to their
+        minimal working size, i.e. `conv_kernel_size`. This means that `crop(0)` will not necessarily always be a no-op, as it may
+        still remove useless states (i.e. states that are not needed for the next `forward`).
+        """
         if not self.record_past:
             raise RuntimeError(
                 "`crop` was called, but the current layer does not track past states. Call `activate_past_recording` before "
@@ -949,10 +985,11 @@ class LinearAttentionCacheLayerMixin(ABC):
             )
         for i in range(self.number_of_states):
             tokens_to_remove = abs(tokens_to_remove)
-            # This both crop the last `tokens_to_remove`, as well as resize the conv states to `conv_kernel_size` as we never
-            # need more for the next forward
+            # In this case, simply restrict the size back to `conv_kernel_size` without cropping
             if tokens_to_remove == 0:
                 self.conv_states[i] = self.conv_states[i][..., -self.conv_kernel_size[i] :]
+            # This both crop the last `tokens_to_remove`, as well as resize the conv states to `conv_kernel_size` as we never
+            # need more for the next forward
             else:
                 self.conv_states[i] = self.conv_states[i][
                     ..., -tokens_to_remove - self.conv_kernel_size[i] : -tokens_to_remove
@@ -1055,7 +1092,7 @@ class LinearAttentionLayer(LinearAttentionCacheLayerMixin):
 
 
 class LinearAttentionAndFullAttentionLayer(LinearAttentionLayer, DynamicLayer):
-    # The dynamic Attention part makes it non-compileable
+    # The dynamic Attention part makes it non-compilable
     is_compileable = False
 
     def __init__(self, number_of_states: int = 1, **kwargs):
@@ -1088,13 +1125,14 @@ class LinearAttentionAndFullAttentionLayer(LinearAttentionLayer, DynamicLayer):
         LinearAttentionLayer.reorder_cache(self, beam_idx)
         DynamicLayer.reorder_cache(self, beam_idx)
 
-    def crop(self, max_length: int) -> None:
-        LinearAttentionLayer.crop(self, max_length)
-        DynamicLayer.crop(self, max_length)
+    @deprecate_kwarg("max_length", new_name="tokens_to_remove", version="5.18")
+    def crop(self, tokens_to_remove: int) -> None:
+        LinearAttentionLayer.crop(self, tokens_to_remove)
+        DynamicLayer.crop(self, tokens_to_remove)
 
 
 class LinearAttentionAndSlidingWindowAttentionLayer(LinearAttentionLayer, DynamicSlidingWindowLayer):
-    # The dynamic sliding attention part makes it non-compileable
+    # The dynamic sliding attention part makes it non-compilable
     is_compileable = False
 
     def __init__(self, sliding_window: int, number_of_states: int = 1, **kwargs):
@@ -1119,9 +1157,10 @@ class LinearAttentionAndSlidingWindowAttentionLayer(LinearAttentionLayer, Dynami
         LinearAttentionLayer.reorder_cache(self, beam_idx)
         DynamicSlidingWindowLayer.reorder_cache(self, beam_idx)
 
-    def crop(self, max_length: int) -> None:
-        LinearAttentionLayer.crop(self, max_length)
-        DynamicSlidingWindowLayer.crop(self, max_length)
+    @deprecate_kwarg("max_length", new_name="tokens_to_remove", version="5.18")
+    def crop(self, tokens_to_remove: int) -> None:
+        LinearAttentionLayer.crop(self, tokens_to_remove)
+        DynamicSlidingWindowLayer.crop(self, tokens_to_remove)
 
 
 class LinearAttentionAndStaticFullAttentionLayer(LinearAttentionLayer, StaticLayer):
@@ -1195,6 +1234,7 @@ DYNAMIC_LAYER_TYPE_MAPPING = {
     "hybrid_sliding": LinearAttentionAndSlidingWindowAttentionLayer,
     # More exotic implementations
     "deepseek_sparse_attention": DynamicIndexedLayer,
+    "qwen_sparse_attention": DynamicIndexedLayer,
     # Note: we want `moe` and `mlp` layers to be LinearAttentionLayer, so that we can correctly grab sequence length etc from
     # attention layers. Since they will stay empty (they don't need any cache), we don't want them to collide for mask creation etc
     # TODO: maybe use a dummy layer in those cases, or a dictionary {idx: Layer} for self.layers, so that we can skipthe indices
@@ -1216,6 +1256,7 @@ STATIC_LAYER_TYPE_MAPPING = {
     "hybrid_sliding": LinearAttentionAndStaticSlidingWindowAttentionLayer,
     # More exotic implementations
     "deepseek_sparse_attention": StaticIndexedLayer,
+    "qwen_sparse_attention": StaticIndexedLayer,
     # Note: we want `moe` and `mlp` layers to be LinearAttentionLayer, so that we can correctly grab sequence length etc from
     # attention layers. Since they will stay empty (they don't need any cache), we don't want them to collide for mask creation etc
     # TODO: maybe use a dummy layer in those cases, or a dictionary {idx: Layer} for self.layers, so that we can skipthe indices
@@ -1475,7 +1516,7 @@ class Cache:
     def get_max_length(self, layer_idx: int | None = None) -> int:
         """
         Returns the maximum length of the cache. If `layer_idx` is not provided (default), this returns the maximum
-        accross all layers. Otherwise, return the maximum supported value for the given layer.
+        across all layers. Otherwise, return the maximum supported value for the given layer.
         A value of `-1` means no maximum, or undefined maximum, e.g. for dynamic attention layers that can grow indefinitely,
         or linear attention layer that do not have a sequence length dimension.
         """
@@ -1565,10 +1606,15 @@ class Cache:
         for layer_idx in range(len(self.layers)):
             self.layers[layer_idx].reorder_cache(beam_idx)
 
-    def crop(self, max_length: int):
-        """Crop the cache to the given length"""
+    def crop(self, tokens_to_remove: int) -> None:
+        """
+        Remove `tokens_to_remove` tokens from the current Cache. For layers that do not need to keep all the past states in memory,
+        such as sliding window layers or linear attention layers, this will also restrict the size of the cached states back to their
+        minimal working size. This means that `crop(0)` will not necessarily always be a no-op, as it may still remove useless states
+        (i.e. states that are not needed for the next `forward`) from the Cache.
+        """
         for layer_idx in range(len(self.layers)):
-            self.layers[layer_idx].crop(max_length)
+            self.layers[layer_idx].crop(tokens_to_remove)
 
     def batch_repeat_interleave(self, repeats: int):
         """Repeat and interleave the cache"""
@@ -1750,20 +1796,20 @@ class DynamicCache(Cache):
         if ddp_cache_data is not None:
             # Init all the layers with the data
             for layer_idx, kv_and_optional_sliding in enumerate(ddp_cache_data):
+                # kv_and_optional_sliding contains at least two elements: the key and value states. It can also
+                # contain a third element, which is an optional sliding window tensor.
+                key_states, value_states = kv_and_optional_sliding[:2]
+                sliding_window_tensor = kv_and_optional_sliding[2] if len(kv_and_optional_sliding) == 3 else None
                 # If the config was not passed above, initialize a new cache layer for each entry of the ddp_data
                 if config is None:
-                    # kv_and_optional_sliding contains at least two elements: the key and value states. It can also
-                    # contain a third element, which is an optional sliding window tensor.
-                    sliding_window_tensor = kv_and_optional_sliding[2] if len(kv_and_optional_sliding) == 3 else None
                     # If there is a sliding window tensor, use it to initialize the layer
                     if sliding_window_tensor is not None:
-                        # Since the same layer is dispatched across replicas, sliding_window is the same for all
-                        sliding_window = sliding_window_tensor[0].item()
-                        layers.append(DynamicSlidingWindowLayer(sliding_window=sliding_window))
+                        layers.append(DynamicSlidingWindowLayer(sliding_window=sliding_window_tensor.item()))
                     else:
                         layers.append(DynamicLayer())
-                # Update the layer with the data
-                _, _ = layers[layer_idx].update(kv_and_optional_sliding[0], kv_and_optional_sliding[1])
+                # Update the layer with the data if any
+                if key_states is not None and value_states is not None:
+                    _, _ = layers[layer_idx].update(key_states, value_states)
 
         # If neither of config nor ddp_data was passed, then simply lazy init a full cache of DynamicLayer
         if len(layers) == 0:
@@ -2008,14 +2054,13 @@ class EncoderDecoderCache(Cache):
                 f"attention cache and {self.cross_attention_cache.__str__()} for the cross attention cache."
             )
 
-    # TODO(gante, sanchit-gandhi): move following functionality into `.generate`
-    def crop(self, maximum_length: int):
+    @deprecate_kwarg("maximum_length", new_name="tokens_to_remove", version="5.18")
+    def crop(self, tokens_to_remove: int) -> None:
         """
-        Crop the past key values up to a new `maximum_length` in terms of tokens. `maximum_length` can also be
-        negative to remove `maximum_length` tokens. This is used in assisted decoding and contrastive search (on the Hub).
+        Remove `tokens_to_remove` tokens from the current cache layer.
         """
         self.check_dynamic_cache(self.crop.__name__)
-        self.self_attention_cache.crop(maximum_length)
+        self.self_attention_cache.crop(tokens_to_remove)
 
     def batch_repeat_interleave(self, repeats: int):
         """Repeat the cache `repeats` times in the batch dimension. Used in contrastive search (on the Hub)."""
@@ -2064,3 +2109,23 @@ class MtpCache(DynamicCache):
         mtp_offset = layer_idx + 1
         kv_length, kv_offset = super().get_mask_sizes(query_length, layer_idx)
         return kv_length, kv_offset + mtp_offset
+
+
+class DFlashCache(DynamicCache):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._previous_number_of_accepted_tokens = 0
+
+    def set_previous_accepted_tokens(self, number_of_accepted_tokens: int):
+        self._previous_number_of_accepted_tokens = number_of_accepted_tokens
+
+    def get_query_offset(self, layer_idx: int = 0):
+        # During one forward, the hidden states that will create queries do NOT have the same length as those that will create k/v, so
+        # all the kv length is shifted by the previous number of accepted tokens, that will be added to k/v inside the Attention
+        return super().get_query_offset(layer_idx) + self._previous_number_of_accepted_tokens
+
+    def get_mask_sizes(self, query_length: int, layer_idx: int) -> tuple[int, int]:
+        # During one forward, the hidden states that will create queries do NOT have the same length as those that will create k/v, so
+        # all the kv length is shifted by the previous number of accepted tokens, that will be added to k/v inside the Attention
+        kv_length, kv_offset = super().get_mask_sizes(query_length, layer_idx)
+        return kv_length + self._previous_number_of_accepted_tokens, kv_offset

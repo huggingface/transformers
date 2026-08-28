@@ -71,6 +71,7 @@ from transformers.testing_utils import (
     hub_retry,
     is_staging_test,
     require_accelerate,
+    require_kernels,
     require_non_hpu,
     require_torch,
     require_torch_accelerator,
@@ -2540,6 +2541,32 @@ class ModelUtilsTest(TestCasePlus):
         self.assertEqual(output_text1, output_text2)
         self.assertEqual(output_text1, EXPECTED_TEXT)
 
+    @require_kernels
+    def test_force_accelerate_hooks_does_not_hide_the_signature_it_wraps(self):
+        """
+        `kernels` refuses to swap in a layer whose forward signature does not match the one it replaces. The
+        `force_accelerate_hooks` wrapper must therefore keep the signature of the forward it decorates, otherwise
+        every mixer carrying it looks like `(self, *args, **kwargs)` and can never be kernelized.
+
+        This is based on one concrete case: `Qwen3_5GatedDeltaNet` is kernelized as a whole layer
+        (`@use_kernel_forward_from_hub("Qwen3_5GatedDeltaNet")`, mapped to `Atlas-Inference/gdn` on GB10/SM121)
+        while its `forward` also carries `@force_accelerate_hooks("conv1d")` -- it is the one class where both
+        decorators meet. See #48089 for the report and #48156 for the fix.
+
+        The signature check is driven directly, so this needs neither the kernel nor the hardware to be available.
+        """
+        from kernels.layer.layer import _validate_layer
+
+        from transformers.models.qwen3_5.modeling_qwen3_5 import Qwen3_5GatedDeltaNet
+
+        # Stands in for a hub kernel layer: same forward signature as the class it would replace
+        class KernelGatedDeltaNet(torch.nn.Module):
+            def forward(self, hidden_states, cache_params=None, attention_mask=None, **kwargs):
+                return hidden_states
+
+        # Raises `TypeError: ... different number of arguments` if the decorator hides the signature
+        _validate_layer(check_cls=Qwen3_5GatedDeltaNet, cls=KernelGatedDeltaNet, repo="dummy-repo")
+
 
 @slow
 @require_torch
@@ -3173,7 +3200,7 @@ class TestAttentionImplementation(unittest.TestCase):
         # Simulate the "module cleared from sys.modules" case (test cleanup, REPL).
         from transformers.models.llama.modeling_llama import LlamaModel
 
-        # The method _can_set_attn_implementation caches the result on a succesful call, so we need to clear the cache
+        # The method _can_set_attn_implementation caches the result on a successful call, so we need to clear the cache
         if hasattr(LlamaModel, "_can_set_attn_implementation_cached_value"):
             delattr(LlamaModel, "_can_set_attn_implementation_cached_value")
 
@@ -3195,12 +3222,12 @@ class TestAttentionImplementation(unittest.TestCase):
         self.assertTrue(FSDPLlamaModel._can_set_attn_implementation())
 
     def test_can_set_attn_modern_vs_legacy(self):
-        # Modern interface model: True. Legacy model (T5 doesn't use ALL_ATTENTION_FUNCTIONS): False.
+        # Modern interface model: True. Legacy model (ProphetNet doesn't use ALL_ATTENTION_FUNCTIONS): False.
         from transformers.models.llama.modeling_llama import LlamaModel
-        from transformers.models.t5.modeling_t5 import T5Model
+        from transformers.models.prophetnet.modeling_prophetnet import ProphetNetModel
 
         self.assertTrue(LlamaModel._can_set_attn_implementation())
-        self.assertFalse(T5Model._can_set_attn_implementation())
+        self.assertFalse(ProphetNetModel._can_set_attn_implementation())
 
     def test_can_set_attn_legacy_edge_cases(self):
         # FSMT: bare `class Attention(nn.Module):` -- tightened regex catches this case.

@@ -1,4 +1,4 @@
-FROM nvidia/cuda:12.6.0-cudnn-devel-ubuntu22.04
+FROM nvidia/cuda:13.0.3-cudnn-devel-ubuntu22.04
 LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -9,12 +9,12 @@ SHELL ["sh", "-lc"]
 # The following `ARG` are mainly used to specify the versions explicitly & directly in this docker file, and not meant
 # to be used as arguments for docker build (so far).
 
-ARG PYTORCH='2.11.0'
+ARG PYTORCH='2.13.0'
 # Example: `cu102`, `cu113`, etc.
-ARG CUDA='cu126'
+ARG CUDA='cu130'
 
 # This needs to be compatible with the above `PYTORCH`.
-ARG TORCHCODEC='0.11.0'
+ARG TORCHCODEC='0.15.0'
 
 ARG FLASH_ATTN='false'
 
@@ -32,12 +32,22 @@ RUN python3 -m pip install --no-cache-dir -e ./transformers[dev]
 # 2. For `torchcodec`, use `cpu` as we don't have `libnvcuvid.so` on the host runner. See https://github.com/meta-pytorch/torchcodec/issues/912
 #    **Important**: We need to specify `torchcodec` version if the torch version is not the latest stable one.
 # 3. `set -e` means "exit immediately if any command fails".
+# 4. Warning: torchaudio only publishes wheels for the CUDA version it was released with (e.g. 2.11.0
+#    only has a cu130 build). If torch is installed with a different CUDA suffix (e.g. cu132), pip
+#    will keep the torchaudio installed in the previous step and torchaudio will raise a RuntimeError on import due to the
+#    CUDA version mismatch. When upgrading CUDA, make sure torchaudio has a wheel for the new version.
 RUN set -e; \
     # Determine torch version
     if [ ${#PYTORCH} -gt 0 ] && [ "$PYTORCH" != "pre" ]; then \
         VERSION="torch==${PYTORCH}.*"; \
-        TORCHAUDIO_VERSION="torchaudio==${PYTORCH}.*"; \
         TORCHCODEC_VERSION="torchcodec==${TORCHCODEC}.*"; \
+        # torchaudio is in maintenance mode: 2.11 is the final release, compatible with torch 2.11+
+        # (no need to upgrade it with torch; it does not pin torch to a specific version)
+        if printf '%s\n' "2.11.0" "${PYTORCH}" | sort -V | head -1 | grep -qx "2.11.0"; then \
+            TORCHAUDIO_VERSION="torchaudio==2.11.0"; \
+        else \
+            TORCHAUDIO_VERSION="torchaudio==${PYTORCH}.*"; \
+        fi; \
     else \
         VERSION="torch"; \
         TORCHAUDIO_VERSION="torchaudio"; \
@@ -81,8 +91,6 @@ RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/pef
 
 # For bettertransformer
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/optimum@main#egg=optimum
-# For kernels
-RUN python3 -m pip install --no-cache-dir kernels
 
 # For ONNX export tests (onnxscript pulls in onnx + onnx_ir; onnxruntime-gpu validates the exported
 # graph on GPU for faster export testing)

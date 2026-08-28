@@ -224,6 +224,15 @@ class Gemma4TextConfig(PreTrainedConfig):
 
         super().__post_init__(**kwargs)
 
+    def to_dict(self) -> dict[str, Any]:
+        output = super().to_dict()
+        # Serialize the value `__post_init__` converted *from*, so that a reload converts once more
+        # instead of halving the already-halved window. Configs that inherit this one without the
+        # flag never convert, hence the `None` fallback.
+        if getattr(self, "use_bidirectional_attention", None) == "all":
+            output["sliding_window"] = (self.sliding_window - 1) * 2
+        return output
+
     def convert_rope_params_to_dict(self, **kwargs):
         # No need to handle BC for new models, because they have no old-format `rope_scaling`
         return kwargs

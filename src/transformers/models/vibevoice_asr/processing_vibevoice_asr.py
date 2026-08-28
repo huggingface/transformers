@@ -17,11 +17,11 @@ import re
 
 import numpy as np
 
-from ...audio_utils import AudioInput, make_list_of_audio, make_list_of_audio_chat_template
+from ...audio_utils import AudioInput, make_list_of_audio_chat_template
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, prepare_prompt_input
 from ...tokenization_utils_base import TextInput
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
@@ -70,6 +70,7 @@ class VibeVoiceAsrProcessor(ProcessorMixin):
             The audio duration token placeholder to use in the chat template.
     """
 
+    valid_processor_kwargs = VibeVoiceAsrProcessorKwargs
     feature_extractor_class = "VibeVoiceAcousticTokenizerFeatureExtractor"
     tokenizer_class = "Qwen2TokenizerFast"
 
@@ -92,6 +93,7 @@ class VibeVoiceAsrProcessor(ProcessorMixin):
         self.audio_duration_token = audio_duration_token
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
 
+    @auto_docstring
     def __call__(
         self,
         text: TextInput | list[TextInput],
@@ -99,77 +101,80 @@ class VibeVoiceAsrProcessor(ProcessorMixin):
         output_labels: bool | None = False,
         **kwargs: Unpack[VibeVoiceAsrProcessorKwargs],
     ) -> BatchFeature:
-        """
-        Main method to process text inputs with optional audio samples for ASR.
-
-        This method processes text inputs (typically prepared by apply_chat_template) and optional audio samples
-        for transcription. It replaces the audio duration placeholder and expands audio token placeholders based
-        on the actual audio length.
-
-        Args:
-            text (`str`, `List[str]`):
-                The input text(s) to process, typically prepared by apply_chat_template with audio token placeholders.
-            audio (`List[Union[str, np.ndarray]]`):
-                Audio samples for transcription. Should match the number of audio token placeholders in text.
-            output_labels (bool, *optional*, default=False):
-                Whether to return labels for training.
-            **kwargs:
-                Additional keyword arguments passed to the tokenizer and feature extractor.
+        r"""
+        output_labels (bool, *optional*, default=False):
+            Whether to return labels for training.
 
         Returns:
             [`BatchFeature`]: A dictionary with tokenized text (`input_ids`, `attention_mask`) and
-            audio features (`input_features`, `input_features_mask`).
+            audio features (`input_values`, `padding_mask`).
         """
-        output_kwargs = self._merge_kwargs(
-            VibeVoiceAsrProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
+        output_kwargs = self._merge_kwargs(VibeVoiceAsrProcessorKwargs, **kwargs)
+        return_tensors = output_kwargs["text_kwargs"].get("return_tensors", None)
 
-        text_kwargs = output_kwargs["text_kwargs"]
-        audio_kwargs = output_kwargs["audio_kwargs"]
-        return_tensors = text_kwargs.get("return_tensors", None)
         if return_tensors != "pt":
             raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
 
-        if isinstance(text, str):
-            text = [text]
-        elif not isinstance(text, (list, tuple)):
-            raise ValueError("text input must be a string or list of strings")
-
         if audio is not None:
-            audio = make_list_of_audio(audio)
-            data = self.feature_extractor(audio, **audio_kwargs)
-            audio_lengths = data["padding_mask"].sum(dim=-1).cpu().numpy()
+            _, text, _, audio = self.prepare_inputs_layout(text=text, audio=audio, **kwargs)
+            self.validate_inputs(text=text, audio=audio, **kwargs)
 
             # Replace audio duration placeholders in text
-            audio_durations = audio_lengths / self.feature_extractor.sampling_rate
-            audio_durations_iter = iter(audio_durations)
+            audio_durations = iter([len(el) / self.feature_extractor.sampling_rate for el in audio])
             audio_duration_pattern = re.compile(re.escape(self.audio_duration_token))
             for i in range(len(text)):
-                text[i] = audio_duration_pattern.sub(lambda _: f"{next(audio_durations_iter):.2f}", text[i])
+                text[i] = audio_duration_pattern.sub(lambda _: f"{next(audio_durations):.2f}", text[i])
 
-            # Expand audio tokens in text
-            num_audio_tokens = np.ceil(audio_lengths / audio_kwargs["pad_to_multiple_of"]).astype(int).tolist()
-            num_audio_tokens_iter = iter(num_audio_tokens)
-            audio_token_pattern = re.compile(re.escape(self.audio_token))
-            for i in range(len(text)):
-                text[i] = audio_token_pattern.sub(lambda _: self.audio_token * next(num_audio_tokens_iter), text[i])
-        else:
-            data = {}
-
-        text_inputs = self.tokenizer(text, **text_kwargs)
-        data.update(text_inputs)
+        model_inputs = super().__call__(text=text, audio=audio, **kwargs)
 
         if output_labels:
-            labels = data["input_ids"].clone()
+            labels = model_inputs["input_ids"].clone()
             labels[labels == self.audio_token_id] = -100
             labels[labels == self.audio_bos_token_id] = -100
             labels[labels == self.audio_eos_token_id] = -100
             labels[labels == self.tokenizer.pad_token_id] = -100
-            data["labels"] = labels
+            model_inputs["labels"] = labels
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(data=model_inputs, tensor_type="pt", skip_tensor_conversion=self.skip_tensor_conversion)
+
+    def prepare_inputs_layout(self, text=None, audio=None, **kwargs):
+        _, text, _, audio = super().prepare_inputs_layout(text=text, audio=audio, **kwargs)
+        if isinstance(text, str):
+            text = [text]
+        return None, text, None, audio
+
+    def validate_inputs(
+        self,
+        text: TextInput | list[TextInput] | None = None,
+        audio: AudioInput | None = None,
+        **kwargs: Unpack[ProcessingKwargs],
+    ):
+        super().validate_inputs(text=text, audio=audio, **kwargs)
+
+        if not isinstance(text, (list, tuple)):
+            raise ValueError("text input must be a string or list of strings")
+
+        if audio is not None:
+            for example in audio:
+                if example.ndim != 1:
+                    raise ValueError(f"Audio should be mono, got shape: {example.shape}")
+
+    def _process_audio(self, audio: AudioInput, **kwargs):
+        audio_inputs = self.feature_extractor(audio, **kwargs)
+        audio_lengths = audio_inputs["padding_mask"].sum(dim=-1).cpu().numpy()
+        audio_inputs["num_audio_tokens"] = np.ceil(audio_lengths / kwargs["pad_to_multiple_of"]).astype(int).tolist()
+
+        audio_replacements = [self.replace_audio_token(audio_inputs, audio_idx=idx) for idx in range(len(audio))]
+        return audio_inputs, audio_replacements
+
+    def replace_audio_token(self, audio_inputs: dict, audio_idx: int, **kwargs) -> str:
+        num_audio_tokens = audio_inputs["num_audio_tokens"][audio_idx]
+        return self.audio_token * num_audio_tokens
+
+    @property
+    def unused_input_names(self) -> list[str]:
+        "Input names returned always by subprocessors but not used in model's `forward`"
+        return ["num_audio_tokens"]
 
     def apply_transcription_request(
         self,

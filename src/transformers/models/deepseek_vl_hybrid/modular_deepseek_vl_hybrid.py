@@ -316,7 +316,7 @@ class DeepseekVLHybridModel(DeepseekVLModel):
         if pixel_values is not None:
             if input_ids is None:
                 image_attention_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                    torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
                 image_attention_mask = image_attention_mask.all(-1)
             else:
@@ -401,45 +401,13 @@ class DeepseekVLHybridForConditionalGeneration(DeepseekVLForConditionalGeneratio
             image_hidden_states=outputs.image_hidden_states,
         )
 
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        inputs_embeds=None,
-        pixel_values=None,
-        high_res_pixel_values=None,
-        attention_mask=None,
-        logits_to_keep=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            logits_to_keep=logits_to_keep,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
-        if is_first_iteration or not kwargs.get("use_cache", True):
-            # Pixel values are used only in the first iteration if available
-            # In subsequent iterations, they are already merged with text and cached
-            # NOTE: first iteration doesn't have to be prefill, it can be the first
-            # iteration with a question and cached system prompt (continue generate from cache)
-            model_inputs["pixel_values"] = pixel_values
-            model_inputs["high_res_pixel_values"] = high_res_pixel_values
-
-        return model_inputs
-
 
 class DeepseekVLHybridImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     min_size (`int`, *optional*, defaults to 14):
         The minimum allowed size for the resized image. Ensures that neither the height nor width
         falls below this value after resizing.
-     high_res_size (`dict`, *optional*, defaults to `{"height": 1024, "width": 1024}`):
+    high_res_size (`dict`, *optional*, defaults to `{"height": 1024, "width": 1024}`):
         Size of the high resolution output image after resizing. Can be overridden by the `high_res_size` parameter in the `preprocess`
         method.
     high_res_resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):

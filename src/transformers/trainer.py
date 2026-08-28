@@ -80,6 +80,7 @@ from .models.auto.modeling_auto import (
 )
 from .optimization import GreedyLR, get_scheduler
 from .processing_utils import ProcessorMixin
+from .pytorch_utils import is_torch_greater_or_equal_than_2_6
 from .tokenization_utils_base import PreTrainedTokenizerBase
 from .trainer_callback import (
     CallbackHandler,
@@ -985,23 +986,23 @@ class Trainer:
         else:
             data_collator = self._get_collator_with_removed_columns(self.data_collator, description=description)
 
-        # MPS requires forking if multiple workers are specified
-        should_fork = torch.backends.mps.is_available() and self.args.dataloader_num_workers > 1
-
         dataloader_params = {
             "batch_size": batch_size,
             "collate_fn": data_collator,
             "num_workers": self.args.dataloader_num_workers,
             "pin_memory": self.args.dataloader_pin_memory,
             "persistent_workers": self.args.dataloader_persistent_workers,
-            "multiprocessing_context": "fork" if should_fork else None,
+            "multiprocessing_context": self.args.dataloader_multiprocessing_context,
+            "prefetch_factor": self.args.dataloader_prefetch_factor,
         }
+        # `in_order` was added in torch 2.6; on older versions the loader always behaves as `in_order=True`.
+        if is_torch_greater_or_equal_than_2_6:
+            dataloader_params["in_order"] = self.args.dataloader_in_order
 
         if not isinstance(dataset, torch.utils.data.IterableDataset):
             if sampler_fn is not None:
                 dataloader_params["sampler"] = sampler_fn(dataset)
             dataloader_params["drop_last"] = self.args.dataloader_drop_last
-            dataloader_params["prefetch_factor"] = self.args.dataloader_prefetch_factor
             if is_training:
                 dataloader_params["worker_init_fn"] = partial(
                     seed_worker, num_workers=self.args.dataloader_num_workers, rank=self.args.process_index
@@ -1077,6 +1078,9 @@ class Trainer:
                 dataset=eval_dataset,
                 lengths=lengths,
                 model_input_name=model_input_name,
+                generator=torch.Generator().manual_seed(
+                    self.args.data_seed if self.args.data_seed is not None else self.args.seed
+                ),
             )
 
         if self.args.world_size <= 1:
@@ -1397,7 +1401,13 @@ class Trainer:
 
         # Activate gradient checkpointing if needed
         if args.gradient_checkpointing:
-            self.model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=args.gradient_checkpointing_kwargs)
+            # `every_n_layers` selects which layers are checkpointed; the remaining keys are forwarded to
+            # `torch.utils.checkpoint.checkpoint`, so it has to come out of the dict before that happens.
+            gc_kwargs = dict(args.gradient_checkpointing_kwargs or {})
+            every_n_layers = gc_kwargs.pop("every_n_layers", 1)
+            self.model.gradient_checkpointing_enable(
+                gradient_checkpointing_kwargs=gc_kwargs or None, every_n_layers=every_n_layers
+            )
 
         # If the model uses a tokenizer, it may have a new tokens for fine-tuning purposes.
         if isinstance(self.processing_class, (PreTrainedTokenizerBase, ProcessorMixin)) and hasattr(
@@ -1565,6 +1575,12 @@ class Trainer:
             os.path.join(resume_from_checkpoint, TRAINER_STATE_NAME)
         ):
             self.state = TrainerState.load_from_json(os.path.join(resume_from_checkpoint, TRAINER_STATE_NAME))
+            if self.state.best_model_checkpoint is not None and not os.path.isdir(self.state.best_model_checkpoint):
+                logger.warning(
+                    f"The best checkpoint {self.state.best_model_checkpoint} recorded in the resumed state does not "
+                    "exist anymore. Ignoring it for this run."
+                )
+                self.state.best_model_checkpoint = None
             compare_trainer_and_checkpoint_args(self.args, self.state)
             self._load_callback_state()
             epochs_trained = int(self.state.global_step // num_update_steps_per_epoch)
@@ -2993,8 +3009,10 @@ class Trainer:
                     logits = smp_nested_concat(logits_mb)
             else:
                 if has_labels or loss_without_labels:
-                    with self.compute_loss_context_manager():
-                        num_items_in_batch = self._get_num_items_in_batch([inputs], self.args.device)
+                    # Count before sharding: `context_parallel` splits the buffers in place.
+                    num_items_in_batch = self._get_num_items_in_batch([inputs], self.args.device)
+                    cp_context, inputs = self._prepare_context_parallel_inputs(model, inputs)
+                    with self.compute_loss_context_manager(), cp_context():
                         if self.args.use_liger_kernel and prediction_loss_only:
                             inputs = {**inputs, "skip_logits": True}
                         loss, outputs = self.compute_loss(
