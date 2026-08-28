@@ -10,7 +10,7 @@ distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, e
 implied. See the License for the specific language governing permissions and limitations under the
 License.
 -->
-*This model was published in HF papers on 2025-09-15 and contributed to Hugging Face Transformers on 2026-08-16.*
+*This model was published in HF papers on 2025-09-15 and contributed to Hugging Face Transformers on 2026-08-28.*
 
 # Fun-ASR-Nano
 
@@ -95,8 +95,8 @@ audio_url = "https://huggingface.co/FunAudioLLM/Fun-ASR-Nano-2512/resolve/main/e
 inputs = processor.apply_transcription_request(
     audio=audio_url,
     language="en",
-    prompt="The recording discusses the Fun-ASR-Nano integration in Transformers.",
-    keywords=["Fun-ASR-Nano", "Transformers"],
+    prompt="A tribal story involving a chieftain and a boy.",
+    keywords=["tribal chieftain", "fifty pieces of gold"],
     return_tensors="pt",
 ).to(model.device)
 

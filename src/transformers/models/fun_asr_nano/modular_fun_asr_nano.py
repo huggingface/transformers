@@ -206,7 +206,7 @@ class FunAsrNanoProcessor(AudioFlamingo3Processor):
             return [None] * batch_size
         if isinstance(keywords, str):
             return [[keywords]] * batch_size
-        if not isinstance(keywords, (list, tuple)):
+        if not isinstance(keywords, list | tuple):
             raise TypeError("`keywords` must be a string, a sequence of strings, or a nested sequence of strings.")
         if all(isinstance(item, str) for item in keywords):
             return [list(keywords)] * batch_size
@@ -219,7 +219,7 @@ class FunAsrNanoProcessor(AudioFlamingo3Processor):
         for items in keywords:
             if items is None:
                 prepared.append(None)
-            elif isinstance(items, (list, tuple)) and all(isinstance(item, str) for item in items):
+            elif isinstance(items, list | tuple) and all(isinstance(item, str) for item in items):
                 prepared.append(list(items))
             else:
                 raise TypeError("Each per-sample keyword value must be a sequence of strings or `None`.")
@@ -277,7 +277,6 @@ class FunAsrNanoAttention(Qwen3ASRAudioAttention):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
-        output_attentions: bool = False,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         batch_size, sequence_length, _ = hidden_states.shape
@@ -305,7 +304,7 @@ class FunAsrNanoAttention(Qwen3ASRAudioAttention):
         )
         attn_output = attn_output.reshape(batch_size, sequence_length, self.embed_dim)
         attn_output = self.out_proj(attn_output)
-        return attn_output, attn_weights if output_attentions else None
+        return attn_output, attn_weights
 
 
 class FunAsrNanoFSMN(nn.Module):
@@ -463,6 +462,7 @@ class FunAsrNanoEncoder(Qwen3ASREncoder):
         self.stem = value
 
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_features: torch.Tensor,

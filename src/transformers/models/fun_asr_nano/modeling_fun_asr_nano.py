@@ -133,7 +133,6 @@ class FunAsrNanoAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
-        output_attentions: bool = False,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
@@ -162,7 +161,7 @@ class FunAsrNanoAttention(nn.Module):
         )
         attn_output = attn_output.reshape(batch_size, sequence_length, self.embed_dim)
         attn_output = self.out_proj(attn_output)
-        return attn_output, attn_weights if output_attentions else None
+        return attn_output, attn_weights
 
 
 class FunAsrNanoFSMN(nn.Module):
@@ -546,6 +545,7 @@ class FunAsrNanoEncoder(FunAsrNanoPreTrainedModel):
         self.stem = value
 
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_features: torch.Tensor,

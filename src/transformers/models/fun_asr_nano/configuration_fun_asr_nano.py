@@ -32,12 +32,13 @@ class FunAsrNanoEncoderConfig(PreTrainedConfig):
 
     model_type = "fun_asr_nano_encoder"
     attribute_map = {
+        "d_model": "hidden_size",
         "num_attention_heads": "encoder_attention_heads",
         "intermediate_size": "encoder_ffn_dim",
     }
 
     num_mel_bins: int = 80
-    d_model: int = 512
+    hidden_size: int = 512
     encoder_attention_heads: int = 4
     encoder_ffn_dim: int = 2048
     encoder_layers: int = 50
@@ -67,11 +68,12 @@ class FunAsrNanoEncoderConfig(PreTrainedConfig):
 @strict
 class FunAsrNanoAdaptorConfig(PreTrainedConfig):
     attribute_map = {
+        "d_model": "hidden_size",
         "num_attention_heads": "encoder_attention_heads",
         "num_hidden_layers": "encoder_layers",
     }
 
-    d_model: int = 1024
+    hidden_size: int = 1024
     encoder_attention_heads: int = 8
     encoder_ffn_dim: int = 256
     encoder_layers: int = 2
@@ -131,7 +133,7 @@ class FunAsrNanoConfig(PreTrainedConfig):
             self.adaptor_config = FunAsrNanoAdaptorConfig(**self.adaptor_config)
         elif self.adaptor_config is None:
             self.adaptor_config = FunAsrNanoAdaptorConfig(
-                d_model=self.text_config.hidden_size,
+                hidden_size=self.text_config.hidden_size,
                 encoder_ffn_dim=self.text_config.hidden_size // 4,
             )
 
@@ -139,9 +141,9 @@ class FunAsrNanoConfig(PreTrainedConfig):
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
-        if self.adaptor_config.d_model != self.text_config.hidden_size:
+        if self.adaptor_config.hidden_size != self.text_config.hidden_size:
             raise ValueError(
-                f"`adaptor_config.d_model` ({self.adaptor_config.d_model}) must match "
+                f"`adaptor_config.hidden_size` ({self.adaptor_config.hidden_size}) must match "
                 f"`text_config.hidden_size` ({self.text_config.hidden_size})."
             )
         if self.adaptor_config.encoder_ffn_dim != self.text_config.hidden_size // 4:
