@@ -113,7 +113,6 @@ class ModelManager:
         trust_remote_code: bool = False,
         attn_implementation: str | None = None,
         gguf_file: str | None = None,
-        tokenizer: str | None = None,
         quantization: str | None = None,
         model_timeout: int = 300,
         force_model: str | None = None,
@@ -134,7 +133,6 @@ class ModelManager:
         self.trust_remote_code = trust_remote_code
         self.attn_implementation = self._resolve_attn_implementation(attn_implementation, self.device)
         self.gguf_file = gguf_file
-        self.tokenizer = tokenizer
         self.quantization = quantization
         self.model_timeout = model_timeout
         self.force_model = force_model
@@ -232,11 +230,14 @@ class ModelManager:
         Args:
             model_id_and_revision: Model ID in ``'model_id@revision'`` format.
         """
-        from transformers import AutoProcessor
+        from transformers import AutoProcessor, AutoTokenizer
 
         model_id, revision = model_id_and_revision.split("@", 1)
-        if self.tokenizer is not None:
-            return AutoProcessor.from_pretrained(self.tokenizer, trust_remote_code=self.trust_remote_code)
+        if self.gguf_file is not None:
+            # A GGUF repo ships no tokenizer files: the vocabulary is read out of the file's metadata.
+            return AutoTokenizer.from_pretrained(
+                model_id, gguf_file=self.gguf_file, revision=revision, trust_remote_code=self.trust_remote_code
+            )
         return AutoProcessor.from_pretrained(model_id, revision=revision, trust_remote_code=self.trust_remote_code)
 
     def _load_model(

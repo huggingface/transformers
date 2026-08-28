@@ -59,16 +59,7 @@ class Serve:
             typer.Option(
                 help=(
                     "Load the weights from this GGUF file inside the model repo. Config and tokenizer "
-                    "still come from the model id."
-                )
-            ),
-        ] = None,
-        tokenizer: Annotated[
-            str | None,
-            typer.Option(
-                help=(
-                    "Load the tokenizer/processor from this model id instead of the served one. Needed "
-                    "for a GGUF-only repo, which ships no tokenizer files."
+                    "come from the file itself."
                 )
             ),
         ] = None,
@@ -151,7 +142,6 @@ class Serve:
             attn_implementation=attn_implementation,
             quantization=quantization,
             gguf_file=gguf_file,
-            tokenizer=tokenizer,
             model_timeout=model_timeout,
             force_model=force_model,
         )
