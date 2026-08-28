@@ -126,6 +126,10 @@ class PaddleOCRVLImageProcessorKwargs(Qwen2VLImageProcessorKwargs):
         The temporal patch size of the vision encoder.
     merge_size (`int`, *optional*, defaults to 2):
         The merge size of the vision encoder to llm encoder.
+    min_pixels (`int`, *optional*, defaults to `384 * 384`):
+        The min pixels of the image to resize the image.
+    max_pixels (`int`, *optional*, defaults to `1536 * 1536`):
+        The max pixels of the image to resize the image.
     """
 
 
