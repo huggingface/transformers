@@ -274,7 +274,7 @@ class SinusoidsPositionEmbedding(nn.Module):
         if channels % 2 != 0:
             raise ValueError("SinusoidsPositionEmbedding needs even channels input")
         position_embedding = self.compute_default_singular_positional_embedding()
-        self.register_buffer("positional_embedding", position_embedding, persistent=False)
+        self.positional_embedding = nn.Buffer(position_embedding, persistent=False)
 
     def compute_default_singular_positional_embedding(self):
         log_timescale_increment = np.log(self.max_timescale) / (self.channels // 2 - 1)
@@ -739,7 +739,7 @@ class FunAsrNanoModel(FunAsrNanoPreTrainedModel):
         """
         if input_ids is None:
             special_audio_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.audio_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.audio_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_audio_mask = special_audio_mask.all(-1)
         else:
@@ -783,7 +783,9 @@ class FunAsrNanoModel(FunAsrNanoPreTrainedModel):
             special_audio_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, audio_features=audio_embeds
             )
-            inputs_embeds = inputs_embeds.masked_scatter(special_audio_mask, audio_embeds.to(inputs_embeds.device))
+            inputs_embeds = inputs_embeds.masked_scatter(
+                special_audio_mask, audio_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            )
 
         outputs = self.language_model(
             inputs_embeds=inputs_embeds,
@@ -908,20 +910,6 @@ class FunAsrNanoForConditionalGeneration(FunAsrNanoPreTrainedModel, GenerationMi
             attentions=outputs.attentions,
             audio_hidden_states=outputs.audio_hidden_states,
         )
-
-    def prepare_inputs_for_generation(self, *args, is_first_iteration: bool = False, **kwargs):
-        input_features = kwargs.pop("input_features", None)
-        input_features_mask = kwargs.pop("input_features_mask", None)
-
-        model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
-
-        if is_first_iteration or not model_inputs.get("use_cache", False):
-            if input_features is not None:
-                model_inputs["input_features"] = input_features
-            if input_features_mask is not None:
-                model_inputs["input_features_mask"] = input_features_mask
-
-        return model_inputs
 
 
 __all__ = ["FunAsrNanoPreTrainedModel", "FunAsrNanoEncoder", "FunAsrNanoModel", "FunAsrNanoForConditionalGeneration"]
