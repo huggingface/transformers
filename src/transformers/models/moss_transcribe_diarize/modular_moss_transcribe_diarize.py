@@ -348,10 +348,11 @@ class MossTranscribeDiarizePreTrainedModel(GlmAsrPreTrainedModel):
     config_class = MossTranscribeDiarizeConfig
     base_model_prefix = "model"
     input_modalities = ("audio", "text")
-    _no_split_modules = ["Qwen3DecoderLayer", "Qwen2AudioEncoderLayer"]
+    _no_split_modules = []
     _skip_keys_device_placement = ["past_key_values"]
 
 
+@auto_docstring
 @dataclass
 class MossTranscribeDiarizeModelOutputWithPast(GlmAsrModelOutputWithPast):
     pass
@@ -507,10 +508,12 @@ class MossTranscribeDiarizeForConditionalGeneration(AudioFlamingo3ForConditional
         self.model = MossTranscribeDiarizeModel(config)
         self.post_init()
 
+    @auto_docstring
     def get_audio_features(self, *args, **kwargs):
         return self.model.get_audio_features(*args, **kwargs)
 
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -527,6 +530,27 @@ class MossTranscribeDiarizeForConditionalGeneration(AudioFlamingo3ForConditional
         audio_chunk_mapping: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
+        r"""
+        audio_feature_lengths (`torch.LongTensor` of shape `(num_chunks,)`, *optional*):
+            Number of output tokens per chunked log-mel feature row in `input_features`.
+        audio_chunk_mapping (`torch.LongTensor` of shape `(num_chunks,)`, *optional*):
+            Index of the source audio sample for each row in `input_features`.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss.
+
+        Example:
+
+        ```python
+        >>> from transformers import MossTranscribeDiarizeForConditionalGeneration, AutoProcessor
+
+        >>> model_id = "OpenMOSS-Team/MOSS-Transcribe-Diarize"
+        >>> processor = AutoProcessor.from_pretrained(model_id)
+        >>> model = MossTranscribeDiarizeForConditionalGeneration.from_pretrained(model_id, device_map="auto")
+        >>> inputs = processor.apply_transcription_request("https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3")
+        >>> inputs = inputs.to(model.device, dtype=model.dtype)
+        >>> outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
+        >>> processor.batch_decode(outputs[:, inputs.input_ids.shape[1] :], skip_special_tokens=True)
+        ```"""
         outputs = self.model(
             input_ids=input_ids,
             input_features=input_features,
