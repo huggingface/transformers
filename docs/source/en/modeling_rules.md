@@ -445,7 +445,7 @@ Checks the first 25 lines of modeling_*.py, modular_*.py, configuration_*.py, pr
 
 ### TRF029
 
-In modeling_*.py and modular_*.py, flags an `__init__` that takes `config` alongside an argument whose name is unambiguously a config field (hidden_size, num_attention_heads, intermediate_size, head_dim, num_hidden_layers, embed_dim, dropout, eps, patch_size, rope_theta, ...). kosmos2 is allowlisted: its doc page cannot be derived from the directory name, so the cutoff cannot grandfather it. The same number now has two sources of truth and the caller decides which one wins, so editing the config no longer changes the model that gets built. It also pushes architecture knowledge out to every call site, where it does not belong.
+In modeling_*.py and modular_*.py, flags an `__init__` that takes `config` alongside an argument whose name is unambiguously a config field (hidden_size, num_attention_heads, intermediate_size, head_dim, num_hidden_layers, embed_dim, dropout, eps, patch_size, rope_theta, ...). A parameter that is optional with a `None` default is exempt: that is an override, not a second source of truth, and it is how one MLP class serves both the dense and the expert width of a MoE model. A hardcoded default such as `hidden_size: int = 1024` is not exempt -- it wins over the config whenever the caller passes nothing. kosmos2 is allowlisted: its doc page cannot be derived from the directory name, so the cutoff cannot grandfather it. The same number now has two sources of truth and the caller decides which one wins, so editing the config no longer changes the model that gets built. It also pushes architecture knowledge out to every call site, where it does not belong.
 
 ```diff
 class AcmeAttention(nn.Module):
@@ -456,6 +456,12 @@ class AcmeAttention(nn.Module):
 -        self.num_heads = num_heads
 +        self.embed_dim = config.hidden_size
 +        self.num_heads = config.num_attention_heads
+
+ class AcmeMLP(nn.Module):
+     # an optional override is fine: omitting it reads the config
+     def __init__(self, config, intermediate_size=None):
+         super().__init__()
+         self.intermediate_size = intermediate_size or config.intermediate_size
 ```
 
 ### TRF030
@@ -518,7 +524,7 @@ In modeling_*.py and modular_*.py, flags a locally-defined class whose name ends
 
 ### TRF035
 
-Flags `# noqa` comments, with or without explicit codes, in modeling_*.py, modular_*.py and configuration_*.py. Model files are ordinary code held to the repo's lint rules, so a suppression means the underlying issue was left in place -- and a bare `# noqa` also hides every future violation on that line. Fix the code instead.
+Flags `# noqa` comments, with or without explicit codes, in modeling_*.py, modular_*.py and configuration_*.py. In a modular file, `F401`, `F821` and `F822` are accepted: a modular file is a generation source that deliberately does not define every name it uses, so ruff's undefined-name family fires on correct code -- `__all__` entries the converter fills in, classes that live in the parent model, imports kept to be re-exported. A `# noqa` naming only those codes is skipped; one naming anything else is reported on the codes that are left. A bare `# noqa` is always reported; in a modular file the message asks for the code rather than a rewrite. Model files are ordinary code held to the repo's lint rules, so a suppression means the underlying issue was left in place -- and a bare `# noqa` also hides every future violation on that line. Fix the code instead.
 
 ```diff
 -from ...modeling_utils import PreTrainedModel  # noqa: F401
@@ -584,7 +590,7 @@ In modeling_*.py and modular_*.py, checks methods decorated with both @capture_o
 
 ### TRF041
 
-In modeling_*.py and modular_*.py, flags every `if`/`elif` and conditional expression whose condition reads a `config.*` or `self.config.*` attribute without a `# CODEPATH:` comment, accepted on the branch line or in the contiguous comment block directly above it. Any config attribute counts, not only boolean flags. Exempt by structure: `X if X is not None else fallback`, where the tested field is itself one of the results -- `getattr(config, x, default)` spelled long, which cannot fork the graph. Merely mentioning None does not qualify: `config.vision_config is not None` still owes a note. A field that gates no checkpoint divergence, such as `problem_type` selecting a loss or `hidden_act` looking up an activation, can be exempted file-wide with a module-level `# trf-ignore: TRF041 config.problem_type, config.hidden_act` at column 0 (`self.config.x`, `config.x` and `x` are the same field). It must name at least one field -- a bare `# trf-ignore: TRF041` keeps its per-line meaning -- and a condition is skipped only when every field it reads is exempt. A config-gated branch is a second architecture in the same file, and the code cannot say whether both halves are still reachable -- which is how dead experimental branches survive for releases. The rule does not forbid the branch: like Rust's `// SAFETY:`, it asks for the checkpoints that take each side to be written down next to it. A branch nobody can name one for is a branch to delete.
+In modeling_*.py and modular_*.py, flags every `if`/`elif` and conditional expression whose condition reads a `config.*` or `self.config.*` attribute without a `# CODEPATH:` comment, accepted on the branch line or in the contiguous comment block directly above it. Any config attribute counts, not only boolean flags. Exempt by structure: `X if X is not None else fallback`, where the tested field is itself one of the results -- `getattr(config, x, default)` spelled long, which cannot fork the graph. Merely mentioning None does not qualify: `config.vision_config is not None` still owes a note. Also exempt by structure: a guard, meaning an `if` with no `else` whose body only raises or only warns/logs -- one side aborts, so nothing diverges past it. Exempt by field: framework plumbing that gates no checkpoint divergence, such as `problem_type` selecting a loss, `hidden_act` looking up an activation, `num_labels`, `use_cache`, `is_decoder`, the special token ids and the `summary_*` head settings; the full list is `DEFAULT_EXEMPT_ATTRIBUTES` in `mlinter/trf041.py`, and `ignored_attributes = [...]` on the rule table extends it for a project keeping its own rules.toml. A model exempts a field of its own file-wide with a module-level `# trf-ignore: TRF041 config.scale_embedding, config.auxiliary_loss` at column 0 (`self.config.x`, `config.x` and `x` are the same field). It must name at least one field -- a bare `# trf-ignore: TRF041` keeps its per-line meaning -- and a condition is skipped only when every field it reads is exempt. A config-gated branch is a second architecture in the same file, and the code cannot say whether both halves are still reachable -- which is how dead experimental branches survive for releases. The rule does not forbid the branch: like Rust's `// SAFETY:`, it asks for the checkpoints that take each side to be written down next to it. A branch nobody can name one for is a branch to delete.
 
 ```diff
 +        # CODEPATH: ESMC-6B ships pre-normalised embeddings, the 300M/600M checkpoints do not.
