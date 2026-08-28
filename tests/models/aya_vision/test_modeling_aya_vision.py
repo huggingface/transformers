@@ -180,6 +180,19 @@ class AyaVisionModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    def test_default_vision_config_is_instantiable(self):
+        # The default `vision_config` mirrors SigLIP so400m (hidden 1152, intermediate 4304,
+        # patch 14, image 384). `num_attention_heads` used to be 14, copied from `patch_size`,
+        # which does not divide 1152, so building a model from a default `AyaVisionConfig()`
+        # raised `ValueError: embed_dim must be divisible by num_heads`.
+        config = AyaVisionConfig()
+        vision_config = config.vision_config
+        self.assertEqual(vision_config.hidden_size % vision_config.num_attention_heads, 0)
+        # Built on `meta` so the default (full-size) config costs no memory; the failure was
+        # raised from the attention constructor, which still runs here.
+        with torch.device("meta"):
+            AyaVisionForConditionalGeneration(config)
+
     @unittest.skip(reason="SiglipVisionModel does not support standalone training")
     def test_training(self):
         pass
