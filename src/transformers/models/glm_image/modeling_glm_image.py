@@ -942,13 +942,6 @@ class GlmImageModel(GlmImagePreTrainedModel, MultiModalPreTrainedModelMixin):
             mrope_position_deltas (`torch.Tensor` of shape `(batch_size, 1)`):
                 Position deltas for multi-modal rotary position embedding.
         """
-        warnings.warn(
-            f"`{self.__class__.__name__}.get_rope_index` is deprecated and will be removed in v5.22. Use "
-            "`get_mrope_position_ids` from this model's modeling module, which takes the config as its first "
-            "argument.",
-            FutureWarning,
-            stacklevel=2,
-        )
         batch_size, seq_len = input_ids.shape
         device = input_ids.device
         dtype = input_ids.dtype

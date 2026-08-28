@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import itertools
-import warnings
 from collections import defaultdict
 from collections.abc import Callable
 from typing import Any
@@ -859,13 +858,6 @@ class Cosmos3EdgeModel(Cosmos3EdgePreTrainedModel, MultiModalPreTrainedModelMixi
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """M-RoPE decoder position ids: `(position_ids, rope_deltas)`, laid out span by span over
         `mm_token_type_ids` by [`get_mrope_position_ids`] above."""
-        warnings.warn(
-            f"`{self.__class__.__name__}.get_rope_index` is deprecated and will be removed in v5.22. Use "
-            "`get_mrope_position_ids` from this model's modeling module, which takes the config as its first "
-            "argument.",
-            FutureWarning,
-            stacklevel=2,
-        )
         return get_mrope_position_ids(
             self.config,
             input_ids,
