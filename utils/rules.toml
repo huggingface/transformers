@@ -36,6 +36,11 @@ diff = '''
 [rules.TRF002]
 description = "base_model_prefix should be a non-empty canonical string when defined on PreTrainedModel classes."
 default_enabled = true
+# `lighton_ocr` sets `base_model_prefix = ""` on `LightOnOcrModel` (`modular_lighton_ocr.py`). It does not
+# currently fire: the rule only inspects classes it can resolve to `PreTrainedModel`, and it resolves base
+# chains within a single file, so `LightOnOcrModel(Mistral3Model)` is not recognized as a pretrained class in
+# the modular file. Kept because the empty prefix is real and authored here, not inherited -- the entry is the
+# only record of it until the rule can follow the chain across models.
 allowlist_models = ["lighton_ocr"]
 
 [rules.TRF002.explanation]
@@ -68,7 +73,11 @@ diff = '''
 [rules.TRF004]
 description = "Models must never override tie_weights. Use _tied_weights_keys instead."
 default_enabled = true
-allowlist_models = ["data2vec", "hubert", "sew", "sew_d", "unispeech", "unispeech_sat", "wav2vec2", "wav2vec2_conformer", "wavlm"]
+# The four models that actually author a `tie_weights` override. `hubert`, `sew`, `unispeech`,
+# `unispeech_sat` and `wavlm` were dropped: their modular files define no `tie_weights` at all, so the
+# override exists only in their generated `modeling_*.py`, copied in from `Wav2Vec2ForCTC`. Fixing wav2vec2
+# fixes all five, and listing them separately implied five independent violations instead of one root cause.
+allowlist_models = ["data2vec", "sew_d", "wav2vec2", "wav2vec2_conformer"]
 
 [rules.TRF004.explanation]
 what_it_does = "Checks that no model class defines a tie_weights method."
@@ -83,7 +92,11 @@ diff = '''
 [rules.TRF005]
 description = "_no_split_modules, when defined, should be a list/tuple of non-empty strings."
 default_enabled = true
-allowlist_models = ["d_fine", "deformable_detr", "glm46v", "lw_detr", "pp_doclayout_v3", "rt_detr", "rt_detr_v2", "voxtral", "voxtral_realtime"]
+# Empty: every previous entry (d_fine, deformable_detr, glm46v, lw_detr, pp_doclayout_v3, rt_detr,
+# rt_detr_v2, voxtral, voxtral_realtime) is compliant under the current rule, which accepts an explicit
+# `_no_split_modules = None` and an `AttributeError` sentinel in a modular file, and treats raw-string
+# elements as the string constants they are. Verified by running the rule directly against each model.
+allowlist_models = []
 
 [rules.TRF005.explanation]
 what_it_does = "Checks the shape of _no_split_modules when present."
@@ -96,7 +109,8 @@ diff = '''
 [rules.TRF006]
 description = "forward with cache arguments should reference cache control/state variables consistently."
 default_enabled = true
-allowlist_models = ["chinese_clip", "evolla", "idefics2", "llama4"]
+# `chinese_clip` was dropped: it no longer fires, verified by running the rule directly against its source.
+allowlist_models = ["evolla", "idefics2", "llama4"]
 
 [rules.TRF006.explanation]
 what_it_does = "Checks that cache arguments declared in a forward signature are actually used in the method body."
@@ -173,7 +187,7 @@ default_enabled = true
 # routes its sub-*configs* through CONFIG_MAPPING as the rule prescribes; this last import is a runtime cache
 # class, which CONFIG_MAPPING cannot supply. It also sits in a generation_*.py file, so it hits the same
 # missing converter support as the nemotron entries above.
-allowlist_models = ["bart", "convbert", "distilbert", "dpr", "fnet", "maskformer", "mobilebert", "nemotron3_5_asr", "nemotron_asr_streaming", "sam3", "sam3_video", "shieldgemma2", "squeezebert", "vibevoice", "vision_text_dual_encoder"]
+allowlist_models = ["bart", "convbert", "distilbert", "dpr", "fnet", "mobilebert", "nemotron3_5_asr", "nemotron_asr_streaming", "sam3", "sam3_video", "shieldgemma2", "squeezebert", "vibevoice", "vision_text_dual_encoder"]
 
 [rules.TRF009.explanation]
 what_it_does = "Flags imports reaching into another model's package, in the files that make up a model's shipped implementation: modeling_*, configuration_*, processing_*, image_processing_*, video_processing_*, feature_extraction_*, tokenization_* and generation_*.py. Three forms are recognised: package path (`from transformers.models.other.modeling_other import X`), relative path (`from ..other.configuration_other import X`), and public API (`from transformers import OtherModel`) -- for the last, the owning directory is inferred from the class name and confirmed against the classes that directory really defines, so an unresolvable name is left alone rather than guessed at. Out of scope: `modular_*.py` (building on another model is its purpose, and the converter flattens those imports away), `convert_*.py`, `__init__.py` and files under `auto`. Allowed targets: the model's own directory, `auto` and `timm_wrapper`."
@@ -189,7 +203,8 @@ diff = '''
 [rules.TRF010]
 description = "Direct config definitions must use @strict(accept_kwargs=True)."
 default_enabled = true
-allowlist_models = ["nemotron_h", "vibevoice_asr"]
+# Empty: `nemotron_h` and `vibevoice_asr` both carry `@strict(accept_kwargs=True)` now.
+allowlist_models = []
 
 [rules.TRF010.explanation]
 what_it_does = "Checks direct PreTrainedConfig/PretrainedConfig subclasses in configuration_*.py and modular_*.py for an explicit @strict(accept_kwargs=True) decorator."
@@ -1110,7 +1125,8 @@ diff = '''
 [rules.TRF056]
 description = "forward() must not materialize tensors with .item() or .tolist()."
 default_enabled = true
-allowlist_models = ["hunyuan_vl", "kimi_k25"]
+# `kimi_k25` was dropped: no `.item()`/`.tolist()` left in its forward, verified against its source.
+allowlist_models = ["hunyuan_vl"]
 cutoff_date = "2026-06-20"
 
 [rules.TRF056.explanation]
