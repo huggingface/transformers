@@ -11,8 +11,13 @@ specific language governing permissions and limitations under the License.
 -->
 *This model was published in HF papers on 2023-08-22 and contributed to Hugging Face Transformers on 2023-10-23.*
 
-# SeamlessM4T
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
 
+# SeamlessM4T
 
 ## Overview
 
@@ -183,10 +188,6 @@ This model was contributed by [ylacombe](https://huggingface.co/ylacombe). The o
     - get_special_tokens_mask
     - save_vocabulary
 
-## SeamlessM4TTokenizerFast
-
-[[autodoc]] SeamlessM4TTokenizerFast
-    - __call__
 
 ## SeamlessM4TFeatureExtractor
 

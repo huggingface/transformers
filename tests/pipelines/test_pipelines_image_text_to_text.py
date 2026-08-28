@@ -19,6 +19,7 @@ from types import SimpleNamespace
 from transformers import MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING, is_vision_available
 from transformers.pipelines import ImageTextToTextPipeline, pipeline
 from transformers.testing_utils import (
+    CaptureLogger,
     Expectations,
     is_pipeline_test,
     require_deterministic_for_xpu,
@@ -26,6 +27,7 @@ from transformers.testing_utils import (
     require_vision,
     slow,
 )
+from transformers.utils import logging
 
 from .test_pipelines_common import ANY
 
@@ -78,6 +80,25 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
         self.assertEqual(
             forward_kwargs["generate_kwargs"],
             {"stop_strings": ["."], "tokenizer": tokenizer, "max_new_tokens": 3},
+        )
+
+    def test_preprocess_empty_processor_kwargs_not_leaked(self):
+        pipe = pipeline("image-text-to-text", model="llava-hf/llava-interleave-qwen-0.5b-hf")
+        logger = logging.get_logger("transformers.processing_utils")
+        logger.warning_once.cache_clear()  # clear cache before each call
+
+        # Empty dict is explicit: nothing extra should reach the processor, so no warning raised
+        with CaptureLogger(logger) as cl:
+            pipe.preprocess("a single prompt", processor_kwargs={}, unrelated_kwarg=True)
+        self.assertEqual(cl.out, "")
+
+        # When `processor_kwargs` is omitted, it passes all kwargs to processor raising a warning
+        logger.warning_once.cache_clear()
+        with CaptureLogger(logger) as cl:
+            pipe.preprocess("a single prompt", unrelated_kwarg=True)
+        self.assertEqual(
+            cl.out,
+            "Keyword argument `unrelated_kwarg` is not a valid argument for this processor and will be ignored.\n",
         )
 
     @require_torch

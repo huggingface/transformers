@@ -58,6 +58,11 @@ on:
         required: false
         type: string
         default: main
+      memory_probe:
+        description: "Diagnostic: record per-test device memory, including how much survives a gc.collect(), and upload it as an artifact. Off by default — the collect frees memory, so it can stop a memory-related failure from reproducing."
+        required: false
+        type: boolean
+        default: false
       correlation_id:
         description: "Opaque id echoed into the run name so serge can find this run"
         required: false
@@ -86,4 +91,5 @@ jobs:
       machine_type: ${{ inputs.machine_type }}
       run_collateral: ${{ inputs.run_collateral }}
       transformersci_ref: ${{ inputs.transformersci_ref }}
+      memory_probe: ${{ inputs.memory_probe }}
     secrets: inherit

@@ -110,6 +110,7 @@ if is_torch_available():
     from transformers.generation.candidate_generator import (
         AssistedCandidateGenerator,
         AssistedCandidateGeneratorDifferentTokenizers,
+        DFlashTokenCandidateGenerator,
     )
     from transformers.generation.utils import ALL_CACHE_NAMES, _speculative_sampling
     from transformers.modeling_layers import MtpModel
@@ -1571,6 +1572,10 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
 
             if config.is_encoder_decoder or not model_class._supports_default_dynamic_cache():
                 self.skipTest(reason="This model does not support the quantized cache format")
+
+            layer_types = getattr(config.get_text_config(), "layer_types", None) or []
+            if any(layer_type != "full_attention" for layer_type in layer_types):
+                self.skipTest(reason="`QuantizedCache` is only supported for models with full attention layers")
 
             config.is_decoder = True
             model = model_class(config).to(torch_device).eval()
@@ -3944,6 +3949,81 @@ class GenerationIntegrationTests(unittest.TestCase):
             max_new_tokens=7,
         )
         self.assertTrue(out.shape[-1] <= (input_length + 7))
+
+    @require_torch_multi_accelerator
+    def test_mtp_use_correct_device_when_drafting(self):
+        """Test that when drafting the new token, mtp puts it back on the correct same device as `input_ids`"""
+        input_device = torch.device(f"{torch_device}:0")
+        assistant_device = torch.device(f"{torch_device}:1")
+
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
+        model.config.get_text_config().num_mtp_layers = 2
+        mtp_model = MtpModel(model, num_mtp_layers=2).to(assistant_device).eval()
+        # Mimics embedding being on 1st device, i.e. main model device
+        mtp_model.embed_tokens.to(input_device)
+
+        input_ids = torch.tensor([[1, 2]], device=input_device)
+
+        # If the device is not correct, this will raise an error
+        mtp_candidate_ids, mtp_candidate_logits, _ = mtp_model.forward(
+            input_ids=input_ids,
+            last_hidden_states=torch.zeros(1, input_ids.shape[1], model.config.hidden_size, device=assistant_device),
+            attention_mask=torch.ones_like(input_ids, device=assistant_device),
+            position_ids=torch.arange(input_ids.shape[1], device=assistant_device).unsqueeze(0),
+            mtp_cache=None,
+            full_input_ids=input_ids,
+        )
+        self.assertEqual(mtp_candidate_ids.device, input_device)
+        self.assertEqual(mtp_candidate_logits.device, assistant_device)
+
+    @require_torch_multi_accelerator
+    def test_dflash_use_correct_device_when_drafting(self):
+        """Test that when drafting the new tokens, dflash puts them it back on the correct same device as `input_ids`"""
+        from transformers.models.muse_glimmer.modeling_muse_glimmer import MuseGlimmerForConditionalGeneration
+        from transformers.models.muse_glimmer_assistant.modeling_muse_glimmer_assistant import (
+            MuseGlimmerAssistantModel,
+        )
+
+        input_device = torch.device(f"{torch_device}:0")
+        assistant_device = torch.device(f"{torch_device}:1")
+
+        model = MuseGlimmerForConditionalGeneration.from_pretrained(
+            "hf-internal-testing/tiny-muse-glimmer", device_map=input_device
+        )
+        assistant = MuseGlimmerAssistantModel.from_pretrained(
+            "hf-internal-testing/tiny-muse-glimmer-assistant", device_map=assistant_device
+        )
+        assistant.config.target_layer_ids = list(range(model.config.text_config.num_hidden_layers))
+
+        input_ids = torch.tensor([[2, 3, 4]], device=input_device)
+        main_model_input_ids = input_ids
+        model_kwargs = {
+            "attention_mask": torch.ones_like(main_model_input_ids),
+            "position_ids": torch.arange(main_model_input_ids.shape[1], device=input_device).unsqueeze(0),
+        }
+
+        dflash_generator = DFlashTokenCandidateGenerator(
+            assistant_model=assistant,
+            main_model_input_embeddings=model.get_input_embeddings(),
+            main_model_output_embeddings=model.get_output_embeddings(),
+            generation_config=GenerationConfig(max_length=8, do_sample=False),
+        )
+        with torch.no_grad():
+            dflash_outputs = model.model(
+                input_ids=main_model_input_ids,
+                attention_mask=model_kwargs["attention_mask"],
+                output_hidden_states=True,
+            )
+            dflash_candidate_ids, dflash_candidate_logits = dflash_generator.get_candidates(
+                input_ids=input_ids,
+                model_kwargs=model_kwargs,
+                model_outputs=dflash_outputs,
+                is_first_iteration=False,
+                n_last_matches=0,
+            )
+        # Both will live on `input_device` as the main model is there
+        self.assertEqual(dflash_candidate_ids.device, input_device)
+        self.assertEqual(dflash_candidate_logits.device, input_device)
 
     def test_model_kwarg_assisted_decoding_decoder_only(self):
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)

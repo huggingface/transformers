@@ -71,6 +71,7 @@ from transformers.testing_utils import (
     hub_retry,
     is_staging_test,
     require_accelerate,
+    require_kernels,
     require_non_hpu,
     require_torch,
     require_torch_accelerator,
@@ -2539,6 +2540,32 @@ class ModelUtilsTest(TestCasePlus):
         # Make sure they are equal, and equal to the ref
         self.assertEqual(output_text1, output_text2)
         self.assertEqual(output_text1, EXPECTED_TEXT)
+
+    @require_kernels
+    def test_force_accelerate_hooks_does_not_hide_the_signature_it_wraps(self):
+        """
+        `kernels` refuses to swap in a layer whose forward signature does not match the one it replaces. The
+        `force_accelerate_hooks` wrapper must therefore keep the signature of the forward it decorates, otherwise
+        every mixer carrying it looks like `(self, *args, **kwargs)` and can never be kernelized.
+
+        This is based on one concrete case: `Qwen3_5GatedDeltaNet` is kernelized as a whole layer
+        (`@use_kernel_forward_from_hub("Qwen3_5GatedDeltaNet")`, mapped to `Atlas-Inference/gdn` on GB10/SM121)
+        while its `forward` also carries `@force_accelerate_hooks("conv1d")` -- it is the one class where both
+        decorators meet. See #48089 for the report and #48156 for the fix.
+
+        The signature check is driven directly, so this needs neither the kernel nor the hardware to be available.
+        """
+        from kernels.layer.layer import _validate_layer
+
+        from transformers.models.qwen3_5.modeling_qwen3_5 import Qwen3_5GatedDeltaNet
+
+        # Stands in for a hub kernel layer: same forward signature as the class it would replace
+        class KernelGatedDeltaNet(torch.nn.Module):
+            def forward(self, hidden_states, cache_params=None, attention_mask=None, **kwargs):
+                return hidden_states
+
+        # Raises `TypeError: ... different number of arguments` if the decorator hides the signature
+        _validate_layer(check_cls=Qwen3_5GatedDeltaNet, cls=KernelGatedDeltaNet, repo="dummy-repo")
 
 
 @slow

@@ -43,7 +43,7 @@ AUTODOC_FILES = [
     "processing_*.py",
     "image_processing_pil_*.py",
     "image_processing_*.py",
-    "feature_extractor_*.py",
+    "feature_extraction_*.py",
 ]
 
 PLACEHOLDER_TO_AUTO_MODULE = {
@@ -81,6 +81,7 @@ HARDCODED_CONFIG_FOR_MODELS = {
     "parakeet": "ParakeetCTCConfig",
     "privacy-filter": "OpenAIPrivacyFilterConfig",
     "lasr": "LasrCTCConfig",
+    "granite-speech5": "GraniteSpeech5CTCConfig",
     "wav2vec2-with-lm": "Wav2Vec2Config",
     "radio": "RADIOConfig",
     "cosmos3-edge": "Cosmos3EdgeConfig",
@@ -390,6 +391,14 @@ class ProcessorArgs:
     The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
     (pretokenized string). If you pass a pretokenized input, set `is_split_into_words=True` to avoid ambiguity with batched inputs.
     """,
+    }
+
+    videos = {
+        "description": """
+    Video to preprocess. Expects a single or batch of videos with pixel values ranging from 0 to 255. If
+    passing in videos with pixel values between 0 and 1, set `do_rescale=False`.
+    """,
+        "shape": None,
     }
 
     audio = {
@@ -4616,10 +4625,10 @@ def auto_docstring(obj=None, *, custom_intro=None, custom_args=None, checkpoint=
 
         Using with ModelOutput classes:
         ```python
-        @dataclass
         @auto_docstring(
             custom_intro="Custom model outputs with additional fields."
         )
+        @dataclass
         class MyModelOutput(ImageClassifierOutput):
             r'''
             loss (`torch.FloatTensor`, *optional*):

@@ -51,6 +51,8 @@ from transformers.generation.continuous_batching.requests import (
     RequestStatus,
     get_device_and_memory_breakdown,
 )
+from transformers.integrations.eager_paged import eager_paged_attention_forward
+from transformers.integrations.sdpa_paged import sdpa_attention_paged_forward
 from transformers.testing_utils import (
     backend_empty_cache,
     backend_memory_allocated,
@@ -216,6 +218,20 @@ def regular_generate(
 
 # Class for all continuous batching tests that do not require any accelerator. Usualy those test are faster to run.
 class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
+    @parameterized.expand(
+        [("paged|eager", eager_paged_attention_forward), ("paged|sdpa", sdpa_attention_paged_forward)]
+    )
+    def test_paged_forward_without_cache_raises(self, attn_implementation, attention_forward):
+        # A standard forward on a model switched to a paged implementation reaches these with no cache. They are
+        # written for the packed inputs and the 4D mask continuous batching prepares, so they would silently attend
+        # bidirectionally instead of causally: refuse the call rather than return a wrong result.
+        module = torch.nn.Module()
+        module.layer_idx = 0
+        module.num_key_value_groups = 1
+        q = k = v = torch.zeros(1, 1, 4, 8)
+        with self.assertRaisesRegex(ValueError, attn_implementation.replace("|", r"\|")):
+            attention_forward(module, q, k, v, None, scaling=1.0)
+
     def test_generation_outputs_are_snapshots(self):
         state = RequestState(
             request_id="r", initial_tokens=[10, 11], max_new_tokens=3, streaming=True, record_timestamps=True
@@ -538,10 +554,11 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         )
         allocator.block_table["req"] = block_table
 
-        # Read indices: cache positions followed by one sentinel per query token
-        read_start = 0 if past_length < sliding_window else past_length % sliding_window
+        # Read indices: the (at most) `sliding_window - 1` most recent cached tokens, in chronological order,
+        # followed by one sentinel per query token. The most recent cached token is the one at logical position
+        # `past_length - 1`, and will be read as long as sliding_window > 1 (should always be the case)
         read_cache_length = min(past_length, sliding_window - 1)
-        expected_read = [to_physical(i) for i in range(read_start, read_start + read_cache_length)]
+        expected_read = [to_physical(i) for i in range(past_length - read_cache_length, past_length)]
         expected_read += [sentinel_index] * query_length
         read = allocator.get_read_indices("req", past_length, query_length)
 
@@ -555,11 +572,10 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
 
         # Write indices: one slot per query token, left-padded with the write trash index when the query overflows the
         # window
-        write_start = past_length % sliding_window
         write_cache_length = min(query_length, sliding_window)
         padding_length = query_length - write_cache_length
         expected_write = [write_trash_index] * padding_length
-        expected_write += [to_physical(i) for i in range(write_start, write_start + write_cache_length)]
+        expected_write += [to_physical(i) for i in range(past_length + padding_length, past_length + query_length)]
         write = allocator.get_write_indices("req", past_length, query_length)
 
         # Main check
@@ -569,6 +585,63 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         # Cache writes land in allocated blocks
         for idx in write[padding_length:]:
             self.assertIn(idx // block_size, block_table)
+
+    @parameterized.expand(
+        [
+            # (block_size, sliding_window, block_table, query_lengths)
+            # Prefill shorter than the window, then decode past the wrap-around
+            (4, 8, [0, 1], [3] + [1] * 16),
+            # Prefill exactly the size of the window, then decode
+            (4, 8, [0, 1], [8] + [1] * 16),
+            # Prefill longer than the window, then decode
+            (4, 8, [3, 5], [11] + [1] * 16),
+            # Chunked prefill, with chunks smaller and larger than the window
+            (4, 8, [0, 1], [3, 5, 4, 10, 2] + [1] * 8),
+            # Single-block window
+            (4, 4, [7], [1] * 12),
+            # Larger block size
+            (16, 32, [0, 1], [5] + [1] * 40),
+        ]
+    )
+    def test_sliding_attention_read_write_round_trip(
+        self,
+        block_size: int,
+        sliding_window: int,
+        block_table: list[int],
+        query_lengths: list[int],
+    ) -> None:
+        """Replays a sequence of prefill/decode steps through the rolling buffer, tracking which logical token each
+        physical slot holds, and checks that every read returns the `sliding_window - 1` most recent tokens in
+        chronological order. Reads and writes are only consistent with each other if both agree on where a given
+        logical position lives, so this catches off-by-one errors that the two index computations would otherwise hide
+        from each other."""
+        allocator = SlidingAttentionCacheAllocator(
+            index=0,
+            block_size=block_size,
+            sliding_window=sliding_window,
+            sentinel_index=-1,
+            write_trash_index=-2,
+        )
+        allocator.block_table["req"] = block_table
+
+        slot_to_token: dict[int, int] = {}  # physical slot -> logical position currently stored there
+        past_length = 0
+        for query_length in query_lengths:
+            # Reads happen before writes, and only when there is cache to read from
+            if past_length > 0:
+                read = allocator.get_read_indices("req", past_length, query_length)
+                self.assertEqual(read[-query_length:], [allocator.sentinel_index] * query_length)
+                cached_tokens = [slot_to_token[idx] for idx in read[:-query_length]]
+                expected_tokens = list(range(max(0, past_length - sliding_window + 1), past_length))
+                self.assertEqual(
+                    cached_tokens,
+                    expected_tokens,
+                    f"Wrong cache read at {past_length = } for {sliding_window = }, {block_size = }",
+                )
+            for offset, idx in enumerate(allocator.get_write_indices("req", past_length, query_length)):
+                if idx != allocator.write_trash_index:
+                    slot_to_token[idx] = past_length + offset
+            past_length += query_length
 
     @slow
     def test_continuous_batching_no_accelerators(self) -> None:
@@ -728,6 +801,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         attn_implementation: str,
         max_new_tokens: int = 20,
         num_repeat_prompts: int = 1,
+        compare_to_fp32_eager: bool = False,
     ) -> None:
         """Tests the parity between continuous batching and non-continuous batching generation."""
 
@@ -783,18 +857,26 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             flush_memory(flush_compile=True)
 
         # Generation without continuous batching (reload model to avoid any state contamination)
-        non_paged_attn_implem = attn_implementation.replace("paged|", "")
+        if compare_to_fp32_eager:
+            non_paged_attn_implem = "eager"
+            dtype = torch.float32
+        else:
+            non_paged_attn_implem = attn_implementation.replace("paged|", "")
+
         _, model = get_tokenizer_and_model(model_id, non_paged_attn_implem, torch_device, dtype)
         model.generation_config.max_new_tokens = max_new_tokens
         model.generation_config.do_sample = False
-        model.generation_config.use_cuda_graph = continuous_batching_config.use_cuda_graph
-        model.generation_config.compile_config = continuous_batching_config.varlen_compile_config
 
-        # Create a static cache if compile_config is set, because regular generate requires a compileable cache
+        # The fp32 eager reference stays a plain generate: flash + StaticCache (needed to compile a regular generate)
+        # can flip an early greedy tie in bf16, whereas eager float32 tracks the true greedy path.
         past_key_values = None
-        if model.generation_config.compile_config is not None:
-            max_cache_len = num_input_tokens + max_new_tokens
-            past_key_values = StaticCache(config=model.config, max_cache_len=max_cache_len)
+        if not compare_to_fp32_eager:
+            model.generation_config.use_cuda_graph = continuous_batching_config.use_cuda_graph
+            model.generation_config.compile_config = continuous_batching_config.varlen_compile_config
+            # Create a static cache if compile_config is set, because regular generate requires a compileable cache
+            if model.generation_config.compile_config is not None:
+                max_cache_len = num_input_tokens + max_new_tokens
+                past_key_values = StaticCache(config=model.config, max_cache_len=max_cache_len)
 
         generate_outputs = model.generate(
             **inputs.to(torch_device), generation_config=model.generation_config, past_key_values=past_key_values
@@ -866,10 +948,12 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             use_cuda_graph=use_cuda_graph,
             default_compile_level=1,
         )
+        # Flash + compile forces a StaticCache reference that can flip an early greedy tie in bf16: use fp32 eager
         self._test_continuous_batching_parity(
             model_id=model_id,
             continuous_batching_config=continuous_batching_config,
             attn_implementation=attn_implementation,
+            compare_to_fp32_eager=is_flash_attention_requested(requested_attention_implementation=attn_implementation),
         )
 
     @parameterized.expand(
@@ -1017,6 +1101,43 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             attn_implementation="sdpa",
             max_new_tokens=80,
         )
+
+    @require_torch_multi_accelerator
+    @with_flush_memory
+    def test_cuda_graph_capture_on_non_default_device(self) -> None:
+        """The background generation thread does not inherit the main thread's current CUDA device: it's a thread-local
+        variable. A freshly spawned thread starts on device 0. A model living on any other device therefore used to bind
+        its CUDA graph memory pool to device 0 while capturing on the model's device, which tripped an allocator assert
+        (`use_count > 0`) on the first in-thread capture. Regression test for #48312.
+
+        The graphs must be captured by the background thread, so this test must not call `warmup()` before `start()`:
+        warming up captures on the main thread instead, which is a documented workaround for the bug.
+        """
+        if torch_device != "cuda":
+            self.skipTest("CUDA graph is only supported on CUDA devices. Skipping test.")
+
+        # The whole point of the test is that the model does NOT live on device 0, where the background thread starts
+        device = f"{torch_device}:1"
+        model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        tokenizer, model = get_tokenizer_and_model(model_id, "paged|sdpa", device, torch.bfloat16)
+
+        gen_config = GenerationConfig(max_new_tokens=5, do_sample=False, eos_token_id=tokenizer.eos_token_id)
+        cb_config = ContinuousBatchingConfig(use_cuda_graph=True, use_async_batching=False, max_memory_percent=0.2)
+
+        manager = model.init_continuous_batching(generation_config=gen_config, continuous_batching_config=cb_config)
+        manager.start()
+        try:
+            input_ids = get_generation_inputs(_DEFAULT_USER_MESSAGES, tokenizer, for_continuous_batching=True)
+            request_ids = manager.add_requests(input_ids, max_new_tokens=5)
+            for _ in request_ids:
+                output = manager.get_result(timeout=120)
+                self.assertIsNotNone(output, "The background generation thread died before returning a result")
+                self.assertIsNone(output.error, f"Request failed during in-thread graph capture: {output.error}")
+                self.assertTrue(output.generated_tokens, "Request returned no generated tokens")
+            # The cache and the graph memory pool must have been created on the model's device, not on device 0
+            self.assertEqual(manager.batch_processor.cache.device, torch.device(device))
+        finally:
+            manager.stop(block=True, timeout=60)
 
     @parameterized.expand([(False, False), (False, True), (True, False), (True, True)])
     @slow
@@ -1171,6 +1292,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             def on_result(output):
                 token_counts.append(len(output.generated_tokens))
                 if output.is_finished():
+                    self.assertEqual(output.status, RequestStatus.FINISHED)  # fail if the request failed
                     future.set_result(True)
 
             request_id = manager.add_request(inputs, max_new_tokens=max_new_tokens, streaming=True)
@@ -1326,6 +1448,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             while requests_left:
                 result = manager.get_result(timeout=1)
                 if result and result.is_finished():
+                    self.assertEqual(result.status, RequestStatus.FINISHED)  # fail if the request failed
                     results.append(result)
                     requests_left -= 1
                 else:
@@ -1359,6 +1482,8 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     ) -> None:
         # Again, we try to not overly use_compile because it adds a lot of overhead
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        # Flash + compile forces a StaticCache reference that can flip an early greedy tie in bf16: use fp32 eager
+        is_fa = is_flash_attention_requested(requested_attention_implementation=attn_implementation)
         self._test_continuous_batching_parity(
             model_id=model_id,
             continuous_batching_config=ContinuousBatchingConfig(
@@ -1368,6 +1493,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
                 default_compile_level=1 if use_compile else 0,
             ),
             attn_implementation=attn_implementation,
+            compare_to_fp32_eager=is_fa and use_compile,
         )
 
     @parameterized.expand([(False, False), (False, True), (True, False), (True, True)])
@@ -1502,6 +1628,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             while len(results) < 2:
                 result = manager.get_result(timeout=1)
                 if result is not None and result.is_finished():
+                    self.assertEqual(result.status, RequestStatus.FINISHED)  # fail if the request failed
                     results[result.request_id] = result
                 elif not manager.is_running():
                     break
