@@ -99,7 +99,6 @@ model = AutoModelForCausalLM.from_pretrained(model_name, dtype="auto")
 - Set `bf16=True` for fast mixed precision training if your hardware supports it (Ampere+ GPUs). Otherwise, fall back to `fp16=True` on older hardware.
 - `gradient_accumulation_steps` simulates a larger effective batch size by accumulating gradients over multiple forward passes before updating weights.
 - `gradient_checkpointing` trades compute for memory by recomputing intermediate activations during the backward pass instead of storing them.
-- Set `train_sampling_strategy="batch_rebalance"` to reduce padding waste on variable-length datasets. It balances the padded-token cost of each micro-batch across devices and gradient accumulation steps, so each device finishes a micro-batch at roughly the same time, reducing idle time at gradient synchronization and keeping peak memory lower than `"group_by_length"`.
 
 </hfoption>
 <hfoption id="evaluation and checkpointing">
