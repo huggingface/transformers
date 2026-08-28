@@ -51,8 +51,3 @@ class InstructBlipVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def _setup_test_attributes(cls, processor):
         # processor expects bare text without placeholders!
         pass
-
-    def skip_unless_modality_and_tokenizer_present(
-        self, modality: str, attributes: list, require_tokenizer: bool = True
-    ):
-        self.skipTest("Processor is old and needs a refactor")

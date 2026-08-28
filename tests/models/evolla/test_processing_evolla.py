@@ -46,9 +46,7 @@ class EvollaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_flat_kwarg_applied_when_modality_dict_lacks_it(self):
         self.skipTest("EvollaProcessor requires `messages_list` and `proteins` inputs.")
 
-    def skip_unless_modality_and_tokenizer_present(
-        self, modality: str, attributes: list, require_tokenizer: bool = True
-    ):
+    def maybe_skip_typed_test_for_modality(self, modality: str, attributes: list, processor):
         self.skipTest("EvollaProcessor requires `messages_list` and `proteins` inputs.")
 
     def prepare_input_and_expected_output(self):
