@@ -21,7 +21,7 @@ from torch import nn
 from ...core_model_loading import WeightConverter, WeightRenaming, WeightTransform
 from ...utils import logging
 from .dequant import GGML_BLOCK
-from .gguf_conversion_mapping import GGUF_ARCHS, Dequantize
+from .gguf_conversion_mapping import GGUF_ARCHS, Cast, Dequantize
 from .kernels import DEQUANT_CHUNK_ELEMS, MAX_GEMV_ROWS, dequantize_blocks, mul_mat_vec
 from .reader import GgufHeader
 
@@ -43,11 +43,11 @@ def get_gguf_conversion_mapping(gguf_arch: str, config) -> list[WeightTransform]
 
 def get_gguf_plan(
     header: GgufHeader, mapping: list[WeightTransform]
-) -> tuple[dict[str, int], dict[str, int], dict[str, torch.Tensor]]:
-    """`{param_name: ggml_type}` for the file's quantized tensors, the subset that can stay packed, and
-    the input permutation each of those needs -- see `PermuteInputFeatures`.
+) -> tuple[dict[str, int], dict[str, int], dict[str, torch.Tensor], list[str]]:
+    """`{param_name: ggml_type}` for the file's quantized tensors, the subset that can stay packed, the
+    input permutation each of those needs (see `PermuteInputFeatures`), and every tensor's renamed name.
 
-    Reads `mapping` as it is before `add_gguf_dequantize_ops` has touched it: what a converter does to a
+    Reads `mapping` as it is before `add_gguf_load_ops` has touched it: what a converter does to a
     tensor decides whether it can stay packed, so the answer has to be taken before the unpacking op is
     inserted at the head of those same operations.
     """
@@ -57,13 +57,14 @@ def get_gguf_plan(
     renamings = [entry for entry in mapping if isinstance(entry, WeightRenaming)]
     converters = [entry for entry in mapping if isinstance(entry, WeightConverter)]
 
-    quantized, packable, permutations = {}, {}, {}
+    quantized, packable, permutations, names = {}, {}, {}, []
     for gguf_name, ggml_type in header.ggml_types.items():
-        if ggml_type not in GGML_BLOCK:
-            continue
         param_name = gguf_name
         for renaming in renamings:
             param_name, _ = renaming.rename_source_key(param_name)
+        names.append(param_name)
+        if ggml_type not in GGML_BLOCK:
+            continue
         quantized[param_name] = ggml_type
         converter = next((entry for entry in converters if entry.rename_source_key(param_name)[1]), None)
         operations = getattr(converter, "operations", ())
@@ -74,28 +75,33 @@ def get_gguf_plan(
             for operation in operations:
                 if (permutation := getattr(operation, "input_permutation", None)) is not None:
                     permutations[param_name] = permutation
-    return quantized, packable, permutations
+    return quantized, packable, permutations, names
 
 
-def add_gguf_dequantize_ops(mapping: list[WeightTransform], to_unpack: dict[str, int], dtype) -> list:
-    """Give every quantized tensor that has to land dense a `Dequantize` as its first conversion.
+def add_gguf_load_ops(mapping: list[WeightTransform], to_unpack: dict[str, int], names: list[str], dtype) -> list:
+    """Bracket every conversion chain: unpack blocks first where needed, cast to `dtype` last.
 
-    `to_unpack` maps a parameter name to its ggml type. It holds only the tensors that need unpacking:
-    the ones the file stores quantized whose module cannot compute on blocks.
+    `to_unpack` maps a parameter name to its ggml type, and holds only the tensors that need unpacking
+    -- the ones the file stores quantized whose module cannot compute on blocks. `names` is every
+    tensor in the file under its transformers name, because the cast has to reach the ones no
+    converter matches too; the reader hands those over in the float type the file wrote them in.
     """
     converters = [entry for entry in mapping if isinstance(entry, WeightConverter)]
-    if not to_unpack:
-        return mapping
-    dequantize_op = Dequantize(to_unpack, dtype)
+    dequantize_op = Dequantize(to_unpack, dtype) if to_unpack else None
+    cast_op = Cast(dtype)
     for converter in converters:
-        converter.operations.insert(0, dequantize_op)
-    unconverted = [name for name in to_unpack if not any(c.rename_source_key(name)[1] for c in converters)]
+        if dequantize_op is not None:
+            converter.operations.insert(0, dequantize_op)
+        converter.operations.append(cast_op)
+    # `Dequantize` passes through a name it was not given, so one converter serves both kinds here
+    operations = [dequantize_op, cast_op] if dequantize_op is not None else [cast_op]
+    unconverted = [name for name in names if not any(c.rename_source_key(name)[1] for c in converters)]
     if unconverted:
         return mapping + [
             WeightConverter(
                 source_patterns=[f"({re.escape(name)})" for name in unconverted],
                 target_patterns=[r"\1"],
-                operations=[dequantize_op],
+                operations=operations,
             )
         ]
     return mapping

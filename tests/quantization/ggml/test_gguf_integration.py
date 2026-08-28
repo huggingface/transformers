@@ -30,8 +30,9 @@ import math
 import unittest
 import unittest.mock
 
-from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, Qwen3_5ForCausalLM
+from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, GgufConfig, Qwen3_5ForCausalLM
 from transformers.testing_utils import (
+    require_kernels,
     require_torch_accelerator,
     require_torch_mps,
     slow,
@@ -61,6 +62,11 @@ class GgufModelIntegrationTesterMixin:
         "<|im_start|>user\nhi<|im_end|>",
     )
 
+    # Per-parameter relative tolerances, for an architecture whose conversion cannot be exact. Empty
+    # is the expectation: the transforms run in the float type the file stores and `Cast` rounds once,
+    # at the end, so a converted weight is bit-for-bit what a safetensors checkpoint holds.
+    inexact_params: dict[str, float] = {}
+
     chat = (
         {"role": "user", "content": "hi"},
         {"role": "assistant", "content": "hello"},
@@ -74,6 +80,7 @@ class GgufModelIntegrationTesterMixin:
         cls.model = cls.load_gguf_model(cls.gguf_file)
         # Built once too: a vocabulary of a few hundred thousand tokens is not free to assemble.
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.gguf_repo, gguf_file=cls.quantized_gguf_file)
+        cls.reference_tokenizer = AutoTokenizer.from_pretrained(cls.reference_repo)
 
     @classmethod
     def tearDownClass(cls):
@@ -82,13 +89,14 @@ class GgufModelIntegrationTesterMixin:
             torch.cuda.empty_cache()
 
     @classmethod
-    def load_gguf_model(cls, gguf_file, dtype=None):
+    def load_gguf_model(cls, gguf_file, dtype=None, **kwargs):
         """Load one of `gguf_repo`'s files, config included: the file's metadata carries it.
 
         Nothing is borrowed from the reference repo — a GGUF repo ships no `config.json`, so this is
         also the only load path that says the metadata is enough on its own.
         """
-        return cls.model_class.from_pretrained(cls.gguf_repo, gguf_file=gguf_file, dtype=dtype)
+        kwargs.setdefault("device_map", torch_device)
+        return cls.model_class.from_pretrained(cls.gguf_repo, gguf_file=gguf_file, dtype=dtype, **kwargs)
 
     @staticmethod
     def map_reference_key(key):
@@ -112,11 +120,10 @@ class GgufModelIntegrationTesterMixin:
 
     def completion(self, model):
         """What the model greedily continues `self.prompt` with."""
-        tokenizer = AutoTokenizer.from_pretrained(self.reference_repo)
-        inputs = tokenizer(self.prompt, return_tensors="pt").to(torch_device)
+        inputs = self.reference_tokenizer(self.prompt, return_tensors="pt").to(model.device)
         with torch.inference_mode():
-            output = model.to(torch_device).generate(**inputs, max_new_tokens=8, do_sample=False)
-        return tokenizer.decode(output[0, inputs.input_ids.shape[1] :])
+            output = model.generate(**inputs, max_new_tokens=8, do_sample=False)
+        return self.reference_tokenizer.decode(output[0, inputs.input_ids.shape[1] :])
 
     def test_tokenizer_matches_transformers(self):
         """A GGUF repo ships no tokenizer files either, so the one built from the metadata is the same.
@@ -196,30 +203,51 @@ class GgufModelIntegrationTesterMixin:
                 differing.append(f"{field}: {expected!r} != {got!r}")
         self.assertEqual(differing, [], f"{len(differing)} config fields differ:\n" + "\n".join(differing))
 
-    def test_generates_expected_text(self):
-        """End-to-end: those weights wired into a working forward pass."""
-        completion = self.completion(self.model)
+    def assert_completes(self, model):
+        """The model greedily continues `self.prompt` with `self.expected_completion`."""
+        completion = self.completion(model)
         self.assertTrue(
             completion.startswith(self.expected_completion),
             f"expected completion to start with {self.expected_completion!r}, got {completion!r}",
         )
 
-    def test_generates_expected_text_from_quantized_file(self):
-        """The same, from a quantized file: the blocks that stayed packed are read correctly.
+    def test_generates_expected_text(self):
+        """End-to-end: those weights wired into a working forward pass."""
+        self.assert_completes(self.model)
 
-        A separate load, because this is the path the non-quantized file never takes — packed modules
-        holding uint8 blocks, unpacked by a kernel or by torch inside every forward.
+    @require_torch_mps
+    @require_kernels
+    def test_generates_expected_text_from_packed_file(self):
+        """A quantized file with its blocks left packed: a kernel reads them correctly.
+
+        Needs a kernel, not just the device one is built for: without one the load falls back to
+        unpacking, which is the test below.
         """
         model = self.load_gguf_model(self.quantized_gguf_file)
         packed = [name for name, p in model.named_parameters() if p.dtype == torch.uint8]
-        self.assertTrue(packed, "no weight stayed in GGUF blocks, so this is not testing a quantized load")
-
-        completion = self.completion(model)
+        self.assertTrue(packed, "no weight stayed in GGUF blocks, so this is not testing a packed load")
+        self.assert_completes(model)
         del model
-        self.assertTrue(
-            completion.startswith(self.expected_completion),
-            f"expected completion to start with {self.expected_completion!r}, got {completion!r}",
+
+    def test_generates_expected_text_from_dequantized_file(self):
+        """The same file unpacked at load, which is how every other device reads it.
+
+        The other half of what a quantized checkpoint has to survive, and the half that runs anywhere:
+        the blocks go through the torch dequantizer rather than a kernel, so a misread block layout
+        shows up as a wrong word here rather than nowhere at all.
+        """
+        model = self.load_gguf_model(
+            self.quantized_gguf_file,
+            dtype=torch.bfloat16,  # a quantized file has no float type of its own, so this would be f32
+            quantization_config=GgufConfig(gguf_file=self.quantized_gguf_file, dequantize=True),
         )
+        self.assertEqual(
+            [name for name, p in model.named_parameters() if p.dtype == torch.uint8],
+            [],
+            "a weight kept its blocks despite dequantize=True",
+        )
+        self.assert_completes(model)
+        del model
 
 
 @slow
@@ -230,8 +258,8 @@ class GgufIntegrationTest(unittest.TestCase):
     packed and what dtype the rest of them land in — so one checkpoint covers them for every model
     that follows.
 
-    Only the two that need the weights *packed* are restricted to Metal, which is the only backend a
-    matmul kernel is built for. Everywhere else the load falls back to dequantizing, and what that
+    Only the two that need the weights *packed* ask for a kernel. Everywhere else -- another device,
+    or this one with no kernel published for it -- the load falls back to dequantizing, and what that
     produces is a dense model that runs anywhere.
     """
 
@@ -259,13 +287,9 @@ class GgufIntegrationTest(unittest.TestCase):
         return tokenizer.decode(output[0, inputs.input_ids.shape[1] :])
 
     @require_torch_mps
+    @require_kernels
     def test_kernel_keeps_the_weights_packed(self):
         """With a matmul kernel, the blocks are what the modules hold and compute on."""
-        from transformers.integrations.gguf.kernels import get_gguf_kernel
-
-        # `False` when there is none, so this asks for truthiness rather than a sentinel
-        if not get_gguf_kernel():
-            self.skipTest("no GGUF kernel is available for this device")
         model = self.load(device_map=torch_device)
 
         packed = self.packed_modules(model)
@@ -312,6 +336,7 @@ class GgufIntegrationTest(unittest.TestCase):
                 del model
 
     @require_torch_mps
+    @require_kernels
     def test_dtype_of_what_a_packed_model_unpacks(self):
         """A packed model still has dense parameters — the ones no module could hold — in `dtype`."""
         model = self.load(dtype=torch.bfloat16, device_map=torch_device)
@@ -332,10 +357,8 @@ class Qwen35GgufModelTest(GgufModelIntegrationTesterMixin, unittest.TestCase):
 
     prompt = "The capital of France is Paris. The capital of Germany is"
     expected_completion = " Berlin"
-    # TODO: tighten back to 1e-6. llama.cpp stores these norms as `w + 1` and the file holds them in
-    # f32, but a bf16 file loads in bf16, so the reader rounds `w + 1` before `SubtractOne` gets to
-    # subtract — up to a full bf16 step at 1.0 (3.9e-03 absolute, 1.1e-02 relative here) lands on a
-    # weight that is much smaller than 1. Doing the arithmetic first needs the loader to stop skipping
-    # the cast for pre-quantized renamed keys (`core_model_loading.py`, `_dtype = None`).
-    # `A_log` is the same story through `LogNegate`, reading an already-rounded `ssm_a`.
-    inexact_params = {"norm.weight": 2e-2, "A_log": 2e-3}
+    # A floor in the checkpoint, not in this path. llama.cpp writes a zero-centred norm as `w + 1` in
+    # f32, whose step at 1.0 is 1.2e-07, so a weight smaller than that is not in the file at all: one
+    # here is 5.178e-07 in the reference and comes back as 4.768e-07, the nearest `1 + w` can encode.
+    # Nothing on load recovers it. Every other parameter matches bit for bit.
+    inexact_params = {"norm.weight": 1e-6}

@@ -720,10 +720,6 @@ def load_and_register_attn_kernel(
         kernel_function = attention_wrapper if attention_wrapper is not None else msa_attention_forward
         mask_implementation = "sdpa"
     elif hasattr(kernel, "flash_attn_forward") and hasattr(kernel, "supports_flash_attn"):
-        # ggml's attention (`kernels-community/ggml-attn`) ships its own entry point, already shaped for the
-        # attention interface, so there is nothing to wrap. It applies causality itself when handed no mask,
-        # the way flash attention does, so `sdpa`'s -- which returns `None` for a plain-causal case -- is the
-        # one to register.
         kernel_function = attention_wrapper if attention_wrapper is not None else kernel.flash_attn_forward
         mask_implementation = "sdpa"
     elif kernel_name is not None:

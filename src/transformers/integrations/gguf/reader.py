@@ -235,29 +235,28 @@ class LazyGgufTensor:
     the whole file.
     """
 
-    def __init__(self, data: np.ndarray, ggml_type: int, shape: tuple[int, ...], dtype=None):
+    def __init__(self, data: np.ndarray, ggml_type: int, shape: tuple[int, ...]):
         self.data = data  # a read-only mmap view, untouched until materialized
         self.ggml_type = ggml_type
         self.shape = shape
-        self.dtype = dtype
 
     def __getitem__(self, _) -> torch.Tensor:
         raw = torch.from_numpy(np.copy(self.data))
         if self.ggml_type not in _TORCH_DTYPE:
             return raw.reshape(self.shape)
-        # The file is mapped as bytes, since numpy has no bfloat16, so the values are reinterpreted here
-        values = raw.view(_TORCH_DTYPE[self.ggml_type]).reshape(self.shape)
-        # TODO: the loader should be doing this. It skips the cast for a pre-quantized
-        # checkpoint under renamed keys, a rule meant for tensors that carry quantization state and have
-        # to keep the dtype they were stored in; every GGUF key is renamed, so it catches the norms too.
-        return values if self.dtype is None else values.to(dtype=self.dtype)
+        # The file is mapped as bytes, since numpy has no bfloat16, so the values are reinterpreted here.
+        # Left in the type the file wrote: the transforms need it -- a norm is stored as `w + 1`, and
+        # rounding before the subtraction spends the precision available near 1.0 on a much smaller
+        # weight. `Cast` is the last op of every chain, so this lands in the model's dtype anyway.
+        return raw.view(_TORCH_DTYPE[self.ggml_type]).reshape(self.shape)
 
 
-def load_gguf_state_dict(header: GgufHeader, dtype: "torch.dtype | None" = None) -> dict[str, LazyGgufTensor]:
+def load_gguf_state_dict(header: GgufHeader) -> dict[str, LazyGgufTensor]:
     """`{gguf_name: LazyGgufTensor}` — the file's tensors, none of them read yet.
 
-    A quantized tensor keeps its `(rows, bytes_per_row)` blocks; `dtype` is the dtype the others are
-    cast to, whatever the file stored them as.
+    Every tensor comes back as the file stores it: a quantized one as its `(rows, bytes_per_row)`
+    blocks, the rest in the float type they were written in. Reaching the dtype the model is loaded in
+    is the last conversion op's job (`Cast`), so that the transforms in between run at full precision.
     """
     blob = _mapped(header.path)
 
@@ -268,6 +267,6 @@ def load_gguf_state_dict(header: GgufHeader, dtype: "torch.dtype | None" = None)
             block_elements, block_bytes = GGML_BLOCK[info.ggml_type]
             shape = (shape[0], shape[1] // block_elements * block_bytes)
         start = header.data_start + info.offset
-        state_dict[info.name] = LazyGgufTensor(blob[start : start + info.nbytes], info.ggml_type, shape, dtype)
+        state_dict[info.name] = LazyGgufTensor(blob[start : start + info.nbytes], info.ggml_type, shape)
 
     return state_dict

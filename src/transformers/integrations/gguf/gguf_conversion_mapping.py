@@ -338,6 +338,41 @@ class TiledToGroupedInputs(PermuteInputFeatures):
         super().__init__(tiled_to_grouped(num_k_heads, heads_per_k, head_dim))
 
 
+class Cast(ConversionOps):
+    """Cast to the dtype the model is being loaded in, after every other transform has run.
+
+    Last, not first, because llama.cpp stores values this path has to do arithmetic on: a zero-centred
+    norm is written as `w + 1`, and rounding *that* to bf16 spends the precision available near 1.0
+    (a step of 7.8e-03) on a weight that is usually much smaller, where the step would have been
+    9.8e-04. Subtracting first and rounding after is what a safetensors checkpoint of the same model
+    holds. `A_log` is the same story through `LogNegate`.
+
+    The loader will not do this itself: it skips the cast for a pre-quantized checkpoint under renamed
+    keys, and a GGUF renames every key.
+
+    Blocks pass through untouched -- they are `uint8`, and a module that holds them unpacks into this
+    dtype when it computes.
+    """
+
+    def __init__(self, dtype: "torch.dtype"):
+        self.dtype = dtype
+
+    @torch.no_grad
+    def convert(
+        self,
+        input_dict: dict[str, torch.Tensor],
+        source_patterns: list[str],
+        target_patterns: list[str],
+        full_layer_name: str | None = None,
+        **kwargs,
+    ) -> dict[str, torch.Tensor]:
+        tensor = _single_tensor(input_dict)
+        name = full_layer_name if full_layer_name is not None else target_patterns[0]
+        if tensor.dtype in (torch.uint8, self.dtype):
+            return {name: tensor}
+        return {name: tensor.to(self.dtype)}
+
+
 class Dequantize(ConversionOps):
     """Unpack GGUF blocks into values.
 

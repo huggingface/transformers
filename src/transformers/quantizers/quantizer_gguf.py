@@ -33,7 +33,7 @@ if is_torch_available():
     from ..integrations.gguf.kernels import get_gguf_kernel
     from ..integrations.gguf.reader import GgufHeader, load_gguf_state_dict, read_gguf_metadata
     from ..integrations.gguf.utils import (
-        add_gguf_dequantize_ops,
+        add_gguf_load_ops,
         get_gguf_conversion_mapping,
         get_gguf_plan,
         is_gguf_arch_supported,
@@ -58,9 +58,10 @@ class GgufHfQuantizer(HfQuantizer):
         self.packed_modules = {}
         self.input_permutations = {}
         self.quantized = {}
+        self.names = []
         self.mapping = []
-        self.kernel = None
         self.header = None
+        self.kernel = None
         self.dtype = None
         # TODO: only for the legacy loader — drop this, and every hook that guards on it, once all
         # architectures go through this path and there is no fallback left
@@ -147,7 +148,7 @@ class GgufHfQuantizer(HfQuantizer):
         dequantizes everything itself.
         """
         if self.supported:
-            return load_gguf_state_dict(self.header, dtype=self.dtype)
+            return load_gguf_state_dict(self.header)
 
         from ..modeling_gguf_pytorch_utils import load_gguf_checkpoint
 
@@ -161,7 +162,7 @@ class GgufHfQuantizer(HfQuantizer):
         if not self.supported:
             return
         self.mapping = get_gguf_conversion_mapping(self.header.architecture, model.config)
-        self.quantized, packable, self.input_permutations = get_gguf_plan(self.header, self.mapping)
+        self.quantized, packable, self.input_permutations, self.names = get_gguf_plan(self.header, self.mapping)
         if self.quantization_config.dequantize:
             return
         self.packed_modules = replace_with_gguf_modules(model, packable, self.kernel, self.dtype)
@@ -189,7 +190,7 @@ class GgufHfQuantizer(HfQuantizer):
         if not self.supported:
             return weight_conversions
         to_unpack = {name: t for name, t in self.quantized.items() if name not in self.packed_modules}
-        return add_gguf_dequantize_ops(self.mapping + weight_conversions, to_unpack, self.dtype)
+        return add_gguf_load_ops(self.mapping + weight_conversions, to_unpack, self.names, self.dtype)
 
     def param_needs_quantization(self, model, param_name: str, **kwargs) -> bool:
         return False
