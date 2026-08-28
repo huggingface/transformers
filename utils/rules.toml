@@ -83,7 +83,7 @@ diff = '''
 [rules.TRF005]
 description = "_no_split_modules, when defined, should be a list/tuple of non-empty strings."
 default_enabled = true
-allowlist_models = ["d_fine", "deformable_detr", "glm46v", "lw_detr", "pp_doclayout_v3", "pp_doclayout_v4", "rt_detr", "rt_detr_v2", "voxtral", "voxtral_realtime"]
+allowlist_models = ["d_fine", "deformable_detr", "glm46v", "lw_detr", "pp_doclayout_v3", "rt_detr", "rt_detr_v2", "voxtral", "voxtral_realtime"]
 
 [rules.TRF005.explanation]
 what_it_does = "Checks the shape of _no_split_modules when present."
