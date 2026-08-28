@@ -28,6 +28,7 @@ from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
 from ...configuration_utils import PretrainedConfig
+from ...distributed.tensor_parallel import set_all_reduce_backend
 from ...generation.configuration_utils import ContinuousBatchingConfig, GenerationConfig
 from ...utils.generic import is_flash_attention_requested
 from ...utils.import_utils import is_flash_attn_2_available, is_flash_attn_3_available
@@ -946,7 +947,49 @@ class ContinuousBatchingManager:
 
     @torch.no_grad()
     def _run_generation_loop(self) -> None:
-        """Main processing loop running in the background thread."""
+        """Main processing loop running in the background thread.
+
+        The loop gets the device its model is on, since a fresh thread starts on device 0 whatever
+        the rank, and a stream of its own. Sharing the default stream with a main thread that keeps
+        using the model deadlocks: this loop's collectives wait for their peer, and the main
+        thread's work sits behind them in the same stream, so the peer can never get there.
+        """
+        # This loop's tensor parallel collectives, if it was given a backend of its own. Without one
+        # they go through NCCL, which a thread sharing the model cannot do safely.
+        set_all_reduce_backend(getattr(self, "all_reduce_backend", None))
+        if torch.cuda.is_available() and self.model.device.type == "cuda":
+            torch.cuda.set_device(self.model.device)
+            # High priority: decode is latency-bound and its collectives wait on the peer rank, so
+            # they must be scheduled promptly even when a trainer is saturating the device.
+            stream_ctx = torch.cuda.stream(torch.cuda.Stream(priority=-1))
+        else:
+            stream_ctx = nullcontext()
+        with stream_ctx:
+            self._generation_loop()
+
+    def step(self) -> bool:
+        """Run one iteration of the generation loop on the calling thread, and say whether it ran.
+
+        For a caller that also uses the model itself, typically a trainer, and cannot let the
+        background thread run: tensor parallel collectives are matched by position across ranks, so
+        two threads issuing them race, while a caller that steps the engine at fixed points in its
+        own work gives every rank the same order by construction.
+
+        Do not use this while the background thread is running; it is an alternative to `start`.
+        """
+        if getattr(self, "batch_processor", None) is None:
+            self.batch_processor = self._create_batch_processor()
+        if not hasattr(self, "current_batch"):
+            self.current_batch = 0
+        batch_processor = self.batch_processor
+        if not batch_processor.prepare_next_batch():
+            return False
+        self._generation_step()
+        batch_processor.update_batch()
+        self.current_batch += 1
+        return True
+
+    def _generation_loop(self) -> None:
         batch_processor = None
 
         # Everything is inside this try / except / finally block so we can handle critical errors gracefully
@@ -1028,6 +1071,12 @@ class ContinuousBatchingManager:
 
     def _generation_step(self) -> None:
         """Perform a single generation step. This is mostly cuda graphed"""
+        import os as _os
+
+        if _os.environ.get("CB_STEP_DEBUG"):
+            self._dbg = getattr(self, "_dbg", 0) + 1
+            if self._dbg <= 6:
+                print(f"[cb-debug rank {self.distributed_helper.global_rank}] generation step {self._dbg}", flush=True)
         if self.batch_processor is None:
             raise RuntimeError("Tried to perform a generation step before the batch processor was initialized.")
         self.batch_processor._generation_step(self.model)
