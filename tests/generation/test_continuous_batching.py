@@ -1102,6 +1102,43 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             max_new_tokens=80,
         )
 
+    @require_torch_multi_accelerator
+    @with_flush_memory
+    def test_cuda_graph_capture_on_non_default_device(self) -> None:
+        """The background generation thread does not inherit the main thread's current CUDA device: it's a thread-local
+        variable. A freshly spawned thread starts on device 0. A model living on any other device therefore used to bind
+        its CUDA graph memory pool to device 0 while capturing on the model's device, which tripped an allocator assert
+        (`use_count > 0`) on the first in-thread capture. Regression test for #48312.
+
+        The graphs must be captured by the background thread, so this test must not call `warmup()` before `start()`:
+        warming up captures on the main thread instead, which is a documented workaround for the bug.
+        """
+        if torch_device != "cuda":
+            self.skipTest("CUDA graph is only supported on CUDA devices. Skipping test.")
+
+        # The whole point of the test is that the model does NOT live on device 0, where the background thread starts
+        device = f"{torch_device}:1"
+        model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        tokenizer, model = get_tokenizer_and_model(model_id, "paged|sdpa", device, torch.bfloat16)
+
+        gen_config = GenerationConfig(max_new_tokens=5, do_sample=False, eos_token_id=tokenizer.eos_token_id)
+        cb_config = ContinuousBatchingConfig(use_cuda_graph=True, use_async_batching=False, max_memory_percent=0.2)
+
+        manager = model.init_continuous_batching(generation_config=gen_config, continuous_batching_config=cb_config)
+        manager.start()
+        try:
+            input_ids = get_generation_inputs(_DEFAULT_USER_MESSAGES, tokenizer, for_continuous_batching=True)
+            request_ids = manager.add_requests(input_ids, max_new_tokens=5)
+            for _ in request_ids:
+                output = manager.get_result(timeout=120)
+                self.assertIsNotNone(output, "The background generation thread died before returning a result")
+                self.assertIsNone(output.error, f"Request failed during in-thread graph capture: {output.error}")
+                self.assertTrue(output.generated_tokens, "Request returned no generated tokens")
+            # The cache and the graph memory pool must have been created on the model's device, not on device 0
+            self.assertEqual(manager.batch_processor.cache.device, torch.device(device))
+        finally:
+            manager.stop(block=True, timeout=60)
+
     @parameterized.expand([(False, False), (False, True), (True, False), (True, True)])
     @slow
     def test_continuous_batching_log_probs(self, use_cuda_graph: bool, use_async_batching: bool) -> None:
