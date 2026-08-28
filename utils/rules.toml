@@ -166,7 +166,14 @@ default_enabled = true
 # `shieldgemma2`: processing_shieldgemma2.py subclasses Gemma3Processor. The converter does support
 # processing files, so this one is genuinely fixable with a modular_shieldgemma2.py -- left as follow-up work
 # rather than folded into this pass.
-allowlist_models = ["bart", "convbert", "distilbert", "dpr", "fnet", "maskformer", "mobilebert", "nemotron3_5_asr", "nemotron_asr_streaming", "sam3", "sam3_video", "shieldgemma2", "squeezebert", "vision_text_dual_encoder"]
+#
+# `vibevoice`: added after this pass, when VibeVoice (#40546) landed on main. generation_vibevoice.py imports
+# `VibeVoiceAcousticTokenizerConv1dPaddingCache` from its own sub-model package. vibevoice is a composite
+# family split across three directories (vibevoice, vibevoice_acoustic_tokenizer, vibevoice_asr) and already
+# routes its sub-*configs* through CONFIG_MAPPING as the rule prescribes; this last import is a runtime cache
+# class, which CONFIG_MAPPING cannot supply. It also sits in a generation_*.py file, so it hits the same
+# missing converter support as the nemotron entries above.
+allowlist_models = ["bart", "convbert", "distilbert", "dpr", "fnet", "maskformer", "mobilebert", "nemotron3_5_asr", "nemotron_asr_streaming", "sam3", "sam3_video", "shieldgemma2", "squeezebert", "vibevoice", "vision_text_dual_encoder"]
 
 [rules.TRF009.explanation]
 what_it_does = "Flags imports reaching into another model's package, in the files that make up a model's shipped implementation: modeling_*, configuration_*, processing_*, image_processing_*, video_processing_*, feature_extraction_*, tokenization_* and generation_*.py. Three forms are recognised: package path (`from transformers.models.other.modeling_other import X`), relative path (`from ..other.configuration_other import X`), and public API (`from transformers import OtherModel`) -- for the last, the owning directory is inferred from the class name and confirmed against the classes that directory really defines, so an unresolvable name is left alone rather than guessed at. Out of scope: `modular_*.py` (building on another model is its purpose, and the converter flattens those imports away), `convert_*.py`, `__init__.py` and files under `auto`. Allowed targets: the model's own directory, `auto` and `timm_wrapper`."
