@@ -32,7 +32,7 @@ model_id = "unsloth/Qwen3.5-4B-GGUF"
 filename = "Qwen3.5-4B-Q4_K_M.gguf"
 
 model = AutoModelForCausalLM.from_pretrained(model_id, gguf_file=filename)
-tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3.5-4B")
+tokenizer = AutoTokenizer.from_pretrained(model_id, gguf_file=filename)
 ```
 
 The weights only stay in their GGUF blocks on Metal (MPS) devices, where the [llama.cpp](https://github.com/ggerganov/llama.cpp) kernels, fetched from the Hub, run the matmuls directly on the packed blocks to keep inference fast.
@@ -41,14 +41,20 @@ Right now, the only architecture supported is Qwen3.5. Everything else falls bac
 
 ## Dequantize
 
+Dequantizing unpacks every weight at load time and gives back a plain dense model. It is the fallback whenever the fast, compressed path doesn't apply. You can also ask for it explicitly with [`GgufConfig`].
+
 ```py
 from transformers import AutoModelForCausalLM, GgufConfig
 
 quantization_config = GgufConfig(gguf_file=filename, dequantize=True)
-model = AutoModelForCausalLM.from_pretrained(model_id, gguf_file=filename, quantization_config=quantization_config)
+model = AutoModelForCausalLM.from_pretrained(
+    model_id, gguf_file=filename, quantization_config=quantization_config, dtype=torch.bfloat16
+)
 ```
 
-Architectures other than Qwen3.5 are read by the legacy loader and dequantize the model also.
+The model that comes out is a regular dense model, so this is also how you take a GGUF checkpoint into the dtype you passed. 
+
+Architectures other than Qwen3.5 are read by the legacy loader which dequantize the model also.
 
 > [!TIP]
 > The legacy loader supports Llama, Mistral, Qwen2, Qwen2Moe, Phi3, Bloom, Falcon, StableLM, GPT2, Starcoder2, and [more](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/ggml.py).

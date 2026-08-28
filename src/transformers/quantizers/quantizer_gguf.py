@@ -22,20 +22,23 @@ Every quantized tensor is read as raw blocks; anything with no packed module to 
 `Dequantize` conversion, which is always correct, just larger.
 """
 
-import torch
-
-from ..integrations.gguf.kernels import get_gguf_kernel
-from ..integrations.gguf.reader import GgufHeader, read_gguf_metadata
-from ..integrations.gguf.utils import (
-    add_gguf_dequantize_ops,
-    get_gguf_conversion_mapping,
-    get_gguf_plan,
-    is_gguf_arch_supported,
-    replace_with_gguf_modules,
-)
-from ..utils import is_torch_mps_available, logging
+from ..utils import is_torch_available, is_torch_mps_available, logging
 from ..utils.quantization_config import GgufConfig
 from .base import HfQuantizer
+
+
+if is_torch_available():
+    import torch
+
+    from ..integrations.gguf.kernels import get_gguf_kernel
+    from ..integrations.gguf.reader import GgufHeader, read_gguf_metadata
+    from ..integrations.gguf.utils import (
+        add_gguf_dequantize_ops,
+        get_gguf_conversion_mapping,
+        get_gguf_plan,
+        is_gguf_arch_supported,
+        replace_with_gguf_modules,
+    )
 
 
 logger = logging.get_logger(__name__)
@@ -45,7 +48,7 @@ class GgufHfQuantizer(HfQuantizer):
     """Loads a quantized GGUF checkpoint with its weights left in GGUF blocks."""
 
     quantization_config: "GgufConfig"
-    header: GgufHeader  # set by `read_header`, before any of the loading hooks run
+    header: "GgufHeader"  # set by `read_header`, before any of the loading hooks run
     requires_calibration = False
     requires_parameters_quantization = False
 
