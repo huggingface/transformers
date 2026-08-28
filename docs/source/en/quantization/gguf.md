@@ -39,6 +39,17 @@ The weights only stay in their GGUF blocks on Metal (MPS) devices, where the [ll
 
 Right now, the only architecture supported is Qwen3.5. Everything else falls back. On another device or quantization type, the model is [dequantized](#dequantize) at load time, and an architecture that isn't supported yet goes through the legacy loader.
 
+## Attention
+
+On Metal, attention has a ggml kernel too: [ggml-attn](https://huggingface.co/marcsun13/ggml-attn), the same
+flash attention llama.cpp runs, for both decode and prefill.
+
+```py
+model = AutoModelForCausalLM.from_pretrained(
+    model_id, gguf_file=filename, attn_implementation="marcsun13/ggml-attn"
+)
+```
+
 ## Dequantize
 
 Dequantizing unpacks every weight at load time and gives back a plain dense model. It is the fallback whenever the fast, compressed path doesn't apply. You can also ask for it explicitly with [`GgufConfig`].
