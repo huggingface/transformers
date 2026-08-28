@@ -261,6 +261,32 @@ class TestTensorParallelLayer(TestCasePlus):
         self.assertEqual(placements["weight"], Shard(0))
         self.assertFalse(hasattr(module, "_hf_kv_replication"))
 
+    def test_replicate_kv_heads_all_reduces_gradients_within_the_replication_group(self):
+        module = torch.nn.Linear(4, 8, bias=False)
+        module._hf_kv_replication = 2
+        module.weight.grad = torch.ones_like(module.weight)
+        mesh = self.MockDeviceMesh(world_size=4, rank=0)
+        group = object()
+        all_reduced = []
+
+        with patch.object(tensor_parallel, "_get_kv_replication_group", return_value=group):
+            ReplicateKVHeadsParallel().install_forward(module, mesh)
+
+        self.assertEqual(len(module._backward_hooks), 1)
+        with patch.object(
+            tensor_parallel.dist, "all_reduce", side_effect=lambda tensor, group=None: all_reduced.append(group)
+        ):
+            next(iter(module._backward_hooks.values()))(module, None, None)
+        self.assertEqual(all_reduced, [group])
+
+    def test_replicate_kv_heads_does_not_sync_gradients_without_replication(self):
+        module = torch.nn.Linear(4, 8, bias=False)
+        mesh = self.MockDeviceMesh(world_size=4, rank=0)
+
+        ReplicateKVHeadsParallel().install_forward(module, mesh)
+
+        self.assertEqual(len(module._backward_hooks), 0)
+
     def test_kv_replication_reads_the_replicated_head_from_the_checkpoint(self):
         world_size, num_key_value_heads, head_dim = 4, 2, 8
         n_rep = world_size // num_key_value_heads

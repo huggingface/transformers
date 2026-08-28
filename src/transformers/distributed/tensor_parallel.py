@@ -260,6 +260,28 @@ def get_kv_replication_factor(num_key_value_heads: int | None, tp_size: int) -> 
     return tp_size // num_key_value_heads
 
 
+_KV_REPLICATION_GROUPS: dict[tuple[int, int], object] = {}
+
+
+def _get_kv_replication_group(mesh, n_rep: int):
+    """Process group holding the `n_rep` ranks that own the same (replicated) KV head.
+
+    ``dist.new_group`` is collective, so every rank walks through all the groups in the same order and keeps the
+    one it belongs to. The result is cached because every attention layer asks for the same group.
+    """
+    key = (id(mesh), n_rep)
+    if key not in _KV_REPLICATION_GROUPS:
+        global_ranks = mesh.mesh.flatten().tolist()
+        local_rank = mesh.get_local_rank()
+        group = None
+        for start in range(0, len(global_ranks), n_rep):
+            candidate = dist.new_group(ranks=global_ranks[start : start + n_rep])
+            if start // n_rep == local_rank // n_rep:
+                group = candidate
+        _KV_REPLICATION_GROUPS[key] = group
+    return _KV_REPLICATION_GROUPS[key]
+
+
 class ReplicateKVHeadsParallel(ColwiseParallel):
     """
     Colwise sharding for `k_proj`/`v_proj` which replicates KV heads when the model has fewer KV heads than
@@ -274,6 +296,10 @@ class ReplicateKVHeadsParallel(ColwiseParallel):
     In DTensor terms the parameter is described as a plain `Shard` of the *expanded* projection, whose sharded
     dimension is `n_rep` times larger than the checkpoint one. Rank `r` therefore owns KV head `r // n_rep`, and
     the loader detects the size mismatch to read the right slice from the checkpoint.
+
+    Because DTensor sees those `n_rep` copies as independent shards, the gradient of a replicated head would only
+    hold the contribution of its own rank. They are summed back with an explicit all-reduce inside each
+    replication group, which also keeps the copies identical so that saving can drop the duplicates.
     """
 
     def shard_param(self, module, param, mesh):
@@ -293,6 +319,22 @@ class ReplicateKVHeadsParallel(ColwiseParallel):
             DTensor.from_local(local_meta, mesh, [Shard(shard_dim)], run_check=False),
             requires_grad=meta.requires_grad,
         )
+
+    def install_forward(self, module, mesh):
+        n_rep = getattr(module, "_hf_kv_replication", 1)
+        if n_rep > 1:
+            group = _get_kv_replication_group(mesh, n_rep)
+
+            # A module hook rather than `param.register_hook`: params are replaced during weight loading, which
+            # happens after TP is applied, and would drop a param-level hook.
+            def _all_reduce_replicated_grads(mod, grad_input, grad_output):
+                for param in mod.parameters(recurse=False):
+                    if param.grad is not None:
+                        grad = param.grad
+                        dist.all_reduce(grad.to_local() if isinstance(grad, DTensor) else grad, group=group)
+
+            module.register_full_backward_hook(_all_reduce_replicated_grads)
+        return super().install_forward(module, mesh)
 
 
 class RowwiseParallel(TensorParallelLayer):
