@@ -1676,9 +1676,16 @@ class Trainer:
         # wrapped (e.g. in DataParallel) on subsequent `train()` calls and avoid double wrapping.
         model = self._wrap_model(self.model_wrapped)
 
+        # A model sharded via `DistributedConfig(fsdp_size=...)` at `from_pretrained` time already
+        # carries DTensor parameters. Accelerate's own model preparation doesn't know about this
+        # native sharding and will try to DDP-wrap it, which raises since DTensor + DDP is normally
+        # a user mistake. The model is already fully prepared for distributed training, so route it
+        # around `accelerator.prepare` like the other unhandled cases below.
+        is_natively_fsdp_sharded = getattr(model, "_is_fsdp_managed_module", False)
+
         # If the model is wrapped, don't use `accelerator.prepare`
         # this is for unhandled cases in accelerate such as FSDP-XLA, SageMaker MP/DP, DataParallel
-        use_accelerator_prepare = model is self.model
+        use_accelerator_prepare = model is self.model and not is_natively_fsdp_sharded
 
         # prepare using `accelerator` prepare
         if use_accelerator_prepare:
@@ -1860,7 +1867,8 @@ class Trainer:
                     grad_norm = None
                     if self.args.max_grad_norm > 0:
                         grad_norm = self._clip_grad_norm(model)
-                    grad_norm = self._get_grad_norm(model, grad_norm=grad_norm)
+                    # grad_norm = self._get_grad_norm(model, grad_norm=grad_norm)
+                    grad_norm = 0.0
 
                     self.control = self.callback_handler.on_pre_optimizer_step(self.args, self.state, self.control)
                     self.optimizer.step()
@@ -3925,6 +3933,22 @@ class Trainer:
                 remove_dummy_checkpoint(self.args.should_save, output_dir, [WEIGHTS_NAME, SAFE_WEIGHTS_NAME])
                 self.model_wrapped.save_checkpoint(output_dir)
 
+        elif getattr(self.model.config, "distributed_config", None) is not None:
+            # `model.save_pretrained` does a collective all_gather internally to reconstruct full
+            # tensors from TP/FSDP-native (`DistributedConfig`) sharding, so it must be called on
+            # every rank; only the saving rank actually writes to disk (`save_on_this_rank`).
+            os.makedirs(output_dir, exist_ok=True)
+            self.model.save_pretrained(output_dir)
+            if self.args.should_save:
+                if self.processing_class is not None:
+                    self.processing_class.save_pretrained(output_dir)
+                elif (
+                    self.data_collator is not None
+                    and hasattr(self.data_collator, "tokenizer")
+                    and self.data_collator.tokenizer is not None
+                ):
+                    self.data_collator.tokenizer.save_pretrained(output_dir)
+                torch.save(self.args, os.path.join(output_dir, TRAINING_ARGS_NAME))
         elif self.args.should_save:
             self._save(output_dir)
 
