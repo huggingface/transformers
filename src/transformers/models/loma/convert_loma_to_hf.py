@@ -47,7 +47,22 @@ VARIANT_CONFIGS = {
 }
 
 
-def _rename_matcher_key(key: str, num_hidden_layers: int) -> str | None:
+def _rename_matcher_key(key: str, num_hidden_layers: int) -> str | list[str] | None:
+    """Rename a matcher key from the reference checkpoint to the HF model format.
+
+    Key mappings:
+        posenc.Wr.weight → positional_encoder.projector.weight
+        input_proj.* → input_projection.*
+        transformers.{i}.self_attn.Wqkv.{w,b} → layers.{i}.self_attention.{q,k,v}_proj.{w,b} (split 3-way)
+        transformers.{i}.self_attn.out_proj.* → layers.{i}.self_attention.o_proj.*
+        transformers.{i}.self_attn.ffn.{0,1,3}.* → layers.{i}.self_mlp.{fc1,layer_norm,fc2}.*
+        transformers.{i}.cross_attn.to_qk.{w,b} → layers.{i}.cross_attention.{q,k}_proj.{w,b} (duplicate)
+        transformers.{i}.cross_attn.to_v.* → layers.{i}.cross_attention.v_proj.*
+        transformers.{i}.cross_attn.to_out.* → layers.{i}.cross_attention.o_proj.*
+        transformers.{i}.cross_attn.ffn.{0,1,3}.* → layers.{i}.cross_mlp.{fc1,layer_norm,fc2}.*
+        log_assignment.{last}.final_proj.* → match_assignment.final_projection.*
+        log_assignment.{last}.matchability.* → match_assignment.matchability.*
+    """
     if key == "posenc.Wr.weight":
         return "positional_encoder.projector.weight"
     if key.startswith("input_proj."):
@@ -57,25 +72,41 @@ def _rename_matcher_key(key: str, num_hidden_layers: int) -> str | None:
     if transformer_match is not None:
         layer_index, attention_type, suffix = transformer_match.groups()
         if attention_type == "self_attn":
+            # Fused QKV → separate q/k/v projections
+            if suffix.startswith("Wqkv."):
+                param = suffix.split(".")[1]  # "weight" or "bias"
+                return [
+                    f"layers.{layer_index}.self_attention.q_proj.{param}",
+                    f"layers.{layer_index}.self_attention.k_proj.{param}",
+                    f"layers.{layer_index}.self_attention.v_proj.{param}",
+                ]
             replacements = {
-                "Wqkv": "self_attention.qkv",
-                "out_proj": "self_attention.output",
-                "ffn.0": "self_attention.mlp.layers.0",
-                "ffn.1": "self_attention.mlp.layers.1",
-                "ffn.3": "self_attention.mlp.layers.3",
+                "out_proj": "self_attention.o_proj",
+                "ffn.0": "self_mlp.fc1",
+                "ffn.1": "self_mlp.layer_norm",
+                "ffn.3": "self_mlp.fc2",
             }
         else:
+            # Shared query-key → duplicate into q_proj and k_proj
+            if suffix.startswith("to_qk."):
+                param = suffix.split(".")[1]
+                return [
+                    f"layers.{layer_index}.cross_attention.q_proj.{param}",
+                    f"layers.{layer_index}.cross_attention.k_proj.{param}",
+                ]
             replacements = {
-                "to_qk": "cross_attention.query_key",
-                "to_v": "cross_attention.value",
-                "to_out": "cross_attention.output",
-                "ffn.0": "cross_attention.mlp.layers.0",
-                "ffn.1": "cross_attention.mlp.layers.1",
-                "ffn.3": "cross_attention.mlp.layers.3",
+                "to_v": "cross_attention.v_proj",
+                "to_out": "cross_attention.o_proj",
+                "ffn.0": "cross_mlp.fc1",
+                "ffn.1": "cross_mlp.layer_norm",
+                "ffn.3": "cross_mlp.fc2",
             }
         for source_prefix, destination_prefix in replacements.items():
             if suffix.startswith(source_prefix + "."):
-                return f"transformer_layers.{layer_index}.{suffix.replace(source_prefix, destination_prefix, 1)}"
+                return f"layers.{layer_index}.{suffix.replace(source_prefix, destination_prefix, 1)}"
+            if suffix == source_prefix:
+                # Handle cases like "out_proj" without trailing dot (shouldn't happen but defensive)
+                return f"layers.{layer_index}.{destination_prefix}"
         return None
 
     assignment_match = re.fullmatch(r"log_assignment\.(\d+)\.(final_proj|matchability)\.(weight|bias)", key)
@@ -110,7 +141,7 @@ def _rename_dinov2_keys(key: str) -> str | list[str] | None:
         return None
 
     sub_key = key.replace("_descriptor.encoder.frozen_dinov2.dinov2_vitl14.", "")
-    hf_prefix = "descriptor_network.dinov2_encoder."
+    hf_prefix = "descriptor_network.auxiliary_backbone."
 
     if sub_key == "cls_token":
         return hf_prefix + "embeddings.cls_token"
@@ -160,10 +191,9 @@ def convert_state_dict(
 
         if destination_key is not None:
             if isinstance(destination_key, list):
-                q, k, v = tensor.chunk(3, dim=0)
-                converted_state_dict[destination_key[0]] = q
-                converted_state_dict[destination_key[1]] = k
-                converted_state_dict[destination_key[2]] = v
+                chunks = tensor.chunk(len(destination_key), dim=0)
+                for dest, chunk in zip(destination_key, chunks):
+                    converted_state_dict[dest] = chunk
             else:
                 converted_state_dict[destination_key] = tensor
     return converted_state_dict
@@ -195,7 +225,7 @@ def convert_checkpoint(checkpoint_path: str | Path, variant: str, output_dir: st
     missing_keys, unexpected_keys = model.load_state_dict(converted_state_dict, strict=False)
 
     # Only keypoint_detector keys are expected to be missing.
-    matcher_prefixes = ("input_projection", "positional_encoder", "transformer_layers", "match_assignment")
+    matcher_prefixes = ("input_projection", "positional_encoder", "layers", "match_assignment")
     missing_matcher_keys = [key for key in missing_keys if key.startswith(matcher_prefixes)]
     if missing_matcher_keys or unexpected_keys:
         raise ValueError(
