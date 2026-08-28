@@ -21,6 +21,7 @@
 
 from huggingface_hub.dataclasses import strict
 
+from ...backbone_utils import consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
@@ -37,7 +38,7 @@ class LoMaConfig(PreTrainedConfig):
         Dimension of the local descriptors supplied by the descriptor network.
     descriptor_dim (`int`, *optional*, defaults to 256):
         Dimension of the descriptors used by the matching transformer.
-    attention_head_dim (`int`, *optional*, defaults to 64):
+    head_dim (`int`, *optional*, defaults to 64):
         Dimension of each attention head. The number of attention heads is derived from `descriptor_dim` when it is
         not specified.
     num_hidden_layers (`int`, *optional*, defaults to 9):
@@ -51,8 +52,8 @@ class LoMaConfig(PreTrainedConfig):
         Frequency scale used by the Fourier positional encoding.
     descriptor_hidden_blocks (`int`, *optional*, defaults to 5):
         Number of depthwise refinement blocks at each decoder scale in the local descriptor network.
-    dinov2_dim (`int`, *optional*, defaults to 1024):
-        Hidden dimension of the DINOv2 encoder.
+    backbone_config (`Union[AutoConfig, dict]`, *optional*):
+        Configuration for the auxiliary backbone encoder (DINOv2 by default) used in the descriptor network.
 
     Examples:
         ```python
@@ -65,39 +66,41 @@ class LoMaConfig(PreTrainedConfig):
     """
 
     model_type = "loma"
-    sub_configs = {"keypoint_detector_config": AutoConfig}
+    sub_configs = {"keypoint_detector_config": AutoConfig, "backbone_config": AutoConfig}
 
     keypoint_detector_config: dict | SuperPointConfig | None = None
     descriptor_dim: int = 256
     num_hidden_layers: int = 9
     num_attention_heads: int | None = None
+    num_key_value_heads: int | None = None
     filter_threshold: float = 0.1
     initializer_range: float = 0.02
+    hidden_act: str = "gelu"
+    attention_dropout: float | int = 0.0
     attention_bias: bool = True
 
     input_descriptor_dim: int = 256
-    attention_head_dim: int | None = None
+    head_dim: int | None = None
     positional_encoding_type: str = "learnable"
     positional_encoding_gamma: float = 1.0
     descriptor_hidden_blocks: int = 5
-    dinov2_dim: int = 1024
+    backbone_config: dict | PreTrainedConfig | None = None
 
     def __post_init__(self, **kwargs):
         if self.num_attention_heads is None:
-            if self.attention_head_dim is None:
-                self.attention_head_dim = 64
-            if self.descriptor_dim % self.attention_head_dim != 0:
-                raise ValueError("descriptor_dim must be divisible by attention_head_dim")
-            self.num_attention_heads = self.descriptor_dim // self.attention_head_dim
-        elif self.attention_head_dim is None:
-            self.attention_head_dim = self.descriptor_dim // self.num_attention_heads
-        elif self.descriptor_dim // self.num_attention_heads != self.attention_head_dim:
-            raise ValueError("descriptor_dim / num_attention_heads must equal attention_head_dim")
+            if self.head_dim is None:
+                self.head_dim = 64
+            if self.descriptor_dim % self.head_dim != 0:
+                raise ValueError("descriptor_dim must be divisible by head_dim")
+            self.num_attention_heads = self.descriptor_dim // self.head_dim
+        elif self.head_dim is None:
+            self.head_dim = self.descriptor_dim // self.num_attention_heads
+        elif self.descriptor_dim // self.num_attention_heads != self.head_dim:
+            raise ValueError("descriptor_dim / num_attention_heads must equal head_dim")
 
         if self.positional_encoding_type not in {"learnable", "fixed"}:
             raise ValueError("positional_encoding_type must be either 'learnable' or 'fixed'")
 
-        # Keep the keypoint detector setup from LightGlueConfig without retaining its attention-specific fields.
         if isinstance(self.keypoint_detector_config, dict):
             self.keypoint_detector_config["model_type"] = self.keypoint_detector_config.get("model_type", "superpoint")
             self.keypoint_detector_config = CONFIG_MAPPING[self.keypoint_detector_config["model_type"]](
@@ -106,6 +109,22 @@ class LoMaConfig(PreTrainedConfig):
         elif self.keypoint_detector_config is None:
             self.keypoint_detector_config = CONFIG_MAPPING["superpoint"](attn_implementation="eager")
 
+        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
+            backbone_config=self.backbone_config,
+            default_config_type="dinov2",
+            default_config_kwargs={
+                "hidden_size": 1024,
+                "num_hidden_layers": 24,
+                "num_attention_heads": 16,
+                "patch_size": 14,
+                "image_size": 518,
+                "out_features": ["stage24"],
+                "reshape_hidden_states": False,
+            },
+            **kwargs,
+        )
+
+        self.num_key_value_heads = self.num_attention_heads
         self.intermediate_size = self.descriptor_dim * 2
         self.hidden_size = self.descriptor_dim
         super().__post_init__(**kwargs)
