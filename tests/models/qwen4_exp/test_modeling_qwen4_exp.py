@@ -56,7 +56,7 @@ class Qwen4ExpTextModelTester(CausalLMModelTester):
     def __init__(self, parent):
         super().__init__(parent=parent)
         self.hidden_act = "silu"
-        self.rope_parameters = {"rope_type": "default", "partial_rotary_factor": 0.25}
+        self.rope_parameters = {"rope_type": "default", "partial_rotary_factor": 0.25, "mrope_section": [1, 1, 1]}
         self.layer_types = ["linear_attention", "qwen_sparse_attention"]
         self.linear_conv_kernel_dim = 2
         self.linear_key_head_dim = 16
