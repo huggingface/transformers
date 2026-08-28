@@ -54,11 +54,6 @@ class Kimi_K25VisionConfig(PreTrainedConfig):
     interpolation_mode: str = "bicubic"
     interpolation_align_corners: bool = False
 
-    @property
-    def spatial_merge_size(self) -> int:
-        """Spatial merge factor under the name every other vision config uses for it."""
-        return self.merge_kernel_size[0]
-
     rope_parameters: dict | None = None  # defaults set by `RopeConfigMixin`
     max_position_embeddings: int | None = None
 

@@ -181,12 +181,10 @@ class MiniMaxM3VLVisionConfig(PreTrainedConfig):
     rope_parameters: RopeParameters | dict | None = None
     initializer_range: float = 0.02
 
-    @property
-    def include_temporal_position_ids(self) -> bool:
-        """Whether vision position ids carry a leading temporal column, fixed for this encoder because
-        its rotary embedding rotates T/H/W. On the config because input preparation reads it without a
-        model: `exporters.utils` precomputes the vision position ids."""
-        return True
+    # Its rotary rotates T/H/W, so the vision position ids carry a leading temporal column. Not a field:
+    # fixed per encoder, so nothing to serialize or tweak — just readable without a model, which is what
+    # input preparation needs (`exporters.utils` precomputes the vision position ids).
+    include_temporal_position_ids = True
 
 
 @auto_docstring(checkpoint="MiniMaxAI/MiniMax-M3")

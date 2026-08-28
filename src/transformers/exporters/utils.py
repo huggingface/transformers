@@ -423,6 +423,21 @@ def _config_attr(config, name: str) -> Any | None:
     return None
 
 
+def _spatial_merge_size(config) -> int | None:
+    """The spatial merge factor, however this encoder spells it.
+
+    Most vision configs call it `spatial_merge_size`. kimi_k25 carries a square `merge_kernel_size` tuple
+    and muse_glimmer a scalar `merge_size`; both mean the same factor, so they are read here rather than
+    aliased on the config, where the value would have to be either a serialized field users could change
+    or a property shadowing the field it derives from.
+    """
+    if (size := _config_attr(config, "spatial_merge_size")) is not None:
+        return size
+    if (kernel := _config_attr(config, "merge_kernel_size")) is not None:
+        return kernel[0]
+    return _config_attr(config, "merge_size")
+
+
 def _grid_side(config) -> int | None:
     """Side of the square learned position-embedding grid, however this encoder spells it.
 
@@ -442,18 +457,18 @@ def _grid_side(config) -> int | None:
     return None
 
 
-def _model_module(config):
+def _modeling_module(config):
     """The `modeling_*` module of `config`'s architecture, for the per-model precompute helpers that live
-    beside the model (`get_mrope_position_ids`, `get_vision_frame_index`, `chunk_and_pad_features`, …). Resolved from
-    `model_type` so no model instance is needed; `None` when it cannot be imported."""
-    from ..models.auto.configuration_auto import model_type_to_module_name
+    beside the model (`get_mrope_position_ids`, `get_vision_frame_index`, `chunk_and_pad_features`, …).
 
-    model_type = getattr(config, "model_type", None)
-    if model_type is None:
+    Taken from the config class itself, which is defined next to the modeling file it belongs to — a
+    sub-config resolves to its family's module for the same reason. No model instance and no `model_type`
+    lookup; `None` when the module cannot be imported."""
+    module_name = type(config).__module__
+    if ".configuration_" not in module_name:
         return None
-    module_name = model_type_to_module_name(model_type)
     try:
-        return importlib.import_module(f"..models.{module_name}.modeling_{module_name}", package=__package__)
+        return importlib.import_module(module_name.replace(".configuration_", ".modeling_"))
     except ModuleNotFoundError:
         return None
 
@@ -486,7 +501,7 @@ def _prepare_grid_thw_vision_inputs(config, inputs: dict[str, Any]) -> None:
     for kimi_k25) — so a model that doesn't use a feature won't get its kwarg injected.
     """
     grid_thw = inputs["grid_thw"]
-    spatial_merge_size = _config_attr(config, "spatial_merge_size")
+    spatial_merge_size = _spatial_merge_size(config)
     if spatial_merge_size is None:
         # Video-Llama-3 carries per-image merge sizes as an input tensor; PaddleOCR-VL has
         # none (its encoder hard-codes `1` because spatial merging happens in the projector).
@@ -495,7 +510,7 @@ def _prepare_grid_thw_vision_inputs(config, inputs: dict[str, Any]) -> None:
     # kimi_k25-style encoders define their own per-frame / temporal-merge precompute helpers in their
     # modeling module (resolved below) and attend over the whole clip, so `cu_seqlens` is per-clip
     # (matching the encoder's util call). Other grid_thw encoders lack these and stay per-frame.
-    module = _model_module(config)
+    module = _modeling_module(config)
     temporal_encoder = hasattr(module, "get_vision_frame_index")
     inputs["cu_seqlens"], inputs["max_seqlen"] = get_vision_attention_seqlens(
         grid_thw, config, merge_temporal=temporal_encoder, kwargs=inputs
@@ -585,13 +600,13 @@ def _prepare_omni_audio_inputs(config, inputs: dict[str, Any]) -> None:
     traced graph.
 
     The helpers (`chunk_and_pad_features`, `get_audio_cu_seqlens`, …) all live in the model's
-    own ``modeling_*.py`` module, so we resolve them from ``config.model_type`` (`_model_module`) rather
+    own ``modeling_*.py`` module, so we resolve them from the config's own class (`_modeling_module`) rather
     than hard-coding one Omni variant. ``n_window_infer`` selects the Qwen3-Omni-style four-arg
     ``get_audio_cu_seqlens`` over the Qwen2.5-Omni-style single-arg form.
     """
     feature_lens = inputs["feature_lens"]
     input_features = inputs["input_features"]
-    module = _model_module(config)
+    module = _modeling_module(config)
 
     chunk_and_pad_features = getattr(module, "chunk_and_pad_features")
     get_audio_cu_seqlens = getattr(module, "get_audio_cu_seqlens")
@@ -652,7 +667,7 @@ def precompute_export_inputs(config, inputs: dict[str, Any]) -> None:
     if config is None:
         return
 
-    rope_index = getattr(_model_module(config), "get_mrope_position_ids", None)
+    rope_index = getattr(_modeling_module(config), "get_mrope_position_ids", None)
     if inputs.get("position_ids") is None and rope_index is not None:
         parameters = inspect.signature(rope_index).parameters
         # The module is the whole family's, so it carries `get_mrope_position_ids` even while a *component* is being

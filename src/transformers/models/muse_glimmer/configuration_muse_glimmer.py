@@ -65,14 +65,6 @@ class MuseGlimmerVisionConfig(PreTrainedConfig):
     layer_types: list[str] | None = None
 
     @property
-    def spatial_merge_size(self) -> int:
-        """Spatial merge factor under the name every other vision config uses for it.
-
-        Overrides kimi_k25's, which indexes a `merge_kernel_size` tuple this config does not have.
-        """
-        return self.merge_size
-
-    @property
     def window_size(self) -> int:
         """Attention window in pixels. On the config because input preparation needs it without a model:
         `exporters.utils` reads it to precompute this encoder's window index."""
