@@ -4268,22 +4268,9 @@ class PreTrainedModel(
         if "experts_implementation" in kwargs:
             config._experts_implementation = kwargs.pop("experts_implementation")
 
-        if gguf_file is not None and quantization_config is None:
-            # GGUF weights are quantized data, so they are loaded through a quantizer like any other
-            # quantized checkpoint. It decides per tensor whether the bytes stay packed.
-            from .utils.quantization_config import GgufConfig
-
-            quantization_config = GgufConfig(gguf_file=gguf_file)
-
         hf_quantizer, config, device_map = get_hf_quantizer(
-            config, quantization_config, device_map, weights_only, user_agent
+            config, quantization_config, device_map, weights_only, user_agent, gguf_file=gguf_file
         )
-
-        if gguf_file:
-            if hf_quantizer.quantization_config.quant_method != "gguf":
-                raise ValueError(
-                    "You cannot combine Quantization and loading a model from a GGUF file, try again by making sure you did not passed a `quantization_config` or that you did not load a quantized model from the Hub."
-                )
 
         if kernel_config is not None and not use_kernels:
             logger.warning_once(
@@ -4354,19 +4341,7 @@ class PreTrainedModel(
                 )
 
         if gguf_file:
-            from .integrations.gguf import load_gguf_state_dict
-
-            # the quantizer parsed the file's metadata and answered both questions already
-            if hf_quantizer.supported:
-                state_dict = load_gguf_state_dict(hf_quantizer.header, dtype=dtype)
-            else:
-                # No mapping for this architecture yet: fall back to the legacy loader, which renames
-                # and dequantizes everything itself.
-                from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
-
-                state_dict = load_gguf_checkpoint(
-                    checkpoint_files[0], return_tensors=True, model_to_load=model, torch_dtype=dtype
-                )["tensors"]
+            state_dict = hf_quantizer.get_state_dict(checkpoint_files[0], model)
 
         # Create the dtype_plan to potentially use the `keep_in_fp32` flags (this needs to be called on the already
         # instantiated model, as the flags can be modified by instances sometimes)

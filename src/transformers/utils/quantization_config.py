@@ -2088,14 +2088,16 @@ class GgufConfig(QuantizationConfigMixin):
     """Load a quantized GGUF checkpoint with its weights left in GGUF blocks.
 
     Args:
-        gguf_file (`str`): path to the `.gguf` file holding the weights.
+        gguf_file (`str`, *optional*):
+            path to the `.gguf` file holding the weights. Can be left out when it is named through
+            `from_pretrained(..., gguf_file=...)`, which fills it in.
         dequantize (`bool`, *optional*, defaults to `False`):
             Unpack every weight at load time into a plain dense model instead. Always correct, but
             gives up the memory saving; this is also the automatic fallback when no matmul kernel is
             available for the file's quantization types.
     """
 
-    def __init__(self, gguf_file: str, dequantize: bool = False, **kwargs):
+    def __init__(self, gguf_file: str | None = None, dequantize: bool = False, **kwargs):
         self.quant_method = QuantizationMethod.GGUF
         self.gguf_file = gguf_file
         self.dequantize = dequantize

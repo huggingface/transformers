@@ -44,9 +44,11 @@ Right now, the only architecture supported is Qwen3.5. Everything else falls bac
 Dequantizing unpacks every weight at load time and gives back a plain dense model. It is the fallback whenever the fast, compressed path doesn't apply. You can also ask for it explicitly with [`GgufConfig`].
 
 ```py
+import torch
+
 from transformers import AutoModelForCausalLM, GgufConfig
 
-quantization_config = GgufConfig(gguf_file=filename, dequantize=True)
+quantization_config = GgufConfig(dequantize=True)
 model = AutoModelForCausalLM.from_pretrained(
     model_id, gguf_file=filename, quantization_config=quantization_config, dtype=torch.bfloat16
 )
