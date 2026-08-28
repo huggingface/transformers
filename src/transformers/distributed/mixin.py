@@ -199,6 +199,7 @@ class DistributedMixin:
             if distributed_config.tp_size > 1:
                 tp_mesh = device_mesh["tp"] if device_mesh.ndim > 1 else device_mesh
                 model = apply_tensor_parallelism(model, tp_mesh)
+                model._tp_size = distributed_config.tp_size
 
             elif distributed_config.fsdp_size > 1:
                 fsdp_mesh = device_mesh["fsdp"] if device_mesh.ndim > 1 else device_mesh
