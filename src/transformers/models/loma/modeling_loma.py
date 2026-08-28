@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -32,7 +33,7 @@ from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
 from ..auto import AutoBackbone
 from ..auto.modeling_auto import AutoModelForKeypointDetection
-from .configuration_loma import LoMaConfig
+from .configuration_loma import LoMaConfig, LoMaVgg19EncoderConfig
 
 
 class LoMaConvBlock(nn.Module):
@@ -87,25 +88,26 @@ class LoMaConvRefiner(nn.Module):
 class LoMaVgg19Encoder(nn.Module):
     """VGG-19 with batch normalization that returns feature maps before each pooling operation."""
 
-    # Channel specification for VGG-19: integers are Conv2d output channels, "pool" is MaxPool2d.
-    VGG19_CHANNELS = [64, 64, "pool", 128, 128, "pool", 256, 256, 256, 256, "pool", 512, 512, 512, 512, "pool"]
-
-    def __init__(self) -> None:
+    def __init__(self, config: LoMaVgg19EncoderConfig) -> None:
         super().__init__()
         layers = []
-        in_channels = 3
-        for out_channels in self.VGG19_CHANNELS:
-            if out_channels == "pool":
-                layers.append(nn.MaxPool2d(kernel_size=2, stride=2))
-            else:
+        in_channels = config.in_channels
+        for out_channels, num_hidden_layers in zip(config.hidden_sizes, config.num_hidden_layers):
+            for _ in range(num_hidden_layers):
                 layers.extend(
                     [
-                        nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
+                        nn.Conv2d(
+                            in_channels,
+                            out_channels,
+                            kernel_size=config.conv_kernel_size,
+                            padding=config.conv_kernel_size // 2,
+                        ),
                         nn.BatchNorm2d(out_channels),
                         nn.ReLU(inplace=True),
                     ]
                 )
                 in_channels = out_channels
+            layers.append(nn.MaxPool2d(kernel_size=config.pool_kernel_size, stride=config.pool_stride))
         self.layers = nn.ModuleList(layers)
 
     def forward(self, pixel_values: torch.Tensor) -> list[torch.Tensor]:
@@ -124,16 +126,27 @@ class LoMaDescriptorDecoder(nn.Module):
         hidden_blocks = config.descriptor_hidden_blocks
         backbone_hidden_size = config.backbone_config.hidden_size
         self.descriptor_dim = descriptor_dim
-        self.scales = ("14", "8", "4", "2", "1")
-        self.layers = nn.ModuleDict(
-            {
-                "14": LoMaConvRefiner(backbone_hidden_size, 768, 512 + descriptor_dim, hidden_blocks),
-                "8": LoMaConvRefiner(512 + 512, 512, 256 + descriptor_dim, hidden_blocks),
-                "4": LoMaConvRefiner(512, 256, 128 + descriptor_dim, hidden_blocks),
-                "2": LoMaConvRefiner(256, 64, 32 + descriptor_dim, hidden_blocks),
-                "1": LoMaConvRefiner(96, 32, 1 + descriptor_dim, hidden_blocks),
-            }
-        )
+        self.scales = config.decoder_config.scales
+        feature_channels = [backbone_hidden_size, *reversed(config.encoder_config.hidden_sizes)]
+        if len(feature_channels) != len(self.scales):
+            raise ValueError("decoder_config.scales must have one more entry than encoder_config.hidden_sizes")
+
+        layers = {}
+        previous_context_channels = 0
+        for scale, num_feature_channels, hidden_size, context_channels in zip(
+            self.scales,
+            feature_channels,
+            config.decoder_config.hidden_sizes,
+            config.decoder_config.context_channels,
+        ):
+            layers[scale] = LoMaConvRefiner(
+                num_feature_channels + previous_context_channels,
+                hidden_size,
+                context_channels + descriptor_dim,
+                hidden_blocks,
+            )
+            previous_context_channels = context_channels
+        self.layers = nn.ModuleDict(layers)
 
     def forward(
         self, feature_map: torch.Tensor, scale: str, context: torch.Tensor | None = None
@@ -153,7 +166,7 @@ class LoMaDescriptorNetwork(nn.Module):
 
     def __init__(self, config: "LoMaConfig") -> None:
         super().__init__()
-        self.encoder = LoMaVgg19Encoder()
+        self.encoder = LoMaVgg19Encoder(config.encoder_config)
         self.auxiliary_backbone = AutoBackbone.from_config(config.backbone_config)
         self.decoder = LoMaDescriptorDecoder(config)
 

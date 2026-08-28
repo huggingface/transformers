@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from dataclasses import field
 
 from huggingface_hub.dataclasses import strict
 
@@ -26,6 +27,61 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..superpoint import SuperPointConfig
+
+
+class LoMaVgg19EncoderConfig(PreTrainedConfig):
+    r"""
+    in_channels (`int`, *optional*, defaults to 3):
+        Number of input image channels.
+    hidden_sizes (`list[int]`, *optional*, defaults to `[64, 128, 256, 512]`):
+        Number of channels in the four VGG encoder stages.
+    num_hidden_layers (`list[int]`, *optional*, defaults to `[2, 2, 4, 4]`):
+        Number of convolution blocks in each VGG encoder stage.
+    conv_kernel_size (`int`, *optional*, defaults to 3):
+        Kernel size used by the convolution blocks.
+    pool_kernel_size (`int`, *optional*, defaults to 2):
+        Kernel size used by the pooling layers between encoder stages.
+    pool_stride (`int`, *optional*, defaults to 2):
+        Stride used by the pooling layers between encoder stages.
+    """
+
+    model_type = "loma_vgg19_encoder"
+
+    in_channels: int = 3
+    hidden_sizes: list[int] = field(default_factory=lambda: [64, 128, 256, 512])
+    num_hidden_layers: list[int] = field(default_factory=lambda: [2, 2, 4, 4])
+    conv_kernel_size: int = 3
+    pool_kernel_size: int = 2
+    pool_stride: int = 2
+
+    def __post_init__(self, **kwargs):
+        if len(self.hidden_sizes) != len(self.num_hidden_layers):
+            raise ValueError("hidden_sizes and num_hidden_layers must have the same length")
+        if any(num_hidden_layers < 1 for num_hidden_layers in self.num_hidden_layers):
+            raise ValueError("num_hidden_layers must contain only positive values")
+        super().__post_init__(**kwargs)
+
+
+class LoMaDescriptorDecoderConfig(PreTrainedConfig):
+    r"""
+    scales (`list[str]`, *optional*, defaults to `["14", "8", "4", "2", "1"]`):
+        Names of the decoder stages, ordered from the auxiliary backbone resolution to the image resolution.
+    hidden_sizes (`list[int]`, *optional*, defaults to `[768, 512, 256, 64, 32]`):
+        Number of channels in the intermediate convolution of each decoder stage.
+    context_channels (`list[int]`, *optional*, defaults to `[512, 256, 128, 32, 1]`):
+        Number of context channels produced by each decoder stage.
+    """
+
+    model_type = "loma_descriptor_decoder"
+
+    scales: list[str] = field(default_factory=lambda: ["14", "8", "4", "2", "1"])
+    hidden_sizes: list[int] = field(default_factory=lambda: [768, 512, 256, 64, 32])
+    context_channels: list[int] = field(default_factory=lambda: [512, 256, 128, 32, 1])
+
+    def __post_init__(self, **kwargs):
+        if len(self.scales) != len(self.hidden_sizes) or len(self.scales) != len(self.context_channels):
+            raise ValueError("scales, hidden_sizes, and context_channels must have the same length")
+        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="ETH-CVG/loma_superpoint")
@@ -52,6 +108,10 @@ class LoMaConfig(PreTrainedConfig):
         Frequency scale used by the Fourier positional encoding.
     descriptor_hidden_blocks (`int`, *optional*, defaults to 5):
         Number of depthwise refinement blocks at each decoder scale in the local descriptor network.
+    encoder_config (`LoMaVgg19EncoderConfig`, *optional*):
+        Configuration for LoMa's VGG-19-style local encoder.
+    decoder_config (`LoMaDescriptorDecoderConfig`, *optional*):
+        Configuration for LoMa's multi-scale local descriptor decoder.
     backbone_config (`Union[AutoConfig, dict]`, *optional*):
         Configuration for the auxiliary backbone encoder (DINOv2 by default) used in the descriptor network.
 
@@ -66,7 +126,12 @@ class LoMaConfig(PreTrainedConfig):
     """
 
     model_type = "loma"
-    sub_configs = {"keypoint_detector_config": AutoConfig, "backbone_config": AutoConfig}
+    sub_configs = {
+        "keypoint_detector_config": AutoConfig,
+        "encoder_config": LoMaVgg19EncoderConfig,
+        "decoder_config": LoMaDescriptorDecoderConfig,
+        "backbone_config": AutoConfig,
+    }
 
     keypoint_detector_config: dict | SuperPointConfig | None = None
     descriptor_dim: int = 256
@@ -84,6 +149,8 @@ class LoMaConfig(PreTrainedConfig):
     positional_encoding_type: str = "learnable"
     positional_encoding_gamma: float = 1.0
     descriptor_hidden_blocks: int = 5
+    encoder_config: dict | LoMaVgg19EncoderConfig | None = None
+    decoder_config: dict | LoMaDescriptorDecoderConfig | None = None
     backbone_config: dict | PreTrainedConfig | None = None
 
     def __post_init__(self, **kwargs):
@@ -108,6 +175,16 @@ class LoMaConfig(PreTrainedConfig):
             )
         elif self.keypoint_detector_config is None:
             self.keypoint_detector_config = CONFIG_MAPPING["superpoint"](attn_implementation="eager")
+
+        if isinstance(self.encoder_config, dict):
+            self.encoder_config = LoMaVgg19EncoderConfig(**self.encoder_config)
+        elif self.encoder_config is None:
+            self.encoder_config = LoMaVgg19EncoderConfig()
+
+        if isinstance(self.decoder_config, dict):
+            self.decoder_config = LoMaDescriptorDecoderConfig(**self.decoder_config)
+        elif self.decoder_config is None:
+            self.decoder_config = LoMaDescriptorDecoderConfig()
 
         self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=self.backbone_config,
@@ -135,4 +212,4 @@ class LoMaConfig(PreTrainedConfig):
             raise ValueError("descriptor_dim % num_heads is different from zero")
 
 
-__all__ = ["LoMaConfig"]
+__all__ = ["LoMaConfig", "LoMaVgg19EncoderConfig", "LoMaDescriptorDecoderConfig"]

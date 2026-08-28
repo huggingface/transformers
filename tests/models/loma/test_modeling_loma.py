@@ -169,6 +169,26 @@ class LoMaModelTest(ModelTesterMixin, unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "head_dim"):
             LoMaConfig(descriptor_dim=250)
 
+    def test_descriptor_network_configuration(self):
+        config = LoMaConfig(
+            input_descriptor_dim=16,
+            descriptor_hidden_blocks=1,
+            encoder_config={"hidden_sizes": [8, 16, 32, 64], "num_hidden_layers": [1, 1, 1, 1]},
+            decoder_config={
+                "hidden_sizes": [64, 32, 16, 8, 4],
+                "context_channels": [32, 16, 8, 4, 1],
+            },
+            backbone_config=self.model_tester.backbone_config,
+        )
+        model = LoMaDescriptorNetwork(config)
+
+        self.assertEqual(model.encoder.layers[0].out_channels, 8)
+        self.assertEqual(model.decoder.layers["14"].block1.conv.out_channels, 64)
+        self.assertEqual(model.decoder.layers["8"].block1.conv.in_channels, 64 + 32)
+
+        with self.assertRaisesRegex(ValueError, "hidden_sizes and num_hidden_layers"):
+            LoMaConfig(encoder_config={"hidden_sizes": [64], "num_hidden_layers": []})
+
     def test_descriptor_network(self):
         config = LoMaConfig(input_descriptor_dim=16, descriptor_hidden_blocks=1)
         model = LoMaDescriptorNetwork(config).to(torch_device)
