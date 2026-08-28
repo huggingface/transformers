@@ -694,6 +694,11 @@ class StaticIndexedLayer(StaticLayer):
             self.indexer_keys.zero_()
             self.indexer_cumulative_length.zero_()
 
+    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
+        super().reorder_cache(beam_idx)
+        if self.is_indexer_initialized and self.indexer_keys.numel() > 0:
+            self.indexer_keys = self.indexer_keys.index_select(0, beam_idx.to(self.indexer_keys.device))
+
 
 class QuantizedLayer(DynamicLayer):
     """
@@ -1229,6 +1234,7 @@ DYNAMIC_LAYER_TYPE_MAPPING = {
     "hybrid_sliding": LinearAttentionAndSlidingWindowAttentionLayer,
     # More exotic implementations
     "deepseek_sparse_attention": DynamicIndexedLayer,
+    "qwen_sparse_attention": DynamicIndexedLayer,
     # Note: we want `moe` and `mlp` layers to be LinearAttentionLayer, so that we can correctly grab sequence length etc from
     # attention layers. Since they will stay empty (they don't need any cache), we don't want them to collide for mask creation etc
     # TODO: maybe use a dummy layer in those cases, or a dictionary {idx: Layer} for self.layers, so that we can skipthe indices
@@ -1250,6 +1256,7 @@ STATIC_LAYER_TYPE_MAPPING = {
     "hybrid_sliding": LinearAttentionAndStaticSlidingWindowAttentionLayer,
     # More exotic implementations
     "deepseek_sparse_attention": StaticIndexedLayer,
+    "qwen_sparse_attention": StaticIndexedLayer,
     # Note: we want `moe` and `mlp` layers to be LinearAttentionLayer, so that we can correctly grab sequence length etc from
     # attention layers. Since they will stay empty (they don't need any cache), we don't want them to collide for mask creation etc
     # TODO: maybe use a dummy layer in those cases, or a dictionary {idx: Layer} for self.layers, so that we can skipthe indices
@@ -1789,20 +1796,20 @@ class DynamicCache(Cache):
         if ddp_cache_data is not None:
             # Init all the layers with the data
             for layer_idx, kv_and_optional_sliding in enumerate(ddp_cache_data):
+                # kv_and_optional_sliding contains at least two elements: the key and value states. It can also
+                # contain a third element, which is an optional sliding window tensor.
+                key_states, value_states = kv_and_optional_sliding[:2]
+                sliding_window_tensor = kv_and_optional_sliding[2] if len(kv_and_optional_sliding) == 3 else None
                 # If the config was not passed above, initialize a new cache layer for each entry of the ddp_data
                 if config is None:
-                    # kv_and_optional_sliding contains at least two elements: the key and value states. It can also
-                    # contain a third element, which is an optional sliding window tensor.
-                    sliding_window_tensor = kv_and_optional_sliding[2] if len(kv_and_optional_sliding) == 3 else None
                     # If there is a sliding window tensor, use it to initialize the layer
                     if sliding_window_tensor is not None:
-                        # Since the same layer is dispatched across replicas, sliding_window is the same for all
-                        sliding_window = sliding_window_tensor[0].item()
-                        layers.append(DynamicSlidingWindowLayer(sliding_window=sliding_window))
+                        layers.append(DynamicSlidingWindowLayer(sliding_window=sliding_window_tensor.item()))
                     else:
                         layers.append(DynamicLayer())
-                # Update the layer with the data
-                _, _ = layers[layer_idx].update(kv_and_optional_sliding[0], kv_and_optional_sliding[1])
+                # Update the layer with the data if any
+                if key_states is not None and value_states is not None:
+                    _, _ = layers[layer_idx].update(key_states, value_states)
 
         # If neither of config nor ddp_data was passed, then simply lazy init a full cache of DynamicLayer
         if len(layers) == 0:

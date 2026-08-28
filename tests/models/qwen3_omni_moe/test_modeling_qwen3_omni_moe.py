@@ -451,21 +451,14 @@ class Qwen3OmniMoeThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gen
     def test_generate_with_quant_cache(self):
         pass
 
-    # TODO (joao, raushan): there are multiple standardization issues in this model that prevent this test from
-    # passing, fix me
-    @unittest.skip("Cannot handle 4D attention mask")
-    @pytest.mark.torch_compile_test
-    def test_generate_compile_model_forward_fullgraph(self):
+    @unittest.skip("Sliding layers cap their cache at `sliding_window`, but the test expects `max_cache_len`")
+    def test_generate_with_static_cache(self):
         pass
 
     @unittest.skip(
         "There seems to be something wrong with the config, that does not play well with this test. TODO fix me"
     )
     def test_save_load(self):
-        pass
-
-    @unittest.skip("Cannot handle 4D attention mask")
-    def test_generate_compilation_all_outputs(self):
         pass
 
     @unittest.skip("In a rush to merge, cannot investigate now")
@@ -476,14 +469,6 @@ class Qwen3OmniMoeThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gen
         "Text FlashAttention kwargs are also forwarded to vision attention, which computes its own cu_seqlens"
     )
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
-        pass
-
-    @unittest.skip("Cannot handle 4D attention mask")
-    def test_generate_with_static_cache(self):
-        pass
-
-    @unittest.skip("Cannot handle 4D attention mask")
-    def test_custom_4d_attention_mask(self):
         pass
 
     @unittest.skip("We don't really care about this one, test is not that slow")

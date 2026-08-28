@@ -104,7 +104,7 @@ _import_structure = {
     "debug_utils": [],
     "dependency_versions_check": [],
     "dependency_versions_table": [],
-    "distributed": [],
+    "distributed": ["DistributedConfig"],
     "dynamic_module_utils": [],
     "exporters": [],
     "feature_extraction_sequence_utils": ["SequenceFeatureExtractor"],
@@ -268,6 +268,7 @@ _import_structure = {
         "HqqConfig",
         "MetalConfig",
         "Mxfp4Config",
+        "NVFP4Config",
         "QuantoConfig",
         "QuarkConfig",
         "SinqConfig",
@@ -555,6 +556,7 @@ if TYPE_CHECKING:
     from .data.datasets import GlueDataTrainingArguments as GlueDataTrainingArguments
     from .data.datasets import SquadDataset as SquadDataset
     from .data.datasets import SquadDataTrainingArguments as SquadDataTrainingArguments
+    from .distributed import DistributedConfig as DistributedConfig
     from .feature_extraction_sequence_utils import SequenceFeatureExtractor as SequenceFeatureExtractor
 
     # Feature Extractor
@@ -795,6 +797,7 @@ if TYPE_CHECKING:
     from .utils.quantization_config import HiggsConfig as HiggsConfig
     from .utils.quantization_config import HqqConfig as HqqConfig
     from .utils.quantization_config import MetalConfig as MetalConfig
+    from .utils.quantization_config import NVFP4Config as NVFP4Config
     from .utils.quantization_config import QuantoConfig as QuantoConfig
     from .utils.quantization_config import QuarkConfig as QuarkConfig
     from .utils.quantization_config import SinqConfig as SinqConfig

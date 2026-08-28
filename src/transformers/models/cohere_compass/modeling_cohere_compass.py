@@ -77,7 +77,7 @@ class CohereCompassRotaryEmbedding(nn.Module):
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
         self.config = config
-        self.layer_types = list(set(config.layer_types))
+        self.layer_types = sorted(set(config.layer_types))
         self.rope_type = {}
         for layer_type in self.layer_types:
             rope_params = self.config.rope_parameters[layer_type]
@@ -297,7 +297,6 @@ class CohereCompassAttention(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None,
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
-        position_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
@@ -401,7 +400,7 @@ class CohereCompassVisionRotaryEmbedding(nn.Module):
 class CohereCompassPreTrainedModel(PreTrainedModel):
     config: CohereCompassConfig
     base_model_prefix = "model"
-    input_modalities = ("image", "video", "text")
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = [
         "CohereCompassDecoderLayer",
@@ -819,6 +818,7 @@ class CohereCompassVisionBlock(GradientCheckpointingLayer):
         return hidden_states
 
 
+@auto_docstring
 class CohereCompassVisionModel(CohereCompassPreTrainedModel):
     config: CohereCompassVisionConfig
     input_modalities = ("image",)

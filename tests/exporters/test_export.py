@@ -127,6 +127,16 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "test timeout (12 attention blocks × 3 Q-pool stage transitions on symbolic H/W). Backend-"
             "agnostic — the torch.export step itself overruns, so every backend hits it."
         ),
+        "SeamlessM4TForSpeechToSpeech": (
+            "The Conformer speech encoder is non-causal, so `sdpa_attention_forward` evaluates "
+            "`q_length > 1 and attention_mask is None and is_causal`; under dynamic shapes `q_length > 1` "
+            "is a `SymBool` and Python's `and` returns it as the first falsy operand, so SDPA raises "
+            "`argument 'is_causal' must be bool, not SymBool`. Static shapes work. TODO: handle on the "
+            "exporter side, see https://github.com/huggingface/transformers/pull/46196#discussion_r3717333141"
+        ),
+        "SeamlessM4TForSpeechToText": "Same `SymBool` `is_causal` as `SeamlessM4TForSpeechToSpeech`.",
+        "SeamlessM4Tv2ForSpeechToSpeech": "Same `SymBool` `is_causal` as `SeamlessM4TForSpeechToSpeech`.",
+        "SeamlessM4Tv2ForSpeechToText": "Same `SymBool` `is_causal` as `SeamlessM4TForSpeechToSpeech`.",
     },
     # Generate path, dynamic-shape only — the multi-token decode (`_merge_decode_calls`) that keeps the
     # query axis symbolic. Backend-agnostic (it's in the shared decomposition). Static generate, which
@@ -142,6 +152,14 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "Chunked local attention assumes a chunk-aligned query length; the merged multi-token query "
             "(seq 2) mismatches the chunked key axis (`size 2 vs 6`). Single-token static generate is fine. "
             "Same chunked-attention limitation as the `onnx.generate` skip."
+        ),
+        "VibeVoiceForConditionalGeneration": (
+            "Classifier-free guidance runs `forward()` twice per generated token — the conditional branch "
+            "and the unconditional one, each with its own cache of a different length — so the captured "
+            "calls interleave the two branches. `_merge_decode_calls` then merges a conditional decode step "
+            "with an unconditional call, mismatching the query and cache axes (`size 5 vs 3` in attention). "
+            "Single-token static generate is fine (it captures a conditional decode step). "
+            "TODO: make the capture branch-aware."
         ),
     },
     # ONNX, every variant.

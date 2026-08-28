@@ -98,7 +98,7 @@ class Emu3Processor(ProcessorMixin):
             image_prompt = f"{self.image_start_token}{height}*{width}{self.fake_token_around_image}"
             if isinstance(text, str):
                 text = [text]
-            text = [f"{self.bos_token}{sample}{image_prompt}" for sample in text]
+            text = [f"{sample}{image_prompt}" for sample in text]
 
         model_inputs = super().__call__(images=images, text=text, **output_kwargs)
         if return_for_image_generation:
@@ -107,7 +107,7 @@ class Emu3Processor(ProcessorMixin):
 
     def prepare_inputs_layout(self, images=None, text=None, **kwargs):
         images, text, *_ = super().prepare_inputs_layout(images=images, text=text, **kwargs)
-        if images is not None and text is not None:
+        if text is not None and kwargs.get("add_special_tokens", True):
             # Add BOS once per sample; GPT tokenizer doesn't add it automatically
             text = [f"{self.bos_token}{sample}" for sample in text]
         return images, text, None, None
