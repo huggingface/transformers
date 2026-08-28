@@ -204,6 +204,21 @@ class LoMaModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertEqual(descriptor_grid.shape, (2, 16, 32, 48))
         self.assertEqual(descriptors.shape, (2, 3, 16))
 
+    def test_auxiliary_backbone_runs_in_inference_mode(self):
+        config = LoMaConfig(
+            input_descriptor_dim=16,
+            descriptor_hidden_blocks=1,
+            backbone_config=self.model_tester.backbone_config,
+        )
+        model = LoMaDescriptorNetwork(config).to(torch_device)
+        model.train()
+        pixel_values = floats_tensor([1, 3, 32, 48]).to(torch_device)
+
+        features = model._extract_auxiliary_features(pixel_values)
+
+        self.assertFalse(model.auxiliary_backbone.training)
+        self.assertFalse(features.requires_grad)
+
     def test_descriptor_network_accepts_grayscale_images(self):
         config = LoMaConfig(input_descriptor_dim=16, descriptor_hidden_blocks=1)
         model = LoMaDescriptorNetwork(config).to(torch_device)

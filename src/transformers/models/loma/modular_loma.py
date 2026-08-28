@@ -342,7 +342,24 @@ class LoMaDescriptorNetwork(nn.Module):
         super().__init__()
         self.encoder = LoMaVgg19Encoder(config.encoder_config)
         self.auxiliary_backbone = AutoBackbone.from_config(config.backbone_config)
+        self.auxiliary_backbone.eval()
         self.decoder = LoMaDescriptorDecoder(config)
+
+    @torch.inference_mode()
+    def _extract_auxiliary_features(self, pixel_values: torch.Tensor) -> torch.Tensor:
+        self.auxiliary_backbone.eval()
+        backbone_output = self.auxiliary_backbone(pixel_values)
+        backbone_features = backbone_output.feature_maps[-1]
+        # Reshape from (batch, seq, hidden) to (batch, hidden, h, w) spatial format.
+        if backbone_features.ndim == 3:
+            batch_size, seq_len, hidden_size = backbone_features.shape
+            h = pixel_values.shape[2] // self.auxiliary_backbone.config.patch_size
+            w = pixel_values.shape[3] // self.auxiliary_backbone.config.patch_size
+            # Strip CLS token if present (seq_len = h*w + 1 with CLS, h*w without).
+            if seq_len == h * w + 1:
+                backbone_features = backbone_features[:, 1:]
+            backbone_features = backbone_features.transpose(1, 2).reshape(batch_size, hidden_size, h, w)
+        return backbone_features
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         if pixel_values.shape[1] == 1:
@@ -352,21 +369,8 @@ class LoMaDescriptorNetwork(nn.Module):
 
         feature_maps = self.encoder(pixel_values)
 
-        # Frozen auxiliary backbone (DINOv2) provides high-level features at stride 14
-        self.auxiliary_backbone.eval()
-        with torch.no_grad():
-            backbone_output = self.auxiliary_backbone(pixel_values)
-        backbone_features = backbone_output.feature_maps[-1]
-        # Reshape from (batch, seq, hidden) to (batch, hidden, h, w) spatial format
-        if backbone_features.ndim == 3:
-            batch_size, seq_len, hidden_size = backbone_features.shape
-            h = pixel_values.shape[2] // self.auxiliary_backbone.config.patch_size
-            w = pixel_values.shape[3] // self.auxiliary_backbone.config.patch_size
-            # Strip CLS token if present (seq_len = h*w + 1 with CLS, h*w without)
-            if seq_len == h * w + 1:
-                backbone_features = backbone_features[:, 1:]
-            backbone_features = backbone_features.transpose(1, 2).reshape(batch_size, hidden_size, h, w)
-        feature_maps.append(backbone_features)
+        # Frozen auxiliary backbone (DINOv2) provides high-level features at stride 14.
+        feature_maps.append(self._extract_auxiliary_features(pixel_values).clone())
 
         descriptor_grid = pixel_values.new_zeros(
             pixel_values.shape[0], self.decoder.descriptor_dim, *feature_maps[-1].shape[-2:]
