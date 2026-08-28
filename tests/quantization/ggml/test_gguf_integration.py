@@ -77,7 +77,9 @@ class GgufModelIntegrationTesterMixin:
     def setUpClass(cls):
         # One load for the whole class: these checkpoints are several GB. No dtype is passed, so this
         # covers `auto` resolving to the one the file was written in.
-        cls.model = cls.load_gguf_model(cls.gguf_file)
+        # The loading report comes back with it, for `test_load_accounts_for_every_key`: free here,
+        # another multi-GB load if that test asked for its own.
+        cls.model, cls.loading_info = cls.load_gguf_model(cls.gguf_file, output_loading_info=True)
         # Built once too: a vocabulary of a few hundred thousand tokens is not free to assemble.
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.gguf_repo, gguf_file=cls.quantized_gguf_file)
         cls.reference_tokenizer = AutoTokenizer.from_pretrained(cls.reference_repo)
@@ -173,6 +175,21 @@ class GgufModelIntegrationTesterMixin:
             if error > rtol * scale:
                 mismatched.append(f"{name}: max abs {error:.3e} (rel {error / scale:.2e}, tol {rtol:.0e})")
         self.assertEqual(mismatched, [], f"{len(mismatched)} parameters differ:\n" + "\n".join(mismatched[:10]))
+
+    def test_load_accounts_for_every_key(self):
+        """Nothing missing, nothing unexpected: the conversion covers the file and fills the model.
+
+        What the comparison above cannot see. That one reads the parameters the two models share, so it
+        is silent about a tensor the conversion strands -- renamed to a module this architecture does
+        not have -- and about a parameter the file never reached, which is left at whatever
+        initialization put there. Both surface here instead.
+
+        Keys the model drops deliberately are already gone by this point
+        (`_keys_to_ignore_on_load_unexpected`), so what is left is a name nothing accounts for.
+        """
+        self.assertEqual(self.loading_info["missing_keys"], set())
+        self.assertEqual(self.loading_info["unexpected_keys"], set())
+        self.assertEqual(self.loading_info["mismatched_keys"], set())
 
     def test_config_matches_transformers(self):
         """The config is rebuilt from the file's metadata alone, so it has to say the same as the repo's.
@@ -303,6 +320,20 @@ class GgufIntegrationTest(unittest.TestCase):
 
         self.assertEqual(self.packed_modules(model), [], "blocks were kept with nothing able to read them")
         self.assertIn("Berlin", self.generates(model))
+
+    def test_load_accounts_for_every_key(self):
+        """Nothing missing, nothing unexpected -- on the one file here that carries an MTP block.
+
+        This export counts llama.cpp's multi-token-prediction block in `block_count` and writes it as
+        `blk.32.*`, one past the decoder stack; the checkpoints the architecture tests use were
+        converted without it. So this is the only place that says those tensors are renamed to
+        something the model drops by name, rather than left to be reported against a 33rd layer that
+        does not exist.
+        """
+        _, loading_info = self.load(device_map=torch_device, output_loading_info=True)
+
+        self.assertEqual(loading_info["missing_keys"], set())
+        self.assertEqual(loading_info["unexpected_keys"], set())
 
     def test_dequantize_gives_a_dense_model(self):
         """`dequantize=True` asks for the weights unpacked once, at load."""

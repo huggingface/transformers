@@ -78,6 +78,11 @@ class GgufHeader(NamedTuple):
         return {info.name: info.ggml_type for info in self.tensors}
 
     @property
+    def has_quantized_weights(self) -> bool:
+        """Whether any tensor is stored as GGUF blocks rather than as plain floats."""
+        return any(ggml_type in GGML_BLOCK for ggml_type in self.ggml_types.values())
+
+    @property
     def dtype(self) -> "torch.dtype | None":
         """The float type this file was written in, or `None` if it holds quantized blocks.
 

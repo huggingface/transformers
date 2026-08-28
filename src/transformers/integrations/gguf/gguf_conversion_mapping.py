@@ -106,17 +106,31 @@ def _qwen35(config) -> list[WeightTransform]:
     per_value = TiledToGroupedRows(*heads, value_head_dim)
     per_head = TiledToGroupedRows(*heads)
 
-    renamings = DENSE_DECODER_RENAMINGS + [
-        WeightRenaming(r"\.attn_qkv\.", ".linear_attn.in_proj_qkv."),
-        WeightRenaming(r"\.attn_gate\.", ".linear_attn.in_proj_z."),
-        WeightRenaming(r"\.ssm_alpha\.", ".linear_attn.in_proj_a."),
-        WeightRenaming(r"\.ssm_beta\.", ".linear_attn.in_proj_b."),
-        WeightRenaming(r"\.ssm_conv1d\.", ".linear_attn.conv1d."),
-        WeightRenaming(r"\.ssm_norm\.", ".linear_attn.norm."),  # the one norm with no offset
-        WeightRenaming(r"\.ssm_out\.", ".linear_attn.out_proj."),
-        WeightRenaming(r"\.ssm_a$", ".linear_attn.A_log"),
-        WeightRenaming(r"\.ssm_dt\.bias$", ".linear_attn.dt_bias"),
-    ]
+    # llama.cpp counts the multi-token-prediction block in `block_count` and writes it as
+    # `blk.{num_hidden_layers}.*`, one past the decoder stack and under ordinary leaf names -- so
+    # nothing about an individual tensor marks it as MTP. Transformers has no MTP module, and
+    # `Qwen3_5ForCausalLM` already drops these by name (`_keys_to_ignore_on_load_unexpected =
+    # [r"^mtp.*"]`), so hand them that prefix. Ahead of the blanket `blk.` rule below, which would
+    # otherwise make them `model.layers.{N}.*` -- a layer the model does not have, which every load
+    # then reports as unexpected. The leaf renamings still rewrite what follows the prefix, which is
+    # harmless: every one of them is relative, so what they produce is still under `mtp.`.
+    mtp_block = [WeightRenaming(rf"^blk\.{text_config.num_hidden_layers}\.", "mtp.")]
+
+    renamings = (
+        mtp_block
+        + DENSE_DECODER_RENAMINGS
+        + [
+            WeightRenaming(r"\.attn_qkv\.", ".linear_attn.in_proj_qkv."),
+            WeightRenaming(r"\.attn_gate\.", ".linear_attn.in_proj_z."),
+            WeightRenaming(r"\.ssm_alpha\.", ".linear_attn.in_proj_a."),
+            WeightRenaming(r"\.ssm_beta\.", ".linear_attn.in_proj_b."),
+            WeightRenaming(r"\.ssm_conv1d\.", ".linear_attn.conv1d."),
+            WeightRenaming(r"\.ssm_norm\.", ".linear_attn.norm."),  # the one norm with no offset
+            WeightRenaming(r"\.ssm_out\.", ".linear_attn.out_proj."),
+            WeightRenaming(r"\.ssm_a$", ".linear_attn.A_log"),
+            WeightRenaming(r"\.ssm_dt\.bias$", ".linear_attn.dt_bias"),
+        ]
+    )
 
     # (2) norms stored as `w + 1`. Each entry renames the leaf and un-offsets in one place; the
     # leading `blk.` -> `model.layers.` renaming has already fired by the time these match.

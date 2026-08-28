@@ -72,6 +72,12 @@ class GgufHfQuantizer(HfQuantizer):
             return
         if self.quantization_config.dequantize:
             return
+        if not self.header.has_quantized_weights:
+            # Nothing is in blocks, so there is nothing to keep packed and nothing to unpack: this is
+            # the dequantized path already, on any device. Setting the flag is what leaves it an
+            # ordinary dense model, and no fallback happened, so there is nothing to warn about.
+            self.quantization_config.dequantize = True
+            return
         if not is_torch_mps_available():
             self.quantization_config.dequantize = True
             logger.warning(
