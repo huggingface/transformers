@@ -352,13 +352,12 @@ diff = '''
 [rules.TRF018]
 description = "_init_weights overrides should call super()._init_weights(module), except modular-file sentinels."
 default_enabled = true
-# Allowlist inherited unchanged from the base pin (0.1.2). 15 of the 16 call the base implementation as
-# `PreTrainedModel._init_weights(module)` instead of `super()._init_weights(module)` -- the form a modular
-# file needs, since `super()` there resolves to the inherited model, not to `PreTrainedModel`. The rule only
-# recognizes the `super()` spelling (459 files use it, these 15 the other), reported upstream as
-# huggingface/transformers-mlinter#27. `radio` is the one real case: it never calls the base implementation.
-# Kept as-is so no pre-existing rule changes behavior in this PR.
-allowlist_models = ["cosmos3_omni", "diffusion_gemma", "eomt_dinov3", "exaone4_5", "gemma4", "higgs_audio_v2", "kimi_k25", "olmo3", "pp_formulanet", "pp_lcnet_v3", "radio", "sam3_lite_text", "sam3_tracker", "slanet", "voxtral_realtime", "xcodec2"]
+# `radio` is the only entry left, and the one real case: it never calls the base implementation. The other
+# 15 spelled the call `PreTrainedModel._init_weights(module)` rather than `super()._init_weights(module)` --
+# the form a modular file needs, since `super()` there resolves to the inherited model, not to
+# `PreTrainedModel`. The rule used to recognize only the `super()` spelling; that was reported upstream as
+# huggingface/transformers-mlinter#27 and fixed there, so those 15 no longer fire and were dropped.
+allowlist_models = ["radio"]
 
 [rules.TRF018.explanation]
 what_it_does = "Checks that every PreTrainedModel subclass overriding `_init_weights(self, module, ...)` chains up via `super()._init_weights(...)`. In modular files the sentinels `PreTrainedModel._init_weights(self, module)`, `PreTrainedModel._init_weights(module)` and `raise AttributeError(...)` are accepted. For a deliberate full override, suppress with `# trf-ignore: TRF018` on the line above the method."
@@ -398,11 +397,11 @@ diff = '''
 [rules.TRF020]
 description = "MLA models must isolate the KV LoRA expansion (kv_b_proj) in a dedicated method that forward() calls."
 default_enabled = true
-# `axk2`: false positive. `AXK2Attention.forward` does call `self.expand_kv(k_pass, k_rot)`
-# (`modular_axk2.py:348`), and `expand_kv` is inherited from `DeepseekV32Attention`, landing at
-# `modeling_axk2.py:568`. The rule resolves the base chain only inside the linted file, so the modular
-# file looks like it is missing the method. Same root cause as TRF034, upstream mlinter#27.
-allowlist_models = ["axk2"]
+# Empty since mlinter#27 landed. The one entry, `axk2`, was a false positive: `AXK2Attention.forward` does
+# call `self.expand_kv(k_pass, k_rot)`, and `expand_kv` is inherited from `DeepseekV32Attention`. The rule
+# used to resolve the base chain only inside the linted file, so the modular file looked like it was missing
+# the method; it now follows the chain across models and the finding is gone.
+allowlist_models = []
 
 [rules.TRF020.explanation]
 what_it_does = "In model directories whose configuration declares `kv_lora_rank` (Multi-head Latent Attention), checks the attention class owning the KV LoRA expansion projection (`kv_b_proj`, or any `nn.Linear(config.kv_lora_rank, ...)`): the expansion must live in a dedicated method (e.g. `expand_kv`) that `forward()` calls, not inline in `forward()`. In modular files, calling a method inherited from an imported base counts."
@@ -592,11 +591,11 @@ diff = '''
 [rules.TRF029]
 description = "A module taking `config` must not also take arguments that live on the config."
 default_enabled = true
-allowlist_models = ["kosmos2", "glm5_next"]
+allowlist_models = ["kosmos2"]
 cutoff_date = "2026-06-20"
 
 [rules.TRF029.explanation]
-what_it_does = "In modeling_*.py and modular_*.py, flags an `__init__` that takes `config` alongside an argument whose name is unambiguously a config field (hidden_size, num_attention_heads, intermediate_size, head_dim, num_hidden_layers, embed_dim, dropout, eps, patch_size, rope_theta, ...). kosmos2 is allowlisted: its doc page cannot be derived from the directory name, so the cutoff cannot grandfather it."
+what_it_does = "In modeling_*.py and modular_*.py, flags an `__init__` that takes `config` alongside an argument whose name is unambiguously a config field (hidden_size, num_attention_heads, intermediate_size, head_dim, num_hidden_layers, embed_dim, dropout, eps, patch_size, rope_theta, ...). A parameter that is optional with a `None` default is exempt: that is an override, not a second source of truth, and it is how one MLP class serves both the dense and the expert width of a MoE model. A hardcoded default such as `hidden_size: int = 1024` is not exempt -- it wins over the config whenever the caller passes nothing. kosmos2 is allowlisted: its doc page cannot be derived from the directory name, so the cutoff cannot grandfather it."
 why_bad = "The same number now has two sources of truth and the caller decides which one wins, so editing the config no longer changes the model that gets built. It also pushes architecture knowledge out to every call site, where it does not belong."
 diff = '''
  class AcmeAttention(nn.Module):
@@ -607,6 +606,12 @@ diff = '''
 -        self.num_heads = num_heads
 +        self.embed_dim = config.hidden_size
 +        self.num_heads = config.num_attention_heads
+
+ class AcmeMLP(nn.Module):
+     # an optional override is fine: omitting it reads the config
+     def __init__(self, config, intermediate_size=None):
+         super().__init__()
+         self.intermediate_size = intermediate_size or config.intermediate_size
 '''
 
 [rules.TRF030]
@@ -679,17 +684,15 @@ diff = '''
 [rules.TRF034]
 description = "Layer classes held in an nn.ModuleList must subclass GradientCheckpointingLayer."
 default_enabled = true
-# 24 findings over these 16 models, and they split in two.
-# False positive (13 models): the rule resolves a class's base chain only inside the file being linted, so
-# a `modular_*.py` layer inheriting another model's layer looks unpatched while the generated
-# `modeling_*.py` does subclass `GradientCheckpointingLayer` -- checked class by class for cohere_compass,
-# cosmos3_edge, granite_swa, granitemoe_swa, hunyuan_vl, kimi_k25, muse_glimmer, muse_glimmer_assistant,
-# radio, step3p7, tipsv2, x_clip (both encoder layers), xcodec2 (`Xcodec2DecoderLayer`), so gradient
-# checkpointing does work at runtime. Reported upstream as mlinter#27.
-# Real (5 models), left for a follow-up: `dinov3_convnext` (`DINOv3ConvNextLayer`), `openai` (`Block`),
-# `tipsv2_dpt` (3 DPT head layers), `x_clip` (`PromptGeneratorLayer`), `xcodec2` (`Xcodec2ResNetBlock`) --
-# x_clip and xcodec2 are in both groups, hence still listed.
-allowlist_models = ["cohere_compass", "cosmos3_edge", "dinov3_convnext", "granite_swa", "granitemoe_swa", "hunyuan_vl", "kimi_k25", "muse_glimmer", "muse_glimmer_assistant", "openai", "radio", "step3p7", "tipsv2", "tipsv2_dpt", "x_clip", "xcodec2", "glm5_next"]
+# Only the real findings are left, as per-model follow-ups: `dinov3_convnext` (`DINOv3ConvNextLayer`),
+# `openai` (`Block`), `tipsv2_dpt` (3 DPT head layers), `x_clip` (`PromptGeneratorLayer`) and `xcodec2`
+# (`Xcodec2ResNetBlock`).
+# The other 12 -- cohere_compass, cosmos3_edge, glm5_next, granite_swa, granitemoe_swa, hunyuan_vl,
+# kimi_k25, muse_glimmer, muse_glimmer_assistant, radio, step3p7, tipsv2 -- were false positives: the rule
+# resolved a class's base chain only inside the file being linted, so a `modular_*.py` layer inheriting
+# another model's layer looked unpatched while the generated `modeling_*.py` did subclass
+# `GradientCheckpointingLayer`. That was mlinter#27, now fixed upstream, so they no longer fire.
+allowlist_models = ["dinov3_convnext", "openai", "tipsv2_dpt", "x_clip", "xcodec2"]
 cutoff_date = "2026-06-20"
 
 [rules.TRF034.explanation]
@@ -705,20 +708,16 @@ diff = '''
 [rules.TRF035]
 description = "Model files must not silence the linter with `# noqa`."
 default_enabled = true
-# 4 sites, one per model, and deleting the `# noqa` only moves the failure to ruff:
-#   `hunyuan_vl`      `modular_hunyuan_vl.py:53`       F401, `repeat_kv` re-exported for downstream tooling
-#   `step3p7`         `modular_step3p7.py:68`          F401, import that steers the converter to Qwen2-VL's
-#                                                      2-axis vision RoPE instead of MiniMax's 3-axis one
-#   `nemotron3_5_asr` `modular_nemotron3_5_asr.py:340` F821, quoted forward reference to a cache class
-#                                                      defined in another model
-#   `zaya`            `modular_zaya.py:287`            F821, `del op_size` drops a name that only exists in
-#                                                      the inherited parent body
-# The last three are modular-converter mechanics, so the fix belongs upstream, not in the model files.
-allowlist_models = ["hunyuan_vl", "nemotron3_5_asr", "step3p7", "zaya", "glm5_next"]
+# Empty since the rule learned to accept F401/F821/F822 in modular files, which is what all five previously
+# allowlisted models (hunyuan_vl, nemotron3_5_asr, step3p7, zaya, glm5_next) were silencing: a re-exported
+# `repeat_kv`, a converter-steering import, a quoted forward reference to another model's cache class, and a
+# `del` of a name that only exists in the inherited parent body. That was flagged upstream as converter
+# mechanics rather than model bugs, and the fix landed there, so no model needs an exemption any more.
+allowlist_models = []
 cutoff_date = "2026-06-20"
 
 [rules.TRF035.explanation]
-what_it_does = "Flags `# noqa` comments, with or without explicit codes, in modeling_*.py, modular_*.py and configuration_*.py."
+what_it_does = "Flags `# noqa` comments, with or without explicit codes, in modeling_*.py, modular_*.py and configuration_*.py. In a modular file, `F401`, `F821` and `F822` are accepted: a modular file is a generation source that deliberately does not define every name it uses, so ruff's undefined-name family fires on correct code -- `__all__` entries the converter fills in, classes that live in the parent model, imports kept to be re-exported. A `# noqa` naming only those codes is skipped; one naming anything else is reported on the codes that are left. A bare `# noqa` is always reported; in a modular file the message asks for the code rather than a rewrite."
 why_bad = "Model files are ordinary code held to the repo's lint rules, so a suppression means the underlying issue was left in place -- and a bare `# noqa` also hides every future violation on that line. Fix the code instead."
 diff = '''
 -from ...modeling_utils import PreTrainedModel  # noqa: F401
@@ -822,16 +821,18 @@ diff = '''
 [rules.TRF041]
 description = "A config-gated branch must carry a `# CODEPATH:` note saying which checkpoints diverge."
 default_enabled = true
-# 35 findings over these 13 models: openai(11), dinov3_vit(4), inkling(4), kosmos2(3), axk2(2),
-# cohere_compass(2), timm_backbone(2), timm_wrapper(2), kimi_k25(1), muse_glimmer(1), tipsv2(1),
-# vitpose_backbone(1), x_clip(1). Every one needs its `# CODEPATH:` note to name the checkpoints that take
-# each path, which only the model owner knows -- guessing would be worse than the missing note -- so they
-# go out as per-model follow-ups. `mimo_v2_flash` no longer fires and was dropped.
-allowlist_models = ["axk2", "cohere_compass", "dinov3_vit", "inkling", "kimi_k25", "kosmos2", "muse_glimmer", "openai", "timm_backbone", "timm_wrapper", "tipsv2", "vitpose_backbone", "x_clip", "glm5_next"]
+# 15 findings over these 9 models: dinov3_vit(4), inkling(4), axk2(1), cohere_compass(1), kimi_k25(1),
+# kosmos2(1), muse_glimmer(1), tipsv2(1), x_clip(1). Every one needs its `# CODEPATH:` note to name the
+# checkpoints that take each path, which only the model owner knows -- guessing would be worse than the
+# missing note -- so they go out as per-model follow-ups. `mimo_v2_flash` no longer fires and was dropped.
+# Down from 35 findings over 13 models: the rule now exempts guards (an `if` with no `else` that only raises
+# or only logs) and a `DEFAULT_EXEMPT_ATTRIBUTES` list of framework plumbing, which cleared `openai`(11),
+# `timm_backbone`(2), `timm_wrapper`(2), `vitpose_backbone`(1) and `glm5_next` outright and trimmed the rest.
+allowlist_models = ["axk2", "cohere_compass", "dinov3_vit", "inkling", "kimi_k25", "kosmos2", "muse_glimmer", "tipsv2", "x_clip"]
 cutoff_date = "2026-06-20"
 
 [rules.TRF041.explanation]
-what_it_does = "In modeling_*.py and modular_*.py, flags every `if`/`elif` and conditional expression whose condition reads a `config.*` or `self.config.*` attribute without a `# CODEPATH:` comment, accepted on the branch line or in the contiguous comment block directly above it. Any config attribute counts, not only boolean flags. Exempt by structure: `X if X is not None else fallback`, where the tested field is itself one of the results -- `getattr(config, x, default)` spelled long, which cannot fork the graph. Merely mentioning None does not qualify: `config.vision_config is not None` still owes a note. A field that gates no checkpoint divergence, such as `problem_type` selecting a loss or `hidden_act` looking up an activation, can be exempted file-wide with a module-level `# trf-ignore: TRF041 config.problem_type, config.hidden_act` at column 0 (`self.config.x`, `config.x` and `x` are the same field). It must name at least one field -- a bare `# trf-ignore: TRF041` keeps its per-line meaning -- and a condition is skipped only when every field it reads is exempt."
+what_it_does = "In modeling_*.py and modular_*.py, flags every `if`/`elif` and conditional expression whose condition reads a `config.*` or `self.config.*` attribute without a `# CODEPATH:` comment, accepted on the branch line or in the contiguous comment block directly above it. Any config attribute counts, not only boolean flags. Exempt by structure: `X if X is not None else fallback`, where the tested field is itself one of the results -- `getattr(config, x, default)` spelled long, which cannot fork the graph. Merely mentioning None does not qualify: `config.vision_config is not None` still owes a note. Also exempt by structure: a guard, meaning an `if` with no `else` whose body only raises or only warns/logs -- one side aborts, so nothing diverges past it. Exempt by field: framework plumbing that gates no checkpoint divergence, such as `problem_type` selecting a loss, `hidden_act` looking up an activation, `num_labels`, `use_cache`, `is_decoder`, the special token ids and the `summary_*` head settings; the full list is `DEFAULT_EXEMPT_ATTRIBUTES` in `mlinter/trf041.py`, and `ignored_attributes = [...]` on the rule table extends it for a project keeping its own rules.toml. A model exempts a field of its own file-wide with a module-level `# trf-ignore: TRF041 config.scale_embedding, config.auxiliary_loss` at column 0 (`self.config.x`, `config.x` and `x` are the same field). It must name at least one field -- a bare `# trf-ignore: TRF041` keeps its per-line meaning -- and a condition is skipped only when every field it reads is exempt."
 why_bad = "A config-gated branch is a second architecture in the same file, and the code cannot say whether both halves are still reachable -- which is how dead experimental branches survive for releases. The rule does not forbid the branch: like Rust's `// SAFETY:`, it asks for the checkpoints that take each side to be written down next to it. A branch nobody can name one for is a branch to delete."
 diff = '''
 +        # CODEPATH: ESMC-6B ships pre-normalised embeddings, the 300M/600M checkpoints do not.
