@@ -1086,6 +1086,12 @@ def is_detectron2_available() -> bool:
 
 @lru_cache
 @_make_compile_constant
+def is_diffusers_available() -> bool:
+    return _is_package_available("diffusers")[0]
+
+
+@lru_cache
+@_make_compile_constant
 def is_rjieba_available() -> bool:
     return _is_package_available("rjieba")[0]
 
@@ -1191,8 +1197,9 @@ def is_flash_attn_2_available(kernels_fallback_ok: bool = False) -> bool:
             from transformers.integrations.hub_kernels import get_attn_kernel_version
             from transformers.modeling_flash_attention_utils import FLASH_ATTN_KERNEL_FALLBACK
 
-            kernel_repo = FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"]
-            get_kernel(kernel_repo, version=get_attn_kernel_version(kernel_repo))
+
+            repo_id = FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"]
+            get_kernel(repo_id, version=get_attn_kernel_version(repo_id))
             return True
         except Exception:  # noqa: S110  # we don't care about the Exception here: we just want to check availability
             pass
@@ -1219,8 +1226,8 @@ def is_flash_attn_3_available(kernels_fallback_ok: bool = False) -> bool:
             from transformers.integrations.hub_kernels import get_attn_kernel_version
             from transformers.modeling_flash_attention_utils import FLASH_ATTN_KERNEL_FALLBACK
 
-            kernel_repo = FLASH_ATTN_KERNEL_FALLBACK["flash_attention_3"]
-            get_kernel(kernel_repo, version=get_attn_kernel_version(kernel_repo))
+            repo_id = FLASH_ATTN_KERNEL_FALLBACK["flash_attention_3"]
+            get_kernel(repo_id, version=get_attn_kernel_version(repo_id))
             return True
         except Exception:  # noqa: S110  # we don't care about the Exception here: we just want to check availability
             pass
@@ -2219,6 +2226,13 @@ Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore
+DIFFUSERS_IMPORT_ERROR = """
+{0} requires the diffusers library. But that was not found in your environment. You can install them with pip:
+`pip install diffusers`
+Please note that you may need to restart your runtime after installation.
+"""
+
+# docstyle-ignore
 SOUNDFILE_IMPORT_ERROR = """
 {0} requires the soundfile library. But that was not found in your environment. You can install it with pip:
 `pip install soundfile`
@@ -2271,6 +2285,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("datasets", (is_datasets_available, DATASETS_IMPORT_ERROR)),
         ("decord", (is_decord_available, DECORD_IMPORT_ERROR)),
         ("detectron2", (is_detectron2_available, DETECTRON2_IMPORT_ERROR)),
+        ("diffusers", (is_diffusers_available, DIFFUSERS_IMPORT_ERROR)),
         ("essentia", (is_essentia_available, ESSENTIA_IMPORT_ERROR)),
         ("faiss", (is_faiss_available, FAISS_IMPORT_ERROR)),
         ("g2p_en", (is_g2p_en_available, G2P_EN_IMPORT_ERROR)),

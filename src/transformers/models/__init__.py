@@ -181,6 +181,7 @@ if TYPE_CHECKING:
     from .glm4_moe_lite import *
     from .glm4v import *
     from .glm4v_moe import *
+    from .glm5_next import *
     from .glm46v import *
     from .glm_image import *
     from .glm_moe_dsa import *
@@ -200,6 +201,7 @@ if TYPE_CHECKING:
     from .granite import *
     from .granite4_vision import *
     from .granite_speech import *
+    from .granite_speech5 import *
     from .granite_speech_plus import *
     from .granite_swa import *
     from .granitemoe import *
@@ -402,6 +404,7 @@ if TYPE_CHECKING:
     from .qwen3_omni_moe import *
     from .qwen3_vl import *
     from .qwen3_vl_moe import *
+    from .qwen4_exp import *
     from .radio import *
     from .rag import *
     from .recurrent_gemma import *
@@ -481,6 +484,7 @@ if TYPE_CHECKING:
     from .upernet import *
     from .uvdoc import *
     from .vaultgemma import *
+    from .vibevoice import *
     from .vibevoice_acoustic_tokenizer import *
     from .vibevoice_asr import *
     from .video_llama_3 import *
