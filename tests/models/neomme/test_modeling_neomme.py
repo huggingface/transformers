@@ -584,7 +584,7 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
 
         with torch.no_grad():
             hidden_states = model.model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
-            expected = model.lm_head(model.unembedding_projection(hidden_states))
+            expected = model.lm_head(hidden_states @ model.unembedding_projection.weight)
             actual = model(input_ids=input_ids, attention_mask=attention_mask).logits
         torch.testing.assert_close(actual, expected)
 

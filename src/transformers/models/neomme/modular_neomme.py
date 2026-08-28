@@ -264,13 +264,6 @@ class NeoMMEEmbeddings(nn.Module):
         return self.embedding_projection(self.word_embeddings(input_ids))
 
 
-class NeoMMEUnembeddingProjection(nn.Linear):
-    """Apply the transpose-tied embedding projection from hidden size back to embedding rank."""
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return hidden_states @ self.weight
-
-
 class NeoMMEPatchEmbeddings(nn.Module):
     """Patch stem that maps flattened image patches to hidden size."""
 
@@ -648,9 +641,7 @@ class NeoMMEForMaskedLM(NeoMMEPreTrainedModel):
     def __init__(self, config: NeoMMEConfig):
         super().__init__(config)
         self.model = NeoMMEModel(config)
-        self.unembedding_projection = NeoMMEUnembeddingProjection(
-            config.embedding_rank, config.hidden_size, bias=False
-        )
+        self.unembedding_projection = nn.Linear(config.embedding_rank, config.hidden_size, bias=False)
         self.lm_head = nn.Linear(config.embedding_rank, config.vocab_size, bias=False)
         self.post_init()
 
@@ -678,7 +669,7 @@ class NeoMMEForMaskedLM(NeoMMEPreTrainedModel):
             **kwargs,
         )
         hidden_states = outputs.last_hidden_state
-        hidden_states = self.unembedding_projection(hidden_states)
+        hidden_states = hidden_states @ self.unembedding_projection.weight
         logits = self.lm_head(hidden_states)
 
         loss = None
