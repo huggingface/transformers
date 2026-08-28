@@ -26,8 +26,8 @@ from .requests import RequestStatus, logger
 from .utils import (
     create_warmup_future_states,
     device_stream_ctx,
-    get_accelerator_graph,
-    get_accelerator_pools,
+    get_cuda_graph,
+    get_cuda_graph_pools,
     graph_capture_ctx,
     mem_pool_ctx,
     pad_to_interval,
@@ -57,20 +57,18 @@ class ModelRunner:
         # Helper attributes
         self.do_sample = do_sample
         self.return_logprobs = return_logprobs
-        self.use_accelerator_graph_varlen, self.use_accelerator_graph_decode = (
-            self.cb_config.accelerator_graph_booleans
-        )
+        self.use_cuda_graph_varlen, self.use_cuda_graph_decode = self.cb_config.cuda_graph_booleans
         self.cache = cache
         self._model_supports_logits_to_keep: bool | None = None  # resolved on first forward
 
-        # Padding only happen when accelerator graphs or compile is used
-        accelerator_graph = self.use_accelerator_graph_varlen or self.use_accelerator_graph_decode
+        # Padding only happen when CUDA graphs or compile is used
+        cuda_graph = self.use_cuda_graph_varlen or self.use_cuda_graph_decode
         compile = self.cb_config.varlen_compile_config is not None or self.cb_config.decode_compile_config is not None
-        self.pad_inputs = accelerator_graph or compile
+        self.pad_inputs = cuda_graph or compile
 
         # Set up the graph pool. This allows all graphs to share the same memory pool, greatly saving memory.
-        if self.use_accelerator_graph_varlen or self.use_accelerator_graph_decode:
-            self.mem_pool, self.graph_pool_id = get_accelerator_pools(self.device)
+        if self.use_cuda_graph_varlen or self.use_cuda_graph_decode:
+            self.mem_pool, self.graph_pool_id = get_cuda_graph_pools(self.device)
         else:
             self.mem_pool, self.graph_pool_id = None, None
 
@@ -113,7 +111,7 @@ class ModelRunner:
 
     def compute_batch(self, model: nn.Module, batch_data: dict) -> None:
         """Runs the forward pass, processes the logits and samples the next tokens. It also handles which version of
-        the forward pass to use (varlen or decode), whether to use accelerator graphs (with the eventual capture of the
+        the forward pass to use (varlen or decode), whether to use CUDA graphs (with the eventual capture of the
         graph) and torch compile."""
         # These tensors are device-resident, this is just pointer retrieval
         carry_over_ids, prev_output_ids, output_ids = self.inputs_and_outputs.get_cb_kwargs()
@@ -125,12 +123,10 @@ class ModelRunner:
             batch_data["logits_to_keep"] = batch_data["logits_indices"]
 
         # Get the appropriate forward function (compiled or not, based on current path)
-        forward_fn, use_accelerator_graph = self._get_forward_fn(
-            use_block_table=self.inputs_and_outputs.use_block_table
-        )
+        forward_fn, use_cuda_graph = self._get_forward_fn(use_block_table=self.inputs_and_outputs.use_block_table)
 
-        # If we are not using accelerator graphs, we perform the generation step and return
-        if not use_accelerator_graph:
+        # If we are not using CUDA graphs, we perform the generation step and return
+        if not use_cuda_graph:
             maybe_stream = device_stream_ctx(self.device_module, compute_stream)
             with maybe_stream:
                 forward_fn(model, batch_data, carry_over_ids, prev_output_ids, output_ids)
@@ -151,11 +147,11 @@ class ModelRunner:
         """Helper function to get the appropriate forward function based on the block table and compile behavior."""
         if use_block_table:
             forward_fn = self._forward_process_and_sample if self._compiled_decode is None else self._compiled_decode
-            use_accelerator_graph = self.use_accelerator_graph_decode
+            use_cuda_graph = self.use_cuda_graph_decode
         else:
             forward_fn = self._forward_process_and_sample if self._compiled_varlen is None else self._compiled_varlen
-            use_accelerator_graph = self.use_accelerator_graph_varlen
-        return forward_fn, use_accelerator_graph
+            use_cuda_graph = self.use_cuda_graph_varlen
+        return forward_fn, use_cuda_graph
 
     def _capture_graph(self, forward_fn: Callable, compute_stream: Any, *args) -> None:
         """Helper function to capture and store a graph for a given forward function."""
@@ -163,7 +159,7 @@ class ModelRunner:
         with device_stream_ctx(self.device_module, compute_stream), mem_pool_ctx(self.device, self.mem_pool):
             forward_fn(*args)
         # Capture using a thread-local capture mode to avoid capturing GPU operations from outside the model forward
-        graph = get_accelerator_graph(self.device)
+        graph = get_cuda_graph(self.device)
         with graph_capture_ctx(self.device, graph, stream=compute_stream, graph_pool_id=self.graph_pool_id):
             forward_fn(*args)
         # Store
@@ -240,8 +236,8 @@ class ModelRunner:
 
     @torch.no_grad()
     def warmup(self, model: nn.Module) -> None:
-        """Pre-capture accelerator graphs and/or trigger compile warmup for varlen and decode paths (if available).
-        Unless the force_warmup flag is set, the warmup is only performed if the accelerator graphs or compile are enabled."""
+        """Pre-capture CUDA graphs and/or trigger compile warmup for varlen and decode paths (if available). Unless the
+        force_warmup flag is set, the warmup is only performed if the CUDA graphs or compile are enabled."""
         # Early return if the warmup is not needed
         if not self.pad_inputs:
             return None

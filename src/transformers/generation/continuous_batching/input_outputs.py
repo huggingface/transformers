@@ -25,7 +25,7 @@ from .cache import PagedAttentionCache
 from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
 from .requests import TMP_TOKEN_ID, FutureRequestState, logger
 from .utils import (
-    AcceleratorGraphBuffer,
+    CUDAGraphBuffer,
     aligned_divide,
     attn_mask_is_needed,
     build_attention_mask,
@@ -106,7 +106,7 @@ class ContinuousBatchingIOs:
         self.config = config
         self.model_dtype = model_dtype
         self.max_requests_per_batch = continuous_batching_config.max_requests_per_batch
-        self.use_accelerator_graph_varlen = continuous_batching_config.accelerator_graph_booleans[0]
+        self.use_cuda_graph_varlen = continuous_batching_config.cuda_graph_booleans[0]
         self.sliding_window = 1 if getattr(config, "sliding_window", None) is None else config.sliding_window
         self.return_logprobs = continuous_batching_config.return_logprobs
         # Setup input-related accumulators
@@ -119,7 +119,7 @@ class ContinuousBatchingIOs:
         # Setup other accumulators
         self.requests_in_batch: list[FutureRequestState] = []
         self.req_id_to_new_token_position: dict[str, int] = {}  # only used for async API
-        self.graphs: AcceleratorGraphBuffer = AcceleratorGraphBuffer()
+        self.graphs: CUDAGraphBuffer = CUDAGraphBuffer()
         self._read_trash_index = cache.read_trash_index
         self._write_trash_index = cache.write_trash_index
         # Setup static tensors and compute stream
@@ -129,7 +129,7 @@ class ContinuousBatchingIOs:
 
     def _setup_static_tensors(self, logit_processor: ContinuousBatchingLogitsProcessorList) -> None:
         """Allocates static tensors for generation inputs and outputs. This is called only once at init time, to avoid
-        repeated allocations and enable accelerator graphs. All tensors are allocated with maximum possible sizes.
+        repeated allocations and enable CUDA graphs. All tensors are allocated with maximum possible sizes.
         The allocated tensors are:
 
         - `_bulk_input_tensor`: Storage for all the small inputs: `input_ids`, `position_ids`, `cumulative_seqlens_q`,
@@ -473,7 +473,7 @@ class ContinuousBatchingIOs:
 
     def get_model_kwargs(self, use_padding: bool = False) -> PagedAttentionArgs:
         """Get model keyword arguments for the current batch, eventually padding the query dimension and KV dimensions
-        if use_padding is True. The padding is only useful if we want static shapes, like when using accelerator graphs."""
+        if use_padding is True. The padding is only useful if we want static shapes, like when using CUDA graphs."""
         q_size = self.num_q_tokens
         kv_size = self.max_kv_read + self.num_q_tokens
         num_sequences = self._get_num_sequences(use_padding=use_padding)
@@ -499,9 +499,9 @@ class ContinuousBatchingIOs:
         # If there is padding, make sure the padding sequences have length 0 (ie. cumulative lengths plateau)
         if use_padding:  # TODO: add per-path padding
             self.max_seqlen_q = q_size  # keep max_seqlen_q > 1 so FA skips the seqlen_q==1 GQA reshape on padded q
-            # Additionally, if there are accelerator graphs, we need to pad max_seqlen_k so graph capture will work regardless
+            # Additionally, if there are CUDA graphs, we need to pad max_seqlen_k so graph capture will work regardless
             # of the future Q / KV lengths of the next batches
-            if not self.use_block_table and self.use_accelerator_graph_varlen:
+            if not self.use_block_table and self.use_cuda_graph_varlen:
                 self.max_seqlen_k = {
                     layer_type: pad_to_pow2(self.max_seqlen_k[layer_type], self.cache.num_pages, 1024)
                     for layer_type in self.max_seqlen_k.keys()
@@ -616,7 +616,7 @@ class HostDeviceIOPair:
 
 class ContinuousBatchingAsyncIOs:
     """A class to handle the inputs and outputs for the asynchronous API. It uses two IO pairs to avoid race conditions
-    between the two batches, which means twice as more VRAM is used for static input tensors and accelerator graph. If your GPU
+    between the two batches, which means twice as more VRAM is used for static input tensors and CUDA graph. If your GPU
     is large enough or you want to generate long sequences, this is a good trade-off to make.
 
     Asynchronous batching works by creating two pairs of host - device inputs and outputs:
@@ -627,9 +627,9 @@ class ContinuousBatchingAsyncIOs:
                       └──────────┘ ◄──────── └────────────┘
                                     outputs
 
-    Each pair is separate from the other. This means that each pairs has its own accelerator graphs set, because graphs
-    need to have static addresses for input tensors. To have a unique set of accelerator graph, we would need to copy the input
-    tensors to a third device-side buffer. This could limit the memory cost of accelerator graphs but would slow down the
+    Each pair is separate from the other. This means that each pairs has its own CUDA graphs set, because graphs need to
+    have static addresses for input tensors. To have a unique set of CUDA graph, we would need to copy the input tensors
+    to a third device-side buffer. This could limit the memory cost of CUDA graphs but would slow down the
     forward pass.
     But the CUDA streams orchestrating the transfer from host to device (H2D) and device to host (D2H) are the same for
     both pairs. Same for the compute stream.

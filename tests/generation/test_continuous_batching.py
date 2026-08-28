@@ -52,7 +52,7 @@ from transformers.generation.continuous_batching.requests import (
     get_device_and_memory_breakdown,
 )
 from transformers.generation.continuous_batching.utils import (
-    SUPPORTED_GRAPH_ACCELERATOR_TYPES,
+    SUPPORTED_CUDA_GRAPH_DEVICE_TYPES,
 )
 from transformers.integrations.eager_paged import eager_paged_attention_forward
 from transformers.integrations.sdpa_paged import sdpa_attention_paged_forward
@@ -812,12 +812,12 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         is_fa = is_flash_attention_requested(requested_attention_implementation=attn_implementation)
         if is_fa and not is_flash_attn_2_available(kernels_fallback_ok=True):
             self.skipTest("Flash Attention is not available and neither is the kernels library. Skipping test.")
-        # Skip the test if accelerator graph is on but the device does not support graph capture.
+        # Skip the test if CUDA graph is on but the device does not support graph capture.
         if (
-            any(continuous_batching_config.accelerator_graph_booleans)
-            and torch_device not in SUPPORTED_GRAPH_ACCELERATOR_TYPES
+            any(continuous_batching_config.cuda_graph_booleans)
+            and torch_device not in SUPPORTED_CUDA_GRAPH_DEVICE_TYPES
         ):
-            self.skipTest("Accelerator graph is only supported on CUDA or XPU devices. Skipping test.")
+            self.skipTest("CUDA graph is only supported on CUDA or XPU devices. Skipping test.")
 
         # If the config turns on compile, change the generation config to use the default mode instead of
         # max-autotune-no-cudagraphs which can change the kernels between generate_batch and generate
@@ -878,7 +878,9 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         past_key_values = None
         if not compare_to_fp32_eager:
             model.generation_config.use_cuda_graph = (
-                any(continuous_batching_config.accelerator_graph_booleans) if torch_device == "cuda" else False
+                any(continuous_batching_config.cuda_graph_booleans)
+                if torch_device in SUPPORTED_CUDA_GRAPH_DEVICE_TYPES
+                else False
             )
             model.generation_config.compile_config = continuous_batching_config.varlen_compile_config
             # Create a static cache if compile_config is set, because regular generate requires a compileable cache
@@ -935,7 +937,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
         continuous_batching_config = ContinuousBatchingConfig(
             allow_block_sharing=allow_block_sharing,
-            use_accelerator_graph=use_cuda_graph,
+            use_cuda_graph=use_cuda_graph,
             default_compile_level=0,
         )
         self._test_continuous_batching_parity(
@@ -1442,7 +1444,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             ("flash_attention_2", False, True),
             ("flash_attention_2", True, False),
             ("flash_attention_2", True, True),
-            # FA3: always turn on accelerator graphs
+            # FA3: always turn on CUDA graphs
             ("flash_attention_3", True, False),
             ("flash_attention_3", True, True),
         ]
@@ -1525,7 +1527,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         # 12 requests but only 4 blocks per request: the decode batch is wider than max_blocks_per_request
         input_ids = get_generation_inputs(_DEFAULT_USER_MESSAGES * 4, tokenizer, for_continuous_batching=True)
         gen_config = GenerationConfig(do_sample=False, max_new_tokens=20)
-        # Accelerator graphs enable input padding, which is where the truncation happened
+        # CUDA graphs enable input padding, which is where the truncation happened
         cb_config = ContinuousBatchingConfig(block_size=256, num_blocks=64, use_cuda_graph=True)
 
         cb_config.max_blocks_per_request = 0  # varlen reference

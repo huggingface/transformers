@@ -25,7 +25,7 @@ from ...modeling_flash_attention_utils import lazy_import_paged_flash_attention
 from ...utils import is_torch_xpu_available
 from ...utils.generic import is_flash_attention_requested
 from .requests import logger
-from .utils import WorkloadHints, is_accelerator_graph_available
+from .utils import WorkloadHints, is_cuda_graph_available
 
 
 FALLBACK_DEFAULTS = {
@@ -47,7 +47,7 @@ def resolve_continuous_batching_config(
 
     # Look at whether the user explicitly asked for the decode fast path before we assign a default value
     user_requested_decode_path = cb_config.max_blocks_per_request is not None
-    # Same for accelerator graphs, if the user signals they want graphs via any padding/cached-graph parameter
+    # Same for CUDA graphs, if the user signals they want graphs via any padding/cached-graph parameter
     cuda_graph_requested = any([cb_config.q_padding_interval_size, cb_config.kv_padding_interval_size])
 
     # Resolve missing attributes for which we have hints. Must happen before no-hints resolve.
@@ -59,7 +59,7 @@ def resolve_continuous_batching_config(
     # Check if the decode fast path is available. Must happen before the compile config.
     ensure_decode_fast_path_is_available(config, cb_config, user_requested_decode_path)
 
-    # Decide if compile should be used. Must happen before accelerator graphs are decided.
+    # Decide if compile should be used. Must happen before CUDA graphs are decided.
     resolve_compile_configs(
         cb_config=cb_config,
         fallback_compile_config=getattr(config, "compile_config", None),
@@ -67,13 +67,13 @@ def resolve_continuous_batching_config(
         decode_fast_path_available=cb_config.max_blocks_per_request > 0,
     )
 
-    # Decide if accelerator graphs should be used. Should happen after compile configs are decided.
+    # Decide if CUDA graphs should be used. Should happen after compile configs are decided.
     is_attn_mask_needed = not is_flash_attention_requested(config)
-    decide_use_accelerator_graphs(
-        cb_config=cb_config, is_attn_mask_needed=is_attn_mask_needed, accelerator_graph_requested=cuda_graph_requested
+    decide_use_cuda_graphs(
+        cb_config=cb_config, is_attn_mask_needed=is_attn_mask_needed, cuda_graph_requested=cuda_graph_requested
     )
 
-    # Decide if asynchronous batching should be used. Should happen after accelerator graphs are decided.
+    # Decide if asynchronous batching should be used. Should happen after CUDA graphs are decided.
     decide_use_async_batching(cb_config=cb_config, is_attn_mask_needed=is_attn_mask_needed)
 
     # Resolve the max memory percent. This can happen anytime before cache creation.
@@ -198,50 +198,46 @@ def resolve_compile_configs(
     cb_config.decode_compile_config = decode_config
 
 
-def decide_use_accelerator_graphs(
-    cb_config: ContinuousBatchingConfig, is_attn_mask_needed: bool, accelerator_graph_requested: bool
+def decide_use_cuda_graphs(
+    cb_config: ContinuousBatchingConfig, is_attn_mask_needed: bool, cuda_graph_requested: bool
 ) -> None:
-    """Decides whether or not to use accelerator graphs for continuous batching. If the user specified this in the
-    config or if they specified a parameter related to accelerator graphs, they are turned on. Otherwise, we use a
-    heuristic based on the attention implementation: we turn on accelerator graphs if and only if no attention mask is
-    needed.
+    """Decides whether or not to use CUDA graphs for continuous batching. If the user specified this in the config or
+    if they specified a parameter related to CUDA graphs, they are turned on. Otherwise, we use a heuristic based on the
+    attention implementation: we turn on CUDA graphs if and only if no attention mask is needed.
 
-    This function modifies the `use_accelerator_graph` attribute of the config in place, to a tuple of booleans.
+    This function modifies the `use_cuda_graph` attribute of the config in place, to a tuple of booleans.
     """
-    # If no accelerator graph-capture backend is available, we cannot use graphs.
-    graph_backend_available = is_accelerator_graph_available()
+    # If no CUDA graph-capture backend is available, we cannot use graphs.
+    graph_backend_available = is_cuda_graph_available()
     if not graph_backend_available:
-        intended_use_accelerator_graph = any(cb_config.accelerator_graph_booleans)
-        if intended_use_accelerator_graph:  # throw a warning only if the user intended to use accelerator graphs
+        intended_use_cuda_graph = any(cb_config.cuda_graph_booleans)
+        if intended_use_cuda_graph:  # throw a warning only if the user intended to use CUDA graphs
             logger.warning(
-                f"{cb_config.use_accelerator_graph = } but no accelerator graph-capture backend is available: "
-                "turning off accelerator graphs"
+                f"{cb_config.use_cuda_graph = } but no CUDA graph-capture backend is available: "
+                "turning off CUDA graphs"
             )
-        cb_config.use_accelerator_graph = (False, False)
-        cb_config.use_cuda_graph = cb_config.use_accelerator_graph
+        cb_config.use_cuda_graph = (False, False)
 
-    # Else if use_accelerator_graph is specified, we follow the user's choice and make sure it is a tuple of booleans
-    elif cb_config.use_accelerator_graph is not None:
-        if isinstance(cb_config.use_accelerator_graph, bool):
-            cb_config.use_accelerator_graph = (cb_config.use_accelerator_graph, cb_config.use_accelerator_graph)
-        cb_config.use_cuda_graph = cb_config.use_accelerator_graph
+    # Else if use_cuda_graph is specified, we follow the user's choice and make sure it is a tuple of booleans
+    elif cb_config.use_cuda_graph is not None:
+        if isinstance(cb_config.use_cuda_graph, bool):
+            cb_config.use_cuda_graph = (cb_config.use_cuda_graph, cb_config.use_cuda_graph)
 
-    # Else if the user specified a parameter related to accelerator graphs, we activate accelerator graphs
-    elif accelerator_graph_requested:
-        cb_config.use_accelerator_graph = (True, True)
-        cb_config.use_cuda_graph = cb_config.use_accelerator_graph
+    # Else if the user specified a parameter related to CUDA graphs, we activate CUDA graphs
+    elif cuda_graph_requested:
+        cb_config.use_cuda_graph = (True, True)
 
     # Otherwise we have a default heuristic based on the attention implementation:
     # attention implementations where an attention mask is needed suffer a lot more from the padding associated
-    # with accelerator graphs, so default is to turn accelerator graphs off for those implementations
+    # with CUDA graphs, so default is to turn CUDA graphs off for those implementations
     else:
-        use_accelerator_graph = []
+        use_cuda_graph = []
         for compile_config in [cb_config.varlen_compile_config, cb_config.decode_compile_config]:
             # No compile config means we decide on attention
             if compile_config is None:
-                use_accelerator_graph.append(not is_attn_mask_needed)
+                use_cuda_graph.append(not is_attn_mask_needed)
                 continue
-            # Otherwise we disable accelerator graphs if the compile config uses them
+            # Otherwise we disable CUDA graphs if the compile config uses them
             options = torch._inductor.list_mode_options().get(compile_config.mode, compile_config.options)
             compile_uses_graphs = options.get("triton.cudagraphs", False)
             if compile_uses_graphs:
@@ -249,40 +245,28 @@ def decide_use_accelerator_graphs(
                     f"Compile config {compile_config.mode = } uses cudagraphs, which usually does not work well with "
                     "continuous batching. We recommend using mode 'default' or 'max-autotune-no-cudagraphs' instead."
                 )
-            use_accelerator_graph.append(not compile_uses_graphs and not is_attn_mask_needed)
-        cb_config.use_accelerator_graph = tuple(use_accelerator_graph)
-        cb_config.use_cuda_graph = cb_config.use_accelerator_graph
+            use_cuda_graph.append(not compile_uses_graphs and not is_attn_mask_needed)
+        cb_config.use_cuda_graph = tuple(use_cuda_graph)
 
-    logger.info(f"Using accelerator graphs for (varlen, decode) paths: {cb_config.use_accelerator_graph}")
+    logger.info(f"Using CUDA graphs for (varlen, decode) paths: {cb_config.use_cuda_graph}")
 
 
 def decide_use_async_batching(cb_config: ContinuousBatchingConfig, is_attn_mask_needed: bool) -> None:
     """Returns whether or not to use asynchronous batching for continuous batching. If the user specified this in
-    the config, we follow their choice. Otherwise, we turn on asynchronous batching if and only if accelerator graphs are
-    turned on and no attention mask is needed.
+    the config, we follow their choice. Otherwise, we turn on asynchronous batching if and only if CUDA graphs are turned
+    on and no attention mask is needed.
 
     This function modifies the `use_async_batching` attribute of the config in place.
     """
     # If the user specifies to use async or not, no need to decide ourselves
     if cb_config.use_async_batching is None:
-        use_accelerator_graphs = any(cb_config.accelerator_graph_booleans)
-        cb_config.use_async_batching = use_accelerator_graphs and not is_attn_mask_needed
+        use_cuda_graphs = any(cb_config.cuda_graph_booleans)
+        cb_config.use_async_batching = use_cuda_graphs and not is_attn_mask_needed
         logger.info(
             f"No behavior specified for use_async_batching, choosing {cb_config.use_async_batching = } because "
-            f"{use_accelerator_graphs = } and {is_attn_mask_needed = }. If you want to save memory, you can "
+            f"{use_cuda_graphs = } and {is_attn_mask_needed = }. If you want to save memory, you can "
             "disable asynchronous batching but it will degrade performance."
         )
-
-
-def decide_use_cuda_graphs(
-    cb_config: ContinuousBatchingConfig, is_attn_mask_needed: bool, cuda_graph_requested: bool
-) -> None:
-    """Backward-compatible wrapper around `decide_use_accelerator_graphs`."""
-    decide_use_accelerator_graphs(
-        cb_config=cb_config,
-        is_attn_mask_needed=is_attn_mask_needed,
-        accelerator_graph_requested=cuda_graph_requested,
-    )
 
 
 def resolve_max_memory_percent(cb_config: ContinuousBatchingConfig, has_logit_processors: bool) -> None:
