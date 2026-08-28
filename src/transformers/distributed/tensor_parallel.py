@@ -288,6 +288,7 @@ class ReplicateKVHeadsParallel(ColwiseParallel):
         local_shape = list(meta.shape)
         local_shape[shard_dim] //= module._hf_num_key_value_heads
         local_meta = torch.empty(local_shape, dtype=meta.dtype, device=meta.device)
+        module._hf_kv_replication = n_rep
         module._parameters[param] = torch.nn.Parameter(
             DTensor.from_local(local_meta, mesh, [Shard(shard_dim)], run_check=False),
             requires_grad=meta.requires_grad,

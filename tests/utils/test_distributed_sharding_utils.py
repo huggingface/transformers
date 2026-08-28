@@ -76,7 +76,7 @@ def _make_dtensor_shard_op(mesh, placements, param_shape, local_shape):
     op.device_mesh = mesh
     op.placements = tuple(placements)
     op.param_ndim = len(param_shape)
-    op.param_shape = tuple(param_shape)
+    op.kv_replication = 1
     op._axis0_offset = 0
     op._axis0_local_size = local_shape[0]
     for mesh_dim, p in enumerate(placements):

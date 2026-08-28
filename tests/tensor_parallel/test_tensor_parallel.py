@@ -206,12 +206,12 @@ class TestTensorParallelLayer(TestCasePlus):
         local_shape[shard_dim] = local_size
         return tuple(local_shape)
 
-    def _make_dtensor_shard_op(self, mesh, placement, param_shape, local_shape):
+    def _make_dtensor_shard_op(self, mesh, placement, param_shape, local_shape, kv_replication=1):
         op = object.__new__(DtensorShardOperation)
         op.device_mesh = mesh
         op.placements = (placement,)
         op.param_ndim = len(param_shape)
-        op.param_shape = tuple(param_shape)
+        op.kv_replication = kv_replication
         op._axis0_offset = 0
         op._axis0_local_size = local_shape[0]
         return op
@@ -247,6 +247,7 @@ class TestTensorParallelLayer(TestCasePlus):
             ReplicateKVHeadsParallel().shard_param(module, "weight", mesh)
 
         self.assertEqual(tuple(module.weight.shape), (head_dim, 32))
+        self.assertEqual(module._hf_kv_replication, world_size // num_key_value_heads)
 
     def test_replicate_kv_heads_falls_back_to_colwise(self):
         # 4 KV heads over 2 ranks: no replication needed, plain colwise sharding
@@ -258,18 +259,21 @@ class TestTensorParallelLayer(TestCasePlus):
         placements = self._get_parameter_placements(module, ReplicateKVHeadsParallel(), mesh=mesh)
 
         self.assertEqual(placements["weight"], Shard(0))
+        self.assertFalse(hasattr(module, "_hf_kv_replication"))
 
     def test_kv_replication_reads_the_replicated_head_from_the_checkpoint(self):
         world_size, num_key_value_heads, head_dim = 4, 2, 8
+        n_rep = world_size // num_key_value_heads
         weight = torch.arange(num_key_value_heads * head_dim * 32, dtype=torch.float32).reshape(-1, 32)
 
         for rank in range(world_size):
             mesh = self.MockDeviceMesh(world_size=world_size, rank=rank)
             # The parameter describes the expanded projection: `world_size` heads instead of `num_key_value_heads`
-            op = self._make_dtensor_shard_op(mesh, Shard(0), (world_size * head_dim, 32), (head_dim, 32))
+            op = self._make_dtensor_shard_op(
+                mesh, Shard(0), (world_size * head_dim, 32), (head_dim, 32), kv_replication=n_rep
+            )
 
-            head_idx = rank // (world_size // num_key_value_heads)
-            expected = weight[head_idx * head_dim : (head_idx + 1) * head_dim]
+            expected = weight[(rank // n_rep) * head_dim : (rank // n_rep + 1) * head_dim]
             torch.testing.assert_close(op.shard_tensor(weight), expected)
 
     def test_kv_replication_only_updates_planned_attention_modules(self):

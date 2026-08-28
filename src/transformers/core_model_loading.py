@@ -1610,6 +1610,12 @@ def convert_and_load_state_dict_in_model(
     weight_mapping = load_config.weight_mapping or []
     meta_model_state_dict = model.state_dict()
     model_buffers = {k for k, _ in model.named_buffers()}
+    # Modules whose KV heads are replicated across ranks (see `colwise_replicate_kv`); empty for every other model.
+    kv_replication_by_module = {
+        name: module._hf_kv_replication
+        for name, module in model.named_modules()
+        if hasattr(module, "_hf_kv_replication")
+    }
 
     # We start from all missing keys, and we will remove/add them from the proper containers as loading advances
     loading_info = LoadStateDictInfo(
@@ -1717,7 +1723,8 @@ def convert_and_load_state_dict_in_model(
             param_device = get_device(device_map, renamed_key, valid_torch_device=True)
             sharding_op = None
             if is_dtensor(empty_param):
-                sharding_op = DtensorShardOperation(empty_param)
+                kv_replication = kv_replication_by_module.get(renamed_key.rsplit(".", 1)[0], 1)
+                sharding_op = DtensorShardOperation(empty_param, kv_replication=kv_replication)
 
             # Some parameters are so large (qwen4_exp ple_embedding is about ~95 GiB) that we cannot afford to perform the Operations
             # directly on the device, as it will completely blow up the memory during the ops memory spike. So defer to "cpu", then
