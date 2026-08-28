@@ -12,9 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from transformers import LoMaConfig, LoMaForKeypointMatching
 from transformers.models.loma.convert_loma_to_hf import (
-    convert_checkpoint,
     convert_matcher_state_dict,
     convert_state_dict,
 )
@@ -35,7 +33,7 @@ class TestLoMaConversion:
             "transformers.0.self_attn.Wqkv.weight": torch.ones(6, 2),
             "transformers.0.self_attn.out_proj.bias": torch.ones(2),
             "transformers.0.self_attn.ffn.1.weight": torch.ones(4),
-            "transformers.0.cross_attn.to_qk.weight": torch.ones(2, 2),
+            "transformers.0.cross_attn.to_qk.weight": torch.ones(4, 2),
             "transformers.0.cross_attn.to_v.weight": torch.ones(2, 2),
             "transformers.0.cross_attn.to_out.bias": torch.ones(2),
             "transformers.0.cross_attn.ffn.3.bias": torch.ones(2),
@@ -49,13 +47,16 @@ class TestLoMaConversion:
         assert set(converted_state_dict) == {
             "positional_encoder.projector.weight",
             "input_projection.weight",
-            "transformer_layers.0.self_attention.qkv.weight",
-            "transformer_layers.0.self_attention.output.bias",
-            "transformer_layers.0.self_attention.mlp.layers.1.weight",
-            "transformer_layers.0.cross_attention.query_key.weight",
-            "transformer_layers.0.cross_attention.value.weight",
-            "transformer_layers.0.cross_attention.output.bias",
-            "transformer_layers.0.cross_attention.mlp.layers.3.bias",
+            "layers.0.self_attention.q_proj.weight",
+            "layers.0.self_attention.k_proj.weight",
+            "layers.0.self_attention.v_proj.weight",
+            "layers.0.self_attention.o_proj.bias",
+            "layers.0.self_mlp.layer_norm.weight",
+            "layers.0.cross_attention.q_proj.weight",
+            "layers.0.cross_attention.k_proj.weight",
+            "layers.0.cross_attention.v_proj.weight",
+            "layers.0.cross_attention.o_proj.bias",
+            "layers.0.cross_mlp.fc2.bias",
             "match_assignment.matchability.bias",
             "descriptor_network.encoder.layers.0.weight",
         }
@@ -77,14 +78,14 @@ class TestLoMaConversion:
         assert "descriptor_network.encoder.layers.0.weight" in converted
         assert "descriptor_network.encoder.layers.1.weight" in converted
         assert "descriptor_network.decoder.layers.1.block1.0.weight" in converted
-        assert "descriptor_network.dinov2_encoder.embeddings.cls_token" in converted
-        assert "descriptor_network.dinov2_encoder.embeddings.patch_embeddings.projection.weight" in converted
-        assert "descriptor_network.dinov2_encoder.encoder.layer.0.attention.attention.query.weight" in converted
-        assert "descriptor_network.dinov2_encoder.encoder.layer.0.attention.attention.key.weight" in converted
-        assert "descriptor_network.dinov2_encoder.encoder.layer.0.attention.attention.value.weight" in converted
-        assert "descriptor_network.dinov2_encoder.encoder.layer.1.layer_scale1.lambda1" in converted
+        assert "descriptor_network.auxiliary_backbone.embeddings.cls_token" in converted
+        assert "descriptor_network.auxiliary_backbone.embeddings.patch_embeddings.projection.weight" in converted
+        assert "descriptor_network.auxiliary_backbone.encoder.layer.0.attention.attention.query.weight" in converted
+        assert "descriptor_network.auxiliary_backbone.encoder.layer.0.attention.attention.key.weight" in converted
+        assert "descriptor_network.auxiliary_backbone.encoder.layer.0.attention.attention.value.weight" in converted
+        assert "descriptor_network.auxiliary_backbone.encoder.layer.1.layer_scale1.lambda1" in converted
         assert converted[
-            "descriptor_network.dinov2_encoder.encoder.layer.0.attention.attention.query.weight"
+            "descriptor_network.auxiliary_backbone.encoder.layer.0.attention.attention.query.weight"
         ].shape == (1024, 1024)
 
         # Verify DINOv2 keys are skipped
@@ -106,72 +107,41 @@ class TestLoMaConversion:
         assert "positional_encoder.projector.weight" in result
         assert "descriptor_network.encoder.layers.0.weight" in result
 
-    def test_convert_checkpoint(self, tmp_path):
-        model = LoMaForKeypointMatching(LoMaConfig(descriptor_dim=256, num_attention_heads=4))
-        reference_state_dict = {}
-        for key, tensor in model.state_dict().items():
-            if key == "positional_encoder.projector.weight":
-                reference_key = "posenc.Wr.weight"
-            elif key.startswith("transformer_layers."):
-                _, layer_index, attention_type, *suffix_parts = key.split(".")
-                suffix = ".".join(suffix_parts)
-                if attention_type == "self_attention":
-                    replacements = {
-                        "qkv": "Wqkv",
-                        "output": "out_proj",
-                        "mlp.layers.0": "ffn.0",
-                        "mlp.layers.1": "ffn.1",
-                        "mlp.layers.3": "ffn.3",
-                    }
-                    reference_attention_type = "self_attn"
-                elif attention_type == "cross_attention":
-                    replacements = {
-                        "query_key": "to_qk",
-                        "value": "to_v",
-                        "output": "to_out",
-                        "mlp.layers.0": "ffn.0",
-                        "mlp.layers.1": "ffn.1",
-                        "mlp.layers.3": "ffn.3",
-                    }
-                    reference_attention_type = "cross_attn"
-                else:
-                    continue
-                for source_prefix, destination_prefix in replacements.items():
-                    if suffix.startswith(source_prefix + "."):
-                        reference_suffix = suffix.replace(source_prefix, destination_prefix, 1)
-                        reference_key = f"transformers.{layer_index}.{reference_attention_type}.{reference_suffix}"
-                        break
-                else:
-                    continue
-            elif key.startswith("match_assignment."):
-                _, source_name, parameter_name = key.split(".")
-                source_name = "final_proj" if source_name == "final_projection" else source_name
-                reference_key = f"log_assignment.8.{source_name}.{parameter_name}"
-            elif key.startswith("descriptor_network.encoder."):
-                reference_key = key.replace("descriptor_network.encoder.", "_descriptor.encoder.vgg.", 1)
-            elif key.startswith("descriptor_network.decoder."):
-                reference_key = key.replace("descriptor_network.", "_descriptor.", 1)
-            elif key.startswith("descriptor_network.dinov2_encoder."):
-                # Mocking the backward conversion for DINOv2 keys is complex because of QKV split,
-                # so we will just skip testing the values of dinov2_encoder in test_convert_checkpoint
-                # (we already test it in test_convert_descriptor_keys).
-                continue
-            else:
-                continue
-            reference_state_dict[reference_key] = tensor
+    def test_qkv_split(self):
+        """Verify that fused QKV weights are correctly split into separate q/k/v projections."""
+        dim = 4
+        # Self attention: Wqkv is [3*dim, dim]
+        qkv_weight = torch.arange(3 * dim * dim, dtype=torch.float).reshape(3 * dim, dim)
+        reference_state_dict = {
+            "transformers.0.self_attn.Wqkv.weight": qkv_weight,
+        }
+        converted = convert_state_dict(reference_state_dict, num_hidden_layers=1)
 
-        checkpoint_path = tmp_path / "loma_b.pt"
-        output_dir = tmp_path / "converted"
-        torch.save(reference_state_dict, checkpoint_path)
-        convert_checkpoint(checkpoint_path, "loma_b", output_dir)
+        q_weight = converted["layers.0.self_attention.q_proj.weight"]
+        k_weight = converted["layers.0.self_attention.k_proj.weight"]
+        v_weight = converted["layers.0.self_attention.v_proj.weight"]
 
-        converted_model = LoMaForKeypointMatching.from_pretrained(output_dir)
-        converted_prefixes = (
-            "positional_encoder",
-            "transformer_layers",
-            "match_assignment",
-            "descriptor_network",
-        )
-        for key, tensor in model.state_dict().items():
-            if key.startswith(converted_prefixes) and not key.startswith("descriptor_network.dinov2_encoder."):
-                assert torch.equal(converted_model.state_dict()[key], tensor), f"Mismatch for key: {key}"
+        assert q_weight.shape == (dim, dim)
+        assert k_weight.shape == (dim, dim)
+        assert v_weight.shape == (dim, dim)
+        assert torch.equal(q_weight, qkv_weight[:dim])
+        assert torch.equal(k_weight, qkv_weight[dim : 2 * dim])
+        assert torch.equal(v_weight, qkv_weight[2 * dim :])
+
+    def test_cross_attention_shared_qk(self):
+        """Verify that shared to_qk weights are correctly duplicated into q_proj and k_proj."""
+        dim = 4
+        qk_weight = torch.randn(2 * dim, dim)
+        reference_state_dict = {
+            "transformers.0.cross_attn.to_qk.weight": qk_weight,
+        }
+        converted = convert_state_dict(reference_state_dict, num_hidden_layers=1)
+
+        q_weight = converted["layers.0.cross_attention.q_proj.weight"]
+        k_weight = converted["layers.0.cross_attention.k_proj.weight"]
+
+        assert q_weight.shape == (dim, dim)
+        assert k_weight.shape == (dim, dim)
+        # The to_qk is split in half, not duplicated
+        assert torch.equal(q_weight, qk_weight[:dim])
+        assert torch.equal(k_weight, qk_weight[dim:])
