@@ -1681,14 +1681,15 @@ class ContinuousBatchingConfig:
             Whether to enable async double-buffering, which removes CPU overhead from the continuous batching
             loop at the cost of doubled VRAM usage. Auto-detected when `None`.
         use_cuda_graph (`bool` or `tuple[bool, bool]`, *optional*):
-            Whether to enable CUDA graphs. This can be a tuple of booleans (one for the varlen path and one for
-            the decode fast path), a boolean which will apply to both paths, or None (automatically inferred). After
-            continuous batching initialization, the attribute will be a tuple of booleans. On XPU devices, this flag
-            enables XPU graph capture. Default is None (automatically inferred).
+            Whether to enable CUDA graphs. This can be a tuple of booleans (one for the varlen path and one for the
+            decode fast path), a boolean which will apply to both paths, or None (automatically inferred). After calling
+            `decide_use_cuda_graphs`, the attribute will be a tuple of booleans. Default is None (automatically inferred).
         q_padding_interval_size (`int`, *optional*, defaults to 0):
-            Query padding granularity in tokens for CUDA graphs. Uses a preset from `continuous_api.py` when set to 0.
+            Query padding granularity in tokens for CUDA graphs. Uses a preset from `continuous_api.py` when
+            set to 0.
         kv_padding_interval_size (`int`, *optional*, defaults to 0):
-            KV padding granularity in tokens for CUDA graphs. Uses a preset from `continuous_api.py` when set to 0.
+            KV padding granularity in tokens for CUDA graphs. Uses a preset from `continuous_api.py` when
+            set to 0.
         varlen_compile_config (`CompileConfig`, *optional*):
             CompileConfig for varlen (prefill) path. Default is None (uses generation_config fallback)
             The varlen path handles batches with varying query and KV lengths, often benefiting from dynamic=True.
@@ -1758,14 +1759,14 @@ class ContinuousBatchingConfig:
     # doubling the VRAM usage. If None, will be automatically detected.
     use_async_batching: bool | None = None
 
-    # Enables CUDA graphs. This can be a tuple of booleans (one for the varlen path and one for the decode fast path),
-    # a boolean which will apply to both paths, or None (automatically inferred). After initialization, the attribute
-    # will ALWAYS be a tuple of booleans. On XPU devices, this enables XPU graph capture.
+    # Enables cuda graphs. This can be a tuple of booleans (one for the varlen path and one for the decode fast path), a
+    # boolean which will apply to both paths, or None (automatically inferred). After calling `decide_use_cuda_graphs`,
+    # the attribute will ALWAYS be a tuple of booleans.
     use_cuda_graph: bool | tuple[bool, bool] | None = None
 
-    # If any of these parameters are set to a non-default, CUDA graphs will be used. Otherwise we automatically infer if
-    # they should be turned on. Padding interval sizes are in tokens and further explained in the docstring at the top
-    # of the continuous_batching/continuous_api.py file.
+    # If any of these parameters are set to a non-default, CUDA graphs will be used. Otherwise we automatically infer
+    # if they should be turned on. Padding interval sizes are in tokens and further explained in the docstring at the
+    # top of the continuous_batching/continuous_api.py file.
     q_padding_interval_size: int = 0
     kv_padding_interval_size: int = 0
 
@@ -1812,8 +1813,8 @@ class ContinuousBatchingConfig:
     drop_unsupported_processors: bool = True
 
     # Disable NCCL's safety net for parallel graph-captured communications. This means it is no longer safe to replay a
-    # CUDA graph with NCCL communication at the same time as 1. another graph with captured comms 2. an eager comm. This
-    # is turned on by default because the above never happens in CB and this gives a nice perf boost.
+    # CUDA graph with NCCL communication at the same time as 1. another CUDA graph with captured comms 2. an eager comm.
+    # This is turned on by default because the above never happens in CB and this gives a nice perf boost.
     disable_nccl_graph_mixing: bool = True
 
     # The time (in seconds) after which a CPU communication will timeout and the process will crash. Leave to None for
@@ -1860,7 +1861,7 @@ class ContinuousBatchingConfig:
 
     @property
     def cuda_graph_booleans(self) -> tuple[bool, bool]:
-        """The CUDA graph booleans for the varlen and decode paths."""
+        """The cuda graph booleans for the varlen and decode paths."""
         if self.use_cuda_graph is None:
             return False, False
         if isinstance(self.use_cuda_graph, bool):

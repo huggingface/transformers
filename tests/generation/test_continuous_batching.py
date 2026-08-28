@@ -2080,13 +2080,13 @@ class ContinuousBatchingTensorParallelTest(unittest.TestCase):
 
     @slow
     def test_continuous_batching_tp_with_cuda_graph(self) -> None:
-        """Test that continuous batching with TP and accelerator graphs is reproducible across runs and that all TP ranks
+        """Test that continuous batching with TP and CUDA graphs is reproducible across runs and that all TP ranks
         agree on the generated tokens — captured-graph collectives must stay in sync across ranks."""
         self._run_cb_worker(use_cuda_graph=True)
 
     @slow
     def test_continuous_batching_tp_with_cuda_graph_and_async(self) -> None:
-        """Test that continuous batching with TP, accelerator graphs, and async batching is reproducible across runs and
+        """Test that continuous batching with TP, CUDA graphs, and async batching is reproducible across runs and
         that all TP ranks agree on the generated tokens — the toughest combination, exercising both captured-graph
         collectives and the async producer/consumer split."""
         self._run_cb_worker(use_cuda_graph=True, use_async_batching=True)
