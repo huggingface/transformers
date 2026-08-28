@@ -292,6 +292,19 @@ if is_kernels_available():
                     ),
                 },
             },
+            # Inference only: the Triton kernel has no backward, so training keeps the
+            # gather-and-sdpa path the layer falls back to.
+            "WeatherNext2Attention": {
+                "cuda": {
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-staging/weathernext2-banded-attention",
+                        layer_name="WeatherNext2Attention",
+                        revision="pr-1091",
+                        # TODO: point at kernels-community once the PR lands and drop this.
+                        trust_remote_code=True,
+                    ),
+                },
+            },
             "EsmFold2TriangleMultiplication": {
                 "cuda": {
                     Mode.INFERENCE: LayerRepository(

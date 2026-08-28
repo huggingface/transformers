@@ -37,6 +37,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import ModelOutput
@@ -256,6 +257,7 @@ def banded_mask_function(attention_mask: torch.Tensor) -> Callable:
     return inner
 
 
+@use_kernel_forward_from_hub("WeatherNext2Attention")
 class WeatherNext2Attention(nn.Module):
     """Local self-attention over mesh nodes.
 

@@ -28,6 +28,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import ModelOutput
@@ -227,6 +228,7 @@ def gather_neighbouring_blocks(states: torch.Tensor) -> torch.Tensor:
     return torch.cat([padded[:, :-2], padded[:, 1:-1], padded[:, 2:]], dim=3)
 
 
+@use_kernel_forward_from_hub("WeatherNext2Attention")
 class WeatherNext2Attention(nn.Module):
     """Local self-attention over mesh nodes.
 
