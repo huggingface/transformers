@@ -699,20 +699,21 @@ diff = '''
 [rules.TRF034]
 description = "Layer classes held in an nn.ModuleList must subclass GradientCheckpointingLayer."
 default_enabled = true
-# Only the real findings are left, as per-model follow-ups: `dinov3_convnext` (`DINOv3ConvNextLayer`),
-# `openai` (`Block`), `tipsv2_dpt` (3 DPT head layers), `x_clip` (`PromptGeneratorLayer`) and `xcodec2`
-# (`Xcodec2ResNetBlock`).
-# The other 12 -- cohere_compass, cosmos3_edge, glm5_next, granite_swa, granitemoe_swa, hunyuan_vl,
-# kimi_k25, muse_glimmer, muse_glimmer_assistant, radio, step3p7, tipsv2 -- were false positives: the rule
-# resolved a class's base chain only inside the file being linted, so a `modular_*.py` layer inheriting
-# another model's layer looked unpatched while the generated `modeling_*.py` did subclass
-# `GradientCheckpointingLayer`. That was mlinter#27, now fixed upstream, so they no longer fire.
-allowlist_models = ["dinov3_convnext", "openai", "tipsv2_dpt", "x_clip", "xcodec2"]
+# `x_clip`'s `PromptGeneratorLayer` is all that is left: an attention stack on a model that does enable
+# gradient checkpointing, so it is a real finding and a follow-up for that model.
+# The list was 17 models and got there in two steps. mlinter#27 fixed base-chain resolution across model
+# files, which cleared the 12 modular layers that only looked unpatched because their generated
+# `modeling_*.py` did subclass `GradientCheckpointingLayer` (cohere_compass, cosmos3_edge, glm5_next,
+# granite_swa, granitemoe_swa, hunyuan_vl, kimi_k25, muse_glimmer, muse_glimmer_assistant, radio, step3p7,
+# tipsv2). mlinter#65 then scoped the rule to the checkpointable trunk, which cleared the remaining four:
+# `dinov3_convnext`, `openai` and `xcodec2` never set `supports_gradient_checkpointing`, so nothing could be
+# skipped, and `tipsv2_dpt`'s three entries are DPT head layers rather than a token-mixing stack.
+allowlist_models = ["x_clip"]
 cutoff_date = "2026-06-20"
 
 [rules.TRF034.explanation]
-what_it_does = "In modeling_*.py and modular_*.py, flags a locally-defined class whose name ends in `Layer` or `Block`, instantiated inside an `nn.ModuleList(...)`, that does not reach `GradientCheckpointingLayer` through its base chain. In modular files, relative imports into sibling model files are followed first; chains that still cannot be resolved are inconclusive. ModuleLists of projections, heads or experts are out of scope: they are not checkpointing boundaries."
-why_bad = "`gradient_checkpointing_enable()` wraps a layer only if it is a GradientCheckpointingLayer. A plain nn.Module in the stack is skipped silently, so training appears checkpointed while still allocating full activations for those layers, and the OOM shows up far from the cause."
+what_it_does = "In modeling_*.py and modular_*.py, flags a locally-defined `*Layer`/`*Block` class instantiated in an `nn.ModuleList(...)` that does not reach `GradientCheckpointingLayer` through its base chain; modular files follow relative imports into sibling models, and unresolved chains are inconclusive. Three things fall out of scope: a model that never sets `supports_gradient_checkpointing = True`, which raises from `gradient_checkpointing_enable()` instead of skipping a layer; a layer holding `nn.BatchNorm*`/`nn.InstanceNorm*`, whose statistics recomputation would update twice; and a stack that is not the model's token mixer, shown by an attention, modulation, mixer or SSM module assigned as `self.x = Y(...)`."
+why_bad = "`gradient_checkpointing_enable()` wraps a layer only if it is a GradientCheckpointingLayer. A plain nn.Module on the trunk is skipped silently, so training looks checkpointed while still allocating full activations, and the OOM surfaces far from the cause. Elsewhere -- a conv backbone, a decode head -- the trade is the model author's call, so the rule stays out."
 diff = '''
 -class AcmeDecoderLayer(nn.Module):
 +class AcmeDecoderLayer(GradientCheckpointingLayer):
