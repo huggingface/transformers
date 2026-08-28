@@ -32,7 +32,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available
 
-from ...test_processing_common import MODALITY_CONFIG, ProcessorTesterMixin
+from ...test_processing_common import MODALITY_TEST_SPECS, ProcessorTesterMixin
 
 
 if is_torch_available():
@@ -63,8 +63,10 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def _setup_video_processor(cls):
         video_processor_class = cls._get_component_class_from_processor("video_processor")
+        print(video_processor_class)
         return video_processor_class.from_pretrained(
-            cls.tiny_model_id, size={"shortest_edge": 12 * 12, "longest_edge": 28 * 28}
+            cls.tiny_model_id,
+            size={"shortest_edge": 12 * 12, "longest_edge": 28 * 28},
         )
 
     @classmethod
@@ -104,9 +106,9 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         This test verifies that processor(single_modality_data) produces the same output as subprocessor(single_modality_data).
         """
         # override to pop processor-only keys from `merged_kwargs`
-        parameterized_config = MODALITY_CONFIG[modality]
+        parameterized_config = MODALITY_TEST_SPECS[modality]
         attributes = self.processor_class.get_attributes()
-        component_key = self._get_subprocessor_name(modality, attributes)
+        component_key = self.get_subprocessor_name(modality, attributes)
         subprocessor = self.get_component(component_key)
 
         # Get all other required components for processor

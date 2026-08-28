@@ -24,7 +24,7 @@ from transformers import (
 from transformers.image_utils import load_image
 from transformers.testing_utils import require_torch, require_vision
 
-from ...test_processing_common import MODALITY_CONFIG, ProcessorTesterMixin, url_to_local_path
+from ...test_processing_common import MODALITY_TEST_SPECS, ProcessorTesterMixin, url_to_local_path
 
 
 if is_torch_available():
@@ -138,14 +138,13 @@ class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
     # Rewrite as Fuyu supports tokenizer kwargs only when image is None.
     def test_unstructured_kwargs_batched_0_images(self):
         attributes = self.processor_class.get_attributes()
-        self._skip_unless_modality_and_tokenizer_present("images", attributes)
+        self.skip_unless_modality_and_tokenizer_present("images", attributes)
         processor = self.get_processor()
-        self.skip_processor_without_typed_kwargs(processor)
 
         input_str = self.prepare_text_inputs(batch_size=2, modalities="image")
         modal_input = self._prepare_modality_input("images", batch_size=2)
         max_length = 76  # just hardcode
-        init_time_kwargs = MODALITY_CONFIG["images"]["init_time_kwargs"]
+        init_time_kwargs = MODALITY_TEST_SPECS["images"]["init_time_kwargs"]
         inputs = self._call_processor(
             processor,
             "images",

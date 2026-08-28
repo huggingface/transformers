@@ -19,9 +19,7 @@ import numpy as np
 from huggingface_hub import hf_hub_download
 from parameterized import parameterized
 
-from transformers import (
-    Qwen3OmniMoeProcessor,
-)
+from transformers import Qwen3OmniMoeProcessor
 from transformers.testing_utils import (
     require_librosa,
     require_torch,
@@ -32,7 +30,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available
 
-from ...test_processing_common import MODALITY_CONFIG, ProcessorTesterMixin
+from ...test_processing_common import MODALITY_TEST_SPECS, ProcessorTesterMixin
 
 
 if is_torch_available():
@@ -47,6 +45,11 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Qwen3OmniMoeProcessor
     # Tiny processor created with make_tiny_processor.py from "Qwen/Qwen2.5-Omni-7B"
     tiny_model_id = "hf-internal-testing/tiny-processor-qwen3_omni_moe"
+
+    videos_unstructured_max_length = 785
+    videos_text_kwargs_max_length = 785
+    videos_text_kwargs_override_max_length = 785
+    audio_unstructured_max_length = 150
 
     @classmethod
     def _setup_image_processor(cls):
@@ -97,9 +100,9 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         """
         # override to pop processor-only keys from `merged_kwargs`
         attributes = self.processor_class.get_attributes()
-        component_key = self._get_subprocessor_name(modality, attributes)
+        component_key = self.get_subprocessor_name(modality, attributes)
 
-        parameterized_config = MODALITY_CONFIG[modality]
+        parameterized_config = MODALITY_TEST_SPECS[modality]
         subprocessor = self.get_component(component_key)
 
         # Get all other required components for processor

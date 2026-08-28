@@ -30,7 +30,7 @@ class PPFormulaNetProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_model_input_names(self):
         pass
 
-    def _skip_unless_modality_and_tokenizer_present(
+    def skip_unless_modality_and_tokenizer_present(
         self, modality: str, attributes: list, require_tokenizer: bool = True
     ):
         self.skipTest("PPFormulaNet does not need input_ids")

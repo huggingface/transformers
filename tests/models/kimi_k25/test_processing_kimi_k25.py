@@ -75,7 +75,6 @@ class Kimi_K25ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def test_kwargs_overrides_custom_image_processor_kwargs(self):
         processor = self.get_processor()
-        self.skip_processor_without_typed_kwargs(processor)
 
         input_str = self.prepare_text_inputs()
         image_input = self.prepare_images_inputs()

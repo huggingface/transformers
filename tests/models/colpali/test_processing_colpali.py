@@ -130,7 +130,6 @@ class ColPaliProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor_components["tokenizer"] = self.get_component("tokenizer", max_length=117, padding="max_length")
 
         processor = self.processor_class(**processor_components)
-        self.skip_processor_without_typed_kwargs(processor)
 
         image_input = self.prepare_images_inputs()
 
@@ -145,7 +144,6 @@ class ColPaliProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor_components["tokenizer"] = self.get_component("tokenizer", padding=None)
 
         processor = self.processor_class(**processor_components)
-        self.skip_processor_without_typed_kwargs(processor)
 
         image_input = self.prepare_images_inputs()
 
@@ -162,7 +160,6 @@ class ColPaliProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_unstructured_kwargs_0_images(self):
         processor_components = self.prepare_components()
         processor = self.processor_class(**processor_components)
-        self.skip_processor_without_typed_kwargs(processor)
 
         input_str = self.prepare_text_inputs()
         inputs = processor(
@@ -179,7 +176,6 @@ class ColPaliProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_unstructured_kwargs_batched_0_images(self):
         processor_components = self.prepare_components()
         processor = self.processor_class(**processor_components)
-        self.skip_processor_without_typed_kwargs(processor)
 
         image_input = self.prepare_images_inputs(batch_size=2)
         inputs = processor(
@@ -196,7 +192,6 @@ class ColPaliProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_doubly_passed_kwargs(self):
         processor_components = self.prepare_components()
         processor = self.processor_class(**processor_components)
-        self.skip_processor_without_typed_kwargs(processor)
 
         image_input = self.prepare_images_inputs()
         with self.assertRaises(ValueError):
@@ -210,7 +205,6 @@ class ColPaliProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_structured_kwargs_nested_0_images(self):
         processor_components = self.prepare_components()
         processor = self.processor_class(**processor_components)
-        self.skip_processor_without_typed_kwargs(processor)
 
         input_str = self.prepare_text_inputs()
 
@@ -222,14 +216,13 @@ class ColPaliProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         }
 
         inputs = processor(text=input_str, **all_kwargs)
-        self.skip_processor_without_typed_kwargs(processor)
 
         self.assertEqual(inputs[self.text_input_name].shape[-1], 76)
 
     def test_structured_kwargs_nested_from_dict_0_images(self):
         processor_components = self.prepare_components()
         processor = self.processor_class(**processor_components)
-        self.skip_processor_without_typed_kwargs(processor)
+
         image_input = self.prepare_images_inputs()
 
         # Define the kwargs for each modality

@@ -22,7 +22,7 @@ from transformers import CsmProcessor
 from transformers.testing_utils import require_torch
 from transformers.utils import is_torch_available
 
-from ...test_processing_common import MODALITY_CONFIG, ProcessorTesterMixin
+from ...test_processing_common import MODALITY_TEST_SPECS, ProcessorTesterMixin
 
 
 if is_torch_available():
@@ -60,9 +60,9 @@ class CsmProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def test_subprocessor_defaults_3_audio(self):
         # override - drop unused kwargs for `subprocessor`
-        parameterized_config = MODALITY_CONFIG["audio"]
+        parameterized_config = MODALITY_TEST_SPECS["audio"]
         attributes = self.processor_class.get_attributes()
-        component_key = self._get_subprocessor_name("audio", attributes)
+        component_key = self.get_subprocessor_name("audio", attributes)
 
         subprocessor = self.get_component(component_key)
 

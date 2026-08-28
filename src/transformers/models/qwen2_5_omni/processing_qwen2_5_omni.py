@@ -164,8 +164,8 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
         if videos is not None:
             videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
 
-            fps = output_kwargs["videos_kwargs"].get("fps", 2.0)
-            fps = fps if fps is not None else 2.0  # fps was set to `None` to turn off sampling, fallback
+            fps = output_kwargs["videos_kwargs"].get("fps")
+            fps = fps if fps is not None else 2.0  # default fps not saved in official ckpt, hardcode
             video_grid_thw = videos_inputs["video_grid_thw"]
             second_per_grid_ts = [self.video_processor.temporal_patch_size / fps] * len(video_grid_thw)
             videos_inputs["video_second_per_grid"] = second_per_grid_ts

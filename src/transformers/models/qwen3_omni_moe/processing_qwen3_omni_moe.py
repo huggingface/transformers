@@ -25,7 +25,7 @@ import numpy as np
 from ...audio_utils import AudioInput
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, VideosKwargs
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring
 from ...video_utils import VideoInput
@@ -138,7 +138,7 @@ class Qwen3OmniMoeProcessor(ProcessorMixin):
         images: ImageInput | None = None,
         videos: VideoInput | None = None,
         audio: AudioInput | None = None,
-        **kwargs,
+        **kwargs: Unpack[Qwen3OmniMoeProcessorKwargs],
     ) -> BatchFeature:
         if text is None:
             raise ValueError("You need to specify either a `text` input to process.")

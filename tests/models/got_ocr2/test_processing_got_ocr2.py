@@ -17,7 +17,7 @@ import unittest
 from transformers import GotOcr2Processor
 from transformers.testing_utils import is_torch_available, require_vision
 
-from ...test_processing_common import MODALITY_CONFIG, ProcessorTesterMixin
+from ...test_processing_common import MODALITY_TEST_SPECS, ProcessorTesterMixin
 
 
 if is_torch_available():
@@ -95,7 +95,7 @@ class GotOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def test_subprocessor_defaults_1_images(self):
         # overriden - pop certina keys from `merged_kwargs` which are used only by processor
-        parameterized_config = MODALITY_CONFIG["images"]
+        parameterized_config = MODALITY_TEST_SPECS["images"]
         subprocessor = self.get_component(parameterized_config["component_key"])
 
         # Get all other required components for processor
