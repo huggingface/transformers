@@ -628,8 +628,8 @@ class WeatherNext2ForWeatherForecasting(WeatherNext2PreTrainedModel):
         # say where the model actually lives.
         existing = next(self.parameters(), None)
         device = existing.device if existing is not None and existing.device.type != "meta" else None
-        self.register_buffer("sigmoid_gate", gate.to(device), persistent=False)
-        self.register_buffer("sigmoid_shift", shifts.to(device), persistent=False)
+        self.sigmoid_gate = nn.Buffer(gate.to(device), persistent=False)
+        self.sigmoid_shift = nn.Buffer(shifts.to(device), persistent=False)
 
     @can_return_tuple
     @auto_docstring
