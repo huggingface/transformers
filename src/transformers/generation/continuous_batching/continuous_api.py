@@ -127,6 +127,13 @@ class OutputRouter:
 
             loop.call_soon_threadsafe(_run_batch)
 
+    def fail_and_deliver(self, state: RequestState, error: Exception) -> None:
+        """Fail the request and deliver the output to the output router. This is made from the OutputRouter so that it
+        can be called even when a batch processor could not be created."""
+        state.status = RequestStatus.FAILED
+        state.error = str(error)
+        self.deliver(state.to_generation_output())
+
 
 class BackgroundThreadStatus:
     """Tracks the status of the background thread locally and in its TP group. The status is an int that can only
@@ -141,6 +148,7 @@ class BackgroundThreadStatus:
         self._local_status_lock = threading.Lock()
         self._local_status = self.DONT_STOP
         self._tp_status = self.DONT_STOP
+        self.fatal_error = None
 
     def clear(self) -> None:
         """Clear the local and TP statuses. This method should ONLY be called by the main thread itself BEFORE starting
@@ -148,6 +156,7 @@ class BackgroundThreadStatus:
         self._tp_status = self.DONT_STOP
         with self._local_status_lock:
             self._local_status = self.DONT_STOP
+        self.fatal_error = None
 
     def request_stop(self, status: int, global_rank: int) -> None:
         """Request the background thread to stop. This does not take effect immediately, only after the TP group has
@@ -159,6 +168,13 @@ class BackgroundThreadStatus:
         logger.info(
             f"Rank {global_rank} requested background thread to stop with {status = }. Now {self._local_status = }"
         )
+
+    def record_fatal_error(self, error: Exception) -> None:
+        """Record a fatal error if none has been recorded yet."""
+        if self.fatal_error is not None:
+            logger.error(f"A fatal error was already recorded, ignoring later error: {error}")
+        else:
+            self.fatal_error = error
 
     def mark_as_stopped(self) -> None:
         """Mark the background thread as stopped. This should be called by the main thread when the generation loop
@@ -174,6 +190,14 @@ class BackgroundThreadStatus:
         # We need to use the lock here because main thread might change the local status after the comm
         with self._local_status_lock:
             self._local_status = max(self._local_status, tp_status)
+
+    def can_accept_new_requests(self) -> str | None:
+        """If the background thread cannot accept new requests, return the reason why. Otherwise, returns None."""
+        if self.fatal_error is not None:
+            return "The background thread died with a fatal error."
+        if self.local_status != self.DONT_STOP:
+            return "The background thread is stopping."
+        return None
 
     @property
     def local_status(self) -> int:
@@ -346,16 +370,13 @@ class ContinuousBatchProcessor:
 
     def _handle_request_error(self, error: Exception, state: RequestState) -> None:
         """Handle general request processing error."""
-        state.status = RequestStatus.FAILED
-        state.error = str(error)
-
         # Include any generated tokens if this is an active request
         if isinstance(state.request_id, str):
             state.generated_tokens = self.scheduler.get_active_request_static_outputs(state.request_id)
         else:
             state.generated_tokens = []
-
-        self.output_router.deliver(state.to_generation_output())
+        # Actual failing of the request
+        self.output_router.fail_and_deliver(state, error)
 
     def prepare_next_batch(self) -> bool:
         """Prepare tensors and metadata for the next model forward pass. Returns True if there are requests to process,
@@ -588,7 +609,6 @@ class ContinuousBatchingManager:
         self._generation_thread = None
 
         # Control flow attributes
-        self.fatal_error: Exception | None = None
         self.warmed_up = False  # Set to True after warmup is completed. Useful for persistent managers.
 
         # Model-related attributes
@@ -620,7 +640,7 @@ class ContinuousBatchingManager:
 
         # Fully resolve the continuous batching config now that we have the model, the config and the logit processor
         self.continuous_batching_config = resolve_continuous_batching_config(
-            config=self.model.config,
+            config=self.model.config.get_text_config(),
             cb_config=continuous_batching_config,
             workload_hints=workload_hints,
             has_logit_processors=self.logit_processor.do_processing,
@@ -655,7 +675,7 @@ class ContinuousBatchingManager:
                     "If you need to use eager or sdpa, use paged|eager or paged|sdpa as the `attn_implementation`."
                 )
             else:
-                logger.warning(f"{msg} Consider using a flash `attn_implementation` when loading the model.")
+                logger.info(f"{msg} Consider using a flash `attn_implementation` when loading the model.")
 
         # Switch to a paged implementation (always entered if conversion to flash happened)
         if "paged|" not in target_implem:
@@ -682,7 +702,6 @@ class ContinuousBatchingManager:
             logger.warning("Manager thread is already running.")
             return None
         self.background_thread_status.clear()
-        self.fatal_error = None
         self._generation_thread = threading.Thread(target=self._run_generation_loop)
         self._generation_thread.start()
 
@@ -787,10 +806,11 @@ class ContinuousBatchingManager:
         # If this process is not a TP driver, request submission is a no-op
         if not self.is_tp_driver:
             return None
-        # If the manager is not accepting new requests, throw a warning and return None
-        if self.background_thread_status.local_status >= BackgroundThreadStatus.FLUSH_AND_STOP:
+        # If the manager is not accepting new requests, stop here.
+        denial_msg = self.background_thread_status.can_accept_new_requests()
+        if denial_msg is not None:
             preview = f"{input_ids[:3]}"[:-1] + ", ..., " + f"{input_ids[-3:]}"[1:]
-            logger.warning(f"Background thread is stopping. Request with ids {preview} will be dropped.")
+            logger.warning(f"{denial_msg}. Request with ids {preview} will be dropped.")
             return None
 
         if request_id is None:
@@ -859,13 +879,16 @@ class ContinuousBatchingManager:
             self.cancel_queue.put(request_id)
             self._has_new_requests.set()
 
-    # TODO:handle benchmarking properly when updating / fixing the requeue logic
+    # TODO (remi-or) : handle benchmarking properly when updating / fixing the requeue logic
     # TODO (remi-or) : this NEEDS to get fixed in a future PR -- it's quite wasteful
     def get_result(self, request_id: str | None = None, timeout: float | None = None) -> GenerationOutput | None:
         """Retrieve one result from the output queue. If an ID is provided, returns the first matching request. If a
         timeout is provided, returns None after the timeout (in seconds)."""
-        if self._generation_thread is None and self.output_router.output_queue.empty():
-            return None
+        # Stop if the output queue is empty and the bg thread is not going to produce new results (crashed or stopped)
+        if self.output_router.output_queue.empty():
+            if self._generation_thread is None or self.background_thread_status.fatal_error is not None:
+                return None
+        # Otherwise, wait for a result from the output queue
         try:
             result = self.output_router.output_queue.get(block=True, timeout=timeout)
             if request_id is not None and result.request_id != request_id:
@@ -919,6 +942,35 @@ class ContinuousBatchingManager:
 
     # ---------------------------------------- BACKGROUND THREAD ONLY METHODS ---------------------------------------- #
 
+    def _generation_loop_body(self, batch_processor: ContinuousBatchProcessor, bootstrapping: bool) -> bool:
+        """Body of the generation loop. Returns True if the loop should continue, False otherwise. Behaves differently
+        if this is for bootstrapping an async run: in that case, there is no need to update the batch, and the first
+        step should exit the bootstrapping loop."""
+        # If some request is available, perform a generation step
+        requests_available = batch_processor.prepare_next_batch()
+        if requests_available:
+            self._generation_step()
+            self.current_batch += 1
+            if bootstrapping:  # no update when bootstrapping an async batching generation
+                return False
+            else:
+                batch_processor.update_batch()
+                return True
+        # Stop waiting if the TP group is hard-stopping
+        elif self.background_thread_status.tp_status == BackgroundThreadStatus.HARD_STOP:
+            return False
+        # Stop waiting if the TP group is flushing and there are no pending requests
+        elif (
+            self.background_thread_status.tp_status == BackgroundThreadStatus.FLUSH_AND_STOP
+            and not batch_processor.has_pending_requests()
+        ):
+            return False
+        # Otherwise, we wait for new requests and retry
+        else:
+            self._has_new_requests.wait(timeout=0.1)  # wait for new requests instead of busy-spinning.
+            self._has_new_requests.clear()
+            return True
+
     @torch.no_grad()
     def _run_generation_loop(self) -> None:
         """Main processing loop running in the background thread."""
@@ -926,6 +978,10 @@ class ContinuousBatchingManager:
 
         # Everything is inside this try / except / finally block so we can handle critical errors gracefully
         try:
+            # Scope the device for the generation loop (thread-scoped)
+            if self.model.device.type == "cuda" and self.model.device.index is not None:
+                torch.cuda.set_device(self.model.device)
+
             # Start the generation loop
             batch_processor = self._create_batch_processor()
             self.batch_processor = batch_processor  # register the batch processor for main thread access
@@ -933,35 +989,12 @@ class ContinuousBatchingManager:
 
             # If using the async API, we bootstrap the first batch w/out update
             if batch_processor.use_async_batching:
-                if not batch_processor.prepare_next_batch():
-                    raise RuntimeError("Failed to bootstrap the first batch.")
-                self._generation_step()
-                self.current_batch += 1
+                while self._generation_loop_body(batch_processor, bootstrapping=True):
+                    pass
 
             # The loop continues until a stop signal has been broadcasted in the TP group
-            while True:
-                requests_available = batch_processor.prepare_next_batch()  # this is where the TP group communicates
-
-                # This only happens if the TP group is not stopping (any kind of stop) so we can check the status after
-                if requests_available:
-                    self._generation_step()
-                    batch_processor.update_batch()
-                    self.current_batch += 1
-
-                # Stop the loop if the TP group is hard-stopping
-                elif self.background_thread_status.tp_status == BackgroundThreadStatus.HARD_STOP:
-                    break
-                # Stop the loop if the TP group is flushing and there are no pending requests
-                elif (
-                    self.background_thread_status.tp_status == BackgroundThreadStatus.FLUSH_AND_STOP
-                    and not batch_processor.has_pending_requests()
-                ):
-                    break
-
-                # Otherwise, we wait for new requests and re-enter the loop
-                else:
-                    self._has_new_requests.wait(timeout=0.1)  # wait for new requests instead of busy-spinning.
-                    self._has_new_requests.clear()
+            while self._generation_loop_body(batch_processor, bootstrapping=False):
+                pass
 
             # In async mode, the last batch's results are still in flight: switch to the right IO pair and process them
             # Also happens for a hard stop, since the results are already available on the device
@@ -999,7 +1032,7 @@ class ContinuousBatchingManager:
 
         # Create the PagedAttentionCache
         paged_attention_cache = PagedAttentionCache(
-            config=self.model.config,
+            config=self.model.config.get_text_config(),
             continuous_batching_config=self.continuous_batching_config,
             device=self.model.device,
             distributed_helper=self.distributed_helper,
@@ -1036,7 +1069,7 @@ class ContinuousBatchingManager:
         # Create the batch processor
         batch_processor = ContinuousBatchProcessor(
             cache=paged_attention_cache,
-            config=self.model.config,
+            config=self.model.config.get_text_config(),
             generation_config=self.generation_config,
             continuous_batching_config=self.continuous_batching_config,
             logit_processor=self.logit_processor,
@@ -1053,8 +1086,6 @@ class ContinuousBatchingManager:
 
     def _handle_critical_error(self, error: Exception, batch_processor: ContinuousBatchProcessor | None) -> None:
         """Handle critical errors that terminate the generation loop."""
-        # Record the error so callers (e.g. the serving layer) can fail fast on subsequent requests
-        self.fatal_error = error
         # Request a hard stop
         self.background_thread_status.request_stop(
             status=BackgroundThreadStatus.HARD_STOP, global_rank=self.distributed_helper.global_rank
@@ -1064,6 +1095,8 @@ class ContinuousBatchingManager:
         self.distributed_helper.tp_all_reduce_state(0, BackgroundThreadStatus.HARD_STOP)
         # Fail all remaining requests
         self._fail_all_remaining_requests(error, batch_processor)
+        # After failing the remaining requests (and so retrieving their partial outputs), record the fatal error
+        self.background_thread_status.record_fatal_error(error)
 
     def _fail_all_remaining_requests(self, error: Exception, batch_processor: ContinuousBatchProcessor | None) -> None:
         """Fail all remaining requests in the input queue and active requests."""
@@ -1073,6 +1106,8 @@ class ContinuousBatchingManager:
                 req_data = self.input_queue.get_nowait()
                 if batch_processor is not None:
                     batch_processor._handle_request_error(error, req_data)
+                else:
+                    self.output_router.fail_and_deliver(req_data, error)
         except queue.Empty:
             pass
         # Fail active and waiting requests
@@ -1182,11 +1217,11 @@ class ContinuousMixin:
             workload_hints=workload_hints,
         )
         if warmup and not manager.warmed_up:
-            # Warmup is long (~30 sec): best to signal the user it's happening than let them think the manager is stuck
-            logger.warning("Warming up for continuous batching...")
+            # TODO: have a progress bar for the warmup as well, like other inference engine
+            logger.info("Warming up for continuous batching...")
             start = perf_counter()
             manager.warmup()
-            logger.warning(f"Warming up completed in {perf_counter() - start:.2f}s.")
+            logger.info(f"Warming up completed in {perf_counter() - start:.2f}s.")
         manager.start()
         try:
             yield manager
@@ -1205,7 +1240,7 @@ class ContinuousMixin:
         generation_config: GenerationConfig | None = None,
         continuous_batching_config: ContinuousBatchingConfig | None = None,
         record_timestamps: bool = False,
-        progress_bar: bool = True,
+        progress_bar: bool = False,
         persistent_manager: bool = False,
         warmup: bool = True,
         **kwargs,
@@ -1229,7 +1264,7 @@ class ContinuousMixin:
 
         # If the logger level is less than DEBUG, disable the progress bar
         if logger.getEffectiveLevel() <= logging.DEBUG:
-            logger.warning("Progress bar is disabled when logger level is less than DEBUG")
+            logger.info("Progress bar is disabled when logger level is less than DEBUG")
             progress_bar = False
 
         # Compute the total number of requests
@@ -1275,6 +1310,7 @@ class ContinuousMixin:
         # Main loop
         results = {}
         finished_count = 0
+        request_ids = []  # if the manager fails before add_requests returns, request_ids should not be unbounded
         with manager_cm as manager, logging_cm, pbar_cm as pbar:
             try:
                 request_ids = manager.add_requests(
@@ -1299,13 +1335,18 @@ class ContinuousMixin:
 
         # Re-order requests to match the order of the inputs
         reordered_results = {}
-        missing_keys = []
+        missing_keys, failed_keys = [], []
         for req_id in request_ids:
             result = results.get(req_id)
             if result is not None:
                 reordered_results[req_id] = result
+                if result.error is not None:
+                    failed_keys.append(req_id)
             else:
                 missing_keys.append(req_id)
+
         if missing_keys:
             logger.error(f"Requests {missing_keys} not found in results.")
+        if failed_keys:
+            logger.error(f"Requests {failed_keys} failed during generation.")
         return reordered_results

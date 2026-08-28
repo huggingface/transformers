@@ -1,35 +1,93 @@
 import os
+import time
 import zipfile
 
 from get_ci_error_statistics import download_artifact, get_artifacts_links, get_github_json
 
 
 def get_daily_ci_runs(token, num_runs=7, workflow_id=None):
-    """Get the workflow runs of the scheduled (daily) CI.
+    """Get the most recent workflow runs of the scheduled (daily) CI on the main branch.
 
-    This only selects the runs triggered by the `schedule` event on the `main` branch.
+    Queries event=schedule; falls back to event=workflow_run when no results are found
+    (AMD CI is triggered via workflow_run, not schedule).  Retries on stale GitHub API
+    responses — see PR #48374 for background.
     """
-    # The id of a workflow (not of a workflow run).
-    # From a given workflow run (where we have workflow run id), we can get the workflow id by going to
-    # https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id}
-    # and check the `workflow_id` key.
-
-    if not workflow_id:
-        workflow_run_id = os.environ["GITHUB_RUN_ID"]
-        workflow_run = get_github_json(
-            f"https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id}", token=token
+    # Fetch current run metadata to (1) resolve workflow_id when not given, and (2) compare
+    # workflow IDs to decide whether stale-cache detection applies (see stale_check below).
+    current_run_id = int(os.environ.get("GITHUB_RUN_ID", 0))
+    current_workflow_id = None
+    if current_run_id:
+        current_run = get_github_json(
+            f"https://api.github.com/repos/huggingface/transformers/actions/runs/{current_run_id}", token=token
         )
-        workflow_id = workflow_run["workflow_id"]
+        current_workflow_id = current_run["workflow_id"]
+        if not workflow_id:
+            workflow_id = current_workflow_id
 
     url = f"https://api.github.com/repos/huggingface/transformers/actions/workflows/{workflow_id}/runs"
-    # On `main` branch + event being `schedule` + not returning PRs + only `num_runs` results
     url += f"?branch=main&exclude_pull_requests=true&per_page={num_runs}"
 
-    result = get_github_json(f"{url}&event=schedule", token=token)
-    workflow_runs = result["workflow_runs"]
-    if len(workflow_runs) == 0:
-        result = get_github_json(f"{url}&event=workflow_run", token=token)
+    # The GitHub Actions search index (used for event=/branch= filters) can lag badly:
+    # the same URL has returned total_count values of 190, 238, 311, and 413 within minutes
+    # from different backend nodes (PR #48374).  We detect a stale response by checking
+    # that GITHUB_RUN_ID appears in the results; if absent we retry.
+    #
+    # Stale-check is only active when querying the *same* workflow as the current run AND
+    # the current run is schedule-triggered (so GITHUB_RUN_ID is guaranteed to be in the
+    # results when the API is fresh).  The two remaining uncovered paths are left for a
+    # follow-up PR once this path is confirmed stable:
+    #   • AMD CI querying its own history → falls into the event=workflow_run fallback below
+    #     (AMD CI is triggered via workflow_run, not schedule).
+    #   • AMD CI querying the matching Nvidia run (different workflow_id) → stale_check=False.
+    stale_check = (
+        current_workflow_id is not None
+        and int(workflow_id) == int(current_workflow_id)
+        and os.environ.get("GITHUB_EVENT_NAME") == "schedule"
+    )
+    max_attempts = 5 if stale_check else 1
+
+    for attempt in range(1, max_attempts + 1):
+        schedule_url = f"{url}&event=schedule"
+        print(f"[DEBUG get_daily_ci_runs] Querying (attempt {attempt}/{max_attempts}): {schedule_url}")
+        result = get_github_json(schedule_url, token=token)
         workflow_runs = result["workflow_runs"]
+        print(
+            f"[DEBUG get_daily_ci_runs] event=schedule returned {len(workflow_runs)} runs (total_count={result.get('total_count')}):"
+        )
+        for r in workflow_runs:
+            print(
+                f"  id={r['id']} status={r['status']} conclusion={r.get('conclusion')} created_at={r['created_at']} event={r['event']}"
+            )
+
+        if len(workflow_runs) == 0:
+            # AMD CI runs appear under event=workflow_run (triggered via the workflow_run
+            # event, not schedule).  Stale-check for this path is TODO (see above).
+            workflow_run_url = f"{url}&event=workflow_run"
+            print(f"[DEBUG get_daily_ci_runs] Falling back to: {workflow_run_url}")
+            result = get_github_json(workflow_run_url, token=token)
+            workflow_runs = result["workflow_runs"]
+            print(f"[DEBUG get_daily_ci_runs] event=workflow_run returned {len(workflow_runs)} runs:")
+            for r in workflow_runs:
+                print(
+                    f"  id={r['id']} status={r['status']} conclusion={r.get('conclusion')} created_at={r['created_at']} event={r['event']}"
+                )
+            break
+
+        if stale_check and current_run_id not in {r["id"] for r in workflow_runs}:
+            if attempt < max_attempts:
+                print(
+                    f"[WARN get_daily_ci_runs] Current run {current_run_id} not found in results — "
+                    f"likely a stale GitHub API cache (total_count={result.get('total_count')}). "
+                    f"Retrying in 30s..."
+                )
+                time.sleep(30)
+                continue
+            else:
+                print(
+                    f"[WARN get_daily_ci_runs] Current run {current_run_id} still not found after "
+                    f"{max_attempts} attempts — proceeding with stale results."
+                )
+        break
 
     return workflow_runs
 
@@ -49,7 +107,11 @@ def get_last_daily_ci_run(token, workflow_run_id=None, workflow_id=None, commit_
         return workflow_run
 
     workflow_runs = get_daily_ci_runs(token, workflow_id=workflow_id)
+    print(f"[DEBUG get_last_daily_ci_run] Iterating {len(workflow_runs)} runs (commit_sha={commit_sha!r}):")
     for run in workflow_runs:
+        print(
+            f"  checking id={run['id']} status={run['status']} conclusion={run.get('conclusion')} created_at={run['created_at']} head_sha={run['head_sha']}"
+        )
         if commit_sha in [None, ""] and run["status"] == "completed":
             workflow_run = run
             break
@@ -58,12 +120,17 @@ def get_last_daily_ci_run(token, workflow_run_id=None, workflow_id=None, commit_
             workflow_run = run
             break
 
+    print(f"[DEBUG get_last_daily_ci_run] Selected run: {workflow_run['id'] if workflow_run else None}")
     return workflow_run
 
 
 def get_last_daily_ci_workflow_run_id(token, workflow_run_id=None, workflow_id=None, commit_sha=None):
     """Get the last completed workflow run id of the scheduled (daily) CI."""
+    print(
+        f"[DEBUG get_last_daily_ci_workflow_run_id] called with workflow_run_id={workflow_run_id!r} workflow_id={workflow_id!r} commit_sha={commit_sha!r}"
+    )
     if workflow_run_id is not None and workflow_run_id != "":
+        print(f"[DEBUG get_last_daily_ci_workflow_run_id] returning early with workflow_run_id={workflow_run_id!r}")
         return workflow_run_id
 
     workflow_run = get_last_daily_ci_run(token, workflow_id=workflow_id, commit_sha=commit_sha)
@@ -71,6 +138,7 @@ def get_last_daily_ci_workflow_run_id(token, workflow_run_id=None, workflow_id=N
     if workflow_run is not None:
         workflow_run_id = workflow_run["id"]
 
+    print(f"[DEBUG get_last_daily_ci_workflow_run_id] returning workflow_run_id={workflow_run_id!r}")
     return workflow_run_id
 
 

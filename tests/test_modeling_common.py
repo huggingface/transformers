@@ -91,6 +91,7 @@ from transformers.testing_utils import (
     get_device_properties,
     hub_retry,
     is_flaky,
+    preserve_module_forwards,
     require_accelerate,
     require_bitsandbytes,
     require_deepspeed,
@@ -105,6 +106,7 @@ from transformers.testing_utils import (
     require_torch_mps,
     require_torch_multi_accelerator,
     require_torch_multi_gpu,
+    rocm_has_sdpa_flash_backend,
     run_first,
     run_test_using_subprocess,
     set_config_for_less_flaky_test,
@@ -135,8 +137,8 @@ if is_torch_available():
     from torch import nn
 
     from transformers import MODEL_MAPPING
+    from transformers.distributed.tensor_parallel import _get_parameter_tp_plan
     from transformers.integrations.accelerate import compute_module_sizes
-    from transformers.integrations.tensor_parallel import _get_parameter_tp_plan
     from transformers.modeling_utils import load_state_dict
     from transformers.pytorch_utils import id_tensor_storage
 
@@ -1697,7 +1699,8 @@ class ModelTesterMixin(ExportTesterMixin):
                 loss = model(**inputs).loss
                 loss.backward()
                 grad_expected_params = [(n, p) for n, p in model.named_parameters() if p.grad is not None]
-                non_zero_grads_normal = {n for n, p in grad_expected_params if p.grad.abs().sum() > 0}
+                normal_grad_sums = {n: p.grad.abs().sum().item() for n, p in grad_expected_params}
+                non_zero_grads_normal = {n for n, s in normal_grad_sums.items() if s > 0}
 
                 # reset all gradients to zero for the comparison with the gradient checkpointing run
                 optimizer.zero_grad()
@@ -1722,8 +1725,33 @@ class ModelTesterMixin(ExportTesterMixin):
 
                 # check that all the parameters that had non-zero gradients before, have non-zero grads with gradient
                 # checkpointing. divergence indicates a different forward-pass environment that needs special handling.
-                non_zero_grads_gradcp = {n for n, p in grad_expected_params if p.grad.abs().sum() > 0}
-                self.assertEqual(non_zero_grads_gradcp, non_zero_grads_normal)
+                gradcp_grad_sums = {n: p.grad.abs().sum().item() for n, p in grad_expected_params}
+                non_zero_grads_gradcp = {n for n, s in gradcp_grad_sums.items() if s > 0}
+
+                if non_zero_grads_gradcp != non_zero_grads_normal:
+                    only_in_normal = non_zero_grads_normal - non_zero_grads_gradcp
+                    only_in_gradcp = non_zero_grads_gradcp - non_zero_grads_normal
+
+                    # Observed flakiness (see #48332): a parameter's gradient is exactly 0.0 in one
+                    # run and a tiny value (≤1e-6, orders of magnitude below real gradients) in the
+                    # other. Either side can be the near-zero one. Treat such pairs as not a mismatch.
+                    _fp_noise = 1e-6
+                    only_in_normal = {
+                        n
+                        for n in only_in_normal
+                        if not (gradcp_grad_sums[n] == 0.0 and normal_grad_sums[n] <= _fp_noise)
+                    }
+                    only_in_gradcp = {
+                        n
+                        for n in only_in_gradcp
+                        if not (normal_grad_sums[n] == 0.0 and gradcp_grad_sums[n] <= _fp_noise)
+                    }
+                    self.assertEqual(
+                        # set union
+                        only_in_gradcp | only_in_normal,
+                        set(),
+                        f"non_zero_grads mismatch after filtering fp noise: only_in_normal={only_in_normal}, only_in_gradcp={only_in_gradcp}",
+                    )
 
                 if self.test_all_params_have_gradient:
                     for k, v in model.named_parameters():
@@ -3804,8 +3832,8 @@ class ModelTesterMixin(ExportTesterMixin):
         device_type, major, minor = get_device_properties()
         if device_type == "cuda" and major < 8:
             self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
-        elif device_type == "rocm" and major < 9:
-            self.skipTest(reason="This test requires an AMD GPU with compute capability >= 9.0")
+        elif device_type == "rocm" and not rocm_has_sdpa_flash_backend(major):
+            self.skipTest(reason="This AMD GPU has no SDPA flash backend available")
         elif device_type not in ["cuda", "rocm", "xpu"]:
             self.skipTest(reason="This test requires a Nvidia or AMD GPU, or an Intel XPU")
 
@@ -3825,6 +3853,10 @@ class ModelTesterMixin(ExportTesterMixin):
                 "evolla",
                 "modernbert",
                 "gemma3",
+                # gemma4: the block-overlay mask in create_masks_for_vision_model forces mask
+                # materialization unconditionally, so SDPA can never use the FA backend when the
+                # vision portion is involved. This is by design and not fixable on the modeling side.
+                "gemma4",
                 "t5gemma",
                 "diffllama",
                 "dpr",
@@ -5791,8 +5823,10 @@ class ModelTesterMixin(ExportTesterMixin):
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
 
-            # Using kernels should not raise a `ValueError`
-            model.use_kernels = True
+            # `kernelize` mutates module-level singletons, so restore them to keep later tests kernel-free
+            with preserve_module_forwards(model):
+                # Using kernels should not raise a `ValueError`
+                model.use_kernels = True
 
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
     def test_model_rope_scaling_from_config(self, scaling_type):
