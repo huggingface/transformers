@@ -54,6 +54,9 @@ from transformers.generation.continuous_batching.requests import (
 from transformers.generation.continuous_batching.utils import (
     SUPPORTED_GRAPH_ACCELERATOR_TYPES,
 )
+from transformers.integrations.eager_paged import eager_paged_attention_forward
+from transformers.integrations.sdpa_paged import sdpa_attention_paged_forward
+
 from transformers.testing_utils import (
     backend_empty_cache,
     backend_memory_allocated,
@@ -219,6 +222,20 @@ def regular_generate(
 
 # Class for all continuous batching tests that do not require any accelerator. Usualy those test are faster to run.
 class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
+    @parameterized.expand(
+        [("paged|eager", eager_paged_attention_forward), ("paged|sdpa", sdpa_attention_paged_forward)]
+    )
+    def test_paged_forward_without_cache_raises(self, attn_implementation, attention_forward):
+        # A standard forward on a model switched to a paged implementation reaches these with no cache. They are
+        # written for the packed inputs and the 4D mask continuous batching prepares, so they would silently attend
+        # bidirectionally instead of causally: refuse the call rather than return a wrong result.
+        module = torch.nn.Module()
+        module.layer_idx = 0
+        module.num_key_value_groups = 1
+        q = k = v = torch.zeros(1, 1, 4, 8)
+        with self.assertRaisesRegex(ValueError, attn_implementation.replace("|", r"\|")):
+            attention_forward(module, q, k, v, None, scaling=1.0)
+
     def test_generation_outputs_are_snapshots(self):
         state = RequestState(
             request_id="r", initial_tokens=[10, 11], max_new_tokens=3, streaming=True, record_timestamps=True
