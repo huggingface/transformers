@@ -41,7 +41,15 @@ class ReasoningMode(str, enum.Enum):
 class Serve:
     def __init__(
         self,
-        force_model: Annotated[str | None, typer.Argument(help="Model to preload and use for all requests.")] = None,
+        force_model: Annotated[
+            str | None,
+            typer.Argument(
+                help=(
+                    "Model to preload and use for all requests. GGUF weights are named `<repo>:<file>.gguf`, "
+                    "and their config and tokenizer come from the file itself."
+                )
+            ),
+        ] = None,
         # Model options
         continuous_batching: Annotated[
             bool,
@@ -53,15 +61,6 @@ class Serve:
         compile: Annotated[bool, typer.Option(help="Enable torch.compile for faster inference.")] = False,
         quantization: Annotated[
             str | None, typer.Option(help="Quantization method: 'bnb-4bit' or 'bnb-8bit'.")
-        ] = None,
-        gguf_file: Annotated[
-            str | None,
-            typer.Option(
-                help=(
-                    "Load the weights from this GGUF file inside the model repo. Config and tokenizer "
-                    "come from the file itself."
-                )
-            ),
         ] = None,
         reasoning: Annotated[
             ReasoningMode,
@@ -141,7 +140,6 @@ class Serve:
             trust_remote_code=trust_remote_code,
             attn_implementation=attn_implementation,
             quantization=quantization,
-            gguf_file=gguf_file,
             model_timeout=model_timeout,
             force_model=force_model,
         )

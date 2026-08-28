@@ -30,7 +30,7 @@ import transformers
 from transformers import BitsAndBytesConfig, PreTrainedTokenizerBase
 
 from ...utils import logging
-from .utils import Modality, make_progress_tqdm_class, reset_torch_cache
+from .utils import Modality, make_progress_tqdm_class, reset_torch_cache, split_model_id
 
 
 if TYPE_CHECKING:
@@ -38,6 +38,9 @@ if TYPE_CHECKING:
 
 
 logger = logging.get_logger(__name__)
+
+# ggml's flash attention, the default on MPS where `kernels` can fetch it.
+GGML_ATTN = "marcsun13/ggml-attn"
 
 
 class TimedModel:
@@ -112,7 +115,6 @@ class ModelManager:
         dtype: str | None = "auto",
         trust_remote_code: bool = False,
         attn_implementation: str | None = None,
-        gguf_file: str | None = None,
         quantization: str | None = None,
         model_timeout: int = 300,
         force_model: str | None = None,
@@ -132,7 +134,6 @@ class ModelManager:
         self.dtype = self._resolve_dtype(dtype)
         self.trust_remote_code = trust_remote_code
         self.attn_implementation = self._resolve_attn_implementation(attn_implementation, self.device)
-        self.gguf_file = gguf_file
         self.quantization = quantization
         self.model_timeout = model_timeout
         self.force_model = force_model
@@ -145,7 +146,8 @@ class ModelManager:
 
         # Preload the forced model after all state is initialized
         if force_model is not None:
-            self.load_model_and_processor(self.process_model_name(force_model))
+            repo, gguf_file = split_model_id(force_model)
+            self.load_model_and_processor(self.process_model_name(repo), gguf_file=gguf_file)
 
     @staticmethod
     def _resolve_dtype(dtype: str | None):
@@ -179,11 +181,10 @@ class ModelManager:
         )
         if is_mps_device and is_kernels_available():
             logger.warning_once(
-                "MPS detected and `kernels` is installed: defaulting attention to "
-                "`kernels-community/metal-flash-sdpa@223ca3350d7ba32ecf19341ff2cbb8c43fa47d62. "
+                f"MPS detected and `kernels` is installed: defaulting attention to `{GGML_ATTN}`. "
                 "Pass `--attn-implementation sdpa` to opt out."
             )
-            return "kernels-community/metal-flash-sdpa@223ca3350d7ba32ecf19341ff2cbb8c43fa47d62"
+            return GGML_ATTN
         return attn_implementation
 
     def _validate_args(self):
@@ -191,18 +192,17 @@ class ModelManager:
             raise ValueError(
                 f"Unsupported quantization method: '{self.quantization}'. Must be 'bnb-4bit' or 'bnb-8bit'."
             )
+        from ...integrations.hub_kernels import is_kernel
+
         VALID_ATTN_IMPLEMENTATIONS = {"eager", "sdpa", "flash_attention_2", "flash_attention_3", "flex_attention"}
-        is_kernels_community = self.attn_implementation is not None and self.attn_implementation.startswith(
-            "kernels-community/"
-        )
         if (
             self.attn_implementation is not None
-            and not is_kernels_community
+            and not is_kernel(self.attn_implementation)
             and self.attn_implementation not in VALID_ATTN_IMPLEMENTATIONS
         ):
             raise ValueError(
                 f"Unsupported attention implementation: '{self.attn_implementation}'. "
-                f"Must be one of {VALID_ATTN_IMPLEMENTATIONS} or a kernels-community kernel (e.g. 'kernels-community/flash-attn2')."
+                f"Must be one of {VALID_ATTN_IMPLEMENTATIONS} or a hub kernel (e.g. 'kernels-community/flash-attn2')."
             )
 
     @staticmethod
@@ -224,7 +224,9 @@ class ModelManager:
             return BitsAndBytesConfig(load_in_8bit=True)
         return None
 
-    def _load_processor(self, model_id_and_revision: str) -> "ProcessorMixin | PreTrainedTokenizerFast":
+    def _load_processor(
+        self, model_id_and_revision: str, gguf_file: str | None = None
+    ) -> "ProcessorMixin | PreTrainedTokenizerFast":
         """Load a processor for the given model.
 
         Args:
@@ -233,15 +235,19 @@ class ModelManager:
         from transformers import AutoProcessor, AutoTokenizer
 
         model_id, revision = model_id_and_revision.split("@", 1)
-        if self.gguf_file is not None:
+        if gguf_file is not None:
             # A GGUF repo ships no tokenizer files: the vocabulary is read out of the file's metadata.
             return AutoTokenizer.from_pretrained(
-                model_id, gguf_file=self.gguf_file, revision=revision, trust_remote_code=self.trust_remote_code
+                model_id, gguf_file=gguf_file, revision=revision, trust_remote_code=self.trust_remote_code
             )
         return AutoProcessor.from_pretrained(model_id, revision=revision, trust_remote_code=self.trust_remote_code)
 
     def _load_model(
-        self, model_id_and_revision: str, tqdm_class: type | None = None, progress_callback: Callable | None = None
+        self,
+        model_id_and_revision: str,
+        tqdm_class: type | None = None,
+        progress_callback: Callable | None = None,
+        gguf_file: str | None = None,
     ) -> "PreTrainedModel":
         """Load a model.
 
@@ -260,6 +266,9 @@ class ModelManager:
         model_kwargs = {
             "revision": revision,
             "attn_implementation": self.attn_implementation,
+            # Naming a kernel repo on the command line is the opt-in, so one outside `kernels-community`
+            # is loaded rather than refused.
+            "allow_all_kernels": True,
             "dtype": self.dtype,
             "device_map": self.device,
             "trust_remote_code": self.trust_remote_code,
@@ -269,8 +278,8 @@ class ModelManager:
         if quantization_config is not None:
             model_kwargs["quantization_config"] = quantization_config
 
-        if self.gguf_file is not None:
-            model_kwargs["gguf_file"] = self.gguf_file
+        if gguf_file is not None:
+            model_kwargs["gguf_file"] = gguf_file
 
         if progress_callback is not None:
             progress_callback({"status": "loading", "model": model_id_and_revision, "stage": "config"})
@@ -291,6 +300,7 @@ class ModelManager:
         model_id_and_revision: str,
         progress_callback: Callable | None = None,
         tqdm_class: type | None = None,
+        gguf_file: str | None = None,
     ) -> "tuple[PreTrainedModel, ProcessorMixin | PreTrainedTokenizerFast]":
         """Load a model (or return it from cache), resetting its inactivity timer.
 
@@ -300,33 +310,40 @@ class ModelManager:
                 ``{"status": "loading", "model": ..., "stage": ...}`` during loading.
             tqdm_class: Optional tqdm subclass for progress bars during ``from_pretrained``.
         """
+        # Cached under the weights rather than the repository: two quantizations of one repo are two models,
+        # and one entry would serve whichever landed first under both names.
+        key = model_id_and_revision if gguf_file is None else f"{model_id_and_revision}:{gguf_file}"
+
         # Per-model lock prevents duplicate loads when concurrent requests arrive
         with self._model_locks_guard:
-            lock = self._model_locks.setdefault(model_id_and_revision, threading.Lock())
+            lock = self._model_locks.setdefault(key, threading.Lock())
 
         with lock:
-            if model_id_and_revision not in self.loaded_models:
-                logger.warning(f"Loading {model_id_and_revision}")
+            if key not in self.loaded_models:
+                logger.warning(f"Loading {key}")
                 if progress_callback is not None:
-                    progress_callback({"status": "loading", "model": model_id_and_revision, "stage": "processor"})
-                processor = self._load_processor(model_id_and_revision)
+                    progress_callback({"status": "loading", "model": key, "stage": "processor"})
+                processor = self._load_processor(model_id_and_revision, gguf_file=gguf_file)
                 model = self._load_model(
-                    model_id_and_revision, tqdm_class=tqdm_class, progress_callback=progress_callback
+                    model_id_and_revision,
+                    tqdm_class=tqdm_class,
+                    progress_callback=progress_callback,
+                    gguf_file=gguf_file,
                 )
-                self.loaded_models[model_id_and_revision] = TimedModel(
+                self.loaded_models[key] = TimedModel(
                     model,
                     timeout_seconds=self.model_timeout,
                     processor=processor,
-                    on_unload=lambda key=model_id_and_revision: self.loaded_models.pop(key, None),
+                    on_unload=lambda cached=key: self.loaded_models.pop(cached, None),
                 )
                 if progress_callback is not None:
-                    progress_callback({"status": "ready", "model": model_id_and_revision, "cached": False})
+                    progress_callback({"status": "ready", "model": key, "cached": False})
             else:
-                self.loaded_models[model_id_and_revision].reset_timer()
-                model = self.loaded_models[model_id_and_revision].model
-                processor = self.loaded_models[model_id_and_revision].processor
+                self.loaded_models[key].reset_timer()
+                model = self.loaded_models[key].model
+                processor = self.loaded_models[key].processor
                 if progress_callback is not None:
-                    progress_callback({"status": "ready", "model": model_id_and_revision, "cached": True})
+                    progress_callback({"status": "ready", "model": key, "cached": True})
         return model, processor
 
     async def load_model_streaming(self, model_id_and_revision: str):

@@ -56,6 +56,19 @@ logger = logging.get_logger(__name__)
 X_REQUEST_ID = "x-request-id"
 
 
+def split_model_id(model_id: str) -> tuple[str, str | None]:
+    """`<repo>[@revision][:<file>.gguf]` -> the id without the file, and the file if one was named.
+
+    `<repo>:<file>.gguf` is how GGUF clients name a file inside a repository: the repository says which
+    model, the file which weights, and both are answered for rather than one of them dropped. A colon
+    that is not a `.gguf` file is left alone -- it is part of the id.
+    """
+    head, _, named = model_id.partition(":")
+    if named and not named.endswith(".gguf"):
+        return model_id, None
+    return head, named or None
+
+
 class Modality(enum.Enum):
     LLM = "LLM"
     VLM = "VLM"
@@ -1108,17 +1121,22 @@ class BaseHandler:
         """
         from fastapi import HTTPException
 
+        requested = body.get("model")
         if self.model_manager.force_model is not None:
-            requested = body.get("model")
             if requested is not None and requested != self.model_manager.force_model:
                 raise HTTPException(
                     status_code=400,
-                    detail=(f"Server is pinned to '{self.model_manager.force_model}'; requested '{requested}'."),
+                    detail=f"Server is pinned to '{self.model_manager.force_model}'; requested '{requested}'.",
                 )
-            body["model"] = self.model_manager.force_model
+            requested = self.model_manager.force_model
 
-        model_id = self.model_manager.process_model_name(body["model"])
-        model, processor = self.model_manager.load_model_and_processor(model_id)
+        # `<repo>:<file>.gguf` is one name for two things: the repository the loader resolves, and the
+        # weights to read out of it.
+        model, gguf_file = split_model_id(requested)
+        body["model"] = model
+
+        model_id = self.model_manager.process_model_name(model)
+        model, processor = self.model_manager.load_model_and_processor(model_id, gguf_file=gguf_file)
 
         return model_id, model, processor
 
