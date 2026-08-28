@@ -417,6 +417,7 @@ class MptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def test_model_weights_reload_no_missing_tied_weights(self):
         pass
 
+    @unittest.skip("The model is gone from the hub see https://github.com/huggingface/transformers/issues/48328")
     @slow
     def test_model_from_pretrained(self):
         model_name = "mosaicml/mpt-7b"
@@ -428,6 +429,7 @@ class MptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 @require_torch_accelerator
 @require_bitsandbytes
 class MptIntegrationTests(unittest.TestCase):
+    @unittest.skip("The model is gone from the hub see https://github.com/huggingface/transformers/issues/48328")
     def test_generation_8k(self):
         model_id = "mosaicml/mpt-7b-8k"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
@@ -454,6 +456,7 @@ class MptIntegrationTests(unittest.TestCase):
         decoded_output = tokenizer.decode(outputs[0], skip_special_tokens=True)
         self.assertEqual(decoded_output, expected_output)
 
+    @unittest.skip("The model is gone from the hub see https://github.com/huggingface/transformers/issues/48328")
     def test_generation(self):
         model_id = "mosaicml/mpt-7b"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
@@ -481,6 +484,7 @@ class MptIntegrationTests(unittest.TestCase):
         decoded_output = tokenizer.decode(outputs[0], skip_special_tokens=True)
         self.assertEqual(decoded_output, expected_output)
 
+    @unittest.skip("The model is gone from the hub see https://github.com/huggingface/transformers/issues/48328")
     @require_deterministic_for_xpu
     def test_generation_batched(self):
         model_id = "mosaicml/mpt-7b"
@@ -527,6 +531,7 @@ class MptIntegrationTests(unittest.TestCase):
         for i, predicted_output in enumerate(decoded_outputs):
             self.assertEqual(predicted_output, expected_output[i])
 
+    @unittest.skip("The model is gone from the hub see https://github.com/huggingface/transformers/issues/48328")
     @require_deterministic_for_xpu
     def test_model_logits(self):
         model_id = "mosaicml/mpt-7b"
