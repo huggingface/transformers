@@ -97,6 +97,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "voxtral_realtime": "qwen2_audio",
     "audioflamingo3": "qwen2_audio",
     "glmasr": "qwen2_audio",
+    "moss_transcribe_diarize": "qwen2_audio",
     "musicflamingo": "qwen2_audio",
     "granite_speech_plus": "granite_speech",
     "granitemoeshared": "granitemoe",
@@ -124,6 +125,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "VoxtralRealtimeModel": "Qwen2AudioModel",
     "AudioFlamingo3Model": "Qwen2AudioModel",
     "GlmAsrModel": "Qwen2AudioModel",
+    "MossTranscribeDiarizeModel": "AudioFlamingo3Model",
     "MusicFlamingoModel": "Qwen2AudioModel",
     "GraniteSpeechPlusModel": "GraniteSpeechModel",
     "MaskFormerDetrDecoder": "DetrModel",
@@ -612,6 +614,12 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
             WeightRenaming(source_patterns=r"^audio_tower", target_patterns="model.audio_tower"),
             WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
+        ],
+        "moss_transcribe_diarize": [
+            WeightRenaming(r"^model\.whisper_encoder\.", "model.audio_tower."),
+            WeightRenaming(r"^model\.vq_adaptor\.layers\.0\.", "model.multi_modal_projector.linear_1."),
+            WeightRenaming(r"^model\.vq_adaptor\.layers\.2\.", "model.multi_modal_projector.linear_2."),
+            WeightRenaming(r"^model\.vq_adaptor\.layers\.3\.", "model.multi_modal_projector.norm."),
         ],
         "Qwen2AudioModel": [
             WeightRenaming(source_patterns=r"^language_model.model", target_patterns="language_model"),

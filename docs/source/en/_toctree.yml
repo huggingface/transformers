@@ -1157,6 +1157,8 @@
         title: Moonshine Streaming
       - local: model_doc/moshi
         title: Moshi
+      - local: model_doc/moss_transcribe_diarize
+        title: MOSS-Transcribe-Diarize
       - local: model_doc/musicgen
         title: MusicGen
       - local: model_doc/musicgen_melody
