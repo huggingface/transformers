@@ -1684,6 +1684,11 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"depth_head\.project", "decoder.project"),
             WeightRenaming(r"depth_head\.depth_head\.", "decoder.head."),
         ],
+        # PoolFormer: flat patch_embeddings/block → hierarchical stages/{i}/(embeddings|layers)
+        "poolformer": [
+            WeightRenaming(r"encoder\.patch_embeddings\.(\d+)\.", r"encoder.stages.\1.embeddings."),
+            WeightRenaming(r"encoder\.block\.(\d+)\.", r"encoder.stages.\1.layers."),
+        ],
     }
 
     mapping["Tipsv2DptForNormalEstimation"] = [

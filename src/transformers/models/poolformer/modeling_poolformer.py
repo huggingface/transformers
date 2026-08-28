@@ -22,7 +22,10 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithNoAttention, ImageClassifierOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_poolformer import PoolFormerConfig
 
 
@@ -43,7 +46,7 @@ class PoolFormerEmbeddings(nn.Module):
         self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=stride, padding=padding)
         self.norm = norm_layer(hidden_size) if norm_layer else nn.Identity()
 
-    def forward(self, pixel_values):
+    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         embeddings = self.projection(pixel_values)
         embeddings = self.norm(embeddings)
         return embeddings
@@ -54,16 +57,16 @@ class PoolFormerGroupNorm(nn.GroupNorm):
     Group Normalization with 1 group. Input: tensor in shape [B, C, H, W]
     """
 
-    def __init__(self, num_channels, **kwargs):
+    def __init__(self, num_channels: int, **kwargs):
         super().__init__(1, num_channels, **kwargs)
 
 
 class PoolFormerPooling(nn.Module):
-    def __init__(self, pool_size):
+    def __init__(self, pool_size: int):
         super().__init__()
         self.pool = nn.AvgPool2d(pool_size, stride=1, padding=pool_size // 2, count_include_pad=False)
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         return self.pool(hidden_states) - hidden_states
 
 
@@ -103,7 +106,7 @@ class PoolFormerOutput(nn.Module):
         else:
             self.act_fn = config.hidden_act
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.conv1(hidden_states)
         hidden_states = self.act_fn(hidden_states)
         hidden_states = self.drop(hidden_states)
@@ -123,7 +126,6 @@ class PoolFormerLayer(nn.Module):
         self.before_norm = PoolFormerGroupNorm(num_channels)
         self.after_norm = PoolFormerGroupNorm(num_channels)
 
-        # Useful for training neural nets
         self.drop_path = PoolFormerDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         self.use_layer_scale = config.use_layer_scale
         if config.use_layer_scale:
@@ -134,100 +136,51 @@ class PoolFormerLayer(nn.Module):
                 config.layer_scale_init_value * torch.ones(num_channels), requires_grad=True
             )
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        pooling_output = self.pooling(self.before_norm(hidden_states))
         if self.use_layer_scale:
-            pooling_output = self.pooling(self.before_norm(hidden_states))
-            scaled_op = self.layer_scale_1.unsqueeze(-1).unsqueeze(-1) * pooling_output
-            # First residual connection
-            hidden_states = hidden_states + self.drop_path(scaled_op)
-            outputs = ()
+            pooling_output = self.layer_scale_1.unsqueeze(-1).unsqueeze(-1) * pooling_output
+        hidden_states = hidden_states + self.drop_path(pooling_output)
 
-            layer_output = self.output(self.after_norm(hidden_states))
-            scaled_op = self.layer_scale_2.unsqueeze(-1).unsqueeze(-1) * layer_output
-            # Second residual connection
-            output = hidden_states + self.drop_path(scaled_op)
-
-            outputs = (output,) + outputs
-            return outputs
-
-        else:
-            pooling_output = self.drop_path(self.pooling(self.before_norm(hidden_states)))
-            # First residual connection
-            hidden_states = pooling_output + hidden_states
-            outputs = ()
-
-            # Second residual connection inside the PoolFormerOutput block
-            layer_output = self.drop_path(self.output(self.after_norm(hidden_states)))
-            output = hidden_states + layer_output
-
-            outputs = (output,) + outputs
-            return outputs
+        layer_output = self.output(self.after_norm(hidden_states))
+        if self.use_layer_scale:
+            layer_output = self.layer_scale_2.unsqueeze(-1).unsqueeze(-1) * layer_output
+        return hidden_states + self.drop_path(layer_output)
 
 
-class PoolFormerEncoder(nn.Module):
-    def __init__(self, config):
+class PoolFormerStage(nn.Module):
+    """One encoder stage: patch embedding followed by a stack of PoolFormer layers."""
+
+    def __init__(self, config: PoolFormerConfig, stage_idx: int, drop_paths: list[float]):
         super().__init__()
-        self.config = config
-        # stochastic depth decay rule
-        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths), device="cpu")]
-
-        # patch embeddings
-        embeddings = []
-        for i in range(config.num_encoder_blocks):
-            embeddings.append(
-                PoolFormerEmbeddings(
-                    patch_size=config.patch_sizes[i],
-                    stride=config.strides[i],
-                    padding=config.padding[i],
-                    num_channels=config.num_channels if i == 0 else config.hidden_sizes[i - 1],
-                    hidden_size=config.hidden_sizes[i],
+        hidden_size = config.hidden_sizes[stage_idx]
+        num_channels = config.num_channels if stage_idx == 0 else config.hidden_sizes[stage_idx - 1]
+        self.embeddings = PoolFormerEmbeddings(
+            patch_size=config.patch_sizes[stage_idx],
+            stride=config.strides[stage_idx],
+            padding=config.padding[stage_idx],
+            num_channels=num_channels,
+            hidden_size=hidden_size,
+        )
+        self.layers = nn.ModuleList(
+            [
+                PoolFormerLayer(
+                    config,
+                    num_channels=hidden_size,
+                    pool_size=config.pool_size,
+                    hidden_size=hidden_size,
+                    intermediate_size=int(hidden_size * config.mlp_ratio),
+                    drop_path=drop_paths[layer_idx],
                 )
-            )
-        self.patch_embeddings = nn.ModuleList(embeddings)
+                for layer_idx in range(config.depths[stage_idx])
+            ]
+        )
 
-        # Transformer blocks
-        blocks = []
-        cur = 0
-        for i in range(config.num_encoder_blocks):
-            # each block consists of layers
-            layers = []
-            if i != 0:
-                cur += config.depths[i - 1]
-            for j in range(config.depths[i]):
-                layers.append(
-                    PoolFormerLayer(
-                        config,
-                        num_channels=config.hidden_sizes[i],
-                        pool_size=config.pool_size,
-                        hidden_size=config.hidden_sizes[i],
-                        intermediate_size=int(config.hidden_sizes[i] * config.mlp_ratio),
-                        drop_path=dpr[cur + j],
-                    )
-                )
-            blocks.append(nn.ModuleList(layers))
-
-        self.block = nn.ModuleList(blocks)
-
-    def forward(self, pixel_values, output_hidden_states=False, return_dict=True):
-        all_hidden_states = () if output_hidden_states else None
-
-        hidden_states = pixel_values
-        for idx, layers in enumerate(zip(self.patch_embeddings, self.block)):
-            embedding_layer, block_layer = layers
-            # Get patch embeddings from hidden_states
-            hidden_states = embedding_layer(hidden_states)
-            # Send the embeddings through the blocks
-            for _, blk in enumerate(block_layer):
-                layer_outputs = blk(hidden_states)
-                hidden_states = layer_outputs[0]
-
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
-
-        return BaseModelOutputWithNoAttention(last_hidden_state=hidden_states, hidden_states=all_hidden_states)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.embeddings(hidden_states)
+        for layer in self.layers:
+            hidden_states = layer(hidden_states)
+        return hidden_states
 
 
 @auto_docstring
@@ -236,11 +189,10 @@ class PoolFormerPreTrainedModel(PreTrainedModel):
     base_model_prefix = "poolformer"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    _no_split_modules = ["PoolFormerLayer"]
+    _no_split_modules = ["PoolFormerStage"]
 
     @torch.no_grad()
-    def _init_weights(self, module):
-        """Initialize the weights"""
+    def _init_weights(self, module: nn.Module):
         super()._init_weights(module)
         if isinstance(module, PoolFormerLayer):
             if hasattr(module, "layer_scale_1"):
@@ -248,64 +200,80 @@ class PoolFormerPreTrainedModel(PreTrainedModel):
                 init.constant_(module.layer_scale_2, self.config.layer_scale_init_value)
 
 
+class PoolFormerEncoder(PoolFormerPreTrainedModel):
+    main_input_name = "pixel_values"
+    # One hidden state per stage (not per micro-layer). Do not prepend the raw image.
+    _can_record_outputs = {
+        "hidden_states": OutputRecorder(PoolFormerStage, index=0, capture_initial_hidden_state=False),
+    }
+
+    def __init__(self, config: PoolFormerConfig):
+        super().__init__(config)
+        self.config = config
+        drop_paths = [
+            path.tolist()
+            for path in torch.linspace(0, config.drop_path_rate, sum(config.depths), device="cpu").split(config.depths)
+        ]
+        self.stages = nn.ModuleList(
+            [
+                PoolFormerStage(config, stage_idx=stage_idx, drop_paths=drop_paths[stage_idx])
+                for stage_idx in range(config.num_encoder_blocks)
+            ]
+        )
+        self.post_init()
+
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
+    def forward(
+        self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> BaseModelOutputWithNoAttention:
+        hidden_states = pixel_values
+        for stage in self.stages:
+            hidden_states = stage(hidden_states)
+        return BaseModelOutputWithNoAttention(last_hidden_state=hidden_states)
+
+
 @auto_docstring
 class PoolFormerModel(PoolFormerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: PoolFormerConfig):
         super().__init__(config)
         self.config = config
 
         self.encoder = PoolFormerEncoder(config)
 
-        # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        # Input embeddings correspond to the very first patch-embedding stage.
-        return self.encoder.patch_embeddings[0]
+    def get_input_embeddings(self) -> PoolFormerEmbeddings:
+        return self.encoder.stages[0].embeddings
 
-    def set_input_embeddings(self, value):
-        self.encoder.patch_embeddings[0] = value
+    def set_input_embeddings(self, value: PoolFormerEmbeddings):
+        self.encoder.stages[0].embeddings = value
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple | BaseModelOutputWithNoAttention:
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithNoAttention:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        encoder_outputs = self.encoder(
-            pixel_values,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-        sequence_output = encoder_outputs[0]
-
-        if not return_dict:
-            return (sequence_output, None) + encoder_outputs[1:]
+        encoder_outputs: BaseModelOutputWithNoAttention = self.encoder(pixel_values, **kwargs)
 
         return BaseModelOutputWithNoAttention(
-            last_hidden_state=sequence_output,
+            last_hidden_state=encoder_outputs.last_hidden_state,
             hidden_states=encoder_outputs.hidden_states,
         )
 
 
 class PoolFormerFinalPooler(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: PoolFormerConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
 
-    def forward(self, hidden_states):
-        output = self.dense(hidden_states)
-        return output
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return self.dense(hidden_states)
 
 
 @auto_docstring(
@@ -314,61 +282,49 @@ class PoolFormerFinalPooler(nn.Module):
     """
 )
 class PoolFormerForImageClassification(PoolFormerPreTrainedModel):
-    def __init__(self, config):
+    accepts_loss_kwargs = False
+
+    def __init__(self, config: PoolFormerConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.poolformer = PoolFormerModel(config)
 
-        # Final norm
         self.norm = PoolFormerGroupNorm(config.hidden_sizes[-1])
-        # Classifier head
         self.classifier = (
             nn.Linear(config.hidden_sizes[-1], config.num_labels) if config.num_labels > 0 else nn.Identity()
         )
 
-        # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
+    def get_input_embeddings(self) -> PoolFormerEmbeddings:
         return self.poolformer.get_input_embeddings()
 
-    def set_input_embeddings(self, value):
+    def set_input_embeddings(self, value: PoolFormerEmbeddings):
         self.poolformer.set_input_embeddings(value)
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple | ImageClassifierOutputWithNoAttention:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> ImageClassifierOutputWithNoAttention:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        outputs = self.poolformer(pixel_values, **kwargs)
 
-        outputs = self.poolformer(
-            pixel_values,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        sequence_output = outputs[0]
+        sequence_output = outputs.last_hidden_state
 
         logits = self.classifier(self.norm(sequence_output).mean([-2, -1]))
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(labels, logits, self.config)
-
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
+            loss = self.loss_function(labels=labels, pooled_logits=logits, config=self.config)
 
         return ImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
 
