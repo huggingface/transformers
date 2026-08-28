@@ -125,7 +125,7 @@ class ColQwen2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     # The following tests override the parent tests because ColQwen2Processor can only take one of images or text as input at a time.
 
-    def test_subprocessor_defaults_preserved_by_kwargs_0_images(self):
+    def _test_modality_processor_defaults_preserved_by_modality_kwargs(self, modality):
         processor_components = self.prepare_components()
         processor_components["image_processor"] = self.get_component(
             "image_processor", do_rescale=True, rescale_factor=-1.0
@@ -139,7 +139,7 @@ class ColQwen2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         inputs = processor(images=image_input, return_tensors="pt")
         self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
 
-    def test_kwargs_overrides_default_subprocessor_kwargs_0_images(self):
+    def _test_kwargs_overrides_default_modality_processor_kwargs(self, modality):
         processor_components = self.prepare_components()
         processor_components["image_processor"] = self.get_component(
             "image_processor", do_rescale=True, rescale_factor=1
@@ -160,7 +160,7 @@ class ColQwen2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
 
-    def test_unstructured_kwargs_0_images(self):
+    def _test_unstructured_kwargs(self, modality):
         processor_components = self.prepare_components()
         processor = self.processor_class(**processor_components)
 
@@ -176,7 +176,7 @@ class ColQwen2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertEqual(inputs[self.text_input_name].shape[-1], 76)
 
-    def test_unstructured_kwargs_batched_0_images(self):
+    def _test_unstructured_kwargs_batched(self, modality):
         processor_components = self.prepare_components()
         processor = self.processor_class(**processor_components)
 
@@ -192,7 +192,7 @@ class ColQwen2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
 
-    def test_doubly_passed_kwargs(self):
+    def _test_doubly_passed_kwargs(self, modality):
         processor_components = self.prepare_components()
         processor = self.processor_class(**processor_components)
 
@@ -205,24 +205,7 @@ class ColQwen2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 return_tensors="pt",
             )
 
-    def test_structured_kwargs_nested_0_images(self):
-        processor_components = self.prepare_components()
-        processor = self.processor_class(**processor_components)
-
-        input_str = self.prepare_text_inputs()
-
-        # Define the kwargs for each modality
-        all_kwargs = {
-            "common_kwargs": {"return_tensors": "pt"},
-            "images_kwargs": {"do_rescale": True, "rescale_factor": -1.0},
-            "text_kwargs": {"padding": "max_length", "max_length": 76},
-        }
-
-        inputs = processor(text=input_str, **all_kwargs)
-
-        self.assertEqual(inputs[self.text_input_name].shape[-1], 76)
-
-    def test_structured_kwargs_nested_from_dict_0_images(self):
+    def _test_structured_kwargs_nested_from_dict(self, modality):
         processor_components = self.prepare_components()
         processor = self.processor_class(**processor_components)
 

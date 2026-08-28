@@ -136,7 +136,7 @@ class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertTrue((processor_outputs["input_ids"] == expected_padded_unpacked_token_inputs).all())
 
     # Rewrite as Fuyu supports tokenizer kwargs only when image is None.
-    def test_unstructured_kwargs_batched_0_images(self):
+    def _test_unstructured_kwargs_batched(self, modality):
         attributes = self.processor_class.get_attributes()
         self.skip_unless_modality_and_tokenizer_present("images", attributes)
         processor = self.get_processor()

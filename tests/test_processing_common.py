@@ -1020,7 +1020,7 @@ class ProcessorTesterMixin:
                 text=input_str, **{modality: modal_input, modality_kwargs_key: init_time_kwargs, **init_time_kwargs}
             )
 
-    def _test_structured_kwargs_nested(self, modality, from_dict=False):
+    def _test_structured_kwargs_nested_from_dict(self, modality):
         attributes = self.processor_class.get_attributes()
         self.skip_unless_modality_and_tokenizer_present(modality, attributes)
 
@@ -1031,19 +1031,16 @@ class ProcessorTesterMixin:
         max_length = getattr(self, f"{modality}_unstructured_max_length")
         modality_kwargs_key = f"{modality}_kwargs"
         modality_kwargs = MODALITY_TEST_SPECS[modality]["init_time_kwargs"]
+        call_kwargs = MODALITY_TEST_SPECS[modality]["call_time_kwargs"]
 
         all_kwargs = {
             "common_kwargs": {"return_tensors": "pt"},
             modality_kwargs_key: modality_kwargs,
             "text_kwargs": {"padding": "max_length", "max_length": max_length},
+            **call_kwargs,
         }
 
         inputs = processor(text=input_str, **{modality: modal_input}, **all_kwargs)
-        if not from_dict:
-            # The non-"from_dict" variant historically re-checked typed kwargs
-            # support a second time after the call; kept for parity.
-
-            pass
 
         self._check_modality_outputs(inputs, modality)
         self.assertEqual(inputs[self.text_input_name].shape[-1], max_length)
@@ -1093,12 +1090,8 @@ class ProcessorTesterMixin:
         self._test_doubly_passed_kwargs(modality)
 
     @parameterized.expand(["images", "videos", "audio"])
-    def test_structured_kwargs_nested(self, modality):
-        self._test_structured_kwargs_nested(modality, from_dict=False)
-
-    @parameterized.expand(["images", "videos", "audio"])
     def test_structured_kwargs_nested_from_dict(self, modality):
-        self._test_structured_kwargs_nested(modality, from_dict=True)
+        self._test_structured_kwargs_nested_from_dict(modality)
 
     @parameterized.expand(["images", "videos", "audio"])
     def test_overlapping_text_image_kwargs_handling(self, modality):
@@ -1109,7 +1102,6 @@ class ProcessorTesterMixin:
         # dropped when its modality dict (e.g. text_kwargs={...}) was also passed without
         # that key. Companion to test_doubly_passed_kwargs which covers the conflict case.
         processor = self.get_processor()
-
         text = self.prepare_text_inputs(modalities=["image", "video", "audio"])
         inputs_dict = {
             "text": text,
@@ -1286,15 +1278,10 @@ class ProcessorTesterMixin:
         self.assertEqual(len(out_dict["input_ids"]), batch_size)
         self.assertEqual(len(out_dict["attention_mask"]), batch_size)
 
-        mm_len = 0
-        if "video_grid_thw" in out_dict:
-            # Qwen-style pixels don't scale with bs same way as other models
-            # calculate expected video token count based on video_grid_thw
-            for thw in out_dict["video_grid_thw"]:
-                mm_len += thw[0] * thw[1] * thw[2]
-        elif "image_grid_thw" in out_dict:
-            for thw in out_dict["image_grid_thw"]:
-                mm_len += thw[0] * thw[1] * thw[2]
+        # Qwen-style pixels don't scale with bs same way as other models
+        # calculate expected video token count based on video_grid_thw
+        if (grid_thw := out_dict.get(f"{modality}_grid_thw")) is not None:
+            mm_len = sum([thw[0] * thw[1] * thw[2] for thw in grid_thw])
         else:
             mm_len = batch_size
 
@@ -1679,7 +1666,7 @@ class ProcessorTesterMixin:
         self.assertEqual(sum(num_image_tokens_from_call), sum(num_image_tokens_from_helper["num_image_tokens"]))
 
     @staticmethod
-    def does_processor_return_offsets(processor_class, method_name: str):
+    def does_processor_return_mm_offsets(processor_class, method_name: str):
         """
         Updated processor need to override a `replace_xxx_method` which is the only
         reliable way to tell if processor is old format or not.
@@ -1698,7 +1685,7 @@ class ProcessorTesterMixin:
         # if we are comparing unk to unk token, the differences are lost
         processor = self.get_processor(use_tiny_ckpt=False)
 
-        if not self.does_processor_return_offsets(processor.__class__, "replace_image_token"):
+        if not self.does_processor_return_mm_offsets(processor.__class__, "replace_image_token"):
             self.skipTest("Processor doesn't support `_get_num_multimodal_tokens` yet")
 
         attr_to_input_param = {

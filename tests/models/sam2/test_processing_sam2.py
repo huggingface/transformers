@@ -116,3 +116,6 @@ class Sam2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         dummy_masks = [[1, 0], [0, 1]]
         with self.assertRaises(TypeError):
             masks = processor.post_process_masks(dummy_masks, np.array(original_sizes))
+
+    def test_flat_kwarg_applied_when_modality_dict_lacks_it(self):
+        self.skipTest("Sam2Processor has a custom interface, not a standard VLM text+image interface")

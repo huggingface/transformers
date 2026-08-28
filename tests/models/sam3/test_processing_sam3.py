@@ -56,6 +56,9 @@ class Sam3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_processor_with_multiple_inputs(self):
         self.skipTest("Sam3Processor has a custom interface, not a standard VLM text+image interface")
 
+    def test_flat_kwarg_applied_when_modality_dict_lacks_it(self):
+        self.skipTest("Sam3Processor has a custom interface, not a standard VLM text+image interface")
+
     def skip_unless_modality_and_tokenizer_present(
         self, modality: str, attributes: list, require_tokenizer: bool = True
     ):
