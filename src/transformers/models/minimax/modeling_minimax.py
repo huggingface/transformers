@@ -513,7 +513,7 @@ class MiniMaxSparseMoeBlock(nn.Module):
         self.gate = MiniMaxTopKRouter(config)
         self.experts = MiniMaxExperts(config)
 
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         if self.training and self.jitter_noise > 0:
             hidden_states *= torch.empty_like(hidden_states).uniform_(1.0 - self.jitter_noise, 1.0 + self.jitter_noise)

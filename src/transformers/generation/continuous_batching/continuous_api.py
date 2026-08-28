@@ -981,6 +981,10 @@ class ContinuousBatchingManager:
 
         # Everything is inside this try / except / finally block so we can handle critical errors gracefully
         try:
+            # Scope the device for the generation loop (thread-scoped)
+            if self.model.device.type == "cuda" and self.model.device.index is not None:
+                torch.cuda.set_device(self.model.device)
+
             # Start the generation loop
             batch_processor = self._create_batch_processor()
             self.batch_processor = batch_processor  # register the batch processor for main thread access
