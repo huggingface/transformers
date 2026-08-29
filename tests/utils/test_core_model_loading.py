@@ -194,6 +194,34 @@ class TestConversionOperations(unittest.TestCase):
                         full_layer_name="demo.layer",
                     )
 
+    def test_chunk_allows_uneven_config_driven_shards(self):
+        config = SimpleNamespace(get_text_config=lambda: SimpleNamespace(split_parts=3))
+        operation = Chunk(dim=0, num_shards_attribute="split_parts")
+
+        result = operation.convert(
+            {"source": [torch.arange(5)]},
+            source_patterns=["source"],
+            target_patterns=["shard_*"],
+            config=config,
+            full_layer_name="embedding.weight",
+        )
+
+        self.assertEqual(list(result), ["shard_0", "shard_1", "shard_2"])
+        self.assertEqual([tensor.shape[0] for tensor in result.values()], [2, 2, 1])
+
+    def test_chunk_rejects_missing_config_driven_shards(self):
+        config = SimpleNamespace(get_text_config=lambda: SimpleNamespace(split_parts=3))
+        operation = Chunk(dim=0, num_shards_attribute="split_parts")
+
+        with self.assertRaisesRegex(ValueError, r"3 chunks.*returned 2 chunks"):
+            operation.convert(
+                {"source": [torch.arange(2)]},
+                source_patterns=["source"],
+                target_patterns=["shard_*"],
+                config=config,
+                full_layer_name="embedding.weight",
+            )
+
 
 class DummyParamModule(nn.Module):
     def __init__(self, shape):

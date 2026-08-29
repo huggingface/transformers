@@ -110,8 +110,9 @@ class _IdentityOp(ConversionOps):
 
 
 class Chunk(ConversionOps):
-    """Split a tensor along `dim` into equally sized chunks. Additionally, `num_shards_attribute` is a config field to read
-    to know how many tensors to chunk into. Useful when concatenating an arbitrary number of tensors."""
+    """Split a tensor along `dim` into chunks. Fixed targets require equally sized chunks. Additionally,
+    `num_shards_attribute` is a config field to read to know how many checkpoint shards to create; those shards may be
+    uneven. Useful when concatenating an arbitrary number of tensors."""
 
     def __init__(self, dim: int = 0, num_shards_attribute: str | None = None):
         self.dim = dim
@@ -128,12 +129,17 @@ class Chunk(ConversionOps):
         targets = self.get_target_patterns(target_patterns, **kwargs)
         num_shards = len(targets)
         dimension_size = tensor.shape[self.dim]
-        if dimension_size % num_shards != 0:
+        if self.num_shards_attribute is None and dimension_size % num_shards != 0:
             raise ValueError(
                 f"Cannot split tensor for `{kwargs.get('full_layer_name')}` with size {dimension_size} along dimension "
                 f"{self.dim} into {num_shards} equally sized chunks."
             )
         chunks = tuple(chunk.contiguous() for chunk in torch.chunk(tensor, num_shards, dim=self.dim))
+        if len(chunks) != num_shards:
+            raise ValueError(
+                f"Cannot split tensor for `{kwargs.get('full_layer_name')}` into {num_shards} chunks along dimension "
+                f"{self.dim}: `torch.chunk` returned {len(chunks)} chunks."
+            )
         return dict(zip(targets, chunks))
 
     def get_target_patterns(self, target_patterns: list[str], **kwargs) -> list[str]:
