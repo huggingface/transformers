@@ -15,6 +15,7 @@
 from dataclasses import field
 
 import torch
+from huggingface_hub.dataclasses import strict
 from torch import nn
 from torch.nn import functional as F
 
@@ -36,6 +37,8 @@ from ..lightglue.modeling_lightglue import (
 )
 
 
+@auto_docstring
+@strict(accept_kwargs=True)
 class LoMaVgg19EncoderConfig(PreTrainedConfig):
     r"""
     in_channels (`int`, *optional*, defaults to 3):
@@ -67,6 +70,8 @@ class LoMaVgg19EncoderConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
+@auto_docstring
+@strict(accept_kwargs=True)
 class LoMaDescriptorDecoderConfig(PreTrainedConfig):
     r"""
     scales (`list[str]`, *optional*, defaults to `["14", "8", "4", "2", "1"]`):
@@ -87,6 +92,8 @@ class LoMaDescriptorDecoderConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
+@auto_docstring(checkpoint="ETH-CVG/loma_superpoint")
+@strict(accept_kwargs=True)
 class LoMaConfig(LightGlueConfig):
     r"""
     keypoint_detector_config (`Union[AutoConfig, dict]`, *optional*, defaults to `SuperPointConfig`):
