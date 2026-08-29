@@ -1384,7 +1384,6 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
         )
         self.tokenizer_type = getattr(config, "tokenizer_type", "qwen2")
         self.tts_model_size = getattr(config, "tts_model_size", "base")
-        self.tts_model_type = getattr(config, "tts_model_type", "base")
 
         # Initialize weights and apply final processing
         self.post_init()

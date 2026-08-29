@@ -189,7 +189,6 @@ def create_config_from_checkpoint(checkpoint_path: Path) -> Qwen3TTSConfig:
         speaker_encoder_config=speaker_encoder_dict,
         tokenizer_type=original_config.get("tokenizer_type"),
         tts_model_size=original_config.get("tts_model_size"),
-        tts_model_type=original_config.get("tts_model_type"),
         im_start_token_id=original_config.get("im_start_token_id", 151644),
         im_end_token_id=original_config.get("im_end_token_id", 151645),
         tts_pad_token_id=original_config.get("tts_pad_token_id", 151671),
