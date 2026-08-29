@@ -1819,6 +1819,7 @@ def _build_checkpoint_conversion_mapping():
         PrefixChange(prefix_to_remove="model"),
         PrefixChange(prefix_to_remove="mtp"),
         WeightRenaming(source_patterns=".shared_head.norm.", target_patterns=".post_norm."),
+        WeightRenaming(source_patterns=".mtp_block.transformer.post_norm.", target_patterns=".post_norm."),
         WeightRenaming(source_patterns=".mtp_block.enorm.", target_patterns=".enorm."),
         WeightRenaming(source_patterns=".mtp_block.hnorm.", target_patterns=".hnorm."),
         WeightRenaming(source_patterns=".mtp_block.eh_proj.", target_patterns=".eh_proj."),

@@ -332,6 +332,10 @@ class Step3p7Config(PreTrainedConfig):
             self.vision_config = Step3p7VisionConfig(
                 **{k: v for k, v in self.vision_config.items() if k != "model_type"}
             )
+        elif not isinstance(self.vision_config, Step3p7VisionConfig):
+            self.vision_config = Step3p7VisionConfig(
+                **{k: v for k, v in self.vision_config.to_dict().items() if k != "model_type"}
+            )
 
         if self.text_config is None:
             self.text_config = Step3p7TextConfig()
@@ -984,6 +988,7 @@ class Step3p7Model(DeepseekOcr2Model):
 
 class Step3p7ForConditionalGeneration(DeepseekOcr2ForConditionalGeneration):
     config: Step3p7Config
+    _keys_to_ignore_on_load_unexpected = [r"model\.language_model\.layers\.(45|46|47)\..*"]
 
 
 @auto_docstring

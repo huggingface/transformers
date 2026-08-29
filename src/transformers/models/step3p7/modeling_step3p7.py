@@ -1119,6 +1119,7 @@ class Step3p7CausalLMOutputWithPast(ModelOutput):
 class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     config: Step3p7Config
+    _keys_to_ignore_on_load_unexpected = [r"model\.language_model\.layers\.(45|46|47)\..*"]
 
     def __init__(self, config: Step3p7Config):
         super().__init__(config)
