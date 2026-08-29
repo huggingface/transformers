@@ -63,7 +63,6 @@ class Qwen3TTSProcessor(ProcessorMixin):
     """
 
     attributes = ["feature_extractor", "tokenizer"]
-    feature_extractor_class = "Qwen3TTSFeatureExtractor"
     tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
     audio_tokenizer_class = "Qwen3TTSTokenizerMultiCodebookModel"
 
