@@ -1042,25 +1042,6 @@ class ContinuousBatchingManager:
             self._has_new_requests.clear()
             return True
 
-    @torch.no_grad()
-    def _run_generation_loop(self) -> None:
-        """Main processing loop running in the background thread.
-
-        The loop gets the device its model is on, since a fresh thread starts on device 0 whatever
-        the rank, and a stream of its own. Sharing the default stream with a main thread that keeps
-        using the model deadlocks: this loop's collectives wait for their peer, and the main
-        thread's work sits behind them in the same stream, so the peer can never get there.
-        """
-        if torch.cuda.is_available() and self.model.device.type == "cuda":
-            torch.cuda.set_device(self.model.device)
-            # High priority: decode is latency-bound and its collectives wait on the peer rank, so
-            # they must be scheduled promptly even when a trainer is saturating the device.
-            stream_ctx = torch.cuda.stream(torch.cuda.Stream(priority=-1))
-        else:
-            stream_ctx = nullcontext()
-        with stream_ctx:
-            self._generation_loop()
-
     def step(self) -> bool:
         """Run one iteration of the generation loop on the calling thread, and say whether it ran.
 
@@ -1089,7 +1070,9 @@ class ContinuousBatchingManager:
         self.current_batch += 1
         return True
 
-    def _generation_loop(self) -> None:
+    @torch.no_grad()
+    def _run_generation_loop(self) -> None:
+        """Main processing loop running in the background thread."""
         batch_processor = None
 
         # Everything is inside this try / except / finally block so we can handle critical errors gracefully
