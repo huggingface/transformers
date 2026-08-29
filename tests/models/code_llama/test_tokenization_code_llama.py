@@ -206,6 +206,26 @@ class LlamaIntegrationTest(unittest.TestCase):
         self.tokenizer.add_eos_token = False
         self.rust_tokenizer.add_eos_token = False
 
+    def test_decode_keeps_real_leading_whitespace(self):
+        # Metaspace only prepends `▁` when the text does not already start with one, so with two or
+        # more leading spaces there is no synthetic prefix to remove and the old
+        # `Strip(content=" ", left=1)` decoder ate one of the user's own spaces. Indentation matters
+        # for a code model, so this is the case worth pinning. Regression test for #47487.
+        tokenizer = self.tokenizer
+        for text in ["  hello", "   leading spaces", "    indented_line", "def f():\n    return 1"]:
+            ids = tokenizer.encode(text, add_special_tokens=False)
+            self.assertEqual(tokenizer.decode(ids), text)
+
+        # The synthetic prefix is still stripped, so text without leading whitespace does not gain a
+        # space. A single leading space is fused into the prefix at encode time and stays unrecoverable.
+        for text in ["hello", "\tindented", "élan"]:
+            ids = tokenizer.encode(text, add_special_tokens=False)
+            self.assertEqual(tokenizer.decode(ids), text)
+        self.assertEqual(tokenizer.decode(tokenizer.encode(" hello", add_special_tokens=False)), "hello")
+
+        # Only the very start of the string is affected, never the indentation of later lines.
+        self.assertEqual(tokenizer.decode(tokenizer.encode(" a\n  b", add_special_tokens=False)), "a\n  b")
+
     @unittest.skip(
         "Skipped in v5 - CodeLlama tokenization differences related to SPM legacy flag and Metaspace handling. "
         "CodeLlama always uses legacy=False (Metaspace pre_tokenizer, no normalizer)"

@@ -27,6 +27,7 @@ from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_
 from tokenizers.models import BPE, Unigram, WordPiece
 
 from .integrations.mistral.constants import is_tekken_vocab_filename
+from .tokenization_utils_base import PREFIX_SPACE_PATTERN
 from .utils import is_protobuf_available, is_sentencepiece_available, logging, requires_backends
 from .utils.import_utils import PROTOBUF_IMPORT_ERROR
 
@@ -1637,7 +1638,7 @@ class LlamaConverter(SpmConverter):
             decoders.Fuse(),
         ]
         if add_prefix_space:
-            sequence += [decoders.Strip(content=" ", left=1)]
+            sequence += [decoders.Replace(Regex(PREFIX_SPACE_PATTERN), "")]
         return decoders.Sequence(sequence)
 
     def normalizer(self, proto):
@@ -1731,7 +1732,7 @@ class MoshiConverter(SpmConverter):
             decoders.Fuse(),
         ]
         if add_prefix_space:
-            sequence += [decoders.Strip(content=" ", left=1)]
+            sequence += [decoders.Replace(Regex(PREFIX_SPACE_PATTERN), "")]
         return decoders.Sequence(sequence)
 
     def pre_tokenizer(self, replacement, add_prefix_space):
@@ -1801,7 +1802,7 @@ class HeliumConverter(SpmConverter):
             decoders.ByteFallback(),
             decoders.Fuse(),
         ]
-        sequence += [decoders.Strip(content=" ", left=1)]
+        sequence += [decoders.Replace(Regex(PREFIX_SPACE_PATTERN), "")]
         return decoders.Sequence(sequence)
 
     def normalizer(self, proto):
