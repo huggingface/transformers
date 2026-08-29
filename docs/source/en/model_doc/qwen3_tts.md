@@ -25,10 +25,18 @@ The abstract from the paper is the following:
 
 *We release Qwen3-TTS, a series of powerful speech generation models offering comprehensive support for voice clone, voice design, ultra-high-quality human-like speech generation, and natural language-based voice control. Powered by the self-developed Qwen3-TTS-Tokenizer-12Hz, it achieves efficient acoustic compression and high-dimensional semantic modeling of speech signals. Utilizing a discrete multi-codebook LM architecture, it realizes full-information end-to-end speech modeling that completely bypasses the information bottlenecks and cascading errors inherent in traditional LM+DiT schemes. It covers 10 major languages (Chinese, English, Japanese, Korean, German, French, Russian, Portuguese, Spanish, and Italian) and supports streaming generation with end-to-end latency as low as 97ms.*
 
-`Qwen3-TTS` checkpoints can be found on the [Hugging Face Hub](https://huggingface.co/collections/Qwen/qwen3-tts).
+The original `Qwen3-TTS` checkpoints can be found on the
+[Hugging Face Hub](https://huggingface.co/collections/Qwen/qwen3-tts). They are in the format of the original
+implementation, so convert them with `convert_qwen3_tts_to_hf.py` before use; the snippets below load an
+already converted Base checkpoint,
+[shahvandit/qwen3-tts-base-hf](https://huggingface.co/shahvandit/qwen3-tts-base-hf).
 
-The audio codec that Qwen3-TTS generates into is documented separately, in
-[Qwen3-TTS Multi-Codebook Tokenizer](./qwen3_tts_tokenizer_multi_codebook).
+Qwen3-TTS generates codes for a separate audio codec, which decodes them to a waveform. That codec is its own
+model, documented in [Qwen3-TTS Multi-Codebook Tokenizer](./qwen3_tts_tokenizer_multi_codebook); the processor
+loads it alongside the text tokenizer and the feature extractor, so [`~Qwen3TTSProcessor.batch_decode`] works
+without setting it up yourself.
+
+This model was contributed by [Vandit Shah](https://huggingface.co/shahvandit).
 
 ## Usage Tips
 
@@ -42,10 +50,10 @@ with [`~Qwen3TTSProcessor.apply_chat_template`], generate the speech codes, then
 import torch
 from transformers import Qwen3TTSForConditionalGeneration, Qwen3TTSProcessor
 
-model_id = "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
+model_id = "shahvandit/qwen3-tts-base-hf"
 
 processor = Qwen3TTSProcessor.from_pretrained(model_id)
-model = Qwen3TTSForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16, device_map="auto")
+model = Qwen3TTSForConditionalGeneration.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
 
 conversation = [
     {"role": "user", "content": [{"type": "text", "text": "Hello, how are you doing today?"}]},
@@ -60,7 +68,10 @@ processor.save_audio(audio, "output.wav")
 ### Built-in Voice Presets
 
 CustomVoice models ship with built-in voice presets. Set a `speaker` on the `user` message and a `language`. Use
-`model.get_supported_speakers()` to list available voices for the loaded checkpoint.
+`model.get_supported_speakers()` to list available voices for the loaded checkpoint; it is empty on Base
+checkpoints, which have no presets.
+
+The id below is an original checkpoint, so convert it with `convert_qwen3_tts_to_hf.py` and load the result.
 
 ```python
 import torch
@@ -69,7 +80,7 @@ from transformers import Qwen3TTSForConditionalGeneration, Qwen3TTSProcessor
 model_id = "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice"
 
 processor = Qwen3TTSProcessor.from_pretrained(model_id)
-model = Qwen3TTSForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16, device_map="auto")
+model = Qwen3TTSForConditionalGeneration.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
 
 conversation = [
     {
@@ -94,10 +105,10 @@ Pass a list of conversations to generate a batch:
 import torch
 from transformers import Qwen3TTSForConditionalGeneration, Qwen3TTSProcessor
 
-model_id = "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
+model_id = "shahvandit/qwen3-tts-base-hf"
 
 processor = Qwen3TTSProcessor.from_pretrained(model_id)
-model = Qwen3TTSForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16, device_map="auto")
+model = Qwen3TTSForConditionalGeneration.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
 
 conversations = [
     [{"role": "user", "content": [{"type": "text", "text": "The weather is nice today."}]}],
@@ -112,7 +123,8 @@ processor.save_audio(audios, ["output_0.wav", "output_1.wav"])
 
 ### Voice Design with Natural Language Instructions
 
-VoiceDesign models accept a natural language description of the desired voice as a `system` message:
+VoiceDesign models accept a natural language description of the desired voice as a `system` message. As above, the
+id below is an original checkpoint and needs converting first:
 
 ```python
 import torch
@@ -121,7 +133,7 @@ from transformers import Qwen3TTSForConditionalGeneration, Qwen3TTSProcessor
 model_id = "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign"
 
 processor = Qwen3TTSProcessor.from_pretrained(model_id)
-model = Qwen3TTSForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16, device_map="auto")
+model = Qwen3TTSForConditionalGeneration.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
 
 conversation = [
     {
@@ -154,11 +166,12 @@ Also, you should have hardware that is compatible with FlashAttention 2. Read mo
 To load and run a model using FlashAttention-2, add `attn_implementation="flash_attention_2"` when loading the model:
 
 ```python
+import torch
 from transformers import Qwen3TTSForConditionalGeneration
 
 model = Qwen3TTSForConditionalGeneration.from_pretrained(
-    "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
-    torch_dtype=torch.bfloat16,
+    "shahvandit/qwen3-tts-base-hf",
+    dtype=torch.bfloat16,
     attn_implementation="flash_attention_2",
     device_map="auto",
 )
