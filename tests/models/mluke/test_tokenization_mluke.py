@@ -116,9 +116,7 @@ class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertNotEqual(tokenizer.extra_special_tokens_ids[0], tokenizer.entity_token_1_id)
 
         encoding = tokenizer("Beyonce lives in Los Angeles.", entity_spans=[(0, 7)])
-        expected_tokens = [
-            "<s>", "<ent>", "▁Beyonce", "<ent>", "▁lives", "▁in", "▁Los", "▁Angeles", ".", "</s>"
-        ]
+        expected_tokens = ["<s>", "<ent>", "▁Beyonce", "<ent>", "▁lives", "▁in", "▁Los", "▁Angeles", ".", "</s>"]
         self.assertEqual(tokenizer.convert_ids_to_tokens(encoding["input_ids"]), expected_tokens)
 
     def test_entity_pair_classification_markers_ignore_extra_special_token_order(self):
@@ -132,7 +130,20 @@ class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
         encoding = tokenizer("Beyonce lives in Los Angeles.", entity_spans=[(0, 7), (16, 27)])
         expected_tokens = [
-            "<s>", "<ent>", "▁Beyonce", "<ent>", "▁lives", "▁in", "<ent2>", "▁Los", "▁Angel", "e", "<ent2>", "▁s", ".", "</s>"
+            "<s>",
+            "<ent>",
+            "▁Beyonce",
+            "<ent>",
+            "▁lives",
+            "▁in",
+            "<ent2>",
+            "▁Los",
+            "▁Angel",
+            "e",
+            "<ent2>",
+            "▁s",
+            ".",
+            "</s>",
         ]
         self.assertEqual(tokenizer.convert_ids_to_tokens(encoding["input_ids"]), expected_tokens)
 
