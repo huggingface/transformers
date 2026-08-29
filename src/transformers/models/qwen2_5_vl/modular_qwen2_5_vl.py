@@ -20,6 +20,7 @@
 
 import itertools
 import warnings
+from collections import defaultdict
 
 import torch
 import torch.nn as nn
@@ -60,6 +61,72 @@ from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 
 
 logger = logging.get_logger(__name__)
+
+
+def get_mrope_position_ids(
+    config,
+    input_ids: torch.LongTensor,
+    mm_token_type_ids: torch.IntTensor,
+    attention_mask: torch.Tensor | None = None,
+    image_grid_thw: torch.LongTensor | None = None,
+    video_grid_thw: torch.LongTensor | None = None,
+    second_per_grid_ts: torch.Tensor | None = None,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """M-RoPE decoder positions for a sequence of interleaved text and vision runs.
+
+    Per batch row, over the unpadded tokens, walk `mm_token_type_ids` span by span (0=text, 1=image,
+    2=video): a text run counts 1D positions on all three axes, and a vision span lays a
+    `(temporal, height, width)` grid then advances the text position by its largest spatial extent. A
+    video's temporal axis is scaled by this family's clock, `tokens_per_second * second_per_grid_ts`.
+    Returns `(position_ids, rope_deltas)`, the deltas being what `generate` advances decode positions by.
+    """
+    vision_config = config.vision_config
+    spatial_merge_size = vision_config.spatial_merge_size
+    tokens_per_second = vision_config.tokens_per_second
+    grids = {1: image_grid_thw, 2: video_grid_thw}
+
+    position_ids = torch.full(
+        (3, input_ids.shape[0], input_ids.shape[1]), 0, dtype=input_ids.dtype, device=input_ids.device
+    )
+    rope_deltas = []
+    for batch_idx, token_ids in enumerate(input_ids):
+        input_token_type = mm_token_type_ids[batch_idx]
+        valid_tokens = None
+        if attention_mask is not None:
+            valid_tokens = attention_mask[batch_idx].bool()
+            token_ids, input_token_type = token_ids[valid_tokens], input_token_type[valid_tokens]
+
+        counter, current_position, blocks = defaultdict(int), 0, []
+        for modality_type, group in itertools.groupby(enumerate(input_token_type.tolist()), lambda x: x[1]):
+            length = len(list(group))
+            # 0 is a text run; 1 and 2 are image and video spans.
+            if modality_type == 0:
+                positions = torch.arange(current_position, current_position + length, device=token_ids.device)
+                blocks.append(positions.expand(3, length))
+                current_position += length
+                continue
+
+            grid_thw = grids[modality_type][counter[modality_type]]
+            counter[modality_type] += 1
+            grid_t = grid_thw[0].item()
+            grid_h, grid_w = grid_thw[1].item() // spatial_merge_size, grid_thw[2].item() // spatial_merge_size
+            time_interval = 1
+            if modality_type == 2 and second_per_grid_ts is not None:
+                time_interval = tokens_per_second * int(second_per_grid_ts[counter[modality_type] - 1])
+            temporal = torch.arange(grid_t, device=token_ids.device) * time_interval + current_position
+            height = torch.arange(grid_h, device=token_ids.device) + current_position
+            width = torch.arange(grid_w, device=token_ids.device) + current_position
+            axes = torch.meshgrid(temporal, height, width, indexing="ij")
+            blocks.append(torch.stack(axes, dim=0).reshape(3, -1))
+            current_position += int(max(grid_thw[1], grid_thw[2])) // spatial_merge_size
+
+        positions = torch.cat(blocks, dim=1).to(device=position_ids.device, dtype=position_ids.dtype)
+        if valid_tokens is not None:
+            position_ids[:, batch_idx, valid_tokens] = positions
+        else:
+            position_ids[:, batch_idx] = positions
+        rope_deltas.append(positions.max() + 1 - len(token_ids))
+    return position_ids, torch.tensor(rope_deltas, device=input_ids.device).unsqueeze(1)
 
 
 @auto_docstring(checkpoint="Qwen/Qwen2-VL-7B-Instruct")
@@ -375,69 +442,15 @@ class Qwen2_5_VLModel(Qwen2VLModel):
             position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
             mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
         """
-        spatial_merge_size = self.config.vision_config.spatial_merge_size
-        tokens_per_second = self.config.vision_config.tokens_per_second
-
-        mrope_position_deltas = []
-        position_ids = torch.zeros(
-            3,
-            input_ids.shape[0],
-            input_ids.shape[1],
-            dtype=input_ids.dtype,
-            device=input_ids.device,
+        return get_mrope_position_ids(
+            self.config,
+            input_ids,
+            mm_token_type_ids,
+            image_grid_thw=image_grid_thw,
+            video_grid_thw=video_grid_thw,
+            attention_mask=attention_mask,
+            second_per_grid_ts=second_per_grid_ts,
         )
-        grid_iters = {
-            1: iter(image_grid_thw) if image_grid_thw is not None else None,
-            2: iter(video_grid_thw) if video_grid_thw is not None else None,
-        }
-        second_per_grid_ts = (
-            iter(second_per_grid_ts) if second_per_grid_ts is not None else iter([1] * input_ids.shape[1])
-        )
-        for batch_idx, current_input_ids in enumerate(input_ids):
-            input_token_type = mm_token_type_ids[batch_idx]
-            if attention_mask is not None:
-                current_input_ids = current_input_ids[attention_mask[batch_idx].bool()]
-                input_token_type = input_token_type[attention_mask[batch_idx].bool()]
-
-            input_type_group = []
-            for key, group in itertools.groupby(enumerate(input_token_type.tolist()), lambda x: x[1]):
-                group = list(group)
-                start_index = group[0][0]
-                end_index = group[-1][0] + 1
-                input_type_group.append((key, start_index, end_index))
-
-            current_pos = 0
-            llm_pos_ids_list = []
-            for modality_type, start_idx, end_idx in input_type_group:
-                # text == 0
-                if modality_type == 0:
-                    text_len = end_idx - start_idx
-                    llm_pos_ids_list.append(
-                        torch.arange(text_len, device=input_ids.device).view(1, -1).expand(3, -1) + current_pos
-                    )
-                    current_pos += text_len
-                # image == 1, video == 2
-                else:
-                    grid_thw = next(grid_iters[modality_type])
-                    # Only apply temporal scaling for videos; still images have no
-                    # temporal dimension to space out (fixes #45325).
-                    if modality_type == 2:
-                        time_interval = tokens_per_second * int(next(second_per_grid_ts))
-                    else:
-                        time_interval = 1
-                    vision_position_ids = self.get_vision_position_ids(
-                        current_pos, grid_thw, 1, spatial_merge_size, time_interval, device=input_ids.device
-                    )
-                    llm_pos_ids_list.append(vision_position_ids)
-                    current_pos += max(grid_thw[1], grid_thw[2]) // spatial_merge_size
-            llm_positions = torch.cat(llm_pos_ids_list, dim=1).reshape(3, -1)
-            if attention_mask is not None:
-                position_ids[:, batch_idx, attention_mask[batch_idx].bool()] = llm_positions.to(position_ids.device)
-            else:
-                position_ids[:, batch_idx] = llm_positions.to(position_ids.device)
-            mrope_position_deltas.append(llm_positions.max() + 1 - len(current_input_ids))
-        mrope_position_deltas = torch.tensor(mrope_position_deltas, device=input_ids.device).unsqueeze(1)
-        return position_ids, mrope_position_deltas
 
     def compute_3d_position_ids(
         self,
@@ -450,6 +463,9 @@ class Qwen2_5_VLModel(Qwen2VLModel):
         second_per_grid_ts: torch.Tensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
     ) -> torch.Tensor | None:
+        # Kept rather than inherited: this model falls back to 1D positions when `mm_token_type_ids` is
+        # missing, where the mixin raises. Callers pass grids without it (`test_video_forward`), so
+        # inheriting would be a breaking change for them.
         past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
         can_compute_mrope = (
             input_ids is not None

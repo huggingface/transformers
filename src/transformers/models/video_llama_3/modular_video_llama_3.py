@@ -467,12 +467,6 @@ class VideoLlama3Model(Qwen2VLModel):
     def get_rope_index(self):
         raise AttributeError("Not needed for VideoLLaMA3")
 
-    def get_vision_position_ids(self):
-        raise AttributeError("Not needed for VideoLLaMA3")
-
-    def compute_3d_position_ids(self):
-        raise AttributeError("Not needed for VideoLLaMA3")
-
     def get_video_features(
         self,
         pixel_values_videos: torch.FloatTensor,
@@ -695,9 +689,6 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
             image_hidden_states=outputs.image_hidden_states,
             video_hidden_states=outputs.video_hidden_states,
         )
-
-    def _prepare_position_ids_for_generation(self):
-        raise AttributeError("Not needed for VideoLLaMA3")
 
     def _get_image_nums_and_video_nums(
         self,

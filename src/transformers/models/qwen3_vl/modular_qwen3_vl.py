@@ -49,6 +49,7 @@ from ...vision_utils import (
     get_vision_position_ids,
 )
 from ..auto.modeling_auto import AutoModel
+from ..glm4v.modeling_glm4v import get_mrope_position_ids
 from ..glm4v.video_processing_glm4v import smart_resize
 from ..llama.modeling_llama import LlamaRotaryEmbedding
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
@@ -102,6 +103,10 @@ class Qwen3VLVisionConfig(PreTrainedConfig):
         The output hidden size of the vision model.
     num_position_embeddings (`int`, *optional*, defaults to 2304):
         The maximum sequence length that this model might ever be used with
+    interpolation_mode (`str`, *optional*, defaults to `"bilinear"`):
+        How the vision embedding resamples its learned position-embedding grid.
+    interpolation_align_corners (`bool`, *optional*, defaults to `True`):
+        Whether that resampling aligns corner samples.
     deepstack_visual_indexes (`list[int]`, *optional*, defaults to `[8, 16, 24]`):
         Indexed of layers for deepstack embeddings.
     """
@@ -120,6 +125,8 @@ class Qwen3VLVisionConfig(PreTrainedConfig):
     temporal_patch_size: int | list[int] | tuple[int, int] = 2
     out_hidden_size: int = 3584
     num_position_embeddings: int = 2304
+    interpolation_mode: str = "bilinear"
+    interpolation_align_corners: bool = True
     deepstack_visual_indexes: list[int] | tuple[int, ...] = (8, 16, 24)
     initializer_range: float = 0.02
 
@@ -438,8 +445,8 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
         self.pos_embed = nn.Embedding(config.num_position_embeddings, config.hidden_size)
         # How the (square) learned position grid is resampled to each image's grid.
         self.num_grid_per_side = int(config.num_position_embeddings**0.5)
-        self.interpolation_align_corners = True
-        self.interpolation_mode = "bilinear"
+        self.interpolation_align_corners = config.interpolation_align_corners
+        self.interpolation_mode = config.interpolation_mode
 
         head_dim = config.hidden_size // config.num_heads
         self.rotary_pos_emb = Qwen3VLVisionRotaryEmbedding(head_dim // 2)
@@ -486,7 +493,7 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
             num_grid_per_side=self.num_grid_per_side,
             mode=self.interpolation_mode,
             align_corners=self.interpolation_align_corners,
-            spatial_merge_size=self.config.spatial_merge_size,
+            spatial_merge_size=self.spatial_merge_size,
         )
         return (self.pos_embed(interp_indices) * interp_weights[:, :, None]).sum(1)
 
@@ -510,7 +517,7 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
             num_grid_per_side=self.num_grid_per_side,
             mode=self.interpolation_mode,
             align_corners=self.interpolation_align_corners,
-            spatial_merge_size=self.config.spatial_merge_size,
+            spatial_merge_size=self.spatial_merge_size,
             kwargs=kwargs,
         )
         position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
@@ -673,40 +680,21 @@ class Qwen3VLModel(Qwen2VLModel):
 
     def get_rope_index(
         self,
+        input_ids: torch.LongTensor,
+        mm_token_type_ids: torch.IntTensor,
+        image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
-        **super_kwargs,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Difference from Qwen2VL/Qwen2.5VL's get_rope_index:
-        - Since Qwen3.5 use timestamps to separate videos, like <t1> <vision_start> <frame1> <vision_end> <t2> <vision_start> <frame2> <vision_end>, the video_grid_thw should also be split too.
-
-        Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-                it.
-            mm_token_type_ids (`torch.IntTensor` of shape `(batch_size, sequence_length)`):
-                Token type ids matching each modality to a different value in the input sequence, i.e. text (0), image (1), video (2).
-            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-                The temporal, height and width of feature shape of each image in LLM.
-            video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-                The temporal, height and width of feature shape of each video in LLM.
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-        Returns:
-            position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
-            mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
-        """
-
-        # Separate video grid thw into multiple grids because timestamps are used to separate videos.
-        if video_grid_thw is not None:
-            video_grid_thw = torch.repeat_interleave(video_grid_thw, video_grid_thw[:, 0], dim=0)
-            video_grid_thw[:, 0] = 1
-
-        return super().get_rope_index(video_grid_thw=video_grid_thw, **super_kwargs)
+        attention_mask: torch.Tensor | None = None,
+        **kwargs,
+    ):
+        return get_mrope_position_ids(
+            self.config,
+            input_ids,
+            mm_token_type_ids,
+            attention_mask=attention_mask,
+            image_grid_thw=image_grid_thw,
+            video_grid_thw=video_grid_thw,
+        )
 
     def get_image_features(
         self,

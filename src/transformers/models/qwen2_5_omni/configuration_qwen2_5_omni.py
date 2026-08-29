@@ -268,6 +268,7 @@ class Qwen2_5OmniThinkerConfig(PreTrainedConfig):
     seconds_per_chunk: int = 2
     audio_start_token_id: int = 151647
     audio_end_token_id: int = 151648
+    vision_start_token_id: int = 151652
     user_token_id: int = 872
     initializer_range: float = 0.02
     tie_word_embeddings: bool = False

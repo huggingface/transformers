@@ -30,6 +30,7 @@ from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_multimodal_utils import MultiModalGenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -684,9 +685,9 @@ class MuseGlimmerVisionPatchEmbedder(nn.Module):
         # For now assume pos_emb_height == pos_emb_width always, i.e. as in shared ckpt
         self.num_grid_per_side = config.pos_emb_height
         # muse_glimmer resamples its position grid with `F.grid_sample(align_corners=False, padding_mode="zeros")`
-        self.interpolation_mode = "bilinear"
-        self.interpolation_align_corners = False
-        self.interpolation_padding = "zeros"
+        self.interpolation_mode = config.interpolation_mode
+        self.interpolation_align_corners = config.interpolation_align_corners
+        self.interpolation_padding = config.interpolation_padding
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
@@ -709,6 +710,7 @@ class MuseGlimmerVisionPatchEmbedder(nn.Module):
             num_grid_per_side=self.num_grid_per_side,
             mode=self.interpolation_mode,
             align_corners=self.interpolation_align_corners,
+            # the learned position grid is resampled *before* the spatial merge — indices over the unmerged grid
             spatial_merge_size=1,
         )
         return (self.position_embedding(interp_indices) * interp_weights[:, :, None]).sum(1).unsqueeze(0)
@@ -734,6 +736,7 @@ class MuseGlimmerVisionPatchEmbedder(nn.Module):
             num_grid_per_side=self.num_grid_per_side,
             mode=self.interpolation_mode,
             align_corners=self.interpolation_align_corners,
+            # the learned position grid is resampled *before* the spatial merge — indices over the unmerged grid
             spatial_merge_size=1,
             padding=self.interpolation_padding,
             kwargs=kwargs,
@@ -879,7 +882,9 @@ class MuseGlimmerVisionModel(MuseGlimmerPreTrainedModel):
         grid_thw (`torch.LongTensor` of shape `(num_images_or_videos, 3)`):
             The temporal, height and width patch-grid dimensions for each packed image or video.
         """
-        cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
+
+        # This encoder attends per frame rather than over the whole clip, unlike kimi_k25's.
+        cu_seqlens = get_vision_cu_seqlens(grid_thw, merge_temporal=False, kwargs=kwargs)
         # assumes pos_emb_height==pos_emb_width, adapt to non-square if needed
         window_index, cu_window_seqlens = get_vision_window_index(
             grid_thw,
@@ -1076,7 +1081,7 @@ class MuseGlimmerModel(MuseGlimmerPreTrainedModel):
 
 
 @auto_docstring
-class MuseGlimmerForConditionalGeneration(MuseGlimmerPreTrainedModel, GenerationMixin):
+class MuseGlimmerForConditionalGeneration(MuseGlimmerPreTrainedModel, MultiModalGenerationMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False

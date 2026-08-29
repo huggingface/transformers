@@ -29,6 +29,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_multimodal_utils import MultiModalGenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -133,8 +134,8 @@ class Kimi_K25VisionPositionEmbeddings(nn.Module):
         )
         # How the (square) learned position grid is resampled to each image's grid.
         self.num_grid_per_side = config.pos_emb_height
-        self.interpolation_align_corners = False
-        self.interpolation_mode = "bicubic"
+        self.interpolation_align_corners = config.interpolation_align_corners
+        self.interpolation_mode = config.interpolation_mode
 
         # Time-axis pos_emb are an additive sinusoidal table, i.e. add pos to hiddens rather than rotating
         time_position_embeddings = self.compute_pos_embed()
@@ -540,7 +541,11 @@ class Kimi_K25VisionModel(Kimi_K25PreTrainedModel):
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(
-            grid_thw, self.config, merge_temporal=True, kwargs=kwargs
+            # Packed vision attention spans all frames of a clip jointly, not one segment per frame.
+            grid_thw,
+            self.config,
+            merge_temporal=True,
+            kwargs=kwargs,
         )
 
         for block in self.layers:
@@ -723,7 +728,7 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel):
 
 
 @auto_docstring
-class Kimi_K25ForConditionalGeneration(Kimi_K25PreTrainedModel, GenerationMixin):
+class Kimi_K25ForConditionalGeneration(Kimi_K25PreTrainedModel, MultiModalGenerationMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False

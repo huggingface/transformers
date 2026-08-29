@@ -1673,9 +1673,6 @@ class Glm5NextForConditionalGeneration(Glm46VForConditionalGeneration, Glm5NextP
             router_logits=outputs.router_logits,
         )
 
-    def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
-        raise AttributeError()
-
     @staticmethod
     def create_masks_for_generate(config, inputs_embeds, attention_mask, past_key_values, **_):
         # We only use the base 2D mask as the indexer is reliant on the padding, not the expanded masks.

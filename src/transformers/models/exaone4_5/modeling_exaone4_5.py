@@ -32,6 +32,7 @@ from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_multimodal_utils import MultiModalGenerationMixin, MultiModalPreTrainedModelMixin
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -610,7 +611,7 @@ class Exaone4_5_VisionModel(Exaone4_5_PreTrainedModel):
 
 
 @auto_docstring
-class Exaone4_5_Model(Exaone4_5_PreTrainedModel):
+class Exaone4_5_Model(Exaone4_5_PreTrainedModel, MultiModalPreTrainedModelMixin):
     base_model_prefix = "model"
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
@@ -761,7 +762,7 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel):
         )
 
 
-class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, GenerationMixin):
+class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, MultiModalGenerationMixin, GenerationMixin):
     """
     Main EXAONE 4.5 conditional generation class.
 

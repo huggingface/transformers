@@ -538,6 +538,9 @@ class MuseGlimmerVisionConfig(Kimi_K25VisionConfig):
     merge_size: int = 2
     pos_emb_height: int = 32
     pos_emb_width: int = 32
+    interpolation_mode: str = "bilinear"
+    interpolation_padding: str = "zeros"
+
     hidden_act: str = "gelu"
     max_position_embeddings: int = 32 * 32  # == `pos_h * pos_w`
     layer_norm_eps: float = 1e-05
@@ -895,9 +898,9 @@ class MuseGlimmerVisionPatchEmbedder(PaddleOCRVisionEmbeddings):
         # For now assume pos_emb_height == pos_emb_width always, i.e. as in shared ckpt
         self.num_grid_per_side = config.pos_emb_height
         # muse_glimmer resamples its position grid with `F.grid_sample(align_corners=False, padding_mode="zeros")`
-        self.interpolation_mode = "bilinear"
-        self.interpolation_align_corners = False
-        self.interpolation_padding = "zeros"
+        self.interpolation_mode = config.interpolation_mode
+        self.interpolation_align_corners = config.interpolation_align_corners
+        self.interpolation_padding = config.interpolation_padding
 
     def forward(
         self,
@@ -920,6 +923,7 @@ class MuseGlimmerVisionPatchEmbedder(PaddleOCRVisionEmbeddings):
             num_grid_per_side=self.num_grid_per_side,
             mode=self.interpolation_mode,
             align_corners=self.interpolation_align_corners,
+            # the learned position grid is resampled *before* the spatial merge — indices over the unmerged grid
             spatial_merge_size=1,
             padding=self.interpolation_padding,
             kwargs=kwargs,
@@ -1019,7 +1023,9 @@ class MuseGlimmerVisionModel(MuseGlimmerPreTrainedModel):
         grid_thw (`torch.LongTensor` of shape `(num_images_or_videos, 3)`):
             The temporal, height and width patch-grid dimensions for each packed image or video.
         """
-        cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
+
+        # This encoder attends per frame rather than over the whole clip, unlike kimi_k25's.
+        cu_seqlens = get_vision_cu_seqlens(grid_thw, merge_temporal=False, kwargs=kwargs)
         # assumes pos_emb_height==pos_emb_width, adapt to non-square if needed
         window_index, cu_window_seqlens = get_vision_window_index(
             grid_thw,

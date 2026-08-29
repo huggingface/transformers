@@ -42,6 +42,7 @@ from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_multimodal_utils import MultiModalGenerationMixin, MultiModalPreTrainedModelMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
@@ -1826,7 +1827,7 @@ class Glm5NextVisionModel(Glm5NextPreTrainedModel):
 
 
 @auto_docstring
-class Glm5NextModel(Glm5NextPreTrainedModel):
+class Glm5NextModel(Glm5NextPreTrainedModel, MultiModalPreTrainedModelMixin):
     base_model_prefix = "model"
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
@@ -2061,7 +2062,7 @@ def load_balancing_loss_func(
 
 
 @auto_docstring
-class Glm5NextForConditionalGeneration(Glm5NextPreTrainedModel, GenerationMixin):
+class Glm5NextForConditionalGeneration(Glm5NextPreTrainedModel, MultiModalGenerationMixin, GenerationMixin):
     """
     Main Glm5Next conditional generation class.
     """

@@ -34,6 +34,7 @@ from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_multimodal_utils import MultiModalPreTrainedModelMixin
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -891,7 +892,7 @@ class GlmImageTextModel(GlmImagePreTrainedModel):
 
 
 @auto_docstring
-class GlmImageModel(GlmImagePreTrainedModel):
+class GlmImageModel(GlmImagePreTrainedModel, MultiModalPreTrainedModelMixin):
     base_model_prefix = "model"
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
@@ -911,58 +912,6 @@ class GlmImageModel(GlmImagePreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_vision_position_ids(
-        self,
-        start_position: int,
-        grid_thw: list[int, int, int] | torch.Tensor,
-        temp_merge_size: int = 1,
-        spatial_merge_size: int = 1,
-        time_interval: int = 1,
-        device: str | torch.device | None = None,
-    ):
-        """
-        Compute 3D positional indices for vision tokens derived from a single image or video input.
-
-        The positions are generated from the input grid defined by temporal (T), height (H), and
-        width (W) dimensions. Temporal and spatial dimensions can be downscaled according to the
-        merge sizes used in the vision backbone. The resulting positions are offset by `start_position`.
-
-        Args:
-            start_position (`int`):
-                Offset added to all computed positional indices.
-            grid_thw (`Sequence[int]` or `torch.Tensor` of shape `(3,)`):
-                The (T, H, W) grid representing the feature layout of the current image or video after patch embedding.
-            temp_merge_size (`int`, *optional*):
-                Factor by which the temporal dimension is reduced in the backbone. The temporal grid size is divided
-                by this value. Defaults to 1.
-            spatial_merge_size (`int`, *optional*):
-                Factor by which the spatial dimensions (H and W) are reduced in the backbone. Both H and W are divided
-                by this value. Defaults to 1.
-            time_interval (`int`, *optional*):
-                Spacing factor applied between consecutive temporal position indices.Defaults to 1.
-            device (`str` or `torch.device`, *optional*):
-                Device on which the resulting tensor is allocated. If `None`, uses the current default device.
-
-        Returns:
-            torch.LongTensor of shape (3, sequence_length):
-                Positional indices for temporal, height, and width dimensions,
-                flattened into sequence form and offset by `start_position`.
-        """
-        llm_grid_t, llm_grid_h, llm_grid_w = (
-            grid_thw[0].item() // temp_merge_size,
-            grid_thw[1].item() // spatial_merge_size,
-            grid_thw[2].item() // spatial_merge_size,
-        )
-
-        position_temporal = torch.arange(llm_grid_t, device=device) * time_interval
-        position_height = torch.arange(llm_grid_h, device=device) + start_position
-        position_width = torch.arange(llm_grid_w, device=device) + start_position
-
-        T_grid, H_grid, W_grid = torch.meshgrid(position_temporal, position_height, position_width, indexing="ij")
-        vision_position_ids = torch.stack([T_grid, H_grid, W_grid], dim=0).reshape(3, -1)
-        vision_position_ids[0] += start_position  # must be after time_interval multiply
-        return vision_position_ids
 
     def get_rope_index(
         self,
@@ -1001,7 +950,7 @@ class GlmImageModel(GlmImagePreTrainedModel):
         image_end_token_id = self.config.image_end_token_id
 
         position_ids = torch.ones(3, batch_size, seq_len, dtype=dtype, device=device)
-        text_positions = torch.arange(seq_len, device=device)[None, :].repeat(3, 1)
+        text_position_ids = torch.arange(seq_len, device=device)[None, :].repeat(3, 1)
 
         # Split image_grid_thw by sample if images_per_sample is provided
         if image_grid_thw is not None and images_per_sample is not None:
@@ -1043,16 +992,20 @@ class GlmImageModel(GlmImagePreTrainedModel):
 
                 # Text tokens before this image
                 llm_pos_length = start - prev_image_end
-                llm_position_ids = text_positions[:, current_pos : current_pos + llm_pos_length].to(device=device)
+                llm_position_ids = text_position_ids[:, current_pos : current_pos + llm_pos_length].to(device=device)
                 current_pos += llm_position_ids.shape[-1]
 
                 # Image tokens with 2D spatial encoding
                 # For an image with height H and width W:
                 # - position_width cycles [0, 1, ..., W-1] for each row, repeated H times
                 # - position_height stays constant per row, [0]*W, [1]*W, ..., [H-1]*W
-                vision_position_ids = self.get_vision_position_ids(
-                    start_position=current_pos, grid_thw=curr_grids[img_idx], device=device
-                )
+                grid_thw = curr_grids[img_idx]
+                grid_t, grid_h, grid_w = (int(grid_thw[0]), int(grid_thw[1]), int(grid_thw[2]))
+                temporal = torch.arange(grid_t, device=device) + current_pos
+                height = torch.arange(grid_h, device=device) + current_pos
+                width = torch.arange(grid_w, device=device) + current_pos
+                axes = torch.meshgrid(temporal, height, width, indexing="ij")
+                vision_position_ids = torch.stack(axes, dim=0).reshape(3, -1)
                 current_pos += max(curr_grids[img_idx][1], curr_grids[img_idx][2])
 
                 prev_image_end = end
@@ -1060,7 +1013,7 @@ class GlmImageModel(GlmImagePreTrainedModel):
 
             # Remaining text tokens (including the final image_start token for generation)
             end_position = len(curr_input_ids_valid) - prev_image_end
-            llm_position_ids = text_positions[:, current_pos : current_pos + end_position].to(device=device)
+            llm_position_ids = text_position_ids[:, current_pos : current_pos + end_position].to(device=device)
             current_pos += llm_position_ids.shape[-1]
             curr_position_ids.append(llm_position_ids)
 
@@ -1180,45 +1133,6 @@ class GlmImageModel(GlmImagePreTrainedModel):
             )
 
         return special_image_mask
-
-    def compute_3d_position_ids(
-        self,
-        input_ids: torch.Tensor | None,
-        image_grid_thw: torch.Tensor | None,
-        images_per_sample: torch.Tensor | None,
-        inputs_embeds: torch.Tensor | None,
-        attention_mask: torch.Tensor | None,
-        past_key_values: torch.Tensor | None,
-    ) -> torch.Tensor | None:
-        past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
-        can_compute_mrope = input_ids is not None and image_grid_thw is not None
-
-        if can_compute_mrope and (self.rope_deltas is None or past_key_values_length == 0):
-            position_ids, rope_deltas = self.get_rope_index(
-                input_ids,
-                image_grid_thw=image_grid_thw,
-                attention_mask=attention_mask,
-                images_per_sample=images_per_sample,
-            )
-            self.rope_deltas = rope_deltas
-        # Use pre-calculated rope-deltas to infer correct 3D position ids during incremental
-        # generation (past_key_values_length > 0) or when only inputs_embeds is provided (no input_ids
-        # to recompute from). Skip when input_ids is provided without past_key_values to avoid shape
-        # mismatches from stale rope_deltas (e.g., training forward pass after generation).
-        elif self.rope_deltas is not None and (past_key_values_length > 0 or input_ids is None):
-            batch_size, seq_length, _ = inputs_embeds.shape
-            if self._cached_decode_position_ids is not None:
-                step = past_key_values_length - self._prefill_len
-                position_ids = self._cached_decode_position_ids[:, :, step : step + seq_length].permute(1, 0, 2)
-            else:
-                position_ids = (
-                    torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_key_values_length
-                )
-                position_ids = position_ids.view(1, 1, -1).repeat(3, batch_size, 1)
-        else:
-            # Can't build correct 3D positions. Let the model infer it
-            position_ids = None
-        return position_ids
 
     @auto_docstring
     @can_return_tuple
@@ -1346,6 +1260,45 @@ class GlmImageModel(GlmImagePreTrainedModel):
             vqmodel_outputs: GlmImageVQVAEModelOutput = self.vqmodel.encode(hs)
             all_image_toks.append(vqmodel_outputs.image_tokens)
         return torch.cat(all_image_toks, dim=0)
+
+    def compute_3d_position_ids(
+        self,
+        input_ids: torch.Tensor | None,
+        image_grid_thw: torch.Tensor | None,
+        images_per_sample: torch.Tensor | None,
+        inputs_embeds: torch.Tensor | None,
+        attention_mask: torch.Tensor | None,
+        past_key_values: torch.Tensor | None,
+    ) -> torch.Tensor | None:
+        past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
+        can_compute_mrope = input_ids is not None and image_grid_thw is not None
+
+        if can_compute_mrope and (self.rope_deltas is None or past_key_values_length == 0):
+            position_ids, rope_deltas = self.get_rope_index(
+                input_ids,
+                image_grid_thw=image_grid_thw,
+                attention_mask=attention_mask,
+                images_per_sample=images_per_sample,
+            )
+            self.rope_deltas = rope_deltas
+        # Use pre-calculated rope-deltas to infer correct 3D position ids during incremental
+        # generation (past_key_values_length > 0) or when only inputs_embeds is provided (no input_ids
+        # to recompute from). Skip when input_ids is provided without past_key_values to avoid shape
+        # mismatches from stale rope_deltas (e.g., training forward pass after generation).
+        elif self.rope_deltas is not None and (past_key_values_length > 0 or input_ids is None):
+            batch_size, seq_length, _ = inputs_embeds.shape
+            if self._cached_decode_position_ids is not None:
+                step = past_key_values_length - self._prefill_len
+                position_ids = self._cached_decode_position_ids[:, :, step : step + seq_length].permute(1, 0, 2)
+            else:
+                position_ids = (
+                    torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_key_values_length
+                )
+                position_ids = position_ids.view(1, 1, -1).repeat(3, batch_size, 1)
+        else:
+            # Can't build correct 3D positions. Let the model infer it
+            position_ids = None
+        return position_ids
 
 
 @auto_docstring

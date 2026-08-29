@@ -32,6 +32,7 @@ from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_multimodal_utils import MultiModalPreTrainedModelMixin
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -852,12 +853,126 @@ class HunYuanVLTextModel(HunYuanVLPreTrainedModel):
         )
 
 
+def get_mrope_image_positions(
+    grid_hw: list[int] | torch.Tensor,
+    spatial_merge_size: int = 1,
+    device: str | torch.device | None = None,
+) -> torch.Tensor:
+    """`(2, tokens)` `(width, height)` indices for one pooled image grid, for the indexed-image layout.
+
+    The vision merger appends one newline-style token per image row, so the width channel spans `w + 1`
+    positions while the height channel repeats each row id over that extra column.
+
+    Not `vision_utils.get_vision_position_ids`: that one indexes the vision *tower's* full patch grid in
+    merge-block-major order; this indexes the *decoder's* pooled grid, row-major, with the newline column.
+    """
+    grid_h, grid_w = (int(value) for value in grid_hw)
+    llm_grid_h = grid_h // spatial_merge_size
+    llm_grid_w = grid_w // spatial_merge_size
+    position_height, position_width = torch.meshgrid(
+        torch.arange(llm_grid_h, dtype=torch.long, device=device),
+        torch.arange(llm_grid_w + 1, dtype=torch.long, device=device),
+        indexing="ij",
+    )
+    return torch.stack([position_width.flatten(), position_height.flatten()], dim=0)
+
+
+def get_mrope_position_ids(
+    config,
+    input_ids: torch.LongTensor,
+    mm_token_type_ids: torch.IntTensor,
+    attention_mask: torch.Tensor | None = None,
+    image_grid_thw: torch.LongTensor | None = None,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """HunYuanVL's M-RoPE: every token keeps plain 1D positions, and each image span overwrites its slice
+    with `(width, height, image_index)` on the last three of `mrope_section`'s axes.
+
+    `rope_parameters["mrope_section"]` sets both the number and the order of the axes: each entry is the
+    half-rotary dimensions for that axis, and the last three are `(width, height, image_index)`.
+    """
+    rope_parameters = config.get_text_config().rope_parameters or {}
+    num_axes = len(rope_parameters.get("mrope_section", []))
+    spatial_merge_size = config.vision_config.spatial_merge_size
+    if num_axes < 3:
+        raise ValueError(f"An indexed-image M-RoPE layout needs at least 3 axes, got {num_axes}.")
+
+    grid_iter = iter(image_grid_thw) if image_grid_thw is not None else None
+    image_index = 0
+
+    position_ids = torch.full(
+        (num_axes, input_ids.shape[0], input_ids.shape[1]), 0, dtype=input_ids.dtype, device=input_ids.device
+    )
+    rope_deltas = []
+    for batch_idx, token_ids in enumerate(input_ids):
+        input_token_type = mm_token_type_ids[batch_idx]
+        valid_tokens = None
+        if attention_mask is not None:
+            valid_tokens = attention_mask[batch_idx].bool()
+            token_ids, input_token_type = token_ids[valid_tokens], input_token_type[valid_tokens]
+
+        current_position_ids = torch.arange(token_ids.shape[-1], dtype=input_ids.dtype, device=token_ids.device)
+        current_position_ids = current_position_ids.view(1, -1).expand(num_axes, -1).clone()
+        if grid_iter is None:
+            if valid_tokens is not None:
+                position_ids[:, batch_idx, valid_tokens] = current_position_ids
+            else:
+                position_ids[:, batch_idx] = current_position_ids
+            rope_deltas.append(current_position_ids.max() + 1 - len(token_ids))
+            continue
+
+        for modality_type, group in itertools.groupby(enumerate(input_token_type.tolist()), lambda x: x[1]):
+            if modality_type != 1:  # image == 1; this layout has no video/audio modality
+                continue
+            group = list(group)
+            span_start, span_end = group[0][0], group[-1][0] + 1
+            try:
+                grid_thw = next(grid_iter)
+            except StopIteration as error:
+                raise ValueError("Found more image placeholder spans than entries in `image_grid_thw`.") from error
+
+            vision_position_ids = get_mrope_image_positions(
+                grid_thw[1:], spatial_merge_size=spatial_merge_size, device=token_ids.device
+            )
+            grid_tokens = vision_position_ids.shape[1]
+            span_length = span_end - span_start
+            if span_length == grid_tokens + 2:  # span includes the image-boundary tokens
+                grid_start = span_start + 1
+            elif span_length == grid_tokens:
+                grid_start = span_start
+            else:
+                raise ValueError(
+                    "Image placeholder span length does not match `image_grid_thw`: "
+                    f"span_length={span_length}, expected {grid_tokens} or {grid_tokens + 2}."
+                )
+
+            grid_end = grid_start + grid_tokens
+            offset = num_axes - 3
+            current_position_ids[offset : offset + 2, grid_start:grid_end] = vision_position_ids.to(
+                dtype=input_ids.dtype
+            )
+            current_position_ids[offset + 2, grid_start:grid_end] = image_index
+            image_index += 1
+        if valid_tokens is not None:
+            position_ids[:, batch_idx, valid_tokens] = current_position_ids
+        else:
+            position_ids[:, batch_idx] = current_position_ids
+        rope_deltas.append(current_position_ids.max() + 1 - len(token_ids))
+
+    rope_deltas = torch.tensor(rope_deltas, device=input_ids.device).unsqueeze(1)
+    if image_grid_thw is not None and image_index != len(image_grid_thw):
+        raise ValueError(
+            "Number of image placeholder spans does not match `image_grid_thw`: "
+            f"spans={image_index}, images={len(image_grid_thw)}."
+        )
+    return position_ids, rope_deltas
+
+
 @auto_docstring(
     custom_intro="""
     The HunYuanVL model which consists of a vision backbone and a language model, without a language modeling head.
     """
 )
-class HunYuanVLModel(HunYuanVLPreTrainedModel):
+class HunYuanVLModel(HunYuanVLPreTrainedModel, MultiModalPreTrainedModelMixin):
     base_model_prefix = "model"
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
@@ -871,29 +986,6 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_vision_position_ids(
-        self,
-        grid_hw: list[int, int] | torch.Tensor,
-        spatial_merge_size: int = 1,
-        device: str | torch.device | None = None,
-    ):
-        """
-        Compute HunYuanVL multimodal RoPE spatial indices for the pooled image-token grid of a single image.
-
-        The vision merger appends one newline-style token per image row, so the width channel spans
-        `patch_w + 1` positions while the height channel repeats each row id over that extra column.
-        """
-        grid_h, grid_w = (int(value) for value in grid_hw)
-        llm_grid_h = grid_h // spatial_merge_size
-        llm_grid_w = grid_w // spatial_merge_size
-
-        position_height, position_width = torch.meshgrid(
-            torch.arange(llm_grid_h, dtype=torch.long, device=device),
-            torch.arange(llm_grid_w + 1, dtype=torch.long, device=device),
-            indexing="ij",
-        )
-        return torch.stack([position_width.flatten(), position_height.flatten()], dim=0)
-
     def get_rope_index(
         self,
         input_ids: torch.LongTensor,
@@ -901,101 +993,15 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
         image_grid_thw: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
     ) -> tuple[torch.LongTensor, torch.LongTensor]:
-        """
-        Build HunYuanVL multimodal RoPE position ids.
-
-        `rope_parameters["mrope_section"]` controls both the number and order of multimodal RoPE axes. Each section
-        value is the number of half-rotary dimensions assigned to the corresponding axis, and the sections must sum to
-        `head_dim // 2`.
-
-        This method returns only the multimodal rotary axes consumed by the text backbone. The last three axes are
-        `(width, height, image_index)`; any preceding axes keep their default 1D sequence positions.
-
-        `width` and `height` index the pooled visual grid inside one image. `image_index` is the ordinal of the
-        image/frame in the input sequence, so all visual tokens from the first image get `0`, the second image get
-        `1`, and so on. Text-only 1D positions for the causal mask are inferred by the text backbone and are not part
-        of this return value.
-        """
-        rope_parameters = self.config.text_config.rope_parameters or {}
-        num_mrope_axes = len(rope_parameters.get("mrope_section", []))
-        if num_mrope_axes < 3:
-            raise ValueError(f"HunYuanVL expects at least 3 multimodal RoPE axes, got {num_mrope_axes}.")
-        position_ids = torch.zeros(
-            num_mrope_axes,
-            input_ids.shape[0],
-            input_ids.shape[1],
-            dtype=input_ids.dtype,
-            device=input_ids.device,
+        """M-RoPE decoder position ids: `(position_ids, rope_deltas)`, laid out span by span over
+        `mm_token_type_ids` by [`get_mrope_position_ids`] above."""
+        return get_mrope_position_ids(
+            self.config,
+            input_ids,
+            mm_token_type_ids,
+            image_grid_thw=image_grid_thw,
+            attention_mask=attention_mask,
         )
-        grid_iter = iter(image_grid_thw) if image_grid_thw is not None else None
-        rope_deltas = []
-        image_index = 0
-
-        for batch_idx, current_input_ids in enumerate(input_ids):
-            input_token_type = mm_token_type_ids[batch_idx]
-            valid_token_mask = None
-            if attention_mask is not None:
-                valid_token_mask = attention_mask[batch_idx].bool()
-                current_input_ids = current_input_ids[valid_token_mask]
-                input_token_type = input_token_type[valid_token_mask]
-
-            current_position_ids = torch.arange(
-                current_input_ids.shape[-1], dtype=input_ids.dtype, device=input_ids.device
-            )
-            current_position_ids = current_position_ids.view(1, -1).expand(num_mrope_axes, -1).clone()
-
-            if grid_iter is not None:
-                for modality_type, group in itertools.groupby(enumerate(input_token_type.tolist()), lambda x: x[1]):
-                    if modality_type != 1:
-                        continue
-                    group = list(group)
-                    span_start = group[0][0]
-                    span_end = group[-1][0] + 1
-                    try:
-                        grid_thw = next(grid_iter)
-                    except StopIteration as error:
-                        raise ValueError(
-                            "Found more image placeholder spans than entries in `image_grid_thw`."
-                        ) from error
-
-                    vision_position_ids = self.get_vision_position_ids(
-                        grid_thw[1:],
-                        spatial_merge_size=self.config.vision_config.spatial_merge_size,
-                        device=input_ids.device,
-                    )
-                    grid_tokens = vision_position_ids.shape[1]
-                    span_length = span_end - span_start
-                    if span_length == grid_tokens + 2:
-                        grid_start = span_start + 1
-                    elif span_length == grid_tokens:
-                        grid_start = span_start
-                    else:
-                        raise ValueError(
-                            "Image placeholder span length does not match `image_grid_thw`: "
-                            f"span_length={span_length}, expected {grid_tokens} or {grid_tokens + 2}."
-                        )
-
-                    grid_end = grid_start + grid_tokens
-                    offset = num_mrope_axes - 3
-                    current_position_ids[offset : offset + 2, grid_start:grid_end] = vision_position_ids.to(
-                        dtype=input_ids.dtype
-                    )
-                    current_position_ids[offset + 2, grid_start:grid_end] = image_index
-                    image_index += 1
-
-            if valid_token_mask is not None:
-                position_ids[:, batch_idx, valid_token_mask] = current_position_ids
-            else:
-                position_ids[:, batch_idx] = current_position_ids
-            rope_deltas.append(current_position_ids.max() + 1 - len(current_input_ids))
-
-        if image_grid_thw is not None and image_index != len(image_grid_thw):
-            raise ValueError(
-                "Found fewer image placeholder spans than entries in `image_grid_thw`: "
-                f"spans={image_index}, images={len(image_grid_thw)}."
-            )
-        rope_deltas = torch.tensor(rope_deltas, device=input_ids.device).unsqueeze(1)
-        return position_ids, rope_deltas
 
     @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
@@ -1036,32 +1042,6 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
                 f"features {image_features.shape[0]}"
             )
         return special_image_mask
-
-    def compute_3d_position_ids(
-        self,
-        input_ids: torch.LongTensor | None,
-        image_grid_thw: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
-        mm_token_type_ids: torch.IntTensor | None = None,
-    ) -> torch.LongTensor | None:
-        past_seen_tokens = 0 if past_key_values is None else past_key_values.get_seq_length()
-        if image_grid_thw is not None and mm_token_type_ids is None and input_ids is not None:
-            raise ValueError(
-                "Multimodal data was passed via `image_grid_thw` but `mm_token_type_ids` is missing. Please pass "
-                "`mm_token_type_ids` to the model so that multimodal RoPE can be computed correctly. "
-                "`mm_token_type_ids` is returned by the processor alongside `input_ids`."
-            )
-        if input_ids is None or image_grid_thw is None or past_seen_tokens != 0:
-            return None
-        rope_positions, rope_deltas = self.get_rope_index(
-            input_ids,
-            mm_token_type_ids=mm_token_type_ids,
-            image_grid_thw=image_grid_thw,
-            attention_mask=attention_mask,
-        )
-        self.rope_deltas = rope_deltas
-        return rope_positions
 
     @can_return_tuple
     @auto_docstring
@@ -1122,6 +1102,32 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
             attentions=outputs.attentions,
             image_hidden_states=image_embeds if pixel_values is not None else None,
         )
+
+    def compute_3d_position_ids(
+        self,
+        input_ids: torch.LongTensor | None,
+        image_grid_thw: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        mm_token_type_ids: torch.IntTensor | None = None,
+    ) -> torch.LongTensor | None:
+        past_seen_tokens = 0 if past_key_values is None else past_key_values.get_seq_length()
+        if image_grid_thw is not None and mm_token_type_ids is None and input_ids is not None:
+            raise ValueError(
+                "Multimodal data was passed via `image_grid_thw` but `mm_token_type_ids` is missing. Please pass "
+                "`mm_token_type_ids` to the model so that multimodal RoPE can be computed correctly. "
+                "`mm_token_type_ids` is returned by the processor alongside `input_ids`."
+            )
+        if input_ids is None or image_grid_thw is None or past_seen_tokens != 0:
+            return None
+        rope_positions, rope_deltas = self.get_rope_index(
+            input_ids,
+            mm_token_type_ids=mm_token_type_ids,
+            image_grid_thw=image_grid_thw,
+            attention_mask=attention_mask,
+        )
+        self.rope_deltas = rope_deltas
+        return rope_positions
 
 
 @auto_docstring
@@ -1283,9 +1289,8 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixi
 
         return model_inputs
 
-    def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
-        # Same as qwen-vl with variable `num_mrope_axes` based on config values
-        text_positions = super()._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
+    def _prepare_mrope_position_ids_for_generation(self, text_position_ids, inputs_tensor, model_kwargs):
+        # Same as the shared layout, with a variable `num_mrope_axes` read off the config
 
         rope_parameters = self.config.text_config.rope_parameters or {}
         num_mrope_axes = len(rope_parameters.get("mrope_section", []))
@@ -1294,7 +1299,7 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixi
         if (cache := model_kwargs.get("past_key_values")) is not None:
             past_length = cache.get_seq_length()
         if past_length != 0 and self.model.rope_deltas is not None:
-            return (text_positions + self.model.rope_deltas).unsqueeze(0).expand(num_mrope_axes, -1, -1)
+            return (text_position_ids + self.model.rope_deltas).unsqueeze(0).expand(num_mrope_axes, -1, -1)
 
         if "input_ids" in model_kwargs and model_kwargs["input_ids"].shape[1] > 0:
             inputs_tensor = model_kwargs["input_ids"]
@@ -1313,7 +1318,7 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixi
             )
             self.model.rope_deltas = rope_deltas
         else:
-            rope_positions = text_positions.unsqueeze(0).expand(num_mrope_axes, -1, -1)
+            rope_positions = text_position_ids.unsqueeze(0).expand(num_mrope_axes, -1, -1)
             self.model.rope_deltas = torch.zeros(
                 inputs_tensor.shape[0], 1, dtype=torch.long, device=inputs_tensor.device
             )

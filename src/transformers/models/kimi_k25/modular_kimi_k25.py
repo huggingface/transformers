@@ -130,6 +130,10 @@ class Kimi_K25VisionConfig(PreTrainedConfig):
     intermediate_size: int = 4304
     hidden_act: str = "gelu_pytorch_tanh"
     merge_kernel_size: tuple[int, int] | list[int] = (2, 2)
+    # See `Qwen3VLVisionConfig` — the same knobs, for this family's own resampling settings
+    interpolation_mode: str = "bicubic"
+    interpolation_align_corners: bool = False
+
     rope_parameters: dict | None = None  # defaults set by `RopeConfigMixin`
     max_position_embeddings: int | None = None
 
@@ -197,8 +201,8 @@ class Kimi_K25VisionPositionEmbeddings(nn.Module):
         )
         # How the (square) learned position grid is resampled to each image's grid.
         self.num_grid_per_side = config.pos_emb_height
-        self.interpolation_align_corners = False
-        self.interpolation_mode = "bicubic"
+        self.interpolation_align_corners = config.interpolation_align_corners
+        self.interpolation_mode = config.interpolation_mode
 
         # Time-axis pos_emb are an additive sinusoidal table, i.e. add pos to hiddens rather than rotating
         time_position_embeddings = self.compute_pos_embed()
@@ -437,7 +441,11 @@ class Kimi_K25VisionModel(Kimi_K25PreTrainedModel):
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(
-            grid_thw, self.config, merge_temporal=True, kwargs=kwargs
+            # Packed vision attention spans all frames of a clip jointly, not one segment per frame.
+            grid_thw,
+            self.config,
+            merge_temporal=True,
+            kwargs=kwargs,
         )
 
         for block in self.layers:
@@ -709,9 +717,6 @@ class Kimi_K25ForConditionalGeneration(Glm4vForConditionalGeneration):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-    def _prepare_position_ids_for_generation(self, **kwargs):
-        raise AttributeError("Kimi doesn't use m-rope!")
 
     def _get_image_nums_and_video_nums(self, **super_kwargs):
         raise AttributeError()

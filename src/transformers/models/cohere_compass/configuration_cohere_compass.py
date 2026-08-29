@@ -32,6 +32,10 @@ class CohereCompassVisionConfig(PreTrainedConfig):
         The output hidden size of the vision model.
     num_position_embeddings (`int`, *optional*, defaults to 2304):
         The maximum sequence length that this model might ever be used with
+    interpolation_mode (`str`, *optional*, defaults to `"bilinear"`):
+        How the vision embedding resamples its learned position-embedding grid.
+    interpolation_align_corners (`bool`, *optional*, defaults to `True`):
+        Whether that resampling aligns corner samples.
     deepstack_visual_indexes (`list[int]`, *optional*, defaults to `[8, 16, 24]`):
         Indexed of layers for deepstack embeddings.
     """
@@ -50,6 +54,8 @@ class CohereCompassVisionConfig(PreTrainedConfig):
     temporal_patch_size: int | list[int] | tuple[int, int] = 2
     out_hidden_size: int = 3584
     num_position_embeddings: int = 2304
+    interpolation_mode: str = "bilinear"
+    interpolation_align_corners: bool = True
     deepstack_visual_indexes: list[int] | tuple[int, ...] = (8, 16, 24)
     initializer_range: float = 0.02
 

@@ -66,6 +66,8 @@ class PaddleOCRVisionConfig(PreTrainedConfig):
     layer_norm_eps: float = 1e-6
     attention_dropout: float | int = 0.0
     spatial_merge_size: int = 2
+    interpolation_mode: str = "bilinear"
+    interpolation_align_corners: bool = True
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PaddleOCR-VL")

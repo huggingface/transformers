@@ -24,7 +24,6 @@ from huggingface_hub.dataclasses import strict
 
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
-from ...generation import GenerationMixin
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -55,6 +54,7 @@ from ...vision_utils import get_vision_attention_seqlens
 from ..clip.modeling_clip import CLIPMLP
 from ..glm4v.image_processing_glm4v import Glm4vImageProcessor, Glm4vImageProcessorKwargs
 from ..glm4v.image_processing_pil_glm4v import Glm4vImageProcessorPil
+from ..glm4v.modeling_glm4v import get_mrope_position_ids
 from ..glm4v.video_processing_glm4v import Glm4vVideoProcessor
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
@@ -623,6 +623,24 @@ class Cosmos3EdgeModel(Qwen2VLModel, Cosmos3EdgePreTrainedModel):
         self.rope_deltas = None
         self.post_init()
 
+    def get_rope_index(
+        self,
+        input_ids: torch.LongTensor,
+        mm_token_type_ids: torch.IntTensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs,
+    ):
+        return get_mrope_position_ids(
+            self.config,
+            input_ids,
+            mm_token_type_ids,
+            attention_mask=attention_mask,
+            image_grid_thw=image_grid_thw,
+            video_grid_thw=video_grid_thw,
+        )
+
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -645,30 +663,6 @@ class Cosmos3EdgeModel(Qwen2VLModel, Cosmos3EdgePreTrainedModel):
     ) -> tuple | BaseModelOutputWithPooling:
         # Video frames use the same vision tower and projector path as images.
         return self.get_image_features(pixel_values_videos, video_grid_thw, **kwargs)
-
-    def get_rope_index(
-        self,
-        input_ids: torch.LongTensor,
-        mm_token_type_ids: torch.IntTensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        video_grid_thw: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        **super_kwargs,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        # Edge's processor emits one timestamped visual span per frame, so split each video's temporal grid before
-        # applying Qwen2-VL's common multimodal position-index routine.
-        if video_grid_thw is not None:
-            video_grid_thw = torch.repeat_interleave(video_grid_thw, video_grid_thw[:, 0], dim=0).clone()
-            video_grid_thw[:, 0] = 1
-
-        return super().get_rope_index(
-            input_ids=input_ids,
-            image_grid_thw=image_grid_thw,
-            video_grid_thw=video_grid_thw,
-            attention_mask=attention_mask,
-            mm_token_type_ids=mm_token_type_ids,
-            **super_kwargs,
-        )
 
     @can_return_tuple
     @auto_docstring
@@ -740,17 +734,16 @@ class Cosmos3EdgeForConditionalGeneration(Qwen2VLForConditionalGeneration, Cosmo
     _tied_weights_keys = {}
     accepts_loss_kwargs = False
 
-    def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
+    def _prepare_mrope_position_ids_for_generation(self, text_position_ids, inputs_tensor, model_kwargs):
         # Qwen2-VL exposes four axes (text plus three visual axes). Edge's interleaved M-RoPE consumes the three
-        # visual axes directly, so start from the common 2D text positions rather than Qwen2-VL's four-axis helper.
-        text_positions = GenerationMixin._prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs)
+        # visual axes directly, so it returns those three rather than the shared four-axis layout.
 
         # Early exit in case we are continuing generation from past kv.
         past_length = 0
         if (cache := model_kwargs.get("past_key_values")) is not None:
             past_length = cache.get_seq_length()
         if past_length != 0 and self.model.rope_deltas is not None:
-            position_ids = text_positions[None, ...] + self.model.rope_deltas
+            position_ids = text_position_ids[None, ...] + self.model.rope_deltas
             return position_ids
 
         # Otherwise compute 3D position ids for vision tokens.
@@ -773,7 +766,7 @@ class Cosmos3EdgeForConditionalGeneration(Qwen2VLForConditionalGeneration, Cosmo
             position_ids, rope_deltas = self.model.get_rope_index(inputs_tensor, **model_kwargs)
             self.model.rope_deltas = rope_deltas
         else:
-            position_ids = text_positions.unsqueeze(0).expand(3, -1, -1)
+            position_ids = text_position_ids.unsqueeze(0).expand(3, -1, -1)
             self.model.rope_deltas = torch.zeros(
                 inputs_tensor.shape[0], 1, dtype=torch.long, device=inputs_tensor.device
             )

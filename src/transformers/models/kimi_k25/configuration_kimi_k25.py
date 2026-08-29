@@ -50,6 +50,10 @@ class Kimi_K25VisionConfig(PreTrainedConfig):
     intermediate_size: int = 4304
     hidden_act: str = "gelu_pytorch_tanh"
     merge_kernel_size: tuple[int, int] | list[int] = (2, 2)
+    # See `Qwen3VLVisionConfig` — the same knobs, for this family's own resampling settings
+    interpolation_mode: str = "bicubic"
+    interpolation_align_corners: bool = False
+
     rope_parameters: dict | None = None  # defaults set by `RopeConfigMixin`
     max_position_embeddings: int | None = None
 

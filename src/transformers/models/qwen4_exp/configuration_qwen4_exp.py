@@ -281,6 +281,8 @@ class Qwen4ExpVisionConfig(PreTrainedConfig):
     temporal_patch_size: int | list[int] | tuple[int, int] = 2
     out_hidden_size: int = 3584
     num_position_embeddings: int = 2304
+    interpolation_mode: str = "bilinear"
+    interpolation_align_corners: bool = True
     initializer_range: float = 0.02
     base_model_fsdp_plan = None
 

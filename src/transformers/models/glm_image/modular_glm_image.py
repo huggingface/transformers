@@ -538,7 +538,7 @@ class GlmImageModel(Glm4vModel):
         image_end_token_id = self.config.image_end_token_id
 
         position_ids = torch.ones(3, batch_size, seq_len, dtype=dtype, device=device)
-        text_positions = torch.arange(seq_len, device=device)[None, :].repeat(3, 1)
+        text_position_ids = torch.arange(seq_len, device=device)[None, :].repeat(3, 1)
 
         # Split image_grid_thw by sample if images_per_sample is provided
         if image_grid_thw is not None and images_per_sample is not None:
@@ -580,16 +580,20 @@ class GlmImageModel(Glm4vModel):
 
                 # Text tokens before this image
                 llm_pos_length = start - prev_image_end
-                llm_position_ids = text_positions[:, current_pos : current_pos + llm_pos_length].to(device=device)
+                llm_position_ids = text_position_ids[:, current_pos : current_pos + llm_pos_length].to(device=device)
                 current_pos += llm_position_ids.shape[-1]
 
                 # Image tokens with 2D spatial encoding
                 # For an image with height H and width W:
                 # - position_width cycles [0, 1, ..., W-1] for each row, repeated H times
                 # - position_height stays constant per row, [0]*W, [1]*W, ..., [H-1]*W
-                vision_position_ids = self.get_vision_position_ids(
-                    start_position=current_pos, grid_thw=curr_grids[img_idx], device=device
-                )
+                grid_thw = curr_grids[img_idx]
+                grid_t, grid_h, grid_w = (int(grid_thw[0]), int(grid_thw[1]), int(grid_thw[2]))
+                temporal = torch.arange(grid_t, device=device) + current_pos
+                height = torch.arange(grid_h, device=device) + current_pos
+                width = torch.arange(grid_w, device=device) + current_pos
+                axes = torch.meshgrid(temporal, height, width, indexing="ij")
+                vision_position_ids = torch.stack(axes, dim=0).reshape(3, -1)
                 current_pos += max(curr_grids[img_idx][1], curr_grids[img_idx][2])
 
                 prev_image_end = end
@@ -597,7 +601,7 @@ class GlmImageModel(Glm4vModel):
 
             # Remaining text tokens (including the final image_start token for generation)
             end_position = len(curr_input_ids_valid) - prev_image_end
-            llm_position_ids = text_positions[:, current_pos : current_pos + end_position].to(device=device)
+            llm_position_ids = text_position_ids[:, current_pos : current_pos + end_position].to(device=device)
             current_pos += llm_position_ids.shape[-1]
             curr_position_ids.append(llm_position_ids)
 
