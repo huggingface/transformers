@@ -765,15 +765,19 @@ class RotaryEmbeddingConfigMixin:
     def standardize_rope_params(self):
         """
         Helper to standardize the config's rope params field by ensuring the params are defined for each
-        later type. For old model the fn will duplicate a single rope param in each layer type (backward compatibility)
+        layer type. For old model the fn will duplicate a single rope param in each layer type (backward compatibility)
         """
+        from .configuration_utils import ALLOWED_LAYER_TYPES
+
         # Move `rope_theta` and `partial_rotary_factor` to the `rope_parameters`, if not there yet
         rope_theta = getattr(self, "rope_theta", None)
         partial_rotary_factor = getattr(self, "partial_rotary_factor", None)
         rope_parameters = getattr(self, "rope_parameters", None) or {}
 
         # Deepseekv4 has `layer_types` which are different from `_rope_type_labels`
-        layer_types = getattr(self, "_rope_type_labels", getattr(self, "layer_types", None))
+        rope_type_labels = getattr(self, "_rope_type_labels", None)
+        has_layer_types = getattr(self, "layer_types", None) is not None or rope_type_labels is not None
+        allowed_layer_types = rope_type_labels if rope_type_labels is not None else ALLOWED_LAYER_TYPES
 
         # Case 0: no RoPE params defined
         if not (rope_parameters or rope_theta):
@@ -781,7 +785,11 @@ class RotaryEmbeddingConfigMixin:
             logger.warning("`standardize_rope_params` was called but no RoPE parameters were found.")
             return
         # Case 1: RoPE param keys do not intersect with possible `layer_types` -> one global dict
-        elif layer_types is None or rope_parameters == {} or not set(rope_parameters.keys()).issubset(layer_types):
+        elif (
+            not has_layer_types
+            or rope_parameters == {}
+            or not set(rope_parameters.keys()).issubset(allowed_layer_types)
+        ):
             rope_parameters.setdefault("rope_type", rope_parameters.get("type", "default"))
             rope_parameters.setdefault("rope_theta", rope_theta)
             if partial_rotary_factor is not None:
@@ -799,7 +807,7 @@ class RotaryEmbeddingConfigMixin:
 
         # Case 2: different RoPE for each layer -> several params as nested dict
         else:
-            for layer_type in set(layer_types):
+            for layer_type in set(rope_parameters.keys()):
                 # skip if saved with `None` value
                 if rope_parameters[layer_type] is None:
                     continue
@@ -819,15 +827,19 @@ class RotaryEmbeddingConfigMixin:
         """
         Validate the RoPE config arguments, given a `"PreTrainedConfig"` object
         """
+        from .configuration_utils import ALLOWED_LAYER_TYPES
+
         # Don't validate if no rope_parameters found (`None`) or if it's an empty dict
         # Note that validation runs every time a new config is created, even if config is non-RoPE
         rope_parameters_dict = getattr(self, "rope_parameters", None)
         if not rope_parameters_dict:
             return
 
-        if getattr(self, "layer_types", None) is not None and set(rope_parameters_dict.keys()).issubset(
-            self.layer_types
-        ):
+        rope_type_labels = getattr(self, "_rope_type_labels", None)
+        has_layer_types = getattr(self, "layer_types", None) is not None or rope_type_labels is not None
+        allowed_layer_types = rope_type_labels if rope_type_labels is not None else ALLOWED_LAYER_TYPES
+
+        if has_layer_types and set(rope_parameters_dict.keys()).issubset(allowed_layer_types):
             pass
         else:
             rope_parameters_dict = {"full_attention": rope_parameters_dict}

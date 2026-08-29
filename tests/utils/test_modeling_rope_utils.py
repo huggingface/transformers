@@ -15,11 +15,12 @@
 
 import logging as stdlib_logging
 import math
+import tempfile
 import unittest
 
 from parameterized import parameterized
 
-from transformers import Gemma3TextConfig, LlamaConfig
+from transformers import Gemma3TextConfig, LlamaConfig, Olmo3Config
 from transformers.testing_utils import is_torch_available, require_torch, torch_device
 
 
@@ -1573,3 +1574,52 @@ class RopeTest(unittest.TestCase):
         for layer_type in layer_types:
             inv_freq, _ = rope_fn(config=config, layer_type=layer_type)
             torch.testing.assert_close(inv_freq, EXPECTED_INV_FREQ, atol=1e-04, rtol=1e-04)
+
+    def test_nested_rope_parameters_partial_layer_types(self):
+        """
+        Regression test for #48392: when a model defines per-layer rope_parameters
+        (e.g., sliding_attention and full_attention) but instantiates fewer layers such that
+        layer_types does not contain every possible layer type, standardize_rope_params and
+        validate_rope should still treat rope_parameters as a per-layer nested dict.
+        """
+        # Gemma3TextConfig with num_hidden_layers=2 only instantiates ['sliding_attention', 'sliding_attention']
+        config = Gemma3TextConfig(num_hidden_layers=2)
+        self.assertEqual(config.layer_types, ["sliding_attention", "sliding_attention"])
+        self.assertIn("sliding_attention", config.rope_parameters)
+        self.assertIn("full_attention", config.rope_parameters)
+
+        # 1. Top-level keys must not be polluted by standardize_rope_params
+        self.assertNotIn("rope_type", config.rope_parameters)
+        self.assertNotIn("rope_theta", config.rope_parameters)
+
+        # 2. validate_rope should not emit spurious warnings for valid per-layer config
+        with self.assertRaises(AssertionError):  # Assert that NO warnings are logged
+            with self.assertLogs("transformers.modeling_rope_utils", level="WARNING"):
+                config.validate_rope()
+
+        # 3. validate_rope must validate all per-layer configs, including those not currently instantiated
+        config.rope_parameters["full_attention"] = {"rope_type": "yarn", "rope_theta": 10000.0}  # missing factor
+        with self.assertRaises(KeyError):
+            config.validate_rope()
+
+        # 4. Olmo3Config with num_hidden_layers=2 also has partial layer_types
+        olmo_config = Olmo3Config(num_hidden_layers=2)
+        self.assertEqual(olmo_config.layer_types, ["sliding_attention", "sliding_attention"])
+        self.assertNotIn("rope_type", olmo_config.rope_parameters)
+        self.assertNotIn("rope_theta", olmo_config.rope_parameters)
+        with self.assertRaises(AssertionError):
+            with self.assertLogs("transformers.modeling_rope_utils", level="WARNING"):
+                olmo_config.validate_rope()
+
+    def test_nested_rope_parameters_save_and_reload_roundtrip(self):
+        """
+        Tests that saving and reloading a config with partial layer_types does not
+        persist extraneous top-level keys in rope_parameters.
+        """
+        config = Gemma3TextConfig(num_hidden_layers=2)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config.save_pretrained(tmp_dir)
+            reloaded = Gemma3TextConfig.from_pretrained(tmp_dir)
+            self.assertNotIn("rope_type", reloaded.rope_parameters)
+            self.assertNotIn("rope_theta", reloaded.rope_parameters)
+            self.assertEqual(set(reloaded.rope_parameters.keys()), {"sliding_attention", "full_attention"})
