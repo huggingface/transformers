@@ -27,6 +27,9 @@ The abstract from the paper is the following:
 
 `Qwen3-TTS` checkpoints can be found on the [Hugging Face Hub](https://huggingface.co/collections/Qwen/qwen3-tts).
 
+The audio codec that Qwen3-TTS generates into is documented separately, in
+[Qwen3-TTS Multi-Codebook Tokenizer](./qwen3_tts_tokenizer_multi_codebook).
+
 ## Usage Tips
 
 ### Basic Text-to-Speech
@@ -192,20 +195,6 @@ model = Qwen3TTSForConditionalGeneration.from_pretrained(
 ## Qwen3TTSFeatureExtractor
 
 [[autodoc]] Qwen3TTSFeatureExtractor
-
-## Qwen3TTSTokenizerMultiCodebookConfig
-
-[[autodoc]] Qwen3TTSTokenizerMultiCodebookConfig
-
-## Qwen3TTSTokenizerMultiCodebookCode2WavConfig
-
-[[autodoc]] Qwen3TTSTokenizerMultiCodebookCode2WavConfig
-
-## Qwen3TTSTokenizerMultiCodebookModel
-
-[[autodoc]] Qwen3TTSTokenizerMultiCodebookModel
-    - encode
-    - decode
 
 ## Qwen3TTSTokenizerSingleCodebookConfig
 
