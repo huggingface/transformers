@@ -188,7 +188,8 @@ class Qwen3TTSGenerationMixin(GenerationMixin):
                 else:
                     speaker_embed = None
 
-            assert language is not None
+            if language is None:
+                raise ValueError("Each input needs a language; pass `languages=['Auto']` to detect it from the text.")
 
             if language.lower() == "auto":
                 language_id = None
