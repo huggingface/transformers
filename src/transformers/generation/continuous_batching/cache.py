@@ -53,7 +53,7 @@ def find_head_dim(config: PreTrainedConfig) -> int:
     raise ValueError(f"head_dim or (hidden_size and num_attention_heads) could not be found in the config:\n{config}")
 
 
-def group_layers_by_attn_type(config: PreTrainedConfig) -> tuple[list[list[int]], list[str], list[int]]:
+def group_layers_by_attn_type(config: PreTrainedConfig) -> tuple[list[list[int]], list[str]]:
     """
     Group layers depending on the attention mix, according to VLLM's hybrid allocator rules:
         - Layers in each group need to have the same type of attention
@@ -63,7 +63,7 @@ def group_layers_by_attn_type(config: PreTrainedConfig) -> tuple[list[list[int]]
     We would get four groups: [0, 3], [1, 2], [4,5] and [6,7].
 
     Linear attention layers keep a fixed-size recurrent state per request instead of a KV cache that grows with the
-    sequence, so they take no part in block allocation: they are returned separately rather than grouped.
+    sequence, so they take no part in block allocation and are left out of the groups entirely.
     """
     # If the config has no layer_type attribute, it means all layers are the same attention type
     layer_types = getattr(config, "layer_types", None)
@@ -73,10 +73,8 @@ def group_layers_by_attn_type(config: PreTrainedConfig) -> tuple[list[list[int]]
 
     # We then count the number of layers of each type
     layer_counts = {}
-    linear_attention_layers = []
     for i, layer_type in enumerate(layer_types):
         if layer_type == "linear_attention":
-            linear_attention_layers.append(i)
             continue
         layer_counts[layer_type] = layer_counts.get(layer_type, []) + [i]
     if not layer_counts:
@@ -92,7 +90,7 @@ def group_layers_by_attn_type(config: PreTrainedConfig) -> tuple[list[list[int]]
             layer_groups.append(indices[i : i + group_size])
     # And note the layer types
     group_types = [layer_types[lg[0]] for lg in layer_groups]
-    return layer_groups, group_types, linear_attention_layers
+    return layer_groups, group_types
 
 
 class PagedAttentionCache:
@@ -188,10 +186,15 @@ class PagedAttentionCache:
             raise ValueError(f"Block size must be at least {self._min_block_size}, but got {self.block_size}")
 
         # Group layers depending on the attention mix
-        layer_groups, group_types, linear_attention_layers = group_layers_by_attn_type(config)
+        layer_groups, group_types = group_layers_by_attn_type(config)
         group_size = len(layer_groups[0])
         self.num_groups = len(layer_groups)
-        self.linear_attention_layers = linear_attention_layers
+        # These hold a fixed-size recurrent state per request rather than blocks, see the state pools below
+        self.linear_attention_layers = [
+            i
+            for i, layer_type in enumerate(getattr(config, "layer_types", None) or [])
+            if layer_type == "linear_attention"
+        ]
 
         self.sliding_windows = {}
         self.layer_index_to_group_indices = {}
