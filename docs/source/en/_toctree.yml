@@ -1175,6 +1175,8 @@
         title: Pop2Piano
       - local: model_doc/qwen3_tts
         title: Qwen3-TTS
+      - local: model_doc/qwen3_tts_tokenizer_multi_codebook
+        title: Qwen3-TTS Multi-Codebook Tokenizer
       - local: model_doc/qwen3_asr
         title: Qwen3 ASR
       - local: model_doc/seamless_m4t
