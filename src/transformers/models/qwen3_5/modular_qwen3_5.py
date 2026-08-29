@@ -279,6 +279,7 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
                 self.conv1d.weight.squeeze(1),
                 self.conv1d.bias,
                 activation=self.activation,
+                cu_seqlens=kwargs.get("cu_seq_lens_q"),
                 **kwargs,
             )
 

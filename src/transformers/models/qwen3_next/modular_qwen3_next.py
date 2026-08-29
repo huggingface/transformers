@@ -184,10 +184,12 @@ def causal_conv1d_fn(
     weight: nn.Parameter,
     bias: nn.Parameter | None = None,
     activation: str | None = None,
+    cu_seqlens: torch.Tensor | None = None,
     **kwargs,
 ):
     _, hidden_size, seq_len = hidden_states.shape
-    padding = weight.shape[-1] - 1
+    kernel_size = weight.shape[-1]
+    padding = kernel_size - 1
 
     out = F.conv1d(
         hidden_states.to(weight.dtype),
@@ -196,6 +198,14 @@ def causal_conv1d_fn(
         padding=padding,
         groups=hidden_size,
     )[:, :, :seq_len]
+    if cu_seqlens is not None:
+        # The row packs several sequences back to back: the first tokens of each sequence must not see the tail of
+        # the previous one, so they are recomputed with zero left-context, exactly as the row start is
+        boundaries = cu_seqlens.tolist()
+        for start, end in zip(boundaries[1:-1], boundaries[2:]):
+            window = hidden_states[:, :, start : min(start + padding, end)].to(weight.dtype)
+            fixed = F.conv1d(window, weight=weight.unsqueeze(1), bias=bias, padding=padding, groups=hidden_size)
+            out[:, :, start : start + window.shape[-1]] = fixed[:, :, : window.shape[-1]]
     if activation is not None:
         out = ACT2FN[activation](out)
     return out.to(hidden_states.dtype)
@@ -642,6 +652,7 @@ class Qwen3NextGatedDeltaNet(nn.Module):
                 self.conv1d.weight.squeeze(1),
                 self.conv1d.bias,
                 activation=self.activation,
+                cu_seqlens=kwargs.get("cu_seq_lens_q"),
                 **kwargs,
             )
 
