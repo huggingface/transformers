@@ -26,6 +26,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
 from copy import deepcopy
 from itertools import chain
+from threading import Lock
 from typing import TYPE_CHECKING, Any
 
 import torch
@@ -1231,13 +1232,21 @@ class WeightConverter(WeightTransform):
 # Having too many is actually harming performances quite a lot, i.e. using 16 can sometimes lead to taking TWICE
 # as much time to load the same model
 GLOBAL_WORKERS = min(4, os.cpu_count() or 4)
+_MPS_MATERIALIZE_LOCK = Lock()
 
 
 def _materialize_copy(tensor: torch.Tensor, device=None, dtype=None) -> torch.Tensor:
     # This slicing is what actually loads the tensor from the safetensors slice object
     tensor = tensor[...]
     if dtype is not None or device is not None:
-        tensor = tensor.to(device=device, dtype=dtype)
+        device_type = getattr(device, "type", device)
+        if isinstance(device_type, str):
+            device_type = device_type.split(":", 1)[0]
+        if device_type == "mps":
+            with _MPS_MATERIALIZE_LOCK:
+                tensor = tensor.to(device=device, dtype=dtype)
+        else:
+            tensor = tensor.to(device=device, dtype=dtype)
     return tensor
 
 

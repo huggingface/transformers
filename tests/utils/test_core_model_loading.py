@@ -12,7 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import copy
+import threading
+import time
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 
 import torch
@@ -174,6 +177,41 @@ class TestWeightGlobMatching(unittest.TestCase):
         key = "unrelated.key"
         renamed_key, _ = rename_source_key(key, renamings, [])
         self.assertEqual(renamed_key, key)
+
+
+class TestMaterializeCopyConcurrency(unittest.TestCase):
+    @staticmethod
+    def get_max_concurrency(device):
+        guard = threading.Lock()
+        active = 0
+        max_active = 0
+
+        class TrackingTensor:
+            def __getitem__(self, key):
+                return self
+
+            def to(self, **kwargs):
+                nonlocal active, max_active
+                with guard:
+                    active += 1
+                    max_active = max(max_active, active)
+                time.sleep(0.05)
+                with guard:
+                    active -= 1
+                return torch.zeros(1)
+
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            futures = [spawn_materialize(pool, TrackingTensor(), device=device) for _ in range(4)]
+            for future in futures:
+                future.result()
+
+        return max_active
+
+    def test_mps_materialization_is_serialized(self):
+        self.assertEqual(self.get_max_concurrency("mps"), 1)
+
+    def test_cpu_materialization_remains_parallel(self):
+        self.assertGreater(self.get_max_concurrency("cpu"), 1)
 
 
 class DummyParamModule(nn.Module):
