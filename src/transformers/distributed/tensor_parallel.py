@@ -364,7 +364,10 @@ class ReplicatedWithGradAllReduce(TensorParallelLayer):
         def _all_reduce_grads(mod, grad_input, grad_output):
             for param in mod.parameters(recurse=False):
                 if param.grad is not None:
-                    dist.all_reduce(param.grad, group=mesh.get_group())
+                    # The parameter is replicated, so a caller is free to hold it as a replicated DTensor, whose
+                    # local tensor is the whole gradient: summing that in place is the same collective.
+                    grad = param.grad.to_local() if isinstance(param.grad, DTensor) else param.grad
+                    dist.all_reduce(grad, group=mesh.get_group())
 
         module.register_full_backward_hook(_all_reduce_grads)
         return module
