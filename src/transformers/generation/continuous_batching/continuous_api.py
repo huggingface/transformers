@@ -719,7 +719,7 @@ class ContinuousBatchingManager:
             msg = "Continuous batching is much better when using flash attention."
             if version is not None:
                 target_implem = f"flash_attention_{version}"  # no "paged|" prefix here to enter the branch below
-                logger.info(
+                logger.warning(
                     f"{msg} Switching from {original_attn_impl} to {target_implem}. "
                     "If you need to use eager or sdpa, use paged|eager or paged|sdpa as the `attn_implementation`."
                 )
