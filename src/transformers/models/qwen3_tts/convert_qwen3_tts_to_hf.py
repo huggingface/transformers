@@ -44,8 +44,12 @@ import torch
 from safetensors.torch import load_file
 
 from transformers import (
+    AutoTokenizer,
     Qwen3TTSConfig,
+    Qwen3TTSFeatureExtractor,
     Qwen3TTSForConditionalGeneration,
+    Qwen3TTSProcessor,
+    Qwen3TTSTokenizerMultiCodebookModel,
 )
 
 
@@ -199,7 +203,32 @@ def create_config_from_checkpoint(checkpoint_path: Path) -> Qwen3TTSConfig:
     return config
 
 
-def convert_checkpoint(checkpoint_path, output_dir, push_to_hub, bfloat16, max_shard_size):
+def convert_processor(checkpoint_path: Path, output_path: Path, audio_tokenizer_id: str, push_to_hub: str | None):
+    """Build the processor and record which audio tokenizer decodes the codes this model generates.
+
+    The tokenizer's weights are not copied into the checkpoint: saving the processor stores only its class
+    and repository id, and `from_pretrained` loads the tokenizer from there. Without this, `batch_decode`
+    and `save_audio` have no tokenizer to call.
+    """
+    logger.info(f"Loading audio tokenizer from {audio_tokenizer_id}")
+    audio_tokenizer = Qwen3TTSTokenizerMultiCodebookModel.from_pretrained(audio_tokenizer_id)
+
+    # The original checkpoint carries the padding settings the feature extractor should keep; the rest of its
+    # fields fall back to the class defaults.
+    processor = Qwen3TTSProcessor(
+        feature_extractor=Qwen3TTSFeatureExtractor.from_pretrained(str(checkpoint_path)),
+        tokenizer=AutoTokenizer.from_pretrained(str(checkpoint_path)),
+        audio_tokenizer=audio_tokenizer,
+    )
+
+    logger.info(f"Saving processor to {output_path}")
+    processor.save_pretrained(str(output_path))
+
+    if push_to_hub:
+        processor.push_to_hub(push_to_hub)
+
+
+def convert_checkpoint(checkpoint_path, output_dir, push_to_hub, bfloat16, max_shard_size, audio_tokenizer_id):
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 
@@ -259,6 +288,8 @@ def convert_checkpoint(checkpoint_path, output_dir, push_to_hub, bfloat16, max_s
         logger.info(f"Pushing to Hub: {push_to_hub}")
         model.push_to_hub(push_to_hub, max_shard_size=max_shard_size)
 
+    convert_processor(Path(checkpoint_path), output_path, audio_tokenizer_id, push_to_hub)
+
     logger.info("Verifying conversion by reloading model")
     del model, converted_state_dict, original_state_dict
     gc.collect()
@@ -298,6 +329,12 @@ def main():
         default="2.5GB",
         help="Maximum shard size for safetensors files.",
     )
+    parser.add_argument(
+        "--audio_tokenizer_id",
+        type=str,
+        default="shahvandit/qwen3-tts-tokenizer-multi-codebook-hf",
+        help="Repository ID of the converted multi-codebook tokenizer the processor should decode with.",
+    )
     args = parser.parse_args()
 
     convert_checkpoint(
@@ -306,6 +343,7 @@ def main():
         push_to_hub=args.push_to_hub,
         bfloat16=not args.float32,
         max_shard_size=args.max_shard_size,
+        audio_tokenizer_id=args.audio_tokenizer_id,
     )
 
 
