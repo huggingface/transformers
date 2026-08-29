@@ -129,6 +129,7 @@ MODALITY_TO_BASE_CLASS_MAPPING = {
     "audio_tokenizer": (
         "HiggsAudioV2TokenizerModel",
         "DacModel",
+        "Qwen3TTSTokenizerMultiCodebookModel",
     ),  # TODO: @eustlb, to be replaced with PreTrainedAudioTokenizerBase
     "audio_processor": "FeatureExtractionMixin",
     "tokenizer": ("PreTrainedTokenizerBase", "MistralCommonBackend"),
