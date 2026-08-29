@@ -23,7 +23,6 @@ from typing import Annotated, Any
 from urllib.parse import urljoin, urlparse, urlunparse
 
 import httpx
-import requests
 import typer
 import yaml
 from huggingface_hub import AsyncInferenceClient, ChatCompletionStreamOutput
@@ -216,11 +215,6 @@ class RichInterface:
         self._console.print()
 
     def print_model_load(self, model: str):
-        response = requests.post(
-            urljoin(get_service_root_url(self.base_url) + "/", "load_model"), json={"model": model}, stream=True
-        )
-        response.raise_for_status()
-
         class StatsColumn(ProgressColumn):
             def render(self, task):
                 if not task.total:
@@ -266,32 +260,35 @@ class RichInterface:
         task_id = progress.add_task(_label("processor"), total=None)
         cached = False
 
-        with Live(progress, console=self._console, transient=True):
-            for line in response.iter_lines():
-                if not line or not line.startswith(b"data: "):
-                    continue
-                event = json.loads(line[6:])
-                status = event.get("status")
+        url = urljoin(get_service_root_url(self.base_url) + "/", "load_model")
+        with httpx.stream("POST", url, json={"model": model}, timeout=None) as response:
+            response.raise_for_status()
+            with Live(progress, console=self._console, transient=True):
+                for line in response.iter_lines():
+                    if not line or not line.startswith("data: "):
+                        continue
+                    event = json.loads(line[6:])
+                    status = event.get("status")
 
-                if status == "ready":
-                    cached = event.get("cached", False)
-                    break
+                    if status == "ready":
+                        cached = event.get("cached", False)
+                        break
 
-                if status == "error":
-                    raise RuntimeError(event.get("message", "Unknown error"))
+                    if status == "error":
+                        raise RuntimeError(event.get("message", "Unknown error"))
 
-                if status == "loading":
-                    stage = event.get("stage")
-                    prog = event.get("progress")
-                    label = _label(stage)
+                    if status == "loading":
+                        stage = event.get("stage")
+                        prog = event.get("progress")
+                        label = _label(stage)
 
-                    if prog:
-                        unit = "bytes" if stage == "download" else "items"
-                        progress.update(
-                            task_id, description=label, completed=prog["current"], total=prog.get("total"), unit=unit
-                        )
-                    else:
-                        progress.update(task_id, description=label, completed=0, total=None)
+                        if prog:
+                            unit = "bytes" if stage == "download" else "items"
+                            progress.update(
+                                task_id, description=label, completed=prog["current"], total=prog.get("total"), unit=unit
+                            )
+                        else:
+                            progress.update(task_id, description=label, completed=0, total=None)
 
         if cached:
             self._console.print(Markdown(f"_*{model} was already loaded.*_"))
