@@ -224,8 +224,10 @@ class PagedAttentionCache:
             resolve_max_memory_percent(cb_config=continuous_batching_config, has_logit_processors=True)
 
         # Linear attention layers store a per-request state of fixed size: the tail of the depthwise conv input and
-        # the recurrent state of the delta rule. One slot per schedulable request, reserved out of the cache budget.
-        self._max_linear_state_slots = continuous_batching_config.max_requests_per_batch
+        # the recurrent state of the delta rule. The slot pools start small and double when they run out (cuda
+        # graphs are off for these models, so the reallocation is safe); only the first chunk is reserved out of
+        # the cache budget.
+        self._linear_state_slots_chunk = 64
         linear_state_bytes = 0
         if self.linear_attention_layers:
             key_dim = config.linear_key_head_dim * config.linear_num_key_heads
@@ -239,7 +241,7 @@ class PagedAttentionCache:
             )
             bytes_per_slot = prod(self._conv_state_shape) * self.dtype.itemsize
             bytes_per_slot += prod(self._recurrent_state_shape) * torch.float32.itemsize
-            linear_state_bytes = self._max_linear_state_slots * bytes_per_slot * len(self.linear_attention_layers)
+            linear_state_bytes = self._linear_state_slots_chunk * bytes_per_slot * len(self.linear_attention_layers)
 
         max_batch_tokens, num_blocks = PagedAttentionMemoryHandler(
             config=config,
@@ -289,18 +291,20 @@ class PagedAttentionCache:
             new_layer_value_cache.view(block_based_shape)[num_blocks].fill_(0)
         logger.info(f"{self.cache_shape = } {self.key_cache[0].shape = } {self.key_cache[0].numel() = }")
 
-        # State pools for linear attention layers: one slot per schedulable request, assigned on first use and
-        # freed with the request's blocks. Slots are zeroed at assignment, which is the pre-first-token state.
+        # State pools for linear attention layers: one slot per live request, assigned on first use and freed with
+        # the request's blocks. Slots are zeroed at assignment, which is the pre-first-token state.
         self.conv_states: dict[int, torch.Tensor] = {}
         self.recurrent_states: dict[int, torch.Tensor] = {}
         self._linear_state_slots: dict[str, int] = {}
-        self._free_linear_state_slots = list(range(self._max_linear_state_slots))
+        self._free_linear_state_slots = list(range(self._linear_state_slots_chunk))
         for layer_idx in self.linear_attention_layers:
             self.conv_states[layer_idx] = torch.zeros(
-                (self._max_linear_state_slots, *self._conv_state_shape), dtype=self.dtype, device=self.device
+                (self._linear_state_slots_chunk, *self._conv_state_shape), dtype=self.dtype, device=self.device
             )
             self.recurrent_states[layer_idx] = torch.zeros(
-                (self._max_linear_state_slots, *self._recurrent_state_shape), dtype=torch.float32, device=self.device
+                (self._linear_state_slots_chunk, *self._recurrent_state_shape),
+                dtype=torch.float32,
+                device=self.device,
             )
 
         # Block management data structures
@@ -445,13 +449,19 @@ class PagedAttentionCache:
             self._free_linear_state_slots.append(slot)
 
     def get_linear_state_slot(self, request_id: str) -> int:
-        """Returns the linear attention state slot of a request, assigning and zeroing one on first use."""
+        """Returns the linear attention state slot of a request, assigning and zeroing one on first use. The pools
+        double when they run out."""
         slot = self._linear_state_slots.get(request_id)
         if slot is None:
             if not self._free_linear_state_slots:
-                raise RuntimeError(
-                    "No free linear attention state slot: more requests hold state than max_requests_per_batch"
-                )
+                old_size = self.conv_states[self.linear_attention_layers[0]].shape[0]
+                for layer_idx in self.linear_attention_layers:
+                    for pools in (self.conv_states, self.recurrent_states):
+                        old = pools[layer_idx]
+                        new = torch.zeros((2 * old_size, *old.shape[1:]), dtype=old.dtype, device=old.device)
+                        new[:old_size] = old
+                        pools[layer_idx] = new
+                self._free_linear_state_slots = list(range(old_size, 2 * old_size))
             slot = self._free_linear_state_slots.pop()
             self._linear_state_slots[request_id] = slot
             for layer_idx in self.linear_attention_layers:
