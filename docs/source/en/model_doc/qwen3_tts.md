@@ -48,11 +48,11 @@ with [`~Qwen3TTSProcessor.apply_chat_template`], generate the speech codes, then
 
 ```python
 import torch
-from transformers import Qwen3TTSForConditionalGeneration, Qwen3TTSProcessor
+from transformers import AutoProcessor, Qwen3TTSForConditionalGeneration
 
 model_id = "shahvandit/qwen3-tts-base-hf"
 
-processor = Qwen3TTSProcessor.from_pretrained(model_id)
+processor = AutoProcessor.from_pretrained(model_id)
 model = Qwen3TTSForConditionalGeneration.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
 
 conversation = [
@@ -75,11 +75,11 @@ The id below is an original checkpoint, so convert it with `convert_qwen3_tts_to
 
 ```python
 import torch
-from transformers import Qwen3TTSForConditionalGeneration, Qwen3TTSProcessor
+from transformers import AutoProcessor, Qwen3TTSForConditionalGeneration
 
 model_id = "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice"
 
-processor = Qwen3TTSProcessor.from_pretrained(model_id)
+processor = AutoProcessor.from_pretrained(model_id)
 model = Qwen3TTSForConditionalGeneration.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
 
 conversation = [
@@ -103,11 +103,11 @@ Pass a list of conversations to generate a batch:
 
 ```python
 import torch
-from transformers import Qwen3TTSForConditionalGeneration, Qwen3TTSProcessor
+from transformers import AutoProcessor, Qwen3TTSForConditionalGeneration
 
 model_id = "shahvandit/qwen3-tts-base-hf"
 
-processor = Qwen3TTSProcessor.from_pretrained(model_id)
+processor = AutoProcessor.from_pretrained(model_id)
 model = Qwen3TTSForConditionalGeneration.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
 
 conversations = [
@@ -128,11 +128,11 @@ id below is an original checkpoint and needs converting first:
 
 ```python
 import torch
-from transformers import Qwen3TTSForConditionalGeneration, Qwen3TTSProcessor
+from transformers import AutoProcessor, Qwen3TTSForConditionalGeneration
 
 model_id = "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign"
 
-processor = Qwen3TTSProcessor.from_pretrained(model_id)
+processor = AutoProcessor.from_pretrained(model_id)
 model = Qwen3TTSForConditionalGeneration.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
 
 conversation = [
@@ -153,28 +153,51 @@ audio = processor.batch_decode(codes)
 processor.save_audio(audio, "output_voice_design.wav")
 ```
 
-### Flash-Attention 2 to speed up generation
+### Voice Cloning
 
-First, make sure to install the latest version of Flash Attention 2:
-
-```bash
-pip install -U flash-attn --no-build-isolation
-```
-
-Also, you should have hardware that is compatible with FlashAttention 2. Read more about it in the official documentation of the [flash attention repository](https://github.com/Dao-AILab/flash-attention). FlashAttention-2 can only be used when a model is loaded in `torch.float16` or `torch.bfloat16`.
-
-To load and run a model using FlashAttention-2, add `attn_implementation="flash_attention_2"` when loading the model:
+Base checkpoints carry a speaker encoder, which turns a reference recording into a speaker embedding that
+conditions generation. The reference has to be mono 24 kHz:
 
 ```python
 import torch
-from transformers import Qwen3TTSForConditionalGeneration
 
-model = Qwen3TTSForConditionalGeneration.from_pretrained(
-    "shahvandit/qwen3-tts-base-hf",
-    dtype=torch.bfloat16,
-    attn_implementation="flash_attention_2",
-    device_map="auto",
+from transformers import AutoProcessor, Qwen3TTSForConditionalGeneration
+from transformers.audio_utils import load_audio_librosa
+
+
+model_id = "shahvandit/qwen3-tts-base-hf"
+
+processor = AutoProcessor.from_pretrained(model_id)
+model = Qwen3TTSForConditionalGeneration.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
+
+reference = load_audio_librosa(
+    "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav",
+    sampling_rate=processor.feature_extractor.sampling_rate,
 )
+speaker_embedding = model.extract_speaker_embedding(
+    reference, processor.feature_extractor.sampling_rate, processor.feature_extractor
+)
+
+conversation = [
+    {
+        "role": "user",
+        "content": [{"type": "text", "text": "This sentence is spoken in the voice of the reference clip."}],
+        "language": "English",
+    },
+]
+inputs = processor.apply_chat_template(conversation)
+
+codes, _ = model.generate(
+    **inputs,
+    voice_clone_prompt={
+        "ref_spk_embedding": [speaker_embedding],
+        "x_vector_only_mode": [True],
+        "icl_mode": [False],
+        "ref_code": None,
+    },
+)
+audio = processor.batch_decode(codes)
+processor.save_audio(audio, "output_cloned.wav")
 ```
 
 ## Qwen3TTSConfig
