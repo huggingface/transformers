@@ -442,7 +442,6 @@ class Qwen3TTSConfig(PreTrainedConfig):
         speaker_encoder_config: dict | None = None,
         tokenizer_type: str | None = None,
         tts_model_size: str | None = None,
-        tts_model_type: str | None = None,
         im_start_token_id: int | None = 151644,
         im_end_token_id: int | None = 151645,
         tts_pad_token_id: int | None = 151671,
@@ -463,8 +462,6 @@ class Qwen3TTSConfig(PreTrainedConfig):
                 Type of audio tokenizer to use (e.g., "12hz", "25hz").
             tts_model_size (`str`, *optional*):
                 Size of the TTS model.
-            tts_model_type (`str`, *optional*):
-                Type of TTS model.
             im_start_token_id (`int`, *optional*, defaults to 151644):
                 The beginning-of-image token ID (used as special marker in input).
             im_end_token_id (`int`, *optional*, defaults to 151645):
@@ -490,7 +487,6 @@ class Qwen3TTSConfig(PreTrainedConfig):
 
         self.tokenizer_type = tokenizer_type
         self.tts_model_size = tts_model_size
-        self.tts_model_type = tts_model_type
 
         self.im_start_token_id = im_start_token_id
         self.im_end_token_id = im_end_token_id
@@ -964,7 +960,6 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
         )
         self.tokenizer_type = getattr(config, "tokenizer_type", "qwen2")
         self.tts_model_size = getattr(config, "tts_model_size", "base")
-        self.tts_model_type = getattr(config, "tts_model_type", "base")
 
         # Initialize weights and apply final processing
         self.post_init()
