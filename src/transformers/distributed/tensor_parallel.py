@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import contextlib
 import re
+import weakref
 
 from ..utils import logging
 from ..utils.generic import GeneralInterface
@@ -218,7 +219,20 @@ class ColwiseParallel(TensorParallelLayer):
 
         # DTensor path: handle regular training and layout redistribution.
         if is_local_input:
-            x = DTensor.from_local(x, mesh, [self.input_layouts], run_check=False)
+            # Modules fed the same activation (q/k/v projections, gate/up projections) share one wrap: their
+            # partial input gradients then sum at a single `from_local` node, which turns one backward
+            # all-reduce per consumer into one per activation. The wrap is cached on the tensor through a
+            # weakref: the autograd graph keeps it alive between the consumers' forwards, and a strong
+            # reference here would make a cycle that keeps every activation waiting for the gc.
+            cached_mesh, wrap_ref = getattr(x, "_tp_shared_wrap", (None, None))
+            wrapped = wrap_ref() if cached_mesh is mesh else None
+            if wrapped is not None and isinstance(self.input_layouts, Replicate):
+                x = wrapped
+            else:
+                local_x = x
+                x = DTensor.from_local(x, mesh, [self.input_layouts], run_check=False)
+                if isinstance(self.input_layouts, Replicate):
+                    local_x._tp_shared_wrap = (mesh, weakref.ref(x))
         if x.placements != (Replicate(),):
             x = x.redistribute(placements=[Replicate()])
         if self.should_use_local_tensors(module):
