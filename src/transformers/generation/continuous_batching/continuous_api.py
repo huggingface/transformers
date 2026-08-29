@@ -1043,6 +1043,12 @@ class ContinuousBatchingManager:
         batch_processor = getattr(self, "batch_processor", None)
         if batch_processor is None:
             batch_processor = self.batch_processor = self._create_batch_processor()
+        # Checked before a batch is prepared: raising once the block tables are set leaves the engine wedged.
+        if not batch_processor.cache.key_cache:
+            raise RuntimeError(
+                "The KV cache has been released, so generation cannot run. Call restore_memory() before stepping the "
+                "engine again."
+            )
         self.current_batch = getattr(self, "current_batch", 0)
         if not batch_processor.prepare_next_batch():
             return False
