@@ -246,6 +246,15 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
         b = self.in_proj_b(hidden_states)
         a = self.in_proj_a(hidden_states)
 
+        # A packed row holds several sequences back to back, and neither the convolution nor the recurrent state
+        # may run across their boundaries. The kernels take a `cu_seqlens` for this, but only some of them honour
+        # it and their signatures are fixed by the kernel hub, so the sequences are taken one at a time here: the
+        # result is the same whichever kernel is bound.
+        cu_seqlens = kwargs.get("cu_seq_lens_q")
+        if cu_seqlens is not None and cache_params is None:
+            core_attn_out = self.gated_delta_rule_per_sequence(mixed_qkv, b, a, cu_seqlens)
+            return self.output_from_core_attn(core_attn_out, z)
+
         # Continuous batching packs the scheduled sequences in one row and keeps per-request conv and recurrent
         # states in the paged cache, so it has its own conv and delta rule path
         if kwargs.get("cache") is not None:
@@ -279,7 +288,6 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
                 self.conv1d.weight.squeeze(1),
                 self.conv1d.bias,
                 activation=self.activation,
-                cu_seqlens=kwargs.get("cu_seq_lens_q"),
                 **kwargs,
             )
 
@@ -320,7 +328,6 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
                 initial_state=recurrent_state,
                 output_final_state=cache_params is not None,
                 use_qk_l2norm_in_kernel=True,
-                cu_seqlens=kwargs.pop("cu_seq_lens_q", None),
                 **kwargs,
             )
         else:
@@ -333,7 +340,6 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
                 initial_state=recurrent_state,
                 output_final_state=cache_params is not None,
                 use_qk_l2norm_in_kernel=True,
-                cu_seqlens=kwargs.pop("cu_seq_lens_q", None),
                 **kwargs,
             )
 

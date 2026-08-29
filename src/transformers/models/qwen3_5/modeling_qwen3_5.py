@@ -228,12 +228,10 @@ def causal_conv1d_fn(
     weight: nn.Parameter,
     bias: nn.Parameter | None = None,
     activation: str | None = None,
-    cu_seqlens: torch.Tensor | None = None,
     **kwargs,
 ):
     _, hidden_size, seq_len = hidden_states.shape
-    kernel_size = weight.shape[-1]
-    padding = kernel_size - 1
+    padding = weight.shape[-1] - 1
 
     out = F.conv1d(
         hidden_states.to(weight.dtype),
@@ -242,14 +240,6 @@ def causal_conv1d_fn(
         padding=padding,
         groups=hidden_size,
     )[:, :, :seq_len]
-    if cu_seqlens is not None:
-        # The row packs several sequences back to back: the first tokens of each sequence must not see the tail of
-        # the previous one, so they are recomputed with zero left-context, exactly as the row start is
-        boundaries = cu_seqlens.tolist()
-        for start, end in zip(boundaries[1:-1], boundaries[2:]):
-            window = hidden_states[:, :, start : min(start + padding, end)].to(weight.dtype)
-            fixed = F.conv1d(window, weight=weight.unsqueeze(1), bias=bias, padding=padding, groups=hidden_size)
-            out[:, :, start : start + window.shape[-1]] = fixed[:, :, : window.shape[-1]]
     if activation is not None:
         out = ACT2FN[activation](out)
     return out.to(hidden_states.dtype)
@@ -272,7 +262,6 @@ def torch_chunk_gated_delta_rule(
     initial_state: torch.Tensor | None = None,
     output_final_state: bool = False,
     use_qk_l2norm_in_kernel: bool = False,
-    cu_seqlens: torch.Tensor | None = None,
     **kwargs,
 ) -> tuple[torch.Tensor, torch.Tensor | None]:
     """Computes the gated delta rule, by chunking along the sequence dimension.
@@ -288,30 +277,10 @@ def torch_chunk_gated_delta_rule(
         initial_state: The recurrent state, an optional tensor of shape [batch_size, num_v_heads, k_head_dim, v_head_dim]
         output_final_state: Whether to output the new recurrent state along with the output.
         use_qk_l2norm_in_kernel: If this flag is set to True, query and key vectors are L2-normalized.
-        cu_seqlens: Boundaries of the sequences packed in a single row, as offsets of shape [num_sequences + 1]. The
-            recurrent state starts from zero at each of them, which is what makes a packed row give every token what
-            it would get on its own.
     Returns:
         - The output tensor of shape [batch_size, sequence_length, num_v_heads, v_head_dim]
         - Either None or the new recurrent state tensor of shape [batch_size, num_v_heads, k_head_dim, v_head_dim]
     """
-    if cu_seqlens is not None:
-        if initial_state is not None or output_final_state:
-            raise NotImplementedError("Packed sequences carry no state in or out: they each start and end here")
-        outputs = [
-            torch_chunk_gated_delta_rule(
-                query[:, start:end],
-                key[:, start:end],
-                value[:, start:end],
-                g=g[:, start:end],
-                beta=beta[:, start:end],
-                chunk_size=chunk_size,
-                use_qk_l2norm_in_kernel=use_qk_l2norm_in_kernel,
-            )[0]
-            for start, end in zip(cu_seqlens[:-1].tolist(), cu_seqlens[1:].tolist())
-        ]
-        return torch.cat(outputs, dim=1), None
-
     initial_dtype = query.dtype
     batch_size, sequence_length, _, k_head_dim = key.shape
     num_v_heads, v_head_dim = value.shape[-2:]
@@ -619,6 +588,49 @@ class Qwen3_5GatedDeltaNet(nn.Module):
         self.in_proj_b = nn.Linear(self.hidden_size, self.num_v_heads, bias=False)
         self.in_proj_a = nn.Linear(self.hidden_size, self.num_v_heads, bias=False)
 
+    def output_from_core_attn(self, core_attn_out, z):
+        z_shape_og = z.shape
+        core_attn_out = core_attn_out.reshape(-1, core_attn_out.shape[-1])
+        z = z.reshape(-1, z.shape[-1])
+        core_attn_out = self.norm(core_attn_out, z)
+        core_attn_out = core_attn_out.reshape(z_shape_og)
+        core_attn_out = core_attn_out.reshape(core_attn_out.shape[0], core_attn_out.shape[1], -1)
+        return self.out_proj(core_attn_out)
+
+    def gated_delta_rule_per_sequence(self, mixed_qkv, b, a, cu_seqlens):
+        """Convolve and scan each packed sequence on its own, so none of them sees the ones before it."""
+        beta = b.sigmoid()
+        # If the model is loaded in fp16, without the .float() here, A might be -inf
+        g = -self.A_log.float().exp() * F.softplus(a.float() + self.dt_bias)
+        gqa_ratio = self.num_v_heads // self.num_k_heads
+
+        outputs = []
+        for start, end in zip(cu_seqlens[:-1].tolist(), cu_seqlens[1:].tolist()):
+            sequence = causal_conv1d_fn(
+                mixed_qkv[:, :, start:end],
+                self.conv1d.weight.squeeze(1),
+                self.conv1d.bias,
+                activation=self.activation,
+            ).transpose(1, 2)
+            query, key, value = torch.split(sequence, [self.key_dim, self.key_dim, self.value_dim], dim=-1)
+            query = query.reshape(*query.shape[:2], -1, self.head_k_dim)
+            key = key.reshape(*key.shape[:2], -1, self.head_k_dim)
+            value = value.reshape(*value.shape[:2], -1, self.head_v_dim)
+            if gqa_ratio > 1:
+                query = query.repeat_interleave(gqa_ratio, dim=2)
+                key = key.repeat_interleave(gqa_ratio, dim=2)
+            outputs.append(
+                torch_chunk_gated_delta_rule(
+                    query,
+                    key,
+                    value,
+                    g=g[:, start:end],
+                    beta=beta[:, start:end],
+                    use_qk_l2norm_in_kernel=True,
+                )[0]
+            )
+        return torch.cat(outputs, dim=1)
+
     @force_accelerate_hooks("conv1d")
     def forward(
         self,
@@ -643,6 +655,15 @@ class Qwen3_5GatedDeltaNet(nn.Module):
 
         b = self.in_proj_b(hidden_states)
         a = self.in_proj_a(hidden_states)
+
+        # A packed row holds several sequences back to back, and neither the convolution nor the recurrent state
+        # may run across their boundaries. The kernels take a `cu_seqlens` for this, but only some of them honour
+        # it and their signatures are fixed by the kernel hub, so the sequences are taken one at a time here: the
+        # result is the same whichever kernel is bound.
+        cu_seqlens = kwargs.get("cu_seq_lens_q")
+        if cu_seqlens is not None and cache_params is None:
+            core_attn_out = self.gated_delta_rule_per_sequence(mixed_qkv, b, a, cu_seqlens)
+            return self.output_from_core_attn(core_attn_out, z)
 
         # Continuous batching packs the scheduled sequences in one row and keeps per-request conv and recurrent
         # states in the paged cache, so it has its own conv and delta rule path
@@ -677,7 +698,6 @@ class Qwen3_5GatedDeltaNet(nn.Module):
                 self.conv1d.weight.squeeze(1),
                 self.conv1d.bias,
                 activation=self.activation,
-                cu_seqlens=kwargs.get("cu_seq_lens_q"),
                 **kwargs,
             )
 
@@ -718,7 +738,6 @@ class Qwen3_5GatedDeltaNet(nn.Module):
                 initial_state=recurrent_state,
                 output_final_state=cache_params is not None,
                 use_qk_l2norm_in_kernel=True,
-                cu_seqlens=kwargs.pop("cu_seq_lens_q", None),
                 **kwargs,
             )
         else:
@@ -731,7 +750,6 @@ class Qwen3_5GatedDeltaNet(nn.Module):
                 initial_state=recurrent_state,
                 output_final_state=cache_params is not None,
                 use_qk_l2norm_in_kernel=True,
-                cu_seqlens=kwargs.pop("cu_seq_lens_q", None),
                 **kwargs,
             )
 

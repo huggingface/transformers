@@ -574,6 +574,104 @@ def torch_recurrent_gated_delta_rule(
     return core_attn_out, last_recurrent_state
 
 
+def paged_gated_delta_forward(
+    module: nn.Module,
+    mixed_qkv: torch.Tensor,
+    b: torch.Tensor,
+    a: torch.Tensor,
+    cache,
+    cu_seq_lens_q: torch.Tensor,
+    linear_state_indices: torch.Tensor,
+) -> torch.Tensor:
+    """Gated delta rule over a continuous batching batch.
+
+    The batch packs the scheduled sequences in one row of `mixed_qkv` (shape `[1, conv_dim, total_tokens]`,
+    boundaries in `cu_seq_lens_q`), and each request's conv tail and recurrent state live in the cache's linear
+    attention state pools at the slot given by `linear_state_indices`. Single-token sequences (decode) are
+    processed as one batch through the recurrent kernel; longer ones (prefill chunks) one by one through the
+    chunked kernel, each carrying its state across chunks. Returns the core attention output of shape
+    `[1, total_tokens, num_v_heads, v_head_dim]`.
+    """
+    conv_pool = cache.conv_states[module.layer_idx]
+    recurrent_pool = cache.recurrent_states[module.layer_idx]
+    device = mixed_qkv.device
+    num_v_heads, _, head_v_dim = recurrent_pool.shape[1:]
+    total_tokens = mixed_qkv.shape[-1]
+    gqa_ratio = module.num_v_heads // module.num_k_heads
+    conv_weight = module.conv1d.weight.squeeze(1)
+
+    beta = b.sigmoid()
+    # If the model is loaded in fp16, without the .float() here, A might be -inf
+    g = -module.A_log.float().exp() * F.softplus(a.float() + module.dt_bias)
+
+    core_attn_out = mixed_qkv.new_empty(1, total_tokens, num_v_heads, head_v_dim)
+
+    # Sort the sequences: single-token ones batch together, the rest are processed one by one. Zero-length
+    # sequences are padding and are skipped.
+    boundaries = cu_seq_lens_q.tolist()
+    decode_positions, decode_slots, prefills = [], [], []
+    for i, slot in enumerate(linear_state_indices.tolist()):
+        start, end = boundaries[i], boundaries[i + 1]
+        if end - start == 1:
+            decode_positions.append(start)
+            decode_slots.append(slot)
+        elif end > start:
+            prefills.append((start, end, slot))
+
+    def split_heads(qkv: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        # qkv: [batch, seq_len, conv_dim] post-conv -> per-head query / key / value with GQA-expanded query and key
+        query, key, value = torch.split(qkv, [module.key_dim, module.key_dim, module.value_dim], dim=-1)
+        query = query.reshape(*query.shape[:2], -1, module.head_k_dim)
+        key = key.reshape(*key.shape[:2], -1, module.head_k_dim)
+        value = value.reshape(*value.shape[:2], -1, module.head_v_dim)
+        if gqa_ratio > 1:
+            query = query.repeat_interleave(gqa_ratio, dim=2)
+            key = key.repeat_interleave(gqa_ratio, dim=2)
+        return query, key, value
+
+    if decode_positions:
+        positions = torch.tensor(decode_positions, dtype=torch.int64, device=device)
+        slots = torch.tensor(decode_slots, dtype=torch.int64, device=device)
+        qkv = mixed_qkv[0].index_select(1, positions).permute(1, 0).unsqueeze(-1)  # [batch, conv_dim, 1]
+        conv_states = conv_pool.index_select(0, slots)
+        qkv = causal_conv1d_update(qkv, conv_states, conv_weight, module.conv1d.bias, module.activation)
+        conv_pool.index_copy_(0, slots, conv_states)
+        query, key, value = split_heads(qkv.transpose(1, 2))
+        out, final_state = torch_recurrent_gated_delta_rule(
+            query,
+            key,
+            value,
+            g=g[0].index_select(0, positions).unsqueeze(1),
+            beta=beta[0].index_select(0, positions).unsqueeze(1),
+            initial_state=recurrent_pool.index_select(0, slots),
+            output_final_state=True,
+            use_qk_l2norm_in_kernel=True,
+        )
+        recurrent_pool.index_copy_(0, slots, final_state.to(recurrent_pool.dtype))
+        core_attn_out[0, positions] = out[:, 0].to(core_attn_out.dtype)
+
+    for start, end, slot in prefills:
+        # The pool slices are views, so the conv update writes the new tail in place
+        qkv = causal_conv1d_update(
+            mixed_qkv[:, :, start:end], conv_pool[slot : slot + 1], conv_weight, module.conv1d.bias, module.activation
+        )
+        query, key, value = split_heads(qkv.transpose(1, 2))
+        out, final_state = torch_chunk_gated_delta_rule(
+            query,
+            key,
+            value,
+            g=g[:, start:end],
+            beta=beta[:, start:end],
+            initial_state=recurrent_pool[slot : slot + 1],
+            output_final_state=True,
+            use_qk_l2norm_in_kernel=True,
+        )
+        recurrent_pool[slot] = final_state[0].to(recurrent_pool.dtype)
+        core_attn_out[0, start:end] = out[0].to(core_attn_out.dtype)
+
+    return core_attn_out
+
+
 @use_kernelized_func(
     [torch_recurrent_gated_delta_rule, torch_chunk_gated_delta_rule, causal_conv1d_fn, causal_conv1d_update]
 )
@@ -652,6 +750,49 @@ class Qwen3NextGatedDeltaNet(nn.Module):
         a = a.reshape(a.size(0), a.size(1), self.num_v_heads)
         return query, key, value, z, b, a
 
+    def output_from_core_attn(self, core_attn_out, z):
+        z_shape_og = z.shape
+        core_attn_out = core_attn_out.reshape(-1, core_attn_out.shape[-1])
+        z = z.reshape(-1, z.shape[-1])
+        core_attn_out = self.norm(core_attn_out, z)
+        core_attn_out = core_attn_out.reshape(z_shape_og)
+        core_attn_out = core_attn_out.reshape(core_attn_out.shape[0], core_attn_out.shape[1], -1)
+        return self.out_proj(core_attn_out)
+
+    def gated_delta_rule_per_sequence(self, mixed_qkv, b, a, cu_seqlens):
+        """Convolve and scan each packed sequence on its own, so none of them sees the ones before it."""
+        beta = b.sigmoid()
+        # If the model is loaded in fp16, without the .float() here, A might be -inf
+        g = -self.A_log.float().exp() * F.softplus(a.float() + self.dt_bias)
+        gqa_ratio = self.num_v_heads // self.num_k_heads
+
+        outputs = []
+        for start, end in zip(cu_seqlens[:-1].tolist(), cu_seqlens[1:].tolist()):
+            sequence = causal_conv1d_fn(
+                mixed_qkv[:, :, start:end],
+                self.conv1d.weight.squeeze(1),
+                self.conv1d.bias,
+                activation=self.activation,
+            ).transpose(1, 2)
+            query, key, value = torch.split(sequence, [self.key_dim, self.key_dim, self.value_dim], dim=-1)
+            query = query.reshape(*query.shape[:2], -1, self.head_k_dim)
+            key = key.reshape(*key.shape[:2], -1, self.head_k_dim)
+            value = value.reshape(*value.shape[:2], -1, self.head_v_dim)
+            if gqa_ratio > 1:
+                query = query.repeat_interleave(gqa_ratio, dim=2)
+                key = key.repeat_interleave(gqa_ratio, dim=2)
+            outputs.append(
+                torch_chunk_gated_delta_rule(
+                    query,
+                    key,
+                    value,
+                    g=g[:, start:end],
+                    beta=beta[:, start:end],
+                    use_qk_l2norm_in_kernel=True,
+                )[0]
+            )
+        return torch.cat(outputs, dim=1)
+
     @force_accelerate_hooks("conv1d")
     def forward(
         self,
@@ -673,6 +814,29 @@ class Qwen3NextGatedDeltaNet(nn.Module):
 
         mixed_qkv = torch.cat((query, key, value), dim=-1)
         mixed_qkv = mixed_qkv.transpose(1, 2)
+
+        # A packed row holds several sequences back to back, and neither the convolution nor the recurrent state
+        # may run across their boundaries. The kernels take a `cu_seqlens` for this, but only some of them honour
+        # it and their signatures are fixed by the kernel hub, so the sequences are taken one at a time here: the
+        # result is the same whichever kernel is bound.
+        cu_seqlens = kwargs.get("cu_seq_lens_q")
+        if cu_seqlens is not None and cache_params is None:
+            core_attn_out = self.gated_delta_rule_per_sequence(mixed_qkv, b, a, cu_seqlens)
+            return self.output_from_core_attn(core_attn_out, z)
+
+        # Continuous batching packs the scheduled sequences in one row and keeps per-request conv and recurrent
+        # states in the paged cache, so it has its own conv and delta rule path
+        if kwargs.get("cache") is not None:
+            core_attn_out = paged_gated_delta_forward(
+                self, mixed_qkv, b, a, kwargs["cache"], kwargs["cu_seq_lens_q"], kwargs["linear_state_indices"]
+            )
+            z_shape_og = z.shape
+            core_attn_out = core_attn_out.reshape(-1, core_attn_out.shape[-1])
+            z = z.reshape(-1, z.shape[-1])
+            core_attn_out = self.norm(core_attn_out, z)
+            core_attn_out = core_attn_out.reshape(z_shape_og)
+            core_attn_out = core_attn_out.reshape(core_attn_out.shape[0], core_attn_out.shape[1], -1)
+            return self.out_proj(core_attn_out)
 
         if use_precomputed_states and seq_len == 1 and not cache_params.layers[self.layer_idx].record_past:
             conv_state = cache_params.layers[self.layer_idx].conv_states[0]
@@ -734,7 +898,6 @@ class Qwen3NextGatedDeltaNet(nn.Module):
                 initial_state=recurrent_state,
                 output_final_state=cache_params is not None,
                 use_qk_l2norm_in_kernel=True,
-                cu_seqlens=kwargs.pop("cu_seq_lens_q", None),
                 **kwargs,
             )
         else:
@@ -747,7 +910,6 @@ class Qwen3NextGatedDeltaNet(nn.Module):
                 initial_state=recurrent_state,
                 output_final_state=cache_params is not None,
                 use_qk_l2norm_in_kernel=True,
-                cu_seqlens=kwargs.pop("cu_seq_lens_q", None),
                 **kwargs,
             )
 
@@ -852,7 +1014,7 @@ class Qwen3NextSparseMoeBlock(nn.Module):
         self.shared_expert = Qwen3NextMLP(config, intermediate_size=config.shared_expert_intermediate_size)
         self.shared_expert_gate = torch.nn.Linear(config.hidden_size, 1, bias=False)
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states_reshaped = hidden_states.view(-1, hidden_dim)
         shared_expert_output = self.shared_expert(hidden_states_reshaped)
@@ -1080,38 +1242,51 @@ def load_balancing_loss_func(
     if gate_logits is None or not isinstance(gate_logits, tuple):
         return 0
 
-    # Accumulate assignment counts and probability sums layer by layer, normalizing at the end,
-    # so peak memory stays O(seq_len * num_experts) regardless of the number of layers.
-    compute_device = gate_logits[0].device
-    tokens_per_expert_sum = torch.zeros(num_experts, dtype=torch.float32, device=compute_device)
-    router_prob_sum = torch.zeros(num_experts, dtype=torch.float32, device=compute_device)
-    total_rows = 0.0
+    if isinstance(gate_logits, tuple):
+        compute_device = gate_logits[0].device
+        concatenated_gate_logits = torch.cat([layer_gate.to(compute_device) for layer_gate in gate_logits], dim=0)
 
-    if attention_mask is not None:
-        # The same flat mask applies to every layer's [batch_size * sequence_length] rows.
-        flat_mask = attention_mask.reshape(-1).to(device=compute_device, dtype=torch.float32)
+    routing_weights = torch.nn.functional.softmax(concatenated_gate_logits, dim=-1)
 
-    for layer_gate in gate_logits:
-        routing_weights = torch.nn.functional.softmax(layer_gate.to(compute_device), dim=-1)
-        _, selected_experts = torch.topk(routing_weights, top_k, dim=-1)
-        if attention_mask is None:
-            # Count of top-k assignments per expert
-            tokens_per_expert_sum = (
-                tokens_per_expert_sum + torch.bincount(selected_experts.reshape(-1), minlength=num_experts).float()
-            )
-            # Sum of routing probabilities per expert
-            router_prob_sum = router_prob_sum + routing_weights.float().sum(dim=0)
-            total_rows = total_rows + routing_weights.shape[0]
-        else:
-            # Same reductions, weighted by the attention mask to exclude padding tokens
-            tokens_per_expert_sum = tokens_per_expert_sum + torch.zeros(
-                num_experts, dtype=torch.float32, device=compute_device
-            ).scatter_add_(0, selected_experts.reshape(-1), flat_mask.repeat_interleave(top_k))
-            router_prob_sum = router_prob_sum + (routing_weights.float() * flat_mask.unsqueeze(-1)).sum(dim=0)
-            total_rows = total_rows + flat_mask.sum()
+    _, selected_experts = torch.topk(routing_weights, top_k, dim=-1)
 
-    tokens_per_expert = tokens_per_expert_sum / total_rows
-    router_prob_per_expert = router_prob_sum / total_rows
+    expert_mask = torch.nn.functional.one_hot(selected_experts, num_experts)
+
+    if attention_mask is None:
+        # Compute the percentage of tokens routed to each experts
+        tokens_per_expert = torch.mean(expert_mask.float(), dim=0)
+
+        # Compute the average probability of routing to these experts
+        router_prob_per_expert = torch.mean(routing_weights, dim=0)
+    else:
+        batch_size, sequence_length = attention_mask.shape
+        num_hidden_layers = concatenated_gate_logits.shape[0] // (batch_size * sequence_length)
+
+        # Compute the mask that masks all padding tokens as 0 with the same shape of expert_mask
+        expert_attention_mask = (
+            attention_mask[None, :, :, None, None]
+            .expand((num_hidden_layers, batch_size, sequence_length, top_k, num_experts))
+            .reshape(-1, top_k, num_experts)
+            .to(compute_device)
+        )
+
+        # Compute the percentage of tokens routed to each experts
+        tokens_per_expert = torch.sum(expert_mask.float() * expert_attention_mask, dim=0) / torch.sum(
+            expert_attention_mask, dim=0
+        )
+
+        # Compute the mask that masks all padding tokens as 0 with the same shape of tokens_per_expert
+        router_per_expert_attention_mask = (
+            attention_mask[None, :, :, None]
+            .expand((num_hidden_layers, batch_size, sequence_length, num_experts))
+            .reshape(-1, num_experts)
+            .to(compute_device)
+        )
+
+        # Compute the average probability of routing to these experts
+        router_prob_per_expert = torch.sum(routing_weights * router_per_expert_attention_mask, dim=0) / torch.sum(
+            router_per_expert_attention_mask, dim=0
+        )
 
     overall_loss = torch.sum(tokens_per_expert * router_prob_per_expert.unsqueeze(0))
     return overall_loss * num_experts
