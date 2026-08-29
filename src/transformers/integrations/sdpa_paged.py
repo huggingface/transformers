@@ -1,7 +1,6 @@
 import torch
 
 from ..generation.continuous_batching.cache import PagedAttentionCache
-from .sdpa_attention import sdpa_attention_forward
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -28,12 +27,11 @@ def sdpa_attention_paged_forward(
 ) -> tuple[torch.Tensor, None]:
     # Add KV cache to the key and value tensors
     cache: PagedAttentionCache | None = kwargs.pop("cache", None)
-    # Without a paged cache, this is not a continuous batching call: behave like the base sdpa implementation.
-    # This happens when a standard forward runs on a model whose attention was switched to a paged implementation,
-    # e.g. a training forward on the same weights a continuous batching manager generates with.
     if cache is None:
-        return sdpa_attention_forward(
-            module, query, key, value, attention_mask, dropout=dropout, scaling=scaling, **kwargs
+        raise ValueError(
+            "`paged|sdpa` was called without a paged attention cache. This implementation expects the packed "
+            "inputs and the 4D mask that continuous batching prepares; on a standard forward it would attend "
+            "bidirectionally. Use `sdpa` for a standard forward."
         )
     # This changes the shape of k and v from [1, num_kv_heads, seqlen_kv, head_dim] to [-1, num_kv_heads, head_dim]
     key, value = cache.update(

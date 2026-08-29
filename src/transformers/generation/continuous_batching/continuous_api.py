@@ -1013,6 +1013,35 @@ class ContinuousBatchingManager:
 
     # ---------------------------------------- BACKGROUND THREAD ONLY METHODS ---------------------------------------- #
 
+    def _generation_loop_body(self, batch_processor: ContinuousBatchProcessor, bootstrapping: bool) -> bool:
+        """Body of the generation loop. Returns True if the loop should continue, False otherwise. Behaves differently
+        if this is for bootstrapping an async run: in that case, there is no need to update the batch, and the first
+        step should exit the bootstrapping loop."""
+        # If some request is available, perform a generation step
+        requests_available = batch_processor.prepare_next_batch()
+        if requests_available:
+            self._generation_step()
+            self.current_batch += 1
+            if bootstrapping:  # no update when bootstrapping an async batching generation
+                return False
+            else:
+                batch_processor.update_batch()
+                return True
+        # Stop waiting if the TP group is hard-stopping
+        elif self.background_thread_status.tp_status == BackgroundThreadStatus.HARD_STOP:
+            return False
+        # Stop waiting if the TP group is flushing and there are no pending requests
+        elif (
+            self.background_thread_status.tp_status == BackgroundThreadStatus.FLUSH_AND_STOP
+            and not batch_processor.has_pending_requests()
+        ):
+            return False
+        # Otherwise, we wait for new requests and retry
+        else:
+            self._has_new_requests.wait(timeout=0.1)  # wait for new requests instead of busy-spinning.
+            self._has_new_requests.clear()
+            return True
+
     @torch.no_grad()
     def _run_generation_loop(self) -> None:
         """Main processing loop running in the background thread.
@@ -1065,6 +1094,10 @@ class ContinuousBatchingManager:
 
         # Everything is inside this try / except / finally block so we can handle critical errors gracefully
         try:
+            # Scope the device for the generation loop (thread-scoped)
+            if self.model.device.type == "cuda" and self.model.device.index is not None:
+                torch.cuda.set_device(self.model.device)
+
             # Start the generation loop
             batch_processor = self._create_batch_processor()
             self.batch_processor = batch_processor  # register the batch processor for main thread access
@@ -1074,51 +1107,12 @@ class ContinuousBatchingManager:
             # started before the first request was submitted: wait for one, with the same stop conditions as
             # the main loop below.
             if batch_processor.use_async_batching:
-                while True:
-                    if batch_processor.prepare_next_batch():
-                        self._generation_step()
-                        self.current_batch += 1
-                        break
-
-                    # Stop waiting if the TP group is hard-stopping
-                    elif self.background_thread_status.tp_status == BackgroundThreadStatus.HARD_STOP:
-                        break
-                    # Stop waiting if the TP group is flushing and there are no pending requests
-                    elif (
-                        self.background_thread_status.tp_status == BackgroundThreadStatus.FLUSH_AND_STOP
-                        and not batch_processor.has_pending_requests()
-                    ):
-                        break
-
-                    # Otherwise, we wait for new requests and retry
-                    else:
-                        self._has_new_requests.wait(timeout=0.1)  # wait for new requests instead of busy-spinning.
-                        self._has_new_requests.clear()
+                while self._generation_loop_body(batch_processor, bootstrapping=True):
+                    pass
 
             # The loop continues until a stop signal has been broadcasted in the TP group
-            while True:
-                requests_available = batch_processor.prepare_next_batch()  # this is where the TP group communicates
-
-                # This only happens if the TP group is not stopping (any kind of stop) so we can check the status after
-                if requests_available:
-                    self._generation_step()
-                    batch_processor.update_batch()
-                    self.current_batch += 1
-
-                # Stop the loop if the TP group is hard-stopping
-                elif self.background_thread_status.tp_status == BackgroundThreadStatus.HARD_STOP:
-                    break
-                # Stop the loop if the TP group is flushing and there are no pending requests
-                elif (
-                    self.background_thread_status.tp_status == BackgroundThreadStatus.FLUSH_AND_STOP
-                    and not batch_processor.has_pending_requests()
-                ):
-                    break
-
-                # Otherwise, we wait for new requests and re-enter the loop
-                else:
-                    self._has_new_requests.wait(timeout=0.1)  # wait for new requests instead of busy-spinning.
-                    self._has_new_requests.clear()
+            while self._generation_loop_body(batch_processor, bootstrapping=False):
+                pass
 
             # In async mode, the last batch's results are still in flight: switch to the right IO pair and process them
             # Also happens for a hard stop, since the results are already available on the device
@@ -1342,6 +1336,7 @@ class ContinuousMixin:
         )
         if warmup and not manager.warmed_up:
             # Warmup is long (~30 sec): best to signal the user it's happening than let them think the manager is stuck
+            # TODO: have a progress bar for the warmup as well, like other inference engine
             logger.info("Warming up for continuous batching...")
             start = perf_counter()
             manager.warmup()
