@@ -176,6 +176,25 @@ class TestWeightGlobMatching(unittest.TestCase):
         self.assertEqual(renamed_key, key)
 
 
+class TestConversionOperations(unittest.TestCase):
+    def test_chunk_rejects_uneven_splits(self):
+        operation = Chunk(dim=0)
+
+        for tensor_size, target_count in ((5, 2), (2, 3)):
+            with self.subTest(tensor_size=tensor_size, target_count=target_count):
+                target_patterns = [f"target_{index}" for index in range(target_count)]
+                with self.assertRaisesRegex(
+                    ValueError,
+                    rf"demo\.layer.*size {tensor_size}.*{target_count} equally sized chunks",
+                ):
+                    operation.convert(
+                        {"source": [torch.arange(tensor_size)]},
+                        source_patterns=["source"],
+                        target_patterns=target_patterns,
+                        full_layer_name="demo.layer",
+                    )
+
+
 class DummyParamModule(nn.Module):
     def __init__(self, shape):
         super().__init__()

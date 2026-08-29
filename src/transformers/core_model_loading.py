@@ -127,6 +127,12 @@ class Chunk(ConversionOps):
         tensor = tensors[0] if isinstance(tensors, list) else tensors
         targets = self.get_target_patterns(target_patterns, **kwargs)
         num_shards = len(targets)
+        dimension_size = tensor.shape[self.dim]
+        if dimension_size % num_shards != 0:
+            raise ValueError(
+                f"Cannot split tensor for `{kwargs.get('full_layer_name')}` with size {dimension_size} along dimension "
+                f"{self.dim} into {num_shards} equally sized chunks."
+            )
         chunks = tuple(chunk.contiguous() for chunk in torch.chunk(tensor, num_shards, dim=self.dim))
         return dict(zip(targets, chunks))
 
