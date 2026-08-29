@@ -285,7 +285,11 @@ class RichInterface:
                         if prog:
                             unit = "bytes" if stage == "download" else "items"
                             progress.update(
-                                task_id, description=label, completed=prog["current"], total=prog.get("total"), unit=unit
+                                task_id,
+                                description=label,
+                                completed=prog["current"],
+                                total=prog.get("total"),
+                                unit=unit,
                             )
                         else:
                             progress.update(task_id, description=label, completed=0, total=None)
