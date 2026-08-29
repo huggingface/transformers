@@ -202,12 +202,12 @@ class PagedAttentionCache:
                 self.sliding_windows[layer] = sliding_window
 
         # Check if the KV heads are part of the TP plan. If they are not, the cache does not need plan for TP.
-        # TODO: this is fragile. If your model fails to TP properly because of this, please open an issue.
-        kv_is_tp = True
-        for key in ["layers.*.self_attn.k_proj", "layers.*.self_attn.v_proj"]:
-            if not (key in tp_plan or "model." + key in tp_plan):
-                kv_is_tp = False
-                break
+        # Matched on the suffix because the prefix depends on where the text model sits: composite models nest it
+        # (`model.language_model.layers.*`), plain causal LMs do not (`model.layers.*`).
+        kv_is_tp = all(
+            any(key.endswith(suffix) for key in tp_plan)
+            for suffix in ["layers.*.self_attn.k_proj", "layers.*.self_attn.v_proj"]
+        )
 
         # If the KV heads are TP'ed, each KV head is dispatched to a different GPU, so the effective number of KV heads
         # per GPU is simply divided by the TP size
