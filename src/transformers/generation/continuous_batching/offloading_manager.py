@@ -239,7 +239,11 @@ class OffloadingManager:
         victims = list(self.scheduler.active_requests.values())
         if not victims:
             return 0
-        cpu_offloaded = self._offload_to_cpu(victims)
+        # Only a decoding request can be resumed from its offloaded blocks: one still working through its prefill has
+        # KV that does not correspond to a whole number of processed tokens, and restoring it yields garbage. Those are
+        # soft reset instead, which `_requeue_offloaded` does for anything not in the offloaded set.
+        decoding = [state for state in victims if state._status == RequestStatus.DECODING]
+        cpu_offloaded = self._offload_to_cpu(decoding) if decoding else set()
         self._requeue_offloaded(victims, cpu_offloaded)
         logger.info(f"Offloaded all {len(victims)} active requests ({len(cpu_offloaded)} to CPU) to release the cache")
         return len(victims)
