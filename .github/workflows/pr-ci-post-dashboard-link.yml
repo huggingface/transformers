@@ -58,4 +58,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MLINTER_FINDINGS_DIR: ${{ runner.temp }}/mlinter-findings
-        run: python3 utils/post_mlinter_review.py "$MLINTER_FINDINGS_DIR"
+        run: |
+          # Validate artifact contents before processing
+          if [ -d "$MLINTER_FINDINGS_DIR" ]; then
+            # Check for suspicious files or patterns
+            find "$MLINTER_FINDINGS_DIR" -type f ! -name '*.json' -delete
+            # Limit file sizes to prevent resource exhaustion
+            find "$MLINTER_FINDINGS_DIR" -type f -size +10M -delete
+          fi
+          python3 utils/post_mlinter_review.py "$MLINTER_FINDINGS_DIR"
