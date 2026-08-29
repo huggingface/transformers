@@ -353,6 +353,9 @@ class PagedAttentionCache:
         """
         if not self.key_cache:
             return 0
+        # Whatever the block manager thinks free blocks contain stops being true the moment these tensors go, and a
+        # later request would otherwise be handed a block by hash and read data that is no longer there.
+        self._block_manager.forget_shared_contents()
         released = sum(t.numel() * t.element_size() for t in self.key_cache + self.value_cache)
         self._released_pointers = [t.data_ptr() for t in self.key_cache + self.value_cache]
         self.key_cache.clear()
@@ -378,7 +381,7 @@ class PagedAttentionCache:
             torch._dynamo.mark_static_address(new_layer_value_cache)
             self.key_cache.append(new_layer_key_cache)
             self.value_cache.append(new_layer_value_cache)
-            # The read trash block is read by padding tokens, so it has to be zeroed again
+            # Padding tokens read from the read trash block, so it has to be zeroed again, exactly as at init
             new_layer_key_cache.view(block_based_shape)[self.num_blocks].fill_(0)
             new_layer_value_cache.view(block_based_shape)[self.num_blocks].fill_(0)
         same_addresses = [t.data_ptr() for t in self.key_cache + self.value_cache] == self._released_pointers

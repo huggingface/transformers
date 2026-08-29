@@ -109,6 +109,22 @@ class BlockManager:
             self._uninit_block_ids.append(id_to_uninitialize)
         return True
 
+    def forget_shared_contents(self) -> None:
+        """Forget what every free block is supposed to contain.
+
+        A free block that is "initialized" is offered to a new request by hash, on the promise that the KV cache tensor
+        still holds the data that hash describes. Whoever released the cache tensors broke that promise, so the hashes
+        have to go: the blocks become plain uninitialized ones, and the next request that needs them writes its own
+        data. Blocks in use are untouched, since their owners restore or re-prefill them.
+        """
+        for block_id in self._init_block_ids:
+            block = self._id_to_block.get(block_id)
+            if block is not None:
+                self._hash_to_id.pop(block.hash, None)
+                block.hash = None
+            self._uninit_block_ids.append(block_id)
+        self._init_block_ids.clear()
+
     def get_free_blocks(
         self, n_blocks: int, last_block_id: int | None, shareable: bool, group_id: int
     ) -> list[int] | None:

@@ -248,6 +248,20 @@ class OffloadingManager:
         logger.info(f"Offloaded all {len(victims)} active requests ({len(cpu_offloaded)} to CPU) to release the cache")
         return len(victims)
 
+    def discard_all_active(self) -> int:
+        """Drop every active request's cache instead of offloading it.
+
+        The requests are put back in the waiting queue and re-prefilled when they run again, so this costs compute
+        rather than host bandwidth, and needs no CPU pool at all. It is the right choice when the cache is about to
+        become worthless anyway, for instance when the weights change between two generation phases.
+        """
+        victims = list(self.scheduler.active_requests.values())
+        if not victims:
+            return 0
+        self._requeue_offloaded(victims, cpu_offloaded=set())  # nothing offloaded, so every victim is soft reset
+        logger.info(f"Discarded the cache of all {len(victims)} active requests")
+        return len(victims)
+
     def _requeue_offloaded(self, victims: list[RequestState], cpu_offloaded: set[str]) -> None:
         """Put offloaded victims back in the waiting queue, oldest first, so they become active again in (roughly)
         their original order. Those that reached the CPU pool resume from their offloaded blocks; the others start
