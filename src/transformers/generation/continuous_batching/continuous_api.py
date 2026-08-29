@@ -1371,8 +1371,7 @@ class ContinuousMixin:
             generation_config: Optional generation configuration
             continuous_batching_config: Optional continuous batching configuration
             record_timestamps: If set to true, the requests will have a timestamp for each token generated
-            progress_bar: If set to true, a progress bar will be displayed. Off by default: like `generate`,
-                `generate_batch` prints nothing at default verbosity
+            progress_bar: If set to true, a progress bar will be displayed
             persistent_manager: whether to persist the manager after the generation is finished. Default is False.
             warmup: whether to pre-capture CUDA graphs before processing requests. Default is True.
         Returns:
