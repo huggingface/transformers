@@ -56,6 +56,7 @@ from .configuration_utils import PreTrainedConfig
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .debug_utils import DebugOption, DebugUnderflowOverflow
 from .distributed.fsdp import get_fsdp_ckpt_kwargs, update_fsdp_plugin_peft
+from .distributed.utils import is_dtensor
 from .feature_extraction_sequence_utils import SequenceFeatureExtractor
 from .feature_extraction_utils import FeatureExtractionMixin
 from .hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS, default_hp_search_backend
@@ -148,7 +149,6 @@ from .trainer_utils import (
     validate_quantization_for_training,
 )
 from .training_args import OptimizerNames, ParallelMode, TrainingArguments
-from .distributed.utils import is_dtensor
 from .utils import (
     ADAPTER_CONFIG_NAME,
     ADAPTER_SAFE_WEIGHTS_NAME,
@@ -2567,11 +2567,7 @@ class Trainer:
 
         from torch.distributed.tensor import DTensor, Replicate
 
-        wrapped = [
-            param
-            for param in model.parameters()
-            if param.grad is not None and not is_dtensor(param.grad)
-        ]
+        wrapped = [param for param in model.parameters() if param.grad is not None and not is_dtensor(param.grad)]
         for param in wrapped:
             param.grad = DTensor.from_local(param.grad, mesh, [Replicate()], run_check=False)
         try:
