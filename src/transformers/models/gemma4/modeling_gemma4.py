@@ -56,8 +56,11 @@ from ...utils import (
     auto_docstring,
     can_return_tuple,
     is_accelerate_available,
+    logging,
     torch_compilable_check,
 )
+
+logger = logging.get_logger(__name__)
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
@@ -2315,7 +2318,10 @@ class Gemma4Model(Gemma4PreTrainedModel):
 
         if per_layer_inputs is None and self.config.get_text_config().hidden_size_per_layer_input:
             pad_embedding = self.language_model.embed_tokens.weight[self.config.text_config.pad_token_id, :]
+            logger.warning(f"[gemma4] before .to(): pad_embedding.device={pad_embedding.device}, multimodal_mask.device={multimodal_mask.device}")
+            pad_embedding = pad_embedding.to(inputs_embeds.device, inputs_embeds.dtype)
             multimodal_mask = multimodal_mask.to(inputs_embeds.device)
+            logger.warning(f"[gemma4] after  .to(): pad_embedding.device={pad_embedding.device}, multimodal_mask.device={multimodal_mask.device}")
             llm_inputs_embeds = torch.where(multimodal_mask[..., None], pad_embedding.view(1, 1, -1), inputs_embeds)
             per_layer_inputs = self.language_model.get_per_layer_inputs(llm_input_ids, llm_inputs_embeds)
 
