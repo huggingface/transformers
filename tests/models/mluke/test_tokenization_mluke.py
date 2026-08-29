@@ -107,35 +107,34 @@ class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(encoding["entity_ids"], [[pad_id, pad_id], [mask_id, mask_id]])
 
     def test_entity_classification_markers_ignore_extra_special_token_order(self):
-        # Regression for #48225: force non-entity specials first so positional ids would be wrong.
-        tokenizer = self.get_tokenizer(
+        # Regression for #48225: with non-entity specials first, positional ids would emit <s> not <ent>.
+        tokenizer = self.tokenizer_class.from_pretrained(
+            self.tmpdirname,
             task="entity_classification",
             extra_special_tokens=["<s>", "</s>", "<ent>", "<ent2>", "[UNK]", "[PAD]", "[MASK]", "[MASK2]"],
         )
-        self.assertEqual(tokenizer.entity_token_1, "<ent>")
-        self.assertEqual(tokenizer.special_tokens_map["entity_token_1"], "<ent>")
-        self.assertEqual(tokenizer.entity_token_1_id, tokenizer.convert_tokens_to_ids("<ent>"))
         self.assertNotEqual(tokenizer.extra_special_tokens_ids[0], tokenizer.entity_token_1_id)
 
         encoding = tokenizer("Beyonce lives in Los Angeles.", entity_spans=[(0, 7)])
-        tokens = tokenizer.convert_ids_to_tokens(encoding["input_ids"])
-        self.assertEqual(tokens.count("<ent>"), 2)
-        self.assertEqual(tokens[1], "<ent>")
+        expected_tokens = [
+            "<s>", "<ent>", "▁Beyonce", "<ent>", "▁lives", "▁in", "▁Los", "▁Angeles", ".", "</s>"
+        ]
+        self.assertEqual(tokenizer.convert_ids_to_tokens(encoding["input_ids"]), expected_tokens)
 
     def test_entity_pair_classification_markers_ignore_extra_special_token_order(self):
-        tokenizer = self.get_tokenizer(
+        tokenizer = self.tokenizer_class.from_pretrained(
+            self.tmpdirname,
             task="entity_pair_classification",
             extra_special_tokens=["<s>", "</s>", "<ent>", "<ent2>", "[UNK]", "[PAD]", "[MASK]", "[MASK2]"],
         )
-        self.assertEqual(tokenizer.entity_token_1_id, tokenizer.convert_tokens_to_ids("<ent>"))
-        self.assertEqual(tokenizer.entity_token_2_id, tokenizer.convert_tokens_to_ids("<ent2>"))
         self.assertNotEqual(tokenizer.extra_special_tokens_ids[0], tokenizer.entity_token_1_id)
         self.assertNotEqual(tokenizer.extra_special_tokens_ids[1], tokenizer.entity_token_2_id)
 
         encoding = tokenizer("Beyonce lives in Los Angeles.", entity_spans=[(0, 7), (16, 27)])
-        tokens = tokenizer.convert_ids_to_tokens(encoding["input_ids"])
-        self.assertEqual(tokens.count("<ent>"), 2)
-        self.assertEqual(tokens.count("<ent2>"), 2)
+        expected_tokens = [
+            "<s>", "<ent>", "▁Beyonce", "<ent>", "▁lives", "▁in", "<ent2>", "▁Los", "▁Angel", "e", "<ent2>", "▁s", ".", "</s>"
+        ]
+        self.assertEqual(tokenizer.convert_ids_to_tokens(encoding["input_ids"]), expected_tokens)
 
     # def test_if_tokenize_single_text_raise_error_with_invalid_inputs(self):
     #     tokenizer = self.get_tokenizer()
