@@ -16,56 +16,20 @@
 import unittest
 
 from transformers.models.mluke.tokenization_mluke import MLukeTokenizer
-from transformers.testing_utils import get_tests_dir, require_torch, slow
-from transformers.tokenization_utils_sentencepiece import SentencePieceExtractor
+from transformers.testing_utils import require_torch, slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
 
-SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
-SAMPLE_ENTITY_VOCAB = get_tests_dir("fixtures/test_entity_vocab.json")
-
-
-# TODO: (Ita / Arthur) FIXME
-@unittest.skip("Skip for now as this fails after #40936")
 class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
-    from_pretrained_id = "studio-ousia/mluke-base"
+    from_pretrained_id = "studio-ousia/mluke-base-lite"
     tokenizer_class = MLukeTokenizer
     from_pretrained_kwargs = {"cls_token": "<s>"}
-
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        cls.from_pretrained_id = "studio-ousia/mluke-base"
-        cls.tokenizer_class = MLukeTokenizer
-
-        cls.special_tokens_map = {"entity_token_1": "<ent>", "entity_token_2": "<ent2>"}
-
-    @classmethod
-    def get_tokenizer(cls, pretrained_name=None, task=None, **kwargs):
-        kwargs.update(cls.special_tokens_map)
-        if "task" not in kwargs or task is not None:
-            kwargs.update({"task": task})
-        # TokenizerTesterMixin passes `pretrained_name` as the first positional argument; keep using fixtures here.
-
-        extractor = SentencePieceExtractor(SAMPLE_VOCAB)
-        vocab_ids, vocab_scores, merges = extractor.extract()
-        tokenizer = MLukeTokenizer(vocab=vocab_scores, entity_vocab_file=SAMPLE_ENTITY_VOCAB, **kwargs)
-        return tokenizer
 
     def get_input_output_texts(self, tokenizer):
         input_text = "lower newer"
         output_text = "lower newer"
         return input_text, output_text
-
-    def mluke_dict_integration_testing(self):
-        tokenizer = self.get_tokenizer()
-
-        self.assertListEqual(tokenizer.encode("Hello world!", add_special_tokens=False), [35378, 8999, 38])
-        self.assertListEqual(
-            tokenizer.encode("Hello world! cécé herlolip 418", add_special_tokens=False),
-            [35378, 8999, 38, 33273, 11676, 604, 365, 21392, 201, 1819],
-        )
 
     def test_sequence_builders(self):
         tokenizer = self.tokenizer_class.from_pretrained("hf-internal-testing/tiny-random-mluke")
@@ -86,11 +50,6 @@ class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(encoded_sentence, encoded_text_from_decode)
         self.assertEqual(encoded_pair, encoded_pair_from_decode)
 
-    def get_clean_sequence(self, tokenizer, max_length=20) -> tuple[str, list]:
-        txt = "Beyonce lives in Los Angeles"
-        ids = tokenizer.encode(txt, add_special_tokens=False)
-        return txt, ids
-
     @unittest.skip
     def test_pretokenized_inputs(self):
         pass
@@ -109,6 +68,38 @@ class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         # test with a sentence with no entity
         encoding = tokenizer([sentence, sentence], entity_spans=[[], [span, span]], padding=True)
         self.assertEqual(encoding["entity_ids"], [[pad_id, pad_id], [mask_id, mask_id]])
+
+    def test_entity_classification_markers_ignore_extra_special_token_order(self):
+        # Regression for #48225: force non-entity specials first so positional ids would be wrong.
+        tokenizer = self.get_tokenizer(
+            task="entity_classification",
+            extra_special_tokens=["<s>", "</s>", "<ent>", "<ent2>", "[UNK]", "[PAD]", "[MASK]", "[MASK2]"],
+        )
+        self.assertEqual(tokenizer.entity_token_1, "<ent>")
+        self.assertEqual(tokenizer.entity_token_2, "<ent2>")
+        self.assertEqual(tokenizer.special_tokens_map["entity_token_1"], "<ent>")
+        self.assertEqual(tokenizer.entity_token_1_id, tokenizer.convert_tokens_to_ids("<ent>"))
+        self.assertNotEqual(tokenizer.extra_special_tokens_ids[0], tokenizer.entity_token_1_id)
+
+        encoding = tokenizer("Beyonce lives in Los Angeles.", entity_spans=[(0, 7)])
+        tokens = tokenizer.convert_ids_to_tokens(encoding["input_ids"])
+        self.assertEqual(tokens.count("<ent>"), 2)
+        self.assertEqual(tokens[1], "<ent>")
+
+    def test_entity_pair_classification_markers_ignore_extra_special_token_order(self):
+        tokenizer = self.get_tokenizer(
+            task="entity_pair_classification",
+            extra_special_tokens=["<s>", "</s>", "<ent>", "<ent2>", "[UNK]", "[PAD]", "[MASK]", "[MASK2]"],
+        )
+        self.assertEqual(tokenizer.entity_token_1_id, tokenizer.convert_tokens_to_ids("<ent>"))
+        self.assertEqual(tokenizer.entity_token_2_id, tokenizer.convert_tokens_to_ids("<ent2>"))
+        self.assertNotEqual(tokenizer.extra_special_tokens_ids[0], tokenizer.entity_token_1_id)
+        self.assertNotEqual(tokenizer.extra_special_tokens_ids[1], tokenizer.entity_token_2_id)
+
+        encoding = tokenizer("Beyonce lives in Los Angeles.", entity_spans=[(0, 7), (16, 27)])
+        tokens = tokenizer.convert_ids_to_tokens(encoding["input_ids"])
+        self.assertEqual(tokens.count("<ent>"), 2)
+        self.assertEqual(tokens.count("<ent2>"), 2)
 
     # def test_if_tokenize_single_text_raise_error_with_invalid_inputs(self):
     #     tokenizer = self.get_tokenizer()
@@ -143,56 +134,6 @@ class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     @slow
     def test_pad_token_initialization(self):
         return super().test_pad_token_initialization()
-
-
-class MLukeEntityMarkerRegressionTest(unittest.TestCase):
-    """Regression for #48225: entity markers must not use positional extra_special_tokens_ids."""
-
-    def _get_tokenizer(self, task, **kwargs):
-        vocab = [
-            ("<unk>", 0.0),
-            ("▁", -1.0),
-            ("▁Beyonce", -2.0),
-            ("▁lives", -3.0),
-            ("▁in", -4.0),
-            ("▁Los", -5.0),
-            ("▁Angeles", -6.0),
-            (".", -7.0),
-        ]
-        entity_vocab = {"[UNK]": 0, "[PAD]": 1, "[MASK]": 2, "[MASK2]": 3}
-        return MLukeTokenizer(
-            vocab=vocab,
-            entity_vocab=entity_vocab,
-            task=task,
-            # Put non-entity specials first so positional indexing would pick the wrong ids.
-            extra_special_tokens=["<s>", "</s>", "<ent>", "<ent2>", "[UNK]", "[PAD]", "[MASK]", "[MASK2]"],
-            **kwargs,
-        )
-
-    def test_entity_classification_markers_ignore_extra_special_token_order(self):
-        tokenizer = self._get_tokenizer("entity_classification")
-        self.assertEqual(tokenizer.entity_token_1, "<ent>")
-        self.assertEqual(tokenizer.entity_token_2, "<ent2>")
-        self.assertEqual(tokenizer.special_tokens_map["entity_token_1"], "<ent>")
-        self.assertEqual(tokenizer.entity_token_1_id, tokenizer.convert_tokens_to_ids("<ent>"))
-        self.assertNotEqual(tokenizer.extra_special_tokens_ids[0], tokenizer.entity_token_1_id)
-
-        encoding = tokenizer("Beyonce lives in Los Angeles.", entity_spans=[(0, 7)])
-        tokens = tokenizer.convert_ids_to_tokens(encoding["input_ids"])
-        self.assertEqual(tokens.count("<ent>"), 2)
-        self.assertEqual(tokens[1], "<ent>")
-
-    def test_entity_pair_classification_markers_ignore_extra_special_token_order(self):
-        tokenizer = self._get_tokenizer("entity_pair_classification")
-        self.assertEqual(tokenizer.entity_token_1_id, tokenizer.convert_tokens_to_ids("<ent>"))
-        self.assertEqual(tokenizer.entity_token_2_id, tokenizer.convert_tokens_to_ids("<ent2>"))
-        self.assertNotEqual(tokenizer.extra_special_tokens_ids[0], tokenizer.entity_token_1_id)
-        self.assertNotEqual(tokenizer.extra_special_tokens_ids[1], tokenizer.entity_token_2_id)
-
-        encoding = tokenizer("Beyonce lives in Los Angeles.", entity_spans=[(0, 7), (16, 27)])
-        tokens = tokenizer.convert_ids_to_tokens(encoding["input_ids"])
-        self.assertEqual(tokens.count("<ent>"), 2)
-        self.assertEqual(tokens.count("<ent2>"), 2)
 
 
 @slow
