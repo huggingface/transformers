@@ -1623,6 +1623,58 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     # ---------------------------------- CPU offloading tests ---------------------------------- #
 
     @require_torch_accelerator
+    @with_flush_memory
+    def test_release_and_restore_memory_preserves_generation(self) -> None:
+        """Releasing the KV cache between two steps and restoring it must leave generation exactly where it was.
+
+        Decoding is greedy, so the run that releases has to produce the same tokens as one that never does. The blocks
+        are small so the sequences span several of them: a released block whose contents the block manager still
+        advertised by hash used to be handed to another request, and generation diverged from the first block boundary
+        on.
+        """
+        model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", torch_device, torch.bfloat16)
+        manager = model.init_continuous_batching(
+            generation_config=GenerationConfig(max_new_tokens=300, do_sample=False),
+            continuous_batching_config=ContinuousBatchingConfig(
+                num_blocks=32,
+                block_size=256,
+                use_cuda_graph=False,
+                use_async_batching=False,
+                allow_block_sharing=True,
+                cpu_offload_space=1.0,
+            ),
+        )
+        manager.warmup()
+        prompts = ["Count from one to thirty:", "Name the days of the week:", "What is a prime number?"]
+
+        def run(release_every: int) -> tuple[dict[str, list[int]], int]:
+            for i, prompt in enumerate(prompts):
+                manager.add_request(tokenizer(prompt)["input_ids"], request_id=f"r{i}", max_new_tokens=300)
+            outputs: dict[str, list[int]] = {}
+            cycles = 0
+            for step in range(1, 8 * 300):
+                if len(outputs) == len(prompts):
+                    break
+                manager.step()
+                while (result := manager.get_result(timeout=0.0)) is not None:
+                    outputs[result.request_id] = list(result.generated_tokens)
+                if release_every and step % release_every == 0 and len(outputs) < len(prompts):
+                    self.assertGreater(manager.release_memory(), 0)
+                    manager.restore_memory()
+                    cycles += 1
+            return outputs, cycles
+
+        baseline, _ = run(release_every=0)
+        released, cycles = run(release_every=4)
+        manager.stop(block=True, timeout=30, hard_stop=True)
+
+        self.assertGreater(cycles, 0, "the cache was never released, so the test proves nothing")
+        self.assertEqual(sorted(baseline), sorted(released))
+        for request_id, tokens in baseline.items():
+            self.assertEqual(tokens, released[request_id], f"{request_id} diverged after a release and restore")
+
+    @require_torch_accelerator
     def test_cpu_offloading_parity(self) -> None:
         """Test that CPU offloading produces the same results as the legacy soft-reset path, and that it is actually
         called at least once. Uses a very small cache (few blocks) to force offloading."""

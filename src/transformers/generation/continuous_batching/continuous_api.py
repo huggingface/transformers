@@ -571,9 +571,12 @@ class ContinuousBatchProcessor:
         it.
 
         With `offload`, the live requests' cache is copied to the CPU pool and copied back when they are scheduled
-        again. Without it, their cache is discarded and they re-prefill instead, which needs no CPU pool and no
-        bandwidth, but pays for the prefill again. Discarding is the better trade when the cache is about to be
-        worthless anyway, for instance when the weights change while generation is paused.
+        again, and generation continues exactly as if it had never stopped, token for token. Without it, their cache is
+        discarded and they re-prefill instead, which needs no CPU pool and no bandwidth, but pays for the prefill
+        again, and the continuation is no longer bitwise what an uninterrupted run would have produced: recomputing a
+        prefix in one forward does not give the same floating point result as having decoded it token by token, which
+        is enough to move a greedy pick. Discarding is the better trade when the cache is about to be worthless anyway,
+        for instance when the weights change while generation is paused.
         """
         # Async batching keeps a batch in flight while the next one is prepared, and offloading every request from
         # under it corrupts the ones that were mid-generation. Settling the pending pair first is not enough, so this
