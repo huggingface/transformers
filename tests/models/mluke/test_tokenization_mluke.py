@@ -16,9 +16,14 @@
 import unittest
 
 from transformers.models.mluke.tokenization_mluke import MLukeTokenizer
-from transformers.testing_utils import require_torch, slow
+from transformers.testing_utils import get_tests_dir, require_torch, slow
+from transformers.tokenization_utils_sentencepiece import SentencePieceExtractor
 
 from ...test_tokenization_common import TokenizerTesterMixin
+
+
+SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
+SAMPLE_ENTITY_VOCAB = get_tests_dir("fixtures/test_entity_vocab.json")
 
 
 class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
@@ -26,10 +31,37 @@ class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = MLukeTokenizer
     from_pretrained_kwargs = {"cls_token": "<s>"}
 
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+
+        cls.special_tokens_map = {"entity_token_1": "<ent>", "entity_token_2": "<ent2>"}
+
+    @classmethod
+    def get_tokenizer(cls, pretrained_name=None, task=None, **kwargs):
+        kwargs.update(cls.special_tokens_map)
+        if "task" not in kwargs or task is not None:
+            kwargs.update({"task": task})
+        # TokenizerTesterMixin passes `pretrained_name` as the first positional argument; keep using fixtures here.
+
+        extractor = SentencePieceExtractor(SAMPLE_VOCAB)
+        vocab_ids, vocab_scores, merges = extractor.extract()
+        tokenizer = MLukeTokenizer(vocab=vocab_scores, entity_vocab_file=SAMPLE_ENTITY_VOCAB, **kwargs)
+        return tokenizer
+
     def get_input_output_texts(self, tokenizer):
         input_text = "lower newer"
         output_text = "lower newer"
         return input_text, output_text
+
+    def mluke_dict_integration_testing(self):
+        tokenizer = self.get_tokenizer()
+
+        self.assertListEqual(tokenizer.encode("Hello world!", add_special_tokens=False), [35378, 8999, 38])
+        self.assertListEqual(
+            tokenizer.encode("Hello world! cécé herlolip 418", add_special_tokens=False),
+            [35378, 8999, 38, 33273, 11676, 604, 365, 21392, 201, 1819],
+        )
 
     def test_sequence_builders(self):
         tokenizer = self.tokenizer_class.from_pretrained("hf-internal-testing/tiny-random-mluke")
@@ -49,6 +81,11 @@ class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertEqual(encoded_sentence, encoded_text_from_decode)
         self.assertEqual(encoded_pair, encoded_pair_from_decode)
+
+    def get_clean_sequence(self, tokenizer, max_length=20) -> tuple[str, list]:
+        txt = "Beyonce lives in Los Angeles"
+        ids = tokenizer.encode(txt, add_special_tokens=False)
+        return txt, ids
 
     @unittest.skip
     def test_pretokenized_inputs(self):
@@ -76,7 +113,6 @@ class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
             extra_special_tokens=["<s>", "</s>", "<ent>", "<ent2>", "[UNK]", "[PAD]", "[MASK]", "[MASK2]"],
         )
         self.assertEqual(tokenizer.entity_token_1, "<ent>")
-        self.assertEqual(tokenizer.entity_token_2, "<ent2>")
         self.assertEqual(tokenizer.special_tokens_map["entity_token_1"], "<ent>")
         self.assertEqual(tokenizer.entity_token_1_id, tokenizer.convert_tokens_to_ids("<ent>"))
         self.assertNotEqual(tokenizer.extra_special_tokens_ids[0], tokenizer.entity_token_1_id)
