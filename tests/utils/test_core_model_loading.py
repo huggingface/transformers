@@ -12,16 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import copy
-import threading
-import time
 import unittest
-from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 import torch
 import torch.nn as nn
 from torch.distributed.tensor.placement_types import Shard
 
+import transformers.core_model_loading as core_model_loading
 from transformers import PreTrainedConfig, PreTrainedModel
 from transformers.conversion_mapping import (
     get_checkpoint_conversion_mapping,
@@ -179,39 +178,41 @@ class TestWeightGlobMatching(unittest.TestCase):
         self.assertEqual(renamed_key, key)
 
 
-class TestMaterializeCopyConcurrency(unittest.TestCase):
-    @staticmethod
-    def get_max_concurrency(device):
-        guard = threading.Lock()
-        active = 0
-        max_active = 0
+class TestMaterializeCopyMPSLock(unittest.TestCase):
+    class TrackingTensor:
+        def __init__(self, device):
+            self.device = torch.device(device)
 
-        class TrackingTensor:
-            def __getitem__(self, key):
-                return self
+        def __getitem__(self, key):
+            return self
 
-            def to(self, **kwargs):
-                nonlocal active, max_active
-                with guard:
-                    active += 1
-                    max_active = max(max_active, active)
-                time.sleep(0.05)
-                with guard:
-                    active -= 1
-                return torch.zeros(1)
+        def to(self, **kwargs):
+            return torch.zeros(1)
 
-        with ThreadPoolExecutor(max_workers=4) as pool:
-            futures = [spawn_materialize(pool, TrackingTensor(), device=device) for _ in range(4)]
-            for future in futures:
-                future.result()
+    def materialize_with_lock(self, source_device, target_device):
+        lock = MagicMock()
+        with patch.object(core_model_loading, "_MPS_MATERIALIZE_LOCK", lock):
+            core_model_loading._materialize_copy(
+                self.TrackingTensor(source_device), device=target_device, dtype=torch.float32
+            )
+        return lock
 
-        return max_active
+    def test_mps_source_or_destination_uses_lock(self):
+        cases = [
+            ("cpu", "mps"),
+            ("cpu", "mps:0"),
+            ("cpu", torch.device("mps")),
+            ("mps", "cpu"),
+            ("mps", None),
+        ]
+        for source_device, target_device in cases:
+            with self.subTest(source_device=source_device, target_device=target_device):
+                lock = self.materialize_with_lock(source_device, target_device)
+                lock.__enter__.assert_called_once_with()
 
-    def test_mps_materialization_is_serialized(self):
-        self.assertEqual(self.get_max_concurrency("mps"), 1)
-
-    def test_cpu_materialization_remains_parallel(self):
-        self.assertGreater(self.get_max_concurrency("cpu"), 1)
+    def test_cpu_materialization_does_not_use_lock(self):
+        lock = self.materialize_with_lock("cpu", "cpu")
+        lock.__enter__.assert_not_called()
 
 
 class DummyParamModule(nn.Module):

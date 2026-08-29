@@ -1242,7 +1242,7 @@ def _materialize_copy(tensor: torch.Tensor, device=None, dtype=None) -> torch.Te
         device_type = getattr(device, "type", device)
         if isinstance(device_type, str):
             device_type = device_type.split(":", 1)[0]
-        if device_type == "mps":
+        if tensor.device.type == "mps" or device_type == "mps":
             with _MPS_MATERIALIZE_LOCK:
                 tensor = tensor.to(device=device, dtype=dtype)
         else:
