@@ -43,6 +43,7 @@ from transformers.cli.serving.utils import (
     response_events_to_chunks,
 )
 from transformers.testing_utils import (
+    cleanup,
     require_librosa,
     require_multipart,
     require_serve,
@@ -50,6 +51,7 @@ from transformers.testing_utils import (
     require_torchcodec,
     require_vision,
     slow,
+    torch_device,
 )
 from transformers.utils.chat_parsing import ResponseParser
 from transformers.utils.import_utils import is_serve_available
@@ -1987,6 +1989,14 @@ class _TestToolCallBase:
     @classmethod
     def tearDownClass(cls):
         cls.serve.kill_server()
+
+    def setUp(self):
+        self.serve.reset_loaded_models()
+        cleanup(torch_device, gc_collect=True)
+
+    def tearDown(self):
+        self.serve.reset_loaded_models()
+        cleanup(torch_device, gc_collect=True)
 
     def _get_tool_def(self):
         return {
