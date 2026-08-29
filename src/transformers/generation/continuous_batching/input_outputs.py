@@ -65,6 +65,7 @@ class PagedAttentionArgs(TypedDict):
     block_table: torch.Tensor | None
     logits_processor_args: torch.Tensor
     use_cache: bool
+    linear_state_indices: torch.Tensor  # only present for models with linear attention layers
 
 
 class ContinuousBatchingIOs:
@@ -361,6 +362,7 @@ class ContinuousBatchingIOs:
         position_ids = []
         cumulative_seqlens_q = [0]
         logits_indices = []
+        linear_state_slots = []
         cumulative_seqlens_k = {layer_type: [0] for layer_type in self.cumulative_seqlens_k.keys()}
         write_index = [[] for _ in range(self.cache.num_groups)]
         read_index = None if self.max_kv_read == 0 else [[] for _ in range(self.cache.num_groups)]
@@ -386,6 +388,10 @@ class ContinuousBatchingIOs:
             for layer_type, layer_type_seqlen_k in seqlens_k.items():
                 cumulative_seqlens_k[layer_type].append(cumulative_seqlens_k[layer_type][-1] + layer_type_seqlen_k)
                 self.max_seqlen_k[layer_type] = max(self.max_seqlen_k[layer_type], layer_type_seqlen_k)
+
+            # Linear attention layers address their per-request state through the request's slot
+            if self.cache.linear_attention_layers:
+                linear_state_slots.append(self.cache.get_linear_state_slot(state.request_id))
 
             # We extend the read and write indices for the cache, or fill the block table for decode-only batches
             if self.use_block_table:
@@ -440,6 +446,8 @@ class ContinuousBatchingIOs:
         self.position_ids[: len(position_ids)] = to_tensor(position_ids)
         self.cumulative_seqlens_q[: len(cumulative_seqlens_q)] = to_tensor(cumulative_seqlens_q)
         self.logits_indices[: len(logits_indices)] = to_tensor(logits_indices)
+        if self.cache.linear_attention_layers:
+            self.linear_state_indices = torch.tensor(linear_state_slots, dtype=torch.int64, device=self.device)
 
         # Those kwargs are either dict of tensors or tensors, so we need to handle both cases
         for layer_type, layer_type_seqlens_k in cumulative_seqlens_k.items():
@@ -489,6 +497,8 @@ class ContinuousBatchingIOs:
             block_table=self.block_table[:, :num_sequences] if self.use_block_table else None,
             use_cache=False,
         )
+        if self.cache.linear_attention_layers:
+            kwargs["linear_state_indices"] = self.linear_state_indices
 
         # If there is padding, make sure the padding sequences have length 0 (ie. cumulative lengths plateau)
         if use_padding:  # TODO: add per-path padding

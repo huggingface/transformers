@@ -50,6 +50,7 @@ from ..qwen3_next.modeling_qwen3_next import (
     apply_mask_to_padding_states,
     causal_conv1d_fn,
     causal_conv1d_update,
+    paged_gated_delta_forward,
     torch_chunk_gated_delta_rule,
     torch_recurrent_gated_delta_rule,
 )
@@ -244,6 +245,18 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
 
         b = self.in_proj_b(hidden_states)
         a = self.in_proj_a(hidden_states)
+
+        # Continuous batching packs the scheduled sequences in one row and keeps per-request conv and recurrent
+        # states in the paged cache, so it has its own conv and delta rule path
+        if kwargs.get("cache") is not None:
+            core_attn_out = paged_gated_delta_forward(
+                self, mixed_qkv, b, a, kwargs["cache"], kwargs["cu_seq_lens_q"], kwargs["linear_state_indices"]
+            )
+            core_attn_out = core_attn_out.reshape(-1, self.head_v_dim)
+            z = z.reshape(-1, self.head_v_dim)
+            core_attn_out = self.norm(core_attn_out, z)
+            core_attn_out = core_attn_out.reshape(batch_size, seq_len, -1)
+            return self.out_proj(core_attn_out)
 
         if use_precomputed_states and seq_len == 1 and not cache_params.layers[self.layer_idx].record_past:
             conv_state = cache_params.layers[self.layer_idx].conv_states[0]

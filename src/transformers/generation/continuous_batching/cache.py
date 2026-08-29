@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import inspect
-from math import floor, gcd, sqrt
+from math import floor, gcd, prod, sqrt
 from typing import Any
 
 import torch
@@ -53,7 +53,7 @@ def find_head_dim(config: PreTrainedConfig) -> int:
     raise ValueError(f"head_dim or (hidden_size and num_attention_heads) could not be found in the config:\n{config}")
 
 
-def group_layers_by_attn_type(config: PreTrainedConfig) -> tuple[list[list[int]], list[str]]:
+def group_layers_by_attn_type(config: PreTrainedConfig) -> tuple[list[list[int]], list[str], list[int]]:
     """
     Group layers depending on the attention mix, according to VLLM's hybrid allocator rules:
         - Layers in each group need to have the same type of attention
@@ -61,6 +61,9 @@ def group_layers_by_attn_type(config: PreTrainedConfig) -> tuple[list[list[int]]
 
     For a model with the following layer types: ["sliding", "full", "full", "sliding", "full", "full", "full", "full"]
     We would get four groups: [0, 3], [1, 2], [4,5] and [6,7].
+
+    Linear attention layers keep a fixed-size recurrent state per request instead of a KV cache that grows with the
+    sequence, so they take no part in block allocation: they are returned separately rather than grouped.
     """
     # If the config has no layer_type attribute, it means all layers are the same attention type
     layer_types = getattr(config, "layer_types", None)
@@ -70,8 +73,14 @@ def group_layers_by_attn_type(config: PreTrainedConfig) -> tuple[list[list[int]]
 
     # We then count the number of layers of each type
     layer_counts = {}
+    linear_attention_layers = []
     for i, layer_type in enumerate(layer_types):
+        if layer_type == "linear_attention":
+            linear_attention_layers.append(i)
+            continue
         layer_counts[layer_type] = layer_counts.get(layer_type, []) + [i]
+    if not layer_counts:
+        raise ValueError("Models with only linear attention layers are not supported by continuous batching")
 
     # The size of all groups is the greatest common divisor of the number of layers of each type
     group_size = gcd(*[len(indices) for indices in layer_counts.values()])
@@ -83,7 +92,7 @@ def group_layers_by_attn_type(config: PreTrainedConfig) -> tuple[list[list[int]]
             layer_groups.append(indices[i : i + group_size])
     # And note the layer types
     group_types = [layer_types[lg[0]] for lg in layer_groups]
-    return layer_groups, group_types
+    return layer_groups, group_types, linear_attention_layers
 
 
 class PagedAttentionCache:
@@ -179,9 +188,10 @@ class PagedAttentionCache:
             raise ValueError(f"Block size must be at least {self._min_block_size}, but got {self.block_size}")
 
         # Group layers depending on the attention mix
-        layer_groups, group_types = group_layers_by_attn_type(config)
+        layer_groups, group_types, linear_attention_layers = group_layers_by_attn_type(config)
         group_size = len(layer_groups[0])
         self.num_groups = len(layer_groups)
+        self.linear_attention_layers = linear_attention_layers
 
         self.sliding_windows = {}
         self.layer_index_to_group_indices = {}
@@ -213,12 +223,31 @@ class PagedAttentionCache:
         if continuous_batching_config.max_memory_percent is None:
             resolve_max_memory_percent(cb_config=continuous_batching_config, has_logit_processors=True)
 
+        # Linear attention layers store a per-request state of fixed size: the tail of the depthwise conv input and
+        # the recurrent state of the delta rule. One slot per schedulable request, reserved out of the cache budget.
+        self._max_linear_state_slots = continuous_batching_config.max_requests_per_batch
+        linear_state_bytes = 0
+        if self.linear_attention_layers:
+            key_dim = config.linear_key_head_dim * config.linear_num_key_heads
+            value_dim = config.linear_value_head_dim * config.linear_num_value_heads
+            self._conv_state_shape = (2 * key_dim + value_dim, config.linear_conv_kernel_dim)
+            # The recurrent state is accumulated in fp32, like the delta rule kernels compute it
+            self._recurrent_state_shape = (
+                config.linear_num_value_heads,
+                config.linear_key_head_dim,
+                config.linear_value_head_dim,
+            )
+            bytes_per_slot = prod(self._conv_state_shape) * self.dtype.itemsize
+            bytes_per_slot += prod(self._recurrent_state_shape) * torch.float32.itemsize
+            linear_state_bytes = self._max_linear_state_slots * bytes_per_slot * len(self.linear_attention_layers)
+
         max_batch_tokens, num_blocks = PagedAttentionMemoryHandler(
             config=config,
             continuous_batching_config=continuous_batching_config,
             dtype=self.dtype,
             group_types=group_types,
             group_size=group_size,
+            reserved_bytes=linear_state_bytes,
         ).infer_max_batch_tokens_and_num_blocks()
 
         # For TP, align max_batch_tokens and num_blocks to the minimal value across the TP group
@@ -260,6 +289,20 @@ class PagedAttentionCache:
             new_layer_value_cache.view(block_based_shape)[num_blocks].fill_(0)
         logger.info(f"{self.cache_shape = } {self.key_cache[0].shape = } {self.key_cache[0].numel() = }")
 
+        # State pools for linear attention layers: one slot per schedulable request, assigned on first use and
+        # freed with the request's blocks. Slots are zeroed at assignment, which is the pre-first-token state.
+        self.conv_states: dict[int, torch.Tensor] = {}
+        self.recurrent_states: dict[int, torch.Tensor] = {}
+        self._linear_state_slots: dict[str, int] = {}
+        self._free_linear_state_slots = list(range(self._max_linear_state_slots))
+        for layer_idx in self.linear_attention_layers:
+            self.conv_states[layer_idx] = torch.zeros(
+                (self._max_linear_state_slots, *self._conv_state_shape), dtype=self.dtype, device=self.device
+            )
+            self.recurrent_states[layer_idx] = torch.zeros(
+                (self._max_linear_state_slots, *self._recurrent_state_shape), dtype=torch.float32, device=self.device
+            )
+
         # Block management data structures
         self.allow_block_sharing = continuous_batching_config.allow_block_sharing
         self.group_cache_managers: list[CacheAllocator] = []
@@ -294,8 +337,12 @@ class PagedAttentionCache:
             max_blocks_per_request = continuous_batching_config.fallback_max_blocks_per_request
         self.max_blocks_per_request = max_blocks_per_request
 
-        # We only use prefix sharing if the whole model has only full attention layers and block sharing is allowed
-        self.use_prefix_sharing = self.allow_block_sharing and group_types == ["full_attention"]
+        # We only use prefix sharing if the whole model has only full attention layers and block sharing is allowed.
+        # Linear attention layers rule it out too: a shared prefix would need the recurrent state at the prefix
+        # boundary, which is not stored per block.
+        self.use_prefix_sharing = (
+            self.allow_block_sharing and group_types == ["full_attention"] and not self.linear_attention_layers
+        )
         self._block_manager = BlockManager(num_blocks, self.block_size, tp_on=tp_size > 1)
         self._total_prefix_length: int = 0  # a counter to measure the impact of prefix sharing, also used in tests
 
@@ -393,6 +440,24 @@ class PagedAttentionCache:
         by the cache managers."""
         for cm in self.group_cache_managers:
             cm.free_blocks(request_id, self._block_manager)
+        slot = self._linear_state_slots.pop(request_id, None)
+        if slot is not None:
+            self._free_linear_state_slots.append(slot)
+
+    def get_linear_state_slot(self, request_id: str) -> int:
+        """Returns the linear attention state slot of a request, assigning and zeroing one on first use."""
+        slot = self._linear_state_slots.get(request_id)
+        if slot is None:
+            if not self._free_linear_state_slots:
+                raise RuntimeError(
+                    "No free linear attention state slot: more requests hold state than max_requests_per_batch"
+                )
+            slot = self._free_linear_state_slots.pop()
+            self._linear_state_slots[request_id] = slot
+            for layer_idx in self.linear_attention_layers:
+                self.conv_states[layer_idx][slot].zero_()
+                self.recurrent_states[layer_idx][slot].zero_()
+        return slot
 
     def get_num_free_blocks(self) -> int:
         """Get the current number of unallocated blocks available for new requests."""
@@ -594,6 +659,14 @@ class PagedAttentionCache:
             src_blocks, dst_blocks = cm.fork_blocks(source_request_id, destination_request_ids, self._block_manager)
             source_blocks.extend(src_blocks)
             destination_blocks.extend(dst_blocks)
+        # Each fork continues from the source's linear attention state, so it starts with a copy of it
+        if self.linear_attention_layers:
+            source_slot = self.get_linear_state_slot(source_request_id)
+            for destination_request_id in destination_request_ids:
+                destination_slot = self.get_linear_state_slot(destination_request_id)
+                for layer_idx in self.linear_attention_layers:
+                    self.conv_states[layer_idx][destination_slot] = self.conv_states[layer_idx][source_slot]
+                    self.recurrent_states[layer_idx][destination_slot] = self.recurrent_states[layer_idx][source_slot]
         return source_blocks, destination_blocks
 
     def free_all_requests(self) -> None:
@@ -603,6 +676,7 @@ class PagedAttentionCache:
         all_request_ids = set()
         for cm in self.group_cache_managers:
             all_request_ids.update(cm.block_table.keys())
+        all_request_ids.update(self._linear_state_slots.keys())
         for request_id in all_request_ids:
             self.free_blocks(request_id)
 
@@ -630,6 +704,7 @@ class PagedAttentionMemoryHandler:
         dtype: torch.dtype,
         group_types: list[str],
         group_size: int,
+        reserved_bytes: int = 0,
     ) -> None:
         """Initialize the memory handler. Args:
         - config: the model configuration
@@ -637,6 +712,8 @@ class PagedAttentionMemoryHandler:
         - dtype: the data type of the activation and the cache
         - group_types: the list of all attention group types, formatted as strings
         - group_size: the size (in layers) of an attention group
+        - reserved_bytes: memory claimed by fixed-size allocations outside the M/N equation, like the linear
+            attention state pools
         """
         self.config = config
         self.cb_config = continuous_batching_config
@@ -660,7 +737,9 @@ class PagedAttentionMemoryHandler:
         self.num_output_rows = 2 if continuous_batching_config.return_logprobs else 1
         # This account for the set of 2 IOs if async batching is used
         self.io_multiplier = 2 if continuous_batching_config.use_async_batching else 1
-        self.available_memory = self.get_available_memory()
+        self.available_memory = self.get_available_memory() - reserved_bytes
+        if self.available_memory <= 0:
+            raise ValueError(f"The {reserved_bytes / 1024**3:.2f} GiB of reserved memory leave none for the cache")
 
     @property
     def activation_peak(self) -> dict[str, tuple[int, ...]]:
