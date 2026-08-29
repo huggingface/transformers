@@ -1321,6 +1321,31 @@ def _build_checkpoint_conversion_mapping():
                 operations=[Chunk(dim=0)],
             ),
         ],
+        "gte": [
+            PrefixChange(prefix_to_remove="new"),
+            WeightRenaming(r"encoder.layer", r"layers"),
+            WeightRenaming(r"attention.o_proj", r"self_attn.o_proj"),
+            WeightRenaming(r"attn_ln", r"post_attention_layernorm"),
+            WeightRenaming(r"mlp_ln", r"post_mlp_layernorm"),
+            WeightRenaming(r"lm_head.norm", r"lm_head.layer_norm"),
+            WeightConverter(
+                source_patterns="attention.qkv_proj",
+                target_patterns=[
+                    "self_attn.q_proj",
+                    "self_attn.k_proj",
+                    "self_attn.v_proj",
+                ],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns="mlp.up_gate_proj",
+                target_patterns=[
+                    "mlp.up_proj",
+                    "mlp.gate_proj",
+                ],
+                operations=[Chunk(dim=0)],
+            ),
+        ],
         "jina_embeddings_v3": [
             WeightRenaming(source_patterns="emb_ln", target_patterns="embeddings.LayerNorm"),
             WeightRenaming(source_patterns="encoder.layers", target_patterns="layers"),
