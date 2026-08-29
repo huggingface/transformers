@@ -230,6 +230,7 @@ def torch_chunk_gated_delta_rule(
     initial_state: torch.Tensor | None = None,
     output_final_state: bool = False,
     use_qk_l2norm_in_kernel: bool = False,
+    cu_seqlens: torch.Tensor | None = None,
     **kwargs,
 ) -> tuple[torch.Tensor, torch.Tensor | None]:
     """Computes the gated delta rule, by chunking along the sequence dimension.
@@ -245,10 +246,30 @@ def torch_chunk_gated_delta_rule(
         initial_state: The recurrent state, an optional tensor of shape [batch_size, num_v_heads, k_head_dim, v_head_dim]
         output_final_state: Whether to output the new recurrent state along with the output.
         use_qk_l2norm_in_kernel: If this flag is set to True, query and key vectors are L2-normalized.
+        cu_seqlens: Boundaries of the sequences packed in a single row, as offsets of shape [num_sequences + 1]. The
+            recurrent state starts from zero at each of them, which is what makes a packed row give every token what
+            it would get on its own.
     Returns:
         - The output tensor of shape [batch_size, sequence_length, num_v_heads, v_head_dim]
         - Either None or the new recurrent state tensor of shape [batch_size, num_v_heads, k_head_dim, v_head_dim]
     """
+    if cu_seqlens is not None:
+        if initial_state is not None or output_final_state:
+            raise NotImplementedError("Packed sequences carry no state in or out: they each start and end here")
+        outputs = [
+            torch_chunk_gated_delta_rule(
+                query[:, start:end],
+                key[:, start:end],
+                value[:, start:end],
+                g=g[:, start:end],
+                beta=beta[:, start:end],
+                chunk_size=chunk_size,
+                use_qk_l2norm_in_kernel=use_qk_l2norm_in_kernel,
+            )[0]
+            for start, end in zip(cu_seqlens[:-1].tolist(), cu_seqlens[1:].tolist())
+        ]
+        return torch.cat(outputs, dim=1), None
+
     initial_dtype = query.dtype
     batch_size, sequence_length, _, k_head_dim = key.shape
     num_v_heads, v_head_dim = value.shape[-2:]
