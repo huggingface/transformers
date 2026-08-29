@@ -32,6 +32,9 @@ python src/transformers/models/qwen3_tts/convert_qwen3_tts_to_hf.py \
 
 To convert the Qwen3-TTS-Tokenizer-12Hz (multi-codebook) model, use the dedicated script:
     src/transformers/models/qwen3_tts_tokenizer_multi_codebook/convert_qwen3_tts_tokenizer_multi_codebook_to_hf.py
+
+The processor saved here records the converted multi-codebook tokenizer that decodes the generated codes, so
+that tokenizer has to exist first; pass a different one with `--audio_tokenizer_id`.
 """
 
 import argparse
