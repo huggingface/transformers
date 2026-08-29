@@ -236,6 +236,7 @@ class PagedAttentionCache:
         # Initialize the cache
         self.key_cache: list[torch.Tensor] = []
         self.value_cache: list[torch.Tensor] = []
+        self._released_pointers: list[int] = []  # addresses held while the pool is released, see release_gpu_memory
         # We add two extra blocks to the cache as a padding zone that no BlockManager ever allocates from.
         # The first one is zeroed and then never written to. Its first index is the read trash, from which padding
         # tokens read their KV cache, and its second index is the sentinel index, to indicate where to store the new key
@@ -342,6 +343,47 @@ class PagedAttentionCache:
                 raise ValueError(f"Failed to allocate {n_blocks} blocks for request {request_id}")
             max_allocated = max(max_allocated, num_allocated_blocks)
         return max_allocated
+
+    def release_gpu_memory(self) -> int:
+        """Free the GPU key and value tensors and return the number of bytes released.
+
+        Only safe when no live request still holds blocks, so the caller offloads them first. The addresses are
+        remembered so `restore_gpu_memory` can report whether the pool came back where it was, which is what captured
+        cuda graphs depend on.
+        """
+        if not self.key_cache:
+            return 0
+        released = sum(t.numel() * t.element_size() for t in self.key_cache + self.value_cache)
+        self._released_pointers = [t.data_ptr() for t in self.key_cache + self.value_cache]
+        self.key_cache.clear()
+        self.value_cache.clear()
+        return released
+
+    def restore_gpu_memory(self) -> bool:
+        """Reallocate the pool that `release_gpu_memory` freed.
+
+        Returns whether every tensor came back at the address it had before. The caching allocator reuses the same
+        block when the memory freed in the meantime has been given back, but it cannot promise it, and a cuda graph
+        captured against the old addresses would then read memory that is no longer the cache. The caller must drop its
+        captured graphs when this returns False.
+        """
+        if self.key_cache:
+            return True
+        group_size = len(self._released_pointers) // 2
+        block_based_shape = (self.num_blocks + 2, self.block_size, self.num_key_value_heads, self.head_dim)
+        for _ in range(group_size):
+            new_layer_key_cache = torch.empty(self.cache_shape, dtype=self.dtype, device=self.device)
+            new_layer_value_cache = torch.empty(self.cache_shape, dtype=self.dtype, device=self.device)
+            torch._dynamo.mark_static_address(new_layer_key_cache)
+            torch._dynamo.mark_static_address(new_layer_value_cache)
+            self.key_cache.append(new_layer_key_cache)
+            self.value_cache.append(new_layer_value_cache)
+            # The read trash block is read by padding tokens, so it has to be zeroed again
+            new_layer_key_cache.view(block_based_shape)[self.num_blocks].fill_(0)
+            new_layer_value_cache.view(block_based_shape)[self.num_blocks].fill_(0)
+        same_addresses = [t.data_ptr() for t in self.key_cache + self.value_cache] == self._released_pointers
+        self._released_pointers = []
+        return same_addresses
 
     def free_blocks(self, request_id: str) -> None:
         """Free all allocated cache blocks for a given request across all layer groups. Actual deallocation is done

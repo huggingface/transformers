@@ -563,6 +563,42 @@ class ContinuousBatchProcessor:
         self.inputs_and_outputs.retrieve_device_outputs()
 
     @torch.no_grad()
+    def release_memory(self) -> int:
+        """Offload every live request and free the KV cache, returning the number of bytes released.
+
+        Generation has to be paused: nothing may step the engine until `restore_memory` is called. The memory goes back
+        to the caching allocator, so whatever else runs on this device meanwhile, a training step for instance, can use
+        it.
+        """
+        # Async batching keeps a batch in flight while the next one is prepared, and offloading every request from
+        # under it corrupts the ones that were mid-generation. Settling the pending pair first is not enough, so this
+        # combination is refused rather than silently producing garbage. Cuda graphs themselves are fine: they are
+        # dropped and recaptured if the cache does not come back at the same addresses, which costs about 110 ms.
+        if isinstance(self.inputs_and_outputs, ContinuousBatchingAsyncIOs):
+            raise RuntimeError(
+                "release_memory() is not supported with async batching. Pass use_async_batching=False; cuda graphs "
+                "can stay on, since they are recaptured when needed."
+            )
+        self.offloading_manager.offload_all_active()
+        # The offloading manager holds block-shaped views of the cache, and a view keeps its base alive, so they have
+        # to go before the tensors can actually be freed.
+        self.offloading_manager.drop_gpu_views()
+        return self.cache.release_gpu_memory()
+
+    def restore_memory(self) -> None:
+        """Reallocate the KV cache freed by `release_memory`, so generation can run again.
+
+        A cuda graph replays the pointers it was captured with, so if the pool does not come back at the addresses it
+        had, the captured graphs are dropped and the next batch captures again. That happens when something else still
+        holds the memory at this point, so restoring after the training step has released its activations is both
+        faster and cheaper.
+        """
+        same_addresses = self.cache.restore_gpu_memory()
+        self.offloading_manager.rebuild_gpu_views()
+        if not same_addresses:
+            self.inputs_and_outputs.clear_graphs()
+            logger.info("The KV cache moved while it was released, so the captured cuda graphs were dropped")
+
     def warmup(self, model: nn.Module) -> None:
         """Pre-capture CUDA graphs (or trigger compile warmup) for varlen and decode paths. In async mode, both IO
         pairs are warmed up since each has its own graph buffer and static tensors. The varlen path is warmed up at
@@ -691,6 +727,28 @@ class ContinuousBatchingManager:
             self.batch_processor = self._create_batch_processor()
         self.batch_processor.warmup(self.model)
         self.warmed_up = True
+
+    def release_memory(self) -> int:
+        """Free the KV cache so something else on this device can use the memory, returning the bytes released.
+
+        Only for callers that drive the engine themselves, with `step`, and can guarantee nothing steps it until
+        `restore_memory`. Live requests are offloaded first, so no generation is lost: they resume from the CPU pool,
+        or re-prefill if they did not fit in it.
+
+        ```python
+        freed = manager.release_memory()
+        ...  # a training step, which now has that memory available
+        manager.restore_memory()
+        ```
+        """
+        if self.batch_processor is None:
+            return 0
+        return self.batch_processor.release_memory()
+
+    def restore_memory(self) -> None:
+        """Reallocate the KV cache freed by `release_memory` so generation can run again."""
+        if self.batch_processor is not None:
+            self.batch_processor.restore_memory()
 
     # --------------------------------------------- CONTROL FLOW METHODS --------------------------------------------- #
 

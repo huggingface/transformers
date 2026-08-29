@@ -559,6 +559,11 @@ class ContinuousBatchingIOs:
         self.graphs.set_graph(key, graph)
         logger.info(f"Setting graph for {key = }")
 
+    def clear_graphs(self) -> None:
+        """Drop every captured graph, so the next batch captures again. Needed when the addresses the graphs were
+        captured against are gone, which is the case after the KV cache has been released and reallocated."""
+        self.graphs.clear()
+
 
 class HostDeviceIOPair:
     def __init__(
@@ -595,6 +600,10 @@ class HostDeviceIOPair:
     def reset(self) -> None:
         self.host_io.reset()
         self.device_io.reset()
+
+    def clear_graphs(self) -> None:
+        self.host_io.clear_graphs()
+        self.device_io.clear_graphs()
         for event in [self.h2d_over, self.compute_over, self.d2h_over]:
             if event is not None:
                 event.synchronize()
@@ -811,6 +820,11 @@ class ContinuousBatchingAsyncIOs:
         io_pair = self.io_pairs[self.current_pair]
         io_pair.d2h_over.synchronize()  # ty:ignore[unresolved-attribute]  <- this is always a CUDA event
         return io_pair.host_io.prepare_batch_update()
+
+    def clear_graphs(self) -> None:
+        """Each pair captures its own graphs, so all of them have to be dropped."""
+        for io_pair in self.io_pairs:
+            io_pair.clear_graphs()
 
     def reset(self) -> None:
         """Reset all state for a new generation session. Used in persistent mode between sessions."""
