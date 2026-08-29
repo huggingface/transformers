@@ -497,8 +497,8 @@ class MiniCPMV4_6IntegrationTest(unittest.TestCase):
         expected_texts = Expectations(
             {
                 ("cuda", None): [
-                    "The animal in the image is a Pystylus, also known as the Eurasian pystylus or snow leopard cat. It's a",
-                    "The animal in the image is a Pystylus, also known as the Eurasian pystylus or snow leopard cat. It's a",
+                    "The animal in the image is a Pystylus, also known as a Pystylus cat or Eurasian pystylus. It",
+                    "The animal in the image is a Pystylus, also known as a Pystylus cat or Eurasian pystylus. It",
                 ],
             }
         )  # fmt: skip
