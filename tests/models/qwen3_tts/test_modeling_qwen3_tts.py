@@ -66,6 +66,9 @@ class Qwen3TTSModelTester:
             "text_vocab_size": 64,
             "text_hidden_size": 32,
             "num_code_groups": 2,
+            # the talker always applies mRoPE, so the tiny config declares its sections too; they sum to
+            # `head_dim // 2`, as `apply_multimodal_rotary_pos_emb` doubles them
+            "rope_parameters": {"rope_type": "default", "rope_theta": 500000.0, "mrope_section": [4, 2, 2]},
             "code_predictor_config": {
                 "vocab_size": 64,
                 "hidden_size": 32,
