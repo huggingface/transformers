@@ -262,6 +262,17 @@ class JinaEmbeddingsV3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
 
+    def test_forward_beyond_max_position_embeddings(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = JinaEmbeddingsV3Model(config)
+        model.to(torch_device)
+        model.eval()
+        seq_length = config.max_position_embeddings + 8
+        input_ids = ids_tensor([1, seq_length], config.vocab_size).to(torch_device)
+        with torch.no_grad():
+            result = model(input_ids)
+        self.assertEqual(result.last_hidden_state.shape, (1, seq_length, config.hidden_size))
+
     @unittest.skip("Model doesn't support scaling - due to non-RoPE related reasons")
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
     def test_model_rope_scaling_from_config(self, scaling_type):
