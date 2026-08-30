@@ -128,11 +128,9 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
             model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
 
-        # A few checkpoints quantize an embedding table too (Qwen4-Exp's n-gram table); a plain
-        # `nn.Embedding` has nowhere to keep its scale, so the model names the ones that may be FP8.
-        quantizable_embeddings = getattr(model, "_quantizable_embeddings", None)
-        if self.pre_quantized and quantizable_embeddings:
-            replace_with_fp8_embedding(model, quantizable_embeddings, self.modules_to_not_convert, dtype)
+        modules_to_convert = self.quantization_config.modules_to_convert
+        if self.pre_quantized and modules_to_convert:
+            replace_with_fp8_embedding(model, modules_to_convert, self.modules_to_not_convert, dtype)
 
         model = replace_with_fp8_linear(
             model,
