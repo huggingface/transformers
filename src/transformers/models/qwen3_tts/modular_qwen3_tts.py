@@ -953,8 +953,8 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
                 if "dialect" not in language_id:
                     self.supported_languages.append(language_id)
 
-        # CODEPATH: base checkpoints only; the others never resample a reference clip
         self.speaker_encoder_sample_rate = (
+            # CODEPATH: base checkpoints only; the others never resample a reference clip
             config.speaker_encoder_config.sample_rate if config.speaker_encoder_config is not None else 24000
         )
         self.tokenizer_type = getattr(config, "tokenizer_type", "qwen2")
