@@ -400,9 +400,7 @@ class VisionAttention(nn.Module):
             if split_sizes is None:
                 lengths = cu_seqlens[1:] - cu_seqlens[:-1]
                 split_sizes = lengths.tolist()
-            splits = [
-                torch.split(tensor, split_sizes, dim=2) for tensor in (query_states, key_states, value_states)
-            ]
+            splits = [torch.split(tensor, split_sizes, dim=2) for tensor in (query_states, key_states, value_states)]
 
             attn_outputs = [
                 attention_interface(
