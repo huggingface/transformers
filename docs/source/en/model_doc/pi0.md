@@ -35,6 +35,9 @@ The original code can be found [here](https://github.com/Physical-Intelligence/o
 
 You can find all the checkpoints under the [PI0](https://huggingface.co/collections/lerobot/pi0) collection.
 
+> [!TIP]
+> Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Refer to [Loading kernels](../kernel_doc/loading_kernels) to learn more.
+
 ## Usage examples
 
 ```python

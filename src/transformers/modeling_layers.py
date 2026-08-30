@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import os
 import re
+import sys
 from functools import partial
 from typing import TYPE_CHECKING
 
@@ -607,8 +608,12 @@ class MtpModel(PreTrainedModel):
         # Open the files, get the slices corresponding only to mtp weights, rename them, and load them
         mtp_state_dict = {}
         all_pointer = set()
+        is_mps = device_map is not None and any(
+            (d.type if isinstance(d, torch.device) else d) == "mps" for d in device_map.values()
+        )
+        backend = "pread" if is_mps or sys.platform == "win32" else "mmap"
         for file in mtp_files:
-            file_pointer = safe_open(file, framework="pt", device="cpu")
+            file_pointer = safe_open(file, framework="pt", device="cpu", backend=backend)
             all_pointer.add(file_pointer)
             for k in file_pointer.keys():
                 # It's one of the mtp weights
