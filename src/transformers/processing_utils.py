@@ -410,6 +410,9 @@ class AudioKwargs(TypedDict, total=False):
             If set, will pad the sequence to a multiple of the provided value.
         return_attention_mask (`bool`, *optional*):
             Whether or not [`~ASTFeatureExtractor.__call__`] should return `attention_mask`.
+        device (`str` or `torch.device`, *optional*):
+            The device to compute the audio features on (e.g. "cpu", "cuda"), only relevant for feature
+            extractors that compute them with torch.
         return_tensors (`str` or [`~utils.TensorType`], *optional*):
             If set, will return tensors of a particular framework. Acceptable values are:
             - `'pt'`: Return PyTorch `torch.Tensor` objects.
@@ -426,6 +429,7 @@ class AudioKwargs(TypedDict, total=False):
     truncation: Annotated[bool | str | TruncationStrategy | None, truncation_validator()]
     pad_to_multiple_of: Annotated[int | None, positive_int()]
     return_attention_mask: bool | None
+    device: Annotated[Union[str, "torch.device"] | None, device_validator()]
     return_tensors: Annotated[str | TensorType | None, tensor_type_validator()]
     load_audio_backend: str | None
 
