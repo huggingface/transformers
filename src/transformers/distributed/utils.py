@@ -123,6 +123,46 @@ def _distributed_barrier():
         torch.distributed.barrier()
 
 
+# Number of tensor parallel meshes built in this process.
+_tp_mesh_count = 0
+
+
+def _build_tp_mesh(device_type: str, tp_size: int):
+    """Build a tensor parallel mesh that no other model in this process shares.
+
+    Two meshes over the same ranks are interchangeable as far as torch is concerned: the process
+    group behind a `DeviceMesh` is not part of its identity, so the meshes compare and hash equal,
+    and a 1-D mesh that spans the whole world reuses the default process group outright. A second
+    model would therefore collide with the first in DTensor's sharding propagation cache, come out
+    holding the first model's mesh, and issue its collectives on the first model's communicator.
+    That is invisible until the two models run at the same time, a continuous batching manager
+    generating while the trainer steps, at which point their collectives interleave on one
+    communicator and the run hangs. Every mesh after the first gets its own group and its own
+    dimension name.
+    """
+    from torch.distributed.device_mesh import DeviceMesh
+
+    global _tp_mesh_count
+    name = "tp" if _tp_mesh_count == 0 else f"tp_{_tp_mesh_count}"
+    _tp_mesh_count += 1
+    world_size = torch.distributed.get_world_size()
+    if _tp_mesh_count == 1:
+        # A mesh of `tp_size` ranks would leave every other rank out of it, with no coordinate in it and no
+        # local shard to load. When the model is split across fewer ranks than the world, the world is a grid of
+        # replicas of it, and the tensor parallel mesh is one row of that grid.
+        if world_size == tp_size:
+            return torch.distributed.init_device_mesh(device_type, (tp_size,), mesh_dim_names=(name,))
+        mesh = torch.distributed.init_device_mesh(
+            device_type, (world_size // tp_size, tp_size), mesh_dim_names=(f"dp_{name}", name)
+        )
+        return mesh[name]
+
+    # Every rank creates every group, in the same order, then keeps the one it belongs to.
+    groups = [torch.distributed.new_group(list(range(s, s + tp_size))) for s in range(0, world_size, tp_size)]
+    group = groups[torch.distributed.get_rank() // tp_size]
+    return DeviceMesh.from_group(group, device_type, mesh_dim_names=(name,))
+
+
 # TODO(3outeille): unify initialization across parallelism
 def initialize_tensor_parallelism(
     tp_plan: str | dict[str, str] | None, tp_size: int | None = None, device_mesh=None, device_map=None
@@ -157,7 +197,7 @@ def initialize_tensor_parallelism(
             tp_device = torch.device(device_type)
             device_map = device_type or {}
 
-        device_mesh = torch.distributed.init_device_mesh(tp_device.type, (tp_size,))
+        device_mesh = _build_tp_mesh(tp_device.type, tp_size)
     else:
         if device_mesh.ndim > 1:
             if "tp" not in device_mesh.mesh_dim_names:

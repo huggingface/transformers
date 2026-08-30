@@ -157,10 +157,11 @@ class DistributedMixin:
         if distributed_config.tp_size > 1 or distributed_config.fsdp_size > 1:
             _ensure_torch_distributed()
             world_size = _get_torch_distributed_world_size()
-            if distributed_config.tp_size * distributed_config.fsdp_size != world_size:
+            parallel_size = distributed_config.tp_size * distributed_config.fsdp_size
+            if world_size % parallel_size != 0:
                 raise RuntimeError(
                     f"tp_size ({distributed_config.tp_size}) * fsdp_size ({distributed_config.fsdp_size}) "
-                    f"is not equal to world_size ({world_size})"
+                    f"must divide world_size ({world_size})"
                 )
 
         if distributed_config.tp_size > 1:

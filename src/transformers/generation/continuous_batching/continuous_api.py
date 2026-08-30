@@ -149,6 +149,10 @@ class BackgroundThreadStatus:
         self._local_status = self.DONT_STOP
         self._tp_status = self.DONT_STOP
         self.fatal_error = None
+        # Handshake with a thread that shares the model, see `ContinuousBatchingManager.training_turn`
+        self.turn_requested = threading.Event()
+        self.turn_granted = threading.Event()
+        self.turn_released = threading.Event()
 
     def clear(self) -> None:
         """Clear the local and TP statuses. This method should ONLY be called by the main thread itself BEFORE starting
@@ -343,9 +347,20 @@ class ContinuousBatchProcessor:
 
         # Cheap 2 ints broadcast of payload size (from rank 0) and requested stop status (all to all)
         local_requested_status = self.background_thread_status.local_status
-        payload_size, tp_status = self.distributed_helper.tp_all_reduce_state(payload_size, local_requested_status)
+        payload_size, tp_status, wants_turn = self.distributed_helper.tp_all_reduce_state(
+            payload_size, local_requested_status, int(self.background_thread_status.turn_requested.is_set())
+        )
         # Update the local stop status with the new one
         self.background_thread_status.update_with_tp_status(tp_status)
+
+        # A thread outside this loop asked for a turn, and every rank now knows it at the same
+        # iteration. Under tensor parallelism the ranks must issue their collectives in one agreed
+        # order, so the loop stops launching until that thread is done rather than racing it.
+        if wants_turn:
+            self.background_thread_status.turn_granted.set()
+            self.background_thread_status.turn_released.wait()
+            self.background_thread_status.turn_released.clear()
+            self.background_thread_status.turn_granted.clear()
 
         # Exit early if the TP group is hard-stopping
         if self.background_thread_status.tp_status == BackgroundThreadStatus.HARD_STOP:
@@ -1071,6 +1086,28 @@ class ContinuousBatchingManager:
         return True
 
     @torch.no_grad()
+    @contextmanager
+    def training_turn(self):
+        """Take a turn on the model while the generation loop holds off launching work.
+
+        Tensor parallelism requires every rank to issue its collectives in the same order, so a
+        trainer sharing the model cannot simply race the generation loop: the ranks would each
+        interleave the two streams their own way and deadlock. Inside this context the loop is
+        paused at an iteration all ranks agreed on, and it keeps its cache and its in-flight
+        requests, so nothing is drained and no rollout is lost.
+        """
+        self.background_thread_status.turn_requested.set()
+        self.background_thread_status.turn_granted.wait()
+        try:
+            yield
+        finally:
+            # Every rank's trainer leaves together, so no rank resumes decoding while another is
+            # still issuing training collectives.
+            if self.distributed_helper.cpu_comm_group is not None:
+                torch.distributed.barrier(group=self.distributed_helper.cpu_comm_group)
+            self.background_thread_status.turn_requested.clear()
+            self.background_thread_status.turn_released.set()
+
     def _run_generation_loop(self) -> None:
         """Main processing loop running in the background thread."""
         batch_processor = None
