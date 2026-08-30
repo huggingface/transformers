@@ -56,6 +56,7 @@ class GteEmbeddings(nn.Module):
 
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        # CODEPATH: gte-base-en-v1.5 alone sets type_vocab_size=0, the other checkpoints ship token type embeddings.
         if config.type_vocab_size == 0:
             self.token_type_embeddings = None
 

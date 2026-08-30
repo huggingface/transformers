@@ -109,6 +109,7 @@ class GteEmbeddings(JinaEmbeddingsV3Embeddings):
         # GTE is rope-only: absolute position ids are never read, and token types always default to zeros.
         del self.position_ids
         del self.token_type_ids
+        # CODEPATH: gte-base-en-v1.5 alone sets type_vocab_size=0, the other checkpoints ship token type embeddings.
         if config.type_vocab_size == 0:
             self.token_type_embeddings = None
 
