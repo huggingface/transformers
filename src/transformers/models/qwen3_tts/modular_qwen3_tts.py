@@ -57,6 +57,7 @@ from .generation_qwen3_tts import Qwen3TTSGenerationMixin
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring
 @strict
 class Qwen3TTSSpeakerEncoderConfig(Qwen2_5OmniDiTConfig):
     r"""
@@ -119,6 +120,7 @@ class Qwen3TTSSpeakerEncoderConfig(Qwen2_5OmniDiTConfig):
     enc_emb_dim = AttributeError()
 
 
+@auto_docstring
 @strict
 class Qwen3TTSTalkerCodePredictorConfig(PreTrainedConfig):
     r"""
@@ -241,6 +243,7 @@ class Qwen3TTSTalkerCodePredictorConfig(PreTrainedConfig):
         self.num_code_groups = num_code_groups
 
 
+@auto_docstring
 @strict
 class Qwen3TTSTalkerConfig(PreTrainedConfig):
     r"""
@@ -664,6 +667,7 @@ class Qwen3TTSTalkerResizeMLP(VoxtralMultiModalProjector):
         self.act = ACT2FN[config.hidden_act]
 
 
+@auto_docstring
 @dataclass
 class Qwen3TTSTalkerCodePredictorOutputWithPast(ModelOutput):
     loss: torch.FloatTensor | None = None
@@ -674,6 +678,7 @@ class Qwen3TTSTalkerCodePredictorOutputWithPast(ModelOutput):
     generation_steps: int | None = None
 
 
+@auto_docstring
 @dataclass
 class Qwen3TTSTalkerOutputWithPast(ModelOutput):
     loss: torch.FloatTensor | None = None
@@ -696,6 +701,7 @@ class Qwen3TTSBasePreTrainedModel(Qwen3PreTrainedModel):
     _can_record_outputs = {}
 
 
+@auto_docstring
 class Qwen3TTSPreTrainedModel(Qwen3TTSBasePreTrainedModel):
     config_class = Qwen3TTSConfig
     _no_split_modules = ["Qwen3TTSTalkerDecoderLayer", "Qwen3TTSDecoderLayer"]
@@ -703,6 +709,7 @@ class Qwen3TTSPreTrainedModel(Qwen3TTSBasePreTrainedModel):
     _supports_static_cache = False
 
 
+@auto_docstring
 class Qwen3TTSTalkerTextPreTrainedModel(Qwen3TTSBasePreTrainedModel):
     """PreTrainedModel for Talker-related models."""
 
@@ -803,6 +810,7 @@ class Qwen3TTSTalkerCodePredictorModel(Qwen3Model):
         self.codec_embedding = value
 
 
+@auto_docstring
 class Qwen3TTSTalkerCodePredictorModelForConditionalGeneration(Qwen3TTSPreTrainedModel, GenerationMixin):
     """Wrapper for CodePredictorModel with generation capabilities."""
 
@@ -815,6 +823,9 @@ class Qwen3TTSTalkerCodePredictorModelForConditionalGeneration(Qwen3TTSPreTraine
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, (config.num_code_groups - 1) * config.vocab_size, bias=False)
 
+        # CODEPATH: the 1.7B checkpoints give the code predictor a narrower hidden size than the talker and
+        # carry `small_to_mtp_projection` weights to bridge the two; on the 0.6B checkpoints the two sizes
+        # match and no projection was trained.
         if config.hidden_size != talker_config.hidden_size:
             self.small_to_mtp_projection = nn.Linear(talker_config.hidden_size, config.hidden_size, bias=True)
         else:

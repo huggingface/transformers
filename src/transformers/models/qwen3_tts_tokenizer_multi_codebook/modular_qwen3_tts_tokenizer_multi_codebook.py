@@ -56,6 +56,7 @@ from ..qwen3_omni_moe.modeling_qwen3_omni_moe import (
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring
 @strict
 class Qwen3TTSTokenizerMultiCodebookCode2WavConfig(Qwen3OmniMoeCode2WavConfig):
     r"""
@@ -100,6 +101,7 @@ class Qwen3TTSTokenizerMultiCodebookCode2WavConfig(Qwen3OmniMoeCode2WavConfig):
     trim_right_ratio: float = 1.0
 
 
+@auto_docstring
 @strict
 class Qwen3TTSTokenizerMultiCodebookConfig(PreTrainedConfig):
     r"""
@@ -224,8 +226,8 @@ class Qwen3TTSTokenizerMultiCodebookEncoderOutput(MimiEncoderOutput):
     pass
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Qwen3TTSTokenizerMultiCodebookOutput(ModelOutput):
     r"""
     audio_values (`List[torch.FloatTensor]`):
@@ -249,6 +251,7 @@ class Qwen3TTSTokenizerMultiCodebookPreTrainedModel(MimiPreTrainedModel):
     _can_compile_fullgraph = False
 
 
+@auto_docstring
 class Qwen3TTSTokenizerMultiCodebookCode2WavPreTrainedModel(Qwen3TTSTokenizerMultiCodebookPreTrainedModel):
     config_class = Qwen3TTSTokenizerMultiCodebookCode2WavConfig
     _no_split_modules = ["Qwen3TTSTokenizerMultiCodebookBlock"]
@@ -257,6 +260,7 @@ class Qwen3TTSTokenizerMultiCodebookCode2WavPreTrainedModel(Qwen3TTSTokenizerMul
 #  Transformer model (decoder side)
 
 
+@auto_docstring
 class Qwen3TTSTokenizerMultiCodebookDecoderTransformerModel(Qwen3TTSTokenizerMultiCodebookCode2WavPreTrainedModel):
     def __init__(self, config: Qwen3TTSTokenizerMultiCodebookCode2WavConfig):
         super().__init__(config)
@@ -421,6 +425,7 @@ class Qwen3TTSTokenizerMultiCodebookDecoder(Qwen3TTSTokenizerMultiCodebookCode2W
         self.decoder = nn.ModuleList(decoder)
         self.post_init()
 
+    @auto_docstring
     def forward(self, codes, **kwargs):
         if codes.shape[1] != self.config.num_quantizers:
             raise ValueError(f"Expected {self.config.num_quantizers} layer of codes, got {codes.shape[1]}")
