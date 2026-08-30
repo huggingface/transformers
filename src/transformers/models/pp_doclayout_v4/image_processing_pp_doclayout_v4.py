@@ -84,10 +84,19 @@ class PPDocLayoutV4ImageProcessor(TorchvisionBackend):
             if do_rescale:
                 stacked_images = self.rescale(stacked_images.to(dtype=torch.float32), rescale_factor)
             if do_resize:
-                stacked_images = self.resize(image=stacked_images, size=size, resample=resample, antialias=False)
                 # `cv2.resize` saturates to the input range, so the bicubic overshoot has to be clipped the same
-                # way. Without this the error grows back to ~0.2 instead of staying below 1/255.
-                upper_bound = 255 * rescale_factor if do_rescale else 255
+                # way. Without this the error grows back to ~0.2 instead of staying below 1/255. The bound is the
+                # range the incoming pixels live in, not the range of this particular image: `cv2.resize` lets the
+                # ringing run up to the dtype maximum, so clipping at the observed maximum would clip too early.
+                # With `do_rescale=False` the documented contract is that the caller already passes floats in
+                # `[0, 1]`, while integer inputs are still `[0, 255]`.
+                if do_rescale:
+                    upper_bound = 255 * rescale_factor
+                elif stacked_images.is_floating_point():
+                    upper_bound = 1.0
+                else:
+                    upper_bound = 255
+                stacked_images = self.resize(image=stacked_images, size=size, resample=resample, antialias=False)
                 stacked_images = stacked_images.clamp(0, upper_bound)
             resized_images_grouped[shape] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)

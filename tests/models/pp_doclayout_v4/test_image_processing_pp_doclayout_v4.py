@@ -283,6 +283,24 @@ class PPDocLayoutV4ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCa
             off_grid = (pixel_values * 255 - (pixel_values * 255).round()).abs().max().item()
             self.assertGreater(off_grid, 1e-3)
 
+    def test_resize_clips_overshoot_without_rescale(self):
+        """
+        `do_rescale=False` is documented as "the caller already passes pixel values in `[0, 1]`", so the overshoot
+        has to be clipped against 1 rather than against 255 on that path too. Clipping against 255 is a no-op for
+        unit-interval floats and lets the bicubic ringing reach the model.
+        """
+        # A one pixel wide white bar on black maximizes bicubic ringing.
+        image = torch.zeros(3, 64, 64, dtype=torch.float32)
+        image[:, :, 30:34] = 1.0
+
+        for image_processing_class in self.image_processing_classes.values():
+            image_processor = image_processing_class(**self.image_processor_dict)
+            pixel_values = image_processor(images=image, do_rescale=False, return_tensors="pt")["pixel_values"]
+
+            self.assertEqual(pixel_values.dtype, torch.float32)
+            self.assertGreaterEqual(pixel_values.min().item(), 0.0)
+            self.assertLessEqual(pixel_values.max().item(), 1.0)
+
     def test_post_process_requires_target_sizes(self):
         outputs = _dummy_outputs()
         for image_processing_class in self.image_processing_classes.values():
