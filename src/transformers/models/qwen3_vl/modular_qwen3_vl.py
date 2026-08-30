@@ -515,6 +515,9 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
         )
         position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
+        split_sizes = kwargs.pop("split_sizes", None)
+        if split_sizes is None:
+            split_sizes = (cu_seqlens[1:] - cu_seqlens[:-1]).tolist()
 
         hidden_states = self.patch_embed(hidden_states)
         pos_embeds = (self.pos_embed(interp_indices) * interp_weights[:, :, None]).sum(1)
@@ -533,6 +536,7 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
                 hidden_states,
                 cu_seqlens=cu_seqlens,
                 max_seqlen=max_seqlen,
+                split_sizes=split_sizes,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )

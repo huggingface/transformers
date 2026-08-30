@@ -228,6 +228,7 @@ class Qwen2_5_VLVisionAttention(nn.Module):
         cu_seqlens: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         max_seqlen: int | None = None,
+        split_sizes: list[int] | None = None,
         **kwargs,
     ) -> torch.Tensor:
         seq_length = hidden_states.shape[0]
@@ -265,10 +266,10 @@ class Qwen2_5_VLVisionAttention(nn.Module):
             )
         else:
             # Other implementations: Process each chunk separately
-            lengths = cu_seqlens[1:] - cu_seqlens[:-1]
-            splits = [
-                torch.split(tensor, lengths.tolist(), dim=2) for tensor in (query_states, key_states, value_states)
-            ]
+            if split_sizes is None:
+                lengths = cu_seqlens[1:] - cu_seqlens[:-1]
+                split_sizes = lengths.tolist()
+            splits = [torch.split(tensor, split_sizes, dim=2) for tensor in (query_states, key_states, value_states)]
 
             attn_outputs = [
                 attention_interface(
