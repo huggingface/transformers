@@ -655,7 +655,7 @@ class Qwen3NextGatedDeltaNet(nn.Module):
         # it and their signatures are fixed by the kernel hub, so the sequences are taken one at a time here: the
         # result is the same whichever kernel is bound.
         cu_seqlens = kwargs.get("cu_seq_lens_q")
-        if cu_seqlens is not None and cache_params is None:
+        if cu_seqlens is not None and cache_params is None and kwargs.get("cache") is None:
             core_attn_out = self.gated_delta_rule_per_sequence(mixed_qkv, b, a, cu_seqlens)
             return self.output_from_core_attn(core_attn_out, z)
 
