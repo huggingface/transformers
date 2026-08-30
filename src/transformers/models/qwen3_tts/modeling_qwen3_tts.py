@@ -20,7 +20,6 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Optional
 
 import torch
 import torch.nn.functional as F
@@ -29,7 +28,7 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
+from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -38,6 +37,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_qwen3_tts import (
@@ -103,8 +103,7 @@ class Qwen3TTSTalkerTextMLP(nn.Module):
 
 
 class Qwen3TTSRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
+    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Qwen3TTSConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
@@ -118,24 +117,17 @@ class Qwen3TTSRotaryEmbedding(nn.Module):
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    def compute_default_rope_parameters(
-        config: Qwen3TTSConfig | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
+    @deprecate_kwarg("device", version="5.18")
+    def compute_default_rope_parameters(config: Qwen3TTSConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
             config ([`~transformers.PreTrainedConfig`]):
                 The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
         Returns:
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
@@ -144,12 +136,9 @@ class Qwen3TTSRotaryEmbedding(nn.Module):
         dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
 
         attention_factor = 1.0  # Unused in this type of RoPE
-
         # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
-        return inv_freq, attention_factor
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        return inv_freq.to(device), attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
@@ -173,8 +162,7 @@ class Qwen3TTSTalkerRotaryEmbedding(nn.Module):
     position_ids expected shape: (3, batch, seq).
     """
 
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
+    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Qwen3TTSConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
@@ -188,24 +176,17 @@ class Qwen3TTSTalkerRotaryEmbedding(nn.Module):
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    def compute_default_rope_parameters(
-        config: Qwen3TTSConfig | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
+    @deprecate_kwarg("device", version="5.18")
+    def compute_default_rope_parameters(config: Qwen3TTSConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
             config ([`~transformers.PreTrainedConfig`]):
                 The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
         Returns:
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
@@ -214,12 +195,9 @@ class Qwen3TTSTalkerRotaryEmbedding(nn.Module):
         dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
 
         attention_factor = 1.0  # Unused in this type of RoPE
-
         # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
-        return inv_freq, attention_factor
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        return inv_freq.to(device), attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update
@@ -247,7 +225,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-@use_kernel_func_from_hub("rotary_pos_emb")
+@use_kernel_forward_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -921,6 +899,7 @@ class Qwen3TTSTalkerResizeMLP(nn.Module):
         return hidden_states
 
 
+@auto_docstring
 @dataclass
 class Qwen3TTSTalkerCodePredictorOutputWithPast(ModelOutput):
     loss: torch.FloatTensor | None = None
@@ -931,6 +910,7 @@ class Qwen3TTSTalkerCodePredictorOutputWithPast(ModelOutput):
     generation_steps: int | None = None
 
 
+@auto_docstring
 @dataclass
 class Qwen3TTSTalkerOutputWithPast(ModelOutput):
     loss: torch.FloatTensor | None = None
@@ -965,6 +945,7 @@ class Qwen3TTSBasePreTrainedModel(PreTrainedModel):
     _can_record_outputs = {}
 
 
+@auto_docstring
 class Qwen3TTSPreTrainedModel(Qwen3TTSBasePreTrainedModel):
     config_class = Qwen3TTSConfig
     _no_split_modules = ["Qwen3TTSTalkerDecoderLayer", "Qwen3TTSDecoderLayer"]
@@ -972,6 +953,7 @@ class Qwen3TTSPreTrainedModel(Qwen3TTSBasePreTrainedModel):
     _supports_static_cache = False
 
 
+@auto_docstring
 class Qwen3TTSTalkerTextPreTrainedModel(Qwen3TTSBasePreTrainedModel):
     """PreTrainedModel for Talker-related models."""
 
@@ -997,7 +979,7 @@ class Qwen3TTSTalkerModel(Qwen3TTSPreTrainedModel):
         "attentions": Qwen3TTSTalkerAttention,
     }
 
-    _no_split_modules = ["Qwen3TTSTalkerDecoderLayer"]
+    _no_split_modules = ["Qwen3TTSDecoderLayer"]
 
     config_class = Qwen3TTSTalkerConfig
     base_model_prefix = "talker.model"
@@ -1227,6 +1209,7 @@ class Qwen3TTSTalkerCodePredictorModel(Qwen3TTSPreTrainedModel):
         self.codec_embedding = value
 
 
+@auto_docstring
 class Qwen3TTSTalkerCodePredictorModelForConditionalGeneration(Qwen3TTSPreTrainedModel, GenerationMixin):
     """Wrapper for CodePredictorModel with generation capabilities."""
 
@@ -1239,6 +1222,9 @@ class Qwen3TTSTalkerCodePredictorModelForConditionalGeneration(Qwen3TTSPreTraine
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, (config.num_code_groups - 1) * config.vocab_size, bias=False)
 
+        # CODEPATH: the 1.7B checkpoints give the code predictor a narrower hidden size than the talker and
+        # carry `small_to_mtp_projection` weights to bridge the two; on the 0.6B checkpoints the two sizes
+        # match and no projection was trained.
         if config.hidden_size != talker_config.hidden_size:
             self.small_to_mtp_projection = nn.Linear(talker_config.hidden_size, config.hidden_size, bias=True)
         else:

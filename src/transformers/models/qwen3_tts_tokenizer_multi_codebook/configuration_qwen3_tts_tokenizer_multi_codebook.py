@@ -21,13 +21,14 @@ from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...utils import logging
+from ...utils import auto_docstring, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring
 @strict
 class Qwen3TTSTokenizerMultiCodebookCode2WavConfig(PreTrainedConfig):
     r"""
@@ -92,11 +93,12 @@ class Qwen3TTSTokenizerMultiCodebookCode2WavConfig(PreTrainedConfig):
     @property
     def layer_types(self):
         """
-        All layer in code2wav should be sliding attention
+        All layers in code2wav should be sliding attention
         """
         return ["sliding_attention"] * self.num_hidden_layers
 
 
+@auto_docstring
 @strict
 class Qwen3TTSTokenizerMultiCodebookConfig(PreTrainedConfig):
     r"""
