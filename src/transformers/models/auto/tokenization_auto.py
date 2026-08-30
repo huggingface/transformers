@@ -841,7 +841,7 @@ class AutoTokenizer:
         ):
             return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
-        # Hub repos that declare this but ship ByteLevel (Llama3 style) must use TokenizersBackend 
+        # Hub repos that declare this but ship ByteLevel (Llama3 style) must use TokenizersBackend
         # because LlamaTokenizer hardcodes Metaspace.
         _hub_declared_class = tokenizer_config_class or getattr(config, "tokenizer_class", None)
         if (
