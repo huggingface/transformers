@@ -296,7 +296,6 @@ class Qwen3TTSTokenizerMultiCodebookAttention(nn.Module):
         self.sliding_window = config.sliding_window
         self.num_heads = config.num_attention_heads
         self.num_key_value_heads = config.num_key_value_heads
-        self.rotary_emb = Qwen3TTSTokenizerMultiCodebookRotaryEmbedding(config=config)
 
     def forward(
         self,
