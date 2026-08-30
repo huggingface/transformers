@@ -1062,7 +1062,6 @@ class PPDocLayoutV4Decoder(PPDocLayoutV4PreTrainedModel):
         )
 
         self.num_queries = config.num_queries
-        self.num_coords = config.num_coords
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1130,10 +1129,7 @@ class PPDocLayoutV4Decoder(PPDocLayoutV4PreTrainedModel):
 
         for idx, decoder_layer in enumerate(self.layers):
             # Deformable attention samples on the enclosing rect of the quad.
-            if self.num_coords > 4:
-                reference_points_input = quad_to_rect(reference_points).unsqueeze(2)
-            else:
-                reference_points_input = reference_points.unsqueeze(2)
+            reference_points_input = quad_to_rect(reference_points).unsqueeze(2)
 
             hidden_states = decoder_layer(
                 hidden_states,
@@ -1625,11 +1621,11 @@ class PPDocLayoutV4Model(PPDocLayoutV4PreTrainedModel):
     ) -> tuple[torch.FloatTensor] | PPDocLayoutV4ModelOutput:
         r"""
         labels (`list[Dict]` of len `(batch_size,)`, *optional*):
-            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
-            following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
-            respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
-            in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
+            Not supported: PP-DocLayoutV4 is inference only in Transformers.
         """
+        if labels is not None:
+            raise ValueError("PPDocLayoutV4Model does not support training")
+
         batch_size, num_channels, height, width = pixel_values.shape
         device = pixel_values.device
 
@@ -1666,7 +1662,11 @@ class PPDocLayoutV4Model(PPDocLayoutV4PreTrainedModel):
         level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
 
         # prepare denoising training
-        # CODEPATH: training only, no released checkpoint reaches this during inference.
+        # CODEPATH: unreachable, `labels` is rejected above. Kept as the scaffolding a future training
+        # implementation would build on. Two things have to change before it can run: the helper emits 4-coordinate
+        # `(cx, cy, w, h)` boxes, which do not concatenate with V4's `num_coords`-wide reference points, and it fills
+        # unused slots with the class index `num_classes`, which is out of range for the `num_labels`-wide denoising
+        # embedding below.
         if self.training and self.config.num_denoising > 0 and labels is not None:
             (
                 denoising_class,

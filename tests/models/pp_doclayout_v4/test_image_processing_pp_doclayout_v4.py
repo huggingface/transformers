@@ -150,29 +150,14 @@ class PPDocLayoutV4ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCa
             # `boxes` is the axis aligned rect enclosing the quad, in (x1, y1, x2, y2) order.
             torch.testing.assert_close(result["boxes"][0], torch.tensor([40.0, 80.0, 60.0, 120.0]))
 
-    def test_post_process_num_coords_4_falls_back_to_rect(self):
-        outputs = _dummy_outputs()
-        # `config.num_coords=4` predicts plain `(cx, cy, w, h)`; the same centered rect as the 10-coord quad.
-        outputs.pred_boxes = torch.tensor([0.5, 0.5, 0.2, 0.2]).expand(1, 8, 4).contiguous()
-        for image_processing_class in self.image_processing_classes.values():
-            image_processor = image_processing_class(**self.image_processor_dict)
-            result = image_processor.post_process_object_detection(outputs, threshold=0.0, target_sizes=[(200, 100)])[
-                0
-            ]
-
-            torch.testing.assert_close(
-                result["polygon_points"][0],
-                torch.tensor([[40.0, 80.0], [60.0, 80.0], [60.0, 120.0], [40.0, 120.0]]),
-            )
-            torch.testing.assert_close(result["boxes"][0], torch.tensor([40.0, 80.0, 60.0, 120.0]))
-
     def test_post_process_rejects_unsupported_num_coords(self):
         outputs = _dummy_outputs()
-        outputs.pred_boxes = torch.rand(1, 8, 6)
-        for image_processing_class in self.image_processing_classes.values():
-            image_processor = image_processing_class(**self.image_processor_dict)
-            with self.assertRaisesRegex(ValueError, "Unsupported num_coords: 6"):
-                image_processor.post_process_object_detection(outputs, threshold=0.0, target_sizes=[(200, 100)])
+        for num_coords in (4, 6):
+            outputs.pred_boxes = torch.rand(1, 8, num_coords)
+            for image_processing_class in self.image_processing_classes.values():
+                image_processor = image_processing_class(**self.image_processor_dict)
+                with self.assertRaisesRegex(ValueError, f"Unsupported num_coords: {num_coords}"):
+                    image_processor.post_process_object_detection(outputs, threshold=0.0, target_sizes=[(200, 100)])
 
     def test_post_process_reading_order_is_sorted(self):
         num_queries = 8

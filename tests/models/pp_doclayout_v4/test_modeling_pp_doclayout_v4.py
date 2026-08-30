@@ -24,6 +24,7 @@ from transformers import (
     PPDocLayoutV4Config,
     PPDocLayoutV4ForObjectDetection,
     PPDocLayoutV4ImageProcessor,
+    PPDocLayoutV4Model,
     is_torch_available,
     is_vision_available,
 )
@@ -35,6 +36,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.trainer_utils import set_seed
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
@@ -226,6 +228,12 @@ class PPDocLayoutV4ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    def test_config_rejects_unsupported_num_coords(self):
+        """Only the quad parameterization is implemented, so anything else has to fail at config time."""
+        for num_coords in (4, 6):
+            with self.assertRaisesRegex(ValueError, "only supports `num_coords=10`"):
+                PPDocLayoutV4Config(num_coords=num_coords)
+
     @unittest.skip(reason="PPDocLayoutV4 does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
@@ -389,12 +397,20 @@ class PPDocLayoutV4ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         self.assertEqual(learnable.b.item(), config.s2r_b_init)
 
     def test_order_heads_are_wired_into_the_model(self):
+        """
+        The tester leaves `s2r_a_init` at the checkpoint default of 0, which makes the fusion a no-op. The released
+        checkpoint carries `s2r_fusion.a = 24.2`, so this also checks that the model really routes the two order
+        heads through the fusion, which a shape-only assertion cannot see.
+        """
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         inputs = self._prepare_for_class(inputs_dict, PPDocLayoutV4ForObjectDetection)
         order_shape = torch.Size((self.model_tester.batch_size,) + (self.model_tester.num_queries,) * 2)
 
+        relative_order_logits = {}
         for use_s2r in (True, False):
             config.use_s2r = use_s2r
+            # Same seed for both, so the two runs only differ by the fusion.
+            set_seed(0)
             model = PPDocLayoutV4ForObjectDetection(config).to(torch_device).eval()
             self.assertEqual(model.model.s2r_fusion is not None, use_s2r)
 
@@ -406,13 +422,38 @@ class PPDocLayoutV4ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
             # Only self loops are masked out, and only on the successor head.
             self.assertTrue(bool((outputs.successor_order_logits.diagonal(dim1=-2, dim2=-1) < -1e3).all()))
             self.assertTrue(bool((outputs.relative_order_logits.diagonal(dim1=-2, dim2=-1).abs() < 1e-3).all()))
+            relative_order_logits[use_s2r] = outputs.relative_order_logits
+
+        # The fusion only adds an antisymmetric term, so it cannot break the antisymmetry of the relative head.
+        fused = relative_order_logits[True]
+        torch.testing.assert_close(fused, -fused.transpose(-2, -1), rtol=1e-4, atol=1e-4)
+
+        # A random-weight successor head produces an almost uniform adjacency, whose antisymmetrized closure cancels
+        # to ~1e-9 for any `a`, so comparing the two runs cannot show that the fusion is applied. Swapping it for a
+        # recognizable stub checks the wiring directly.
+        class OffsetFusion(torch.nn.Module):
+            def forward(self, relative_logits, successor_logits):
+                return relative_logits + 1.0
+
+        config.use_s2r = True
+        set_seed(0)
+        model = PPDocLayoutV4ForObjectDetection(config).to(torch_device).eval()
+        model.model.s2r_fusion = OffsetFusion()
+        with torch.no_grad():
+            stubbed = model(**inputs).relative_order_logits
+        torch.testing.assert_close(stubbed, relative_order_logits[False] + 1.0, rtol=1e-4, atol=1e-4)
 
     def test_training_raises(self):
+        """Both public classes reject `labels`; the base model would otherwise reach the broken denoising path."""
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        model = PPDocLayoutV4ForObjectDetection(config).to(torch_device)
         labels = [{"class_labels": torch.zeros(1, dtype=torch.long), "boxes": torch.zeros(1, 4)}]
-        with self.assertRaises(ValueError):
-            model(pixel_values=inputs_dict["pixel_values"][:1].to(torch_device), labels=labels)
+        pixel_values = inputs_dict["pixel_values"][:1].to(torch_device)
+
+        for model_class in (PPDocLayoutV4ForObjectDetection, PPDocLayoutV4Model):
+            model = model_class(config).to(torch_device)
+            model.train()
+            with self.assertRaises(ValueError):
+                model(pixel_values=pixel_values, labels=labels)
 
     @parameterized.expand(["float32", "float16", "bfloat16"])
     @require_torch_accelerator

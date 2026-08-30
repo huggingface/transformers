@@ -32,6 +32,10 @@ from ...utils import auto_docstring, requires_backends
 from ...utils.generic import TensorType
 
 
+# `[center_x, center_y]` plus four `(dx, dy)` corner offsets.
+QUAD_NUM_COORDS = 10
+
+
 @auto_docstring
 class PPDocLayoutV4ImageProcessor(TorchvisionBackend):
     r"""
@@ -209,21 +213,17 @@ class PPDocLayoutV4ImageProcessor(TorchvisionBackend):
 
         Args:
             pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, config.num_coords)`):
-                With `config.num_coords=10`, boxes as `[center_x, center_y, dx1, dy1, ..., dx4, dy4]` in sigmoid
-                space, with the corner offsets shifted by `+0.5`. With `config.num_coords=4`, plain
-                `(center_x, center_y, width, height)` boxes, whose corners are the axis aligned rectangle.
+                Boxes as `[center_x, center_y, dx1, dy1, ..., dx4, dy4]` in sigmoid space, with the corner offsets
+                shifted by `+0.5`.
 
         Returns:
             `torch.FloatTensor` of shape `(batch_size, num_queries, 4, 2)`: The four corners in top-left, top-right,
             bottom-right, bottom-left order, normalized to `[0, 1]`.
         """
         num_coords = pred_boxes.shape[-1]
+        if num_coords != QUAD_NUM_COORDS:
+            raise ValueError(f"Unsupported num_coords: {num_coords}. PP-DocLayoutV4 only supports quads (10).")
         centers = pred_boxes[..., :2].unsqueeze(-2)
-        if num_coords == 4:
-            corner_signs = pred_boxes.new_tensor([[-1.0, -1.0], [1.0, -1.0], [1.0, 1.0], [-1.0, 1.0]])
-            return centers + pred_boxes[..., 2:].unsqueeze(-2) / 2 * corner_signs
-        if num_coords != 10:
-            raise ValueError(f"Unsupported num_coords: {num_coords}. PP-DocLayoutV4 supports 10 (quad) or 4 (rect).")
         offsets = pred_boxes[..., 2:].reshape(*pred_boxes.shape[:-1], 4, 2) - 0.5
         return centers + offsets
 
