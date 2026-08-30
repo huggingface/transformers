@@ -839,6 +839,27 @@ def apply_tensor_parallelism(model, tp_mesh):
     return model
 
 
+def shard_state_dict_for_load(state_dict: dict[str, torch.Tensor], model) -> dict[str, torch.Tensor]:
+    """Split full checkpoint tensors back over the mesh the model's parameters live on.
+
+    The inverse of `gather_state_dict_for_save`: a checkpoint holds whole tensors, while a
+    tensor-parallel model holds a shard of each one, so loading the file as it stands fails on every
+    sharded parameter's shape. Every rank must call this, since `distribute_tensor` is collective.
+    """
+    sharded = {}
+    # `remove_duplicate=False`, or a tied output embedding is missing from the map and loads unsharded
+    parameters = dict(model.named_parameters(remove_duplicate=False))
+    parameters.update(model.named_buffers(remove_duplicate=False))
+    for key, tensor in state_dict.items():
+        target = parameters.get(key)
+        if isinstance(target, torch.Tensor) and isinstance(target.data, DTensor) and not isinstance(tensor, DTensor):
+            tensor = distribute_tensor(
+                tensor.to(target.data.device), target.data.device_mesh, target.data.placements
+            )
+        sharded[key] = tensor
+    return sharded
+
+
 def gather_state_dict_for_save(
     state_dict: dict[str, torch.Tensor],
     _tp_plan: dict[str, str],

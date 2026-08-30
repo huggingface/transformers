@@ -3331,6 +3331,9 @@ class Trainer:
             save_fsdp_optimizer(
                 self.accelerator.state.fsdp_plugin, self.accelerator, self.optimizer, self.model, output_dir
             )
+        elif self.get_tp_size() > 1:
+            os.makedirs(output_dir, exist_ok=True)
+            torch.save(self.optimizer.state_dict(), self._sharded_optimizer_file(output_dir))
         elif self.args.should_save:
             # deepspeed.save_checkpoint above saves model/optim/sched
             torch.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
@@ -3461,6 +3464,12 @@ class Trainer:
                 else:
                     check_torch_load_is_safe()
                     state_dict = torch.load(weights_file, map_location="cpu", weights_only=True)
+
+                # A checkpoint holds whole tensors while a tensor-parallel model holds a shard of each
+                if self.get_tp_size() > 1:
+                    from .distributed.tensor_parallel import shard_state_dict_for_load
+
+                    state_dict = shard_state_dict_for_load(state_dict, model)
 
                 # workaround for FSDP bug https://github.com/pytorch/pytorch/issues/82963
                 # which takes *args instead of **kwargs
@@ -3651,6 +3660,15 @@ class Trainer:
         if is_torch_musa_available():
             set_rng_state_for_device("MUSA", torch.musa, checkpoint_rng_state, is_distributed)
 
+    def _sharded_optimizer_file(self, checkpoint: str) -> str:
+        """Path of this rank's optimizer state under tensor parallelism.
+
+        Each rank holds a different shard of every parameter, so its optimizer state is its own and
+        cannot be read from another rank's file. The shapes match across ranks, so a single shared
+        file loads without error and silently gives every rank rank 0's moments.
+        """
+        return os.path.join(checkpoint, f"rank{self.args.process_index}-of-{self.args.world_size}-{OPTIMIZER_NAME}")
+
     def _load_optimizer_and_scheduler(self, checkpoint: str | None) -> None:
         """If optimizer and scheduler states exist, load them."""
         if checkpoint is None:
@@ -3685,7 +3703,7 @@ class Trainer:
         )
         checkpoint_file_exists = (
             glob.glob(os.path.join(checkpoint, f"rank*-of-{self.args.world_size}-{OPTIMIZER_NAME}"))
-            if self.is_fsdp_xla_v1_enabled
+            if self.is_fsdp_xla_v1_enabled or self.get_tp_size() > 1
             else checkpoint_file_exists
         )
         if checkpoint_file_exists and os.path.isfile(os.path.join(checkpoint, SCHEDULER_NAME)):
@@ -3743,10 +3761,13 @@ class Trainer:
                         )
                     else:
                         check_torch_load_is_safe()
+                        optimizer_file = (
+                            self._sharded_optimizer_file(checkpoint)
+                            if self.get_tp_size() > 1
+                            else os.path.join(checkpoint, OPTIMIZER_NAME)
+                        )
                         self.optimizer.load_state_dict(
-                            torch.load(
-                                os.path.join(checkpoint, OPTIMIZER_NAME), map_location=map_location, weights_only=True
-                            )
+                            torch.load(optimizer_file, map_location=map_location, weights_only=True)
                         )
                 with warnings.catch_warnings(record=True) as caught_warnings:
                     check_torch_load_is_safe()
@@ -3890,7 +3911,10 @@ class Trainer:
                 remove_dummy_checkpoint(self.args.should_save, output_dir, [WEIGHTS_NAME, SAFE_WEIGHTS_NAME])
                 self.model_wrapped.save_checkpoint(output_dir)
 
-        elif self.args.should_save:
+        # Under tensor parallelism every rank has to enter `_save`: the weights are gathered inside
+        # `save_pretrained`, with a collective across the tp mesh that deadlocks if only rank 0 calls it.
+        # `save_pretrained` writes on rank 0 alone, and `_save` guards its own writes the same way.
+        elif self.args.should_save or self.get_tp_size() > 1:
             self._save(output_dir)
 
         # Push to the Hub when `save_model` is called by the user.
@@ -3901,7 +3925,8 @@ class Trainer:
         """Save model weights, configuration, and processing class to `output_dir`."""
         # If we are executing this function, we are the process zero, so we don't check for that.
         output_dir = output_dir if output_dir is not None else self.args.output_dir
-        os.makedirs(output_dir, exist_ok=True)
+        if self.args.should_save:
+            os.makedirs(output_dir, exist_ok=True)
         logger.info(f"Saving model checkpoint to {output_dir}")
 
         supported_classes = (PreTrainedModel,) if not is_peft_available() else (PreTrainedModel, PeftModel)
@@ -3922,6 +3947,10 @@ class Trainer:
                 )
         else:
             self.model.save_pretrained(output_dir, state_dict=state_dict)
+
+        # Ranks that only took part in gathering the weights write nothing of their own
+        if not self.args.should_save:
+            return
 
         if self.processing_class is not None:
             self.processing_class.save_pretrained(output_dir)
