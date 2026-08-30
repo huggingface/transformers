@@ -18,7 +18,7 @@ from pathlib import Path
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
-from ...utils import is_soundfile_available, is_torch_available, logging
+from ...utils import auto_docstring, is_soundfile_available, is_torch_available, logging
 
 
 if is_torch_available():
@@ -42,6 +42,7 @@ class Qwen3TTSProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class Qwen3TTSProcessor(ProcessorMixin):
     r"""
     Constructs a Qwen3TTS processor which combines a Qwen tokenizer and a feature extractor.
@@ -56,8 +57,6 @@ class Qwen3TTSProcessor(ProcessorMixin):
             The feature extractor for extracting mel spectrogram features from audio.
         tokenizer ([`Qwen2TokenizerFast`], *optional*):
             The text tokenizer for encoding text inputs. Should be a Qwen2 tokenizer.
-        audio_tokenizer ([`Qwen3TTSTokenizerMultiCodebookModel`], *optional*):
-            The audio tokenizer that decodes generated audio codes into waveforms.
         chat_template (`str`, *optional*):
             The Jinja template to use for formatting conversations using the chat template.
     """
@@ -67,8 +66,14 @@ class Qwen3TTSProcessor(ProcessorMixin):
     audio_tokenizer_class = "Qwen3TTSTokenizerMultiCodebookModel"
 
     def __init__(self, feature_extractor=None, tokenizer=None, audio_tokenizer=None, chat_template=None):
+        r"""
+        audio_tokenizer ([`Qwen3TTSTokenizerMultiCodebookModel`], *optional*):
+            The audio tokenizer that decodes the codes the model generates back into waveforms. A checkpoint
+            records which one to use, so `from_pretrained` supplies it.
+        """
         super().__init__(feature_extractor, tokenizer, audio_tokenizer=audio_tokenizer, chat_template=chat_template)
 
+    @auto_docstring
     def __call__(self, text=None, audio=None, **kwargs) -> BatchFeature:
         """
         Prepare inputs for the Qwen3-TTS model.
