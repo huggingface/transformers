@@ -850,6 +850,7 @@ class Qwen3TTSTalkerCodePredictorModelForConditionalGeneration(Qwen3TTSPreTraine
     def get_decoder(self):
         return self.model
 
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -859,16 +860,9 @@ class Qwen3TTSTalkerCodePredictorModelForConditionalGeneration(Qwen3TTSPreTraine
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
         generation_steps: int | None = None,
         **kwargs,
     ) -> CausalLMOutputWithPast:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
         # Prefill stage: derive generation_steps from sequence length
         if inputs_embeds is not None and inputs_embeds.shape[1] > 1:
             generation_steps = inputs_embeds.shape[1] - 2
@@ -885,8 +879,6 @@ class Qwen3TTSTalkerCodePredictorModelForConditionalGeneration(Qwen3TTSPreTraine
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             **kwargs,
         )
 
@@ -918,6 +910,7 @@ class Qwen3TTSTalkerCodePredictorModelForConditionalGeneration(Qwen3TTSPreTraine
         return model_kwargs
 
 
+@auto_docstring
 class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerationMixin):
     """Main Qwen3-TTS model for text-to-acoustic generation."""
 
@@ -940,7 +933,9 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
         )
         self.rope_deltas = None
 
-        # Optional speaker encoder for voice cloning (present only when a speaker_encoder_config is set)
+        # CODEPATH: the base checkpoints carry a speaker encoder and clone a voice from a reference clip; the
+        # CustomVoice and VoiceDesign checkpoints ship no such weights and take their voice from a preset or a
+        # description instead.
         if config.speaker_encoder_config is not None:
             self.speaker_encoder = Qwen3TTSSpeakerEncoder(config.speaker_encoder_config)
         else:
@@ -962,6 +957,8 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
                 if "dialect" not in language_id:
                     self.supported_languages.append(language_id)
 
+        # CODEPATH: as above, only the base checkpoints carry the speaker encoder that defines this rate; on the
+        # others no reference clip is ever resampled, so the fallback is never read.
         self.speaker_encoder_sample_rate = (
             config.speaker_encoder_config.sample_rate if config.speaker_encoder_config is not None else 24000
         )
@@ -1013,6 +1010,36 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
     def get_decoder(self):
         return self.model
 
+    def compute_3d_position_ids(
+        self,
+        input_ids: torch.LongTensor | None,
+        inputs_embeds: torch.FloatTensor | None,
+        attention_mask: torch.Tensor,
+        past_key_values: Cache | None = None,
+    ) -> torch.Tensor:
+        """
+        Build the temporal, height and width position ids the talker's mRoPE expects.
+
+        The offset between a padded batch's positions and its cache length is recomputed on the first step and
+        cached on the module, as the other mrope models do, so later steps only shift the arange by it.
+        """
+        past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
+        if past_key_values_length == 0 or self.rope_deltas is None:
+            delta0 = (1 - attention_mask).sum(dim=-1).unsqueeze(1)
+            position_ids, rope_deltas = self.get_rope_index(attention_mask)
+            self.rope_deltas = rope_deltas - delta0
+            # Trim to match actual input length (avoids broadcast during decode when
+            # attention_mask covers all past tokens but inputs_embeds is 1 token)
+            return position_ids[:, :, -inputs_embeds.shape[1] :]
+
+        batch_size, seq_length = input_ids.shape
+        delta = past_key_values_length + self.rope_deltas
+        position_ids = torch.arange(seq_length, device=input_ids.device)
+        position_ids = position_ids.view(1, -1).expand(batch_size, -1)
+        position_ids = position_ids.add(delta)
+        return position_ids.unsqueeze(0).expand(3, -1, -1)
+
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1022,8 +1049,6 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
         past_hidden: torch.FloatTensor | None = None,
         trailing_text_hidden: torch.FloatTensor | None = None,
         tts_pad_embed: torch.FloatTensor | None = None,
@@ -1068,22 +1093,7 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
                 inputs_embeds = inputs_embeds + tts_pad_embed
 
         if attention_mask is not None:
-            past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
-            if past_key_values_length == 0 or self.rope_deltas is None:
-                delta0 = (1 - attention_mask).sum(dim=-1).unsqueeze(1)
-                position_ids, rope_deltas = self.get_rope_index(attention_mask)
-                rope_deltas = rope_deltas - delta0
-                self.rope_deltas = rope_deltas
-                # Trim to match actual input length (avoids broadcast during decode when
-                # attention_mask covers all past tokens but inputs_embeds is 1 token)
-                position_ids = position_ids[:, :, -inputs_embeds.shape[1] :]
-            else:
-                batch_size, seq_length = input_ids.shape
-                delta = past_key_values_length + self.rope_deltas
-                position_ids = torch.arange(seq_length, device=input_ids.device)
-                position_ids = position_ids.view(1, -1).expand(batch_size, -1)
-                position_ids = position_ids.add(delta)
-                position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
+            position_ids = self.compute_3d_position_ids(input_ids, inputs_embeds, attention_mask, past_key_values)
 
         outputs: BaseModelOutputWithPast = self.model(
             input_ids=None,
@@ -1092,8 +1102,6 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             **kwargs,
         )
 
