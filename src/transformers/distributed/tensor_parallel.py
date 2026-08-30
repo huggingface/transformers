@@ -865,17 +865,21 @@ def gather_state_dict_for_save(
     _tp_plan: dict[str, str],
     _device_mesh,
     _tp_size: int,
+    keep: bool = True,
 ) -> dict[str, torch.Tensor]:
     """Gather TP-sharded ``DTensor`` parameters to full CPU tensors for checkpoint saving.
 
-    Every rank must call this function so ``DTensor.full_tensor()`` collectives complete.
+    Every rank must call this function so ``DTensor.full_tensor()`` collectives complete. Only the rank
+    that writes the checkpoint keeps what comes back: a rank that is only here for the collective would
+    otherwise hold a whole copy of the model in host memory, once per rank of the mesh.
     """
     gathered = {}
     for key, tensor in state_dict.items():
         if isinstance(tensor, torch.Tensor):
             if isinstance(tensor, DTensor):
                 tensor = tensor.full_tensor()
-            gathered[key] = tensor.detach().cpu().contiguous()
-        else:
+            if keep:
+                gathered[key] = tensor.detach().cpu().contiguous()
+        elif keep:
             gathered[key] = tensor
     return gathered

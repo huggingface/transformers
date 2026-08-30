@@ -269,12 +269,9 @@ class DistributedMixin:
             return state_dict
 
         if distributed_config.tp_size > 1:
-            state_dict = gather_state_dict_for_save(
-                state_dict, self._tp_plan, self._device_mesh, distributed_config.tp_size
+            return gather_state_dict_for_save(
+                state_dict, self._tp_plan, self._device_mesh, distributed_config.tp_size, keep=save_on_this_rank
             )
-            if not save_on_this_rank:
-                state_dict = {}
-            return state_dict
 
         if distributed_config.fsdp_size > 1:
             if not _is_torch_distributed_initialized():
