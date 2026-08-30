@@ -42,7 +42,7 @@ import torch
 import torch.nn.functional as F
 from transformers import AutoModel, AutoTokenizer
 
-model_id = "Alibaba-NLP/gte-multilingual-base"
+model_id = "harshaljanjani/gte-multilingual-base-hf"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = AutoModel.from_pretrained(model_id, device_map="auto")
 
@@ -60,7 +60,7 @@ import torch
 import torch.nn.functional as F
 from transformers import AutoModel, AutoTokenizer
 
-model_id = "Alibaba-NLP/gte-multilingual-base"
+model_id = "harshaljanjani/gte-multilingual-base-hf"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = AutoModel.from_pretrained(model_id, device_map="auto")
 
@@ -79,7 +79,7 @@ The reranker checkpoints are cross-encoders and expose a single relevance logit 
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-model_id = "Alibaba-NLP/gte-multilingual-reranker-base"
+model_id = "harshaljanjani/gte-multilingual-reranker-base-hf"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = AutoModelForSequenceClassification.from_pretrained(model_id, device_map="auto")
 
@@ -95,7 +95,7 @@ Fine-tuning uses the standard forward and backward pass:
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-model_id = "Alibaba-NLP/gte-multilingual-base"
+model_id = "harshaljanjani/gte-multilingual-base-hf"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = AutoModelForSequenceClassification.from_pretrained(model_id, num_labels=2, device_map="auto")
 
@@ -112,7 +112,7 @@ The model is compatible with [`torch.compile`]:
 import torch
 from transformers import AutoModel, AutoTokenizer
 
-model_id = "Alibaba-NLP/gte-multilingual-base"
+model_id = "harshaljanjani/gte-multilingual-base-hf"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = AutoModel.from_pretrained(model_id, device_map="auto")
 model = torch.compile(model)

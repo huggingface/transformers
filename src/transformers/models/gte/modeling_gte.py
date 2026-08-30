@@ -67,6 +67,7 @@ class GteEmbeddings(nn.Module):
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
     ) -> torch.Tensor:
+        # Unlike JinaEmbeddingsV3Embeddings, token types default to zeros and are skipped when type_vocab_size is 0.
         embeddings = inputs_embeds
         if inputs_embeds is None:
             embeddings = self.word_embeddings(input_ids)
@@ -264,7 +265,8 @@ class GteMLP(nn.Module):
         self.act_fn = ACT2FN[config.hidden_act]
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # Unlike GemmaMLP, `down_proj` carries a bias and the gated activation is dropped out.
         hidden_states = self.act_fn(self.gate_proj(x)) * self.up_proj(x)
         hidden_states = self.dropout(hidden_states)
         down_proj = self.down_proj(hidden_states)
@@ -484,6 +486,7 @@ class GteForMaskedLM(GtePreTrainedModel):
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | MaskedLMOutput:
+        # Unlike JinaEmbeddingsV3ForMaskedLM, the backbone is bound as `self.gte`, which modular cannot rename.
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,

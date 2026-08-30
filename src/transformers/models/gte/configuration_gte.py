@@ -25,7 +25,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="Alibaba-NLP/gte-multilingual-base")
+@auto_docstring(checkpoint="harshaljanjani/gte-multilingual-base-hf")
 @strict
 class GteConfig(PreTrainedConfig):
     r"""
@@ -52,18 +52,17 @@ class GteConfig(PreTrainedConfig):
     num_attention_heads: int = 12
     intermediate_size: int = 3072
     hidden_act: str = "gelu"
-    hidden_dropout_prob: float = 0.1
-    attention_probs_dropout_prob: float = 0.0
+    hidden_dropout_prob: float | int = 0.1
+    attention_probs_dropout_prob: float | int = 0.0
     max_position_embeddings: int = 8192
     type_vocab_size: int = 1
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-12
-    pad_token_id: int = 1
-    classifier_dropout: float | None = None
+    pad_token_id: int | None = 1
+    classifier_dropout: float | int | None = None
     bos_token_id: int | None = None
     eos_token_id: int | list[int] | None = None
     tie_word_embeddings: bool = True
-    default_theta = 10000.0
     rope_parameters: RopeParameters | dict | None = None
 
     def convert_rope_params_to_dict(self, **kwargs):

@@ -44,7 +44,7 @@ from ..jina_embeddings_v3.modeling_jina_embeddings_v3 import (
 from ..llama.modeling_llama import LlamaRotaryEmbedding
 
 
-@auto_docstring(checkpoint="Alibaba-NLP/gte-multilingual-base")
+@auto_docstring(checkpoint="harshaljanjani/gte-multilingual-base-hf")
 @strict
 class GteConfig(BertConfig):
     r"""
@@ -64,21 +64,11 @@ class GteConfig(BertConfig):
     ```"""
 
     model_type = "gte"
-    default_theta = 10000.0
 
     vocab_size: int = 250048
-    hidden_size: int = 768
-    num_hidden_layers: int = 12
-    num_attention_heads: int = 12
-    intermediate_size: int = 3072
-    hidden_act: str = "gelu"
-    hidden_dropout_prob: float = 0.1
-    attention_probs_dropout_prob: float = 0.0
-    initializer_range: float = 0.02
-    layer_norm_eps: float = 1e-12
-    classifier_dropout: float | None = None
+    attention_probs_dropout_prob: float | int = 0.0
     type_vocab_size: int = 1
-    pad_token_id: int = 1
+    pad_token_id: int | None = 1
     max_position_embeddings: int = 8192
     rope_parameters: RopeParameters | dict | None = None
     is_decoder = AttributeError()
@@ -120,6 +110,7 @@ class GteEmbeddings(JinaEmbeddingsV3Embeddings):
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
     ) -> torch.Tensor:
+        # Unlike JinaEmbeddingsV3Embeddings, token types default to zeros and are skipped when type_vocab_size is 0.
         embeddings = inputs_embeds
         if inputs_embeds is None:
             embeddings = self.word_embeddings(input_ids)
@@ -148,7 +139,8 @@ class GteMLP(GemmaMLP):
         self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=True)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # Unlike GemmaMLP, `down_proj` carries a bias and the gated activation is dropped out.
         hidden_states = self.act_fn(self.gate_proj(x)) * self.up_proj(x)
         hidden_states = self.dropout(hidden_states)
         down_proj = self.down_proj(hidden_states)
@@ -223,6 +215,7 @@ class GteForMaskedLM(JinaEmbeddingsV3ForMaskedLM):
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | MaskedLMOutput:
+        # Unlike JinaEmbeddingsV3ForMaskedLM, the backbone is bound as `self.gte`, which modular cannot rename.
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,

@@ -14,7 +14,14 @@
 
 import unittest
 
-from transformers import AutoModel, AutoModelForSequenceClassification, AutoTokenizer, GteConfig, is_torch_available
+from transformers import (
+    AutoModel,
+    AutoModelForMaskedLM,
+    AutoModelForSequenceClassification,
+    AutoTokenizer,
+    GteConfig,
+    is_torch_available,
+)
 from transformers.testing_utils import Expectations, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
@@ -258,6 +265,14 @@ class GteModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
 
+    def test_ntk_rope_scaling_is_translated_to_linear(self):
+        config = GteConfig(
+            hidden_size=64, num_attention_heads=4, rope_theta=20000, rope_scaling={"type": "ntk", "factor": 8.0}
+        )
+        self.assertEqual(config.rope_parameters["rope_type"], "linear")
+        self.assertEqual(config.rope_parameters["rope_theta"], 160000.0)
+        self.assertAlmostEqual(config.rope_parameters["factor"], 8.0 ** (2 / 16))
+
 
 @require_torch
 class GteModelIntegrationTest(unittest.TestCase):
@@ -327,10 +342,10 @@ class GteModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_no_head_snowflake_arctic_embed(self):
-        model = AutoModel.from_pretrained("harshaljanjani/snowflake-arctic-embed-m-v2.0-hf", dtype=torch.float32).to(
+        model = AutoModel.from_pretrained("Snowflake/snowflake-arctic-embed-m-v2.0", dtype=torch.float32).to(
             torch_device
         )
-        tokenizer = AutoTokenizer.from_pretrained("harshaljanjani/snowflake-arctic-embed-m-v2.0-hf")
+        tokenizer = AutoTokenizer.from_pretrained("Snowflake/snowflake-arctic-embed-m-v2.0")
 
         inputs = tokenizer(self.sentences, return_tensors="pt", padding=True, truncation=True).to(torch_device)
 
@@ -370,12 +385,36 @@ class GteModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((2, 1))
         self.assertEqual(output.shape, expected_shape)
 
+        expected_slice = Expectations({(None, None): torch.tensor([[0.2428], [0.5710]])}).get_expectation()
+
+        torch.testing.assert_close(output.cpu().detach(), expected_slice, rtol=1e-3, atol=1e-3)
+
+    @slow
+    def test_inference_masked_lm(self):
+        model = AutoModelForMaskedLM.from_pretrained(
+            "harshaljanjani/gte-multilingual-mlm-base-hf", dtype=torch.float32
+        ).to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained("harshaljanjani/gte-multilingual-mlm-base-hf")
+
+        inputs = tokenizer(self.sentences, return_tensors="pt", padding=True, truncation=True).to(torch_device)
+
+        with torch.no_grad():
+            output = model(**inputs).logits
+
+        expected_shape = torch.Size((2, 15, 250048))
+        self.assertEqual(output.shape, expected_shape)
+
         # fmt: off
         expected_slice = Expectations(
             {
-                (None, None): torch.tensor([[0.2428], [0.5710]]),
+                (None, None): torch.tensor(
+                    [
+                        [[-1.9263,  5.8634,  3.9742], [-1.2569,  9.1684,  6.1088], [-1.1027,  6.3202,  8.6400]],
+                        [[-2.3521,  4.1811,  9.3579], [-2.2531, -0.8155,  5.1775], [-2.1518,  4.4150,  7.3230]],
+                    ]
+                ),
             }
         ).get_expectation()
         # fmt: on
 
-        torch.testing.assert_close(output.cpu().detach(), expected_slice, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(output[:, 1:4, 1:4].cpu().detach(), expected_slice, rtol=1e-3, atol=1e-3)
