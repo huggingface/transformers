@@ -821,9 +821,7 @@ class Qwen3TTSTalkerCodePredictorModelForConditionalGeneration(Qwen3TTSPreTraine
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, (config.num_code_groups - 1) * config.vocab_size, bias=False)
 
-        # CODEPATH: the 1.7B checkpoints give the code predictor a narrower hidden size than the talker and
-        # carry `small_to_mtp_projection` weights to bridge the two; on the 0.6B checkpoints the two sizes
-        # match and no projection was trained.
+        # CODEPATH: the 1.7B checkpoints carry this projection; on the 0.6B ones the two sizes already match
         if config.hidden_size != talker_config.hidden_size:
             self.small_to_mtp_projection = nn.Linear(talker_config.hidden_size, config.hidden_size, bias=True)
         else:
@@ -933,9 +931,7 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
         )
         self.rope_deltas = None
 
-        # CODEPATH: the base checkpoints carry a speaker encoder and clone a voice from a reference clip; the
-        # CustomVoice and VoiceDesign checkpoints ship no such weights and take their voice from a preset or a
-        # description instead.
+        # CODEPATH: base checkpoints only; CustomVoice and VoiceDesign ship no speaker encoder
         if config.speaker_encoder_config is not None:
             self.speaker_encoder = Qwen3TTSSpeakerEncoder(config.speaker_encoder_config)
         else:
@@ -957,8 +953,7 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
                 if "dialect" not in language_id:
                     self.supported_languages.append(language_id)
 
-        # CODEPATH: as above, only the base checkpoints carry the speaker encoder that defines this rate; on the
-        # others no reference clip is ever resampled, so the fallback is never read.
+        # CODEPATH: base checkpoints only; the others never resample a reference clip
         self.speaker_encoder_sample_rate = (
             config.speaker_encoder_config.sample_rate if config.speaker_encoder_config is not None else 24000
         )
@@ -1017,12 +1012,8 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
         attention_mask: torch.Tensor,
         past_key_values: Cache | None = None,
     ) -> torch.Tensor:
-        """
-        Build the temporal, height and width position ids the talker's mRoPE expects.
-
-        The offset between a padded batch's positions and its cache length is recomputed on the first step and
-        cached on the module, as the other mrope models do, so later steps only shift the arange by it.
-        """
+        """Position ids for the talker's mRoPE. The padding offset is computed once and cached on the module,
+        so later decoding steps only shift an arange by it."""
         past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
         if past_key_values_length == 0 or self.rope_deltas is None:
             delta0 = (1 - attention_mask).sum(dim=-1).unsqueeze(1)
