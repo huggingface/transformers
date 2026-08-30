@@ -12,6 +12,7 @@ from transformers.utils.import_utils import (
     clear_import_cache,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
+    is_gguf_available,
 )
 
 
@@ -57,6 +58,36 @@ def test_is_package_available_edge_cases():
             patch("transformers.utils.import_utils.importlib.import_module", return_value=fake_module),
         ):
             assert _is_package_available(pkg_name, return_version=True) == expected
+
+
+def test_is_package_available_missing_from_distribution_mapping():
+    """
+    `importlib.metadata.packages_distributions()` can miss an installed distribution whose dist-info carries no
+    usable top-level record. Observed with `gguf==0.19.0` in the quantization CI image: the `KeyError` sent
+    `_is_package_available` down the import fallback, `gguf` exposes no `__version__`, and the returned `"N/A"`
+    reached `packaging.version.parse` in `is_gguf_available`, raising `InvalidVersion` while merely *collecting*
+    `tests/quantization/ggml/test_ggml.py`. The import name is the right fallback for the distribution name.
+    """
+    pkg_name = "pkg_missing_from_mapping"
+    with (
+        patch("transformers.utils.import_utils.importlib.util.find_spec", return_value=object()),
+        patch("transformers.utils.import_utils.PACKAGE_DISTRIBUTION_MAPPING", {}),
+        patch("transformers.utils.import_utils.importlib.metadata.version", return_value="0.19.0") as version_mock,
+    ):
+        assert _is_package_available(pkg_name, return_version=True) == (True, "0.19.0")
+    version_mock.assert_called_once_with(pkg_name)
+
+    # The symptom, end to end: callers parse the version, so an unparseable sentinel is a hard error.
+    is_gguf_available.cache_clear()
+    try:
+        with (
+            patch("transformers.utils.import_utils.importlib.util.find_spec", return_value=object()),
+            patch("transformers.utils.import_utils.PACKAGE_DISTRIBUTION_MAPPING", {}),
+            patch("transformers.utils.import_utils.importlib.metadata.version", return_value="0.19.0"),
+        ):
+            assert is_gguf_available() is True
+    finally:
+        is_gguf_available.cache_clear()
 
 
 @contextmanager
