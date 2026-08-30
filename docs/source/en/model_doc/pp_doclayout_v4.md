@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 ## Overview
 
 **PP-DocLayoutV4** is an end-to-end document layout analysis model that predicts, in a single forward pass, what each
-layout element is, the quadrilateral that encloses it, and the order in which the elements should be read.
+layout element is, the quadrilateral that encloses it, and the logits the reading order is decoded from.
 
 ## Model Architecture
 
@@ -45,21 +45,25 @@ their relative order votes.
 
 ## Usage
 
-Results returned by the image processor are already sorted by reading order. Each result carries `polygon_points` — a
-`(num_boxes, 4, 2)` tensor of the regressed corners in top-left, top-right, bottom-right, bottom-left order — plus
-`boxes`, the axis aligned rectangle enclosing each quad, and `order_seq`, the 0-based rank of each box.
+Results returned by [`~PPDocLayoutV4ImageProcessor.post_process_object_detection`] are already sorted by reading
+order. Each result carries `polygon_points` — a `(num_boxes, 4, 2)` tensor of the regressed corners in top-left,
+top-right, bottom-right, bottom-left order — plus `boxes`, the axis aligned rectangle enclosing each quad, and
+`order_seq`, the 0-based rank of each box. The [`AutoModel`] example below prints `order_seq` directly, the others
+print the 1-based position in the sorted list, which is `order_seq + 1` unless one query was kept under several
+labels.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
+[`Pipeline`] preserves the reading order in the order of the returned list, but flattens each detection to a score, a
+label and an integer bounding box. Use the [`AutoModel`] path below to get the quadrilaterals and `order_seq`.
+
 ```python
-import requests
-from PIL import Image
-
 from transformers import pipeline
+from transformers.image_utils import load_image
 
 
-image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/layout_demo.jpg", stream=True).raw)
+image = load_image("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/layout_demo.jpg")
 layout_detector = pipeline("object-detection", model="PaddlePaddle/PP-DocLayoutV4_safetensors")
 results = layout_detector(image)
 for idx, res in enumerate(results):
@@ -71,28 +75,26 @@ for idx, res in enumerate(results):
 <hfoption id="AutoModel">
 
 ```python
-import requests
-from PIL import Image
-
 from transformers import AutoImageProcessor, AutoModelForObjectDetection
+from transformers.image_utils import load_image
 
 
 model_path = "PaddlePaddle/PP-DocLayoutV4_safetensors"
 model = AutoModelForObjectDetection.from_pretrained(model_path, device_map="auto")
 image_processor = AutoImageProcessor.from_pretrained(model_path)
 
-image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/layout_demo.jpg", stream=True).raw)
+image = load_image("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/layout_demo.jpg")
 inputs = image_processor(images=image, return_tensors="pt").to(model.device)
 
 outputs = model(**inputs)
 results = image_processor.post_process_object_detection(outputs, target_sizes=[image.size[::-1]])
 for result in results:
-    for idx, (score, label_id, box, quad) in enumerate(
-        zip(result["scores"], result["labels"], result["boxes"], result["polygon_points"])
+    for score, label_id, box, quad, rank in zip(
+        result["scores"], result["labels"], result["boxes"], result["polygon_points"], result["order_seq"]
     ):
         box = [round(i, 2) for i in box.tolist()]
-        print(f"Order {idx + 1}: {model.config.id2label[label_id.item()]}, score: {score.item():.2f}, box: {box}")
-        print(f"           corners: {[[round(x, 2) for x in point] for point in quad.tolist()]}")
+        print(f"Order {rank.item()}: {model.config.id2label[label_id.item()]}, score: {score.item():.2f}, box: {box}")
+        print(f"         corners: {[[round(x, 2) for x in point] for point in quad.tolist()]}")
 ```
 
 </hfoption>
@@ -103,17 +105,15 @@ for result in results:
 Pass a list of images and one target size per image. The reading order is decoded per image.
 
 ```python
-import requests
-from PIL import Image
-
 from transformers import AutoImageProcessor, AutoModelForObjectDetection
+from transformers.image_utils import load_image
 
 
 model_path = "PaddlePaddle/PP-DocLayoutV4_safetensors"
 model = AutoModelForObjectDetection.from_pretrained(model_path, device_map="auto")
 image_processor = AutoImageProcessor.from_pretrained(model_path)
 
-image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/layout_demo.jpg", stream=True).raw)
+image = load_image("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/layout_demo.jpg")
 inputs = image_processor(images=[image, image], return_tensors="pt").to(model.device)
 
 outputs = model(**inputs)
@@ -149,18 +149,8 @@ policies on top, which Transformers deliberately leaves to the caller:
 | `skip_order_labels` (default: 11 labels) | Blanks the reading order of figures, tables, headers, footers, ... | not applied, every kept box gets a rank |
 | `layout_unclip_ratio`, `layout_merge_bboxes_mode` | Expands or merges boxes | not applied |
 
-With those policies disabled, the two implementations return the same detections, verified on five images. Running
-the PaddleX pipeline against `post_process_object_detection` end to end — each side with its own preprocessing —
-the same boxes are kept, labels and reading order agree exactly, scores agree to 6e-3 and quad corners to 0.31 px
-(0.14 px on the three images that are actual document scans). Feeding both sides the identical `cv2` preprocessed
-tensor isolates the model and brings that down to 1e-6 on scores, 5e-4 px on corners, and 1e-4 on the raw relative
-and successor order logits, so preprocessing accounts for nearly all of the end-to-end residual.
-
-Those order logits only agree that closely on the queries that pass the score threshold. The queries that do not are
-badly conditioned — perturbing the input by 1e-4 already moves their order logits by tens of units — so comparing the
-full `(num_queries, num_queries)` matrices measures the global pointer's conditioning rather than an implementation
-difference.
-
+With those policies disabled, PP-DocLayoutV4 in Transformers and the PaddleX layout analysis pipeline keep the same
+boxes and agree on labels and reading order.
 
 ## PPDocLayoutV4ForObjectDetection
 
