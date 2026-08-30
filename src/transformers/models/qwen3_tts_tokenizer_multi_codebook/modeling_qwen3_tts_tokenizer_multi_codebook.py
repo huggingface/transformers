@@ -22,7 +22,6 @@ import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from types import SimpleNamespace
-from typing import Optional
 
 import numpy as np
 import torch
@@ -33,7 +32,7 @@ from torch.nn import Parameter
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
+from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -42,6 +41,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedAudioTokenizerBase, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast
 from .configuration_qwen3_tts_tokenizer_multi_codebook import (
     Qwen3TTSTokenizerMultiCodebookCode2WavConfig,
@@ -139,8 +139,7 @@ class Qwen3TTSTokenizerMultiCodebookConvNeXtBlock(nn.Module):
 
 
 class Qwen3TTSTokenizerMultiCodebookRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
+    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Qwen3TTSTokenizerMultiCodebookConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
@@ -154,24 +153,19 @@ class Qwen3TTSTokenizerMultiCodebookRotaryEmbedding(nn.Module):
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
+    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
-        config: Qwen3TTSTokenizerMultiCodebookConfig | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
+        config: Qwen3TTSTokenizerMultiCodebookConfig, device=None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
             config ([`~transformers.PreTrainedConfig`]):
                 The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
         Returns:
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
@@ -180,12 +174,9 @@ class Qwen3TTSTokenizerMultiCodebookRotaryEmbedding(nn.Module):
         dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
 
         attention_factor = 1.0  # Unused in this type of RoPE
-
         # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
-        return inv_freq, attention_factor
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        return inv_freq.to(device), attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
@@ -247,7 +238,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-@use_kernel_func_from_hub("rotary_pos_emb")
+@use_kernel_forward_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -711,8 +702,8 @@ class Qwen3TTSTokenizerMultiCodebookEncoderOutput(ModelOutput):
     padding_cache: Qwen3TTSTokenizerMultiCodebookConv1dPaddingCache | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Qwen3TTSTokenizerMultiCodebookOutput(ModelOutput):
     r"""
     audio_values (`List[torch.FloatTensor]`):
@@ -763,9 +754,9 @@ class Qwen3TTSTokenizerMultiCodebookConv1d(nn.Module):
         # Effective kernel size with dilations.
         kernel_size = torch.tensor((kernel_size - 1) * dilation + 1, dtype=torch.int64)
 
-        self.register_buffer("stride", stride, persistent=False)
-        self.register_buffer("kernel_size", kernel_size, persistent=False)
-        self.register_buffer("padding_total", kernel_size - stride, persistent=False)
+        self.stride = nn.Buffer(stride, persistent=False)
+        self.kernel_size = nn.Buffer(kernel_size, persistent=False)
+        self.padding_total = nn.Buffer(kernel_size - stride, persistent=False)
 
         # Asymmetric padding required for odd strides
         self.padding_right = self.padding_total // 2
@@ -897,14 +888,8 @@ class Qwen3TTSTokenizerMultiCodebookPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-        elif isinstance(module, (nn.Conv1d, nn.ConvTranspose1d)):
+        super()._init_weights(module)
+        if isinstance(module, (nn.Conv1d, nn.ConvTranspose1d)):
             init.kaiming_normal_(module.weight)
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
@@ -923,17 +908,9 @@ class Qwen3TTSTokenizerMultiCodebookPreTrainedModel(PreTrainedModel):
             init.ones_(module.initialized)
             init.ones_(module.cluster_usage)
             init.zeros_(module.embed_sum)
-        elif isinstance(module, Qwen3TTSTokenizerMultiCodebookRotaryEmbedding):
-            rope_fn = (
-                ROPE_INIT_FUNCTIONS[module.rope_type]
-                if module.rope_type != "default"
-                else module.compute_default_rope_parameters
-            )
-            buffer_value, _ = rope_fn(module.config)
-            init.copy_(module.inv_freq, buffer_value)
-            init.copy_(module.original_inv_freq, buffer_value)
 
 
+@auto_docstring
 class Qwen3TTSTokenizerMultiCodebookCode2WavPreTrainedModel(Qwen3TTSTokenizerMultiCodebookPreTrainedModel):
     config_class = Qwen3TTSTokenizerMultiCodebookCode2WavConfig
     _no_split_modules = ["Qwen3TTSTokenizerMultiCodebookBlock"]
@@ -942,6 +919,7 @@ class Qwen3TTSTokenizerMultiCodebookCode2WavPreTrainedModel(Qwen3TTSTokenizerMul
 #  Transformer model (decoder side)
 
 
+@auto_docstring
 class Qwen3TTSTokenizerMultiCodebookDecoderTransformerModel(Qwen3TTSTokenizerMultiCodebookCode2WavPreTrainedModel):
     def __init__(self, config: Qwen3TTSTokenizerMultiCodebookCode2WavConfig):
         super().__init__(config)
@@ -1118,9 +1096,9 @@ class Qwen3TTSTokenizerMultiCodebookEuclideanCodebook(nn.Module):
 
         self.codebook_size = config.codebook_size
 
-        self.register_buffer("initialized", torch.tensor([True], dtype=torch.float32))
-        self.register_buffer("cluster_usage", torch.ones(config.codebook_size))
-        self.register_buffer("embed_sum", embed)
+        self.initialized = nn.Buffer(torch.tensor([True], dtype=torch.float32))
+        self.cluster_usage = nn.Buffer(torch.ones(config.codebook_size))
+        self.embed_sum = nn.Buffer(embed)
         self._embed = None
         self.epsilon = epsilon
 
@@ -1216,7 +1194,7 @@ class Qwen3TTSTokenizerMultiCodebookResidualVectorQuantizer(nn.Module):
 
     def decode(self, codes: torch.Tensor) -> torch.Tensor:
         """Decode the given codes of shape [B, K, T] to the quantized representation."""
-        quantized_out = torch.tensor(0.0, device=codes.device)
+        quantized_out = torch.full((), 0.0, device=codes.device)
         codes = codes.transpose(0, 1)
         for i, indices in enumerate(codes):
             layer = self.layers[i]
@@ -1340,6 +1318,7 @@ class Qwen3TTSTokenizerMultiCodebookDecoder(Qwen3TTSTokenizerMultiCodebookCode2W
         self.decoder = nn.ModuleList(decoder)
         self.post_init()
 
+    @auto_docstring
     def forward(self, codes, **kwargs):
         if codes.shape[1] != self.config.num_quantizers:
             raise ValueError(f"Expected {self.config.num_quantizers} layer of codes, got {codes.shape[1]}")

@@ -27,6 +27,7 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring
 @strict
 class Qwen3TTSSpeakerEncoderConfig(PreTrainedConfig):
     r"""
@@ -72,6 +73,7 @@ class Qwen3TTSSpeakerEncoderConfig(PreTrainedConfig):
     sample_rate: int = 24000
 
 
+@auto_docstring
 @strict
 class Qwen3TTSTalkerCodePredictorConfig(PreTrainedConfig):
     r"""
@@ -194,6 +196,7 @@ class Qwen3TTSTalkerCodePredictorConfig(PreTrainedConfig):
         self.num_code_groups = num_code_groups
 
 
+@auto_docstring
 @strict
 class Qwen3TTSTalkerConfig(PreTrainedConfig):
     r"""
