@@ -200,7 +200,6 @@ class Qwen3TTSTokenizerMultiCodebookAttention(Qwen3OmniMoeCode2WavAttention):
         super().__init__(config, layer_idx)
         self.num_heads = config.num_attention_heads
         self.num_key_value_heads = config.num_key_value_heads
-        self.rotary_emb = Qwen3TTSTokenizerMultiCodebookRotaryEmbedding(config=config)
 
 
 class Qwen3TTSTokenizerMultiCodebookRMSNorm(Qwen3OmniMoeCode2WavRMSNorm):
