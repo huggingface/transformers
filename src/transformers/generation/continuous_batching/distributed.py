@@ -87,7 +87,7 @@ class DistributedHelper:
         self.dp_size = self.world_size // self.tp_size
 
         # Accumulator to CPU integer comm
-        self._cpu_int_acc = torch.tensor([0, 0], dtype=torch.int64, device="cpu")
+        self._cpu_int_acc = torch.tensor([0, 0, 0], dtype=torch.int64, device="cpu")
 
     @staticmethod
     def check_device_mesh_for_cb(device_mesh: DeviceMesh | None) -> None:
@@ -110,9 +110,12 @@ class DistributedHelper:
         # Case: device mesh with no named dims => assumed TP mesh
         if device_mesh.mesh_dim_names is None:
             return device_mesh if device_mesh.size() > 1 else None
-        # Case: device mesh with named dims => extract the TP mesh
-        if "tp" in device_mesh.mesh_dim_names and device_mesh["tp"].size() > 1:
-            return device_mesh["tp"]
+        # Case: device mesh with named dims => extract the TP mesh. A model that is not the first
+        # one parallelized in this process gets a mesh named `tp_1`, `tp_2`, ... so that it does not
+        # share a mesh, and therefore a communicator, with the others.
+        name = next((n for n in device_mesh.mesh_dim_names if n == "tp" or n.startswith("tp_")), None)
+        if name is not None and device_mesh[name].size() > 1:
+            return device_mesh[name]
         return None
 
     def infer_if_tp_driver(self) -> bool:
@@ -130,15 +133,17 @@ class DistributedHelper:
             dist.broadcast(value, src=self.tp_root_global_rank, async_op=False, group=self.tp_group)
         return value
 
-    def tp_all_reduce_state(self, payload_size: int, stop_status: int) -> tuple[int, int]:
-        """Broadcasts two information: 1. the size of the payload held by the TP driver (all other rank broadcast 0) and
-        2. the requested stop status (all to all). These information are broadcasted through a MAX-reduce operation."""
+    def tp_all_reduce_state(self, payload_size: int, stop_status: int, wants_turn: int = 0) -> tuple[int, int, int]:
+        """Broadcasts three information: 1. the size of the payload held by the TP driver (all other rank broadcast 0),
+        2. the requested stop status (all to all) and 3. whether a thread outside the generation loop is asking for a
+        turn (all to all). These information are broadcasted through a MAX-reduce operation."""
         if self.tp_size > 1:
             self._cpu_int_acc[0] = payload_size
             self._cpu_int_acc[1] = stop_status
+            self._cpu_int_acc[2] = wants_turn
             dist.all_reduce(self._cpu_int_acc, op=dist.ReduceOp.MAX, async_op=False, group=self.cpu_comm_group)
-            payload_size, stop_status = self._cpu_int_acc.tolist()
-        return payload_size, stop_status
+            payload_size, stop_status, wants_turn = self._cpu_int_acc.tolist()
+        return payload_size, stop_status, wants_turn
 
     def tp_all_reduce_min(self, value: torch.Tensor, on_cpu: bool = False) -> torch.Tensor:
         """Inside each TP group, all-reduces a tensor with the MIN op. No-op when TP is off. If the tensor is on CPU,
