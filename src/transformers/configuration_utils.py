@@ -73,6 +73,7 @@ ALLOWED_ATTN_LAYER_TYPES = (
     "hybrid",  # layers that combine attention + mamba/linear-attention-shaped states (zamba2, falcon_h1, zaya1)
     "hybrid_sliding",  # layers that combine sliding attention + linear-attention-shaped states (zaya1)
     "deepseek_sparse_attention",  # for models with DSA indexer (GLM MoE DSA, DeepSeek V32)
+    "qwen_sparse_attention",  # QSA with block-compressed indexer keys (Qwen4-Exp)
     # Recurrent layers (mamba / mamba2 / GDN / minimax-lightning)
     "linear_attention",
 )
@@ -348,6 +349,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         if per_layer_config is not None:
             self.per_layer_config = per_layer_config
 
+        # TODO: to support models whose input embedding module is not named `embed_tokens` (e.g. GPT-NeoX's `embed_in`).
         if getattr(self, "tie_word_embeddings", False) and self.base_model_tp_plan is not None:
             self.base_model_tp_plan = {
                 **self.base_model_tp_plan,

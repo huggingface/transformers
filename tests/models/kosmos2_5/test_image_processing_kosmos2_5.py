@@ -22,7 +22,7 @@ from transformers.image_utils import load_image
 from transformers.testing_utils import require_torch, require_torch_accelerator, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
 from ...test_processing_common import url_to_local_path
 
 
@@ -38,7 +38,7 @@ if is_torchvision_available():
     from transformers import Kosmos2_5ImageProcessor
 
 
-class Kosmos2_5ImageProcessingTester:
+class Kosmos2_5ImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -74,17 +74,6 @@ class Kosmos2_5ImageProcessingTester:
         )
         raw_image = load_image(img_url).convert("RGB")
         return raw_image
-
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
 
 
 @require_torch

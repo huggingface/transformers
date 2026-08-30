@@ -694,6 +694,11 @@ class StaticIndexedLayer(StaticLayer):
             self.indexer_keys.zero_()
             self.indexer_cumulative_length.zero_()
 
+    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
+        super().reorder_cache(beam_idx)
+        if self.is_indexer_initialized and self.indexer_keys.numel() > 0:
+            self.indexer_keys = self.indexer_keys.index_select(0, beam_idx.to(self.indexer_keys.device))
+
 
 class QuantizedLayer(DynamicLayer):
     """
@@ -1229,6 +1234,7 @@ DYNAMIC_LAYER_TYPE_MAPPING = {
     "hybrid_sliding": LinearAttentionAndSlidingWindowAttentionLayer,
     # More exotic implementations
     "deepseek_sparse_attention": DynamicIndexedLayer,
+    "qwen_sparse_attention": DynamicIndexedLayer,
     # Note: we want `moe` and `mlp` layers to be LinearAttentionLayer, so that we can correctly grab sequence length etc from
     # attention layers. Since they will stay empty (they don't need any cache), we don't want them to collide for mask creation etc
     # TODO: maybe use a dummy layer in those cases, or a dictionary {idx: Layer} for self.layers, so that we can skipthe indices
@@ -1250,6 +1256,7 @@ STATIC_LAYER_TYPE_MAPPING = {
     "hybrid_sliding": LinearAttentionAndStaticSlidingWindowAttentionLayer,
     # More exotic implementations
     "deepseek_sparse_attention": StaticIndexedLayer,
+    "qwen_sparse_attention": StaticIndexedLayer,
     # Note: we want `moe` and `mlp` layers to be LinearAttentionLayer, so that we can correctly grab sequence length etc from
     # attention layers. Since they will stay empty (they don't need any cache), we don't want them to collide for mask creation etc
     # TODO: maybe use a dummy layer in those cases, or a dictionary {idx: Layer} for self.layers, so that we can skipthe indices
