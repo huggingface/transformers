@@ -34,12 +34,7 @@ logger = logging.get_logger(__name__)
 class Qwen3TTSProcessorKwargs(ProcessingKwargs, total=False):
     """Kwargs for Qwen3TTS processor."""
 
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "padding_side": "left",
-        }
-    }
+    _defaults = {}
 
 
 @auto_docstring
