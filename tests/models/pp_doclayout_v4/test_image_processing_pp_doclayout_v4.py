@@ -301,6 +301,25 @@ class PPDocLayoutV4ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCa
             self.assertGreaterEqual(pixel_values.min().item(), 0.0)
             self.assertLessEqual(pixel_values.max().item(), 1.0)
 
+    def test_resize_does_not_clip_float_images_outside_the_unit_interval(self):
+        """
+        A float image that is not in `[0, 1]` lives in the same `[0, 255]` range as an integer one, so clipping it
+        against 1 would saturate almost every pixel to white instead of only trimming the bicubic ringing.
+        """
+        image = torch.zeros(3, 64, 64, dtype=torch.float32)
+        image[:, :, 30:34] = 255.0
+
+        for image_processing_class in self.image_processing_classes.values():
+            image_processor = image_processing_class(**self.image_processor_dict)
+            no_rescale = image_processor(images=image, do_rescale=False, return_tensors="pt")["pixel_values"]
+            # Same pixel content as an integer tensor, which is bounded by 255 and rescaled to the unit interval.
+            rescaled = image_processor(images=image.to(torch.uint8), return_tensors="pt")["pixel_values"]
+
+            self.assertGreaterEqual(no_rescale.min().item(), 0.0)
+            self.assertLessEqual(no_rescale.max().item(), 255.0)
+            self.assertGreater(no_rescale.max().item(), 1.0)
+            torch.testing.assert_close(no_rescale / 255, rescaled, rtol=0, atol=1e-6)
+
     def test_post_process_requires_target_sizes(self):
         outputs = _dummy_outputs()
         for image_processing_class in self.image_processing_classes.values():

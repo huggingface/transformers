@@ -274,24 +274,24 @@ class PPDocLayoutV4ImageProcessor(PPDocLayoutV3ImageProcessor):
         # once. Resizing a `uint8` tensor with torchvision rounds a second time with slightly different weights, and
         # the two roundings compound to ~22/255 on high contrast edges -- enough to permute the predicted reading
         # order. Running the same resize in floating point instead keeps every pixel within one 8-bit step.
+        if do_resize:
+            # The bicubic overshoot has to be clipped, or the error grows back to ~0.2 instead of staying below
+            # 1/255. The reference preprocessing resizes `uint8` with `cv2.resize`, whose saturating cast bounds the
+            # ringing by the dtype maximum -- so the bound is the range the incoming pixels live in, not the range of
+            # this particular image, which would clip too early. `cv2.resize` does not saturate floating point input
+            # at all, so a float tensor is only bounded by 1 when it actually is the unit interval the
+            # `do_rescale=False` contract documents; anything else is treated as `[0, 255]` like an integer input.
+            is_unit_interval = all(image.is_floating_point() for image in images) and (
+                float(max(image.amax() for image in images)) <= 1.0
+            )
+            upper_bound = (1.0 if is_unit_interval else 255.0) * (rescale_factor if do_rescale else 1.0)
+
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_rescale:
                 stacked_images = self.rescale(stacked_images.to(dtype=torch.float32), rescale_factor)
             if do_resize:
-                # `cv2.resize` saturates to the input range, so the bicubic overshoot has to be clipped the same
-                # way. Without this the error grows back to ~0.2 instead of staying below 1/255. The bound is the
-                # range the incoming pixels live in, not the range of this particular image: `cv2.resize` lets the
-                # ringing run up to the dtype maximum, so clipping at the observed maximum would clip too early.
-                # With `do_rescale=False` the documented contract is that the caller already passes floats in
-                # `[0, 1]`, while integer inputs are still `[0, 255]`.
-                if do_rescale:
-                    upper_bound = 255 * rescale_factor
-                elif stacked_images.is_floating_point():
-                    upper_bound = 1.0
-                else:
-                    upper_bound = 255
                 stacked_images = self.resize(image=stacked_images, size=size, resample=resample, antialias=False)
                 stacked_images = stacked_images.clamp(0, upper_bound)
             resized_images_grouped[shape] = stacked_images
