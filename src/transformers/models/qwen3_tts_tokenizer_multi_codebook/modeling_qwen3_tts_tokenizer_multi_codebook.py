@@ -935,13 +935,7 @@ class Qwen3TTSTokenizerMultiCodebookDecoderTransformerModel(Qwen3TTSTokenizerMul
         self.output_proj = nn.Linear(config.hidden_size, config.latent_dim)
         self.post_init()
 
-    @auto_docstring(
-        custom_args="""
-        cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-            Indices depicting the position of the input sequence tokens in the sequence. Used to update the cache
-            in the correct position and to infer the complete sequence length.
-        """
-    )
+    @auto_docstring
     def forward(
         self,
         attention_mask=None,
@@ -949,7 +943,6 @@ class Qwen3TTSTokenizerMultiCodebookDecoderTransformerModel(Qwen3TTSTokenizerMul
         past_key_values=None,
         inputs_embeds=None,
         use_cache=None,
-        cache_position=None,
         **kwargs,
     ) -> BaseModelOutputWithPast:
         if inputs_embeds is not None:
@@ -958,14 +951,10 @@ class Qwen3TTSTokenizerMultiCodebookDecoderTransformerModel(Qwen3TTSTokenizerMul
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
-
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         if not isinstance(causal_mask_mapping := attention_mask, dict):
             mask_kwargs = {
@@ -990,7 +979,6 @@ class Qwen3TTSTokenizerMultiCodebookDecoderTransformerModel(Qwen3TTSTokenizerMul
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                cache_position=cache_position,
                 **kwargs,
             )
 
