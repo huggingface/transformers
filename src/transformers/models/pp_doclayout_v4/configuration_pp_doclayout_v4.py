@@ -26,6 +26,10 @@ from ...utils import auto_docstring
 from ..auto import AutoConfig
 
 
+# `[center_x, center_y]` plus four `(dx, dy)` corner offsets.
+QUAD_NUM_COORDS = 10
+
+
 @auto_docstring(checkpoint="PaddlePaddle/PP-DocLayoutV4_safetensors")
 @strict
 class PPDocLayoutV4Config(PreTrainedConfig):
@@ -86,7 +90,7 @@ class PPDocLayoutV4Config(PreTrainedConfig):
     num_coords (`int`, *optional*, defaults to 10):
         Size of the box parameterization predicted by the bbox heads. PP-DocLayoutV4 regresses a four point
         quadrilateral encoded as `[center_x, center_y, dx1, dy1, dx2, dy2, dx3, dy3, dx4, dy4]` in sigmoid space,
-        where the corner offsets are shifted by `+0.5`. Set to `4` to fall back to plain `(cx, cy, w, h)` boxes.
+        where the corner offsets are shifted by `+0.5`. Only `10` is supported.
     global_pointer_head_size (`int`, *optional*, defaults to 64):
         The size of the global pointer head.
     gp_dropout_value (`float`, *optional*, defaults to 0.1):
@@ -182,6 +186,11 @@ class PPDocLayoutV4Config(PreTrainedConfig):
     s2r_learnable_b: bool = False
 
     def __post_init__(self, **kwargs):
+        # The anchor generator, the deformable attention reference points and the corner decode are all written
+        # against the quad parameterization, so anything else fails with a shape error deep inside the forward.
+        if self.num_coords != QUAD_NUM_COORDS:
+            raise ValueError(f"PP-DocLayoutV4 only supports `num_coords={QUAD_NUM_COORDS}`, got {self.num_coords}.")
+
         self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=self.backbone_config,
             default_config_type="hgnet_v2",

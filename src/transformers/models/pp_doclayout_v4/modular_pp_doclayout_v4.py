@@ -55,6 +55,9 @@ from ..rt_detr.modeling_rt_detr import (
 
 logger = logging.get_logger(__name__)
 
+# `[center_x, center_y]` plus four `(dx, dy)` corner offsets.
+QUAD_NUM_COORDS = 10
+
 
 @auto_docstring(checkpoint="PaddlePaddle/PP-DocLayoutV4_safetensors")
 @strict
@@ -116,7 +119,7 @@ class PPDocLayoutV4Config(PreTrainedConfig):
     num_coords (`int`, *optional*, defaults to 10):
         Size of the box parameterization predicted by the bbox heads. PP-DocLayoutV4 regresses a four point
         quadrilateral encoded as `[center_x, center_y, dx1, dy1, dx2, dy2, dx3, dy3, dx4, dy4]` in sigmoid space,
-        where the corner offsets are shifted by `+0.5`. Set to `4` to fall back to plain `(cx, cy, w, h)` boxes.
+        where the corner offsets are shifted by `+0.5`. Only `10` is supported.
     global_pointer_head_size (`int`, *optional*, defaults to 64):
         The size of the global pointer head.
     gp_dropout_value (`float`, *optional*, defaults to 0.1):
@@ -212,6 +215,11 @@ class PPDocLayoutV4Config(PreTrainedConfig):
     s2r_learnable_b: bool = False
 
     def __post_init__(self, **kwargs):
+        # The anchor generator, the deformable attention reference points and the corner decode are all written
+        # against the quad parameterization, so anything else fails with a shape error deep inside the forward.
+        if self.num_coords != QUAD_NUM_COORDS:
+            raise ValueError(f"PP-DocLayoutV4 only supports `num_coords={QUAD_NUM_COORDS}`, got {self.num_coords}.")
+
         self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=self.backbone_config,
             default_config_type="hgnet_v2",
@@ -334,21 +342,17 @@ class PPDocLayoutV4ImageProcessor(PPDocLayoutV3ImageProcessor):
 
         Args:
             pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, config.num_coords)`):
-                With `config.num_coords=10`, boxes as `[center_x, center_y, dx1, dy1, ..., dx4, dy4]` in sigmoid
-                space, with the corner offsets shifted by `+0.5`. With `config.num_coords=4`, plain
-                `(center_x, center_y, width, height)` boxes, whose corners are the axis aligned rectangle.
+                Boxes as `[center_x, center_y, dx1, dy1, ..., dx4, dy4]` in sigmoid space, with the corner offsets
+                shifted by `+0.5`.
 
         Returns:
             `torch.FloatTensor` of shape `(batch_size, num_queries, 4, 2)`: The four corners in top-left, top-right,
             bottom-right, bottom-left order, normalized to `[0, 1]`.
         """
         num_coords = pred_boxes.shape[-1]
+        if num_coords != QUAD_NUM_COORDS:
+            raise ValueError(f"Unsupported num_coords: {num_coords}. PP-DocLayoutV4 only supports quads (10).")
         centers = pred_boxes[..., :2].unsqueeze(-2)
-        if num_coords == 4:
-            corner_signs = pred_boxes.new_tensor([[-1.0, -1.0], [1.0, -1.0], [1.0, 1.0], [-1.0, 1.0]])
-            return centers + pred_boxes[..., 2:].unsqueeze(-2) / 2 * corner_signs
-        if num_coords != 10:
-            raise ValueError(f"Unsupported num_coords: {num_coords}. PP-DocLayoutV4 supports 10 (quad) or 4 (rect).")
         offsets = pred_boxes[..., 2:].reshape(*pred_boxes.shape[:-1], 4, 2) - 0.5
         return centers + offsets
 
@@ -813,7 +817,6 @@ class PPDocLayoutV4Decoder(PPDocLayoutV3Decoder):
         super().__init__(config)
 
         self.num_queries = config.num_queries
-        self.num_coords = config.num_coords
         self.query_pos_head = PPDocLayoutV4MLPPredictionHead(
             config.num_coords, 2 * config.d_model, config.d_model, num_layers=2
         )
@@ -890,10 +893,7 @@ class PPDocLayoutV4Decoder(PPDocLayoutV3Decoder):
 
         for idx, decoder_layer in enumerate(self.layers):
             # Deformable attention samples on the enclosing rect of the quad.
-            if self.num_coords > 4:
-                reference_points_input = quad_to_rect(reference_points).unsqueeze(2)
-            else:
-                reference_points_input = reference_points.unsqueeze(2)
+            reference_points_input = quad_to_rect(reference_points).unsqueeze(2)
 
             hidden_states = decoder_layer(
                 hidden_states,
@@ -1095,11 +1095,11 @@ class PPDocLayoutV4Model(PPDocLayoutV3Model):
     ) -> tuple[torch.FloatTensor] | PPDocLayoutV4ModelOutput:
         r"""
         labels (`list[Dict]` of len `(batch_size,)`, *optional*):
-            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
-            following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
-            respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
-            in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
+            Not supported: PP-DocLayoutV4 is inference only in Transformers.
         """
+        if labels is not None:
+            raise ValueError("PPDocLayoutV4Model does not support training")
+
         batch_size, num_channels, height, width = pixel_values.shape
         device = pixel_values.device
 
@@ -1136,7 +1136,11 @@ class PPDocLayoutV4Model(PPDocLayoutV3Model):
         level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
 
         # prepare denoising training
-        # CODEPATH: training only, no released checkpoint reaches this during inference.
+        # CODEPATH: unreachable, `labels` is rejected above. Kept as the scaffolding a future training
+        # implementation would build on. Two things have to change before it can run: the helper emits 4-coordinate
+        # `(cx, cy, w, h)` boxes, which do not concatenate with V4's `num_coords`-wide reference points, and it fills
+        # unused slots with the class index `num_classes`, which is out of range for the `num_labels`-wide denoising
+        # embedding below.
         if self.training and self.config.num_denoising > 0 and labels is not None:
             (
                 denoising_class,
