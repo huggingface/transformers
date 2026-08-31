@@ -282,24 +282,41 @@ class ReplicateKVHeadsParallel(ColwiseParallel):
 
     # Cached process groups, so that the collective `dist.new_group` calls happen once per mesh instead of once
     # per attention layer.
-    _replication_groups: dict[tuple[int, int], object] = {}
+    _replication_groups: dict[tuple, object] = {}
+
+    @staticmethod
+    def _tp_rows(mesh) -> tuple[tuple[int, ...], ...]:
+        """Global ranks of every TP group in `mesh`, one tuple per group.
+
+        KV heads are only replicated along the TP dimension, so a 2D ``(dp, tp)`` mesh has one row per DP rank.
+        The result doubles as a cache key: ``DeviceMesh`` objects are rebuilt on the fly (``mesh["tp"]`` returns a
+        new object every time), so their identity cannot be used.
+        """
+        mesh_tensor = mesh.mesh
+        if mesh.ndim == 1:
+            return (tuple(mesh_tensor.flatten().tolist()),)
+        tp_dim = list(mesh.mesh_dim_names).index("tp")
+        rows = mesh_tensor.movedim(tp_dim, -1).reshape(-1, mesh_tensor.shape[tp_dim])
+        return tuple(tuple(row) for row in rows.tolist())
 
     @classmethod
     def _get_replication_group(cls, mesh, n_rep: int):
         """Process group holding the `n_rep` ranks that own the same (replicated) KV head.
 
-        ``dist.new_group`` is collective, so every rank walks through all the groups in the same order and keeps
-        the one it belongs to.
+        ``dist.new_group`` is collective, so every rank walks through all the groups of every TP row in the same
+        order and keeps the one it belongs to.
         """
-        key = (id(mesh), n_rep)
+        tp_rows = cls._tp_rows(mesh)
+        key = (tp_rows, n_rep)
         if key not in cls._replication_groups:
-            global_ranks = mesh.mesh.flatten().tolist()
-            local_rank = mesh.get_local_rank()
+            global_rank = dist.get_rank()
             group = None
-            for start in range(0, len(global_ranks), n_rep):
-                candidate = dist.new_group(ranks=global_ranks[start : start + n_rep])
-                if start // n_rep == local_rank // n_rep:
-                    group = candidate
+            for tp_row in tp_rows:
+                for start in range(0, len(tp_row), n_rep):
+                    ranks = tp_row[start : start + n_rep]
+                    candidate = dist.new_group(ranks=list(ranks))
+                    if global_rank in ranks:
+                        group = candidate
             cls._replication_groups[key] = group
         return cls._replication_groups[key]
 

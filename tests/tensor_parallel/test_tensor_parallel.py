@@ -287,6 +287,18 @@ class TestTensorParallelLayer(TestCasePlus):
 
         self.assertEqual(len(module._backward_hooks), 0)
 
+    def test_kv_replication_groups_follow_the_tp_dimension(self):
+        mesh_1d = SimpleNamespace(mesh=torch.arange(4), ndim=1, mesh_dim_names=("tp",))
+        self.assertEqual(ReplicateKVHeadsParallel._tp_rows(mesh_1d), ((0, 1, 2, 3),))
+
+        # (dp=2, tp=4): KV heads are replicated within a TP group, so each DP rank gets its own groups
+        mesh_2d = SimpleNamespace(mesh=torch.arange(8).reshape(2, 4), ndim=2, mesh_dim_names=("dp", "tp"))
+        self.assertEqual(ReplicateKVHeadsParallel._tp_rows(mesh_2d), ((0, 1, 2, 3), (4, 5, 6, 7)))
+
+        # `tp` is not necessarily the last mesh dimension
+        mesh_tp_first = SimpleNamespace(mesh=torch.arange(8).reshape(4, 2), ndim=2, mesh_dim_names=("tp", "dp"))
+        self.assertEqual(ReplicateKVHeadsParallel._tp_rows(mesh_tp_first), ((0, 2, 4, 6), (1, 3, 5, 7)))
+
     def test_kv_replication_reads_the_replicated_head_from_the_checkpoint(self):
         world_size, num_key_value_heads, head_dim = 4, 2, 8
         n_rep = world_size // num_key_value_heads
