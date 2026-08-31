@@ -24,7 +24,7 @@ import torch
 
 from ...audio_utils import AudioInput, make_list_of_audio_chat_template
 from ...feature_extraction_utils import BatchFeature
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, prepare_prompt_input
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring
 from ...utils.import_utils import requires
@@ -38,6 +38,7 @@ class MossTranscribeDiarizeProcessorKwargs(ProcessingKwargs, total=False):
         },
         "common_kwargs": {
             "return_tensors": "pt",
+            "padding_side": "left",
         },
         "audio_kwargs": {
             "sampling_rate": 16000,
@@ -63,6 +64,11 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
         audio_encoder_stride: int = 2,
         time_marker_every_seconds: int = 2,
         enable_time_marker: bool = True,
+        default_transcription_prompt: str = (
+            "请将音频转写为文本，每一段需以起始时间戳和说话人编号"
+            "（[S01]、[S02]、[S03]…）开头，正文为对应的语音内容，"
+            "并在段末标注结束时间戳，以清晰标明该段语音范围。"
+        ),
     ):
         r"""
         audio_token (`str`, *optional*, defaults to `"<|audio_pad|>"`):
@@ -77,9 +83,13 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
             Insert numeric time-marker tokens into the audio span every N seconds.
         enable_time_marker (`bool`, *optional*, defaults to `True`):
             Whether to inject time-marker tokens into the audio placeholder span.
+        default_transcription_prompt (`str`, *optional*):
+            Default prompt used by [`~MossTranscribeDiarizeProcessor.apply_transcription_request`] when `prompt` is
+            `None`. Requests timestamped transcription with speaker labels such as `[S01]`.
         """
         self.audio_token = audio_token
         self.audio_token_id = tokenizer.convert_tokens_to_ids(audio_token)
+        self.default_transcription_prompt = default_transcription_prompt
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
         self.audio_tokens_per_second = audio_tokens_per_second
         self.audio_merge_size = int(audio_merge_size)
@@ -132,6 +142,14 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
         if text is not None and audio is not None and len(text) != len(audio):
             raise ValueError(f"Got {len(text)} text but {len(audio)} audios; they must match 1:1.")
 
+    def _get_audio_token_length(self, audio_lengths: "torch.Tensor") -> "torch.Tensor":
+        merge_factor = 4
+        for padding, kernel_size, stride in [(1, 3, 1), (1, 3, 2)]:
+            audio_lengths = (audio_lengths + 2 * padding - (kernel_size - 1) - 1) // stride + 1
+
+        num_tokens = (audio_lengths - merge_factor) // merge_factor + 1
+        return num_tokens
+
     def _process_audio(self, audio: AudioInput, **kwargs) -> tuple[dict[str, torch.Tensor], list[str]]:
         # Determine number of Whisper-window chunks per sample, and flatten
         window_size = int(self.feature_extractor.n_samples)
@@ -140,6 +158,8 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
         per_sample_windows: list[int] = []
         flat_chunks: list[np.ndarray] = []
         feature_lengths: list[int] = []
+        mel_frames = int(self.feature_extractor.nb_max_frames)
+        max_tokens_per_full_window = (mel_frames // (2 * self.audio_encoder_stride)) // self.audio_merge_size
         for audio_el in audio:
             waveform = np.asarray(audio_el, dtype=np.float32).squeeze()
             n_samples = int(waveform.shape[0])
@@ -152,7 +172,10 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
                 end = min((i + 1) * window_size, time_cap)
                 chunk = waveform[start:end]
                 flat_chunks.append(chunk)
-                feature_lengths.append((chunk.shape[0] - 1) // token_stride + 1)
+                token_count = (chunk.shape[0] - 1) // token_stride + 1
+                if chunk.shape[0] >= window_size:
+                    token_count = min(token_count, max_tokens_per_full_window)
+                feature_lengths.append(token_count)
 
         if flat_chunks:
             input_features = self.feature_extractor(flat_chunks, **kwargs)["input_features"]
@@ -210,7 +233,7 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
                 the chat template loader; NumPy arrays and PyTorch tensors are forwarded directly.
             prompt (`str` or `list[str]`, *optional*):
                 Custom prompt(s) to include in the user turn. A list must be the same length as the batch. When `None`,
-                only the audio is included in the user turn.
+                each sample uses the default diarization prompt from [`default_transcription_prompt`].
             **kwargs:
                 Additional keyword arguments forwarded to [`~MossTranscribeDiarizeProcessor.apply_chat_template`].
         """
@@ -221,7 +244,18 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
         if batch_size == 0:
             raise ValueError("`audio` must contain at least one sample.")
 
-        prompts = prepare_prompt_input(prompt, batch_size, input_name="prompt")
+        if prompt is None:
+            prompts = [self.default_transcription_prompt] * batch_size
+        elif isinstance(prompt, str):
+            prompts = [prompt] * batch_size
+        elif isinstance(prompt, (list, tuple)):
+            if len(prompt) != batch_size:
+                raise ValueError(
+                    f"Received {len(prompt)} prompt(s) for {batch_size} audio sample(s); counts must match."
+                )
+            prompts = [self.default_transcription_prompt if item is None else item for item in prompt]
+        else:
+            raise TypeError("`prompt` must be a string, a sequence of strings, or `None`.")
 
         conversations = []
         for prompt_text, audio_item in zip(prompts, audio_items):
@@ -231,8 +265,7 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
             else:
                 content.append({"type": "audio", "audio": audio_item})
 
-            if prompt_text is not None:
-                content.append({"type": "text", "text": prompt_text})
+            content.append({"type": "text", "text": prompt_text})
 
             conversations.append([{"role": "user", "content": content}])
 
