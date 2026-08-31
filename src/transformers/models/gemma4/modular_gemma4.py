@@ -2034,7 +2034,10 @@ class Gemma4Model(Gemma3nModel):
             inputs_embeds = self.get_input_embeddings()(llm_input_ids)
 
         if per_layer_inputs is None and self.config.get_text_config().hidden_size_per_layer_input:
-            pad_embedding = self.language_model.embed_tokens.weight[self.config.text_config.pad_token_id, :]
+            pad_token = torch.tensor(
+                [[self.config.text_config.pad_token_id]], device=inputs_embeds.device, dtype=torch.long
+            )
+            pad_embedding = self.language_model.embed_tokens(pad_token).squeeze(0).squeeze(0)
             multimodal_mask = multimodal_mask.to(inputs_embeds.device)
             llm_inputs_embeds = torch.where(multimodal_mask[..., None], pad_embedding.view(1, 1, -1), inputs_embeds)
             per_layer_inputs = self.language_model.get_per_layer_inputs(llm_input_ids, llm_inputs_embeds)
