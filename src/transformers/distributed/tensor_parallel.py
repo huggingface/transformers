@@ -972,22 +972,25 @@ def _maybe_enable_kv_head_replication(model, tp_plan: dict[str, str], tp_size: i
 def apply_tensor_parallelism(model, tp_mesh):
     """DTensor backend: shard params as placeholders and install TP forward hooks."""
 
-    _validate_tp_plan_styles(model.tp_plan)
-    if model.tp_plan is not None:
-        model.tp_plan = _maybe_enable_kv_head_replication(model, model.tp_plan, tp_mesh.size())
+    # `model.tp_plan` returns the expert-parallel plan when `enable_expert_parallel=True`, but its setter always
+    # writes `_tp_plan`. Patch the dict the getter handed us in place so we update whichever plan is active.
+    tp_plan = model.tp_plan
+    _validate_tp_plan_styles(tp_plan)
+    if tp_plan:
+        tp_plan.update(_maybe_enable_kv_head_replication(model, tp_plan, tp_mesh.size()))
 
     for name, module in model.named_modules():
         # Create DTensor placeholders so the loader knows which shard belongs to this rank.
         for p_name, _ in list(module.named_parameters(recurse=False)):
             full = f"{name}.{p_name}" if name else p_name
-            style_name = _get_parameter_tp_plan(parameter_name=full, tp_plan=model.tp_plan, is_weight=True)
+            style_name = _get_parameter_tp_plan(parameter_name=full, tp_plan=tp_plan, is_weight=True)
             if style_name is not None and style_name in ALL_PARALLEL_STYLES:
                 style = ALL_PARALLEL_STYLES[style_name]
                 style.validate_param(module, p_name, tp_mesh, parameter_name=full)
                 style.shard_param(module, p_name, tp_mesh)
 
         # Install the input/output transforms required by this module's TP style.
-        style_name = _get_parameter_tp_plan(parameter_name=name, tp_plan=model.tp_plan, is_weight=False)
+        style_name = _get_parameter_tp_plan(parameter_name=name, tp_plan=tp_plan, is_weight=False)
         if style_name is not None and style_name in ALL_PARALLEL_STYLES:
             if style_name == "mla_kv_a_proj":
                 # MLA needs to know the qk_rope_head_dim to split the projection output into KV and RoPE parts.

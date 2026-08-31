@@ -20,6 +20,7 @@ from torch.distributed.tensor.placement_types import Shard
 
 from transformers import AutoModelForCausalLM
 from transformers.distributed import tensor_parallel
+from transformers.distributed.mixin import DistributedMixin
 from transformers.distributed.sharding_utils import DtensorShardOperation
 from transformers.distributed.tensor_parallel import (
     ALL_PARALLEL_STYLES,
@@ -343,6 +344,23 @@ class TestTensorParallelLayer(TestCasePlus):
         self.assertEqual(model.layers[0].self_attn.num_key_value_groups, 1)
         self.assertEqual(model.vision.attn.num_key_value_groups, 8)
         self.assertEqual(model.layers[0].self_attn.k_proj._hf_num_key_value_heads, 2)
+
+    def test_kv_replication_updates_the_plan_that_is_actually_applied(self):
+        class Model(DistributedMixin, torch.nn.Module):
+            pass
+
+        model = Model()
+        model.config = SimpleNamespace(distributed_config=SimpleNamespace(enable_expert_parallel=True))
+        model._tp_plan = {}
+        model._ep_plan = {"layers.*.self_attn.k_proj": "colwise"}
+        replicated_plan = {"layers.*.self_attn.k_proj": "colwise_replicate_kv"}
+
+        with patch.object(tensor_parallel, "_maybe_enable_kv_head_replication", return_value=replicated_plan):
+            tensor_parallel.apply_tensor_parallelism(model, self.MockDeviceMesh(world_size=4, rank=0))
+
+        # Under expert parallelism `model.tp_plan` reads `_ep_plan`, so that is the plan that must be updated
+        self.assertEqual(model._ep_plan, replicated_plan)
+        self.assertEqual(model._tp_plan, {})
 
     def test_colwise_uneven_local_shapes(self):
         module = torch.nn.Module()
