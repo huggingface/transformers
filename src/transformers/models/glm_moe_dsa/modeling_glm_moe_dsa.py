@@ -198,8 +198,8 @@ class GlmMoeDsaIndexer(nn.Module):
         hidden_states: torch.Tensor,
         q_resid: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None,
-        position_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+        *,
         past_key_values: Cache | None = None,
     ) -> torch.Tensor:
         """
@@ -244,12 +244,10 @@ class GlmMoeDsaIndexer(nn.Module):
         index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
 
         # Causality needs to be taken into account when computing scores so padding tokens don't affect computation
-        if attention_mask is not None:
-            index_scores = index_scores + attention_mask
+        if attention_mask.dtype == torch.bool:
+            index_scores = index_scores.masked_fill(~attention_mask, float("-inf"))
         else:
-            key_positions = torch.arange(index_scores.shape[-1], device=index_scores.device)
-            causal = key_positions[None, None, :] > position_ids[:, :, None]  # [B, S, T]
-            index_scores = index_scores.masked_fill(causal, float("-inf"))
+            index_scores = index_scores + attention_mask
 
         topk = min(self.index_topk, index_scores.shape[-1])
         return index_scores.topk(topk, dim=-1).indices.to(torch.int32)  # [B, S, topk]
@@ -399,7 +397,7 @@ class GlmMoeDsaAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None,
+        attention_mask: torch.Tensor,
         past_key_values: Cache | None = None,
         position_ids: torch.Tensor | None = None,
         prev_topk_indices: torch.Tensor | None = None,
@@ -431,12 +429,11 @@ class GlmMoeDsaAttention(nn.Module):
 
         # DSA: select this layer's top-k tokens, or reuse the previous full layer's on `"shared"` layers.
         if self.indexer is not None:
-            indexer_mask = attention_mask[:, 0, :, :] if attention_mask is not None else None
             topk_indices = self.indexer(
                 hidden_states,
                 q_resid,
                 position_embeddings,
-                indexer_mask,
+                attention_mask[:, 0, :, :],
                 position_ids,
                 past_key_values=past_key_values,
             )  # [B, S, topk]
@@ -452,11 +449,11 @@ class GlmMoeDsaAttention(nn.Module):
                 .scatter(-1, topk_indices.long(), False)
                 .unsqueeze(1)
             )
-            if attention_mask is None:
-                key_positions = torch.arange(key_states.shape[2], device=hidden_states.device)
-                index_mask = index_mask | (key_positions[None, None, None, :] > position_ids[:, None, :, None])
-                attention_mask = hidden_states.new_zeros((batch_size, 1, seq_length, key_states.shape[2]))
-            attention_mask = attention_mask.masked_fill(index_mask, torch.finfo(hidden_states.dtype).min)
+
+            if attention_mask.dtype == torch.bool:
+                attention_mask = attention_mask & ~index_mask
+            else:
+                attention_mask = attention_mask.masked_fill(index_mask, torch.finfo(hidden_states.dtype).min)
         else:
             sparse_indices = topk_indices
 
@@ -733,16 +730,6 @@ class GlmMoeDsaModel(GlmMoeDsaPreTrainedModel):
                 "allow_is_causal_skip": False,  # Always force creation to account for causality in the indexer
             }
             causal_mask_mapping = {"deepseek_sparse_attention": create_causal_mask(**mask_kwargs)}
-
-        # We need a float mask (additive bias) for DSA indexer
-        if causal_mask_mapping["deepseek_sparse_attention"].dtype == torch.bool:
-            min_dtype = torch.finfo(inputs_embeds.dtype).min
-            # we need 0s where the tokens should be taken into account, and -inf otherwise
-            causal_mask_mapping["deepseek_sparse_attention"] = torch.where(
-                causal_mask_mapping["deepseek_sparse_attention"],
-                torch.full((), 0.0, device=inputs_embeds.device, dtype=inputs_embeds.dtype),
-                min_dtype,
-            )
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
