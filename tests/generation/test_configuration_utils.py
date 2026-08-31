@@ -22,7 +22,12 @@ import warnings
 from huggingface_hub import create_pull_request
 from parameterized import parameterized
 
-from transformers import AutoConfig, GenerationConfig, WatermarkingConfig, is_torch_available
+from transformers import (
+    AutoConfig,
+    GenerationConfig,
+    WatermarkingConfig,
+    is_torch_available,
+)
 from transformers import logging as transformers_logging
 
 
@@ -77,7 +82,9 @@ class GenerationConfigTest(unittest.TestCase):
         )
         with tempfile.TemporaryDirectory() as tmp_dir:
             config.save_pretrained(tmp_dir, config_name=config_name)
-            loaded_config = GenerationConfig.from_pretrained(tmp_dir, config_name=config_name)
+            loaded_config = GenerationConfig.from_pretrained(
+                tmp_dir, config_name=config_name
+            )
 
         # Checks parameters that were specified
         self.assertEqual(loaded_config.do_sample, True)
@@ -99,8 +106,13 @@ class GenerationConfigTest(unittest.TestCase):
         self.assertNotEqual(generation_config_from_model, default_generation_config)
 
         # One of those parameters is eos_token_id -- check if it matches
-        self.assertNotEqual(generation_config_from_model.eos_token_id, default_generation_config.eos_token_id)
-        self.assertEqual(generation_config_from_model.eos_token_id, model_config.eos_token_id)
+        self.assertNotEqual(
+            generation_config_from_model.eos_token_id,
+            default_generation_config.eos_token_id,
+        )
+        self.assertEqual(
+            generation_config_from_model.eos_token_id, model_config.eos_token_id
+        )
 
     def test_update(self):
         generation_config = GenerationConfig()
@@ -149,7 +161,9 @@ class GenerationConfigTest(unittest.TestCase):
         """
         Tests that the `validate` method is working as expected. Note that `validate` is called at initialization time
         """
-        logger = transformers_logging.get_logger("transformers.generation.configuration_utils")
+        logger = transformers_logging.get_logger(
+            "transformers.generation.configuration_utils"
+        )
 
         # A correct configuration will not throw any warning
         logger.warning_once.cache_clear()
@@ -167,14 +181,18 @@ class GenerationConfigTest(unittest.TestCase):
         # Explicitly setting a sampling flag alongside `do_sample=False` still warns: this is a user-level mistake.
         logger.warning_once.cache_clear()
         with CaptureLogger(logger) as captured_logs:
-            generation_config_bad_temperature = GenerationConfig(do_sample=False, temperature=0.5)  # store for later
+            generation_config_bad_temperature = GenerationConfig(
+                do_sample=False, temperature=0.5
+            )  # store for later
         self.assertNotEqual(len(captured_logs.out), 0)
 
         # But a value inherited from a model's default config (i.e. not in this update's kwargs) does NOT warn: in
         # the real world, `generate(do_sample=False)` on a model whose `generation_config.json` has `temperature=0.6`
         # would otherwise log a useless warning.
         logger.warning_once.cache_clear()
-        base_config = GenerationConfig(do_sample=True, temperature=0.6)  # mimics a model's default config
+        base_config = GenerationConfig(
+            do_sample=True, temperature=0.6
+        )  # mimics a model's default config
         with CaptureLogger(logger) as captured_logs:
             base_config.update(do_sample=False)
         self.assertEqual(len(captured_logs.out), 0)
@@ -182,7 +200,9 @@ class GenerationConfigTest(unittest.TestCase):
         # Inverse provenance case: `do_sample=False` inherited from a model's config (so not user-set this call), user only
         # sets a sampling flag. The conflict SHOULD produce noise because the user may think that it's non-greedy by default
         logger.warning_once.cache_clear()
-        greedy_hub_config = GenerationConfig(do_sample=False)  # mimics a model's default config forcing greedy
+        greedy_hub_config = GenerationConfig(
+            do_sample=False
+        )  # mimics a model's default config forcing greedy
         with CaptureLogger(logger) as captured_logs:
             greedy_hub_config.update(top_p=0.8)
         self.assertNotEqual(len(captured_logs.out), 0)
@@ -227,7 +247,9 @@ class GenerationConfigTest(unittest.TestCase):
                 GenerationConfig(do_sample=False, temperature=0.5)
         self.assertNotIn("0.5", captured_logs.out)
         self.assertTrue(len(captured_logs.out) < 150)  # short log
-        self.assertIn("Set `TRANSFORMERS_VERBOSITY=info` for more details", captured_logs.out)
+        self.assertIn(
+            "Set `TRANSFORMERS_VERBOSITY=info` for more details", captured_logs.out
+        )
 
         # INFO level: we share the full deets
         logger.warning_once.cache_clear()
@@ -237,7 +259,9 @@ class GenerationConfigTest(unittest.TestCase):
                 GenerationConfig(do_sample=False, temperature=0.5)
         self.assertIn("0.5", captured_logs.out)
         self.assertTrue(len(captured_logs.out) > 400)  # long log
-        self.assertNotIn("Set `TRANSFORMERS_VERBOSITY=info` for more details", captured_logs.out)
+        self.assertNotIn(
+            "Set `TRANSFORMERS_VERBOSITY=info` for more details", captured_logs.out
+        )
 
         # Finally, we can set `strict=True` to raise an exception on what would otherwise be a warning.
         generation_config = GenerationConfig()
@@ -258,6 +282,16 @@ class GenerationConfigTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 GenerationConfig(assistant_ensemble_weight=invalid).validate()
 
+    def test_validate_negative_bounds(self):
+        """`min_length`, `min_new_tokens` and `temperature` must be non-negative."""
+        GenerationConfig(min_length=0, min_new_tokens=0, temperature=0.0).validate()
+        with self.assertRaises(ValueError):
+            GenerationConfig(min_length=-1).validate()
+        with self.assertRaises(ValueError):
+            GenerationConfig(min_new_tokens=-1).validate()
+        with self.assertRaises(ValueError):
+            GenerationConfig(temperature=-0.5).validate()
+
     def test_assistant_ensemble_weight_default_and_round_trip(self):
         """Default is `None`; values round-trip through `to_dict`/`from_dict`."""
         self.assertIsNone(GenerationConfig().assistant_ensemble_weight)
@@ -266,7 +300,9 @@ class GenerationConfigTest(unittest.TestCase):
         self.assertEqual(config.assistant_ensemble_weight, 0.7)
         config_dict = config.to_dict()
         self.assertEqual(config_dict["assistant_ensemble_weight"], 0.7)
-        self.assertEqual(GenerationConfig.from_dict(config_dict).assistant_ensemble_weight, 0.7)
+        self.assertEqual(
+            GenerationConfig.from_dict(config_dict).assistant_ensemble_weight, 0.7
+        )
 
     def test_validate_sampling_flag_provenance(self):
         """
@@ -275,7 +311,9 @@ class GenerationConfigTest(unittest.TestCase):
         were explicitly provided by the caller in the same context, or none of the 2 were directly provided, or only
         the sampling flag is provided along do_sample=False already existing.
         """
-        logger = transformers_logging.get_logger("transformers.generation.configuration_utils")
+        logger = transformers_logging.get_logger(
+            "transformers.generation.configuration_utils"
+        )
 
         def _warn_count(fn):
             logger.warning_once.cache_clear()
@@ -287,13 +325,17 @@ class GenerationConfigTest(unittest.TestCase):
         #    (Emulates: model whose `generation_config.json` carries `do_sample=True, temperature=0.6`, user
         #    explicitly asks for greedy decoding.)
         def case_hub_temp_user_do_sample_only():
-            cfg = GenerationConfig(do_sample=True, temperature=0.6)  # stands in for the hub default
+            cfg = GenerationConfig(
+                do_sample=True, temperature=0.6
+            )  # stands in for the hub default
             cfg.update(do_sample=False)
 
         self.assertEqual(_warn_count(case_hub_temp_user_do_sample_only), 0)
 
         # 2. User explicitly sets BOTH `do_sample=False` and `top_p=0.8` in the same call -> WARN.
-        self.assertNotEqual(_warn_count(lambda: GenerationConfig(do_sample=False, top_p=0.8)), 0)
+        self.assertNotEqual(
+            _warn_count(lambda: GenerationConfig(do_sample=False, top_p=0.8)), 0
+        )
 
         # 3. User explicitly sets only `do_sample=False` (no sampling flag) -> NO warning, even though
         #    attribute defaults (like `top_k=50`) may be present.
@@ -317,13 +359,17 @@ class GenerationConfigTest(unittest.TestCase):
         # 6. Same idea for beam flags: user only asks for `num_beams=1`, hub default has `length_penalty=0.8`
         #    -> NO warning.
         def case_hub_length_penalty_user_num_beams_only():
-            cfg = GenerationConfig(num_beams=4, length_penalty=0.8)  # stands in for the hub default
+            cfg = GenerationConfig(
+                num_beams=4, length_penalty=0.8
+            )  # stands in for the hub default
             cfg.update(num_beams=1)
 
         self.assertEqual(_warn_count(case_hub_length_penalty_user_num_beams_only), 0)
 
         # 7. User sets BOTH `num_beams=1` and `length_penalty=0.8` explicitly -> WARN.
-        self.assertNotEqual(_warn_count(lambda: GenerationConfig(num_beams=1, length_penalty=0.8)), 0)
+        self.assertNotEqual(
+            _warn_count(lambda: GenerationConfig(num_beams=1, length_penalty=0.8)), 0
+        )
 
     def test_refuse_to_save(self):
         """Tests that we refuse to save a generation config that fails validation."""
@@ -335,7 +381,9 @@ class GenerationConfigTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             with self.assertRaises(ValueError) as exc:
                 config.save_pretrained(tmp_dir)
-            self.assertTrue("Fix these issues to save the configuration." in str(exc.exception))
+            self.assertTrue(
+                "Fix these issues to save the configuration." in str(exc.exception)
+            )
             self.assertTrue("`temperature` is set to `0.5`" in str(exc.exception))
             self.assertTrue(len(os.listdir(tmp_dir)) == 0)
 
@@ -346,7 +394,9 @@ class GenerationConfigTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             with self.assertRaises(ValueError) as exc:
                 config.save_pretrained(tmp_dir)
-            self.assertTrue("Fix these issues to save the configuration." in str(exc.exception))
+            self.assertTrue(
+                "Fix these issues to save the configuration." in str(exc.exception)
+            )
             self.assertTrue(
                 "Greedy methods (do_sample != True) without beam search do not support `num_return_sequences` different than 1"
                 in str(exc.exception)
@@ -360,7 +410,9 @@ class GenerationConfigTest(unittest.TestCase):
             with warnings.catch_warnings(record=True) as captured_warnings:
                 # Catch logs (up to WARNING level, the default level)
                 with LoggingLevel(logging.WARNING):
-                    logger = transformers_logging.get_logger("transformers.generation.configuration_utils")
+                    logger = transformers_logging.get_logger(
+                        "transformers.generation.configuration_utils"
+                    )
                     with CaptureLogger(logger) as captured_logs:
                         config.save_pretrained(tmp_dir)
             self.assertEqual(len(captured_warnings), 0)
@@ -380,10 +432,15 @@ class GenerationConfigTest(unittest.TestCase):
 
         # TODO joao, manuel: remove this in v4.62.0
         config = GenerationConfig(top_k=10, do_sample=False, penalty_alpha=0.6)
-        self.assertEqual(config.get_generation_mode(), GenerationMode.CONTRASTIVE_SEARCH)
+        self.assertEqual(
+            config.get_generation_mode(), GenerationMode.CONTRASTIVE_SEARCH
+        )
 
         config = GenerationConfig()
-        self.assertEqual(config.get_generation_mode(assistant_model="foo"), GenerationMode.ASSISTED_GENERATION)
+        self.assertEqual(
+            config.get_generation_mode(assistant_model="foo"),
+            GenerationMode.ASSISTED_GENERATION,
+        )
 
     def test_static_cache_without_cache_config(self):
         """Regression test for #35026 -- static cache should work without a cache config."""
@@ -405,14 +462,18 @@ class GenerationConfigSerializationTest(unittest.TestCase):
 
         expected_sequence_bias = {(45, 67): -0.6, (89,): 1.2}
         bias_logits_processor = SequenceBiasLogitsProcessor(new_config.sequence_bias)
-        self.assertDictEqual(bias_logits_processor.sequence_bias, expected_sequence_bias)
+        self.assertDictEqual(
+            bias_logits_processor.sequence_bias, expected_sequence_bias
+        )
 
     def test_serialize_generation_min_length_eos_token(self):
         """Tests that GenerationConfig is serialized and MinLengthLogitsProcessor is initialized with min_length and eos_token_id"""
         eos_token_id = 0
         min_length = 10
 
-        generation_config = GenerationConfig(min_length=min_length, eos_token_id=eos_token_id)
+        generation_config = GenerationConfig(
+            min_length=min_length, eos_token_id=eos_token_id
+        )
         with tempfile.TemporaryDirectory("test-generation-config") as tmp_dir:
             generation_config.save_pretrained(tmp_dir)
             new_config = GenerationConfig.from_pretrained(tmp_dir)
@@ -454,7 +515,9 @@ class GenerationConfigSerializationTest(unittest.TestCase):
             new_config = GenerationConfig.from_pretrained(tmp_dir)
         self.assertEqual(new_config.temperature, temperature)
 
-        temperature_logits_warper = TemperatureLogitsWarper(temperature=new_config.temperature)
+        temperature_logits_warper = TemperatureLogitsWarper(
+            temperature=new_config.temperature
+        )
         self.assertEqual(temperature_logits_warper.temperature, temperature)
 
     def test_serialize_generation_repetition_penalty(self):
@@ -467,13 +530,17 @@ class GenerationConfigSerializationTest(unittest.TestCase):
             new_config = GenerationConfig.from_pretrained(tmp_dir)
         self.assertEqual(new_config.repetition_penalty, penalty)
 
-        rep_penalty_proc = RepetitionPenaltyLogitsProcessor(penalty=new_config.repetition_penalty)
+        rep_penalty_proc = RepetitionPenaltyLogitsProcessor(
+            penalty=new_config.repetition_penalty
+        )
         self.assertEqual(rep_penalty_proc.penalty, penalty)
 
     def test_serialize_generation_encoder_repetition_penalty(self):
         """Tests that GenerationConfig is serialized and EncoderRepetitionPenaltyLogitsProcessor is initialized with penalty and input_ids"""
         penalty = 2.0
-        input_ids = torch.tensor([[0, 1], [5, 0]], device=torch_device, dtype=torch.long)
+        input_ids = torch.tensor(
+            [[0, 1], [5, 0]], device=torch_device, dtype=torch.long
+        )
 
         generation_config = GenerationConfig(encoder_repetition_penalty=penalty)
         with tempfile.TemporaryDirectory("test-generation-config") as tmp_dir:
@@ -569,28 +636,37 @@ class GenerationConfigSerializationTest(unittest.TestCase):
         """Tests that GenerationConfig is serialized and NoRepeatNGramLogitsProcessor is initialized with ngram_size"""
         ngram_size = 2
 
-        generation_config = GenerationConfig(no_repeat_ngram_size=ngram_size, do_sample=True)
+        generation_config = GenerationConfig(
+            no_repeat_ngram_size=ngram_size, do_sample=True
+        )
         with tempfile.TemporaryDirectory("test-generation-config") as tmp_dir:
             generation_config.save_pretrained(tmp_dir)
             new_config = GenerationConfig.from_pretrained(tmp_dir)
         self.assertEqual(new_config.no_repeat_ngram_size, ngram_size)
 
-        no_repeat_ngram_proc = NoRepeatNGramLogitsProcessor(ngram_size=new_config.no_repeat_ngram_size)
+        no_repeat_ngram_proc = NoRepeatNGramLogitsProcessor(
+            ngram_size=new_config.no_repeat_ngram_size
+        )
         self.assertEqual(no_repeat_ngram_proc.ngram_size, ngram_size)
 
     def test_serialize_generation_encoder_ngram_size(self):
         """Tests that GenerationConfig is serialized and EncoderNoRepeatNGramLogitsProcessor is initialized with ngram_size"""
         ngram_size = 2
-        input_ids = torch.tensor([[0, 1], [5, 0]], device=torch_device, dtype=torch.long)
+        input_ids = torch.tensor(
+            [[0, 1], [5, 0]], device=torch_device, dtype=torch.long
+        )
 
-        generation_config = GenerationConfig(encoder_no_repeat_ngram_size=ngram_size, do_sample=True)
+        generation_config = GenerationConfig(
+            encoder_no_repeat_ngram_size=ngram_size, do_sample=True
+        )
         with tempfile.TemporaryDirectory("test-generation-config") as tmp_dir:
             generation_config.save_pretrained(tmp_dir)
             new_config = GenerationConfig.from_pretrained(tmp_dir)
         self.assertEqual(new_config.encoder_no_repeat_ngram_size, ngram_size)
 
         encoder_no_repeat_ngram_proc = EncoderNoRepeatNGramLogitsProcessor(
-            encoder_ngram_size=new_config.encoder_no_repeat_ngram_size, encoder_input_ids=input_ids
+            encoder_ngram_size=new_config.encoder_no_repeat_ngram_size,
+            encoder_input_ids=input_ids,
         )
         self.assertEqual(encoder_no_repeat_ngram_proc.ngram_size, ngram_size)
 
@@ -604,7 +680,9 @@ class GenerationConfigSerializationTest(unittest.TestCase):
             new_config = GenerationConfig.from_pretrained(tmp_dir)
         self.assertSequenceEqual(new_config.bad_words_ids, bad_word_tokens)
 
-        no_bad_words_dist_proc = NoBadWordsLogitsProcessor(bad_words_ids=new_config.bad_words_ids)
+        no_bad_words_dist_proc = NoBadWordsLogitsProcessor(
+            bad_words_ids=new_config.bad_words_ids
+        )
         self.assertSequenceEqual(no_bad_words_dist_proc.bad_word_ids, bad_word_tokens)
 
     def test_serialize_generation_num_beams(self):
@@ -635,7 +713,9 @@ class GenerationConfigSerializationTest(unittest.TestCase):
             new_config = GenerationConfig.from_pretrained(tmp_dir)
         self.assertEqual(new_config.bos_token_id, bos_token_id)
 
-        logits_processor = ForcedBOSTokenLogitsProcessor(bos_token_id=new_config.bos_token_id)
+        logits_processor = ForcedBOSTokenLogitsProcessor(
+            bos_token_id=new_config.bos_token_id
+        )
         self.assertEqual(logits_processor.bos_token_id, bos_token_id)
 
     def test_serialize_generation_eos_token_id(self):
@@ -650,7 +730,9 @@ class GenerationConfigSerializationTest(unittest.TestCase):
         self.assertEqual(new_config.eos_token_id, eos_token_id)
 
         logits_processor = ForcedEOSTokenLogitsProcessor(
-            max_length=max_length, eos_token_id=new_config.eos_token_id, device=torch_device
+            max_length=max_length,
+            eos_token_id=new_config.eos_token_id,
+            device=torch_device,
         )
         self.assertEqual(logits_processor.eos_token_id, eos_token_id)
 
@@ -662,11 +744,15 @@ class GenerationConfigSerializationTest(unittest.TestCase):
         input_ids_seq_length = 10
         exponential_decay_length_penalty = (penalty_start, penalty_factor)
 
-        generation_config = GenerationConfig(exponential_decay_length_penalty=exponential_decay_length_penalty)
+        generation_config = GenerationConfig(
+            exponential_decay_length_penalty=exponential_decay_length_penalty
+        )
         with tempfile.TemporaryDirectory("test-generation-config") as tmp_dir:
             generation_config.save_pretrained(tmp_dir)
             new_config = GenerationConfig.from_pretrained(tmp_dir)
-        self.assertEqual(new_config.exponential_decay_length_penalty, [penalty_start, penalty_factor])
+        self.assertEqual(
+            new_config.exponential_decay_length_penalty, [penalty_start, penalty_factor]
+        )
 
         exponential_decay_processor = ExponentialDecayLengthPenalty(
             exponential_decay_length_penalty=new_config.exponential_decay_length_penalty,
@@ -674,25 +760,36 @@ class GenerationConfigSerializationTest(unittest.TestCase):
             input_ids_seq_length=input_ids_seq_length,
         )
         self.assertEqual(
-            exponential_decay_processor.regulation_start, exponential_decay_length_penalty[0] + input_ids_seq_length
+            exponential_decay_processor.regulation_start,
+            exponential_decay_length_penalty[0] + input_ids_seq_length,
         )
-        self.assertEqual(exponential_decay_processor.regulation_factor, exponential_decay_length_penalty[1])
+        self.assertEqual(
+            exponential_decay_processor.regulation_factor,
+            exponential_decay_length_penalty[1],
+        )
 
     def test_serialize_generation_begin_suppress_tokens(self):
         """Tests that GenerationConfig is serialized and SuppressTokensAtBeginLogitsProcessor is initialized with begin_suppress_token and begin_index"""
 
         begin_suppress_tokens = [220, 50256]
         begin_index = 0
-        generation_config = GenerationConfig(begin_suppress_tokens=begin_suppress_tokens)
+        generation_config = GenerationConfig(
+            begin_suppress_tokens=begin_suppress_tokens
+        )
         with tempfile.TemporaryDirectory("test-generation-config") as tmp_dir:
             generation_config.save_pretrained(tmp_dir)
             new_config = GenerationConfig.from_pretrained(tmp_dir)
-        self.assertSequenceEqual(new_config.begin_suppress_tokens, begin_suppress_tokens)
+        self.assertSequenceEqual(
+            new_config.begin_suppress_tokens, begin_suppress_tokens
+        )
 
         suppress_processor = SuppressTokensAtBeginLogitsProcessor(
-            begin_suppress_tokens=new_config.begin_suppress_tokens, begin_index=begin_index
+            begin_suppress_tokens=new_config.begin_suppress_tokens,
+            begin_index=begin_index,
         )
-        self.assertSequenceEqual(suppress_processor.begin_suppress_tokens, begin_suppress_tokens)
+        self.assertSequenceEqual(
+            suppress_processor.begin_suppress_tokens, begin_suppress_tokens
+        )
         self.assertEqual(suppress_processor.begin_index, begin_index)
 
     def test_serialize_generation_suppress_tokens(self):
@@ -705,7 +802,9 @@ class GenerationConfigSerializationTest(unittest.TestCase):
             new_config = GenerationConfig.from_pretrained(tmp_dir)
         self.assertSequenceEqual(new_config.suppress_tokens, suppress_tokens)
 
-        suppress_processor = SuppressTokensLogitsProcessor(suppress_tokens=new_config.suppress_tokens)
+        suppress_processor = SuppressTokensLogitsProcessor(
+            suppress_tokens=new_config.suppress_tokens
+        )
         self.assertSequenceEqual(suppress_processor.suppress_tokens, suppress_tokens)
 
     def test_serialize_generation_guidance_scale(self):
@@ -717,7 +816,9 @@ class GenerationConfigSerializationTest(unittest.TestCase):
             new_config = GenerationConfig.from_pretrained(tmp_dir)
         self.assertEqual(new_config.guidance_scale, guidance_scale)
 
-        classifier_processor = ClassifierFreeGuidanceLogitsProcessor(guidance_scale=new_config.guidance_scale)
+        classifier_processor = ClassifierFreeGuidanceLogitsProcessor(
+            guidance_scale=new_config.guidance_scale
+        )
         self.assertEqual(classifier_processor.guidance_scale, guidance_scale)
 
     def test_serialize_generation_guidance_scale_unbatched(self):
@@ -732,7 +833,9 @@ class GenerationConfigSerializationTest(unittest.TestCase):
             new_config = GenerationConfig.from_pretrained(tmp_dir)
         self.assertEqual(new_config.guidance_scale, guidance_scale)
 
-        cfg = UnbatchedClassifierFreeGuidanceLogitsProcessor(new_config.guidance_scale, {}, input_ids)
+        cfg = UnbatchedClassifierFreeGuidanceLogitsProcessor(
+            new_config.guidance_scale, {}, input_ids
+        )
         self.assertEqual(cfg.guidance_scale, guidance_scale)
 
     def test_serialize_generation_watermarking_config(self):
@@ -757,7 +860,9 @@ class GenerationConfigSerializationTest(unittest.TestCase):
             generation_config.save_pretrained(tmp_dir)
             new_config = GenerationConfig.from_pretrained(tmp_dir)
         self.assertEqual(new_config.watermarking_config.bias, bias)
-        self.assertEqual(new_config.watermarking_config.greenlist_ratio, greenlist_ratio)
+        self.assertEqual(
+            new_config.watermarking_config.greenlist_ratio, greenlist_ratio
+        )
         self.assertEqual(new_config.watermarking_config.hashing_key, hashing_key)
         self.assertEqual(new_config.watermarking_config.seeding_scheme, seeding_scheme)
         self.assertEqual(new_config.watermarking_config.context_width, context_width)
@@ -807,7 +912,12 @@ class ConfigPushToHubTester(unittest.TestCase):
             )
             # Push to hub via save_pretrained
             with tempfile.TemporaryDirectory() as tmp_dir:
-                config.save_pretrained(tmp_dir, repo_id=tmp_repo.repo_id, push_to_hub=True, token=self._token)
+                config.save_pretrained(
+                    tmp_dir,
+                    repo_id=tmp_repo.repo_id,
+                    push_to_hub=True,
+                    token=self._token,
+                )
 
             new_config = GenerationConfig.from_pretrained(tmp_repo.repo_id)
             for k, v in config.to_dict().items():
@@ -837,7 +947,12 @@ class ConfigPushToHubTester(unittest.TestCase):
             )
             # Push to hub via save_pretrained
             with tempfile.TemporaryDirectory() as tmp_dir:
-                config.save_pretrained(tmp_dir, repo_id=tmp_repo.repo_id, push_to_hub=True, token=self._token)
+                config.save_pretrained(
+                    tmp_dir,
+                    repo_id=tmp_repo.repo_id,
+                    push_to_hub=True,
+                    token=self._token,
+                )
 
             new_config = GenerationConfig.from_pretrained(tmp_repo.repo_id)
             for k, v in config.to_dict().items():
@@ -847,7 +962,9 @@ class ConfigPushToHubTester(unittest.TestCase):
     def test_push_to_hub_on_pr_revision(self):
         with TemporaryHubRepo(token=self._token) as tmp_repo:
             # create a PR
-            pr = create_pull_request(repo_id=tmp_repo.repo_id, title="Test PR", token=self._token)
+            pr = create_pull_request(
+                repo_id=tmp_repo.repo_id, title="Test PR", token=self._token
+            )
             revision = f"refs/pr/{pr.num}"
 
             # push to PR ref
@@ -859,7 +976,9 @@ class ConfigPushToHubTester(unittest.TestCase):
             config.push_to_hub(tmp_repo.repo_id, token=self._token, revision=revision)
 
             # load from PR ref
-            new_config = GenerationConfig.from_pretrained(tmp_repo.repo_id, revision=revision)
+            new_config = GenerationConfig.from_pretrained(
+                tmp_repo.repo_id, revision=revision
+            )
             for k, v in config.to_dict().items():
                 if k != "transformers_version":
                     self.assertEqual(v, getattr(new_config, k))
