@@ -219,7 +219,7 @@ class AlbertLayer(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    ) -> torch.Tensor:
         attention_output, _ = self.attention(hidden_states, attention_mask, **kwargs)
 
         ffn_output = apply_chunking_to_forward(
@@ -249,7 +249,7 @@ class AlbertLayerGroup(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor | tuple[torch.Tensor], ...]:
+    ) -> torch.Tensor:
         for layer_index, albert_layer in enumerate(self.albert_layers):
             hidden_states = albert_layer(hidden_states, attention_mask, **kwargs)
         return hidden_states
