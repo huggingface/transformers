@@ -1163,8 +1163,6 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
         ```"""
         outputs = self.model(
             input_ids=input_ids,
-            pixel_values=pixel_values,
-            image_sizes=image_sizes,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,

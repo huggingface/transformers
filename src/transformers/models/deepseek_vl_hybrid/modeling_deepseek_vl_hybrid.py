@@ -381,12 +381,11 @@ class DeepseekVLHybridModel(DeepseekVLHybridPreTrainedModel):
     def get_high_res_image_features(
         self,
         pixel_values: torch.FloatTensor,
-        output_hidden_states: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
+        kwargs["output_hidden_states"] = True
         high_res_outputs = self.high_res_vision_model(
             pixel_values=pixel_values,
-            output_hidden_states=True,  # Ignore arg on purpose
             return_dict=True,
             **kwargs,
         )

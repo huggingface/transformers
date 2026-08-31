@@ -1170,6 +1170,8 @@ class Ernie4_5_VLMoeForConditionalGeneration(Glm4vForConditionalGeneration, Gene
             router_logits=outputs.router_logits,
         )
 
+    def _expand_multimodal_outputs(self, **super_kwargs):
+        raise AttributeError("Uses normal super call")
 
 class Ernie4_5_VLMoeImageProcessorKwargs(ImagesKwargs, total=False):
     r"""

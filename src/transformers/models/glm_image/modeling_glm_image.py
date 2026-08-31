@@ -1148,10 +1148,6 @@ class GlmImageModel(GlmImagePreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input images.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
         images_per_sample (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             The number of image inputs per each sample in the batch.
         """
