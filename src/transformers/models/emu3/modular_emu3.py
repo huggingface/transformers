@@ -1109,8 +1109,8 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         labels: torch.LongTensor | None = None,
-        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""

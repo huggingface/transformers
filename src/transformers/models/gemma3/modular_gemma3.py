@@ -700,7 +700,7 @@ class Gemma3Model(PaliGemmaModel):
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
-        **lm_kwargs: Unpack[TransformersKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Gemma3ModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -754,7 +754,7 @@ class Gemma3Model(PaliGemmaModel):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             return_dict=True,
-            **lm_kwargs,
+            **kwargs,
         )
 
         return Gemma3ModelOutputWithPast(
@@ -784,9 +784,9 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         logits_to_keep: int | torch.Tensor = 0,
-        **lm_kwargs: Unpack[TransformersKwargs],
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Gemma3CausalLMOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -845,7 +845,7 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
             labels=labels,
             mm_encoder_outputs=mm_encoder_outputs,
             return_dict=True,
-            **lm_kwargs,
+            **kwargs,
         )
 
         hidden_states = outputs[0]

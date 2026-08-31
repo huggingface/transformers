@@ -153,8 +153,8 @@ class AyaVisionModel(LlavaModel):
         inputs_embeds: torch.FloatTensor | None = None,
         vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
-        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         use_cache: bool | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | AyaVisionModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -263,6 +263,7 @@ class AyaVisionForConditionalGeneration(LlavaForConditionalGeneration):
             labels=labels,
             logits_to_keep=logits_to_keep,
             image_sizes=image_sizes,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
 

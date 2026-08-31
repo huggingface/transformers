@@ -253,8 +253,8 @@ class FastVlmForConditionalGeneration(LlavaForConditionalGeneration):
         vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         labels: torch.LongTensor | None = None,
-        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | FastVlmCausalLMOutputWithPast:
         r"""

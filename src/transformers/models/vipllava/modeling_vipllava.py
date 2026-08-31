@@ -217,7 +217,7 @@ class VipLlavaModel(VipLlavaPreTrainedModel):
         vision_feature_layers: int | list[int] | None = None,
         use_cache: bool | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
-        **lm_kwargs: Unpack[TransformersKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | VipLlavaModelOutputWithPast:
         r"""
         vision_feature_layers (`Union[int, list[int]]`, *optional*):
@@ -253,7 +253,7 @@ class VipLlavaModel(VipLlavaPreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            **lm_kwargs,
+            **kwargs,
         )
 
         output = VipLlavaModelOutputWithPast(
@@ -314,9 +314,9 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin)
         vision_feature_layers: int | list[int] | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         logits_to_keep: int | torch.Tensor = 0,
-        **lm_kwargs: Unpack[TransformersKwargs],
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | VipLlavaCausalLMOutputWithPast:
         r"""
         vision_feature_layers (`Union[int, list[int]]`, *optional*):
@@ -368,7 +368,7 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin)
             use_cache=use_cache,
             vision_feature_layers=vision_feature_layers,
             mm_encoder_outputs=mm_encoder_outputs,
-            **lm_kwargs,
+            **kwargs,
         )
 
         hidden_states = outputs.last_hidden_state

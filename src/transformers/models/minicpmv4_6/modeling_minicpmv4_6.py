@@ -674,8 +674,8 @@ class MiniCPMV4_6Model(MiniCPMV4_6PreTrainedModel):
         past_key_values: list[torch.FloatTensor] | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         downsample_mode: str | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         r"""
@@ -790,8 +790,8 @@ class MiniCPMV4_6ForConditionalGeneration(MiniCPMV4_6PreTrainedModel, Generation
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         downsample_mode: str | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""

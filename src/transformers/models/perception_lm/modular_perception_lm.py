@@ -217,7 +217,7 @@ class PerceptionLMModel(LlavaModel):
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
-        **lm_kwargs,
+        **kwargs,
     ) -> tuple | PerceptionLMModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -263,7 +263,7 @@ class PerceptionLMModel(LlavaModel):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             return_dict=True,
-            **lm_kwargs,
+            **kwargs,
         )
         return PerceptionLMModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
@@ -290,9 +290,9 @@ class PerceptionLMForConditionalGeneration(LlavaForConditionalGeneration):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         logits_to_keep: int | torch.Tensor = 0,
-        **lm_kwargs,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
+        **kwargs,
     ) -> tuple | PerceptionLMCausalLMOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -352,7 +352,7 @@ class PerceptionLMForConditionalGeneration(LlavaForConditionalGeneration):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             mm_encoder_outputs=mm_encoder_outputs,
-            **lm_kwargs,
+            **kwargs,
         )
 
         hidden_states = outputs[0]
@@ -366,7 +366,7 @@ class PerceptionLMForConditionalGeneration(LlavaForConditionalGeneration):
                 logits=logits,
                 labels=labels,
                 vocab_size=self.config.text_config.vocab_size,
-                **lm_kwargs,
+                **kwargs,
             )
 
         return PerceptionLMCausalLMOutputWithPast(

@@ -724,8 +724,8 @@ class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGenerat
         batch_num_images: torch.LongTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | LlavaOnevisionCausalLMOutputWithPast:
         r"""

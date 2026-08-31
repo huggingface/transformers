@@ -21,6 +21,7 @@ import itertools
 import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
+from itertools import accumulate
 from typing import Any
 
 import torch
@@ -1314,8 +1315,8 @@ class Glm4vForConditionalGeneration(Glm4vPreTrainedModel, GenerationMixin):
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
-        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Glm4vCausalLMOutputWithPast:
         r"""
@@ -1450,7 +1451,7 @@ class Glm4vForConditionalGeneration(Glm4vPreTrainedModel, GenerationMixin):
     def _expand_multimodal_outputs(
         self,
         input_ids: torch.LongTensor,
-        mm_encoder_output: ModelOutput | None,
+        mm_encoder_output: dict,
         expand_size: int = 1,
         inputs_embeds: torch.LongTensor | None = None,
     ) -> dict[str, dict]:

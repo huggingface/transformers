@@ -440,8 +440,8 @@ class LlavaNextModel(LlavaNextPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
-        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         use_cache: bool | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple | LlavaNextModelOutputWithPast:
         r"""
@@ -566,8 +566,8 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
         vision_feature_select_strategy: str | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | LlavaNextCausalLMOutputWithPast:
         r"""

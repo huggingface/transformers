@@ -717,6 +717,7 @@ class Kimi_K25ForConditionalGeneration(Glm4vForConditionalGeneration):
     def _expand_multimodal_outputs(self, **super_kwargs):
         raise AttributeError("Uses normal super call")
 
+
 class Kimi_K25ProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {

@@ -968,8 +968,8 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         vision_feature_layer: int | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
-        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         use_cache: bool | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Granite4VisionModelOutputWithPast:
         r"""
@@ -1105,10 +1105,10 @@ class Granite4VisionForConditionalGeneration(Granite4VisionPreTrainedModel, Gene
         inputs_embeds: torch.FloatTensor | None = None,
         vision_feature_layer: int | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
-        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Granite4VisionCausalLMOutputWithPast:
         r"""

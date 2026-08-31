@@ -1229,8 +1229,8 @@ class Cosmos3EdgeForConditionalGeneration(Cosmos3EdgePreTrainedModel, Generation
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
-        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Cosmos3EdgeCausalLMOutputWithPast:
         r"""

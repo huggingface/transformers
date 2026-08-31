@@ -1410,8 +1410,8 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
         pixel_values: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         images_per_sample: torch.LongTensor | None = None,
-        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | GlmImageCausalLMOutputWithPast:
         r"""

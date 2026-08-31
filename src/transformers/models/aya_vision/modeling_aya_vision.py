@@ -242,8 +242,8 @@ class AyaVisionModel(AyaVisionPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
-        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         use_cache: bool | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | AyaVisionModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):

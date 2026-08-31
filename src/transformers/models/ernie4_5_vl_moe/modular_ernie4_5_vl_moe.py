@@ -1107,8 +1107,8 @@ class Ernie4_5_VLMoeForConditionalGeneration(Glm4vForConditionalGeneration, Gene
         pixel_values_videos: torch.FloatTensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
-        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MoeCausalLMOutputWithPast:
         r"""
@@ -1172,6 +1172,7 @@ class Ernie4_5_VLMoeForConditionalGeneration(Glm4vForConditionalGeneration, Gene
 
     def _expand_multimodal_outputs(self, **super_kwargs):
         raise AttributeError("Uses normal super call")
+
 
 class Ernie4_5_VLMoeImageProcessorKwargs(ImagesKwargs, total=False):
     r"""

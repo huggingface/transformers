@@ -1130,8 +1130,8 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         interpolate_pos_encoding: bool = False,
-        mm_encoder_outputs: BaseModelOutputWithPooling | None = None,
         use_cache: bool | None = None,
+        mm_encoder_outputs: BaseModelOutputWithPooling | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | InstructBlipVideoForConditionalGenerationModelOutput:
         r"""

@@ -1574,8 +1574,8 @@ class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_VLMoePreTrainedModel, Gene
         pixel_values_videos: torch.FloatTensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
-        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MoeCausalLMOutputWithPast:
         r"""

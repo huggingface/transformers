@@ -965,7 +965,7 @@ class GenerationMixin(ContinuousMixin):
     def _expand_multimodal_outputs(
         self: "GenerativePreTrainedModel",
         input_ids: torch.LongTensor,
-        mm_encoder_output: ModelOutput | None,
+        mm_encoder_output: dict,
         expand_size: int = 1,
         inputs_embeds: torch.LongTensor | None = None,
     ) -> dict[str, dict]:

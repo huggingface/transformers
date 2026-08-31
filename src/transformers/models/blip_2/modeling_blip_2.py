@@ -1600,9 +1600,9 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         labels: torch.LongTensor | None = None,
         interpolate_pos_encoding: bool = False,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Blip2ForConditionalGenerationModelOutput:
         r"""
