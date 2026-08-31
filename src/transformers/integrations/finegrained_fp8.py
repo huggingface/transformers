@@ -366,17 +366,8 @@ class FP8Embedding(nn.Embedding):
         self.weight_scale = nn.Parameter(torch.ones(1), requires_grad=False)
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
-        rows = F.embedding(
-            input,
-            self.weight,
-            self.padding_idx,
-            self.max_norm,
-            self.norm_type,
-            self.scale_grad_by_freq,
-            self.sparse,
-        )
-        scale = self.weight_scale.to(rows.device)
-        return rows.to(scale.dtype) * scale
+        rows = super().forward(input)
+        return rows.to(self.weight_scale.dtype) * self.weight_scale
 
 
 class FP8GroupedLinear(FP8Linear):
