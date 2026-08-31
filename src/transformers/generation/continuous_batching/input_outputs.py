@@ -25,7 +25,7 @@ from .cache import PagedAttentionCache
 from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
 from .requests import TMP_TOKEN_ID, FutureRequestState, logger
 from .utils import (
-    CUDAGraphBuffer,
+    CudaGraphBuffer,
     aligned_divide,
     attn_mask_is_needed,
     build_attention_mask,
@@ -119,7 +119,7 @@ class ContinuousBatchingIOs:
         # Setup other accumulators
         self.requests_in_batch: list[FutureRequestState] = []
         self.req_id_to_new_token_position: dict[str, int] = {}  # only used for async API
-        self.graphs: CUDAGraphBuffer = CUDAGraphBuffer()
+        self.graphs: CudaGraphBuffer = CudaGraphBuffer()
         self._read_trash_index = cache.read_trash_index
         self._write_trash_index = cache.write_trash_index
         # Setup static tensors and compute stream
@@ -312,6 +312,9 @@ class ContinuousBatchingIOs:
         if self.compute_stream is not None:
             self.compute_stream.synchronize()
 
+    def stream_ctx(self):
+        return device_stream_ctx(self.device_module, self.compute_stream)
+
     def prepare_batch_update(self) -> tuple[list[FutureRequestState], list[int], list[float] | None]:
         new_tokens = self.output_ids[0, : self.num_request_in_batch].tolist()
         # If logprobs are generated, we retrieve them from the output tensor and cast them to the right dtype
@@ -473,7 +476,7 @@ class ContinuousBatchingIOs:
 
     def get_model_kwargs(self, use_padding: bool = False) -> PagedAttentionArgs:
         """Get model keyword arguments for the current batch, eventually padding the query dimension and KV dimensions
-        if use_padding is True. The padding is only useful if we want static shapes, like when using CUDA graphs."""
+        if use_padding is True. The padding is only useful if we want static shapes, like when using cuda graphs."""
         q_size = self.num_q_tokens
         kv_size = self.max_kv_read + self.num_q_tokens
         num_sequences = self._get_num_sequences(use_padding=use_padding)
@@ -627,9 +630,9 @@ class ContinuousBatchingAsyncIOs:
                       └──────────┘ ◄──────── └────────────┘
                                     outputs
 
-    Each pair is separate from the other. This means that each pairs has its own CUDA graphs set, because graphs need to
-    have static addresses for input tensors. To have a unique set of CUDA graph, we would need to copy the input tensors
-    to a third device-side buffer. This could limit the memory cost of CUDA graphs but would slow down the
+    Each pair is separate from the other. This means that each pairs has its own CUDA graphs set, because CUDA graphs
+    need to have static addresses for input tensors. To have a unique set of CUDA graph, we would need to copy the input
+    tensors to a third device-side buffer. This could limit the memory cost of CUDA graphs but would slow down the
     forward pass.
     But the CUDA streams orchestrating the transfer from host to device (H2D) and device to host (D2H) are the same for
     both pairs. Same for the compute stream.
@@ -657,7 +660,7 @@ class ContinuousBatchingAsyncIOs:
           - UP N: update of batch N
 
     You can see that the GPU is almost always busy, except where the █ is.
-    Proper ordering of steps is ensured through the use of accelerator events and streams.
+    Proper ordering of steps is ensured through the use of CUDA events and streams.
     """
 
     def __init__(
@@ -686,7 +689,7 @@ class ContinuousBatchingAsyncIOs:
             )
             for _ in range(2)
         ]
-        # Accelerator streams
+        # CUDA streams
         self.h2d_stream = self.device_module.Stream(device=device)
         self.d2h_stream = self.device_module.Stream(device=device)
         self.compute_stream = self.device_module.Stream(device=device)
@@ -808,6 +811,9 @@ class ContinuousBatchingAsyncIOs:
         self.d2h_stream.record_event(io_pair.d2h_over)
         # Swap IO pair
         self.swap_io_pairs()
+
+    def stream_ctx(self):
+        return device_stream_ctx(self.device_module, self.compute_stream)
 
     def swap_io_pairs(self) -> None:
         """Switch to the other IO pair so the next batch reads from / writes into a fresh set of static buffers."""

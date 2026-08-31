@@ -42,11 +42,11 @@ from .model_runner import ModelRunner
 from .offloading_manager import OffloadingManager
 from .requests import GenerationOutput, RequestState, RequestStatus, logger
 from .scheduler import SCHEDULER_MAPPING, FIFOScheduler, Scheduler
-from .utils import WorkloadHints, device_stream_ctx, drain_queue
+from .utils import WorkloadHints, drain_queue, get_torch_device_module
 
 
 """
-To enable CUDA graphs, we need the dimensions of all tensors to be static, which is counter-intuitive for CB. In CB, as
+To enable cuda graphs, we need the dimensions of all tensors to be static, which is counter-intuitive for CB. In CB, as
 generation goes on, there are two dimensions that change:
 - the number of queries tokens (Q), which can vary from batch to batch
 - the number of keys/values tokens (KV), which grows as the cache does
@@ -317,7 +317,9 @@ class ContinuousBatchProcessor:
         )
 
     def __del__(self) -> None:
-        device_module = self.inputs_and_outputs.device_module if self.inputs_and_outputs is not None else None
+        device_module = None
+        if self.model_device.type in ("cuda", "xpu"):
+            device_module = get_torch_device_module(self.model_device)
         self.inputs_and_outputs = None  # clean up CUDA graphs in priority
         gc.collect()
         if device_module is not None and device_module.is_available():
@@ -515,10 +517,7 @@ class ContinuousBatchProcessor:
         if copy_source:
             # FIXME: this will avoid any race condition, but it can cause issue when using async batching with a sliding
             # window model. Fix will be fixed in a PR in the near future (tempfix, v5.3)
-            compute_stream = self.inputs_and_outputs.compute_stream
-            device_module = self.inputs_and_outputs.device_module
-            maybe_stream = device_stream_ctx(device_module, compute_stream)
-            with maybe_stream:
+            with self.inputs_and_outputs.stream_ctx():
                 self.cache.copy_cache(copy_source, copy_destination)
 
     def has_pending_requests(self) -> bool:
@@ -722,7 +721,9 @@ class ContinuousBatchingManager:
         # We expect the batch processor to be initialized at this point. Warn otherwise.
         if self.batch_processor is None:
             logger.warning("\nBatch processor was not initialized.")
-        device_module = None if self.batch_processor is None else self.batch_processor.inputs_and_outputs.device_module
+        device_module = None
+        if self.model.device.type in ("cuda", "xpu"):
+            device_module = get_torch_device_module(self.model.device)
 
         # If the manager is not started, warn and return.
         if self._generation_thread is None:
@@ -1020,7 +1021,7 @@ class ContinuousBatchingManager:
             logger.info("Generation loop finished and background thread exited successfully.")
 
     def _generation_step(self) -> None:
-        """Perform a single generation step. This is mostly CUDA graphed"""
+        """Perform a single generation step. This is mostly cuda graphed"""
         if self.batch_processor is None:
             raise RuntimeError("Tried to perform a generation step before the batch processor was initialized.")
         self.batch_processor._generation_step(self.model)

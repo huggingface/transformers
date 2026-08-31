@@ -47,7 +47,7 @@ def resolve_continuous_batching_config(
 
     # Look at whether the user explicitly asked for the decode fast path before we assign a default value
     user_requested_decode_path = cb_config.max_blocks_per_request is not None
-    # Same for CUDA graphs, if the user signals they want graphs via any padding/cached-graph parameter
+    # Same for cuda graphs, if the user signals they want CUDA graphs via any padding/cached-graph parameter
     cuda_graph_requested = any([cb_config.q_padding_interval_size, cb_config.kv_padding_interval_size])
 
     # Resolve missing attributes for which we have hints. Must happen before no-hints resolve.
@@ -201,9 +201,9 @@ def resolve_compile_configs(
 def decide_use_cuda_graphs(
     cb_config: ContinuousBatchingConfig, is_attn_mask_needed: bool, cuda_graph_requested: bool
 ) -> None:
-    """Decides whether or not to use CUDA graphs for continuous batching. If the user specified this in the config or
-    if they specified a parameter related to CUDA graphs, they are turned on. Otherwise, we use a heuristic based on the
-    attention implementation: we turn on CUDA graphs if and only if no attention mask is needed.
+    """Decides whether or not to use cuda graphs for continuous batching. If the user specified this in the config
+    or if they specified a parameter related to cuda graphs, they are turned on. Otherwise, we use a heuristic
+    based on the attention implementation: we turn on cuda graphs if and only if no attention mask is needed.
 
     This function modifies the `use_cuda_graph` attribute of the config in place, to a tuple of booleans.
     """
@@ -211,7 +211,7 @@ def decide_use_cuda_graphs(
     graph_backend_available = is_cuda_graph_available()
     if not graph_backend_available:
         intended_use_cuda_graph = any(cb_config.cuda_graph_booleans)
-        if intended_use_cuda_graph:  # throw a warning only if the user intended to use CUDA graphs
+        if intended_use_cuda_graph:  # throw a warning only if the user intended to use cuda graphs
             logger.warning(
                 f"{cb_config.use_cuda_graph = } but no CUDA graph-capture backend is available: "
                 "turning off CUDA graphs"
@@ -223,13 +223,13 @@ def decide_use_cuda_graphs(
         if isinstance(cb_config.use_cuda_graph, bool):
             cb_config.use_cuda_graph = (cb_config.use_cuda_graph, cb_config.use_cuda_graph)
 
-    # Else if the user specified a parameter related to CUDA graphs, we activate CUDA graphs
+    # Else if the user specified a parameter related to cuda graphs, we activate cuda graphs
     elif cuda_graph_requested:
         cb_config.use_cuda_graph = (True, True)
 
     # Otherwise we have a default heuristic based on the attention implementation:
     # attention implementations where an attention mask is needed suffer a lot more from the padding associated
-    # with CUDA graphs, so default is to turn CUDA graphs off for those implementations
+    # with cuda graphs, so default is to turn cuda graphs off for those implementations
     else:
         use_cuda_graph = []
         for compile_config in [cb_config.varlen_compile_config, cb_config.decode_compile_config]:
@@ -237,24 +237,24 @@ def decide_use_cuda_graphs(
             if compile_config is None:
                 use_cuda_graph.append(not is_attn_mask_needed)
                 continue
-            # Otherwise we disable CUDA graphs if the compile config uses them
+            # Otherwise we disable cuda graphs if the compile config uses them
             options = torch._inductor.list_mode_options().get(compile_config.mode, compile_config.options)
-            compile_uses_graphs = options.get("triton.cudagraphs", False)
-            if compile_uses_graphs:
+            compile_uses_cudagraphs = options.get("triton.cudagraphs", False)
+            if compile_uses_cudagraphs:
                 logger.warning(
                     f"Compile config {compile_config.mode = } uses cudagraphs, which usually does not work well with "
                     "continuous batching. We recommend using mode 'default' or 'max-autotune-no-cudagraphs' instead."
                 )
-            use_cuda_graph.append(not compile_uses_graphs and not is_attn_mask_needed)
+            use_cuda_graph.append(not compile_uses_cudagraphs and not is_attn_mask_needed)
         cb_config.use_cuda_graph = tuple(use_cuda_graph)
 
-    logger.info(f"Using CUDA graphs for (varlen, decode) paths: {cb_config.use_cuda_graph}")
+    logger.info(f"Using cuda graphs for (varlen, decode) paths: {cb_config.use_cuda_graph}")
 
 
 def decide_use_async_batching(cb_config: ContinuousBatchingConfig, is_attn_mask_needed: bool) -> None:
     """Returns whether or not to use asynchronous batching for continuous batching. If the user specified this in
-    the config, we follow their choice. Otherwise, we turn on asynchronous batching if and only if CUDA graphs are turned
-    on and no attention mask is needed.
+    the config, we follow their choice. Otherwise, we turn on asynchronous batching if and only if CUDA graphs are
+    turned on and no attention mask is needed.
 
     This function modifies the `use_async_batching` attribute of the config in place.
     """

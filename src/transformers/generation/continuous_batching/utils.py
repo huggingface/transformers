@@ -76,7 +76,7 @@ def get_cuda_graph(device: torch.device) -> Any:
     return graph_class()
 
 
-class CUDAGraphBuffer:
+class CudaGraphBuffer:
     """A dict for CUDA graphs with a special __del__ method to make sure the graphs are properly reset."""
 
     def __init__(self) -> None:

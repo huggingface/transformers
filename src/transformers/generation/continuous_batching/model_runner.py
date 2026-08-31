@@ -111,8 +111,8 @@ class ModelRunner:
 
     def compute_batch(self, model: nn.Module, batch_data: dict) -> None:
         """Runs the forward pass, processes the logits and samples the next tokens. It also handles which version of
-        the forward pass to use (varlen or decode), whether to use CUDA graphs (with the eventual capture of the
-        graph) and torch compile."""
+        the forward pass to use (varlen or decode), whether to use CUDA graphs (with the eventual capture of the graph)
+        and torch compile."""
         # These tensors are device-resident, this is just pointer retrieval
         carry_over_ids, prev_output_ids, output_ids = self.inputs_and_outputs.get_cb_kwargs()
         # This is the stream on which the compute happens
