@@ -30,7 +30,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPool
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..qwen3_5.modeling_qwen3_5 import (
     Qwen3_5Attention,
@@ -295,6 +295,7 @@ class Qwen4ExpTextRotaryEmbedding(Qwen3_5TextRotaryEmbedding):
     pass
 
 
+@no_inherit_decorator
 class Qwen4ExpTextRMSNorm(Qwen3_5RMSNorm):
     def __init__(self, dim: int, group_size: int | None = None, eps: float = 1e-6):
         super().__init__(dim, eps=eps)
