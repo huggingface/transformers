@@ -399,7 +399,7 @@ class GlmMoeDsaAttention(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor,
         past_key_values: Cache | None = None,
-        position_ids: torch.Tensor | None = None,  # Kept for BC
+        position_ids: torch.Tensor | None = None,
         prev_topk_indices: torch.Tensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
@@ -434,6 +434,7 @@ class GlmMoeDsaAttention(nn.Module):
                 q_resid,
                 position_embeddings,
                 attention_mask[:, 0, :, :],
+                position_ids,  # Kept for BC
                 past_key_values=past_key_values,
             )  # [B, S, topk]
         else:
