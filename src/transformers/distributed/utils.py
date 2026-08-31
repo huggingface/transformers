@@ -16,7 +16,10 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING, TypeGuard
 
-from ..utils import is_torch_available, is_torch_distributed_available, is_torch_greater_or_equal
+from ..utils import is_torch_available, is_torch_distributed_available, is_torch_greater_or_equal, logging
+
+
+logger = logging.get_logger(__name__)
 
 
 if TYPE_CHECKING:
@@ -67,6 +70,11 @@ def _ensure_torch_distributed(device_type: str | None = None):
     if not torch.distributed.is_initialized():
         if device_type is None:
             device_type = torch._C._get_accelerator().type
+        if device_type == "mps":
+            logger.warning_once(
+                "PyTorch's built-in DeviceMesh/DTensor stack does not support an MPS mesh. Falling back to CPU."
+            )
+            device_type = "cpu"
         try:
             rank = int(os.environ["RANK"])
             local_rank = int(os.environ["LOCAL_RANK"])
@@ -134,7 +142,10 @@ def initialize_tensor_parallelism(
         # Detect the accelerator on the machine. If no accelerator is available, it returns CPU.
         device_type = torch._C._get_accelerator().type
         if device_type == "mps":
-            raise RuntimeError("Tensor parallelism is not supported on MPS devices.")
+            logger.warning_once(
+                "PyTorch's built-in DeviceMesh/DTensor stack does not support an MPS mesh. Falling back to CPU."
+            )
+            device_type = "cpu"
         current_device = getattr(torch, device_type)
 
         if device_type != "cpu":

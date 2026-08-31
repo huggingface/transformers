@@ -1575,6 +1575,12 @@ class Trainer:
             os.path.join(resume_from_checkpoint, TRAINER_STATE_NAME)
         ):
             self.state = TrainerState.load_from_json(os.path.join(resume_from_checkpoint, TRAINER_STATE_NAME))
+            if self.state.best_model_checkpoint is not None and not os.path.isdir(self.state.best_model_checkpoint):
+                logger.warning(
+                    f"The best checkpoint {self.state.best_model_checkpoint} recorded in the resumed state does not "
+                    "exist anymore. Ignoring it for this run."
+                )
+                self.state.best_model_checkpoint = None
             compare_trainer_and_checkpoint_args(self.args, self.state)
             self._load_callback_state()
             epochs_trained = int(self.state.global_step // num_update_steps_per_epoch)
