@@ -17,11 +17,11 @@ import unittest
 
 import numpy as np
 
-from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
+from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling
 from transformers.testing_utils import require_torch, require_torchvision, require_vision
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
 
 
 if is_torch_available():
@@ -30,13 +30,13 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers.models.hunyuan_vl.image_processing_pil_hunyuan_vl import HunYuanVLImageProcessorPil
+    from transformers.models.hunyuan_vl.image_processing_pil_hunyuan_vl import HunYuanVLImageProcessorPil, smart_resize
 
     if is_torchvision_available():
         from transformers.models.hunyuan_vl.image_processing_hunyuan_vl import HunYuanVLImageProcessor
 
 
-class HunYuanVLImageProcessingTester:
+class HunYuanVLImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -83,17 +83,6 @@ class HunYuanVLImageProcessingTester:
             "merge_size": self.merge_size,
             "do_convert_rgb": self.do_convert_rgb,
         }
-
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
 
 
 @require_torch
@@ -242,3 +231,27 @@ class HunYuanVLImageProcessorPilTest(unittest.TestCase):
         self.assertSetEqual(set(inputs.keys()), {"pixel_values", "image_grid_thw"})
         self.assertEqual(inputs["image_grid_thw"].shape, (1, 3))
         self.assertGreater(inputs["pixel_values"].shape[0], 0)
+
+    def test_pil_image_processor_matches_reference_resize_with_hub_config(self):
+        processor = HunYuanVLImageProcessorPil(
+            min_pixels=32 * 32,
+            max_pixels=32 * 32,
+            patch_size=16,
+            temporal_patch_size=1,
+            merge_size=1,
+            do_rescale=False,
+            do_normalize=False,
+            resample=PILImageResampling.LANCZOS,
+        )
+        image = (np.arange(3 * 17 * 19, dtype=np.uint16) % 256).astype(np.uint8).reshape(3, 17, 19)
+
+        resized_height, resized_width = smart_resize(
+            image.shape[-2], image.shape[-1], factor=16, min_pixels=32 * 32, max_pixels=32 * 32
+        )
+        reference_image = np.asarray(
+            Image.fromarray(image.transpose(1, 2, 0)).resize((resized_width, resized_height))
+        ).transpose(2, 0, 1)
+        outputs = processor(image, return_tensors="np")
+        reference_outputs = processor(reference_image, do_resize=False, return_tensors="np")
+
+        np.testing.assert_array_equal(outputs.pixel_values, reference_outputs.pixel_values)

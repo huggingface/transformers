@@ -80,6 +80,7 @@ from .models.auto.modeling_auto import (
 )
 from .optimization import GreedyLR, get_scheduler
 from .processing_utils import ProcessorMixin
+from .pytorch_utils import is_torch_greater_or_equal_than_2_6
 from .tokenization_utils_base import PreTrainedTokenizerBase
 from .trainer_callback import (
     CallbackHandler,
@@ -517,8 +518,13 @@ class Trainer:
         # each row is never a prediction target. The valid-prediction count used by `num_items_in_batch` must therefore
         # be taken over `labels[..., 1:]`, not the full label tensor. Inspect the actual loss function via
         # LOSS_MAPPING so model-specific loss_types that route to ForCausalLMLoss (e.g. CsmForConditionalGeneration)
-        # are caught too.
-        self._loss_shifts_labels = LOSS_MAPPING.get(getattr(model_to_inspect, "loss_type", None)) is ForCausalLMLoss
+        # are caught too. Encoder-decoder models are excluded: their loss is aligned with unshifted targets (usually
+        # because they feed right-shifted `decoder_input_ids` to the decoder), so every non-`-100` label is a
+        # prediction target and the decoder-only `labels[..., 1:]` counting rule must not apply -- it would
+        # under-count and over-scale the loss.
+        self._loss_shifts_labels = LOSS_MAPPING.get(
+            getattr(model_to_inspect, "loss_type", None)
+        ) is ForCausalLMLoss and not getattr(getattr(model_to_inspect, "config", None), "is_encoder_decoder", False)
 
         if self.args.label_smoothing_factor != 0:
             if getattr(self.model.config, "problem_type", None) == "multi_label_classification":
@@ -980,23 +986,23 @@ class Trainer:
         else:
             data_collator = self._get_collator_with_removed_columns(self.data_collator, description=description)
 
-        # MPS requires forking if multiple workers are specified
-        should_fork = torch.backends.mps.is_available() and self.args.dataloader_num_workers > 1
-
         dataloader_params = {
             "batch_size": batch_size,
             "collate_fn": data_collator,
             "num_workers": self.args.dataloader_num_workers,
             "pin_memory": self.args.dataloader_pin_memory,
             "persistent_workers": self.args.dataloader_persistent_workers,
-            "multiprocessing_context": "fork" if should_fork else None,
+            "multiprocessing_context": self.args.dataloader_multiprocessing_context,
+            "prefetch_factor": self.args.dataloader_prefetch_factor,
         }
+        # `in_order` was added in torch 2.6; on older versions the loader always behaves as `in_order=True`.
+        if is_torch_greater_or_equal_than_2_6:
+            dataloader_params["in_order"] = self.args.dataloader_in_order
 
         if not isinstance(dataset, torch.utils.data.IterableDataset):
             if sampler_fn is not None:
                 dataloader_params["sampler"] = sampler_fn(dataset)
             dataloader_params["drop_last"] = self.args.dataloader_drop_last
-            dataloader_params["prefetch_factor"] = self.args.dataloader_prefetch_factor
             if is_training:
                 dataloader_params["worker_init_fn"] = partial(
                     seed_worker, num_workers=self.args.dataloader_num_workers, rank=self.args.process_index
@@ -1072,6 +1078,9 @@ class Trainer:
                 dataset=eval_dataset,
                 lengths=lengths,
                 model_input_name=model_input_name,
+                generator=torch.Generator().manual_seed(
+                    self.args.data_seed if self.args.data_seed is not None else self.args.seed
+                ),
             )
 
         if self.args.world_size <= 1:
@@ -1392,7 +1401,13 @@ class Trainer:
 
         # Activate gradient checkpointing if needed
         if args.gradient_checkpointing:
-            self.model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=args.gradient_checkpointing_kwargs)
+            # `every_n_layers` selects which layers are checkpointed; the remaining keys are forwarded to
+            # `torch.utils.checkpoint.checkpoint`, so it has to come out of the dict before that happens.
+            gc_kwargs = dict(args.gradient_checkpointing_kwargs or {})
+            every_n_layers = gc_kwargs.pop("every_n_layers", 1)
+            self.model.gradient_checkpointing_enable(
+                gradient_checkpointing_kwargs=gc_kwargs or None, every_n_layers=every_n_layers
+            )
 
         # If the model uses a tokenizer, it may have a new tokens for fine-tuning purposes.
         if isinstance(self.processing_class, (PreTrainedTokenizerBase, ProcessorMixin)) and hasattr(
@@ -2019,9 +2034,9 @@ class Trainer:
                 else unwrapped_model._get_name()
             )
             if model_name in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values():
-                loss = self.label_smoother(outputs, labels, shift_labels=True)
+                loss = self.label_smoother(outputs, labels, shift_labels=True, num_items_in_batch=num_items_in_batch)
             else:
-                loss = self.label_smoother(outputs, labels)
+                loss = self.label_smoother(outputs, labels, num_items_in_batch=num_items_in_batch)
         else:
             if isinstance(outputs, dict) and "loss" not in outputs:
                 raise ValueError(
@@ -2988,8 +3003,12 @@ class Trainer:
                     logits = smp_nested_concat(logits_mb)
             else:
                 if has_labels or loss_without_labels:
-                    with self.compute_loss_context_manager():
-                        num_items_in_batch = self._get_num_items_in_batch([inputs], self.args.device)
+                    # Count before sharding: `context_parallel` splits the buffers in place.
+                    num_items_in_batch = self._get_num_items_in_batch([inputs], self.args.device)
+                    cp_context, inputs = self._prepare_context_parallel_inputs(model, inputs)
+                    with self.compute_loss_context_manager(), cp_context():
+                        if self.args.use_liger_kernel and prediction_loss_only:
+                            inputs = {**inputs, "skip_logits": True}
                         loss, outputs = self.compute_loss(
                             model, inputs, return_outputs=True, num_items_in_batch=num_items_in_batch
                         )

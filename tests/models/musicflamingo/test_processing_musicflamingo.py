@@ -182,6 +182,8 @@ class MusicFlamingoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_torch
     def test_output_labels_with_audio(self):
+        import torch
+
         processor = self.get_processor()
         pad_token_id = processor.tokenizer.pad_token_id
 
@@ -201,11 +203,7 @@ class MusicFlamingoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(labels.shape, input_ids.shape)
 
         # audio token positions (including audio bos/eos) are masked
-        audio_positions = (
-            (input_ids == processor.audio_token_id)
-            | (input_ids == processor.audio_bos_token_id)
-            | (input_ids == processor.audio_eos_token_id)
-        )
+        audio_positions = torch.isin(input_ids, torch.tensor(processor.audio_token_ids, dtype=input_ids.dtype))
         self.assertTrue(audio_positions.any())
         self.assertTrue((labels[audio_positions] == -100).all())
 

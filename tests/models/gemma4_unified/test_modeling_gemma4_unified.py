@@ -69,6 +69,8 @@ def _normalize_text(text):
 
 
 class Gemma4UnifiedTextModelTester(CausalLMModelTester):
+    forced_config_args = ["pad_token_id", "per_layer_config"]
+
     if is_torch_available():
         config_class = Gemma4UnifiedTextConfig
         base_model_class = Gemma4UnifiedTextModel
@@ -84,7 +86,11 @@ class Gemma4UnifiedTextModelTester(CausalLMModelTester):
             "sliding_attention",
             "full_attention",
         ]  # similarly we want to test sharing on both types
-        self.global_head_dim = self.head_dim  # gemma4 use a different head_dim for full and sliding layers
+        self.per_layer_config = {
+            layer_idx: {"head_dim": 2 * self.head_dim}
+            for layer_idx, layer_type in enumerate(self.layer_types)
+            if layer_type == "full_attention"
+        }  # gemma4 use a different head_dim for full and sliding layers
 
         # Test if bidirectional image mask path works
         self.use_bidirectional_attention = "vision"
@@ -98,15 +104,6 @@ class Gemma4UnifiedTextModelTest(CausalLMModelTest, unittest.TestCase):
 
     @unittest.skip("We need 4 layers to correctly test cache sharing.")
     def test_num_layers_is_small(self):
-        pass
-
-    @unittest.skip("Gemma4Unified uses different rope per layer type, which is not compatible with this test")
-    def test_model_rope_scaling_frequencies(self):
-        pass
-
-    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
-    @unittest.skip("Gemma4Unified uses different rope per layer type, which is not compatible with this test")
-    def test_model_rope_scaling_from_config(self):
         pass
 
     @unittest.skip(
@@ -242,15 +239,17 @@ class Gemma4UnifiedAudio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, 
         self.skip_mm_output_format()
 
     def skip_mm_output_format(self):
+        # This test doesn't have any images/videos in input
         skippable_tests = [
             "test_get_image_features_hidden_states",
             "test_get_image_features_attentions",
+            "test_get_image_features_output",
             "test_get_video_features_hidden_states",
             "test_get_video_features_attentions",
+            "test_get_video_features_output",
             "test_get_audio_features_hidden_states",
             "test_get_audio_features_attentions",
-            "test_get_image_features_output",
-            "test_get_video_features_output",
+            # no last-hidden-states returned, only pooler output
             "test_get_audio_features_output",
         ]
 
@@ -399,15 +398,15 @@ class Gemma4UnifiedVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin,
         self.skip_mm_output_format()
 
     def skip_mm_output_format(self):
+        # This test doesn't have any audio/videos in input
         skippable_tests = [
             "test_get_image_features_hidden_states",
             "test_get_image_features_attentions",
             "test_get_video_features_hidden_states",
             "test_get_video_features_attentions",
+            "test_get_video_features_output",
             "test_get_audio_features_hidden_states",
             "test_get_audio_features_attentions",
-            "test_get_image_features_output",
-            "test_get_video_features_output",
             "test_get_audio_features_output",
         ]
 

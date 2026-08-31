@@ -22,6 +22,7 @@ import math
 from dataclasses import dataclass
 
 import torch
+import torch.nn.functional as F
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
@@ -29,54 +30,273 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import lazy_load_kernel
+from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub_with_fallback, use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, logging
+from ...utils import ModelOutput, auto_docstring
 from ...utils.import_utils import (
     is_mambapy_available,
     is_torch_greater_or_equal,
     is_torchdynamo_compiling,
-    is_tracing,
-    resolve_internal_import,
+    is_torchdynamo_exporting,
 )
 from .configuration_falcon_mamba import FalconMambaConfig
 
 
-if is_torch_greater_or_equal("2.9.0"):
-    from torch._higher_order_ops.associative_scan import associative_scan
-else:
-    associative_scan = None
+class FalconMambaWeightlessRMSNorm(torch.nn.Module):
+    def __init__(self, hidden_size, eps: float = 1e-6):
+        super().__init__()
+        self.eps = eps
+        # Dummy weights that are not used (only for imitating the kernels path)
+        self.weight = nn.Buffer(torch.ones(hidden_size, requires_grad=False), persistent=False)
 
-if is_mambapy_available():
-    from mambapy.pscan import pscan
-else:
-    pscan = None
+    def _norm(self, x):
+        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+
+    def forward(self, x):
+        return self._norm(x.float()).type_as(x)
+
+    def extra_repr(self):
+        return f"eps={self.eps}"
 
 
-logger = logging.get_logger(__name__)
-
-
-def rms_forward(hidden_states, variance_epsilon=1e-6):
+def apply_mask_to_padding_states(hidden_states, attention_mask):
     """
-    Calculates simple RMSNorm with no learnable weights. `MambaRMSNorm` will
-    leverage this in order to multiply the final result with the RMSNorm weight
-
-    Args:
-        hidden_states (`torch.Tensor`):
-            Hidden states to normalize
-        variance_epsilon (`float`):
-            The eps value to add in the square root scaling factor
+    Tunes out the hidden states for padding tokens, see https://github.com/state-spaces/falcon_mamba/issues/66
     """
+    # NOTE: attention mask is a 2D boolean tensor
+    if attention_mask is not None:
+        dtype = hidden_states.dtype
+        hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
+
+    return hidden_states
+
+
+@use_kernel_func_from_hub_with_fallback("causal_conv1d_update", "causal_conv1d")
+def causal_conv1d_update(
+    hidden_states: torch.Tensor,
+    conv_state: torch.Tensor,
+    weight: nn.Parameter,
+    bias: nn.Parameter | None = None,
+    activation: str | None = None,
+):
+    _, hidden_size, seq_len = hidden_states.shape
+    state_len = conv_state.shape[-1]
+
+    hidden_states_new = torch.cat([conv_state, hidden_states], dim=-1).to(weight.dtype)
+    conv_state.copy_(hidden_states_new[:, :, -state_len:])
+    out = F.conv1d(hidden_states_new, weight.unsqueeze(1), bias, padding=0, groups=hidden_size)
+    out = out[:, :, -seq_len:]
+    if activation is not None:
+        out = ACT2FN[activation](out)
+    return out.to(hidden_states.dtype)
+
+
+@use_kernel_func_from_hub_with_fallback("causal_conv1d_fn", "causal_conv1d")
+def causal_conv1d_fn(
+    hidden_states: torch.Tensor,
+    weight: nn.Parameter,
+    bias: nn.Parameter | None = None,
+    activation: str | None = None,
+    **kwargs,
+):
+    _, hidden_size, seq_len = hidden_states.shape
+    padding = weight.shape[-1] - 1
+
+    out = F.conv1d(
+        hidden_states.to(weight.dtype),
+        weight=weight.unsqueeze(1),
+        bias=bias,
+        padding=padding,
+        groups=hidden_size,
+    )[:, :, :seq_len]
+    if activation is not None:
+        out = ACT2FN[activation](out)
+    return out.to(hidden_states.dtype)
+
+
+@use_kernel_func_from_hub_with_fallback("mamba_inner_fn", "mamba_ssm")
+def mamba_inner_fn(
+    xz: torch.Tensor,
+    conv1d_weight: torch.Tensor,
+    conv1d_bias: torch.Tensor | None,
+    x_proj_weight: torch.Tensor,
+    delta_proj_weight: torch.Tensor,
+    out_proj_weight: torch.Tensor,
+    out_proj_bias: torch.Tensor | None,
+    A: torch.Tensor,
+    B: torch.Tensor | None = None,
+    C: torch.Tensor | None = None,
+    D: torch.Tensor | None = None,
+    delta_bias: torch.Tensor | None = None,
+    delta_softplus: bool = True,
+    b_rms_weight: torch.Tensor | None = None,
+    c_rms_weight: torch.Tensor | None = None,
+    dt_rms_weight: torch.Tensor | None = None,
+    b_c_dt_rms_eps: float = 1e-6,
+    **kwargs,
+):
+    return None
+
+
+@use_kernel_func_from_hub_with_fallback("selective_state_update", "mamba_ssm")
+def mamba_selective_state_update(
+    state: torch.Tensor,
+    hidden_states: torch.Tensor,
+    dt: torch.Tensor,
+    A: torch.Tensor,
+    B: torch.Tensor,
+    C: torch.Tensor,
+    D: torch.Tensor | None = None,
+    dt_bias: torch.Tensor | None = None,
+    dt_softplus: bool = False,
+    z: torch.Tensor | None = None,
+    **kwargs,
+):
     input_dtype = hidden_states.dtype
-    hidden_states = hidden_states.to(torch.float32)
 
-    variance = hidden_states.pow(2).mean(-1, keepdim=True)
-    hidden_states = hidden_states * torch.rsqrt(variance + variance_epsilon)
-    return hidden_states.to(input_dtype)
+    if dt_bias is not None:
+        dt = dt + dt_bias.to(dt.dtype)
+    if dt_softplus:
+        dt = F.softplus(dt)
+
+    # Discretize A
+    dA = torch.exp(dt.float()[..., None] * A.float()).to(device=state.device)
+
+    # Discretize B
+    dB = dt.float()[..., None] * B.float()[:, None, :]
+    # Discretize x into dB
+    dBx = dB * hidden_states.float()[..., None]
+
+    # State calculation
+    ssm_state = state.float() * dA + dBx
+    state.copy_(ssm_state.to(state.dtype))
+
+    # Subsequent output
+    out = torch.matmul(ssm_state.to(C.dtype), C.unsqueeze(-1)).squeeze(-1)
+
+    # D skip connection
+    if D is not None:
+        out = out + hidden_states * D
+
+    if z is not None:
+        out = out * F.silu(z)
+
+    return out.to(input_dtype)
 
 
+@use_kernel_func_from_hub_with_fallback("selective_scan_fn", "mamba_ssm")
+def mamba_selective_scan(
+    hidden_states: torch.Tensor,
+    dt: torch.Tensor,
+    A: torch.Tensor,
+    B: torch.Tensor,
+    C: torch.Tensor,
+    D: torch.Tensor | None = None,
+    z: torch.Tensor | None = None,
+    delta_bias: torch.Tensor | None = None,
+    delta_softplus: bool = False,
+    return_last_state: bool = False,
+    use_mambapy: bool = False,
+    use_associative_scan: bool = False,
+    **kwargs,
+):
+    # Torch only alternatives to the recurrent path
+    if is_torch_greater_or_equal("2.9.0"):
+        from torch._higher_order_ops.associative_scan import associative_scan
+    else:
+        associative_scan = None
+
+    if is_mambapy_available():
+        from mambapy.pscan import pscan
+    else:
+        pscan = None
+
+    batch_size, intermediate_size, seq_len = hidden_states.shape
+    input_dtype = hidden_states.dtype
+
+    if delta_bias is not None:
+        dt = dt + delta_bias.to(dt.dtype)[..., None]
+    if delta_softplus:
+        dt = F.softplus(dt)
+
+    # We need to transpose on the basis of the original kernel layout
+    B = B.transpose(1, 2)
+    C = C.transpose(1, 2)
+
+    # Discretize A and B for the entire sequence
+    discrete_A = torch.exp(A[None, :, None, :] * dt[:, :, :, None])
+    discrete_B = dt[:, :, :, None] * B[:, None, :, :].float()
+    deltaB_u = discrete_B * hidden_states[:, :, :, None].float()
+
+    if use_mambapy and pscan is not None:
+        all_states = pscan(discrete_A.transpose(1, 2), deltaB_u.transpose(1, 2))
+
+        scan_output = (all_states @ C.unsqueeze(-1)).squeeze(3).transpose(1, 2)
+        ssm_state = all_states[:, -1]
+
+    elif (
+        use_associative_scan
+        and associative_scan is not None
+        # There is no onnx translation for this op so we rely on the normal sequential path then
+        and (is_torchdynamo_compiling() and not is_torchdynamo_exporting())
+    ):
+
+        def combine_fn(left, right):
+            a_left, b_left = left
+            a_right, b_right = right
+            return a_left * a_right, a_right * b_left + b_right
+
+        combine_mode = "pointwise" if discrete_A.device.type in ("cuda", "xpu") else "generic"
+        _, all_states = associative_scan(
+            combine_fn,
+            (discrete_A, deltaB_u),
+            dim=2,
+            combine_mode=combine_mode,
+        )
+
+        scan_output = torch.matmul(all_states.transpose(1, 2).to(input_dtype), C.unsqueeze(-1))
+        scan_output = scan_output.squeeze(-1).transpose(1, 2)
+        ssm_state = all_states[:, :, -1]
+
+    # Recurrent iteration
+    else:
+        # "Initial hidden state" is not supported by the kernel path, so use
+        # the same zero initialization as the kernel
+        ssm_state = torch.zeros(
+            batch_size,
+            intermediate_size,
+            A.shape[-1],
+            dtype=input_dtype,
+            device=hidden_states.device,
+        )
+
+        scan_outputs = []
+        for index in range(seq_len):
+            # State calculation
+            ssm_state = discrete_A[:, :, index] * ssm_state + deltaB_u[:, :, index]
+
+            # Subsequent output
+            scan_output = torch.matmul(ssm_state.to(input_dtype), C[:, index, :].unsqueeze(-1))
+            scan_outputs.append(scan_output[:, :, 0])
+        scan_output = torch.stack(scan_outputs, dim=-1)
+
+    if D is not None:
+        scan_output = scan_output + hidden_states * D[None, :, None]
+
+    if z is not None:
+        scan_output = scan_output * F.silu(z)
+
+    if return_last_state:
+        return scan_output, ssm_state
+
+    return scan_output
+
+
+@use_kernelized_func(
+    [mamba_inner_fn, mamba_selective_scan, mamba_selective_state_update, causal_conv1d_fn, causal_conv1d_update]
+)
 class FalconMambaMixer(nn.Module):
     """
     Compute ∆, A, B, C, and D the state space parameters and compute the `contextualized_states`.
@@ -107,7 +327,7 @@ class FalconMambaMixer(nn.Module):
         self.activation = config.hidden_act
         self.act = ACT2FN[config.hidden_act]
 
-        self.use_falcon_mambapy = config.use_falcon_mambapy
+        self.use_mambapy = config.use_mambapy
         self.use_associative_scan = config.use_associative_scan
 
         # projection of the input hidden states
@@ -126,26 +346,11 @@ class FalconMambaMixer(nn.Module):
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
         self.use_bias = config.use_bias
 
-        global causal_conv1d, causal_conv1d_update, causal_conv1d_fn
-        causal_conv1d = lazy_load_kernel("causal-conv1d")
-        causal_conv1d_update = getattr(causal_conv1d, "causal_conv1d_update", None)
-        causal_conv1d_fn = getattr(causal_conv1d, "causal_conv1d_fn", None)
-
-        global falcon_mamba_ssm, selective_state_update, selective_scan_fn, falcon_mamba_inner_fn
-        falcon_mamba_ssm = lazy_load_kernel("falcon_mamba-ssm")
-        selective_state_update = resolve_internal_import(
-            falcon_mamba_ssm, chained_path="ops.triton.selective_state_update.selective_state_update"
-        )
-        selective_scan_fn = getattr(falcon_mamba_ssm, "selective_scan_fn", None)
-        falcon_mamba_inner_fn = getattr(falcon_mamba_ssm, "falcon_mamba_inner_fn", None)
-
-        self.warn_slow_implementation()
-
         self.layer_type = config.layer_types[layer_idx]
-
-        # Triton expects to pass RMS weights even if they are non learnable, thus we need to create these weights here
-        self.register_buffer("b_c_rms", torch.ones(self.ssm_state_size, requires_grad=False), persistent=False)
-        self.register_buffer("dt_rms", torch.ones(self.intermediate_size, requires_grad=False), persistent=False)
+        # These include dummy weights that are not used (only for imitating the kernels path)
+        self.dt_layernorm = FalconMambaWeightlessRMSNorm(self.intermediate_size, eps=config.mixer_rms_eps)
+        self.b_layernorm = FalconMambaWeightlessRMSNorm(self.ssm_state_size, eps=config.mixer_rms_eps)
+        self.c_layernorm = FalconMambaWeightlessRMSNorm(self.ssm_state_size, eps=config.mixer_rms_eps)
         self.rms_eps = config.mixer_rms_eps
 
     @torch.no_grad()
@@ -169,45 +374,29 @@ class FalconMambaMixer(nn.Module):
         # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
         inv_dt = dt + torch.log(-torch.expm1(-dt))
         init.copy_(self.dt_proj.bias, inv_dt)
-        init.ones_(self.b_c_rms)
-        init.ones_(self.dt_rms)
+        init.ones_(self.dt_layernorm.weight)
+        init.ones_(self.b_layernorm.weight)
+        init.ones_(self.c_layernorm.weight)
 
-    def warn_slow_implementation(self):
-        is_fast_path_available = all(
-            (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, falcon_mamba_inner_fn)
-        )
-        if not is_fast_path_available:
-            if self.use_falcon_mambapy:
-                if is_mambapy_available():
-                    logger.warning_once(
-                        "The fast path is not available because one of `(selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)`"
-                        " is None. Falling back to the mamba.py backend. The recommended way to enable the fast path is `pip install kernels`, which provides the"
-                        " FalconMamba kernels (loaded on demand). Alternatively, install mamba-ssm (https://github.com/state-spaces/mamba/#installation) and"
-                        " causal-conv1d (https://github.com/Dao-AILab/causal-conv1d)."
-                    )
-                else:
-                    raise ImportError(
-                        "use_mambapy is set to True but the mambapy package is not installed. To install it follow https://github.com/alxndrTL/mamba.py."
-                    )
-            else:
-                logger.warning_once(
-                    "The fast path is not available because one of `(selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)`"
-                    " is None. Falling back to the sequential implementation of Mamba, as use_mambapy is set to False. The recommended way to enable the fast path is"
-                    " `pip install kernels`, which provides the FalconMamba kernels (loaded on demand). Alternatively, install mamba-ssm"
-                    " (https://github.com/state-spaces/mamba/#installation) and causal-conv1d (https://github.com/Dao-AILab/causal-conv1d)."
-                    " For the mamba.py backend, follow https://github.com/alxndrTL/mamba.py."
-                )
-
-    def cuda_kernels_forward(
+    @force_accelerate_hooks(["conv1d", "dt_proj"])
+    def forward(
         self,
         hidden_states: torch.Tensor,
         cache_params: Cache | None = None,
-        attention_mask: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs,
     ):
+        seq_len = hidden_states.shape[1]
+        dtype = hidden_states.dtype
+        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
+
         # 1. Gated MLP's linear projection
+        hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
         projected_states = self.in_proj(hidden_states).transpose(1, 2)
-        if self.training and cache_params is None:  # Doesn't support outputting the states -> used for training
-            contextualized_states = falcon_mamba_inner_fn(
+
+        A = -torch.exp(self.A_log.float())
+        if self.training and cache_params is None:
+            fused_output = mamba_inner_fn(
                 projected_states,
                 self.conv1d.weight,
                 self.conv1d.bias if self.use_conv_bias else None,
@@ -215,263 +404,141 @@ class FalconMambaMixer(nn.Module):
                 self.dt_proj.weight,
                 self.out_proj.weight,
                 self.out_proj.bias.float() if self.use_bias else None,
-                -torch.exp(self.A_log.float()),
+                A,
                 None,  # input-dependent B
                 None,  # input-dependent C
                 self.D.float(),
                 delta_bias=self.dt_proj.bias.float(),
                 delta_softplus=True,
-                b_rms_weight=self.b_c_rms,
-                c_rms_weight=self.b_c_rms,
-                dt_rms_weight=self.dt_rms,
+                # Key difference: norms on B, C, and dt
+                b_rms_weight=self.b_layernorm.weight,
+                c_rms_weight=self.c_layernorm.weight,
+                dt_rms_weight=self.dt_layernorm.weight,
                 b_c_dt_rms_eps=self.rms_eps,
             )
 
-        else:
-            hidden_states, gate = projected_states.chunk(2, dim=1)
+            # Only kernels can use this shortcircuit, fallback to normal torch otherwise
+            if fused_output is not None:
+                return fused_output
 
-            if attention_mask is not None:
-                hidden_states = hidden_states * attention_mask.unsqueeze(1)
+        hidden_states_B_C, gate = projected_states.chunk(2, dim=1)
 
-            is_decoding = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
-
-            # 2. Convolution sequence transformation
-            conv_weights = self.conv1d.weight.view(self.conv1d.weight.size(0), self.conv1d.weight.size(2))
-            if is_decoding:
-                hidden_states = causal_conv1d_update(
-                    hidden_states.squeeze(-1),
-                    cache_params.layers[self.layer_idx].conv_states[0],
-                    conv_weights,
-                    self.conv1d.bias,
-                    self.activation,
-                )
-                hidden_states = hidden_states.unsqueeze(-1)
-            else:
-                if cache_params is not None:
-                    conv_states = nn.functional.pad(
-                        hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0)
-                    )
-                    cache_params.update_conv_state(conv_states, self.layer_idx)
-                hidden_states = causal_conv1d_fn(
-                    hidden_states, conv_weights, self.conv1d.bias, activation=self.activation
-                )
-
-            if attention_mask is not None:
-                hidden_states = hidden_states * attention_mask.unsqueeze(1)
-
-            # 3. State Space Model sequence transformation
-            # 3.a. input varying initialization of time_step, B and C
-            ssm_parameters = self.x_proj(hidden_states.transpose(1, 2))
-            time_step, B, C = torch.split(
-                ssm_parameters, [self.time_step_rank, self.ssm_state_size, self.ssm_state_size], dim=-1
-            )
-
-            B = rms_forward(B, variance_epsilon=self.rms_eps)
-            C = rms_forward(C, variance_epsilon=self.rms_eps)
-            time_step = rms_forward(time_step, variance_epsilon=self.rms_eps)
-
-            # In case the model has been quantized, we need a hack to properly call the `nn.Linear` module
-            # at the price of a small overhead.
-            if hasattr(self.config, "_is_quantized"):
-                discrete_time_step = (self.dt_proj(time_step) - self.dt_proj.bias).transpose(1, 2)
-            else:
-                discrete_time_step = self.dt_proj.weight @ time_step.transpose(1, 2)
-
-            A = -torch.exp(self.A_log.float())
-            # 3.c perform the recurrence y ← SSM(A, B, C)(x)
-            time_proj_bias = self.dt_proj.bias.float() if hasattr(self.dt_proj, "bias") else None
-            if is_decoding:
-                scan_outputs = selective_state_update(
-                    cache_params.layers[self.layer_idx].recurrent_states[0],
-                    hidden_states[..., 0],
-                    discrete_time_step[..., 0],
-                    A,
-                    B[:, 0],
-                    C[:, 0],
-                    self.D,
-                    gate[..., 0],
-                    time_proj_bias,
-                    dt_softplus=True,
-                ).unsqueeze(-1)
-            else:
-                scan_outputs, ssm_state = selective_scan_fn(
-                    hidden_states,
-                    discrete_time_step,
-                    A,
-                    B.transpose(1, 2),
-                    C.transpose(1, 2),
-                    self.D.float(),
-                    gate,
-                    time_proj_bias,
-                    delta_softplus=True,
-                    return_last_state=True,
-                )
-                if ssm_state is not None and cache_params is not None:
-                    cache_params.update_recurrent_state(ssm_state, self.layer_idx)
-
-            # 4. Final linear projection
-            contextualized_states = self.out_proj(scan_outputs.transpose(1, 2))
-        return contextualized_states
-
-    # fmt: off
-    def slow_forward(self,
-        input_states,
-        cache_params: Cache | None = None,
-        attention_mask: torch.LongTensor | None = None,
-    ):
-        batch_size, seq_len, _ = input_states.shape
-        dtype = input_states.dtype
-        # 1. Gated MLP's linear projection
-        projected_states = self.in_proj(input_states).transpose(1, 2)  # [batch, 2 * intermediate_size, seq_len]
-        hidden_states, gate = projected_states.chunk(2, dim=1)
-
-        if attention_mask is not None:
-            hidden_states = hidden_states * attention_mask.unsqueeze(1)
-
-        if cache_params is not None and cache_params.has_previous_state(self.layer_idx):
-            ssm_state = cache_params.layers[self.layer_idx].recurrent_states[0].clone()
-        else:
-            ssm_state = torch.zeros(
-                (batch_size, self.intermediate_size, self.ssm_state_size), device=hidden_states.device, dtype=dtype
-            )
+        if use_precomputed_states:
+            conv_state = cache_params.layers[self.layer_idx].conv_states[0]
+            recurrent_state = cache_params.layers[self.layer_idx].recurrent_states[0]
 
         # 2. Convolution sequence transformation
-        if cache_params is not None:
-            if not cache_params.has_previous_state(self.layer_idx):
-                conv_state = nn.functional.pad(hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0))
-
-                cache_params.update_conv_state(conv_state, self.layer_idx)
-                hidden_states = self.act(
-                    self.conv1d(hidden_states)[..., :seq_len]
-                )  # [batch, intermediate_size, seq_len]
-            else:
-                conv_state = cache_params.update_conv_state(hidden_states, self.layer_idx)[
-                    ..., -self.conv_kernel_size :
-                ]
-                conv_state = conv_state.to(self.conv1d.weight.device)
-                hidden_states = torch.sum(conv_state * self.conv1d.weight[:, 0, :], dim=-1)
-                if self.use_conv_bias:
-                    hidden_states += self.conv1d.bias
-                hidden_states = (
-                    self.act(hidden_states).to(dtype).unsqueeze(-1)
-                )  # [batch, intermediate_size, 1] : decoding
+        if use_precomputed_states and seq_len == 1 and not cache_params.layers[self.layer_idx].record_past:
+            hidden_states_B_C = causal_conv1d_update(
+                hidden_states_B_C,
+                conv_state,
+                self.conv1d.weight.squeeze(1),
+                self.conv1d.bias,
+                activation=self.activation,
+            )
         else:
-            hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])  # [batch, intermediate_size, seq_len]
-
-        if attention_mask is not None:
-            hidden_states = hidden_states * attention_mask.unsqueeze(1)
-
-        # 3. State Space Model sequence transformation
-        # 3.a. Selection:  [batch, seq_len, self.time_step_rank + self.ssm_state_size * 2]
-        ssm_parameters = self.x_proj(hidden_states.transpose(1, 2))
-        time_step, B, C = torch.split(
-            ssm_parameters, [self.time_step_rank, self.ssm_state_size, self.ssm_state_size], dim=-1
-        )
-
-        B = rms_forward(B, variance_epsilon=self.rms_eps)
-        C = rms_forward(C, variance_epsilon=self.rms_eps)
-        time_step = rms_forward(time_step, variance_epsilon=self.rms_eps)
-
-        discrete_time_step = self.dt_proj(time_step)  # [batch, seq_len, intermediate_size]
-        discrete_time_step = nn.functional.softplus(discrete_time_step).transpose(
-            1, 2
-        )  # [batch, intermediate_size, seq_len]
-
-        # 3.b. Discretization: B and C to [batch, seq_len, intermediate_size, ssm_state_size] (SRAM)
-        A = -torch.exp(self.A_log.float())  # [intermediate_size, ssm_state_size]
-        discrete_A = torch.exp(
-            A[None, :, None, :] * discrete_time_step[:, :, :, None]
-        )  # [batch, intermediate_size, seq_len, ssm_state_size]
-        discrete_B = (
-            discrete_time_step[:, :, :, None] * B[:, None, :, :].float()
-        )  # [batch, intermediate_size, seq_len, ssm_state_size]
-        deltaB_u = discrete_B * hidden_states[:, :, :, None].float()
-
-        # 3.c perform the recurrence y ← SSM(A, B, C)(x)
-        if self.use_falcon_mambapy and self.training and cache_params is None:
-            hs = pscan(
-                discrete_A.transpose(1, 2), deltaB_u.transpose(1, 2)
-            )  # [batch, seq_len, intermediate_size, ssm_state_size]
-            scan_output = (hs @ C.unsqueeze(-1)).squeeze(3).transpose(1, 2)  # [batch, intermediate_size, seq_len]
-            scan_output = scan_output + hidden_states * self.D[None, :, None]
-            scan_output = scan_output * self.act(gate)
-        else:
-            # Use associative_scan for parallel computation when available
-            if (
-                self.use_associative_scan
-                and associative_scan is not None
-                and is_tracing(hidden_states)
-                and cache_params is None
-            ):
-
-                def combine_fn(left, right):
-                    a_left, b_left = left
-                    a_right, b_right = right
-                    return (a_left * a_right, a_right * b_left + b_right)
-
-                combine_mode = "pointwise" if discrete_A.device.type in ("cuda", "xpu") else "generic"
-                _, all_h = associative_scan(combine_fn, (discrete_A, deltaB_u), dim=2, combine_mode=combine_mode)
-                # all_h: [B, D, S, N] -> output: [B, D, S]
-                scan_output = (
-                    torch.matmul(all_h.permute(0, 2, 1, 3).to(dtype), C.unsqueeze(-1)).squeeze(-1).permute(0, 2, 1)
+            if cache_params is not None:
+                hidden_states_B_C = cache_params.update_conv_state(
+                    hidden_states_B_C,
+                    self.layer_idx,
+                    conv_kernel_size=self.conv_kernel_size,
                 )
-                ssm_state = all_h[:, :, -1, :]
-            else:
-                # Sequential loop for decoding or when associative_scan unavailable
-                scan_outputs = []
-                for i in range(seq_len):
-                    ssm_state = (
-                        discrete_A[:, :, i, :] * ssm_state + deltaB_u[:, :, i, :]
-                    )  # [batch, intermediate_size, ssm_state]
-                    scan_output = torch.matmul(
-                        ssm_state.to(dtype), C[:, i, :].unsqueeze(-1)
-                    )  # [batch, intermediate_size, 1]
-                    scan_outputs.append(scan_output[:, :, 0])
-                scan_output = torch.stack(scan_outputs, dim=-1)  # [batch, intermediate_size, seq_len]
 
-            scan_output = scan_output + (hidden_states * self.D[None, :, None])
-            scan_output = scan_output * self.act(gate)
+            hidden_states_B_C = causal_conv1d_fn(
+                hidden_states_B_C,
+                self.conv1d.weight.squeeze(1),
+                self.conv1d.bias,
+                activation=self.activation,
+                **kwargs,
+            )
 
             if cache_params is not None:
-                cache_params.update_recurrent_state(ssm_state, self.layer_idx)
+                hidden_states_B_C = hidden_states_B_C[:, :, -seq_len:]
+
+        # 3. SSM transformation
+        hidden_states_B_C = apply_mask_to_padding_states(hidden_states_B_C.transpose(1, 2), attention_mask)
+        time_step, B, C = torch.split(
+            self.x_proj(hidden_states_B_C),
+            [self.time_step_rank, self.ssm_state_size, self.ssm_state_size],
+            dim=-1,
+        )
+
+        # Key difference: Additional norms on B, C, and dt
+        time_step = self.dt_layernorm(time_step)
+        B = self.b_layernorm(B)
+        C = self.c_layernorm(C)
+
+        # In case the model has been quantized, we need a hack to properly call the `nn.Linear` module
+        # at the price of a small overhead.
+        if hasattr(self.config, "_is_quantized"):
+            time_step = (self.dt_proj(time_step) - self.dt_proj.bias).transpose(1, 2)
+        else:
+            time_step = self.dt_proj.weight @ time_step.transpose(1, 2)
+        time_proj_bias = self.dt_proj.bias.float() if self.dt_proj.bias is not None else None
+
+        # Recurrent form
+        if use_precomputed_states and seq_len == 1:
+            scan_output = mamba_selective_state_update(
+                recurrent_state,
+                hidden_states_B_C.transpose(1, 2)[..., 0],
+                time_step[..., 0],
+                A,
+                B[:, 0],
+                C[:, 0],
+                self.D,
+                z=gate[..., 0],
+                dt_bias=time_proj_bias,
+                dt_softplus=True,
+            ).unsqueeze(-1)
+
+        # Full sequence form
+        else:
+            output_final_state = cache_params is not None
+            scan_result = mamba_selective_scan(
+                hidden_states_B_C.transpose(1, 2),
+                time_step,
+                A,
+                B.transpose(1, 2),
+                C.transpose(1, 2),
+                D=self.D.float(),
+                z=gate,
+                delta_bias=time_proj_bias,
+                delta_softplus=True,
+                return_last_state=output_final_state,
+                use_mambapy=self.use_mambapy,
+                use_associative_scan=self.use_associative_scan,
+            )
+
+            if output_final_state:
+                scan_output, final_state = scan_result
+                cache_params.update_recurrent_state(final_state, self.layer_idx)
+            else:
+                scan_output = scan_result
 
         # 4. Final linear projection
-        contextualized_states = self.out_proj(scan_output.transpose(1, 2))  # [batch, seq_len, hidden_size]
+        contextualized_states = self.out_proj(scan_output.transpose(1, 2).to(dtype))
         return contextualized_states
-    # fmt: on
-
-    @force_accelerate_hooks("conv1d")
-    def forward(
-        self,
-        hidden_states,
-        cache_params: Cache | None = None,
-        attention_mask: torch.LongTensor | None = None,
-        **kwargs,
-    ):
-        is_fast_path_available = all(
-            (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, falcon_mamba_inner_fn)
-        )
-        if is_fast_path_available and "cuda" in self.x_proj.weight.device.type and not is_torchdynamo_compiling():
-            return self.cuda_kernels_forward(hidden_states, cache_params, attention_mask)
-        return self.slow_forward(hidden_states, cache_params, attention_mask)
 
 
+@use_kernel_forward_from_hub("RMSNorm")
 class FalconMambaRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
-        FalconMambaRMSNorm is equivalent to T5LayerNorm and LlamaRMSNorm
+        FalconMambaRMSNorm is equivalent to T5LayerNorm
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
 
-    def forward(self, hidden_states):
-        return self.weight.to(hidden_states.device) * rms_forward(
-            hidden_states, variance_epsilon=self.variance_epsilon
-        )
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
 
     def extra_repr(self):
-        return f"{self.weight.shape[0]}, eps={self.variance_epsilon}"
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
 class FalconMambaBlock(GradientCheckpointingLayer):

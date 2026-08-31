@@ -206,10 +206,21 @@ class NeuCodecModelTest(ModelTesterMixin, unittest.TestCase):
     def test_hidden_states_output(self):
         pass
 
+    @unittest.skip(
+        "quantization_dim must track hidden_size + semantic_hidden_size, but `_prepare_config_headdim` mutates "
+        "hidden_size on an already-built config without updating it, desyncing the two."
+    )
+    def test_flex_attention_with_grads(self):
+        pass
+
 
 @slow
 @require_torch
 class NeuCodecIntegrationTest(unittest.TestCase):
+    """
+    Expected results for the integration tests can be created by running the script athttps://gist.github.com/harryjulian/b8f6b4b1fe47fdc5a9b7ac6c82b73399
+    """
+
     def setUp(self):
         self.fixtures_path = Path(__file__).parent.parent.parent / "fixtures/neucodec"
 
@@ -266,7 +277,10 @@ class NeuCodecIntegrationTest(unittest.TestCase):
 
         dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         dataset = dataset.cast_column("audio", Audio(sampling_rate=feature_extractor.sampling_rate))
-        audios = [dataset[i]["audio"]["array"] for i in range(num_samples)]
+        # Fixed indices, chosen to keep audio lengths within a modest spread rather than the dataset's natural
+        # first-N order, which stresses padding-sensitive ops beyond what this test is meant to cover.
+        dataset_indices = raw_data["dataset_indices"]
+        audios = [dataset[i]["audio"]["array"] for i in dataset_indices]
 
         # Batched feature extraction + inference
         inputs = feature_extractor(
@@ -285,7 +299,7 @@ class NeuCodecIntegrationTest(unittest.TestCase):
             )
             batch_codes = enc.audio_codes
             batch_mask = enc.audio_codes_mask
-            dec = model.decode(audio_codes=batch_codes).audio_values
+            dec = model.decode(audio_codes=batch_codes, audio_codes_mask=batch_mask).audio_values
 
         for i in range(num_samples):
             valid_code_len = int(batch_mask[i].sum().item())

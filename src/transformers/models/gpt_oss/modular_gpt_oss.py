@@ -19,7 +19,7 @@ from torch.nn import functional as F
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
-from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernel_func_from_hub
+from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import (
     MoeModelOutputWithPast,
@@ -171,7 +171,7 @@ def _apply_rotary_emb(
     return torch.cat((first_, second_), dim=-1)
 
 
-@use_kernel_func_from_hub("rotary_pos_emb")
+@use_kernel_forward_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
@@ -315,7 +315,12 @@ class GptOssDecoderLayer(LlamaDecoderLayer):
 class GptOssPreTrainedModel(LlamaPreTrainedModel):
     _keep_in_fp32_modules = ["post_attention_layernorm", "input_layernorm", "norm"]
     _supports_sdpa = False
-    _compatible_flash_implementations = ["kernels-community/vllm-flash-attn3", "flash_attention_4"]
+    _compatible_flash_implementations = [
+        "kernels-community/vllm-flash-attn3",
+        "flash_attention_4",
+        "kernels-community/metal-flash-sdpa",
+    ]
+
     _can_record_outputs = {
         "router_logits": OutputRecorder(GptOssTopKRouter, index=0),
         "hidden_states": GptOssDecoderLayer,

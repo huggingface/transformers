@@ -817,6 +817,10 @@ class ProphetNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     test_resize_embeddings = False
     is_encoder_decoder = True
 
+    @unittest.skip(reason="ProphetNet's loss is NLL over n-gram streams, not one cross-entropy over the logits")
+    def test_encoder_decoder_loss_no_double_shift(self):
+        pass
+
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
         self,

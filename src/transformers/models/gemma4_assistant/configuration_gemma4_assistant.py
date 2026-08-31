@@ -34,7 +34,7 @@ class Gemma4AssistantConfig(PreTrainedConfig):
         If True, uses an embedding table ordered for optimal assistant model performance that needs to be re-ordered to
         align with the main model.
     num_centroids (`int`, defaults to 2048):
-        The total numer of centroids.
+        The total number of centroids.
     centroid_intermediate_top_k (`int`, defaults to 32):
         The number of active centroids.
 

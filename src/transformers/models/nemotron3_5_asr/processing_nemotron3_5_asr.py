@@ -25,6 +25,7 @@ from ...audio_utils import AudioInput, make_list_of_audio
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, is_torch_available, logging
+from ...utils.import_utils import requires
 
 
 if is_torch_available():
@@ -181,6 +182,7 @@ DEFAULT_PROMPT_DICTIONARY = {
 }
 
 
+@requires(backends=("torch",))
 @auto_docstring
 class Nemotron3_5AsrProcessor(ProcessorMixin):
     def __init__(

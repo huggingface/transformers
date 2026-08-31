@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -123,13 +123,16 @@ outputs = model.generate(**inputs, do_sample=False, max_new_tokens=50, cache_imp
 
 [Parallelism](./perf_infer_gpu_multi) distributes a model across devices so models too big for one device run fast. This approach uses more memory due to sharding overhead and communication to sync results.
 
-[Tensor parallelism](./perf_infer_gpu_multi) splits a model layer across devices. Set `tp_plan="auto"` in [`~PreTrainedModel.from_pretrained`] to enable it.
+[Tensor parallelism](./perf_infer_gpu_multi) splits a model layer across devices. Set the number of devices with `DistributedConfig(tp_size=N)` and pass it to [`~PreTrainedModel.from_pretrained`] to enable it.
 
 ```py
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, DistributedConfig
 
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Meta-Llama-3-8B-Instruct", tp_plan="auto")
+distributed_config = DistributedConfig(tp_size=4)
+model = AutoModelForCausalLM.from_pretrained(
+    "meta-llama/Meta-Llama-3-8B-Instruct",
+    distributed_config=distributed_config,
+)
 print(model._tp_plan)
 ```
 
@@ -147,7 +150,7 @@ from transformers.generation import GenerationConfig
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-0.6B",
     attn_implementation="paged|sdpa",
-    device_map="cuda",
+    device_map="auto",
     torch_dtype=torch.bfloat16,
 )
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")

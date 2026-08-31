@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch Gemma4 model."""
 
+import tempfile
 import unittest
 from contextlib import contextmanager
 
@@ -24,10 +25,12 @@ from transformers import (
     Gemma4Config,
     Gemma4TextConfig,
     is_torch_available,
+    set_seed,
 )
 from transformers.testing_utils import (
     Expectations,
     cleanup,
+    require_deterministic_for_accelerator,
     require_deterministic_for_xpu,
     require_torch,
     require_torch_accelerator,
@@ -35,6 +38,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.utils import ModelOutput
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...generation.test_utils import GenerationTesterMixin
@@ -63,6 +67,8 @@ GEMMA4_RANDOM_MOE_FA2_SKIP_REASON = (
 
 
 class Gemma4TextModelTester(CausalLMModelTester):
+    forced_config_args = ["pad_token_id", "per_layer_config"]
+
     if is_torch_available():
         config_class = Gemma4TextConfig
         base_model_class = Gemma4TextModel
@@ -78,7 +84,11 @@ class Gemma4TextModelTester(CausalLMModelTester):
             "sliding_attention",
             "full_attention",
         ]  # similarly we want to test sharing on both types
-        self.global_head_dim = self.head_dim  # gemma4 use a different head_dim for full and sliding layers
+        self.per_layer_config = {
+            layer_idx: {"head_dim": 2 * self.head_dim}
+            for layer_idx, layer_type in enumerate(self.layer_types)
+            if layer_type == "full_attention"
+        }  # gemma4 use a different head_dim for full and sliding layers
 
         # To make model small
         self.vocab_size_per_layer_input = 99
@@ -103,14 +113,15 @@ class Gemma4TextModelTest(CausalLMModelTest, unittest.TestCase):
     def test_num_layers_is_small(self):
         pass
 
-    @unittest.skip("Gemma4 uses different rope per layer type, which is not compatible with this test")
-    def test_model_rope_scaling_frequencies(self):
-        pass
+    def test_bidirectional_sliding_window_survives_save_and_reload(self):
+        config = Gemma4TextConfig(sliding_window=512, use_bidirectional_attention="all")
+        self.assertEqual(config.sliding_window, 257)
 
-    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
-    @unittest.skip("Gemma4 uses different rope per layer type, which is not compatible with this test")
-    def test_model_rope_scaling_from_config(self):
-        pass
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            config.save_pretrained(tmpdirname)
+            reloaded = Gemma4TextConfig.from_pretrained(tmpdirname)
+
+        self.assertEqual(reloaded.sliding_window, config.sliding_window)
 
     @unittest.skip(
         "Gemma4 cannot use random inputs_embeds, as it needs to reverse them when input_ids is not provided"
@@ -439,6 +450,16 @@ class Gemma4Vision2TextModelTester:
         pixel_position_ids = torch.ones(self.vision_config["image_size"], device=torch_device, dtype=torch.long)
         pixel_position_ids = pixel_position_ids[None, :, None].repeat(self.batch_size, 1, 2)
 
+        # create (h*w, 2) grid of (x, y) coords for a non-square input image
+        num_patches = self.vision_config["image_size"]
+        h = int(num_patches**0.5)
+        w = num_patches // h
+
+        xs = torch.arange(w).repeat(h)
+        ys = torch.arange(h).repeat_interleave(w)
+        pixel_position_ids = torch.stack([xs, ys], dim=-1).to(device=torch_device)
+        pixel_position_ids = pixel_position_ids.unsqueeze(0).repeat(self.batch_size, 1, 1)
+
         return config, pixel_values, pixel_position_ids
 
     def prepare_config_and_inputs_for_common(self):
@@ -450,7 +471,7 @@ class Gemma4Vision2TextModelTester:
         # Ensure no tokens accidentally match special token IDs
         for token_id in [config.image_token_id, config.video_token_id, config.audio_token_id]:
             input_ids[input_ids == token_id] = self.pad_token_id
-        input_ids[:, :1] = config.image_token_id
+        input_ids[:, :5] = config.image_token_id
 
         mm_token_type_ids = torch.zeros_like(input_ids)
         mm_token_type_ids[input_ids == config.image_token_id] = 1
@@ -602,6 +623,110 @@ class Gemma4Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
             _ = model(inputs_embeds=inputs_embeds)
             self.assertEqual(counter["call_count"], 1)
 
+    @parameterized.expand([True, False, None])
+    def test_get_image_features_output(self, return_dict: bool | None):
+        "Override to infer last hidden states' `batch_size` from image position ids"
+        for model_class in self.all_model_classes:
+            if not hasattr(model_class, "get_image_features"):
+                continue
+
+            config, inputs_dict = self._image_features_prepare_config_and_inputs()
+            if return_dict is not None:
+                config.return_dict = return_dict
+
+            model = model_class(config).eval()
+            model = model.to(torch_device)
+
+            set_seed(42)
+            with torch.no_grad():
+                outputs = model.get_image_features(**inputs_dict)
+
+            if return_dict in (True, None):
+                self.assertTrue(isinstance(outputs, ModelOutput), "get_image_features() must return a BaseModelOutput")
+                self.assertTrue(
+                    hasattr(outputs, "last_hidden_state"),
+                    "get_image_features() must return a BaseModelOutput with last_hidden_state",
+                )
+                self.assertTrue(
+                    hasattr(outputs, "pooler_output"),
+                    "get_image_features() must return a BaseModelOutput with pooler_output",
+                )
+                self.assertTrue(
+                    hasattr(outputs, "hidden_states"),
+                    "get_image_features() must return a BaseModelOutput with hidden_states",
+                )
+                if self.has_attentions:
+                    self.assertTrue(
+                        hasattr(outputs, "attentions"),
+                        "get_image_features() must return a BaseModelOutput with attentions",
+                    )
+
+                if getattr(self, "skip_test_image_features_output_shape", False):
+                    return
+
+                last_hidden_state_shape = outputs.last_hidden_state.shape
+                batch_size = (
+                    inputs_dict["pixel_values"].shape[0]
+                    if "pixel_values" in inputs_dict
+                    else inputs_dict["pixel_values_images"].shape[0]
+                )
+                output_length = inputs_dict["pixel_values"].shape[-2] // (
+                    model.config.vision_config.pooling_kernel_size**2
+                )
+                k_squared = int((inputs_dict["image_position_ids"].shape[1] // output_length) ** 0.5) ** 2
+                batch_size *= inputs_dict["image_position_ids"].shape[1] // k_squared
+
+                self.assertEqual(
+                    last_hidden_state_shape[0],
+                    batch_size,
+                    f"batch_size mismatch, full shape: {last_hidden_state_shape}",
+                )
+
+                vision_config = config.vision_config if hasattr(config, "vision_config") else config
+                vision_config = (
+                    vision_config.backbone_config if hasattr(vision_config, "backbone_config") else vision_config
+                )
+                vision_config = vision_config.vq_config if hasattr(vision_config, "vq_config") else vision_config
+                vision_config = vision_config.model_args if hasattr(vision_config, "model_args") else vision_config
+                attribute_candidates = [
+                    "embed_dim_per_stage",
+                    "embed_dim",
+                    "embed_dims",
+                    "out_hidden_size",
+                    "hidden_size",
+                    "hidden_dim",
+                ]
+                hidden_size = None
+                for attr in attribute_candidates:
+                    if hasattr(vision_config, attr):
+                        hidden_size = getattr(vision_config, attr)
+                        break
+                    elif isinstance(vision_config, dict) and attr in vision_config:
+                        hidden_size = vision_config[attr]
+                        break
+                else:
+                    raise ValueError("Cannot find the hidden size attribute in vision_config")
+                if isinstance(hidden_size, (list, tuple)):
+                    hidden_size = hidden_size[-1]
+                self.assertEqual(
+                    last_hidden_state_shape[-1],
+                    hidden_size,
+                    f"hidden_size mismatch, full shape: {last_hidden_state_shape}",
+                )
+
+                self.assertEqual(
+                    len(outputs.pooler_output),
+                    self.model_tester.batch_size,
+                    f"batch_size mismatch for `pooler_output`: {len(outputs.pooler_output)} != {self.model_tester.batch_size}",
+                )
+                self.assertEqual(
+                    outputs.pooler_output[0].ndim,
+                    2,
+                    f"each sample in `pooler_output` should be a 2D array but got {outputs.pooler_output[0].ndim}",
+                )
+            else:
+                self.assertIsInstance(outputs, tuple, "get_image_features() must return a tuple if return_dict=False")
+
     def test_attention_mask_composition(self):
         config = self.model_tester.get_config()
         config.text_config._attn_implementation = "eager"
@@ -698,8 +823,8 @@ class Gemma4IntegrationTest(unittest.TestCase):
 
         EXPECTED_TEXTS = Expectations(
             {
-                ("cuda", 8): ['This image shows a **brown and white cow** standing on a **sandy beach** with the **ocean and a blue sky** in the background'],
-                ("xpu", 3): ['This image shows a **brown and white cow** standing on a **sandy beach** with the **ocean and a blue sky** in the background'],
+                ("cuda", 8): ['This image shows a **brown and white cow** standing on a **sandy beach** with the **ocean** in the background under a **clear'],
+                ("xpu", 5): ['This image shows a **brown and white cow** standing on a **sandy beach** with the **ocean** in the background under a **clear'],
             }
         )  # fmt: skip
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
@@ -739,20 +864,12 @@ class Gemma4IntegrationTest(unittest.TestCase):
 
         EXPECTED_TEXTS = Expectations(
             {
-                ("cuda", (8, 0)): [
-                    "This image shows a **brown and white cow** standing on a **sandy beach** with the **ocean and a blue sky** in the background",
-                    "No, these images are not identical.\n\nThe first image is a photograph of a **cow** standing on a beach under a blue sky.\n\n",
-                ],
-                ("cuda", (8, 6)): [
-                    "This image shows a **brown and white cow** standing on a **sandy beach** with the **ocean and a blue sky** in the background",
-                    "No, these images are not identical.\n\nThe first image is a photograph of a **brown and white cow standing on a beach** under a blue",
-                ],
-                ("cuda", (9, 0)): [
+                ("cuda", 8): [
                     "This image shows a **brown and white cow** standing on a **sandy beach** with the **ocean and a blue sky** in the background",
                     "No, these images are **not identical**.\n\nHere's a breakdown of the differences:\n\n1.  **Image 1 (Cow on",
                 ],
-                ("xpu", 3): [
-                    "This image shows a **brown and white cow** standing on a **sandy beach** with the **ocean and a blue sky** in the background",
+                ("xpu", 5): [
+                    "This image shows a **brown and white cow** standing on a **sandy beach** with the **ocean** in the background under a **clear",
                     "No, these images are **not identical**.\n\nHere's a breakdown of the differences:\n\n1.  **Image 1 (Cow on",
                 ],
             }
@@ -789,9 +906,9 @@ class Gemma4IntegrationTest(unittest.TestCase):
         output_text = self.processor.batch_decode(output[:, input_size:], skip_special_tokens=True)
         EXPECTED_TEXTS = Expectations(
             {
-                ("cuda", 8): ['Based on the image, here is a description of what I see:\n\n**Foreground & Street Scene:**\n* **Traffic Sign:** The most prominent'],
+                ("cuda", 8): ['Based on the image, here is a description of what I see:\n\n**Foreground & Street Scene:**\n* **Roadway:** There is an'],
                 ("cuda", (9, 0)): ['Based on the image, here is a description of what I see:\n\n**Foreground & Street Scene:**\n* **Roadway:** There is an'],
-                ("xpu", 3): ['Based on the image, here is a description of what I see:\n\n**Foreground & Street Scene:**\n* **Roadway:** There is an'],
+                ("xpu", 5): ['Based on the image, here is a description of what I see:\n\n**Foreground & Street Scene:**\n* **Roadway:** There is an'],
             }
         )  # fmt: skip
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
@@ -819,7 +936,7 @@ class Gemma4IntegrationTest(unittest.TestCase):
         EXPECTED_TEXTS = Expectations(
             {
                 ("cuda", (8, 0)): ['## The Algorithmic Mind\n\nA whisper starts, a seed unseen,\nOf data vast, a vibrant sheen.\nA sea of numbers,'],
-                ("cuda", (8, 6)): ['## The Algorithmic Mind\n\nA tapestry of data, vast and deep,\nWhere silent numbers in their slumber sleep.\nA sea of text'],
+                ("cuda", (8, 6)): ['## The Algorithmic Mind\n\nA loom of logic, spun from endless thread,\nWhere data streams in, and the patterns spread.\nNo'],
                 ("cuda", (9, 0)): ['## The Algorithmic Mind\n\nA whisper starts, a seed unseen,\nOf data vast, a vibrant sheen.\nA sea of numbers,'],
             }
         )  # fmt: skip
@@ -845,9 +962,9 @@ class Gemma4IntegrationTest(unittest.TestCase):
         EXPECTED_TEXTS = Expectations(
             {
                 ("cuda", (8, 0)): ['## The Algorithmic Mind\n\nA whisper starts, a seed unseen,\nOf data vast, a vibrant sheen.\nA sea of numbers,'],
-                ("cuda", (8, 6)): ['## The Algorithmic Bloom\n\nFrom silent data, a whisper starts to rise,\nA sea of numbers beneath intelligent skies.\nNo flesh and'],
+                ("cuda", (8, 6)): ['## The Algorithmic Mind\n\nA loom of logic, spun from endless thread,\nWhere data streams in, and the patterns spread.\nNo'],
                 ("cuda", (9, 0)): ['## The Algorithmic Mind\n\nA whisper starts, a seed unseen,\nOf data vast, a vibrant sheen.\nA sea of numbers,'],
-                ("xpu", 3): ['## The Algorithmic Mind\n\nA whisper starts in silicon deep,\nWhere data streams in endless sweep.\nNo flesh and blood, no beating'],
+                ("xpu", 5): ['## The Algorithmic Mind\n\nA whisper starts, a seed unseen,\nOf data vast, a vibrant sheen.\nA sea of numbers,'],
             }
         )  # fmt: skip
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
@@ -878,7 +995,7 @@ class Gemma4IntegrationTest(unittest.TestCase):
 
     # Note: we do not test FA2 as the head dim is 512 on some layers, which is not compatible with the kernels
     @parameterized.expand([("sdpa",), ("eager",)])
-    @require_deterministic_for_xpu
+    @require_deterministic_for_accelerator(devices=["cuda"])
     def test_generation_beyond_sliding_window(self, attn_implementation: str):
         """Test that we can correctly generate beyond the sliding window. Outputs for every attention functions
         should be coherent and identical.
@@ -915,10 +1032,12 @@ class Gemma4IntegrationTest(unittest.TestCase):
         EXPECTED_COMPLETIONS = Expectations(
             {
                 ("cuda", 8): [
-                    "That sounds lovely! It seems like you're really enjoying the place you'",
+                    "That sounds lovely! It seems like you're really enjoying the place you'"
+                    if attn_implementation == "sdpa"
+                    else "That sounds like a very pleasant place! It seems like you're really enjoying",
                     "Here are a few ways you could use or expand upon that list, depending on",
                 ],
-                ("xpu", 3): [
+                ("xpu", 5): [
                     "That sounds lovely! It seems like you're really enjoying the place you'",
                     "Here are a few ways you could use or expand upon that list, depending on",
                 ],
@@ -930,14 +1049,15 @@ class Gemma4IntegrationTest(unittest.TestCase):
     def test_export_text_only(self):
         from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM
 
-        model = Gemma4ForConditionalGeneration.from_pretrained(self.model_name, device_map=torch_device)
+        # Run on CPU: the full E2B model (~4 GiB bfloat16) + torch.export tracing overhead
+        # (~4 GiB) exceeds the 22.3 GiB GPU memory available in CI. CPU avoids the OOM.
+        # max_cache_len=19 covers the prompt (~16 tokens) + 3 new tokens with a small buffer.
+        model = Gemma4ForConditionalGeneration.from_pretrained(self.model_name, device_map="cpu")
         tokenizer = AutoTokenizer.from_pretrained(self.model_name)
 
-        exportable_module = TorchExportableModuleForDecoderOnlyLM(
-            model, batch_size=1, max_cache_len=1024, device=torch_device
-        )
+        exportable_module = TorchExportableModuleForDecoderOnlyLM(model, batch_size=1, max_cache_len=19, device="cpu")
         exported_program = exportable_module.export(
-            input_ids=torch.tensor([[1]], device=torch_device, dtype=torch.long),
+            input_ids=torch.tensor([[1]], device="cpu", dtype=torch.long),
         )
 
         # Test generation with the exported model
@@ -947,13 +1067,13 @@ class Gemma4IntegrationTest(unittest.TestCase):
             add_generation_prompt=True,
         )
 
-        max_new_tokens_to_generate = 20
+        max_new_tokens_to_generate = 3
         # Generate text with the exported model
         export_generated_text = TorchExportableModuleForDecoderOnlyLM.generate(
-            exported_program, tokenizer, prompt, max_new_tokens=max_new_tokens_to_generate, device=torch_device
+            exported_program, tokenizer, prompt, max_new_tokens=max_new_tokens_to_generate, device="cpu"
         )
 
-        input_text = tokenizer(prompt, return_tensors="pt").to(torch_device)
+        input_text = tokenizer(prompt, return_tensors="pt").to("cpu")
         eager_outputs = model.generate(
             **input_text,
             max_new_tokens=max_new_tokens_to_generate,

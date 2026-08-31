@@ -148,11 +148,11 @@ class DbrxExpertGLU(nn.Module):
     def forward(
         self, x: torch.Tensor, expert_w1: torch.Tensor, expert_v1: torch.Tensor, expert_w2: torch.Tensor
     ) -> torch.Tensor:
-        gate_proj = x.matmul(expert_w1)
-        up_proj = x.matmul(expert_v1)
+        gate_proj = x.matmul(expert_w1.T)
+        up_proj = x.matmul(expert_v1.T)
         gate_proj = self.activation_fn(gate_proj)
         intermediate_states = gate_proj * up_proj
-        down_proj = intermediate_states.matmul(expert_w2.t())
+        down_proj = intermediate_states.matmul(expert_w2)
         return down_proj
 
 
@@ -171,7 +171,7 @@ class DbrxExperts(nn.Module):
         top_k_weights: torch.Tensor,
     ) -> torch.Tensor:
         batch_size = hidden_states.shape[0]
-        hidden_states = hidden_states.reshape(-1, self.ffn_hidden_size)
+        hidden_states = hidden_states.reshape(-1, self.hidden_size)
 
         next_states = torch.zeros_like(hidden_states, dtype=hidden_states.dtype, device=hidden_states.device)
         with torch.no_grad():
@@ -188,17 +188,17 @@ class DbrxExperts(nn.Module):
             w1 = self.mlp.w1.view(split_expert_shape)[expert_idx]
             w2 = self.mlp.w2.view(split_expert_shape)[expert_idx]
             states = self.mlp(hidden_states[token_idx], w1, v1, w2)
-            states = states.view(-1, self.ffn_hidden_size) * top_k_weights[token_idx, idx, None]
+            states = states.view(-1, self.hidden_size) * top_k_weights[token_idx, idx, None]
             next_states.index_add_(0, token_idx, states)
 
-        next_states = next_states.view(batch_size, -1, self.ffn_hidden_size)
+        next_states = next_states.view(batch_size, -1, self.hidden_size)
         return next_states
 
 
 class DbrxRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.hidden_size = config.ffn_hidden_size
+        self.hidden_size = config.hidden_size
         self.moe_jitter_eps = config.moe_jitter_eps
         self.layer = nn.Linear(self.hidden_size, config.moe_num_experts, bias=False)
 
@@ -432,6 +432,8 @@ class DbrxForCausalLM(DbrxPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "transformer.wte.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
 
     def __init__(self, config: DbrxConfig):
         super().__init__(config)

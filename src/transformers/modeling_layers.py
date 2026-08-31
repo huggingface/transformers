@@ -72,6 +72,9 @@ class GradientCheckpointingLayer(nn.Module):
     """
 
     gradient_checkpointing = False
+    # Layers that only read the KV cache can set this to keep it under gradient checkpointing (the recompute reads the
+    # same states). Writers must leave it `False`, otherwise the cache is updated a second time on the backward replay.
+    _can_checkpoint_with_cache = False
 
     def __call__(self, *args, **kwargs):
         if self.gradient_checkpointing and self.training:
@@ -84,22 +87,23 @@ class GradientCheckpointingLayer(nn.Module):
                 message += " `use_cache=False`,"
                 do_warn = True
 
-            # different names for the same thing in different layers
-            # TODO cyril: this one without `S` can be removed after deprecation cycle
-            if "past_key_value" in kwargs and kwargs["past_key_value"] is not None:
-                kwargs["past_key_value"] = None
-                message += " `past_key_value=None`,"
-                do_warn = True
+            if not self._can_checkpoint_with_cache:
+                # different names for the same thing in different layers
+                # TODO cyril: this one without `S` can be removed after deprecation cycle
+                if "past_key_value" in kwargs and kwargs["past_key_value"] is not None:
+                    kwargs["past_key_value"] = None
+                    message += " `past_key_value=None`,"
+                    do_warn = True
 
-            if "past_key_values" in kwargs and kwargs["past_key_values"] is not None:
-                kwargs["past_key_values"] = None
-                message += " `past_key_values=None`,"
-                do_warn = True
+                if "past_key_values" in kwargs and kwargs["past_key_values"] is not None:
+                    kwargs["past_key_values"] = None
+                    message += " `past_key_values=None`,"
+                    do_warn = True
 
-            if "layer_past" in kwargs and kwargs["layer_past"] is not None:
-                kwargs["layer_past"] = None
-                message += " `layer_past=None`,"
-                do_warn = True
+                if "layer_past" in kwargs and kwargs["layer_past"] is not None:
+                    kwargs["layer_past"] = None
+                    message += " `layer_past=None`,"
+                    do_warn = True
 
             # warn if anything was changed
             if do_warn:
@@ -529,17 +533,17 @@ class MtpModel(PreTrainedModel):
                     logits, labels, vocab_size=self.config.vocab_size, shift_labels=shift_labels, **kwargs
                 )
 
-            # Append the drafted logits
-            drafted_logits.append(logits)
             # Decode one token
             next_token_logits = logits[:, -1, :].to(device=input_ids.device)
             if logits_processor is not None and full_input_ids is not None:
-                next_token_scores = logits_processor(full_input_ids, next_token_logits.to(torch.float32))
+                next_token_logits = logits_processor(full_input_ids, next_token_logits.to(dtype=torch.float32))
+            # Append the drafted logits AFTER logits processors if any
+            drafted_logits.append(next_token_logits[:, None, :])
             if do_sample:
-                probs = nn.functional.softmax(next_token_scores, dim=-1, dtype=torch.float32)
+                probs = nn.functional.softmax(next_token_logits, dim=-1, dtype=torch.float32)
                 next_mtp_token = torch.multinomial(probs, num_samples=1)
             else:
-                next_mtp_token = torch.argmax(next_token_scores, dim=-1, keepdim=True)
+                next_mtp_token = torch.argmax(next_token_logits, dim=-1, keepdim=True)
             drafted_tokens.append(next_mtp_token)
 
             # Roll by 1 and append for next layer
@@ -631,7 +635,6 @@ class MtpModel(PreTrainedModel):
             load_config=LoadStateDictConfig(
                 weight_mapping=weight_conversions, device_map=device_map, dtype=main_model.config.dtype
             ),
-            tp_plan=None,
         )
         # finally close all opened file pointers
         for k in all_pointer:

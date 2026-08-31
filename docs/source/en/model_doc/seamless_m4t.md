@@ -11,6 +11,12 @@ specific language governing permissions and limitations under the License.
 -->
 *This model was published in HF papers on 2023-08-22 and contributed to Hugging Face Transformers on 2023-10-23.*
 
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
+
 # SeamlessM4T
 
 
@@ -48,7 +54,7 @@ processor = AutoProcessor.from_pretrained("facebook/hf-seamless-m4t-medium")
 model = SeamlessM4TModel.from_pretrained("facebook/hf-seamless-m4t-medium", device_map="auto")
 ```
 
-You can seamlessly use this model on text or on audio, to generated either translated text or translated audio.
+You can seamlessly use this model on text or on audio, to generate either translated text or translated audio.
 
 Here is how to use the processor to process text and audio:
 

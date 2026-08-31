@@ -98,11 +98,6 @@ class Gemma4TextConfig(PreTrainedConfig):
         `[vocab_size_per_layer_input, num_hidden_layers * hidden_size_per_layer_input]`
         because all layers are packed into a single table. See the [Gemma4](https://huggingface.co/docs/transformers/main/en/model_doc/gemma4#per-layer-embeddings-ple) docs
         for a description of the full PLE pipeline.
-    num_global_key_value_heads (`int`, *optional*):
-        Number of key-value heads for global (full) attention layers. If `None`, defaults
-        to `num_key_value_heads`.
-    global_head_dim (`int`, defaults to 512):
-        Dimension of each attention head in global (full) attention layers.
     attention_k_eq_v (`bool`, defaults to `False`):
         Whether keys and values share the same projection weights. When `True`, the key
         projection output is reused as the value projection.
@@ -179,8 +174,6 @@ class Gemma4TextConfig(PreTrainedConfig):
     use_bidirectional_attention: Literal["all", "vision"] | None = None
     vocab_size_per_layer_input: int = 262_144
     hidden_size_per_layer_input: int = 256
-    num_global_key_value_heads: int | None = None
-    global_head_dim: int = 512
     attention_k_eq_v: bool = False
     num_kv_shared_layers: int = 0
     enable_moe_block: bool = False
@@ -214,7 +207,31 @@ class Gemma4TextConfig(PreTrainedConfig):
         if self.rope_parameters is None:
             self.rope_parameters = default_rope_params
 
+        global_head_dim = kwargs.pop("global_head_dim", 512)
+        num_global_key_value_heads = kwargs.pop("num_global_key_value_heads", None)
+        if "per_layer_config" not in kwargs:
+            layer_overrides: dict[str, Any] = {"head_dim": global_head_dim}
+            # `attention_k_eq_v` gates the kv-head override for the models that declare it;
+            # models that drop the attribute entirely are ungated, hence the `True` fallback.
+            num_key_value_heads = num_global_key_value_heads if getattr(self, "attention_k_eq_v", True) else None
+            if num_key_value_heads is not None:
+                layer_overrides["num_key_value_heads"] = num_key_value_heads
+            kwargs["per_layer_config"] = {
+                layer_idx: layer_overrides
+                for layer_idx, layer_type in enumerate(self.layer_types)
+                if layer_type == "full_attention"
+            }
+
         super().__post_init__(**kwargs)
+
+    def to_dict(self) -> dict[str, Any]:
+        output = super().to_dict()
+        # Serialize the value `__post_init__` converted *from*, so that a reload converts once more
+        # instead of halving the already-halved window. Configs that inherit this one without the
+        # flag never convert, hence the `None` fallback.
+        if getattr(self, "use_bidirectional_attention", None) == "all":
+            output["sliding_window"] = (self.sliding_window - 1) * 2
+        return output
 
     def convert_rope_params_to_dict(self, **kwargs):
         # No need to handle BC for new models, because they have no old-format `rope_scaling`
@@ -249,6 +266,7 @@ class Gemma4VisionConfig(PreTrainedConfig):
         "encoder.layers.*.mlp.up_proj": "colwise",
         "encoder.layers.*.mlp.down_proj": "rowwise",
     }
+
     default_theta = 100.0
 
     hidden_size: int = 768

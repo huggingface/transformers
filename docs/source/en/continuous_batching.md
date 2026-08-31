@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -35,13 +35,13 @@ from transformers.generation import ContinuousBatchingConfig, GenerationConfig
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-4B",
     attn_implementation="flash_attention_2",
-    device_map="cuda",
+    device_map="auto",
     dtype=torch.bfloat16,
 )
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-4B")
 
 prompts = [
-    "Whats up?",
+    "What's up?",
     "Name a cat breed.",
     "Write a detailed history of quantum mechanics.",
 ]
@@ -404,7 +404,7 @@ Continuous batching requires a paged attention backend. Set `attn_implementation
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-4B",
     attn_implementation="paged|flash_attention_2",
-    device_map="cuda",
+    device_map="auto",
     dtype=torch.bfloat16,
 )
 ```
@@ -419,21 +419,22 @@ to the `kernels` package, this is becoming rare).
 
 ## Tensor parallelism
 
-For models too large to fit on a single GPU, shard the weights across devices with tensor parallelism. Load the model with `tp_plan="auto"` and continuous batching reads the tensor parallel size from the model to size the paged KV cache per shard. See [Tensor parallelism](./tensor_parallelism) for the list of supported architectures and how sharding works.
+For models too large to fit on a single GPU, shard the weights across devices with tensor parallelism. Set the number of devices with `DistributedConfig(tp_size=N)`. Continuous batching reads the tensor parallel size from the model to size the paged KV cache per shard. See [Tensor parallelism](./tensor_parallelism) for the list of supported architectures and how sharding works.
 
 ```py
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, DistributedConfig
 from transformers.generation import ContinuousBatchingConfig, GenerationConfig
 
+distributed_config = DistributedConfig(tp_size=4)
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-32B",
     attn_implementation="paged|flash_attention_2",
-    tp_plan="auto",
+    distributed_config=distributed_config,
 )
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-32B")
 
-inputs = [tokenizer.encode(p) for p in ["Whats up?", "Name a cat breed."]]
+inputs = [tokenizer.encode(p) for p in ["What's up?", "Name a cat breed."]]
 generation_config = GenerationConfig(max_new_tokens=64, eos_token_id=tokenizer.eos_token_id)
 
 outputs = model.generate_batch(inputs=inputs, generation_config=generation_config)
@@ -448,7 +449,7 @@ torchrun --nproc-per-node 4 cb_tp.py
 The tensor parallel size must divide the model's `num_key_value_heads` (check the model config). The paged cache raises an error at startup otherwise, so choose an appropriate `--nproc-per-node`.
 
 > [!WARNING]
-> Don't set `device_map` with `tp_plan`. The two conflict because `device_map` places whole modules on specific GPUs, while `tp_plan` shards those same parameters across all GPUs.
+> Don't set `device_map` with `distributed_config`. The two conflict because `device_map` places whole modules on specific GPUs, while tensor parallelism shards those same parameters across all GPUs.
 
 ## Sliding window attention
 
@@ -464,7 +465,7 @@ model = AutoModelForCausalLM.from_pretrained(
     "google/gemma-2-2b",
     config=config,
     attn_implementation="paged|sdpa",
-    device_map="cuda",
+    device_map="auto",
     dtype=torch.bfloat16,
 )
 ```

@@ -49,7 +49,8 @@ from transformers import AutoProcessor, LlavaOnevisionForConditionalGeneration
 import torch
 model_id = "llava-hf/llava-onevision-qwen2-0.5b-ov-hf"
 
-processor = AutoProcessor.from_pretrained(model_id, device="cuda")
+device = torch.accelerator.current_accelerator().type if torch.accelerator.is_available() else "cpu"
+processor = AutoProcessor.from_pretrained(model_id, device=device)
 
 model = LlavaForConditionalGeneration.from_pretrained(model_id, device_map="auto", dtype=torch.float16)
 ```

@@ -15,6 +15,7 @@
 
 import copy
 import math
+from collections.abc import Callable
 
 import torch
 from torch import nn
@@ -35,8 +36,11 @@ from ...modeling_outputs import (
     Seq2SeqSequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel
-from ...utils import DUMMY_INPUTS, DUMMY_MASK, auto_docstring, logging, torch_compilable_check
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
+from ...utils import DUMMY_INPUTS, DUMMY_MASK, TransformersKwargs, auto_docstring, logging, torch_compilable_check
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_t5 import T5Config
 
 
@@ -137,15 +141,50 @@ class T5LayerFF(nn.Module):
         return hidden_states
 
 
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
+    dropout: float = 0.0,
+    position_bias: torch.Tensor | None = None,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
+
+    # Take the dot product between "query" and "key" to get the raw attention scores.
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+
+    if position_bias is not None:
+        attn_weights = attn_weights + position_bias
+
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
 class T5Attention(nn.Module):
     def __init__(
         self,
         config: T5Config,
         has_relative_attention_bias=False,
         layer_idx: int | None = None,
+        is_causal: bool = False,
     ):
         super().__init__()
+        self.config = config
         self.is_decoder = config.is_decoder
+        self.is_causal = is_causal
         self.has_relative_attention_bias = has_relative_attention_bias
         self.relative_attention_num_buckets = config.relative_attention_num_buckets
         self.relative_attention_max_distance = config.relative_attention_max_distance
@@ -154,6 +193,8 @@ class T5Attention(nn.Module):
         self.n_heads = config.num_heads
         self.dropout = config.dropout_rate
         self.inner_dim = self.n_heads * self.key_value_proj_dim
+        # T5 folds the relative position bias into the attention scores and does not scale the query/key dot product.
+        self.scaling = 1.0
         self.layer_idx = layer_idx
         if layer_idx is None and self.is_decoder:
             logger.warning_once(
@@ -244,8 +285,7 @@ class T5Attention(nn.Module):
         key_value_states=None,
         position_bias=None,
         past_key_values=None,
-        output_attentions=False,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         """
         Self-attention (if key_value_states is None) or attention over source sentence (provided by key_value_states).
@@ -292,50 +332,51 @@ class T5Attention(nn.Module):
                     past_key_values.is_updated[self.layer_idx] = True
 
         # compute scores, equivalent of torch.einsum("bnqd,bnkd->bnqk", query_states, key_states), compatible with onnx op>9
-        scores = torch.matmul(query_states, key_states.transpose(3, 2))
-
         if position_bias is None:
             key_length = key_states.shape[-2]
             if not self.has_relative_attention_bias:
                 position_bias = torch.zeros(
-                    (1, query_states.shape[1], input_shape[1], key_length), device=scores.device, dtype=scores.dtype
+                    (1, self.n_heads, input_shape[1], key_length),
+                    device=query_states.device,
+                    dtype=query_states.dtype,
                 )
                 if self.gradient_checkpointing and self.training:
                     position_bias.requires_grad = True
             else:
                 position_bias = self.compute_bias(
-                    input_shape[1], key_length, device=scores.device, past_seen_tokens=past_seen_tokens
+                    input_shape[1], key_length, device=query_states.device, past_seen_tokens=past_seen_tokens
                 )
 
-            if mask is not None:
-                causal_mask = mask[:, :, :, : key_states.shape[-2]]
-                position_bias = position_bias + causal_mask
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
-        position_bias_masked = position_bias
-        scores += position_bias_masked
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            mask,
+            dropout=0.0 if not self.training else self.dropout,
+            scaling=self.scaling,
+            position_bias=position_bias,
+            **kwargs,
+        )
 
-        # (batch_size, n_heads, seq_length, key_length)
-        attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(scores)
-        attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-
-        attn_output = torch.matmul(attn_weights, value_states)
-
-        attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.reshape(*input_shape, -1)
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o(attn_output)
 
-        outputs = (attn_output, position_bias)
-
-        if output_attentions:
-            outputs = outputs + (attn_weights,)
-        return outputs
+        return attn_output, position_bias, attn_weights
 
 
 class T5LayerSelfAttention(nn.Module):
     def __init__(self, config, has_relative_attention_bias=False, layer_idx: int | None = None):
         super().__init__()
         self.SelfAttention = T5Attention(
-            config, has_relative_attention_bias=has_relative_attention_bias, layer_idx=layer_idx
+            config,
+            has_relative_attention_bias=has_relative_attention_bias,
+            layer_idx=layer_idx,
+            is_causal=config.is_decoder,
         )
         self.layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
@@ -346,28 +387,26 @@ class T5LayerSelfAttention(nn.Module):
         attention_mask=None,
         position_bias=None,
         past_key_values=None,
-        use_cache=False,
-        output_attentions=False,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         normed_hidden_states = self.layer_norm(hidden_states)
-        attention_output = self.SelfAttention(
+        attention_output, position_bias, attn_weights = self.SelfAttention(
             normed_hidden_states,
             mask=attention_mask,
             position_bias=position_bias,
             past_key_values=past_key_values,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
+            **kwargs,
         )
-        hidden_states = hidden_states + self.dropout(attention_output[0])
-        outputs = (hidden_states,) + attention_output[1:]  # add attentions if we output them
-        return outputs
+        attention_output = hidden_states + self.dropout(attention_output)
+        return attention_output, position_bias, attn_weights
 
 
 class T5LayerCrossAttention(nn.Module):
     def __init__(self, config, layer_idx: int | None = None):
         super().__init__()
-        self.EncDecAttention = T5Attention(config, has_relative_attention_bias=False, layer_idx=layer_idx)
+        self.EncDecAttention = T5Attention(
+            config, has_relative_attention_bias=False, layer_idx=layer_idx, is_causal=False
+        )
         self.layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
@@ -378,21 +417,19 @@ class T5LayerCrossAttention(nn.Module):
         attention_mask=None,
         position_bias=None,
         past_key_values=None,
-        output_attentions=False,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         normed_hidden_states = self.layer_norm(hidden_states)
-        attention_output = self.EncDecAttention(
+        attention_output, position_bias, attn_weights = self.EncDecAttention(
             normed_hidden_states,
             mask=attention_mask,
             key_value_states=key_value_states,
             position_bias=position_bias,
             past_key_values=past_key_values,
-            output_attentions=output_attentions,
+            **kwargs,
         )
-        layer_output = hidden_states + self.dropout(attention_output[0])
-        outputs = (layer_output,) + attention_output[1:]  # add attentions if we output them
-        return outputs
+        layer_output = hidden_states + self.dropout(attention_output)
+        return layer_output, position_bias, attn_weights
 
 
 class T5Block(GradientCheckpointingLayer):
@@ -417,21 +454,15 @@ class T5Block(GradientCheckpointingLayer):
         encoder_attention_mask=None,
         encoder_decoder_position_bias=None,
         past_key_values=None,
-        use_cache=False,
-        output_attentions=False,
-        return_dict=True,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
-        self_attention_outputs = self.layer[0](
+        hidden_states, self_attn_position_bias, _ = self.layer[0](
             hidden_states,
             attention_mask=attention_mask,
             position_bias=position_bias,
             past_key_values=past_key_values,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
+            **kwargs,
         )
-        hidden_states = self_attention_outputs[0]
-        attention_outputs = self_attention_outputs[1:]  # Keep self-attention outputs and relative position weights
 
         # clamp inf values to enable fp16 training
         if hidden_states.dtype == torch.float16:
@@ -442,17 +473,17 @@ class T5Block(GradientCheckpointingLayer):
             )
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
+        cross_attn_position_bias = None
         do_cross_attention = self.is_decoder and encoder_hidden_states is not None
         if do_cross_attention:
-            cross_attention_outputs = self.layer[1](
+            hidden_states, cross_attn_position_bias, _ = self.layer[1](
                 hidden_states,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
                 position_bias=encoder_decoder_position_bias,
                 past_key_values=past_key_values,
-                output_attentions=output_attentions,
+                **kwargs,
             )
-            hidden_states = cross_attention_outputs[0]
 
             # clamp inf values to enable fp16 training
             if hidden_states.dtype == torch.float16:
@@ -462,9 +493,6 @@ class T5Block(GradientCheckpointingLayer):
                     torch.finfo(hidden_states.dtype).max,
                 )
                 hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
-
-            # Keep cross-attention outputs and relative position weights
-            attention_outputs = attention_outputs + cross_attention_outputs[1:]
 
         # Apply Feed Forward layer
         hidden_states = self.layer[-1](hidden_states)
@@ -478,11 +506,7 @@ class T5Block(GradientCheckpointingLayer):
             )
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
-        outputs = (hidden_states,)
-
-        return (
-            outputs + attention_outputs
-        )  # hidden-states, (self-attention position bias), (self-attention weights), (cross-attention position bias), (cross-attention weights)
+        return hidden_states, self_attn_position_bias, cross_attn_position_bias
 
 
 class T5ClassificationHead(nn.Module):
@@ -508,10 +532,21 @@ class T5PreTrainedModel(PreTrainedModel):
     config: T5Config
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
-    _can_compile_fullgraph = True
 
     _no_split_modules = ["T5Block"]
     _keep_in_fp32_modules = ["wo"]
+
+    # Using position bias API for attention; not yet supported for FA
+    _supports_flash_attn = False
+    _supports_flex_attn = True
+    _supports_sdpa = True
+    _can_compile_fullgraph = True
+
+    _can_record_outputs = {
+        "hidden_states": OutputRecorder(T5Block, index=0),
+        "attentions": OutputRecorder(T5LayerSelfAttention, index=-1),
+        "cross_attentions": OutputRecorder(T5LayerCrossAttention, index=-1),
+    }
 
     @property
     def dummy_inputs(self):
@@ -622,6 +657,9 @@ class T5Stack(T5PreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.embed_tokens = new_embeddings
 
+    @merge_with_config_defaults
+    @capture_outputs
+    @auto_docstring
     def forward(
         self,
         input_ids=None,
@@ -631,45 +669,13 @@ class T5Stack(T5PreTrainedModel):
         inputs_embeds=None,
         past_key_values=None,
         use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
-        if input_ids is not None and inputs_embeds is not None:
-            err_msg_prefix = "decoder_" if self.is_decoder else ""
-            raise ValueError(
-                f"You cannot specify both {err_msg_prefix}input_ids and {err_msg_prefix}inputs_embeds at the same time"
-            )
-        elif input_ids is not None:
-            input_shape = input_ids.size()
-            input_ids = input_ids.view(-1, input_shape[-1])
-        elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
-        else:
-            err_msg_prefix = "decoder_" if self.is_decoder else ""
-            raise ValueError(f"You have to specify either {err_msg_prefix}input_ids or {err_msg_prefix}inputs_embeds")
-
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                )
-                use_cache = False
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
-            if self.embed_tokens is None:
-                raise ValueError("You have to initialize the model with valid token embeddings")
             inputs_embeds = self.embed_tokens(input_ids)
-
-        batch_size, seq_length = input_shape
 
         if use_cache is True:
             if not self.is_decoder:
@@ -713,19 +719,13 @@ class T5Stack(T5PreTrainedModel):
                 encoder_hidden_states=encoder_hidden_states,
             )
 
-        all_hidden_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
-        all_cross_attentions = () if (output_attentions and self.is_decoder) else None
         position_bias = None
         encoder_decoder_position_bias = None
 
         hidden_states = self.dropout(inputs_embeds)
 
         for layer_module in self.block:
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-            layer_outputs = layer_module(
+            hidden_states, self_attention_position_bias, cross_attention_position_bias = layer_module(
                 hidden_states,
                 attention_mask,
                 position_bias,
@@ -733,50 +733,20 @@ class T5Stack(T5PreTrainedModel):
                 encoder_extended_attention_mask,
                 encoder_decoder_position_bias,  # as a positional argument for gradient checkpointing
                 past_key_values=past_key_values,
-                use_cache=use_cache,
-                output_attentions=output_attentions,
-                return_dict=return_dict,
+                **kwargs,
             )
 
-            hidden_states = layer_outputs[0]
-
-            # We share the position biases between the layers - the first layer store them
-            # layer_outputs = hidden-states, key-value-states (self-attention position bias), (self-attention weights),
-            # (cross-attention position bias), (cross-attention weights)
-            position_bias = layer_outputs[1]
+            # We share the position biases between the layers - the first layer stores them
+            position_bias = self_attention_position_bias
             if self.is_decoder and encoder_hidden_states is not None:
-                encoder_decoder_position_bias = layer_outputs[3 if output_attentions else 2]
-
-            if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[2],)
-                if self.is_decoder:
-                    all_cross_attentions = all_cross_attentions + (layer_outputs[4],)
+                encoder_decoder_position_bias = cross_attention_position_bias
 
         hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
-        # Add last layer
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    hidden_states,
-                    past_key_values,
-                    all_hidden_states,
-                    all_attentions,
-                    all_cross_attentions,
-                ]
-                if v is not None
-            )
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
-            hidden_states=all_hidden_states,
-            attentions=all_attentions,
-            cross_attentions=all_cross_attentions,
         )
 
 
@@ -815,6 +785,7 @@ class T5Model(T5PreTrainedModel):
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -827,11 +798,8 @@ class T5Model(T5PreTrainedModel):
         inputs_embeds: torch.Tensor | None = None,
         decoder_inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple[torch.FloatTensor] | Seq2SeqModelOutput:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Seq2SeqModelOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. T5 is a model with relative position embeddings so you
@@ -881,20 +849,15 @@ class T5Model(T5PreTrainedModel):
         >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
         >>> last_hidden_states = outputs.last_hidden_state
         ```"""
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 inputs_embeds=inputs_embeds,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
+                **kwargs,
             )
-        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
+        elif not isinstance(encoder_outputs, BaseModelOutput):
             encoder_outputs = BaseModelOutput(
                 last_hidden_state=encoder_outputs[0],
                 hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
@@ -912,13 +875,8 @@ class T5Model(T5PreTrainedModel):
             encoder_hidden_states=hidden_states,
             encoder_attention_mask=attention_mask,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
-
-        if not return_dict:
-            return decoder_outputs + encoder_outputs
 
         return Seq2SeqModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
@@ -976,6 +934,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel, GenerationMixin):
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -989,11 +948,8 @@ class T5ForConditionalGeneration(T5PreTrainedModel, GenerationMixin):
         decoder_inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple[torch.FloatTensor] | Seq2SeqLMOutput:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Seq2SeqLMOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. T5 is a model with relative position embeddings so you
@@ -1049,9 +1005,6 @@ class T5ForConditionalGeneration(T5PreTrainedModel, GenerationMixin):
         >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
         >>> # studies have shown that owning a dog is good for you.
         ```"""
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
             # Convert encoder inputs in embeddings if needed
@@ -1059,11 +1012,9 @@ class T5ForConditionalGeneration(T5PreTrainedModel, GenerationMixin):
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 inputs_embeds=inputs_embeds,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
+                **kwargs,
             )
-        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
+        elif not isinstance(encoder_outputs, BaseModelOutput):
             encoder_outputs = BaseModelOutput(
                 last_hidden_state=encoder_outputs[0],
                 hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
@@ -1085,9 +1036,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel, GenerationMixin):
             encoder_hidden_states=hidden_states,
             encoder_attention_mask=attention_mask,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         sequence_output = decoder_outputs[0]
@@ -1103,10 +1052,6 @@ class T5ForConditionalGeneration(T5PreTrainedModel, GenerationMixin):
             # move labels to correct device to enable PP
             labels = labels.to(lm_logits.device)
             loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
-
-        if not return_dict:
-            output = (lm_logits,) + decoder_outputs[1:] + encoder_outputs
-            return ((loss,) + output) if loss is not None else output
 
         return Seq2SeqLMOutput(
             loss=loss,
@@ -1148,17 +1093,15 @@ class T5EncoderModel(T5PreTrainedModel):
         self.shared = new_embeddings
         self.encoder.set_input_embeddings(new_embeddings)
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.FloatTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple[torch.FloatTensor] | BaseModelOutput:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. T5 is a model with relative position embeddings so you
@@ -1182,15 +1125,11 @@ class T5EncoderModel(T5PreTrainedModel):
         >>> outputs = model(input_ids=input_ids)
         >>> last_hidden_states = outputs.last_hidden_state
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
-        encoder_outputs = self.encoder(
+        encoder_outputs: BaseModelOutput = self.encoder(
             input_ids=input_ids,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         return encoder_outputs
@@ -1213,6 +1152,7 @@ class T5ForSequenceClassification(T5PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1225,11 +1165,8 @@ class T5ForSequenceClassification(T5PreTrainedModel):
         decoder_inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple | Seq2SeqSequenceClassifierOutput:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Seq2SeqSequenceClassifierOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. T5 is a model with relative position embeddings so you
@@ -1261,7 +1198,6 @@ class T5ForSequenceClassification(T5PreTrainedModel):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
         if labels is not None:
             use_cache = False
 
@@ -1281,7 +1217,7 @@ class T5ForSequenceClassification(T5PreTrainedModel):
                 )
             decoder_input_ids = self._shift_right(input_ids)
 
-        outputs = self.transformer(
+        outputs: Seq2SeqModelOutput = self.transformer(
             input_ids,
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
@@ -1290,9 +1226,7 @@ class T5ForSequenceClassification(T5PreTrainedModel):
             inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
         sequence_output = outputs[0]
 
@@ -1334,9 +1268,6 @@ class T5ForSequenceClassification(T5PreTrainedModel):
             elif self.config.problem_type == "multi_label_classification":
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(logits, labels)
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
 
         return Seq2SeqSequenceClassifierOutput(
             loss=loss,
@@ -1364,6 +1295,7 @@ class T5ForTokenClassification(T5PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1371,11 +1303,8 @@ class T5ForTokenClassification(T5PreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple[torch.Tensor] | TokenClassifierOutput:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> TokenClassifierOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. T5 is a model with relative position embeddings so you
@@ -1390,15 +1319,11 @@ class T5ForTokenClassification(T5PreTrainedModel):
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
-        outputs = self.transformer(
+        outputs: BaseModelOutput = self.transformer(
             input_ids,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         hidden_states = outputs[0]
@@ -1409,10 +1334,6 @@ class T5ForTokenClassification(T5PreTrainedModel):
         if labels is not None:
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-
-        if not return_dict:
-            output = (logits, outputs[2:-1])
-            return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
             loss=loss,
@@ -1460,6 +1381,7 @@ class T5ForQuestionAnswering(T5PreTrainedModel):
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1473,11 +1395,8 @@ class T5ForQuestionAnswering(T5PreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         decoder_inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple[torch.FloatTensor] | Seq2SeqQuestionAnsweringModelOutput:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Seq2SeqQuestionAnsweringModelOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. T5 is a model with relative position embeddings so you
@@ -1506,8 +1425,6 @@ class T5ForQuestionAnswering(T5PreTrainedModel):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
             be used by default.
         """
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
         if start_positions is not None and end_positions is not None:
             use_cache = False
 
@@ -1523,20 +1440,15 @@ class T5ForQuestionAnswering(T5PreTrainedModel):
                 )
             decoder_input_ids = self._shift_right(input_ids)
 
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 inputs_embeds=inputs_embeds,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
+                **kwargs,
             )
-        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
+        elif not isinstance(encoder_outputs, BaseModelOutput):
             encoder_outputs = BaseModelOutput(
                 last_hidden_state=encoder_outputs[0],
                 hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
@@ -1554,9 +1466,7 @@ class T5ForQuestionAnswering(T5PreTrainedModel):
             encoder_hidden_states=hidden_states,
             encoder_attention_mask=attention_mask,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         sequence_output = decoder_outputs[0]
@@ -1582,10 +1492,6 @@ class T5ForQuestionAnswering(T5PreTrainedModel):
             start_loss = loss_fct(start_logits, start_positions)
             end_loss = loss_fct(end_logits, end_positions)
             total_loss = (start_loss + end_loss) / 2
-
-        if not return_dict:
-            output = (start_logits, end_logits) + decoder_outputs[1:] + encoder_outputs
-            return ((total_loss,) + output) if total_loss is not None else output
 
         return Seq2SeqQuestionAnsweringModelOutput(
             loss=total_loss,

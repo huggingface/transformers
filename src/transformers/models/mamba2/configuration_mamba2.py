@@ -84,7 +84,6 @@ class Mamba2Config(PreTrainedConfig):
     time_step_limit: list[float] | tuple[float, ...] = (0.0, float("inf"))
     rescale_prenorm_residual: bool = False
     use_cache: bool = True
-    rms_norm: bool = True
     chunk_size: int = 256
     tie_word_embeddings: bool = False
 

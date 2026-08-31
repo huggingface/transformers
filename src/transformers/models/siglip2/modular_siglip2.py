@@ -344,7 +344,7 @@ class Siglip2MultiheadAttentionPoolingHead(SiglipMultiheadAttentionPoolingHead):
                 if attention_mask.dtype == torch.bool:
                     attention_mask = torch.where(
                         attention_mask,
-                        torch.tensor(0.0, device=attention_mask.device, dtype=probe.dtype),
+                        torch.full((), 0.0, device=attention_mask.device, dtype=probe.dtype),
                         torch.finfo(probe.dtype).min,
                     )
 

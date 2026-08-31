@@ -904,14 +904,19 @@ def find_matching_model_files(check_all: bool = False):
         if len(module_diff_files) == 0:
             return None
 
-    modeling_glob_pattern = os.path.join(PATH_TO_TRANSFORMERS, "models/**/modeling_**")
-    potential_files = glob.glob(modeling_glob_pattern)
-    image_processing_glob_pattern = os.path.join(PATH_TO_TRANSFORMERS, "models/**/image_processing_*_fast.py")
-    potential_files += glob.glob(image_processing_glob_pattern)
-    processing_glob_pattern = os.path.join(PATH_TO_TRANSFORMERS, "models/**/processing_*.py")
-    potential_files += glob.glob(processing_glob_pattern)
-    configuration_glob_pattern = os.path.join(PATH_TO_TRANSFORMERS, "models/**/configuration_*.py")
-    potential_files += glob.glob(configuration_glob_pattern)
+    autodoc_files_regex = [
+        "modeling_**",
+        "image_processing_*_fast.py",
+        "image_processing_pil_*.py",
+        "video_processing_*.py",
+        "processing_*.py",
+        "configuration_*.py",
+    ]
+    potential_files = []
+    for pattern in autodoc_files_regex:
+        glob_pattern = os.path.join(PATH_TO_TRANSFORMERS, "models/**", pattern)
+        potential_files += glob.glob(glob_pattern)
+
     matching_files = []
     for file_path in potential_files:
         if os.path.isfile(file_path):

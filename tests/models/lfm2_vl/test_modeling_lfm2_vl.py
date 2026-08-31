@@ -230,8 +230,18 @@ class Lfm2VlForConditionalGenerationIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
-        expected_generated_text = "In this image, we see two cats sleeping on a pink blanket. There are also two remote controls on the blanket.\n\n\n\n"
-        self.assertEqual(generated_texts[0], expected_generated_text)
+        EXPECTED_TEXT_COMPLETION = Expectations(
+            {
+                ("cuda", (8, 0)): [
+                    "In this image, we see two cats sleeping on a pink blanket. There are also two remote controls on the blanket.\n\n\n\n"
+                ],
+                ("cuda", (8, 6)): [
+                    "In this image, we see two cats sleeping on a pink blanket. They are both very relaxed and comfortable. They are both grey"
+                ],
+            }
+        )
+        EXPECTED_TEXT_COMPLETION = EXPECTED_TEXT_COMPLETION.get_expectation()[0]
+        self.assertEqual(generated_texts[0], EXPECTED_TEXT_COMPLETION)
 
     @require_deterministic_for_xpu
     def test_integration_test_high_resolution(self):
@@ -272,11 +282,20 @@ class Lfm2VlForConditionalGenerationIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
-        expected_generated_text = [
-            "In this image, we see a panoramic view of the New York City skyline. The iconic Statics and the New York",
-            "In this image, we see a cat that is lying on its side on a cat bed.",
-        ]
-        self.assertListEqual(generated_texts, expected_generated_text)
+        EXPECTED_TEXT_COMPLETION = Expectations(
+            {
+                ("cuda", (8, 0)): [
+                    "In this image, we see a panoramic view of the New York City skyline. The iconic Statics and the New York",
+                    "In this image, we see a cat that is lying on its side on a cat bed.",
+                ],
+                ("cuda", (8, 6)): [
+                    "In this image, we see a panoramic view of the New York City skyline. The iconic Statics and the New York",
+                    "In this image, we see a cat that is lying on its side, and is resting on a pink blanket. The cat is lying on",
+                ],
+            }
+        )
+        EXPECTED_TEXT_COMPLETION = EXPECTED_TEXT_COMPLETION.get_expectation()
+        self.assertListEqual(generated_texts, EXPECTED_TEXT_COMPLETION)
 
 
 @require_torch_accelerator
@@ -352,10 +371,10 @@ class Lfm2_5VlForConditionalGenerationIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
-        expected_generated_text = Expectations(
+        EXPECTED_TEXT_COMPLETION = Expectations(
             {
-                (None, None): [
-                    "In this image, we see the Statue of Liberty, an iconic symbol of freedom and democracy. It stands on Liberty Island in",
+                ("cuda", 8): [
+                    "In this image, we see the Statue of Liberty, an iconic symbol of freedom and democracy. It stands tall on a small",
                     "In this image, we see two cats lying on a pink blanket. One cat is a tabby, and the other is a",
                 ],
                 ("xpu", 5): [
@@ -364,4 +383,4 @@ class Lfm2_5VlForConditionalGenerationIntegrationTest(unittest.TestCase):
                 ],
             }
         ).get_expectation()
-        self.assertListEqual(generated_texts, expected_generated_text)
+        self.assertListEqual(generated_texts, EXPECTED_TEXT_COMPLETION)

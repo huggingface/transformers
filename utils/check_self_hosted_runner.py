@@ -1,23 +1,13 @@
 import argparse
 import json
-import subprocess
+
+from github_utils import get_github_json
 
 
 def get_runner_status(target_runners, token):
     offline_runners = []
 
-    cmd = [
-        "curl",
-        "-H",
-        "Accept: application/vnd.github+json",
-        "-H",
-        f"Authorization: Bearer {token}",
-        "https://api.github.com/repos/huggingface/transformers/actions/runners",
-    ]
-
-    output = subprocess.run(cmd, check=False, shell=True, stdout=subprocess.PIPE)
-    o = output.stdout.decode("utf-8")
-    status = json.loads(o)
+    status = get_github_json("https://api.github.com/repos/huggingface/transformers/actions/runners", token=token)
 
     runners = status["runners"]
     for runner in runners:

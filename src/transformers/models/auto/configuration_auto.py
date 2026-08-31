@@ -140,6 +140,15 @@ class _LazyConfigMapping(OrderedDict[str, type[PreTrainedConfig]]):
             raise ValueError(f"'{key}' is already used by a Transformers config, pick another name.")
         self._extra_content[key] = value
 
+    def __reduce__(self):
+        return (self.__class__._from_pickle, (dict(self._mapping), dict(self._extra_content)))
+
+    @classmethod
+    def _from_pickle(cls, mapping, extra_content):
+        obj = cls(mapping)
+        obj._extra_content = extra_content
+        return obj
+
 
 CONFIG_MAPPING = _LazyConfigMapping(CONFIG_MAPPING_NAMES)
 
@@ -193,6 +202,9 @@ class _LazyLoadAllMappings(OrderedDict[str, str]):
     def __contains__(self, item: object) -> bool:
         self._initialize()
         return item in self._data
+
+    def __reduce__(self):
+        return (self.__class__, (dict(self._mapping),))
 
 
 def _get_class_name(model_class: str | list[str]):

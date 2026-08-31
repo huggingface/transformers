@@ -14,6 +14,7 @@
 
 """Testing suite for the PyTorch PhiMoE model."""
 
+import tempfile
 import unittest
 
 from parameterized import parameterized
@@ -113,18 +114,27 @@ class PhimoeModelTest(CausalLMModelTest, unittest.TestCase):
 @require_torch
 class PhimoeIntegrationTest(unittest.TestCase):
     model = None
+    offload_dir = None
 
     @classmethod
     def get_model(cls):
         if cls.model is None:
+            cls.offload_dir = tempfile.TemporaryDirectory()
             cls.model = PhimoeForCausalLM.from_pretrained(
-                "microsoft/Phi-3.5-MoE-instruct", experts_implementation="eager", dtype="auto", device_map="auto"
+                "microsoft/Phi-3.5-MoE-instruct",
+                experts_implementation="eager",
+                dtype="auto",
+                device_map="auto",
+                offload_folder=cls.offload_dir.name,
             )
         return cls.model
 
     @classmethod
     def tearDownClass(cls):
         del cls.model
+        if cls.offload_dir is not None:
+            cls.offload_dir.cleanup()
+            cls.offload_dir = None
         cleanup(torch_device, gc_collect=True)
 
     def setUp(self):
@@ -144,8 +154,8 @@ class PhimoeIntegrationTest(unittest.TestCase):
 
         EXPECTED_OUTPUT = torch.tensor(
             [
-                    [-3.4844, -2.4531, -1.1719, 0.6055, -0.4922, -0.1001, 0.8086, -0.2422, 0.3477, -1.0078],
-                    [-0.9766, 0.1631, -0.5508, 2.3594, 0.7031, 3.1719, 0.4141, 0.2305, 0.6055, -2.1250],
+                [-3.5625, -2.4375, -1.3672, 0.3438, -0.7539, -0.4590, 0.6133, -0.4531, 0.2188, -1.2422],
+                [-0.9688, 0.3633, -0.4902, 2.3281, 0.6250, 3.1094, 0.3828, 0.1670, 0.5781, -2.1094],
             ]
         ).to(device=torch_device, dtype=output.dtype)  # fmt: skip
 

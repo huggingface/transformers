@@ -25,7 +25,7 @@ rendered properly in your Markdown viewer.
 
 [MobileNet V2](https://huggingface.co/papers/1801.04381) improves performance on mobile devices with a more efficient architecture. It uses inverted residual blocks and linear bottlenecks to start with a smaller representation of the data, expands it for processing, and shrinks it again to reduce the number of computations. The model also removes non-linearities to maintain accuracy despite its simplified design. Like [MobileNet V1](./mobilenet_v1), it uses depthwise separable convolutions for efficiency.
 
-You can all the original MobileNet checkpoints under the [Google](https://huggingface.co/google?search_models=mobilenet) organization.
+You can find all the original MobileNet checkpoints under the [Google](https://huggingface.co/google?search_models=mobilenet) organization.
 
 > [!TIP]
 > Click on the MobileNet V2 models in the right sidebar for more examples of how to apply MobileNet to different vision tasks.

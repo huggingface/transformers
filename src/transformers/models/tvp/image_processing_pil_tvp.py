@@ -30,11 +30,7 @@ from ...image_utils import (
     make_nested_list_of_images,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available
-
-
-if is_torchvision_available():
-    pass
+from ...utils import TensorType, auto_docstring
 
 
 def get_resize_output_image_size(

@@ -13,38 +13,44 @@
 # limitations under the License.
 from __future__ import annotations
 
+import os
 import re
 import warnings
 from typing import TYPE_CHECKING
 
-from ..integrations.tensor_parallel import (
-    ALL_PARALLEL_STYLES,
-    apply_tensor_parallelism,
-    initialize_tensor_parallelism,
-)
-from ..utils import is_torch_available
+from ..utils import is_torch_greater_or_equal, logging
+from ..utils.hub import create_and_tag_model_card
 from .configuration_utils import DistributedConfig
-from .fsdp import apply_fully_sharded_data_parallelism
-from .utils import initialize_fully_sharded_data_parallelism
+from .fsdp import apply_fully_sharded_data_parallelism, is_fsdp_managed_module
+from .pipeline_parallel import apply_pipeline_parallelism
+from .tensor_parallel import (
+    _validate_tp_plan_styles,
+    apply_tensor_parallelism,
+    gather_state_dict_for_save,
+)
+from .utils import (
+    _distributed_barrier,
+    _ensure_torch_distributed,
+    _get_torch_distributed_rank,
+    _get_torch_distributed_world_size,
+    _is_torch_distributed_initialized,
+    gather_full_state_dict,
+    initialize_fully_sharded_data_parallelism,
+    initialize_pipeline_parallelism,
+    initialize_tensor_parallelism,
+    save_model_checkpoint_distributed,
+)
+
+
+logger = logging.get_logger(__name__)
 
 
 if TYPE_CHECKING:
     import torch.nn as nn
 
-if is_torch_available():
-    import torch
-
-    _torch_distributed_available = torch.distributed.is_available()
-else:
-    _torch_distributed_available = False
-
 
 class DistributedMixin:
-    """Distributed orchestration hooks for [`PreTrainedModel`].
-
-    Stateless heavy lifting stays in `transformers.distributed.*` and
-    `integrations.tensor_parallel`. This mixin owns orchestration and instance state.
-    """
+    """Distributed orchestration and save/load hooks for [`PreTrainedModel`]."""
 
     _device_mesh = None
     _tp_plan: dict[str, str] | None = None
@@ -106,12 +112,7 @@ class DistributedMixin:
         if not isinstance(plan, dict):
             raise ValueError("Can only set a dictionary as `tp_plan`")
 
-        for layer_pattern, parallel_style in plan.items():
-            if parallel_style not in ALL_PARALLEL_STYLES:
-                raise ValueError(
-                    f"Unsupported tensor parallel style '{parallel_style}' for layer '{layer_pattern}'. "
-                    f"Supported styles are {list(ALL_PARALLEL_STYLES.keys())}"
-                )
+        _validate_tp_plan_styles(plan)
 
         model_param_names = [name for name, _ in self.named_parameters()]
         for layer_pattern in plan.keys():
@@ -147,12 +148,20 @@ class DistributedMixin:
         device_mesh=None,
         device_map=None,
     ) -> tuple[DistributedConfig | None, object, object]:
-        """Parse ``distributed_config``, init TP/FSDP mesh, and validate."""
         if distributed_config is None:
             return None, device_map, device_mesh
 
         if isinstance(distributed_config, dict):
             distributed_config = DistributedConfig.from_dict(distributed_config)
+
+        if distributed_config.tp_size > 1 or distributed_config.fsdp_size > 1:
+            _ensure_torch_distributed()
+            world_size = _get_torch_distributed_world_size()
+            if distributed_config.tp_size * distributed_config.fsdp_size != world_size:
+                raise RuntimeError(
+                    f"tp_size ({distributed_config.tp_size}) * fsdp_size ({distributed_config.fsdp_size}) "
+                    f"is not equal to world_size ({world_size})"
+                )
 
         if distributed_config.tp_size > 1:
             if distributed_config.tp_plan is None:
@@ -165,8 +174,9 @@ class DistributedMixin:
             )
         elif distributed_config.fsdp_size > 1:
             device_map, device_mesh = initialize_fully_sharded_data_parallelism(distributed_config)
+        elif distributed_config.pp_size > 1:
+            device_map, device_mesh = initialize_pipeline_parallelism(distributed_config)
 
-        distributed_config.validate()
         return distributed_config, device_map, device_mesh
 
     @classmethod
@@ -177,18 +187,104 @@ class DistributedMixin:
         device_mesh,
     ):
         """Apply TP or FSDP2 after model init, before weight loading."""
-        if _torch_distributed_available and device_mesh is not None:
+        if device_mesh is not None:
             model.config.distributed_config = distributed_config
             model._device_mesh = device_mesh
 
             if distributed_config.tp_size > 1:
-                model = apply_tensor_parallelism(
-                    model,
-                    distributed_config.tp_plan,
-                    distributed_config,
-                    device_mesh,
-                )
+                tp_mesh = device_mesh["tp"] if device_mesh.ndim > 1 else device_mesh
+                if isinstance(distributed_config.tp_plan, dict):
+                    model.tp_plan = distributed_config.tp_plan
+                model = apply_tensor_parallelism(model, tp_mesh)
+
             elif distributed_config.fsdp_size > 1:
                 fsdp_mesh = device_mesh["fsdp"] if device_mesh.ndim > 1 else device_mesh
                 model = apply_fully_sharded_data_parallelism(model, fsdp_mesh)
+
+            elif distributed_config.pp_size > 1:
+                pp_mesh = device_mesh["pp"] if device_mesh.ndim > 1 else device_mesh
+                model = apply_pipeline_parallelism(model, pp_mesh)
         return model
+
+    def should_save_on_this_rank(self, is_main_process: bool) -> bool:
+        """Return whether this rank should write checkpoint files."""
+        save_on_this_rank = is_main_process
+        if _is_torch_distributed_initialized():
+            save_on_this_rank = save_on_this_rank and _get_torch_distributed_rank() == 0
+        return save_on_this_rank
+
+    def save_distributed_checkpoint(
+        self,
+        model_to_save,
+        save_directory: str | os.PathLike,
+        *,
+        push_to_hub: bool = False,
+        save_on_this_rank: bool = True,
+        repo_id: str | None = None,
+        files_timestamps: dict | None = None,
+        commit_message: str | None = None,
+        token: str | bool | None = None,
+        create_pr: bool = False,
+    ) -> None:
+        """Save an FSDP-wrapped model via DCP and optionally push to the Hub."""
+        if not is_torch_greater_or_equal("2.7"):
+            raise OSError("save_pretrained(..., distributed_checkpoint=True) requires torch>=2.7.")
+        if not is_fsdp_managed_module(model_to_save):
+            raise ValueError(
+                "save_pretrained(..., distributed_checkpoint=True) is only supported for FSDP-wrapped models."
+            )
+        if getattr(model_to_save, "_device_mesh", None) is None:
+            raise ValueError(
+                "save_pretrained(..., distributed_checkpoint=True) requires the model to have been "
+                "initialized with a distributed_config (_device_mesh is None)."
+            )
+        save_model_checkpoint_distributed(model_to_save, save_directory)
+
+        if push_to_hub and save_on_this_rank:
+            model_card = create_and_tag_model_card(repo_id, self.model_tags, token=token)
+            model_card.save(os.path.join(save_directory, "README.md"))
+            self._upload_modified_files(
+                save_directory,
+                repo_id,
+                files_timestamps,
+                commit_message=commit_message,
+                token=token,
+                create_pr=create_pr,
+            )
+
+    def gather_sharded_state_dict_for_save(
+        self,
+        model_to_save,
+        state_dict: dict,
+        distributed_config: DistributedConfig | None,
+        *,
+        save_on_this_rank: bool = True,
+    ) -> dict:
+        """Gather TP- or FSDP-sharded weights to full CPU tensors for checkpoint writing."""
+        if distributed_config is None:
+            return state_dict
+
+        if distributed_config.tp_size > 1:
+            state_dict = gather_state_dict_for_save(
+                state_dict, self._tp_plan, self._device_mesh, distributed_config.tp_size
+            )
+            if not save_on_this_rank:
+                state_dict = {}
+            return state_dict
+
+        if distributed_config.fsdp_size > 1:
+            if not _is_torch_distributed_initialized():
+                raise ValueError(
+                    "Saving an FSDP-wrapped model requires torch.distributed to be initialized. "
+                    "Call save_pretrained from every rank after init_process_group."
+                )
+            return gather_full_state_dict(model_to_save)
+
+        return state_dict
+
+    def barrier_after_gathered_checkpoint_save(self, distributed_config: DistributedConfig | None) -> None:
+        """Barrier so non-writer ranks wait for rank 0 to finish gathered checkpoint writes."""
+        if distributed_config is None:
+            return
+        if distributed_config.tp_size > 1 or distributed_config.fsdp_size > 1:
+            _distributed_barrier()

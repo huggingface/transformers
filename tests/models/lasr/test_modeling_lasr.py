@@ -61,6 +61,7 @@ class LasrEncoderModelTester:
         subsampling_conv_kernel_size=5,
         subsampling_conv_stride=2,
         layerdrop=0.0,
+        max_position_embeddings=512,
     ):
         # testing suite parameters
         self.parent = parent
@@ -68,6 +69,7 @@ class LasrEncoderModelTester:
         self.seq_length = seq_length
         self.num_mel_bins = num_mel_bins
         self.is_training = is_training
+        self.max_position_embeddings = max_position_embeddings
 
         # config parameters
         self.hidden_size = hidden_size
@@ -107,6 +109,7 @@ class LasrEncoderModelTester:
 
     def get_config(self):
         return LasrEncoderConfig(
+            max_position_embeddings=self.max_position_embeddings,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,

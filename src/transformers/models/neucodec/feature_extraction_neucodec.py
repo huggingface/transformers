@@ -18,28 +18,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import copy
 from typing import Any
 
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
-from ...utils import PaddingStrategy, TensorType, logging
-from ...utils.import_utils import is_torch_available, is_torchaudio_available, requires
+from ...utils import PaddingStrategy, TensorType, is_torch_available, logging
+from ...utils.import_utils import is_torchaudio_available, requires
 
-
-if is_torch_available():
-    import torch
-    import torch.nn.functional as F
 
 if is_torchaudio_available():
     import torchaudio
+if is_torch_available():
+    import torch
+    import torch.nn.functional as F
 
 
 logger = logging.get_logger(__name__)
 
 
+@requires(backends=("torchaudio",))
 class NeuCodecFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a NeuCodec feature extractor, which computes mel-filter bank features for the semantic encoder and padded
@@ -172,9 +171,16 @@ class NeuCodecFeatureExtractor(SequenceFeatureExtractor):
         # reference implementation (https://github.com/neuphonic/neucodec/blob/main/neucodec/model.py) feeds the
         # acoustic-padded waveform directly into the mel computation, with no extra "valid_len" trimming or
         # symmetric hop-sized padding: https://github.com/neuphonic/neucodec/blob/main/neucodec/model.py#L128
+        # Padded per-sample (not via the batch-collated `padded_audio`): the CMVN normalization below is computed
+        # over the whole padded signal, so batch-padding a short sample to the batch's longest would skew it.
         mel_features = []
         for i in range(batch_size):
-            waveform = padded_audio[i].to(device)
+            single_padded_audio = self.acoustic_encoder_padder.pad(
+                BatchFeature({"audio": [audio[i]]}),
+                pad_to_multiple_of=self.hop_length,
+                return_tensors="pt",
+            )
+            waveform = single_padded_audio["audio"].to(device)
             features = torchaudio.compliance.kaldi.fbank(
                 waveform * (2**15),
                 num_mel_bins=self.num_mel_bins,
