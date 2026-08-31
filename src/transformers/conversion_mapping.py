@@ -532,6 +532,52 @@ def _build_checkpoint_conversion_mapping():
                 operations=[MergeModulelist(dim=0)],
             ),
         ],
+        "glm5_next": [
+            WeightRenaming(
+                source_patterns=r"self_attn\.f_a_proj\.",
+                target_patterns=r"self_attn.forget_gate.f_a_proj.",
+            ),
+            WeightRenaming(
+                source_patterns=r"self_attn\.f_b_proj\.",
+                target_patterns=r"self_attn.forget_gate.f_b_proj.",
+            ),
+            WeightRenaming(
+                source_patterns=r"self_attn\.dt_bias",
+                target_patterns=r"self_attn.forget_gate.dt_bias",
+            ),
+            WeightRenaming(
+                source_patterns=r"self_attn\.A_log",
+                target_patterns=r"self_attn.forget_gate.A_log",
+            ),
+            WeightRenaming(source_patterns="hc_attn_fn", target_patterns="attn_hc.fn"),
+            WeightRenaming(source_patterns="hc_attn_base", target_patterns="attn_hc.base"),
+            WeightRenaming(source_patterns="hc_attn_scale", target_patterns="attn_hc.scale"),
+            WeightRenaming(source_patterns="hc_ffn_fn", target_patterns="ffn_hc.fn"),
+            WeightRenaming(source_patterns="hc_ffn_base", target_patterns="ffn_hc.base"),
+            WeightRenaming(source_patterns="hc_ffn_scale", target_patterns="ffn_hc.scale"),
+            WeightConverter(
+                source_patterns=[
+                    "mlp.experts.*.gate_proj.weight",
+                    "mlp.experts.*.up_proj.weight",
+                ],
+                target_patterns="mlp.experts.gate_up_proj",
+                operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+            ),
+            WeightConverter(
+                source_patterns="mlp.experts.*.down_proj.weight",
+                target_patterns="mlp.experts.down_proj",
+                operations=[MergeModulelist(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns=[
+                    "self_attn.q_conv1d.weight",
+                    "self_attn.k_conv1d.weight",
+                    "self_attn.v_conv1d.weight",
+                ],
+                target_patterns="self_attn.conv1d.weight",
+                operations=[Concatenate(dim=0)],
+            ),
+        ],
         "LlavaModel": [
             WeightRenaming(source_patterns=r"^language_model.model", target_patterns="language_model"),
         ],
