@@ -5117,7 +5117,7 @@ class GenerationIntegrationTests(unittest.TestCase):
     def test_compileable_default_cache_doesnt_compile_encoder_decoder(self):
         """Test that a compileable default cache doesn't trigger compilation on encoder-decoder models either"""
         model = AutoModelForSeq2SeqLM.from_pretrained("hf-internal-testing/tiny-random-bart")
-        decoder_config = copy.deepcopy(model.config.get_text_config(decoder=True))
+        decoder_config = model.config.get_text_config(decoder=True)
         # Linear attention layers are statically shaped, so the default `DynamicCache` is compileable (e.g. Mamba)
         decoder_config.layer_types = ["linear_attention"] * decoder_config.num_hidden_layers
         self_attention_cache = DynamicCache(config=decoder_config)
@@ -5128,7 +5128,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         )
         generation_config = GenerationConfig()
         generation_config.compile_config = CompileConfig()
-        generation_config.compile_config._compile_all_devices = True
+        generation_config.compile_config._compile_all_devices = True  # force compilation (e.g. fast CI, CPU)
         self.assertFalse(model._valid_auto_compile_criteria({"past_key_values": cache}, generation_config))
 
     def test_custom_generate_from_argument_in_generate(self):
