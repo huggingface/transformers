@@ -85,8 +85,16 @@ class DtensorShardOperation:
         self.device_mesh = param.device_mesh
         self.placements = tuple(param.placements)
         self.param_ndim = param.ndim
-        # `colwise_replicate_kv` describes the *expanded* projection, so `kv_replication` consecutive ranks read
-        # the same KV head from the checkpoint instead of disjoint contiguous chunks.
+        # `colwise_replicate_kv` derives the KV head a rank owns from its TP rank, which is only well defined on a
+        # 1D TP mesh. `apply_tensor_parallelism` is always given `device_mesh["tp"]` and TP/FSDP/PP are mutually
+        # exclusive, so this cannot happen today; guard against it rather than silently reading the wrong slice.
+        if kv_replication > 1 and self.device_mesh.ndim > 1:
+            raise NotImplementedError(
+                "KV head replication (`colwise_replicate_kv`, used when `num_key_value_heads < tp_size`) is only "
+                f"supported on a 1D tensor parallel mesh, but got a {self.device_mesh.ndim}D mesh "
+                f"{self.device_mesh.mesh_dim_names}. Combining it with another parallelism dimension is not "
+                "supported yet."
+            )
         self.kv_replication = kv_replication
         local_shape, offsets = compute_local_shape_and_global_offset(param.shape, self.device_mesh, self.placements)
         # Axis-0 range owned by this rank (used to filter per-expert pieces)
@@ -127,6 +135,8 @@ class DtensorShardOperation:
                 rank, world_size = sub_mesh.get_local_rank(), sub_mesh.size()
                 dim_idx = self._normalize_param_dim(placement.dim)
                 if self.kv_replication > 1 and placement.is_shard():
+                    # The parameter describes the *expanded* projection (2 KV heads on 4 ranks are declared as
+                    # `[h0, h0, h1, h1]`), so rank `r` reads head `r // kv_replication` of the checkpoint.
                     rank, world_size = rank // self.kv_replication, world_size // self.kv_replication
                 planned_ops_by_dim[dim_idx].append((placement, rank, world_size))
 
