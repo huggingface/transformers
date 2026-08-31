@@ -942,7 +942,10 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(inputs_tensor)
 
-        if (image_outputs := model_kwargs.pop("mm_encoder_outputs", {}).get("images")) is not None:
+        if (image_outputs := model_kwargs.pop("mm_encoder_outputs", {}).get("image")) is not None:
+            if model_kwargs.get("pixel_values") is not None:
+                raise ValueError("You cannot pass both: raw pixels and pre-computed embeddings for input images")
+
             image_features = image_outputs.pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 inputs_tensor, inputs_embeds=inputs_embeds, image_features=image_features

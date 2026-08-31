@@ -879,13 +879,11 @@ class GenerationMixin(ContinuousMixin):
         self: "GenerativePreTrainedModel", model_kwargs
     ) -> torch.FloatTensor:
         """Prepares image/video hidden states if model support this modality"""
-
         model_kwargs.setdefault("mm_encoder_outputs", {})
         keys_to_pop = set()
         for modality in ["image", "video"]:
             if (
                 modality in self.input_modalities
-                and model_kwargs["mm_encoder_outputs"].get(f"{modality}") is None
                 and (encoder_fn := getattr(self.base_model, f"get_{modality}_features", None)) is not None
             ):
                 encoder_kwargs = {
@@ -896,6 +894,10 @@ class GenerationMixin(ContinuousMixin):
                 keys_to_pop.update(encoder_kwargs.keys())
                 # all models use only two arg names to define the main input (only fuyu uses `image_patches`)
                 if any(key in encoder_kwargs for key in ["pixel_values", "pixel_values_videos", "image_patches"]):
+                    if model_kwargs["mm_encoder_outputs"].get(f"{modality}") is not None:
+                        raise ValueError(
+                            f"You cannot pass both: raw pixels and pre-computed embeddings for input {modality}"
+                        )
                     encoder_kwargs["return_dict"] = True
                     model_kwargs["mm_encoder_outputs"][modality] = encoder_fn(**encoder_kwargs)
 
@@ -2681,7 +2683,7 @@ class GenerationMixin(ContinuousMixin):
         if not kwargs_has_position_ids and accepts_position_ids and not self.config.is_encoder_decoder:
             model_kwargs["position_ids"] = self._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
 
-        if not (model_kwargs.get("encoder_outputs") or model_kwargs.get("mm_encoder_outputs")):
+        if model_kwargs.get("encoder_outputs") is None or model_kwargs.get("mm_encoder_outputs") is None:
             # if model is encoder decoder encoder_outputs are created and added to `model_kwargs`
             model_kwargs = self._maybe_prepare_encoder_kwargs_for_generation(
                 inputs_tensor, model_kwargs, model_input_name, generation_config
