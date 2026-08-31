@@ -25,9 +25,8 @@ from ...audio_utils import AudioInput, make_list_of_audio_chat_template
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
-from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import ProcessorMixin, Unpack
-from ...tokenization_utils_base import TextInput
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.import_utils import requires
 from ..audioflamingo3.modeling_audioflamingo3 import (
@@ -35,7 +34,7 @@ from ..audioflamingo3.modeling_audioflamingo3 import (
     AudioFlamingo3ForConditionalGeneration,
     AudioFlamingo3MultiModalProjector,
 )
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import CONFIG_MAPPING
 from ..glmasr.configuration_glmasr import GlmAsrConfig
 from ..glmasr.modeling_glmasr import (
     GlmAsrModel,
@@ -200,9 +199,7 @@ class MossTranscribeDiarizeProcessor(GlmAsrProcessor):
         flat_chunks: list[np.ndarray] = []
         feature_lengths: list[int] = []
         mel_frames = int(self.feature_extractor.nb_max_frames)
-        max_tokens_per_full_window = (
-            mel_frames // (2 * self.audio_encoder_stride)
-        ) // self.audio_merge_size
+        max_tokens_per_full_window = (mel_frames // (2 * self.audio_encoder_stride)) // self.audio_merge_size
         for audio_el in audio:
             waveform = np.asarray(audio_el, dtype=np.float32).squeeze()
             n_samples = int(waveform.shape[0])
@@ -248,7 +245,7 @@ class MossTranscribeDiarizeProcessor(GlmAsrProcessor):
         if self.enable_time_marker and self.time_marker_every_seconds > 0:
             return self._build_time_marker_span(num_tokens)
         return self.audio_token * num_tokens
-        
+
     def _build_time_marker_span(self, num_tokens: int) -> str:
         num_tokens = int(num_tokens)
         if num_tokens <= 0:
@@ -313,9 +310,7 @@ class MossTranscribeDiarizeProcessor(GlmAsrProcessor):
                 raise ValueError(
                     f"Received {len(prompt)} prompt(s) for {batch_size} audio sample(s); counts must match."
                 )
-            prompts = [
-                self.default_transcription_prompt if item is None else item for item in prompt
-            ]
+            prompts = [self.default_transcription_prompt if item is None else item for item in prompt]
         else:
             raise TypeError("`prompt` must be a string, a sequence of strings, or `None`.")
 
