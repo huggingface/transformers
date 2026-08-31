@@ -1,8 +1,4 @@
-import contextlib
-from functools import lru_cache
-
 import torch
-from torch.nn.attention import SDPBackend, sdpa_kernel
 
 from ..utils import is_torch_npu_available, is_torch_xpu_available, logging
 from ..utils.import_utils import is_torch_greater_or_equal
@@ -14,38 +10,6 @@ logger = logging.get_logger(__name__)
 _is_torch_greater_or_equal_than_2_8 = is_torch_greater_or_equal("2.8", accept_dev=True)
 _is_torch_xpu_available = is_torch_xpu_available()
 _is_torch_npu_available = is_torch_npu_available()
-
-
-@lru_cache
-def _prefer_cudnn_sdpa(device: int) -> bool:
-    """Whether to ask SDPA for the cuDNN backend first on this device.
-
-    SDPA's default backend order puts FlashAttention first. On Hopper the cuDNN attention kernels
-    are substantially faster for the shapes used in training while producing the same accuracy, so
-    we express a preference there. This is a preference, not a restriction: backends that cannot
-    serve a given shape are skipped, so the effective behavior is unchanged wherever cuDNN does not
-    apply.
-
-    Hopper only, because that is where cuDNN wins: measured forward+backward at 8K-128K sequence
-    lengths, cuDNN is 1.7-2.3x faster on H100 and H200, but 0.82x on A100 and 0.88x on Blackwell
-    (RTX PRO 6000, sm120). sm100 was not measured. Benchmark and numbers:
-    https://github.com/huggingface/transformers/pull/48163
-    """
-    if not _is_torch_greater_or_equal_than_2_8:
-        return False
-    return torch.cuda.get_device_capability(device)[0] == 9
-
-
-def _sdpa_backend_priority(q_length: int) -> contextlib.AbstractContextManager:
-    # Expressing a preference costs ~18us per call (it saves and restores global backend flags), so it is
-    # only worth it when the attention call itself is substantial. During decoding `q_length == 1` and that
-    # overhead would dominate, so keep the default backend there.
-    if q_length == 1 or not torch.cuda.is_available() or not _prefer_cudnn_sdpa(torch.cuda.current_device()):
-        return contextlib.nullcontext()
-    return sdpa_kernel(
-        [SDPBackend.CUDNN_ATTENTION, SDPBackend.FLASH_ATTENTION, SDPBackend.EFFICIENT_ATTENTION, SDPBackend.MATH],
-        set_priority=True,
-    )
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -191,17 +155,16 @@ def sdpa_attention_forward(
         attention_mask = create_position_bias_mask(position_bias, attention_mask, is_causal, query, key)
         is_causal = False
 
-    with _sdpa_backend_priority(q_length):
-        attn_output = torch.nn.functional.scaled_dot_product_attention(
-            query,
-            key,
-            value,
-            attn_mask=attention_mask,
-            dropout_p=dropout,
-            scale=scaling,
-            is_causal=is_causal,
-            **sdpa_kwargs,
-        )
+    attn_output = torch.nn.functional.scaled_dot_product_attention(
+        query,
+        key,
+        value,
+        attn_mask=attention_mask,
+        dropout_p=dropout,
+        scale=scaling,
+        is_causal=is_causal,
+        **sdpa_kwargs,
+    )
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, None
