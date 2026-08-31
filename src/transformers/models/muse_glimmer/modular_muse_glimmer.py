@@ -775,6 +775,9 @@ class MuseGlimmerPreTrainedModel(Gemma2PreTrainedModel):
         raise NotImplementedError("No need to inherit, we can use the base one")
 
 
+# Not a pass-through wrapper: this *is* the embedding (nn.Embedding subclass) and forward does the
+# lookup via super().forward() before the norm, so there is no inner module to hoist out.
+# trf-ignore: TRF026
 class MuseGlimmerTextNormedEmbedding(nn.Embedding):
     def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, norm_eps: float = 1e-6):
         super().__init__(num_embeddings, embedding_dim, padding_idx)
@@ -971,6 +974,7 @@ def get_vision_pixel_shuffle_index(
     return torch.cat(indices, dim=0)
 
 
+@auto_docstring
 class MuseGlimmerVisionModel(MuseGlimmerPreTrainedModel):
     config: MuseGlimmerVisionConfig
     main_input_name = "pixel_values"
@@ -999,17 +1003,22 @@ class MuseGlimmerVisionModel(MuseGlimmerPreTrainedModel):
         factor = self.merge_size
         dim = hidden_states.shape[-1]
         shuffle_index = get_vision_pixel_shuffle_index(grid_thw, factor, kwargs=kwargs)
-        hidden_states = hidden_states[shuffle_index]
+        hidden_states = hidden_states[shuffle_index.to(hidden_states.device)]
         return hidden_states.view(-1, factor * factor, dim).permute(0, 2, 1).reshape(-1, dim * factor * factor)
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
         grid_thw: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
+        r"""
+        grid_thw (`torch.LongTensor` of shape `(num_images_or_videos, 3)`):
+            The temporal, height and width patch-grid dimensions for each packed image or video.
+        """
         cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
         # assumes pos_emb_height==pos_emb_width, adapt to non-square if needed
         window_index, cu_window_seqlens = get_vision_window_index(

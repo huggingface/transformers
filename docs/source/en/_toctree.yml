@@ -291,6 +291,8 @@
       title: FP-Quant
     - local: quantization/mxfp4
       title: MXFP4
+    - local: quantization/nvfp4
+      title: NVFP4
     title: FP4 and FP8 formats
   - sections:
     - local: quantization/auto_round
@@ -617,6 +619,10 @@
         title: Ernie4_5_MoE
       - local: model_doc/esm
         title: ESM
+      - local: model_doc/esmc
+        title: ESMC
+      - local: model_doc/esmfold2
+        title: ESMFold2
       - local: model_doc/eurobert
         title: EuroBERT
       - local: model_doc/exaone4
@@ -663,10 +669,10 @@
         title: GLM-4.5, GLM-4.6, GLM-4.7
       - local: model_doc/glm4_moe_lite
         title: GLM-4.7-Flash
+      - local: model_doc/glm_moe_dsa
+        title: GLM-5, GLM-5.1, GLM-5.2, GLM-5.3
       - local: model_doc/glm_image
         title: GLM-Image
-      - local: model_doc/glm_moe_dsa
-        title: GlmMoeDsa
       - local: model_doc/openai-gpt
         title: GPT
       - local: model_doc/gpt_neo
@@ -867,6 +873,8 @@
         title: Qwen3MoE
       - local: model_doc/qwen3_next
         title: Qwen3Next
+      - local: model_doc/qwen4_exp
+        title: Qwen4-Exp
       - local: model_doc/rag
         title: RAG
       - local: model_doc/recurrent_gemma
@@ -1129,6 +1137,8 @@
         title: GLM-ASR
       - local: model_doc/granite_speech
         title: GraniteSpeech
+      - local: model_doc/granite_speech5
+        title: GraniteSpeech5
       - local: model_doc/granite_speech_plus
         title: GraniteSpeechPlus
       - local: model_doc/higgs_audio_v2
@@ -1185,6 +1195,8 @@
         title: UniSpeech-SAT
       - local: model_doc/univnet
         title: UnivNet
+      - local: model_doc/vibevoice
+        title: VibeVoice
       - local: model_doc/vibevoice_acoustic_tokenizer
         title: VibeVoice Acoustic Tokenizer
       - local: model_doc/vibevoice_asr
@@ -1317,6 +1329,8 @@
         title: Gemma4 Unified
       - local: model_doc/git
         title: GIT
+      - local: model_doc/glm5_next
+        title: GLM-5.3-Flash
       - local: model_doc/glm46v
         title: Glm46V
       - local: model_doc/glm4v
@@ -1403,6 +1417,8 @@
         title: MM Grounding DINO
       - local: model_doc/musicflamingo
         title: MusicFlamingo
+      - local: model_doc/neomme
+        title: NeoMME
       - local: model_doc/nougat
         title: Nougat
       - local: model_doc/omdet-turbo

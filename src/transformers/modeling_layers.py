@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import os
 import re
+import sys
 from functools import partial
 from typing import TYPE_CHECKING
 
@@ -533,17 +534,17 @@ class MtpModel(PreTrainedModel):
                     logits, labels, vocab_size=self.config.vocab_size, shift_labels=shift_labels, **kwargs
                 )
 
-            # Append the drafted logits
-            drafted_logits.append(logits)
             # Decode one token
             next_token_logits = logits[:, -1, :].to(device=input_ids.device)
             if logits_processor is not None and full_input_ids is not None:
-                next_token_scores = logits_processor(full_input_ids, next_token_logits.to(torch.float32))
+                next_token_logits = logits_processor(full_input_ids, next_token_logits.to(dtype=torch.float32))
+            # Append the drafted logits AFTER logits processors if any
+            drafted_logits.append(next_token_logits[:, None, :])
             if do_sample:
-                probs = nn.functional.softmax(next_token_scores, dim=-1, dtype=torch.float32)
+                probs = nn.functional.softmax(next_token_logits, dim=-1, dtype=torch.float32)
                 next_mtp_token = torch.multinomial(probs, num_samples=1)
             else:
-                next_mtp_token = torch.argmax(next_token_scores, dim=-1, keepdim=True)
+                next_mtp_token = torch.argmax(next_token_logits, dim=-1, keepdim=True)
             drafted_tokens.append(next_mtp_token)
 
             # Roll by 1 and append for next layer
@@ -605,8 +606,12 @@ class MtpModel(PreTrainedModel):
         # Open the files, get the slices corresponding only to mtp weights, rename them, and load them
         mtp_state_dict = {}
         all_pointer = set()
+        is_mps = device_map is not None and any(
+            (d.type if isinstance(d, torch.device) else d) == "mps" for d in device_map.values()
+        )
+        backend = "pread" if is_mps or sys.platform == "win32" else "mmap"
         for file in mtp_files:
-            file_pointer = safe_open(file, framework="pt", device="cpu")
+            file_pointer = safe_open(file, framework="pt", device="cpu", backend=backend)
             all_pointer.add(file_pointer)
             for k in file_pointer.keys():
                 # It's one of the mtp weights
@@ -635,7 +640,6 @@ class MtpModel(PreTrainedModel):
             load_config=LoadStateDictConfig(
                 weight_mapping=weight_conversions, device_map=device_map, dtype=main_model.config.dtype
             ),
-            tp_plan=None,
         )
         # finally close all opened file pointers
         for k in all_pointer:

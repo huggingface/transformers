@@ -91,9 +91,9 @@ class AXK2GatedRMSNorm(nn.Module):
     return y * sigmoid(gate_mlp(y))
     """
 
-    def __init__(self, config: AXK2Config, eps: float):
+    def __init__(self, config: AXK2Config):
         super().__init__()
-        self.norm = AXK2RMSNorm(config.hidden_size, eps=eps)
+        self.norm = AXK2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.mlp = AXK2GateMLP(config)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -678,13 +678,10 @@ class AXK2DecoderLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
         self.self_attn = AXK2Attention(config, layer_idx)
 
-        if config.mlp_layer_types[layer_idx] == "sparse":
-            self.mlp = AXK2MoE(config)
-        else:
-            self.mlp = AXK2MLP(config)
-        self.input_layernorm = AXK2GatedRMSNorm(config, eps=config.rms_norm_eps)
+        self.mlp = AXK2MoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else AXK2MLP(config)
+        self.input_layernorm = AXK2GatedRMSNorm(config)
         self.post_attention_layernorm = (
-            AXK2GatedRMSNorm(config, eps=config.rms_norm_eps)
+            AXK2GatedRMSNorm(config)
             if config.mlp_layer_types[layer_idx] == "sparse"
             else AXK2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         )

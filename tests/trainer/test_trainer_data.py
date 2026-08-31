@@ -67,6 +67,7 @@ from .trainer_test_utils import (
     RegressionPreTrainedModel,
     RegressionTrainingArguments,
     SampleIterableDataset,
+    SequenceClassificationDataset,
     TrainerIntegrationCommon,
     TstLayer,
     get_regression_trainer,
@@ -398,6 +399,16 @@ class TrainerSamplerTest(unittest.TestCase):
         self.assertEqual(len(data[indices[0]]["input_ids"]), 105)
         # The indices should be a permutation of range(6)
         self.assertEqual(sorted(indices), list(range(6)))
+
+    def test_eval_sampler_deterministic_with_group_by_length(self):
+        eval_dataset = SequenceClassificationDataset()
+        args = TrainingArguments(train_sampling_strategy="group_by_length")
+        trainer = Trainer(model=RegressionModel(), args=args, eval_dataset=eval_dataset)
+        order_1 = list(trainer._get_eval_sampler(eval_dataset))
+        torch.rand(100)  # get random items from global generator to simulate random number operation between two evals
+        order_2 = list(trainer._get_eval_sampler(eval_dataset))
+        self.assertEqual(sorted(order_1), list(range(len(eval_dataset))))
+        self.assertEqual(order_1, order_2)
 
     def test_distributed_length_grouped(self):
         # Get some inputs of random lengths

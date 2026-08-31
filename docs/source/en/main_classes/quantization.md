@@ -74,6 +74,10 @@ Learn how to quantize models in the [Quantization](../quantization/overview) gui
 
 [[autodoc]] Mxfp4Config
 
+## NVFP4Config
+
+[[autodoc]] NVFP4Config
+
 ## FbgemmFp8Config
 
 [[autodoc]] FbgemmFp8Config

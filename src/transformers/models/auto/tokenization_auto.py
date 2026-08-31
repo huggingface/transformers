@@ -119,6 +119,8 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("emu3", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("ernie", "BertTokenizer" if is_tokenizers_available() else None),
         ("esm", "EsmTokenizer"),
+        ("esmc", "EsmcTokenizer" if is_tokenizers_available() else None),
+        ("esmfold2", "EsmcTokenizer" if is_tokenizers_available() else None),
         ("falcon_mamba", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
         ("fastspeech2_conformer", "FastSpeech2ConformerTokenizer" if is_g2p_en_available() else None),
         ("flaubert", "FlaubertTokenizer"),
@@ -153,6 +155,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("gpt_neox_japanese", "GPTNeoXJapaneseTokenizer"),
         ("gptj", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("granite", "TokenizersBackend" if is_tokenizers_available() else None),
+        ("granite_speech5_ctc", "ParakeetTokenizer" if is_tokenizers_available() else None),
         ("granitemoe", "TokenizersBackend" if is_tokenizers_available() else None),
         ("granitemoehybrid", "TokenizersBackend" if is_tokenizers_available() else None),
         ("granitemoeshared", "TokenizersBackend" if is_tokenizers_available() else None),
@@ -293,6 +296,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("qwen3_omni_moe", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen3_vl", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen3_vl_moe", "Qwen2Tokenizer" if is_tokenizers_available() else None),
+        ("qwen4_exp", "Qwen3_5Tokenizer" if is_tokenizers_available() else None),
         ("rag", "RagTokenizer"),
         ("realm", "BertTokenizer" if is_tokenizers_available() else None),
         ("recurrent_gemma", "GemmaTokenizer" if is_tokenizers_available() else None),
@@ -328,6 +332,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("umt5", "TokenizersBackend" if is_tokenizers_available() else None),
         ("unispeech", "Wav2Vec2CTCTokenizer"),
         ("unispeech-sat", "Wav2Vec2CTCTokenizer"),
+        ("vibevoice", "Qwen2TokenizerFast" if is_tokenizers_available() else None),
         ("videoprism", "VideoPrismTokenizer" if is_tokenizers_available() else None),
         ("vilt", "BertTokenizer" if is_tokenizers_available() else None),
         ("visual_bert", "BertTokenizer" if is_tokenizers_available() else None),
@@ -421,7 +426,7 @@ TOKENIZER_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TOKENIZER_MAPPING_NAM
 CONFIG_TO_TYPE = {v: k for k, v in CONFIG_MAPPING_NAMES.items()}
 
 MODEL_IDS_TO_TOKENIZERS_BACKEND = [
-    "deepseek-ai/deepseek-r1-distill-*",
+    "deepseek-ai/deepseek-r1-distill-llama-*",
     "deepseek-ai/deepseek-coder-*",
     "allenai/dolma2-tokenizer",
     "google/umt5-small",

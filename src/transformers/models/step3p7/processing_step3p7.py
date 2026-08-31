@@ -19,8 +19,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from ...processing_utils import ProcessorMixin
+from ...utils import auto_docstring
 
 
+@auto_docstring
 class Step3p7Processor(ProcessorMixin):
     """Processor for Step-3.7-Flash.
 
