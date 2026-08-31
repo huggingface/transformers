@@ -60,7 +60,7 @@ class MossTranscribeDiarizePreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("audio", "text")
     supports_gradient_checkpointing = True
-    _no_split_modules = []
+    _no_split_modules = None
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -76,6 +76,32 @@ class MossTranscribeDiarizeModelOutputWithPast(BaseModelOutputWithPast):
         Projected audio hidden states.
     """
 
+    audio_hidden_states: torch.FloatTensor | None = None
+
+
+@auto_docstring(
+    custom_intro="""
+    Base class for MossTranscribeDiarize causal language model (or autoregressive) outputs.
+    """
+)
+@dataclass
+class MossTranscribeDiarizeCausalLMOutputWithPast(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Language modeling loss (for next-token prediction).
+    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        Prediction scores of the language modeling head.
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        It is a [`~cache_utils.Cache`] instance.
+    audio_hidden_states (`torch.FloatTensor`, *optional*):
+        Hidden states of the audio encoder after projection.
+    """
+
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    past_key_values: Cache | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
     audio_hidden_states: torch.FloatTensor | None = None
 
 
@@ -140,23 +166,25 @@ class MossTranscribeDiarizeModel(MossTranscribeDiarizePreTrainedModel):
             audio_outputs.pooler_output = whisper_features.new_zeros(0, self.config.text_config.hidden_size)
             return audio_outputs
 
-        num_samples = int(audio_chunk_mapping.max().item()) + 1
-        per_sample_chunks: list[list[torch.Tensor]] = [[] for _ in range(num_samples)]
-        for chunk_idx in range(num_chunks):
-            sample_idx = int(audio_chunk_mapping[chunk_idx].item())
-            per_sample_chunks[sample_idx].append(whisper_features[chunk_idx, valid_mask[chunk_idx]])
+        _, chunk_counts = torch.unique_consecutive(audio_chunk_mapping, return_counts=True)
+        chunk_starts = torch.nn.functional.pad(chunk_counts.cumsum(0)[:-1], (1, 0), value=0)
+        split_indices = chunk_starts[1:].long().cpu()
+        chunk_groups = torch.tensor_split(whisper_features, split_indices, dim=0)
+        valid_mask_groups = torch.tensor_split(valid_mask, split_indices, dim=0)
 
         projected = []
-        for sample_chunks in per_sample_chunks:
-            if not sample_chunks:
+        for sample_features, sample_valid_mask in zip(chunk_groups, valid_mask_groups):
+            flat_features = sample_features[sample_valid_mask]
+            if flat_features.numel() == 0:
                 continue
-            sample_features = torch.cat(sample_chunks, dim=0).unsqueeze(0).to(self.dtype)
-            batch_size, seq_len, hidden_size = sample_features.shape
+            sample_features = flat_features.unsqueeze(0).to(self.dtype)
+            seq_len = sample_features.shape[1]
             trimmed_seq_len = (seq_len // merge_size) * merge_size
             if trimmed_seq_len == 0:
                 continue
+            hidden_size = sample_features.shape[2]
             sample_features = sample_features[:, :trimmed_seq_len].reshape(
-                batch_size, trimmed_seq_len // merge_size, hidden_size * merge_size
+                1, trimmed_seq_len // merge_size, hidden_size * merge_size
             )
             projected.append(self.multi_modal_projector(sample_features).squeeze(0))
 
@@ -253,32 +281,6 @@ class MossTranscribeDiarizeModel(MossTranscribeDiarizePreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    Base class for MossTranscribeDiarize causal language model (or autoregressive) outputs.
-    """
-)
-@dataclass
-class MossTranscribeDiarizeCausalLMOutputWithPast(ModelOutput):
-    r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Language modeling loss (for next-token prediction).
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-        Prediction scores of the language modeling head.
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance.
-    audio_hidden_states (`torch.FloatTensor`, *optional*):
-        Hidden states of the audio encoder after projection.
-    """
-
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
-    audio_hidden_states: torch.FloatTensor | None = None
-
-
-@auto_docstring(
-    custom_intro="""
     The MOSS-Transcribe-Diarize model for conditional generation with transcription and speaker diarization.
     """
 )
@@ -314,6 +316,8 @@ class MossTranscribeDiarizeForConditionalGeneration(MossTranscribeDiarizePreTrai
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MossTranscribeDiarizeCausalLMOutputWithPast:
         r"""
+        input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`, *optional*):
+            Unused. MOSS reassembles chunked audio via `audio_feature_lengths` and `audio_chunk_mapping` instead.
         audio_feature_lengths (`torch.LongTensor` of shape `(num_chunks,)`, *optional*):
             Number of output tokens per chunked log-mel feature row in `input_features`.
         audio_chunk_mapping (`torch.LongTensor` of shape `(num_chunks,)`, *optional*):
