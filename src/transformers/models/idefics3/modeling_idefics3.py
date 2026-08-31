@@ -640,6 +640,11 @@ class Idefics3Model(Idefics3PreTrainedModel):
         r"""
         pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
             Mask to avoid performing attention on padding pixel indices.
+        image_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The hidden states of the image encoder after modality projection. Pass this instead of `pixel_values`
+            to reuse a previous call's vision-tower output and skip recomputing it (e.g. across turns in a
+            conversation). Do not pass both at once: clear `pixel_values` from the inputs first, or a `ValueError`
+            is raised.
         """
 
         use_cache = use_cache if use_cache is not None else self.config.use_cache

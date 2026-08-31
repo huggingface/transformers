@@ -19,7 +19,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import warnings
 from collections.abc import Callable
 from typing import Any
 
@@ -516,30 +515,6 @@ class Exaone4_5_VisionModel(Exaone4_5_PreTrainedModel):
         self.gradient_checkpointing = False
 
         self.post_init()
-
-    def rot_pos_emb(self, grid_thw):
-        warnings.warn(
-            f"`{self.__class__.__name__}.rot_pos_emb` is deprecated and will be removed in v5.11. Use `get_vision_position_ids` from `transformers.vision_utils` and apply the rotary embedding module.",
-            FutureWarning,
-            stacklevel=2,
-        )
-        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size)
-        rotary_pos_emb = self.rotary_pos_emb(position_ids)
-        return rotary_pos_emb
-
-    def get_window_index(self, grid_thw):
-        warnings.warn(
-            f"`{self.__class__.__name__}.get_window_index` is deprecated and will be removed in v5.11. Use `get_vision_window_index` from `transformers.vision_utils` instead.",
-            FutureWarning,
-            stacklevel=2,
-        )
-        window_index, cu_window_seqlens = get_vision_window_index(
-            grid_thw,
-            spatial_merge_size=self.spatial_merge_size,
-            window_size=self.window_size,
-            patch_size=self.patch_size,
-        )
-        return window_index, cu_window_seqlens.tolist()
 
     @merge_with_config_defaults
     @capture_outputs
