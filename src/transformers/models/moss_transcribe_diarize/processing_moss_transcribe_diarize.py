@@ -178,26 +178,24 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
                 feature_lengths.append(token_count)
 
         if flat_chunks:
-            input_features = self.feature_extractor(flat_chunks, **kwargs)["input_features"]
+            audio_inputs = self.feature_extractor(flat_chunks, **kwargs)
         else:
-            input_features = torch.empty(
-                (0, int(self.feature_extractor.feature_size), int(self.feature_extractor.nb_max_frames)),
-            )
+            audio_inputs = {
+                "input_features": torch.empty(
+                    (0, int(self.feature_extractor.feature_size), int(self.feature_extractor.nb_max_frames)),
+                ),
+            }
+        audio_inputs.pop("attention_mask", None)
 
         # MOSS chunks per-sample audio into Whisper windows upstream (unlike AF3-style token counting), so
         # the model needs `audio_chunk_mapping` to reassemble chunks per sample before merge + projection.
-        audio_feature_lengths = torch.tensor(feature_lengths, dtype=torch.long)
-        audio_chunk_mapping = torch.repeat_interleave(
+        audio_inputs["audio_feature_lengths"] = torch.tensor(feature_lengths, dtype=torch.long)
+        audio_inputs["audio_chunk_mapping"] = torch.repeat_interleave(
             torch.arange(len(audio), dtype=torch.long), torch.tensor(per_sample_windows, dtype=torch.long)
         )
         num_audio_tokens = torch.zeros(len(audio), dtype=torch.long)
-        num_audio_tokens.scatter_add_(0, audio_chunk_mapping, audio_feature_lengths)
-        audio_inputs = {
-            "input_features": input_features,
-            "audio_feature_lengths": audio_feature_lengths,
-            "audio_chunk_mapping": audio_chunk_mapping,
-            "num_audio_tokens": num_audio_tokens,
-        }
+        num_audio_tokens.scatter_add_(0, audio_inputs["audio_chunk_mapping"], audio_inputs["audio_feature_lengths"])
+        audio_inputs["num_audio_tokens"] = num_audio_tokens
 
         audio_replacements = [self.replace_audio_token(audio_inputs, audio_idx=idx) for idx in range(len(audio))]
         return audio_inputs, audio_replacements
