@@ -626,8 +626,12 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained(model_id)
 
         IMG_URLS = [
-            load_test_image("https://picsum.photos/id/237/400/300"),
-            load_test_image("https://picsum.photos/id/231/200/300"),
+            load_test_image(
+                "https://huggingface.co/datasets/raushan-testing-hf/images_test/resolve/main/picsum_237_200x300.jpg"
+            ),
+            load_test_image(
+                "https://huggingface.co/datasets/raushan-testing-hf/images_test/resolve/main/picsum_231_200x300.jpg"
+            ),
         ]
         PROMPT = "<s>[INST]Describe the images.\n[IMG][IMG][/INST]"
 
@@ -659,8 +663,12 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained(model_id)
 
         IMG_URLS = [
-            load_test_image("https://picsum.photos/id/237/400/300"),
-            load_test_image("https://picsum.photos/id/231/200/300"),
+            load_test_image(
+                "https://huggingface.co/datasets/raushan-testing-hf/images_test/resolve/main/picsum_237_200x300.jpg"
+            ),
+            load_test_image(
+                "https://huggingface.co/datasets/raushan-testing-hf/images_test/resolve/main/picsum_231_200x300.jpg"
+            ),
         ]
         PROMPT = "<s>[INST][IMG][IMG]Describe the images.[/INST]"
 
@@ -691,8 +699,12 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         processor.tokenizer.pad_token_id = processor.tokenizer.eos_token_id
 
         IMG_URLS = [
-            load_test_image("https://picsum.photos/id/237/400/300"),
-            load_test_image("https://picsum.photos/id/17/150/500"),
+            load_test_image(
+                "https://huggingface.co/datasets/raushan-testing-hf/images_test/resolve/main/picsum_237_200x300.jpg"
+            ),
+            load_test_image(
+                "https://huggingface.co/datasets/raushan-testing-hf/images_test/resolve/main/picsum_17_150x500.jpg"
+            ),
         ]
         PROMPT = [
             "<s>[INST][IMG]What breed is the dog?[/INST]",

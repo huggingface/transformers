@@ -358,7 +358,12 @@ class Emu3IntegrationTest(unittest.TestCase):
         )
         processor = Emu3Processor.from_pretrained("BAAI/Emu3-Chat-hf")
 
-        image = Image.open(requests.get("https://picsum.photos/id/237/200/200", stream=True).raw)
+        image = Image.open(
+            requests.get(
+                "https://huggingface.co/datasets/raushan-testing-hf/images_test/resolve/main/picsum_237_200x300.jpg",
+                stream=True,
+            ).raw
+        )
         prompt = "USER: <image>Describe what do you see here and tell me about the history behind it? ASSISTANT:"
 
         inputs = processor(images=image, text=prompt, return_tensors="pt").to(model.device, torch.float16)
@@ -379,8 +384,18 @@ class Emu3IntegrationTest(unittest.TestCase):
         processor = Emu3Processor.from_pretrained("BAAI/Emu3-Chat-hf")
         processor.tokenizer.padding_side = "left"
 
-        image = Image.open(requests.get("https://picsum.photos/id/237/200/200", stream=True).raw)
-        image_2 = Image.open(requests.get("https://picsum.photos/id/247/200/200", stream=True).raw)
+        image = Image.open(
+            requests.get(
+                "https://huggingface.co/datasets/raushan-testing-hf/images_test/resolve/main/picsum_237_200x300.jpg",
+                stream=True,
+            ).raw
+        )
+        image_2 = Image.open(
+            requests.get(
+                "https://huggingface.co/datasets/raushan-testing-hf/images_test/resolve/main/picsum_247_200x200.jpg",
+                stream=True,
+            ).raw
+        )
         prompts = [
             "USER: <image>Describe what do you see here? ASSISTANT:",
             "USER: <image>What can you say about the image? ASSISTANT:",
@@ -426,8 +441,18 @@ class Emu3IntegrationTest(unittest.TestCase):
         processor.image_processor.max_pixels = 256 * 256
         processor.image_processor.size = {"min_pixels": 256 * 256, "max_pixels": 256 * 256}
 
-        image = Image.open(requests.get("https://picsum.photos/id/237/200/200", stream=True).raw)
-        image_2 = Image.open(requests.get("https://picsum.photos/id/247/200/200", stream=True).raw)
+        image = Image.open(
+            requests.get(
+                "https://huggingface.co/datasets/raushan-testing-hf/images_test/resolve/main/picsum_237_200x300.jpg",
+                stream=True,
+            ).raw
+        )
+        image_2 = Image.open(
+            requests.get(
+                "https://huggingface.co/datasets/raushan-testing-hf/images_test/resolve/main/picsum_247_200x200.jpg",
+                stream=True,
+            ).raw
+        )
         prompt = "USER: <image><image>What do these two images have in common? ASSISTANT:"
 
         inputs = processor(images=[image, image_2], text=prompt, return_tensors="pt").to(model.device, torch.float16)
