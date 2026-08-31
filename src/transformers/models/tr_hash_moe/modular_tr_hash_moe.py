@@ -183,11 +183,11 @@ class TRHashRouter(nn.Module):
         self.layer_idx = layer_idx
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_experts
-        self.register_buffer("route_table", _build_multi_hash_route_table(config, layer_idx), persistent=True)
+        self.route_table = nn.Buffer(_build_multi_hash_route_table(config, layer_idx), persistent=True)
 
         remaining_weight = (1.0 - config.top_k_primary_weight) / (self.top_k - 1)
         route_weights = (config.top_k_primary_weight, *((remaining_weight,) * (self.top_k - 1)))
-        self.register_buffer("route_weights", torch.tensor(route_weights), persistent=False)
+        self.route_weights = nn.Buffer(torch.tensor(route_weights), persistent=False)
 
     def resize_route_table(self, new_vocab_size: int) -> None:
         old_route_table = self.route_table
