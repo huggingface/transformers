@@ -664,11 +664,7 @@ class Glm46VForConditionalGeneration(Glm46VPreTrainedModel, GenerationMixin):
             token_id_key = f"{modality}_token_id"
             if (input_ids is None or input_ids.numel() == 0) and inputs_embeds is not None:
                 special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(
-                        self.config.image_token_id,  # hardcode `image_token_id`
-                        dtype=torch.long,
-                        device=inputs_embeds.device,
-                    )
+                    torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
                 num_image_tokens_in_text = special_image_mask.all(-1).sum(-1)
             else:

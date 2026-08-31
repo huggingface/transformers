@@ -984,11 +984,7 @@ class GenerationMixin(ContinuousMixin):
             token_id_key = f"{modality}_token_id"
             if (input_ids is None or input_ids.numel() == 0) and inputs_embeds is not None:
                 special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(
-                        getattr(self.config, token_id_key),
-                        dtype=torch.long,
-                        device=inputs_embeds.device,
-                    )
+                    torch.full((), getattr(self.config, token_id_key), dtype=torch.long, device=inputs_embeds.device)
                 )
                 num_image_tokens_in_text = special_image_mask.all(-1).sum(-1)
             else:
