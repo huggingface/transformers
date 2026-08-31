@@ -500,7 +500,7 @@ class CanaryModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 @require_torch
 @slow
 class CanaryIntegrationTest(unittest.TestCase):
-    checkpoint = "harshaljanjani/canary-1b-v2-hf"
+    checkpoint = "nvidia/canary-1b-v2"
 
     @classmethod
     def setUp(cls):

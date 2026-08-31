@@ -31,7 +31,7 @@ The abstract from the paper is the following:
 
 Canary reuses the [Fast Conformer](https://huggingface.co/papers/2305.05084) encoder from [Parakeet](./parakeet.md) (loaded through [`ParakeetEncoder`] / [`ParakeetEncoderConfig`]) and pairs it with a Transformer decoder that uses fixed sinusoidal positional embeddings, cross-attention to the encoder outputs and tied input/output embeddings. The task is selected through a decoder prompt prefix built by [`CanaryProcessor`] of the form `<|startofcontext|> <|startoftranscript|> <|emo:undefined|> <source_lang> <target_lang> <pnc|nopnc> <|noitn|> <|notimestamp|> <|nodiarize|>`, where `source_lang == target_lang` selects transcription and otherwise selects translation.
 
-The original implementation can be found in [NVIDIA NeMo](https://github.com/NVIDIA/NeMo). A model checkpoint is available at [harshaljanjani/canary-1b-v2-hf](https://huggingface.co/harshaljanjani/canary-1b-v2-hf).
+The original implementation can be found in [NVIDIA NeMo](https://github.com/NVIDIA/NeMo). A model checkpoint is available at [nvidia/canary-1b-v2](https://huggingface.co/nvidia/canary-1b-v2).
 
 This model was contributed by [Harshal Janjani](https://huggingface.co/harshaljanjani).
 
@@ -48,8 +48,8 @@ The simplest way to transcribe audio is with `apply_transcription_request`, whic
 from datasets import load_dataset, Audio
 from transformers import AutoProcessor, AutoModelForSpeechSeq2Seq
 
-processor = AutoProcessor.from_pretrained("harshaljanjani/canary-1b-v2-hf")
-model = AutoModelForSpeechSeq2Seq.from_pretrained("harshaljanjani/canary-1b-v2-hf", device_map="auto")
+processor = AutoProcessor.from_pretrained("nvidia/canary-1b-v2")
+model = AutoModelForSpeechSeq2Seq.from_pretrained("nvidia/canary-1b-v2", device_map="auto")
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))

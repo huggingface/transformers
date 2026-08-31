@@ -44,7 +44,7 @@ from ..qwen2_5_omni.modeling_qwen2_5_omni import SinusoidsPositionEmbedding
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="harshaljanjani/canary-1b-v2-hf")
+@auto_docstring(checkpoint="nvidia/canary-1b-v2")
 @strict
 class CanaryDecoderConfig(LlamaConfig):
     model_type = "canary_decoder"
@@ -73,7 +73,7 @@ class CanaryDecoderConfig(LlamaConfig):
     base_model_pp_plan = AttributeError()
 
 
-@auto_docstring(checkpoint="harshaljanjani/canary-1b-v2-hf")
+@auto_docstring(checkpoint="nvidia/canary-1b-v2")
 @strict
 class CanaryConfig(PreTrainedConfig):
     r"""

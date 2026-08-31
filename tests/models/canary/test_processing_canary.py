@@ -34,7 +34,7 @@ def _get_prompt(source: str, target: str, pnc: bool = True) -> str:
 class CanaryProcessorTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.checkpoint = "harshaljanjani/canary-1b-v2-hf"
+        cls.checkpoint = "nvidia/canary-1b-v2"
         cls.tmpdirname = tempfile.mkdtemp()
         CanaryProcessor.from_pretrained(cls.checkpoint).save_pretrained(cls.tmpdirname)
 

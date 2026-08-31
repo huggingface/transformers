@@ -25,7 +25,7 @@ from ...utils.type_validators import interval
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-@auto_docstring(checkpoint="harshaljanjani/canary-1b-v2-hf")
+@auto_docstring(checkpoint="nvidia/canary-1b-v2")
 @strict
 class CanaryDecoderConfig(PreTrainedConfig):
     r"""
@@ -80,7 +80,7 @@ class CanaryDecoderConfig(PreTrainedConfig):
             )
 
 
-@auto_docstring(checkpoint="harshaljanjani/canary-1b-v2-hf")
+@auto_docstring(checkpoint="nvidia/canary-1b-v2")
 @strict
 class CanaryConfig(PreTrainedConfig):
     r"""
