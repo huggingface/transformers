@@ -118,7 +118,6 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
-        dtype: "torch.dtype | None" = None,
         **kwargs,
     ):
         from ..integrations.finegrained_fp8 import replace_with_fp8_embedding, replace_with_fp8_linear
@@ -130,7 +129,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
 
         modules_to_convert = self.quantization_config.modules_to_convert
         if self.pre_quantized and modules_to_convert:
-            replace_with_fp8_embedding(model, modules_to_convert, self.modules_to_not_convert, dtype)
+            replace_with_fp8_embedding(model, modules_to_convert, self.modules_to_not_convert)
 
         model = replace_with_fp8_linear(
             model,

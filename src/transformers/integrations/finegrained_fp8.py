@@ -359,12 +359,11 @@ class FP8Embedding(nn.Embedding):
         num_embeddings: int,
         embedding_dim: int,
         padding_idx: int | None = None,
-        dtype: torch.dtype | None = None,
     ):
         super().__init__(num_embeddings, embedding_dim, padding_idx=padding_idx)
         self.weight = nn.Parameter(torch.empty(num_embeddings, embedding_dim, dtype=_FP8_DTYPE), requires_grad=False)
         # `(1,)` rather than a scalar: the shape checkpoints serialize per-tensor scales with.
-        self.weight_scale = nn.Parameter(torch.ones(1, dtype=dtype or torch.get_default_dtype()), requires_grad=False)
+        self.weight_scale = nn.Parameter(torch.ones(1), requires_grad=False)
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         rows = F.embedding(
@@ -828,9 +827,7 @@ def _disable_deepgemm_on_multi_device(model: nn.Module) -> None:
     )
 
 
-def replace_with_fp8_embedding(
-    model, patterns: list[str], modules_to_not_convert: list[str] | None = None, dtype=None
-):
+def replace_with_fp8_embedding(model, patterns: list[str], modules_to_not_convert: list[str] | None = None):
     """Swap every `nn.Embedding` whose name ends with one of `patterns` for `FP8Embedding`.
 
     Also runs under `dequantize=True`: a table worth quantizing is one we cannot afford to expand.
@@ -840,7 +837,7 @@ def replace_with_fp8_embedding(
             if not should_convert_module(name, modules_to_not_convert):
                 continue
             with torch.device("meta"):
-                new_module = FP8Embedding(module.num_embeddings, module.embedding_dim, module.padding_idx, dtype)
+                new_module = FP8Embedding(module.num_embeddings, module.embedding_dim, module.padding_idx)
             new_module._hf_quantized_needs_local_tp = True
             model.set_submodule(name, new_module)
     return model
