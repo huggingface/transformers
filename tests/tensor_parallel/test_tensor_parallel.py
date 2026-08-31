@@ -269,7 +269,7 @@ class TestTensorParallelLayer(TestCasePlus):
         group = object()
         all_reduced = []
 
-        with patch.object(tensor_parallel, "_get_kv_replication_group", return_value=group):
+        with patch.object(ReplicateKVHeadsParallel, "_get_replication_group", return_value=group):
             ReplicateKVHeadsParallel().install_forward(module, mesh)
 
         self.assertEqual(len(module._backward_hooks), 1)

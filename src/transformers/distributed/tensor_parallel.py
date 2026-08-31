@@ -260,28 +260,6 @@ def get_kv_replication_factor(num_key_value_heads: int | None, tp_size: int) -> 
     return tp_size // num_key_value_heads
 
 
-_KV_REPLICATION_GROUPS: dict[tuple[int, int], object] = {}
-
-
-def _get_kv_replication_group(mesh, n_rep: int):
-    """Process group holding the `n_rep` ranks that own the same (replicated) KV head.
-
-    ``dist.new_group`` is collective, so every rank walks through all the groups in the same order and keeps the
-    one it belongs to. The result is cached because every attention layer asks for the same group.
-    """
-    key = (id(mesh), n_rep)
-    if key not in _KV_REPLICATION_GROUPS:
-        global_ranks = mesh.mesh.flatten().tolist()
-        local_rank = mesh.get_local_rank()
-        group = None
-        for start in range(0, len(global_ranks), n_rep):
-            candidate = dist.new_group(ranks=global_ranks[start : start + n_rep])
-            if start // n_rep == local_rank // n_rep:
-                group = candidate
-        _KV_REPLICATION_GROUPS[key] = group
-    return _KV_REPLICATION_GROUPS[key]
-
-
 class ReplicateKVHeadsParallel(ColwiseParallel):
     """
     Colwise sharding for `k_proj`/`v_proj` which replicates KV heads when the model has fewer KV heads than
@@ -301,6 +279,29 @@ class ReplicateKVHeadsParallel(ColwiseParallel):
     hold the contribution of its own rank. They are summed back with an explicit all-reduce inside each
     replication group, which also keeps the copies identical so that saving can drop the duplicates.
     """
+
+    # Cached process groups, so that the collective `dist.new_group` calls happen once per mesh instead of once
+    # per attention layer.
+    _replication_groups: dict[tuple[int, int], object] = {}
+
+    @classmethod
+    def _get_replication_group(cls, mesh, n_rep: int):
+        """Process group holding the `n_rep` ranks that own the same (replicated) KV head.
+
+        ``dist.new_group`` is collective, so every rank walks through all the groups in the same order and keeps
+        the one it belongs to.
+        """
+        key = (id(mesh), n_rep)
+        if key not in cls._replication_groups:
+            global_ranks = mesh.mesh.flatten().tolist()
+            local_rank = mesh.get_local_rank()
+            group = None
+            for start in range(0, len(global_ranks), n_rep):
+                candidate = dist.new_group(ranks=global_ranks[start : start + n_rep])
+                if start // n_rep == local_rank // n_rep:
+                    group = candidate
+            cls._replication_groups[key] = group
+        return cls._replication_groups[key]
 
     def shard_param(self, module, param, mesh):
         meta = module._parameters.get(param)
@@ -323,7 +324,7 @@ class ReplicateKVHeadsParallel(ColwiseParallel):
     def install_forward(self, module, mesh):
         n_rep = getattr(module, "_hf_kv_replication", 1)
         if n_rep > 1:
-            group = _get_kv_replication_group(mesh, n_rep)
+            group = self._get_replication_group(mesh, n_rep)
 
             # A module hook rather than `param.register_hook`: params are replaced during weight loading, which
             # happens after TP is applied, and would drop a param-level hook.
@@ -943,10 +944,11 @@ def _maybe_enable_kv_head_replication(model, tp_plan: dict[str, str], tp_size: i
         key: ("colwise_replicate_kv" if style == "colwise" and key.endswith(("k_proj", "v_proj")) else style)
         for key, style in tp_plan.items()
     }
-    logger.warning_once(
-        f"Replicating KV heads for {', '.join(replicated_modules)} because there are fewer KV heads than tensor "
-        f"parallel ranks ({tp_size}); this duplicates the KV cache."
-    )
+    if not dist.is_initialized() or dist.get_rank() == 0:
+        logger.warning_once(
+            f"Replicating KV heads for {', '.join(replicated_modules)} because there are fewer KV heads than tensor "
+            f"parallel ranks ({tp_size}); this duplicates the KV cache."
+        )
     return tp_plan
 
 
