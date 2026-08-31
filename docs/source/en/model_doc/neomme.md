@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-*This model was contributed to Hugging Face Transformers on 2026-08-28.*
+*This model was contributed to Hugging Face Transformers on 2026-08-31.*
 
 # NeoMME
 
