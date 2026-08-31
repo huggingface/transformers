@@ -1074,11 +1074,13 @@ def _build_checkpoint_conversion_mapping():
                 ],
                 target_patterns=".experts.gate_up_proj",
                 operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+                force_cpu=True,
             ),
             WeightConverter(
                 source_patterns=".experts.*.w2.weight",
                 target_patterns=".experts.down_proj",
                 operations=[MergeModulelist(dim=0)],
+                force_cpu=True,
             ),
         ],
         "lfm2_moe": [
