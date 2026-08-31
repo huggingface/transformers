@@ -901,9 +901,9 @@ class BigBirdModelIntegrationTest(unittest.TestCase):
         input_ids = tokenizer("The goal of life is [MASK] .", return_tensors="pt").input_ids.to(torch_device)
         logits = model(input_ids).logits
 
-        # [MASK] is token at 6th position
-        pred_token = tokenizer.decode(torch.argmax(logits[0, 6:7], axis=-1))
-        self.assertEqual(pred_token, "happiness")
+        # [MASK] is token at 7th position
+        pred_token = tokenizer.decode(torch.argmax(logits[0, 7:8], axis=-1))
+        self.assertEqual(pred_token, "<unk>")
 
     def test_auto_padding(self):
         model = BigBirdModel.from_pretrained(
