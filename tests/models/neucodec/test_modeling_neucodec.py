@@ -207,23 +207,33 @@ class NeuCodecModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(
-        "quantization_dim must track hidden_size + semantic_hidden_size, but `_prepare_config_headdim` mutates "
-        "hidden_size on an already-built config without updating it, desyncing the two."
+        reason="The Wav2Vec2Bert semantic encoder uses relative position embeddings that produce a dense attention bias incompatible with Flash Attention"
     )
-    def test_flex_attention_with_grads(self):
+    def test_sdpa_can_dispatch_on_flash(self):
         pass
 
+    @staticmethod
+    def _prepare_config_headdim(config, requested_dim):
+        """
+        Similar to Xcodec2: override to keep `quantization_dim` in sync with the encoder outputs. The quantizer
+        consumes the concatenation of the acoustic and semantic encoder outputs, i.e. `hidden_size +
+        semantic_model_config.hidden_size`, and both hidden sizes are scaled when adjusting the head dim.
+        """
+        config = ModelTesterMixin._prepare_config_headdim(config, requested_dim)
+        config.quantization_dim = config.hidden_size + config.semantic_model_config.hidden_size
+        return config
 
-@slow
+
 @require_torch
 class NeuCodecIntegrationTest(unittest.TestCase):
     """
-    Expected results for the integration tests can be created by running the script athttps://gist.github.com/harryjulian/b8f6b4b1fe47fdc5a9b7ac6c82b73399
+    reproducer: https://gist.github.com/ebezzam/becefc7002ba9030ad0defd93123e32b
     """
 
     def setUp(self):
         self.fixtures_path = Path(__file__).parent.parent.parent / "fixtures/neucodec"
 
+    @slow
     def test_integration(self):
         results_path = self.fixtures_path / "expected_results.json"
         with open(results_path, "r") as f:
@@ -262,6 +272,7 @@ class NeuCodecIntegrationTest(unittest.TestCase):
             enc_dec = model(inputs["input_values"], inputs["input_features"]).audio_values
             self.assertTrue(torch.equal(dec[..., : enc_dec.shape[-1]], enc_dec))
 
+    @slow
     def test_batch_integration(self):
         results_path = self.fixtures_path / "expected_results.json"
         with open(results_path, "r") as f:
