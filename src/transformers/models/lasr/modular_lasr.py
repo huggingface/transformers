@@ -27,7 +27,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...tokenization_utils_tokenizers import TokenizersBackend
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..llama.modeling_llama import LlamaAttention, LlamaRotaryEmbedding, apply_rotary_pos_emb, eager_attention_forward
@@ -488,7 +488,6 @@ class LasrEncoder(LasrPreTrainedModel):
     @auto_docstring
     @merge_with_config_defaults
     @capture_outputs
-    @can_return_tuple
     def forward(
         self,
         input_features: torch.Tensor,

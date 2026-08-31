@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -174,7 +174,7 @@ from transformers import AutoModel, AutoProcessor
 
 model_id = "google/siglip2-so400m-patch14-384"
 processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModel.from_pretrained(model_id).eval( device_map="auto")
+model = AutoModel.from_pretrained(model_id).eval(device_map="auto")
 
 texts = [
     "HOME084 Timbangan Badan Digital Kaca Transparan 28CM Body Scale Personal Scale",
@@ -229,9 +229,9 @@ inputs = tokenizer(
     ```py
     # pip install -U flash-attn --no-build-isolation
 
-    from transformers import SiglipModel
+    from transformers import Siglip2Model
 
-    model = SiglipModel.from_pretrained(
+    model = Siglip2Model.from_pretrained(
         "google/siglip2-so400m-patch14-384",
         attn_implementation="flash_attention_2",
         device_map="auto",

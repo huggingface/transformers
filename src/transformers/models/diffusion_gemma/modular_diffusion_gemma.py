@@ -14,7 +14,7 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 import torch
 from huggingface_hub.dataclasses import strict
@@ -184,22 +184,16 @@ class DiffusionGemmaConfig(Gemma4Config):
 
 # Add support for `partial_rotary_factor` in full attention layers
 class DiffusionGemmaTextRotaryEmbedding(Gemma4TextRotaryEmbedding):
+    @staticmethod
     def compute_default_rope_parameters(
-        config: DiffusionGemmaTextConfig | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-        layer_type: str | None = None,
-    ) -> tuple["torch.Tensor", float]:
+        config: DiffusionGemmaTextConfig, device=None, layer_type: str | None = None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
             config ([`~transformers.PreTrainedConfig`]):
                 The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
-            layer_type (`str`, *optional*):
+            layer_type (`str`):
                 The current layer type if the model has different RoPE parameters per type.
                 Should not be used unless `config.layer_types is not None`
 
@@ -214,12 +208,9 @@ class DiffusionGemmaTextRotaryEmbedding(Gemma4TextRotaryEmbedding):
         dim = int(dim * partial_rotary_factor)
 
         attention_factor = 1.0  # Unused in this type of RoPE
-
         # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
-        return inv_freq, attention_factor
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        return inv_freq.to(device), attention_factor
 
 
 class DiffusionGemmaRMSNorm(Gemma4RMSNorm):
@@ -505,7 +496,7 @@ class DiffusionGemmaEncoderTextLayer(nn.Module):
         self.post_attention_layernorm = DiffusionGemmaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.pre_feedforward_layernorm = DiffusionGemmaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm = DiffusionGemmaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
-        self.register_buffer("layer_scalar", torch.ones(1))
+        self.layer_scalar = nn.Buffer(torch.ones(1))
 
         self.router = DiffusionGemmaTextRouter(config)
         self.experts = DiffusionGemmaTextExperts(config)
@@ -583,7 +574,7 @@ class DiffusionGemmaDecoderTextLayer(Gemma4TextDecoderLayer):
         self.post_attention_layernorm = DiffusionGemmaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.pre_feedforward_layernorm = DiffusionGemmaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm = DiffusionGemmaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
-        self.register_buffer("layer_scalar", torch.ones(1))
+        self.layer_scalar = nn.Buffer(torch.ones(1))
 
         self.router = DiffusionGemmaTextRouter(config)
         self.experts = DiffusionGemmaTextExperts(config)
@@ -691,7 +682,6 @@ class DiffusionGemmaPreTrainedModel(T5Gemma2PreTrainedModel):
     _no_split_modules = [
         "DiffusionGemmaDecoderTextLayer",
         "DiffusionGemmaEncoderTextLayer",
-        "DiffusionGemmaVisionEncoderLayer",
     ]
     supports_gradient_checkpointing = True
     _can_record_outputs = None  # override
@@ -908,7 +898,7 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel, Gemma4Model):
             special_image_mask = input_ids == self.config.image_token_id
         else:
             image_token_embeddings = self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = (inputs_embeds == image_token_embeddings).all(-1)
 

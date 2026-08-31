@@ -18,8 +18,6 @@
 # limitations under the License.
 """PyTorch Bamba model."""
 
-from typing import Optional, TypedDict
-
 import torch
 from torch import nn
 
@@ -30,7 +28,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, logging
-from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
+from ...utils.generic import TransformersKwargs, merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import capture_outputs
 from ..jamba.modeling_jamba import JambaAttentionDecoderLayer
 from ..llama.modeling_llama import (
@@ -51,45 +49,13 @@ from .configuration_bamba import BambaConfig
 logger = logging.get_logger(__name__)
 
 
-class BambaFlashAttentionKwargs(TypedDict, total=False):
-    """
-    Keyword arguments for advanced Flash Attention, causal-conv1d, and mamba_ssm kernel usage.
-    Use cases include padding-free training and fewer `torch.compile` graph breaks.
-
-    cu_seq_lens_q (`torch.LongTensor`):
-        Gets cumulative sequence length for query state.
-    cu_seq_lens_k (`torch.LongTensor`):
-        Gets cumulative sequence length for key state.
-    max_length_q (`int`):
-        Maximum sequence length for query state.
-    max_length_k (`int`):
-        Maximum sequence length for key state.
-    seq_idx (`torch.IntTensor`):
-        Index of each packed sequence.
-    """
-
-    cu_seq_lens_q: torch.LongTensor
-    cu_seq_lens_k: torch.LongTensor
-    max_length_q: int
-    max_length_k: int
-    seq_idx: torch.IntTensor
-
-
 class BambaRotaryEmbedding(LlamaRotaryEmbedding):
-    def compute_default_rope_parameters(
-        config: BambaConfig | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
+    def compute_default_rope_parameters(config: BambaConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
             config ([`~transformers.PreTrainedConfig`]):
                 The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
         Returns:
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
@@ -100,12 +66,9 @@ class BambaRotaryEmbedding(LlamaRotaryEmbedding):
         dim = int(dim * partial_rotary_factor)
 
         attention_factor = 1.0  # Unused in this type of RoPE
-
         # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
-        return inv_freq, attention_factor
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        return inv_freq.to(device), attention_factor
 
 
 # Adapted from transformers.models.glm.modular_glm.apply_rotary_pos_emb
@@ -244,7 +207,7 @@ class BambaDecoderLayer(JambaAttentionDecoderLayer):
         past_key_values: Cache | None = None,
         use_cache: bool | None = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        **kwargs: Unpack[BambaFlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
         residual = hidden_states
 
@@ -336,7 +299,7 @@ class BambaModel(BambaPreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        **kwargs: Unpack[BambaFlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -459,29 +422,9 @@ class BambaForCausalLM(LlamaForCausalLM):
             attentions=outputs.attentions,
         )
 
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        position_ids=None,
-        use_cache=True,
-        is_first_iteration=False,
-        **kwargs,
-    ):
+    def prepare_inputs_for_generation(self, input_ids, **kwargs):
         kwargs["logits_to_keep"] = self.config.num_logits_to_keep
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            position_ids=position_ids,
-            use_cache=use_cache,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
+        model_inputs = super().prepare_inputs_for_generation(input_ids, **kwargs)
         return model_inputs
 
 

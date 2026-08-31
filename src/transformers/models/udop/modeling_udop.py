@@ -18,7 +18,7 @@ import logging
 import math
 import random
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
@@ -39,15 +39,52 @@ from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
 from ...utils import (
     ModelOutput,
+    TransformersKwargs,
     auto_docstring,
     is_torchdynamo_compiling,
 )
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 
 
 logger = logging.getLogger(__name__)
+
+
+# Copied from transformers.models.t5.modeling_t5.eager_attention_forward
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
+    dropout: float = 0.0,
+    position_bias: torch.Tensor | None = None,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
+
+    # Take the dot product between "query" and "key" to get the raw attention scores.
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+
+    if position_bias is not None:
+        attn_weights = attn_weights + position_bias
+
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
 
 
 @auto_docstring(
@@ -243,88 +280,6 @@ class UdopPatchEmbeddings(nn.Module):
         return embeddings
 
 
-@auto_docstring
-class UdopPreTrainedModel(PreTrainedModel):
-    config: UdopConfig
-    base_model_prefix = "transformer"
-    input_modalities = ("image", "text")
-    supports_gradient_checkpointing = True
-
-    _can_compile_fullgraph = False
-    _keep_in_fp32_modules = ["wo"]
-
-    @torch.no_grad()
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        super()._init_weights(module)
-        factor = self.config.initializer_factor  # Used for testing weights initialization
-        if isinstance(module, UdopLayerNorm):
-            init.constant_(module.weight, factor * 1.0)
-        elif isinstance(module, nn.Conv2d):
-            init.trunc_normal_(module.weight, mean=0.0, std=factor)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, RelativePositionBiasBase):
-            factor = self.config.initializer_factor
-            d_model = self.config.d_model
-            init.normal_(module.relative_attention_bias.weight, mean=0.0, std=factor * ((d_model) ** -0.5))
-        elif isinstance(module, UdopModel):
-            init.normal_(module.shared.weight, mean=0.0, std=factor * 1.0)
-        elif isinstance(module, UdopForConditionalGeneration):
-            if hasattr(module, "lm_head") and not self.config.tie_word_embeddings:
-                init.normal_(module.lm_head.weight, mean=0.0, std=factor * 1.0)
-        elif isinstance(module, UdopDenseActDense):
-            init.normal_(module.wi.weight, mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
-            if hasattr(module.wi, "bias") and module.wi.bias is not None:
-                init.zeros_(module.wi.bias)
-            init.normal_(module.wo.weight, mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
-            if hasattr(module.wo, "bias") and module.wo.bias is not None:
-                init.zeros_(module.wo.bias)
-        elif isinstance(module, UdopDenseGatedActDense):
-            init.normal_(module.wi_0.weight, mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
-            if hasattr(module.wi_0, "bias") and module.wi_0.bias is not None:
-                init.zeros_(module.wi_0.bias)
-            init.normal_(module.wi_1.weight, mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
-            if hasattr(module.wi_1, "bias") and module.wi_1.bias is not None:
-                init.zeros_(module.wi_1.bias)
-            init.normal_(module.wo.weight, mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
-            if hasattr(module.wo, "bias") and module.wo.bias is not None:
-                init.zeros_(module.wo.bias)
-        elif isinstance(module, UdopAttention):
-            d_model = self.config.d_model
-            key_value_proj_dim = self.config.d_kv
-            n_heads = self.config.num_heads
-            init.normal_(module.q.weight, mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
-            init.normal_(module.k.weight, mean=0.0, std=factor * (d_model**-0.5))
-            init.normal_(module.v.weight, mean=0.0, std=factor * (d_model**-0.5))
-            init.normal_(module.o.weight, mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
-            if module.has_relative_attention_bias:
-                init.normal_(module.relative_attention_bias.weight, mean=0.0, std=factor * ((d_model) ** -0.5))
-
-    # Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetPreTrainedModel._shift_right with ProphetNet->Udop
-    def _shift_right(self, input_ids):
-        decoder_start_token_id = self.config.decoder_start_token_id
-        pad_token_id = self.config.pad_token_id
-
-        assert decoder_start_token_id is not None, (
-            "self.model.config.decoder_start_token_id has to be defined. In Udop it is usually set to the"
-            " pad_token_id. See Udop docs for more information"
-        )
-
-        # shift inputs to the right
-        shifted_input_ids = input_ids.new_zeros(input_ids.shape)
-        shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
-        shifted_input_ids[..., 0] = decoder_start_token_id
-
-        assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
-        # replace possible -100 values in labels by `pad_token_id`
-        shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
-
-        assert torch.all(shifted_input_ids >= 0).item(), "Verify that `shifted_input_ids` has only positive values"
-
-        return shifted_input_ids
-
-
 # Copied from transformers.models.t5.modeling_t5.T5LayerNorm with T5->Udop
 class UdopLayerNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
@@ -430,9 +385,12 @@ class UdopAttention(nn.Module):
         config: UdopConfig,
         has_relative_attention_bias=False,
         layer_idx: int | None = None,
+        is_causal: bool = False,
     ):
         super().__init__()
+        self.config = config
         self.is_decoder = config.is_decoder
+        self.is_causal = is_causal
         self.has_relative_attention_bias = has_relative_attention_bias
         self.relative_attention_num_buckets = config.relative_attention_num_buckets
         self.relative_attention_max_distance = config.relative_attention_max_distance
@@ -441,6 +399,8 @@ class UdopAttention(nn.Module):
         self.n_heads = config.num_heads
         self.dropout = config.dropout_rate
         self.inner_dim = self.n_heads * self.key_value_proj_dim
+        # Udop folds the relative position bias into the attention scores and does not scale the query/key dot product.
+        self.scaling = 1.0
         self.layer_idx = layer_idx
         if layer_idx is None and self.is_decoder:
             logger.warning_once(
@@ -531,8 +491,7 @@ class UdopAttention(nn.Module):
         key_value_states=None,
         position_bias=None,
         past_key_values=None,
-        output_attentions=False,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         """
         Self-attention (if key_value_states is None) or attention over source sentence (provided by key_value_states).
@@ -579,43 +538,41 @@ class UdopAttention(nn.Module):
                     past_key_values.is_updated[self.layer_idx] = True
 
         # compute scores, equivalent of torch.einsum("bnqd,bnkd->bnqk", query_states, key_states), compatible with onnx op>9
-        scores = torch.matmul(query_states, key_states.transpose(3, 2))
-
         if position_bias is None:
             key_length = key_states.shape[-2]
             if not self.has_relative_attention_bias:
                 position_bias = torch.zeros(
-                    (1, query_states.shape[1], input_shape[1], key_length), device=scores.device, dtype=scores.dtype
+                    (1, self.n_heads, input_shape[1], key_length),
+                    device=query_states.device,
+                    dtype=query_states.dtype,
                 )
                 if self.gradient_checkpointing and self.training:
                     position_bias.requires_grad = True
             else:
                 position_bias = self.compute_bias(
-                    input_shape[1], key_length, device=scores.device, past_seen_tokens=past_seen_tokens
+                    input_shape[1], key_length, device=query_states.device, past_seen_tokens=past_seen_tokens
                 )
 
-            if mask is not None:
-                causal_mask = mask[:, :, :, : key_states.shape[-2]]
-                position_bias = position_bias + causal_mask
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
-        position_bias_masked = position_bias
-        scores += position_bias_masked
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            mask,
+            dropout=0.0 if not self.training else self.dropout,
+            scaling=self.scaling,
+            position_bias=position_bias,
+            **kwargs,
+        )
 
-        # (batch_size, n_heads, seq_length, key_length)
-        attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(scores)
-        attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-
-        attn_output = torch.matmul(attn_weights, value_states)
-
-        attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.reshape(*input_shape, -1)
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o(attn_output)
 
-        outputs = (attn_output, position_bias)
-
-        if output_attentions:
-            outputs = outputs + (attn_weights,)
-        return outputs
+        return attn_output, position_bias, attn_weights
 
 
 # Copied from transformers.models.t5.modeling_t5.T5LayerSelfAttention with T5->Udop
@@ -623,7 +580,10 @@ class UdopLayerSelfAttention(nn.Module):
     def __init__(self, config, has_relative_attention_bias=False, layer_idx: int | None = None):
         super().__init__()
         self.SelfAttention = UdopAttention(
-            config, has_relative_attention_bias=has_relative_attention_bias, layer_idx=layer_idx
+            config,
+            has_relative_attention_bias=has_relative_attention_bias,
+            layer_idx=layer_idx,
+            is_causal=config.is_decoder,
         )
         self.layer_norm = UdopLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
@@ -634,29 +594,27 @@ class UdopLayerSelfAttention(nn.Module):
         attention_mask=None,
         position_bias=None,
         past_key_values=None,
-        use_cache=False,
-        output_attentions=False,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         normed_hidden_states = self.layer_norm(hidden_states)
-        attention_output = self.SelfAttention(
+        attention_output, position_bias, attn_weights = self.SelfAttention(
             normed_hidden_states,
             mask=attention_mask,
             position_bias=position_bias,
             past_key_values=past_key_values,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
+            **kwargs,
         )
-        hidden_states = hidden_states + self.dropout(attention_output[0])
-        outputs = (hidden_states,) + attention_output[1:]  # add attentions if we output them
-        return outputs
+        attention_output = hidden_states + self.dropout(attention_output)
+        return attention_output, position_bias, attn_weights
 
 
 # Copied from transformers.models.t5.modeling_t5.T5LayerCrossAttention with T5->Udop
 class UdopLayerCrossAttention(nn.Module):
     def __init__(self, config, layer_idx: int | None = None):
         super().__init__()
-        self.EncDecAttention = UdopAttention(config, has_relative_attention_bias=False, layer_idx=layer_idx)
+        self.EncDecAttention = UdopAttention(
+            config, has_relative_attention_bias=False, layer_idx=layer_idx, is_causal=False
+        )
         self.layer_norm = UdopLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
@@ -667,21 +625,19 @@ class UdopLayerCrossAttention(nn.Module):
         attention_mask=None,
         position_bias=None,
         past_key_values=None,
-        output_attentions=False,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         normed_hidden_states = self.layer_norm(hidden_states)
-        attention_output = self.EncDecAttention(
+        attention_output, position_bias, attn_weights = self.EncDecAttention(
             normed_hidden_states,
             mask=attention_mask,
             key_value_states=key_value_states,
             position_bias=position_bias,
             past_key_values=past_key_values,
-            output_attentions=output_attentions,
+            **kwargs,
         )
-        layer_output = hidden_states + self.dropout(attention_output[0])
-        outputs = (layer_output,) + attention_output[1:]  # add attentions if we output them
-        return outputs
+        layer_output = hidden_states + self.dropout(attention_output)
+        return layer_output, position_bias, attn_weights
 
 
 # Copied from transformers.models.t5.modeling_t5.T5Block with T5->Udop
@@ -709,21 +665,15 @@ class UdopBlock(GradientCheckpointingLayer):
         encoder_attention_mask=None,
         encoder_decoder_position_bias=None,
         past_key_values=None,
-        use_cache=False,
-        output_attentions=False,
-        return_dict=True,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
-        self_attention_outputs = self.layer[0](
+        hidden_states, self_attn_position_bias, _ = self.layer[0](
             hidden_states,
             attention_mask=attention_mask,
             position_bias=position_bias,
             past_key_values=past_key_values,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
+            **kwargs,
         )
-        hidden_states = self_attention_outputs[0]
-        attention_outputs = self_attention_outputs[1:]  # Keep self-attention outputs and relative position weights
 
         # clamp inf values to enable fp16 training
         if hidden_states.dtype == torch.float16:
@@ -734,17 +684,17 @@ class UdopBlock(GradientCheckpointingLayer):
             )
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
+        cross_attn_position_bias = None
         do_cross_attention = self.is_decoder and encoder_hidden_states is not None
         if do_cross_attention:
-            cross_attention_outputs = self.layer[1](
+            hidden_states, cross_attn_position_bias, _ = self.layer[1](
                 hidden_states,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
                 position_bias=encoder_decoder_position_bias,
                 past_key_values=past_key_values,
-                output_attentions=output_attentions,
+                **kwargs,
             )
-            hidden_states = cross_attention_outputs[0]
 
             # clamp inf values to enable fp16 training
             if hidden_states.dtype == torch.float16:
@@ -754,9 +704,6 @@ class UdopBlock(GradientCheckpointingLayer):
                     torch.finfo(hidden_states.dtype).max,
                 )
                 hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
-
-            # Keep cross-attention outputs and relative position weights
-            attention_outputs = attention_outputs + cross_attention_outputs[1:]
 
         # Apply Feed Forward layer
         hidden_states = self.layer[-1](hidden_states)
@@ -770,11 +717,98 @@ class UdopBlock(GradientCheckpointingLayer):
             )
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
-        outputs = (hidden_states,)
+        return hidden_states, self_attn_position_bias, cross_attn_position_bias
 
-        return (
-            outputs + attention_outputs
-        )  # hidden-states, (self-attention position bias), (self-attention weights), (cross-attention position bias), (cross-attention weights)
+
+@auto_docstring
+class UdopPreTrainedModel(PreTrainedModel):
+    config: UdopConfig
+    base_model_prefix = "transformer"
+    input_modalities = ("image", "text")
+    supports_gradient_checkpointing = True
+
+    _can_compile_fullgraph = False
+    _keep_in_fp32_modules = ["wo"]
+    _supports_flash_attn = False
+    _supports_flex_attn = True
+    _supports_sdpa = True
+
+    _can_record_outputs = {
+        "hidden_states": OutputRecorder(UdopBlock, index=0),
+        "attentions": OutputRecorder(UdopLayerSelfAttention, index=-1),
+        "cross_attentions": OutputRecorder(UdopLayerCrossAttention, index=-1),
+    }
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        super()._init_weights(module)
+        factor = self.config.initializer_factor  # Used for testing weights initialization
+        if isinstance(module, UdopLayerNorm):
+            init.constant_(module.weight, factor * 1.0)
+        elif isinstance(module, nn.Conv2d):
+            init.trunc_normal_(module.weight, mean=0.0, std=factor)
+            if module.bias is not None:
+                init.zeros_(module.bias)
+        elif isinstance(module, RelativePositionBiasBase):
+            factor = self.config.initializer_factor
+            d_model = self.config.d_model
+            init.normal_(module.relative_attention_bias.weight, mean=0.0, std=factor * ((d_model) ** -0.5))
+        elif isinstance(module, UdopModel):
+            init.normal_(module.shared.weight, mean=0.0, std=factor * 1.0)
+        elif isinstance(module, UdopForConditionalGeneration):
+            if hasattr(module, "lm_head") and not self.config.tie_word_embeddings:
+                init.normal_(module.lm_head.weight, mean=0.0, std=factor * 1.0)
+        elif isinstance(module, UdopDenseActDense):
+            init.normal_(module.wi.weight, mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+            if hasattr(module.wi, "bias") and module.wi.bias is not None:
+                init.zeros_(module.wi.bias)
+            init.normal_(module.wo.weight, mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
+            if hasattr(module.wo, "bias") and module.wo.bias is not None:
+                init.zeros_(module.wo.bias)
+        elif isinstance(module, UdopDenseGatedActDense):
+            init.normal_(module.wi_0.weight, mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+            if hasattr(module.wi_0, "bias") and module.wi_0.bias is not None:
+                init.zeros_(module.wi_0.bias)
+            init.normal_(module.wi_1.weight, mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+            if hasattr(module.wi_1, "bias") and module.wi_1.bias is not None:
+                init.zeros_(module.wi_1.bias)
+            init.normal_(module.wo.weight, mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
+            if hasattr(module.wo, "bias") and module.wo.bias is not None:
+                init.zeros_(module.wo.bias)
+        elif isinstance(module, UdopAttention):
+            d_model = self.config.d_model
+            key_value_proj_dim = self.config.d_kv
+            n_heads = self.config.num_heads
+            init.normal_(module.q.weight, mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
+            init.normal_(module.k.weight, mean=0.0, std=factor * (d_model**-0.5))
+            init.normal_(module.v.weight, mean=0.0, std=factor * (d_model**-0.5))
+            init.normal_(module.o.weight, mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
+            if module.has_relative_attention_bias:
+                init.normal_(module.relative_attention_bias.weight, mean=0.0, std=factor * ((d_model) ** -0.5))
+
+    # Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetPreTrainedModel._shift_right with ProphetNet->Udop
+    def _shift_right(self, input_ids):
+        decoder_start_token_id = self.config.decoder_start_token_id
+        pad_token_id = self.config.pad_token_id
+
+        assert decoder_start_token_id is not None, (
+            "self.model.config.decoder_start_token_id has to be defined. In Udop it is usually set to the"
+            " pad_token_id. See Udop docs for more information"
+        )
+
+        # shift inputs to the right
+        shifted_input_ids = input_ids.new_zeros(input_ids.shape)
+        shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
+        shifted_input_ids[..., 0] = decoder_start_token_id
+
+        assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
+        # replace possible -100 values in labels by `pad_token_id`
+        shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
+
+        assert torch.all(shifted_input_ids >= 0).item(), "Verify that `shifted_input_ids` has only positive values"
+
+        return shifted_input_ids
 
 
 class UdopCellEmbeddings(nn.Module):
@@ -788,6 +822,9 @@ class UdopCellEmbeddings(nn.Module):
     def forward(self, bbox):
         bbox = torch.clip(bbox, 0.0, 1.0)
         bbox = (bbox * (self.max_2d_position_embeddings - 1)).long()
+        # In low precision (fp16/bf16) the multiplication above can round up to `max_2d_position_embeddings`, which is
+        # out of range for the embedding tables, so we clamp the indices to the valid range.
+        bbox = bbox.clamp(0, self.max_2d_position_embeddings - 1)
         left_position_embeddings = self.x_position_embeddings(bbox[:, :, 0])
         upper_position_embeddings = self.y_position_embeddings(bbox[:, :, 1])
         right_position_embeddings = self.x_position_embeddings(bbox[:, :, 2])
@@ -877,7 +914,8 @@ class RelativePositionBiasBase(nn.Module, ABC):
     def get_relative_position(self, positions):
         context_position = positions[:, :, None]
         memory_position = positions[:, None, :]
-        relative_position = memory_position - context_position
+        # Upcast to float32: in fp16 the bucketing loses precision and indexes the bias embedding out of range.
+        relative_position = (memory_position - context_position).float()
         if self.augmentation and self.training:
             relative_position *= random.uniform(*AUGMENTATION_RANGE)
         relative_position *= self.scaling_factor
@@ -905,6 +943,8 @@ class RelativePositionBiasBase(nn.Module, ABC):
                 rp_bucket[idx, :num_prefix_row, num_prefix_row:] = self.relative_attention_num_buckets
                 rp_bucket[idx, num_prefix_row:, :num_prefix_row] = self.relative_attention_num_buckets + 1
 
+        # Clamp to a provable range so torch.compile can bound the gather index (float->long bucketing loses it).
+        rp_bucket = rp_bucket.clamp(0, self.relative_attention_bias.num_embeddings - 1)
         values: Tensor = self.relative_attention_bias(rp_bucket)
         if values.dim() != 4:
             raise ValueError("Wrong dimension of values tensor")
@@ -1057,6 +1097,8 @@ class UdopStack(UdopPreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.embed_tokens = new_embeddings
 
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         input_ids=None,
@@ -1071,44 +1113,30 @@ class UdopStack(UdopPreTrainedModel):
         position_bias=None,
         past_key_values=None,
         use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        **kwargs,
-    ) -> tuple | BaseModelOutputWithAttentionMask:
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithAttentionMask:
         # input embeddings processing
 
-        if input_ids is not None and inputs_embeds is not None:
+        if (input_ids is None) ^ (inputs_embeds is not None):
             err_msg_prefix = "decoder_" if self.is_decoder else ""
             raise ValueError(
-                f"You cannot specify both {err_msg_prefix}inputs and {err_msg_prefix}inputs_embeds at the same time"
+                f"You must specify exactly one of {err_msg_prefix}input_ids or {err_msg_prefix}inputs_embeds"
             )
-        elif input_ids is not None and torch.numel(input_ids) > 0:
-            input_shape = input_ids.size()
-            input_ids = input_ids.view(-1, input_shape[-1])
-        elif inputs_embeds is None and input_ids is not None and torch.numel(input_ids) == 0:
+
+        if input_ids is not None and torch.numel(input_ids) == 0:
             input_ids = torch.full((4, 1024), self.config.pad_token_id, device=input_ids.device, dtype=input_ids.dtype)
             attention_mask = torch.zeros((4, 1024), device=input_ids.device, dtype=input_ids.dtype)
             bbox = torch.zeros((4, 1024, 4), device=input_ids.device, dtype=input_ids.dtype)
-            input_shape = input_ids.size()
             position_bias = torch.zeros_like(attention_mask[:, None, None, :]).to(self.dtype)
             logger.warning("Empty batch")
-        elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
+
+        if input_ids is not None:
+            input_shape = input_ids.size()
+            input_ids = input_ids.view(-1, input_shape[-1])
         else:
-            err_msg_prefix = "decoder_" if self.is_decoder else ""
-            raise ValueError(f"You have to specify either {err_msg_prefix}inputs or {err_msg_prefix}inputs_embeds")
+            input_shape = inputs_embeds.size()[:-1]
 
         if inputs_embeds is None:
-            if self.embed_tokens is None:
-                raise ValueError("You have to initialize the model with valid token embeddings")
             inputs_embeds = self.embed_tokens(input_ids)
 
         if pixel_values is not None:
@@ -1165,9 +1193,11 @@ class UdopStack(UdopPreTrainedModel):
                 past_key_values=past_key_values,
             )
         else:
-            causal_mask = attention_mask[:, None, None, :]
-            causal_mask = causal_mask.to(dtype=inputs_embeds.dtype)
-            causal_mask = (1.0 - causal_mask) * torch.finfo(inputs_embeds.dtype).min
+            causal_mask = create_bidirectional_mask(
+                config=self.config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+            )
 
         if self.is_decoder and encoder_attention_mask is not None:
             encoder_extended_attention_mask = create_bidirectional_mask(
@@ -1179,26 +1209,18 @@ class UdopStack(UdopPreTrainedModel):
         else:
             encoder_extended_attention_mask = None
 
-        all_hidden_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
-        all_cross_attentions = () if (output_attentions and self.is_decoder) else None
-
         if self.is_decoder:  # modified lines
             position_bias = None
         else:
             position_bias = self.relative_bias(attention_mask=attention_mask, bbox=bbox)
-            position_bias = position_bias + causal_mask
         encoder_decoder_position_bias = None
 
         hidden_states = inputs_embeds
 
         hidden_states = self.dropout(hidden_states)
 
-        for i, layer_module in enumerate(self.block):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-            layer_outputs = layer_module(
+        for layer_module in self.block:
+            hidden_states, self_attention_position_bias, cross_attention_position_bias = layer_module(
                 hidden_states,
                 causal_mask,
                 position_bias,
@@ -1206,53 +1228,21 @@ class UdopStack(UdopPreTrainedModel):
                 encoder_extended_attention_mask,
                 encoder_decoder_position_bias,  # as a positional argument for gradient checkpointing
                 past_key_values=past_key_values,
-                use_cache=use_cache,
-                output_attentions=output_attentions,
+                **kwargs,
             )
 
-            hidden_states = layer_outputs[0]
-
-            # We share the position biases between the layers - the first layer store them
-            # layer_outputs = hidden-states, key-value-states (self-attention weights),
-            # (self-attention position bias), (cross-attention weights), (cross-attention position bias)
-
-            position_bias = layer_outputs[1]
+            # We share the position biases between the layers - the first layer stores them
+            position_bias = self_attention_position_bias
             if self.is_decoder and encoder_hidden_states is not None:
-                encoder_decoder_position_bias = layer_outputs[3 if output_attentions else 2]
-
-            if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[2],)  # We keep only self-attention weights for now
-                if self.is_decoder:
-                    all_cross_attentions = all_cross_attentions + (layer_outputs[4],)
+                encoder_decoder_position_bias = cross_attention_position_bias
 
         hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
-
-        # Add last layer
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    hidden_states,
-                    attention_mask,
-                    past_key_values,
-                    all_hidden_states,
-                    all_attentions,
-                    all_cross_attentions,
-                ]
-                if v is not None
-            )
 
         return BaseModelOutputWithAttentionMask(
             last_hidden_state=hidden_states,
             attention_mask=attention_mask,
             past_key_values=past_key_values,
-            hidden_states=all_hidden_states,
-            attentions=all_attentions,
-            cross_attentions=all_cross_attentions,
         )
 
 
@@ -1293,6 +1283,7 @@ class UdopModel(UdopPreTrainedModel):
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1308,11 +1299,8 @@ class UdopModel(UdopPreTrainedModel):
         past_key_values: Cache | None = None,
         decoder_inputs_embeds: Tensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple | Seq2SeqModelOutput:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Seq2SeqModelOutput:
         r"""
         bbox (`torch.LongTensor` of shape `({0}, 4)`, *optional*):
             Bounding boxes of each input sequence tokens. Selected in the range `[0,
@@ -1365,8 +1353,6 @@ class UdopModel(UdopPreTrainedModel):
         >>> list(last_hidden_states.shape)
         [1, 1, 1024]
         ```"""
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
@@ -1377,13 +1363,11 @@ class UdopModel(UdopPreTrainedModel):
                 pixel_values=pixel_values,
                 visual_bbox=visual_bbox,
                 inputs_embeds=inputs_embeds,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
+                **kwargs,
             )
 
         hidden_states = encoder_outputs[0]
-        encoder_attention_mask = encoder_outputs.attention_mask if return_dict else encoder_outputs[1]
+        encoder_attention_mask = encoder_outputs.attention_mask
 
         # Decode
         decoder_outputs = self.decoder(
@@ -1394,16 +1378,8 @@ class UdopModel(UdopPreTrainedModel):
             encoder_hidden_states=hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
-
-        if not return_dict:
-            # we filter out the attention mask
-            decoder_outputs = tuple(value for idx, value in enumerate(decoder_outputs) if idx != 1)
-            encoder_outputs = tuple(value for idx, value in enumerate(encoder_outputs) if idx != 1)
-            return decoder_outputs + encoder_outputs
 
         return Seq2SeqModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
@@ -1467,6 +1443,7 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1482,12 +1459,9 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
         past_key_values: Cache | None = None,
         decoder_inputs_embeds: Tensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         labels: Tensor | None = None,
-        **kwargs,
-    ) -> tuple | Seq2SeqLMOutput:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Seq2SeqLMOutput:
         r"""
         bbox (`torch.LongTensor` of shape `({0}, 4)`, *optional*):
             Bounding boxes of each input sequence tokens. Selected in the range `[0,
@@ -1545,9 +1519,6 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
         9/30/92
         ```"""
 
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
         if decoder_input_ids is None and labels is not None:
             decoder_input_ids = self._shift_right(labels)
 
@@ -1560,13 +1531,11 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
                 pixel_values=pixel_values,
                 attention_mask=attention_mask,
                 inputs_embeds=inputs_embeds,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
+                **kwargs,
             )
 
         hidden_states = encoder_outputs[0]
-        encoder_attention_mask = encoder_outputs.attention_mask if return_dict else encoder_outputs[1]
+        encoder_attention_mask = encoder_outputs.attention_mask
 
         # Decode
         decoder_outputs = self.decoder(
@@ -1577,9 +1546,7 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
             encoder_hidden_states=hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         sequence_output = decoder_outputs[0]
@@ -1593,10 +1560,6 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
         if labels is not None:
             loss_fct = CrossEntropyLoss(ignore_index=-100)
             loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
-
-        if not return_dict:
-            output = (lm_logits,) + decoder_outputs[2:] + (encoder_outputs[0],) + encoder_outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return Seq2SeqLMOutput(
             loss=loss,
@@ -1643,6 +1606,7 @@ class UdopEncoderModel(UdopPreTrainedModel):
         self.shared = new_embeddings
         self.encoder.set_input_embeddings(new_embeddings)
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1652,11 +1616,8 @@ class UdopEncoderModel(UdopPreTrainedModel):
         pixel_values: Tensor | None = None,
         visual_bbox: dict[str, Any] | None = None,
         inputs_embeds: Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple[torch.FloatTensor] | BaseModelOutputWithAttentionMask:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithAttentionMask:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. T5 is a model with relative position embeddings so you
@@ -1702,12 +1663,6 @@ class UdopEncoderModel(UdopPreTrainedModel):
         >>> outputs = model(**encoding)
         >>> last_hidden_states = outputs.last_hidden_state
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
         encoder_outputs = self.encoder(
             input_ids=input_ids,
             bbox=bbox,
@@ -1715,9 +1670,7 @@ class UdopEncoderModel(UdopPreTrainedModel):
             pixel_values=pixel_values,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         return encoder_outputs

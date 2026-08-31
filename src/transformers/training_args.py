@@ -304,7 +304,9 @@ class TrainingArguments:
             clearing activations during forward pass and recomputing them during backward pass.
             Enables training larger models or batch sizes at the cost of ~20% slower training.
         gradient_checkpointing_kwargs (`dict`, *optional*, defaults to `None`):
-            Keyword arguments passed to `gradient_checkpointing_enable()`.
+            Keyword arguments passed to `gradient_checkpointing_enable()`. `every_n_layers` checkpoints only every
+            n-th decoder layer instead of all of them; `1` is the usual all-or-nothing behavior, and larger values
+            give some memory back to speed. Any other key is forwarded to `torch.utils.checkpoint.checkpoint`.
 
         > Compilation
 
@@ -608,6 +610,16 @@ class TrainingArguments:
         dataloader_prefetch_factor (`int`, *optional*):
             Number of batches loaded in advance by each worker.
             2 means there will be a total of 2 * num_workers batches prefetched across all workers.
+        dataloader_multiprocessing_context (`str`, *optional*):
+            The multiprocessing start method to use for data loading workers (`"fork"`, `"spawn"`, or
+            `"forkserver"`). Defaults to PyTorch's default start method, except on MPS with
+            `dataloader_num_workers > 1`, where it defaults to `"fork"`. Use `"spawn"` when streaming from sources
+            whose objects are not fork-safe (e.g. HDFS via `pyarrow`). Under `"spawn"`, any custom `collate_fn` or
+            dataset code must be importable at module level (no lambdas/closures).
+        dataloader_in_order (`bool`, *optional*, defaults to `True`):
+            If `True`, the data loader yields batches in the order workers were dispatched. Set to `False` to yield
+            batches as soon as they are ready, which can reduce tail latency for `IterableDataset` streaming
+            workloads. Requires PyTorch >= 2.6.
         remove_unused_columns (`bool`, *optional*, defaults to `True`):
             Whether or not to automatically remove the columns unused by the model forward method.
         label_names (`list[str]`, *optional*):
@@ -891,7 +903,12 @@ class TrainingArguments:
     )
     gradient_checkpointing_kwargs: dict[str, Any] | str | None = field(
         default=None,
-        metadata={"help": "Keyword arguments passed to `gradient_checkpointing_enable()`."},
+        metadata={
+            "help": "Keyword arguments passed to `gradient_checkpointing_enable()`. `every_n_layers` checkpoints "
+            "only every n-th decoder layer instead of all of them; `1` is the usual all-or-nothing behavior, and "
+            "larger values give some memory back to speed. Any other key is forwarded to "
+            "`torch.utils.checkpoint.checkpoint`."
+        },
     )
 
     # --- Compilation ---
@@ -1305,6 +1322,29 @@ class TrainingArguments:
             )
         },
     )
+    dataloader_multiprocessing_context: str | None = field(
+        default=None,
+        metadata={
+            "help": (
+                "The multiprocessing start method to use for data loading workers ('fork', 'spawn', or "
+                "'forkserver'). Defaults to PyTorch's default, except on MPS with dataloader_num_workers > 1, where "
+                "it defaults to 'fork'. Use 'spawn' when streaming from sources whose objects are not fork-safe "
+                "(e.g. HDFS via pyarrow). Under 'spawn', any custom collate_fn / dataset code must be importable at "
+                "module level (no lambdas/closures)."
+            ),
+            "choices": ["fork", "spawn", "forkserver"],
+        },
+    )
+    dataloader_in_order: bool = field(
+        default=True,
+        metadata={
+            "help": (
+                "If True (default), the data loader yields batches in the order workers were dispatched. Set to "
+                "False to yield batches as soon as they are ready, reducing tail latency for IterableDataset "
+                "streaming workloads. Requires PyTorch >= 2.6."
+            )
+        },
+    )
     remove_unused_columns: bool = field(
         default=True,
         metadata={"help": "Whether or not to automatically remove the columns unused by the model forward method."},
@@ -1609,6 +1649,14 @@ class TrainingArguments:
         # ── 10. Hardware Overrides ──
         if self.use_cpu:
             self.dataloader_pin_memory = False
+
+        # MPS requires forking if multiple workers are specified; a user-specified start method takes precedence.
+        if (
+            self.dataloader_multiprocessing_context is None
+            and self.dataloader_num_workers > 1
+            and is_torch_mps_available()
+        ):
+            self.dataloader_multiprocessing_context = "fork"
 
         # ── 11. FSDP ──
         # Store args only (not the plugin itself) to avoid pickle issues
@@ -2604,6 +2652,8 @@ class TrainingArguments:
         pin_memory: bool = True,
         persistent_workers: bool = False,
         prefetch_factor: int | None = None,
+        multiprocessing_context: str | None = None,
+        in_order: bool = True,
         auto_find_batch_size: bool = False,
         ignore_data_skip: bool = False,
         sampler_seed: int | None = None,
@@ -2627,6 +2677,15 @@ class TrainingArguments:
             prefetch_factor (`int`, *optional*):
                 Number of batches loaded in advance by each worker.
                 2 means there will be a total of 2 * num_workers batches prefetched across all workers.
+            multiprocessing_context (`str`, *optional*):
+                The multiprocessing start method to use for data loading workers (`"fork"`, `"spawn"`, or
+                `"forkserver"`). Defaults to PyTorch's default start method. Use `"spawn"` when streaming from
+                sources whose objects are not fork-safe (e.g. HDFS via `pyarrow`). Under `"spawn"`, any custom
+                `collate_fn` or dataset code must be importable at module level (no lambdas/closures).
+            in_order (`bool`, *optional*, defaults to `True`):
+                If `True`, the data loader yields batches in the order workers were dispatched. Set to `False` to
+                yield batches as soon as they are ready, which can reduce tail latency for `IterableDataset`
+                streaming workloads. Requires PyTorch >= 2.6.
             auto_find_batch_size (`bool`, *optional*, defaults to `False`)
                 Whether to find a batch size that will fit into memory automatically through exponential decay,
                 avoiding CUDA Out-of-Memory errors. Requires accelerate to be installed (`pip install accelerate`)
@@ -2658,6 +2717,8 @@ class TrainingArguments:
         self.dataloader_pin_memory = pin_memory
         self.dataloader_persistent_workers = persistent_workers
         self.dataloader_prefetch_factor = prefetch_factor
+        self.dataloader_multiprocessing_context = multiprocessing_context
+        self.dataloader_in_order = in_order
         self.auto_find_batch_size = auto_find_batch_size
         self.ignore_data_skip = ignore_data_skip
         self.data_seed = sampler_seed

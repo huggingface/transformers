@@ -165,7 +165,7 @@ class Sam2VideoConfig(PreTrainedConfig):
     ... )
 
     >>> # Initializing a Sam2Config with `"facebook/sam2.1_hiera_tiny"` style configuration
-    >>> configuration = Sam2config()
+    >>> configuration = Sam2Config()
 
     >>> # Initializing a Sam2Model (with random weights) from the `"facebook/sam2.1_hiera_tiny"` style configuration
     >>> model = Sam2Model(configuration)
@@ -964,8 +964,8 @@ class Sam2VideoVisionRotaryEmbedding(nn.Module):
 
         # directly register the cos and sin embeddings as we have a fixed feature shape
         inv_freq = self.create_inv_freq()
-        self.register_buffer("rope_embeddings_cos", inv_freq.cos(), persistent=False)
-        self.register_buffer("rope_embeddings_sin", inv_freq.sin(), persistent=False)
+        self.rope_embeddings_cos = nn.Buffer(inv_freq.cos(), persistent=False)
+        self.rope_embeddings_sin = nn.Buffer(inv_freq.sin(), persistent=False)
 
     @torch.no_grad()
     def forward(self) -> tuple[torch.Tensor, torch.Tensor]:
@@ -989,7 +989,7 @@ class Sam2VideoVisionRotaryEmbedding(nn.Module):
 
 def rotate_pairwise(x):
     """
-    pairwise rotation of the hidden dims of the input. Differerent from Llama Half-Tensor Rotation.
+    pairwise rotation of the hidden dims of the input. Different from Llama Half-Tensor Rotation.
 
     This is an optimized version of the following more explicit implementation:
     ```python

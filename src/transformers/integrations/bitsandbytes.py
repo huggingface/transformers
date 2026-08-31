@@ -39,7 +39,7 @@ class Bnb4bitQuantize(ConversionOps):
         **kwargs,
     ) -> dict[str, torch.Tensor]:
         """
-        we need to store some parameters to create the quantized weight. For example, bnb requires 6 values that are stored in the checkpoint to recover the quantized weight. So we store them in a dict that it stored in hf_quantizer for now as we can't save it in the op since we create an op per tensor.
+        we need to store some parameters to create the quantized weight. For example, bnb requires 6 values that are stored in the checkpoint to recover the quantized weight. So we store them in a dict that is stored in hf_quantizer for now as we can't save it in the op since we create an op per tensor.
         """
         result = {}
         for param_name, value in input_dict.items():
@@ -176,7 +176,7 @@ def replace_with_bnb_linear(
             converted.
         quantization_config (`BitsAndBytesConfig`):
             The quantization config object that contains the quantization parameters.
-        pre_quantized (`book`, defaults to `False`):
+        pre_quantized (`bool`, defaults to `False`):
             Whether the model is pre-quantized or not
     """
     has_been_replaced = False

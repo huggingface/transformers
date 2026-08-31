@@ -46,12 +46,8 @@ class Ovis2Processor(ProcessorMixin):
             The number of image tokens to be used for each image in the input.
         """
         self.image_seq_length = image_seq_length
-        self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
-        self.image_token_id = (
-            tokenizer.image_token_id
-            if getattr(tokenizer, "image_token_id", None)
-            else tokenizer.convert_tokens_to_ids(self.image_token)
-        )
+        self.image_token = "<image>"
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:

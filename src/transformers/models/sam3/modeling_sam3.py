@@ -432,8 +432,8 @@ class Sam3ViTRotaryEmbedding(nn.Module):
         inv_freq = torch.cat([freqs_x, freqs_y], dim=-1)
         inv_freq = inv_freq.repeat_interleave(2, dim=-1)
         # directly register the cos and sin embeddings as we have a fixed feature shape
-        self.register_buffer("rope_embeddings_cos", inv_freq.cos(), persistent=False)
-        self.register_buffer("rope_embeddings_sin", inv_freq.sin(), persistent=False)
+        self.rope_embeddings_cos = nn.Buffer(inv_freq.cos(), persistent=False)
+        self.rope_embeddings_sin = nn.Buffer(inv_freq.sin(), persistent=False)
 
     @torch.no_grad()
     def forward(self) -> tuple[torch.Tensor, torch.Tensor]:
@@ -443,7 +443,7 @@ class Sam3ViTRotaryEmbedding(nn.Module):
 
 def rotate_pairwise(x):
     """
-    pairwise rotation of the hidden dims of the input. Differerent from Llama Half-Tensor Rotation.
+    pairwise rotation of the hidden dims of the input. Different from Llama Half-Tensor Rotation.
 
     This is an optimized version of the following more explicit implementation:
     ```python

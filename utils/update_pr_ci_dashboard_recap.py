@@ -23,6 +23,10 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+# GitHub REST calls go through the shared helper (rate-limit handling, no anonymous fallback, fail
+# hard on a rejected token); the local `request_json` below is kept only for the Grafana proxy.
+from github_utils import github_request
+
 
 GITHUB_API_URL = "https://api.github.com"
 GRAFANA_QUERY_URL = "https://transformers-ci.lor-e.huggingface.cool/api/datasources/proxy/uid/prometheus/api/v1/query"
@@ -58,28 +62,19 @@ def log_workflow_run(workflow_run):
     print("==========================================")
 
 
-def request_json(url, token=None, method="GET", payload=None):
-    """Send an HTTP request and parse the response body as JSON."""
-    headers = {
-        "Accept": "application/vnd.github+json" if "api.github.com" in url else "application/json",
-        "User-Agent": "transformers-ci-dashboard-recap",
-    }
-    if token is not None and "api.github.com" in url:
-        headers["Authorization"] = f"Bearer {token}"
-        headers["X-GitHub-Api-Version"] = "2022-11-28"
+def request_json(url):
+    """GET a URL and parse the response body as JSON (used for the Grafana datasource proxy).
 
-    data = None
-    if payload is not None:
-        data = json.dumps(payload).encode("utf-8")
-        headers["Content-Type"] = "application/json"
-
-    request = urllib.request.Request(url, data=data, headers=headers, method=method)
+    GitHub API access does *not* go through here -- see :func:`github_utils.github_request`.
+    """
+    headers = {"Accept": "application/json", "User-Agent": "transformers-ci-dashboard-recap"}
+    request = urllib.request.Request(url, headers=headers, method="GET")
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
             raw = response.read().decode("utf-8")
     except urllib.error.HTTPError as error:
         body = error.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"{method} {url} failed with {error.code}: {body}") from error
+        raise RuntimeError(f"GET {url} failed with {error.code}: {body}") from error
 
     if not raw:
         return None
@@ -93,7 +88,7 @@ def github_paginate(path, token, key=None):
     separator = "&" if "?" in path else "?"
     while True:
         url = f"{GITHUB_API_URL}{path}{separator}per_page=100&page={page}"
-        payload = request_json(url, token=token)
+        payload = github_request(url, token=token)
         page_items = payload[key] if key is not None else payload
         if not page_items:
             break
@@ -199,12 +194,26 @@ def format_duration(seconds):
 
 
 def render_ci_badge(pr_number, dashboard_url):
-    """Render the CI dashboard badge block inserted at the top of the PR body."""
-    badge_url = f"{BADGE_URL}?pr={pr_number}"
+    """Render the CI dashboard badge block inserted at the top of the PR body.
+
+    Two badges on one line, one per CI stream a PR accumulates: regular PR CI on
+    CPU, and the GPU runs a maintainer asks for with a `run-slow: <models>`
+    comment. They have separate verdicts, so a single badge had to pick one and
+    would report whichever ran last -- against a dashboard link that showed the
+    other.
+
+    Both are always emitted, and the GPU badge renders "not run" until a run-slow
+    run exists. That is deliberate: this workflow only fires on PR CI completion,
+    so a badge written only when a run-slow already existed would stay missing
+    after a run-slow that no push follows. The SVGs are live, so the URLs written
+    here keep answering for the newest run of their stream with no rewrite.
+    """
+    cpu_url = f"{BADGE_URL}?pr={pr_number}&event=pr-ci"
+    gpu_url = f"{BADGE_URL}?pr={pr_number}&event=run-slow"
     return "\n".join(
         [
             BADGE_START,
-            f"[![CI]({badge_url})]({dashboard_url})",
+            f"[![CPU CI]({cpu_url})]({dashboard_url}) [![GPU run-slow]({gpu_url})]({dashboard_url})",
             BADGE_END,
         ]
     )
@@ -294,7 +303,7 @@ def delete_old_dashboard_comments(repo, token, pr_number):
     for comment in comments:
         body = comment.get("body") or ""
         if any(marker in body for marker in OLD_DASHBOARD_COMMENT_MARKERS):
-            request_json(
+            github_request(
                 f"{GITHUB_API_URL}/repos/{repo}/issues/comments/{comment['id']}", token=token, method="DELETE"
             )
 
@@ -305,13 +314,13 @@ def recreate_ci_recap_comment(repo, token, pr_number, recap):
     for comment in comments:
         if RECAP_START not in (comment.get("body") or ""):
             continue
-        request_json(
+        github_request(
             f"{GITHUB_API_URL}/repos/{repo}/issues/comments/{comment['id']}",
             token=token,
             method="DELETE",
         )
 
-    request_json(
+    github_request(
         f"{GITHUB_API_URL}/repos/{repo}/issues/{pr_number}/comments",
         token=token,
         method="POST",
@@ -363,7 +372,7 @@ def main():
     )
     updated_body = inject_ci_badge(pr.get("body"), badge_body)
     updated_body = remove_marked_block(updated_body, RECAP_START, RECAP_END)
-    request_json(
+    github_request(
         f"{GITHUB_API_URL}/repos/{repo}/pulls/{pr['number']}",
         token=token,
         method="PATCH",

@@ -299,7 +299,7 @@ class SpeechT5SinusoidalPositionalEmbedding(nn.Module):
             # in forward put the weights on the correct dtype and device of the param
             emb_weights = emb_weights.to(dtype=self.weights.dtype, device=self.weights.device)
 
-        self.register_buffer("weights", emb_weights, persistent=False)
+        self.weights = nn.Buffer(emb_weights, persistent=False)
 
     @staticmethod
     def get_embedding(num_embeddings: int, embedding_dim: int, padding_idx: int | None = None):
@@ -410,7 +410,7 @@ class SpeechT5ScaledPositionalEncoding(nn.Module):
         pe[:, 1::2] = torch.cos(position.float() * div_term)
         pe = pe.unsqueeze(0)
         super().__init__()
-        self.register_buffer("pe", pe, persistent=False)
+        self.pe = nn.Buffer(pe, persistent=False)
         self.dropout = nn.Dropout(p=dropout)
         self.dim = dim
         self.max_len = max_len
@@ -2987,8 +2987,8 @@ class SpeechT5HifiGan(PreTrainedModel):
 
         self.conv_post = nn.Conv1d(channels, 1, kernel_size=7, stride=1, padding=3)
 
-        self.register_buffer("mean", torch.zeros(config.model_in_dim))
-        self.register_buffer("scale", torch.ones(config.model_in_dim))
+        self.mean = nn.Buffer(torch.zeros(config.model_in_dim))
+        self.scale = nn.Buffer(torch.ones(config.model_in_dim))
 
         # Initialize weights and apply final processing
         self.post_init()

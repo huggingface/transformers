@@ -17,6 +17,7 @@ import unittest
 
 from transformers import AutoTokenizer, DogeConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
+    Expectations,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -341,9 +342,9 @@ class DogeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         # They are valid but not always used, depending on config.is_moe flag (the modules are not the same in both cases)
         problematic_keys = {
-            "layers.*.mlp.router_gate": "colwise_rep",
-            "layers.*.mlp.down_embed": "rowwise_rep",
-            "layers.*.mlp.up_embed": "rowwise_rep",
+            "layers.*.mlp.router_gate": "colwise_gather_output",
+            "layers.*.mlp.down_embed": "rowwise_split_input",
+            "layers.*.mlp.up_embed": "rowwise_split_input",
         }
         if not config.is_moe:
             for key in problematic_keys:
@@ -370,7 +371,12 @@ class DogeIntegrationTest(unittest.TestCase):
         """
         An integration test for Doge-20M. It tests against a long output to ensure the subtle numerical differences
         """
-        EXPECTED_TEXT = "Here's everything I know about dogs. Dogs is the best animal in the world. It is a very popular and popular dog in the United States. It is a very popular"
+        EXPECTED_TEXT = Expectations(
+            {
+                (None, None): "Here's everything I know about dogs. Dogs is the best animal in the world. It is a very popular and popular dog in the United States. It is a very popular",
+                ("cuda", 8): "Here's everything I know about dogs. Dogs is the best animal in the world. It is a very popular and popular breed for dogs. It is a very popular and popular",
+            }
+        ).get_expectation()  # fmt: skip
 
         tokenizer = AutoTokenizer.from_pretrained("SmallDoge/Doge-20M")
         model = DogeForCausalLM.from_pretrained("SmallDoge/Doge-20M", device_map="auto", dtype=torch.bfloat16)

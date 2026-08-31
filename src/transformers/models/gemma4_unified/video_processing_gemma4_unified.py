@@ -27,9 +27,9 @@ from ...image_utils import PILImageResampling
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
-    add_start_docstrings,
+    auto_docstring,
 )
-from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING, BaseVideoProcessor
+from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoInput
 from .processing_gemma4_unified import Gemma4UnifiedVideoProcessorKwargs
 
@@ -197,10 +197,7 @@ def patches_merge(
     return merged_patches, new_positions
 
 
-@add_start_docstrings(
-    "Constructs a Gemma4Unified video processor that samples frames from videos for use with the Gemma4Unified model.",
-    BASE_VIDEO_PROCESSOR_DOCSTRING,
-)
+@auto_docstring
 class Gemma4UnifiedVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
     image_mean = [0.0, 0.0, 0.0]

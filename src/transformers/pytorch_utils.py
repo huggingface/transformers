@@ -21,7 +21,7 @@ import torch
 from safetensors.torch import storage_ptr, storage_size
 from torch import nn
 
-from .distributed.utils import _torch_distributed_available
+from .distributed.utils import is_dtensor
 from .utils import (
     is_torch_greater_or_equal,
     is_torch_xla_available,
@@ -215,12 +215,9 @@ def id_tensor_storage(tensor: torch.Tensor) -> tuple[torch.device, int, int]:
     guaranteed to be unique and constant for this tensor's storage during its lifetime. Two tensor storages with
     non-overlapping lifetimes may have the same id.
     """
-    if _torch_distributed_available and is_torch_greater_or_equal("2.5"):
-        from torch.distributed.tensor import DTensor
-
-        if isinstance(tensor, DTensor):
-            local_tensor = tensor.to_local()
-            return tensor.device, local_tensor.storage().data_ptr(), tensor.nbytes
+    if is_dtensor(tensor):
+        local_tensor = tensor.to_local()  # type: ignore
+        return tensor.device, local_tensor.storage().data_ptr(), tensor.nbytes
 
     if tensor.device.type == "xla" and is_torch_xla_available():
         # NOTE: xla tensors dont have storage

@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 The pipelines are a great and easy way to use models for inference. These pipelines are objects that abstract most of
 the complex code from the library, offering a simple API dedicated to several tasks, including Named Entity
 Recognition, Masked Language Modeling, Sentiment Analysis, Feature Extraction and Question Answering. See the
-[task summary](../task_summary) for examples of use.
+[Pipeline tutorial](../pipeline_tutorial) for examples of use.
 
 There are two categories of pipeline abstractions to be aware about:
 
@@ -176,7 +176,7 @@ Streaming batch_size=256
 (diminishing returns, saturated the GPU)
 ```
 
-Example where it's most a slowdown:
+Example where it's mostly a slowdown:
 
 ```python
 class MyDataset(Dataset):
@@ -262,7 +262,7 @@ outputs = pipe.postprocess(all_model_outputs)
 This should be very transparent to your code because the pipelines are used in
 the same way.
 
-This is a simplified view, since the pipeline can handle automatically the batch to ! Meaning you don't have to care
+This is a simplified view, since the pipeline can handle automatically the batch to you! Meaning you don't have to care
 about how many forward passes you inputs are actually going to trigger, you can optimize the `batch_size`
 independently of the inputs. The caveats from the previous section still apply.
 

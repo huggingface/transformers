@@ -43,6 +43,7 @@ import copy
 import importlib
 import inspect
 import sys
+import types
 from collections.abc import MutableMapping
 from contextlib import contextmanager
 from typing import Any
@@ -98,6 +99,13 @@ class DynamoExporter(HfExporter):
 
         dynamic_shapes = config.dynamic_shapes
         if config.dynamic and dynamic_shapes is None:
+            logger.warning_once(
+                "`dynamic=True` with no explicit `dynamic_shapes` marks every input axis `Dim.AUTO`, so "
+                "torch.export resolves symbolic shapes for all of them — including axes that are actually "
+                "fixed (batch, a size-1 decode step, num_heads/head_dim). Passing explicit `dynamic_shapes` "
+                "that mark only the axes which vary bypasses that symbolic-shape resolution and exports "
+                "significantly faster."
+            )
             dynamic_shapes = get_auto_dynamic_shapes(sample_inputs)
 
         register_cache_pytrees_for_model(model)
@@ -285,8 +293,10 @@ def _reshaped_vision_attention_forward(
         "Chunked vision attention received an empty input.",
     )
     num_segments = cu_seqlens.shape[0] - 1
+    # The reshape-into-batch below needs equal-length segments.
+    segment_lengths = cu_seqlens[1:] - cu_seqlens[:-1]
     torch_compilable_check(
-        seq_length % num_segments == 0,
+        (segment_lengths == segment_lengths[0]).all(),
         "Chunked vision attention requires uniform segment lengths during export. "
         "Ensure all images have the same resolution (use do_resize=True in the processor) "
         "or pad inputs to a common size.",
@@ -351,8 +361,8 @@ def _reshaped_vision_attention_forward(
         enable_gqa=getattr(self, "num_key_value_heads", self.num_heads) != self.num_heads,
     )
 
-    # (n_seg, heads, seg_len, dim) → (n_seg, seg_len, heads, dim) → (seq, heads*dim)
-    attn_output = attn_output.transpose(1, 2).reshape(seq_length, -1).contiguous()
+    # (n_seg, heads, seg_len, dim) → (n_seg, seg_len, heads, dim) → (seq, heads*dim).
+    attn_output = attn_output.transpose(1, 2).reshape(seq_length, -1)
     out_proj = self.proj if hasattr(self, "proj") else self.out_proj
     attn_output = out_proj(attn_output)
 
@@ -376,12 +386,15 @@ def _reshaped_vision_attention_forward(
     "transformers.models.glm4v_moe.modeling_glm4v_moe.Glm4vMoeVisionAttention.forward",
     "transformers.models.glm_ocr.modeling_glm_ocr.GlmOcrVisionAttention.forward",
     "transformers.models.ernie4_5_vl_moe.modeling_ernie4_5_vl_moe.Ernie4_5_VLMoeVisionAttention.forward",
+    # Combined `qkv` + optional `(cos, sin)` rotary + `.proj`
+    "transformers.models.cohere_compass.modeling_cohere_compass.CohereCompassVisionAttention.forward",
     # Asymmetric `qkv` split + `(cos, sin)` rotary + `.proj`
     "transformers.models.exaone4_5.modeling_exaone4_5.Exaone4_5_VisionAttention.forward",
-    # Combined `qkv` + no in-attention rotary + `.proj`
-    "transformers.models.glm_image.modeling_glm_image.GlmImageVisionAttention.forward",
     # Separate `.q` / `.k` / `.v` + single rotary tensor + `.proj`
     "transformers.models.qwen2_5_omni.modeling_qwen2_5_omni.Qwen2_5OmniVisionAttention.forward",
+    # Separate `q_proj`/`k_proj`/`v_proj` + `(cos, sin)` rotary + `.proj` (single return)
+    "transformers.models.kimi_k25.modeling_kimi_k25.Kimi_K25VisionAttention.forward",
+    "transformers.models.muse_glimmer.modeling_muse_glimmer.MuseGlimmerVisionAttention.forward",
     # Separate `_proj` + `(cos, sin)` rotary + `.out_proj` (tuple return)
     "transformers.models.video_llama_3.modeling_video_llama_3.VideoLlama3VisionAttention.forward",
     "transformers.models.paddleocr_vl.modeling_paddleocr_vl.PaddleOCRVisionAttention.forward",
@@ -425,6 +438,18 @@ def _path_to_class(path: str) -> type:
     return obj
 
 
+def _maybe_sym_constant(sym: Any) -> Any:
+    """The concrete value a ``Sym*`` has already specialized to, or ``None`` if it's still dynamic.
+    Each ``Sym*`` type has its own accessor (``maybe_as_bool``/``maybe_as_float``/``maybe_as_int``);
+    there is no generic one."""
+    node = sym.node
+    if isinstance(sym, torch.SymBool):
+        return node.maybe_as_bool()
+    if isinstance(sym, torch.SymFloat):
+        return node.maybe_as_float()
+    return node.maybe_as_int()
+
+
 def _flatten_to_context(obj: Any, tensors: list) -> Any:
     """Single-pass: recursively build a JSON-native context while collecting tensors into `tensors`."""
     # --- Pure Python / JSON-native (exact type check — subclasses fall through to stateful objects) ---
@@ -449,6 +474,17 @@ def _flatten_to_context(obj: Any, tensors: list) -> Any:
     if isinstance(obj, torch.layout):
         return {"_t": "layout", "n": str(obj).removeprefix("torch.")}
     if isinstance(obj, (torch.SymInt, torch.SymFloat, torch.SymBool)):
+        # A Sym* that has already specialized to a concrete constant is not a genuine dynamic
+        # graph output — bake it as a plain scalar instead of a leaf. Leaving it as a leaf makes
+        # flatten non-deterministic: the same field can be a constant-valued SymInt at one trace
+        # point (the dynamo out_spec capture) and an already-materialized python scalar at another
+        # (the aot-decomposition retrace), so the leaf count flips and `treespec.unflatten` fails
+        # with an off-by-one. deepseek_v4 hits this via two sibling cache layers
+        # (DeepseekV4HCACache / DeepseekV4CSACache) sharing a `cumulative_length` counter that one
+        # path leaves as a constant SymInt and the other as a python int.
+        const = _maybe_sym_constant(obj)
+        if const is not None:
+            return const
         idx = len(tensors)
         tensors.append(obj)
         return {"_t": "sym", "i": idx}
@@ -471,12 +507,15 @@ def _flatten_to_context(obj: Any, tensors: list) -> Any:
             "p": _class_to_path(cls),
             "v": [_flatten_to_context(i, tensors) for i in obj],
         }
+    if isinstance(obj, types.MethodType):
+        # A bound method can't be flattened into pytree context. Models shouldn't bind methods onto
+        # objects they return at forward time (e.g. recurrent_gemma binds `get_seq_length`/
+        # `get_mask_sizes` onto its `DynamicCache`) — that pattern isn't exportable; such a model is
+        # skipped until the binding is refactored away (e.g. into a `Cache` subclass).
+        raise TypeError("Cannot flatten a bound method for pytree context")
     if hasattr(obj, "__dict__"):
-        return {
-            "_t": "obj",
-            "p": _class_to_path(cls),
-            "s": {k: _flatten_to_context(v, tensors) for k, v in vars(obj).items()},
-        }
+        state = {k: _flatten_to_context(v, tensors) for k, v in vars(obj).items()}
+        return {"_t": "obj", "p": _class_to_path(cls), "s": state}
 
     raise TypeError(f"Cannot flatten {type(obj).__name__} for pytree context")
 
@@ -523,9 +562,9 @@ def _unflatten_from_context(ctx: Any, tensors: list) -> Any:
             return cls(*items)  # NamedTuple (requires positional args)
     if t == "obj":
         cls = _path_to_class(ctx["p"])
-        state = {k: _unflatten_from_context(v, tensors) for k, v in ctx["s"].items()}
         instance = cls.__new__(cls)
-        instance.__dict__.update(state)
+        for k, v in ctx["s"].items():
+            instance.__dict__[k] = _unflatten_from_context(v, tensors)
         return instance
 
     raise TypeError(f"Unknown tag {t!r} in pytree context")
@@ -546,7 +585,9 @@ def _pytree_unflatten(values, context: Any) -> Any:
     return _unflatten_from_context(context, list(values))
 
 
-def _register_pytree_node(object_cls: type):
+def register_pytree_node(object_cls: type):
+    """Register a single class (e.g. a `Cache` subclass like `StaticCache`) as a torch.export pytree
+    node, so `torch.export.load` can unflatten it as a graph input without needing the original model."""
     try:
         torch.utils._pytree.register_pytree_node(
             object_cls,
@@ -570,7 +611,7 @@ def register_cache_pytrees_for_model(model: PreTrainedModel):
     """Register all relevant cache types as pytree nodes for torch.export."""
     # All transformers Cache subclasses
     for cache_type in _iter_subclasses(Cache):
-        _register_pytree_node(cache_type)
+        register_pytree_node(cache_type)
 
     # Model-specific cache classes not inheriting from Cache (e.g. custom per-model caches)
     for _, obj in inspect.getmembers(inspect.getmodule(model)):
@@ -580,13 +621,13 @@ def register_cache_pytrees_for_model(model: PreTrainedModel):
             and obj.__name__.endswith("Cache")
             and not issubclass(obj, Cache)
         ):
-            _register_pytree_node(obj)
+            register_pytree_node(obj)
 
     # detectron2 ImageList (used by layoutlmv2)
     if is_detectron2_available() and isinstance(model, PreTrainedModel) and model.config.model_type == "layoutlmv2":
         from detectron2.structures.image_list import ImageList
 
-        _register_pytree_node(ImageList)
+        register_pytree_node(ImageList)
 
 
 # ── Stage 4: Dynamic shapes ─────────────────────────────────────────────────
@@ -636,8 +677,6 @@ def get_auto_dynamic_shapes(inputs: Any) -> Any:
 # To register a new stateful attribute: append its name to `_STATEFUL_CACHE_ATTRS`.
 
 _STATEFUL_CACHE_ATTRS = (
-    "_cached_decode_position_ids",  # glm_image (m-rope decode position ids)
-    "_prefill_len",  # glm_image (m-rope prefill length)
     "cached_rotary_positional_embedding",  # wav2vec2_bert, seamless_m4t, clvp
     "cached_sequence_length",  # wav2vec2_bert, seamless_m4t, clvp
 )

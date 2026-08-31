@@ -83,11 +83,9 @@ docs/source/en/model_doc/deformable_detr.md
 docs/source/en/model_doc/deit.md
 docs/source/en/model_doc/deplot.md
 docs/source/en/model_doc/detr.md
-docs/source/en/model_doc/dialogpt.md
 docs/source/en/model_doc/dinat.md
 docs/source/en/model_doc/dinov2.md
 docs/source/en/model_doc/distilbert.md
-docs/source/en/model_doc/dit.md
 docs/source/en/model_doc/dpr.md
 docs/source/en/model_doc/efficientnet.md
 docs/source/en/model_doc/electra.md
@@ -142,7 +140,6 @@ docs/source/en/model_doc/maskformer.md
 docs/source/en/model_doc/matcha.md
 docs/source/en/model_doc/mbart.md
 docs/source/en/model_doc/megatron-bert.md
-docs/source/en/model_doc/megatron_gpt2.md
 docs/source/en/model_doc/mgp-str.md
 docs/source/en/model_doc/mistral.md
 docs/source/en/model_doc/mixtral.md
@@ -257,7 +254,6 @@ docs/source/en/serialization.md
 docs/source/en/tasks/asr.md
 docs/source/en/tasks/audio_classification.md
 docs/source/en/tasks/document_question_answering.md
-docs/source/en/tasks/idefics.md
 docs/source/en/tasks/image_captioning.md
 docs/source/en/tasks/image_classification.md
 docs/source/en/tasks/language_modeling.md
@@ -379,12 +375,10 @@ src/transformers/models/deformable_detr/convert_deformable_detr_to_pytorch.py
 src/transformers/models/deit/convert_deit_timm_to_pytorch.py
 src/transformers/models/detr/convert_detr_original_pytorch_checkpoint_to_pytorch.py
 src/transformers/models/detr/convert_detr_to_pytorch.py
-src/transformers/models/dialogpt/convert_dialogpt_original_pytorch_checkpoint_to_pytorch.py
 src/transformers/models/dinov2/configuration_dinov2.py
 src/transformers/models/dinov2/convert_dinov2_to_hf.py
 src/transformers/models/dinov2/modeling_dinov2.py
 src/transformers/models/distilbert/modeling_distilbert.py
-src/transformers/models/dit/convert_dit_unilm_to_pytorch.py
 src/transformers/models/donut/configuration_donut_swin.py
 src/transformers/models/donut/convert_donut_to_pytorch.py
 src/transformers/models/donut/modeling_donut_swin.py
@@ -503,8 +497,6 @@ src/transformers/models/maskformer/modeling_maskformer_swin.py
 src/transformers/models/mbart/convert_mbart_original_checkpoint_to_pytorch.py
 src/transformers/models/megatron_bert/convert_megatron_bert_checkpoint.py
 src/transformers/models/megatron_bert/modeling_megatron_bert.py
-src/transformers/models/megatron_gpt2/checkpoint_reshaping_and_interoperability.py
-src/transformers/models/megatron_gpt2/convert_megatron_gpt2_checkpoint.py
 src/transformers/models/mgp_str/configuration_mgp_str.py
 src/transformers/models/mgp_str/modeling_mgp_str.py
 src/transformers/models/mistral/configuration_mistral.py

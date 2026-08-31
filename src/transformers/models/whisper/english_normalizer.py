@@ -549,7 +549,7 @@ class EnglishTextNormalizer:
             r"\bjr\b": "junior ",
             r"\bsr\b": "senior ",
             r"\besq\b": "esquire ",
-            # prefect tenses, ideally it should be any past participles, but it's harder..
+            # perfect tenses, ideally it should be any past participles, but it's harder..
             r"'d been\b": " had been",
             r"'s been\b": " has been",
             r"'d gone\b": " had gone",

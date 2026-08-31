@@ -55,9 +55,7 @@ class BlipTextEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False)
 
         self.config = config
 
@@ -639,7 +637,7 @@ class BlipTextLMHeadModel(BlipTextPreTrainedModel, GenerationMixin):
         labels (`torch.LongTensor`, *optional*):
             Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
             `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are
-            ignored (masked), the loss is only computed for the tokens with labels n `[0, ..., config.vocab_size]`
+            ignored (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
         past_key_values (`Cache`, *optional*):
             Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that

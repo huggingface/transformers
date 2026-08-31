@@ -404,7 +404,9 @@ class AnyToAnyPipeline(Pipeline):
                 inputs["audio"] = self.processor.feature_extractor.fetch_audio(inputs["audio"])
 
         # If batched text inputs, we set padding to True unless specified otherwise
-        processor_kwargs = processing_kwargs.pop("processor_kwargs", None) or processing_kwargs
+        processor_kwargs = processing_kwargs.pop("processor_kwargs", None)
+        if processor_kwargs is None:
+            processor_kwargs = processing_kwargs
         if isinstance(text, (list, tuple)) and len(text) > 1:
             processor_kwargs.setdefault("padding", True)
         model_inputs = self.processor(text=text, **inputs, return_tensors="pt", **processor_kwargs).to(

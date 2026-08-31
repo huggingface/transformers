@@ -14,7 +14,7 @@
 """
 File utilities: utilities related to download and cache models
 
-This module should not be update anymore and is only left for backward compatibility.
+This module should not be updated anymore and is only left for backward compatibility.
 """
 
 from . import __version__
