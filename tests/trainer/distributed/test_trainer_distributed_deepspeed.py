@@ -86,6 +86,7 @@ GPTJ_TINY = "hf-internal-testing/tiny-random-gptj"
 
 # Accelerate config paths
 DS_ZERO2_CONFIG_FILE = os.path.join(CONFIGS_DIR, "deepspeed_zero2.yaml")
+DS_ZERO3_SP_ACCELERATE_CONFIG_FILE = os.path.join(CONFIGS_DIR, "deepspeed_zero3_sp_accelerate.yaml")
 DS_ZERO3_CONFIG_FILE = os.path.join(CONFIGS_DIR, "deepspeed_zero3.yaml")
 
 # DS JSON config paths (used by single-GPU tests via dict and distributed tests via file)
@@ -1115,6 +1116,12 @@ class TestTrainerDistributedDeepSpeedCommon(DeepSpeedCommandsMixin, TrainerDistr
     def test_eval(self):
         # ZeRO inference only works with ZeRO-3
         self.check_eval(config_file=DS_CONFIGS[ZERO3])
+
+    def test_sp_equivalence(self):
+        """Native ("accelerate") Ulysses SP under DeepSpeed ZeRO-3 must produce the same losses as no
+        SP. ZeRO-3 (params sharded too) is the meaningful long-context case. See `check_sp_equivalence`.
+        (The ALST `sp_backend="deepspeed"` path is `test_alst_ulysses_sp`.)"""
+        self.check_sp_equivalence(DS_ZERO3_SP_ACCELERATE_CONFIG_FILE, DS_ZERO3_CONFIG_FILE)
 
     def test_alst_ulysses_sp(self):
         """Test that ALST/Ulysses sequence parallelism produces the same losses as without it."""

@@ -1,0 +1,6 @@
+distributed_type: MULTI_GPU
+num_machines: 1
+num_processes: 2
+parallelism_config:
+  parallelism_config_sp_size: 2
+  parallelism_config_sp_backend: accelerate
