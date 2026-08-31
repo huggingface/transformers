@@ -698,7 +698,7 @@ class Gemma4VisionMLP(nn.Module):
         self.gate_proj = Gemma4ClippableLinear(config, self.hidden_size, self.intermediate_size)
         self.up_proj = Gemma4ClippableLinear(config, self.hidden_size, self.intermediate_size)
         self.down_proj = Gemma4ClippableLinear(config, self.intermediate_size, self.hidden_size)
-        self.act_fn = ACT2FN[config.hidden_activation]
+        self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, x):
         down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
@@ -1076,7 +1076,7 @@ class Gemma4TextMLP(nn.Module):
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-        self.act_fn = ACT2FN[config.hidden_activation]
+        self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, x):
         down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
