@@ -326,6 +326,7 @@ if TYPE_CHECKING:
     from .nemotron3_5_asr import *
     from .nemotron_asr_streaming import *
     from .nemotron_h import *
+    from .neomme import *
     from .nllb import *
     from .nllb_moe import *
     from .nomic_bert import *
