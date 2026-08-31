@@ -326,6 +326,7 @@ if TYPE_CHECKING:
     from .nemotron3_5_asr import *
     from .nemotron_asr_streaming import *
     from .nemotron_h import *
+    from .neomme import *
     from .neucodec import *
     from .nllb import *
     from .nllb_moe import *
@@ -485,6 +486,7 @@ if TYPE_CHECKING:
     from .upernet import *
     from .uvdoc import *
     from .vaultgemma import *
+    from .vibevoice import *
     from .vibevoice_acoustic_tokenizer import *
     from .vibevoice_asr import *
     from .video_llama_3 import *
