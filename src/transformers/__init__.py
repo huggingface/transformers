@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "5.13.0.dev0"
+__version__ = "5.16.0.dev0"
 
 import importlib
 import sys
@@ -104,8 +104,9 @@ _import_structure = {
     "debug_utils": [],
     "dependency_versions_check": [],
     "dependency_versions_table": [],
-    "distributed": [],
+    "distributed": ["DistributedConfig"],
     "dynamic_module_utils": [],
+    "exporters": [],
     "feature_extraction_sequence_utils": ["SequenceFeatureExtractor"],
     "feature_extraction_utils": ["BatchFeature", "FeatureExtractionMixin"],
     "file_utils": [],
@@ -267,6 +268,7 @@ _import_structure = {
         "HqqConfig",
         "MetalConfig",
         "Mxfp4Config",
+        "NVFP4Config",
         "QuantoConfig",
         "QuarkConfig",
         "SinqConfig",
@@ -382,9 +384,12 @@ else:
         "Chunk",
         "Concatenate",
         "ConversionOps",
+        "GroupWeightRename",
         "MergeModulelist",
         "PermuteForRope",
         "SplitModulelist",
+        "VisionFuseAndPermuteForRope",
+        "VisionUnfuseAndPermuteForRope",
         "WeightConverter",
     ]
     _import_structure["data.datasets"] = [
@@ -506,9 +511,12 @@ if TYPE_CHECKING:
     from .core_model_loading import Chunk as Chunk
     from .core_model_loading import Concatenate as Concatenate
     from .core_model_loading import ConversionOps as ConversionOps
+    from .core_model_loading import GroupWeightRename as GroupWeightRename
     from .core_model_loading import MergeModulelist as MergeModulelist
     from .core_model_loading import PermuteForRope as PermuteForRope
     from .core_model_loading import SplitModulelist as SplitModulelist
+    from .core_model_loading import VisionFuseAndPermuteForRope as VisionFuseAndPermuteForRope
+    from .core_model_loading import VisionUnfuseAndPermuteForRope as VisionUnfuseAndPermuteForRope
     from .core_model_loading import WeightConverter as WeightConverter
 
     # Data
@@ -548,6 +556,7 @@ if TYPE_CHECKING:
     from .data.datasets import GlueDataTrainingArguments as GlueDataTrainingArguments
     from .data.datasets import SquadDataset as SquadDataset
     from .data.datasets import SquadDataTrainingArguments as SquadDataTrainingArguments
+    from .distributed import DistributedConfig as DistributedConfig
     from .feature_extraction_sequence_utils import SequenceFeatureExtractor as SequenceFeatureExtractor
 
     # Feature Extractor
@@ -788,6 +797,7 @@ if TYPE_CHECKING:
     from .utils.quantization_config import HiggsConfig as HiggsConfig
     from .utils.quantization_config import HqqConfig as HqqConfig
     from .utils.quantization_config import MetalConfig as MetalConfig
+    from .utils.quantization_config import NVFP4Config as NVFP4Config
     from .utils.quantization_config import QuantoConfig as QuantoConfig
     from .utils.quantization_config import QuarkConfig as QuarkConfig
     from .utils.quantization_config import SinqConfig as SinqConfig

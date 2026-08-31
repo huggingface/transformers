@@ -9,12 +9,12 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
 
-# Data Collator
+# Data collator
 
 Data collators are objects that will form a batch by using a list of dataset elements as input. These elements are of
 the same type as the elements of `train_dataset` or `eval_dataset`.
@@ -23,7 +23,7 @@ To be able to build batches, data collators may apply some processing (like padd
 [`DataCollatorForLanguageModeling`]) also apply some random data augmentation (like random masking)
 on the formed batch.
 
-Examples of use can be found in the [example scripts](../examples) or [example notebooks](../notebooks).
+Examples of use can be found in the [example scripts](https://github.com/huggingface/transformers/tree/main/examples) or [example notebooks](../notebooks).
 
 ## Default data collator
 

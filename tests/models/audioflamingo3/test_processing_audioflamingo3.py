@@ -25,36 +25,33 @@ from transformers import (
     AutoTokenizer,
     WhisperFeatureExtractor,
 )
-from transformers.testing_utils import require_librosa, require_torch, require_torchaudio
+from transformers.testing_utils import require_librosa, require_torch, slow
 
 from ...test_processing_common import MODALITY_INPUT_DATA, ProcessorTesterMixin
 
 
 class AudioFlamingo3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = AudioFlamingo3Processor
+    # Tiny processor created with make_tiny_processor.py from "nvidia/audio-flamingo-3-hf"
+    tiny_model_id = "hf-internal-testing/tiny-processor-audioflamingo3"
+    checkpoint = "nvidia/audio-flamingo-3-hf"
 
     @classmethod
     @require_torch
-    @require_torchaudio
     def setUpClass(cls):
-        cls.checkpoint = "nvidia/audio-flamingo-3-hf"
         cls.tmpdirname = tempfile.mkdtemp()
-
-        processor = AudioFlamingo3Processor.from_pretrained(cls.checkpoint)
+        processor = AudioFlamingo3Processor.from_pretrained(cls.tiny_model_id)
         processor.save_pretrained(cls.tmpdirname)
 
     @require_torch
-    @require_torchaudio
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
 
     @require_torch
-    @require_torchaudio
     def get_audio_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).audio_processor
 
     @require_torch
-    @require_torchaudio
     def get_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs)
 
@@ -63,17 +60,15 @@ class AudioFlamingo3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     @require_torch
-    @require_torchaudio
     def test_can_load_various_tokenizers(self):
-        processor = AudioFlamingo3Processor.from_pretrained(self.checkpoint)
-        tokenizer = AutoTokenizer.from_pretrained(self.checkpoint)
+        processor = AudioFlamingo3Processor.from_pretrained(self.tiny_model_id)
+        tokenizer = AutoTokenizer.from_pretrained(self.tiny_model_id)
         self.assertEqual(processor.tokenizer.__class__, tokenizer.__class__)
 
     @require_torch
-    @require_torchaudio
     def test_save_load_pretrained_default(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.checkpoint)
-        processor = AudioFlamingo3Processor.from_pretrained(self.checkpoint)
+        tokenizer = AutoTokenizer.from_pretrained(self.tiny_model_id)
+        processor = AudioFlamingo3Processor.from_pretrained(self.tiny_model_id)
         feature_extractor = processor.feature_extractor
 
         processor = AudioFlamingo3Processor(tokenizer=tokenizer, feature_extractor=feature_extractor)
@@ -87,8 +82,22 @@ class AudioFlamingo3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIsInstance(reloaded.feature_extractor, WhisperFeatureExtractor)
 
     @require_torch
-    @require_torchaudio
     def test_tokenizer_integration(self):
+        slow_tokenizer = AutoTokenizer.from_pretrained(self.tiny_model_id, use_fast=False)
+        fast_tokenizer = AutoTokenizer.from_pretrained(self.tiny_model_id, from_slow=True, legacy=False)
+
+        prompt = (
+            "<|im_start|>system\nAnswer the questions.<|im_end|>"
+            "<|im_start|>user\n<sound>What is it?<|im_end|>"
+            "<|im_start|>assistant\n"
+        )
+
+        # Verify slow and fast tokenizers produce the same output (parity test)
+        self.assertEqual(slow_tokenizer.tokenize(prompt), fast_tokenizer.tokenize(prompt))
+
+    @slow
+    @require_torch
+    def test_tokenizer_full_integration(self):
         slow_tokenizer = AutoTokenizer.from_pretrained(self.checkpoint, use_fast=False)
         fast_tokenizer = AutoTokenizer.from_pretrained(self.checkpoint, from_slow=True, legacy=False)
 
@@ -124,9 +133,8 @@ class AudioFlamingo3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(fast_tokenizer.tokenize(prompt), EXPECTED_OUTPUT)
 
     @require_torch
-    @require_torchaudio
     def test_chat_template(self):
-        processor = AutoProcessor.from_pretrained(self.checkpoint)
+        processor = self.get_processor()
         expected_prompt = (
             "<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n"
             "<|im_start|>user\n<sound>What is surprising about the relationship between the barking and the music?<|im_end|>\n"
@@ -153,11 +161,12 @@ class AudioFlamingo3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(expected_prompt, formatted)
 
     @require_torch
-    @require_torchaudio
     def test_apply_transcription_request_single(self):
-        processor = AutoProcessor.from_pretrained(self.checkpoint)
+        processor = self.get_processor()
 
-        audio_url = "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/t_837b89f2-26aa-4ee2-bdf6-f73f0dd59b26.wav"
+        audio_url = (
+            "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/f2641_0_throatclearing.wav"
+        )
         helper_outputs = processor.apply_transcription_request(audio=audio_url)
 
         conversation = [
@@ -189,3 +198,60 @@ class AudioFlamingo3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self._test_apply_chat_template(
             "audio", batch_size, return_tensors, "audio_input_name", "feature_extractor", MODALITY_INPUT_DATA["audio"]
         )
+
+    @require_torch
+    def test_output_labels_with_audio(self):
+        processor = self.get_processor()
+        audio_token_id = processor.audio_token_id
+        pad_token_id = processor.tokenizer.pad_token_id
+
+        # Different text lengths so that padding is applied
+        text = [
+            f"{processor.audio_token} Transcribe the input speech.",
+            f"{processor.audio_token} What can you hear in this audio clip?",
+        ]
+        audio = self.prepare_audio_inputs(batch_size=2)
+
+        inputs = processor(text=text, audio=audio, output_labels=True)
+
+        self.assertIn("labels", inputs)
+        self.assertNotIn("mm_token_type_ids", inputs)
+        labels = inputs["labels"]
+        input_ids = inputs["input_ids"]
+        self.assertEqual(labels.shape, input_ids.shape)
+
+        # audio token positions are masked
+        audio_positions = input_ids == audio_token_id
+        self.assertTrue(audio_positions.any())
+        self.assertTrue((labels[audio_positions] == -100).all())
+
+        # padding positions are masked
+        pad_positions = input_ids == pad_token_id
+        self.assertTrue(pad_positions.any())
+        self.assertTrue((labels[pad_positions] == -100).all())
+
+        # all other positions match input_ids
+        kept_positions = ~(audio_positions | pad_positions)
+        self.assertTrue(kept_positions.any())
+        self.assertTrue((labels[kept_positions] == input_ids[kept_positions]).all())
+
+    @require_torch
+    def test_output_labels_without_audio(self):
+        processor = self.get_processor()
+        pad_token_id = processor.tokenizer.pad_token_id
+
+        # Different text lengths so that padding is applied
+        text = ["Transcribe the input speech.", "Hello!"]
+        inputs = processor(text=text, output_labels=True)
+
+        self.assertIn("labels", inputs)
+        labels = inputs["labels"]
+        input_ids = inputs["input_ids"]
+        self.assertEqual(labels.shape, input_ids.shape)
+
+        # without audio, only padding positions are masked
+        pad_positions = input_ids == pad_token_id
+        self.assertTrue(pad_positions.any())
+        self.assertTrue((labels[pad_positions] == -100).all())
+        kept_positions = ~pad_positions
+        self.assertTrue((labels[kept_positions] == input_ids[kept_positions]).all())

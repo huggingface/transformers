@@ -260,8 +260,8 @@ class UVDocPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        super()._init_weights(module)
         """Initialize the weights."""
+        super()._init_weights(module)
         if isinstance(module, nn.PReLU):
             module.reset_parameters()
 
@@ -292,6 +292,7 @@ class UVDocBridge(UVDocPreTrainedModel):
     """
 )
 class UVDocBackbone(BackboneMixin, UVDocPreTrainedModel):
+    config: UVDocBackboneConfig
     has_attentions = False
     base_model_prefix = "backbone"
 

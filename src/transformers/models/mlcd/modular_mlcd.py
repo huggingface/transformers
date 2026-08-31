@@ -83,37 +83,7 @@ class MLCDMLP(CLIPMLP):
 
 
 class MLCDRotaryEmbedding(VisionRotaryEmbedding):
-    def forward(self, num_patches_height: int, num_patches_width: int) -> torch.Tensor:
-        """
-        Calculate the Rotary Position Embedding (RoPE) for MLCDVisionModel based on the grid size.
-
-        Args:
-            num_patches_height (int): Number of patches in the height dimension.
-            num_patches_width (int): Number of patches in the width dimension.
-
-        Returns:
-            torch.Tensor: Rotary positional embeddings for the given grid size.
-        """
-        # Generate position IDs for height and width dimensions
-        hpos_ids = (
-            torch.arange(num_patches_height, device=self.inv_freq.device).unsqueeze(1).expand(-1, num_patches_width)
-        )
-        wpos_ids = (
-            torch.arange(num_patches_width, device=self.inv_freq.device).unsqueeze(0).expand(num_patches_height, -1)
-        )
-
-        # Flatten and stack the position IDs
-        pos_ids = torch.stack([hpos_ids.flatten(), wpos_ids.flatten()], dim=-1)
-
-        # Generate the full rotary positional embeddings for the maximum grid size
-        max_grid_size = max(num_patches_height, num_patches_width)
-        seq = torch.arange(max_grid_size, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
-        rotary_pos_emb_full = torch.outer(seq, self.inv_freq)
-
-        # Select and flatten the embeddings based on the position IDs
-        rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(1)
-
-        return rotary_pos_emb
+    pass
 
 
 class MLCDVisionEmbeddings(CLIPVisionEmbeddings):
@@ -304,6 +274,7 @@ class MLCDPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
         factor = self.config.initializer_factor
         if isinstance(module, MLCDVisionEmbeddings):
             factor = self.config.initializer_factor
@@ -328,11 +299,6 @@ class MLCDPreTrainedModel(PreTrainedModel):
             factor = self.config.initializer_factor
             pos_emb_std = (module.config.hidden_size // module.config.num_attention_heads // 2) ** -0.5 * factor
             init.normal_(module.class_pos_emb, mean=0.0, std=pos_emb_std)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-        elif isinstance(module, nn.Linear) and module.bias is not None:
-            init.zeros_(module.bias)
         elif isinstance(module, MLCDRotaryEmbedding):
             inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
             init.copy_(module.inv_freq, inv_freq)
@@ -378,8 +344,14 @@ class MLCDVisionModel(CLIPVisionModel):
 
         num_patches_height = pixel_values.shape[-2] // self.config.patch_size
         num_patches_width = pixel_values.shape[-1] // self.config.patch_size
-        rotary_pos_emb = self.vision_rotary_embedding(num_patches_height, num_patches_width)
-        rotary_pos_emb = rotary_pos_emb.to(self.class_pos_emb.device)
+        hpos_ids = (
+            torch.arange(num_patches_height, device=pixel_values.device).unsqueeze(1).expand(-1, num_patches_width)
+        )
+        wpos_ids = (
+            torch.arange(num_patches_width, device=pixel_values.device).unsqueeze(0).expand(num_patches_height, -1)
+        )
+        pos_ids = torch.stack([hpos_ids.flatten(), wpos_ids.flatten()], dim=-1)
+        rotary_pos_emb = self.vision_rotary_embedding(pos_ids)
         rotary_pos_emb = torch.cat([self.class_pos_emb, rotary_pos_emb], dim=0)
         emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
         position_embeddings = (emb.cos(), emb.sin())

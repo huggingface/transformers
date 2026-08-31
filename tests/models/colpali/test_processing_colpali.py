@@ -25,7 +25,7 @@ from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from transformers import ColPaliProcessor, GemmaTokenizer
+    from transformers import ColPaliProcessor, GemmaTokenizer, SiglipImageProcessor
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 
@@ -40,8 +40,9 @@ class ColPaliProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @classmethod
     def _setup_image_processor(cls):
-        image_processor_class = cls._get_component_class_from_processor("image_processor")
-        image_processor = image_processor_class.from_pretrained("google/siglip-so400m-patch14-384")
+        # Use 64×64 instead of the default 384×384 from google/siglip-so400m-patch14-384 to avoid
+        # large tensors. image_seq_length=0 matches the processor attribute so token-count tests pass.
+        image_processor = SiglipImageProcessor(size={"height": 64, "width": 64})
         image_processor.image_seq_length = 0
         return image_processor
 
@@ -85,7 +86,7 @@ class ColPaliProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # Assertions
         self.assertIn("pixel_values", batch_feature)
-        self.assertEqual(batch_feature["pixel_values"].shape, torch.Size([1, 3, 384, 384]))
+        self.assertEqual(batch_feature["pixel_values"].shape, torch.Size([1, 3, 64, 64]))
 
     @require_torch
     @require_vision

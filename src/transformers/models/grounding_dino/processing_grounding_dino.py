@@ -19,9 +19,7 @@ import warnings
 from typing import TYPE_CHECKING
 
 from ...image_transforms import center_to_corners_format
-from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
+from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from ...utils import TensorType, auto_docstring, is_torch_available
 
 
@@ -120,16 +118,10 @@ class GroundingDinoProcessor(ProcessorMixin):
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
 
-    @auto_docstring
-    def __call__(
-        self,
-        images: ImageInput | None = None,
-        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
-        **kwargs: Unpack[GroundingDinoProcessorKwargs],
-    ) -> BatchEncoding:
+    def prepare_inputs_layout(self, images=None, text=None, videos=None, audio=None, **kwargs):
         if text is not None:
             text = self._preprocess_input_text(text)
-        return super().__call__(images=images, text=text, **kwargs)
+        return super().prepare_inputs_layout(images=images, text=text, videos=videos, audio=audio, **kwargs)
 
     def _preprocess_input_text(self, text):
         """

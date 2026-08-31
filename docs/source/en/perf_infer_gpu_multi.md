@@ -8,12 +8,12 @@ http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
 
-# Tensor parallelism
+# Tensor parallelism for inference
 
 [Tensor parallelism](./perf_train_gpu_many#tensor-parallelism) slices a model layer into pieces so multiple hardware accelerators work on it simultaneously. This lets you run models that exceed a single GPU's memory capacity and achieve higher throughput. You'll need fast intra-node communication because GPUs exchange partial results at each layer.
 
@@ -40,21 +40,27 @@ This guide covers enabling tensor parallelism in Transformers and the available 
 
 ## Partitioning a model
 
-Transformers enables tensor parallelism when a model has a `tp_plan`. Choose from two partitioning methods.
+Transformers supports tensor parallelism for models with a predefined plan. Configure the number of tensor parallel devices with `tp_size` in [`DistributedConfig`].
 
-- Set `tp_plan="auto"` for an automatic plan based on the model's predefined configuration.
-- Define and pass a manual `tp_plan`.
+- Set `DistributedConfig(tp_size=N)` to use the model's predefined plan.
+- Define a manual `tp_plan` and pass it to [`DistributedConfig`] with `tp_size`.
+
+You can also set `tp_plan="auto"` in [`DistributedConfig`]. When `tp_size` is omitted, it is inferred from `WORLD_SIZE`. Passing `tp_plan` directly to [`~PreTrainedModel.from_pretrained`] is deprecated and will be removed in v5.18.
 
 <hfoptions id="tp_plan">
 <hfoption id="auto plan">
 
 ```py
-import os
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, DistributedConfig
 
 # model_id = "meta-llama/Llama-4-Scout-17B-16E-Instruct" # better to visualize all the possible strategies
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Meta-Llama-3-8B-Instruct" , dtype=torch.bfloat16, tp_plan="auto")
+distributed_config = DistributedConfig(tp_size=4)
+model = AutoModelForCausalLM.from_pretrained(
+    "meta-llama/Meta-Llama-3-8B-Instruct",
+    dtype=torch.bfloat16,
+    distributed_config=distributed_config,
+)
 print(model._tp_plan)
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Meta-Llama-3-8B-Instruct")
@@ -65,7 +71,7 @@ inputs = tokenizer(prompt, return_tensors="pt").input_ids.to(model.device)
 outputs = model(inputs)
 ```
 
-Launch the inference script with [torchrun](https://pytorch.org/docs/stable/elastic/run.html). Use 4 processes per GPU.
+Launch the inference script with [torchrun](https://pytorch.org/docs/stable/elastic/run.html). Use one process per GPU.
 
 ```bash
 torchrun --nproc-per-node 4 demo.py
@@ -74,12 +80,12 @@ torchrun --nproc-per-node 4 demo.py
 </hfoption>
 <hfoption id="manual plan">
 
-Define a tensor parallel plan for each layer in `tp_plan`. Pass it to [`~PreTrainedModel.from_pretrained`]. The example below uses column and row partitioning. See the [Partitioning strategies](#partitioning-strategies) section for other supported strategies.
+Define a tensor parallel plan for each layer in `tp_plan` and pass it through [`DistributedConfig`]. The example below uses column and row partitioning. See the [Partitioning strategies](#partitioning-strategies) section for other supported strategies.
 
 Manual partitioning requires a deep understanding of model architecture and strategy interactions. Poor partitioning choices create slow models that fail or produce incorrect results. The [Ultra-Scale Playbook](https://huggingface.co/spaces/nanotron/ultrascale-playbook?section=tensor_parallelism) explains partitioning strategies in detail.
 
 ```py
-from transformers import AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, DistributedConfig
 
 tp_plan = {
     "model.layers.*.self_attn.q_proj": "colwise",
@@ -89,7 +95,12 @@ tp_plan = {
     ...
 }
 
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Meta-Llama-3-8B-Instruct", dtype="auto", tp_plan=tp_plan)
+distributed_config = DistributedConfig(tp_size=4, tp_plan=tp_plan)
+model = AutoModelForCausalLM.from_pretrained(
+    "meta-llama/Meta-Llama-3-8B-Instruct",
+    dtype="auto",
+    distributed_config=distributed_config,
+)
 print(model.tp_plan)
 ```
 
@@ -98,7 +109,7 @@ print(model.tp_plan)
 
 ## Partitioning strategies
 
-The [`ParallelInterface`] class defines all partitioning strategies. It maps a string to the strategy implementation. You don't need to interact with this class directly since you set strategies with `tp_plan` in [`~PreTrainedModel.from_pretrained`]. It's useful for checking available strategies.
+The [`ParallelInterface`] class defines all partitioning strategies. It maps a string to the strategy implementation. You don't need to interact with this class directly since you set strategies with `tp_plan` in [`DistributedConfig`]. It's useful for checking available strategies.
 
 ```py
 class ParallelInterface(MutableMapping):
@@ -164,7 +175,7 @@ def forward(self, hidden_states):
 Local strategies (`local_colwise`, `local_rowwise`, `local_packed_rowwise`) don't use [DTensor](https://docs.pytorch.org/docs/stable/distributed.tensor.html) because it lacks support for some operations like [torch.chunk](https://docs.pytorch.org/docs/stable/generated/torch.chunk.html). Instead, local strategies use the basic [torch.Tensor](https://docs.pytorch.org/docs/stable/tensors.html) and perform distributed logic manually.
 
 <!--
-Readd this when I get the exact error message
+Re-add this when I get the exact error message
 > [!TIP]
 > If you are using a custom partitioning strategy, and it's not working with `... is not supported` error, try using the `local*` strategies to see if they work better.
 -->
@@ -232,6 +243,9 @@ The example below shows how to implement `ColwiseParallel` with this workflow.
 3. Register the strategy to [`ParallelInterface`] to enable it for use with `tp_plan`.
 
     ```python
+    import torch
+
+    from transformers import AutoModelForCausalLM, DistributedConfig
     from transformers.integrations.tensor_parallel import ParallelInterface
 
     ParallelInterface.register_strategy("colwise_custom", ColwiseParallel)
@@ -239,7 +253,12 @@ The example below shows how to implement `ColwiseParallel` with this workflow.
         "model.layers.*.self_attn.q_proj": "colwise_custom",
         ...
     }
-    model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, tp_plan=tp_plan)
+    distributed_config = DistributedConfig(tp_size=4, tp_plan=tp_plan)
+    model = AutoModelForCausalLM.from_pretrained(
+        model_id,
+        dtype=torch.bfloat16,
+        distributed_config=distributed_config,
+    )
     ```
 
 ## Benchmarks
@@ -261,10 +280,12 @@ Transformers implements tensor parallelism in a framework-agnostic way. It relie
 `DeviceMesh` creates a multi-dimensional grid of devices that communicate together. Different parallelization strategies require different communication patterns. Create a `DeviceMesh` with multiple sub-meshes to handle these patterns.
 
 ```python
+import torch
 from torch.distributed.device_mesh import init_device_mesh
 
-# Create a 1D mesh of 4 GPUs
-device_mesh = init_device_mesh("cuda", (4,), mesh_dim_names=["tp"])
+# Create a 1D mesh of 4 accelerators
+device_type = torch.accelerator.current_accelerator().type
+device_mesh = init_device_mesh(device_type, (4,), mesh_dim_names=["tp"])
 ```
 
 Most `torch.distributed` parallelization strategies apply to the mesh itself or its sub-mesh. The mesh automatically handles communication patterns.

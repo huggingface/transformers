@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -37,7 +37,7 @@ from transformers import AutoModelForCausalLM
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-0.6B",
     use_kernels=True,
-    device_map="cuda"
+    device_map="auto"
 )
 ```
 
@@ -69,7 +69,7 @@ from transformers import AutoModelForCausalLM
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-0.6B",
     attn_implementation="kernels-community/flash-attn2",
-    device_map="cuda"
+    device_map="auto"
 )
 ```
 
@@ -82,7 +82,7 @@ model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-0.6B",
     attn_implementation="random-repo/random-attention",
     allow_all_kernels=True,
-    device_map="cuda"
+    device_map="auto"
 )
 ```
 
@@ -98,13 +98,31 @@ from transformers import AutoModelForCausalLM
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-0.6B",
     attn_implementation="kernels-community/flash-attn2@v2.1.0",
-    device_map="cuda"
+    device_map="auto"
 )
 # use semantic versioning constraints
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-0.6B",
     attn_implementation="kernels-community/flash-attn2@>=2.0,<3.0",
-    device_map="cuda"
+    device_map="auto"
+)
+```
+
+### FlashAttention fallback
+
+Requesting `attn_implementation="flash_attention_2"`, `"flash_attention_3"`, or `"flash_attention_4"` falls back to the matching Hub kernel when the compiled `flash-attn` package isn't installed or your device isn't CUDA.
+
+> [!NOTE]
+> FlashAttention-4 support is in beta. APIs and behavior may change.
+
+```py
+from transformers import AutoModelForCausalLM
+
+# uses the compiled flash-attn package if present, otherwise the kernels-community/flash-attn2 Hub kernel
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen3-0.6B",
+    attn_implementation="flash_attention_2",
+    device_map="auto",
 )
 ```
 
@@ -119,7 +137,7 @@ from transformers import AutoModelForCausalLM
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-0.6B",
     use_kernels=True,
-    device_map="cuda"
+    device_map="auto"
 )
 
 # Switch to inference mode - uses inference-optimized kernels
@@ -168,7 +186,7 @@ model = AutoModelForCausalLM.from_pretrained(
     attn_implementation="kernels-community/flash-attn2:FlashAttention2",
     use_kernels=True,
     kernel_config=kernel_config,
-    device_map="cuda"
+    device_map="auto"
 )
 ```
 
@@ -208,7 +226,7 @@ model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-0.6B",
     use_kernels=True,
     kernel_config=kernel_config,
-    device_map="cuda",
+    device_map="auto",
 )
 ```
 
@@ -254,7 +272,7 @@ model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-0.6B",
     use_kernels=True,
     kernel_config=kernel_config,
-    device_map="cuda"
+    device_map="auto"
 )
 ```
 

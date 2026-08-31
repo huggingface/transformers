@@ -24,8 +24,6 @@ from typing import TYPE_CHECKING, Any, Protocol, TypeAlias
 if TYPE_CHECKING:
     import torch
 
-    from .cache_utils import Cache
-
 
 # A few helpful type aliases
 Level: TypeAlias = int
@@ -150,7 +148,7 @@ class GenerativePreTrainedModel(Protocol):
     hf_quantizer: Any
     encoder: Any
     hf_device_map: dict[str, Any]
-    _cache: Cache
+    _previous_max_cache_length: int
 
     generation_config: Any  # GenerationConfig
 

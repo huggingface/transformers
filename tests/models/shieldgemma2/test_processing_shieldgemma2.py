@@ -68,8 +68,9 @@ class ShieldGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @classmethod
     def _setup_image_processor(cls):
+        # Use 64×64 instead of the default 224×224 to avoid large tensors.
         image_processor_class = cls._get_component_class_from_processor("image_processor")
-        return image_processor_class.from_pretrained("google/siglip-so400m-patch14-384")
+        return image_processor_class(size={"height": 64, "width": 64})
 
     @classmethod
     def _setup_tokenizer(cls):

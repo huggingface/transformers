@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -35,13 +35,13 @@ from transformers.generation import ContinuousBatchingConfig, GenerationConfig
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-4B",
     attn_implementation="flash_attention_2",
-    device_map="cuda",
+    device_map="auto",
     dtype=torch.bfloat16,
 )
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-4B")
 
 prompts = [
-    "Whats up?",
+    "What's up?",
     "Name a cat breed.",
     "Write a detailed history of quantum mechanics.",
 ]
@@ -195,13 +195,17 @@ for chunk in manager.request_id_iter(request_id="streamed"):
 
 ## ContinuousBatchingConfig
 
-[`ContinuousBatchingConfig`] controls the KV cache, scheduling, CUDA graphs, memory usage, and more. Pass it alongside [`GenerationConfig`] to customize continuous batching.
+[`ContinuousBatchingConfig`] controls the KV cache, scheduling, CUDA graphs, memory usage, and more. Pass it to `generate_batch` or [`~ContinuousMixin.init_continuous_batching`] with the `continuous_batching_config` argument, separately from [`GenerationConfig`]. The two configs describe different things. [`GenerationConfig`] is model-centered and holds sampling and stopping parameters, while [`ContinuousBatchingConfig`] is hardware-centered and holds memory and scheduling parameters.
 
-By default, `num_blocks` and `max_batch_tokens` are inferred automatically from available GPU memory. Use the table below to help you pick the appropriate features.
+> [!WARNING]
+> Setting `continuous_batching_config` on a [`GenerationConfig`] is deprecated, emits a `FutureWarning`, and will be removed in v5.19.
+
+By default, `max_batch_tokens` is `8192`, bounded by available GPU memory and never below `256`, while `num_blocks` fills the remaining memory. Use the table below to help you pick the appropriate features.
 
 | Feature | Memory | Throughput | Latency |
 |---|---|---|---|
 | `max_memory_percent` / `block_size` | ✓ controls KV budget | | |
+| `max_batch_tokens` | ↑ larger input buffers | ✓ bigger prefill batches | ✓ TTFT when prefill-bound |
 | `scheduler` | | ✓ scheduling policy | ✓ TTFT |
 | CUDA graphs | ↑ graph storage | ✓ less dispatch overhead | ✓ |
 | Async batching | ↑ ~2× I/O buffers | ✓ overlaps CPU/GPU | |
@@ -229,6 +233,26 @@ outputs = model.generate_batch(
     generation_config=generation_config,
     continuous_batching_config=cb_config,
 )
+```
+
+### KV cache block size
+
+`block_size` sets how many tokens each KV cache block holds. It must be at least 4, and `generate_batch` raises a `ValueError` for any smaller value. The cache reserves two extra blocks for padding and sentinel bookkeeping, so very small blocks spend a large fraction of memory on this fixed overhead. Larger blocks cut bookkeeping but waste space when a sequence doesn't fill its last block. The default of 256 matches the `flash_attn_with_kvcache` decode kernel and works well in most cases. Keep `block_size` well above the minimum for an efficient cache.
+
+```py
+cb_config = ContinuousBatchingConfig(block_size=128)
+```
+
+### Prefill batch size
+
+`max_batch_tokens` sets the token budget for a single forward pass, the maximum number of query tokens the model processes at once. A larger budget packs more prompt tokens into each prefill, which raises prefill throughput and lowers time-to-first-token on prompt-heavy workloads. The scheduler splits prompts that exceed the budget across steps. See [chunked prefill](./continuous_batching_architecture#chunked-prefill) for how oversized prompts are handled.
+
+By default, `max_batch_tokens` is `8192`. The value is bounded by available GPU memory so the per-batch input tensors don't crowd out the KV cache, and it never falls below `256`. On a GPU with little free memory, the bound lowers it below `8192`.
+
+`max_batch_tokens` and `num_blocks` draw from the same memory budget, so they trade off against each other. A larger token budget allocates bigger input buffers and leaves fewer KV cache blocks for concurrent or long requests. Raise `max_batch_tokens` to push prefill throughput when you have more memory available, and lower it to free memory for more KV blocks or to avoid out-of-memory errors.
+
+```py
+cb_config = ContinuousBatchingConfig(max_batch_tokens=16384)
 ```
 
 ### Batch and scheduling limits
@@ -277,7 +301,6 @@ cb_config = ContinuousBatchingConfig(
     use_cuda_graph=True,
     q_padding_interval_size=64,
     kv_padding_interval_size=16384,
-    max_cached_graphs=32,
 )
 ```
 
@@ -338,6 +361,8 @@ The fast path relies on the `flash_attn_with_kvcache` kernel, which is available
 
 For any other combination, or when the kernel can't be imported, the manager falls back to the varlen path. It logs a warning only when you set `max_blocks_per_request` explicitly.
 
+Sliding window attention doesn't support block tables, so the cache forces `max_blocks_per_request` to `0` for any model with sliding window layers, regardless of the attention implementation. If you set a nonzero value, it's overridden and the cache logs `Sliding window attention groups detected: disabling block table support.`
+
 ### CPU offloading
 
 CPU offloading copies evicted KV cache blocks to a pre-allocated pinned CPU buffer when the GPU KV cache is full. After cache space becomes available, the manager copies the blocks back to the GPU and resumes the request without recomputing its prompt and generated tokens.
@@ -384,28 +409,37 @@ Continuous batching requires a paged attention backend. Set `attn_implementation
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-4B",
     attn_implementation="paged|flash_attention_2",
-    device_map="cuda",
+    device_map="auto",
     dtype=torch.bfloat16,
 )
 ```
 
+Also, continuous batching works much better with flash attention rather than eager or SDPA, mostly because Flash does not require an attention mask.
+Hence, when flash attention is available, if a model uses `attn_implementation="eager"` or `attn_implementation="sdpa"`, the attention implementation will be replaced by flash.
+This works if flash is accessible through the `flash_attn` package or the `kernels` package.  
+To avoid this, you may set `attn_implementation="paged|eager"` or `attn_implementation="paged|sdpa"`, and continuous batching will interpret this as the user 
+specifically requesting those implementations. This can be useful in the context of testing or in a setting where flash attention is hard to enable (although, thanks
+to the `kernels` package, this is becoming rare).
+
+
 ## Tensor parallelism
 
-For models too large to fit on a single GPU, shard the weights across devices with tensor parallelism. Load the model with `tp_plan="auto"` and continuous batching reads the tensor parallel size from the model to size the paged KV cache per shard. See [Tensor parallelism](./tensor_parallelism) for the list of supported architectures and how sharding works.
+For models too large to fit on a single GPU, shard the weights across devices with tensor parallelism. Set the number of devices with `DistributedConfig(tp_size=N)`. Continuous batching reads the tensor parallel size from the model to size the paged KV cache per shard. See [Tensor parallelism](./tensor_parallelism) for the list of supported architectures and how sharding works.
 
 ```py
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, DistributedConfig
 from transformers.generation import ContinuousBatchingConfig, GenerationConfig
 
+distributed_config = DistributedConfig(tp_size=4)
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-32B",
     attn_implementation="paged|flash_attention_2",
-    tp_plan="auto",
+    distributed_config=distributed_config,
 )
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-32B")
 
-inputs = [tokenizer.encode(p) for p in ["Whats up?", "Name a cat breed."]]
+inputs = [tokenizer.encode(p) for p in ["What's up?", "Name a cat breed."]]
 generation_config = GenerationConfig(max_new_tokens=64, eos_token_id=tokenizer.eos_token_id)
 
 outputs = model.generate_batch(inputs=inputs, generation_config=generation_config)
@@ -420,7 +454,7 @@ torchrun --nproc-per-node 4 cb_tp.py
 The tensor parallel size must divide the model's `num_key_value_heads` (check the model config). The paged cache raises an error at startup otherwise, so choose an appropriate `--nproc-per-node`.
 
 > [!WARNING]
-> Don't set `device_map` with `tp_plan`. The two conflict because `device_map` places whole modules on specific GPUs, while `tp_plan` shards those same parameters across all GPUs.
+> Don't set `device_map` with `distributed_config`. The two conflict because `device_map` places whole modules on specific GPUs, while tensor parallelism shards those same parameters across all GPUs.
 
 ## Sliding window attention
 
@@ -436,12 +470,12 @@ model = AutoModelForCausalLM.from_pretrained(
     "google/gemma-2-2b",
     config=config,
     attn_implementation="paged|sdpa",
-    device_map="cuda",
+    device_map="auto",
     dtype=torch.bfloat16,
 )
 ```
 
-Prefix caching is disabled automatically when sliding window attention is active.
+Prefix caching and the [decode fast path](#decode-fast-path) are disabled automatically when sliding window attention is active.
 
 ## Next steps
 

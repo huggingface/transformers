@@ -27,7 +27,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...image_processing_utils import BatchFeature
 from ...image_utils import PILImageResampling
 from ...masking_utils import create_causal_mask, create_masks_for_generate, create_sliding_window_causal_mask
-from ...modeling_outputs import ModelOutput
+from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
@@ -334,7 +334,7 @@ class Gemma4UnifiedProcessorKwargs(Gemma4ProcessorKwargs):
 
 
 class Gemma4UnifiedProcessor(Gemma4Processor):
-    def replace_audio_token(self, audio_inputs: dict, audio_idx: int) -> str:
+    def replace_audio_token(self, audio_inputs: dict, audio_idx: int, **kwargs) -> str:
         """Replace the audio placeholder with the correct number of audio tokens.
 
         Unlike standard Gemma4 which has a conformer audio encoder with two stride-2
@@ -428,11 +428,6 @@ class Gemma4UnifiedTextConfig(Gemma4TextConfig):
         Controls bidirectional attention behavior. When set to `"vision"`, vision tokens
         attend bidirectionally while text tokens use causal attention. When set to `"all"`,
         all tokens use bidirectional attention.
-    num_global_key_value_heads (`int`, *optional*):
-        Number of key-value heads for global (full) attention layers. If `None`, defaults
-        to `num_key_value_heads`.
-    global_head_dim (`int`, defaults to 512):
-        Dimension of each attention head in global (full) attention layers.
     attention_k_eq_v (`bool`, defaults to `False`):
         Whether keys and values share the same projection weights. When `True`, the key
         projection output is reused as the value projection.
@@ -543,17 +538,6 @@ class Gemma4UnifiedAudioModelOutput(ModelOutput):
     attention_mask: torch.BoolTensor | None = None
 
 
-@auto_docstring
-@dataclass
-class Gemma4UnifiedVisionModelOutput(ModelOutput):
-    r"""
-    pooler_output (`torch.FloatTensor` of shape `(batch_size, ..., hidden_size)`):
-        Last hidden state that went through the vision specific multimodal projectors.
-    """
-
-    pooler_output: torch.FloatTensor | None = None
-
-
 class Gemma4UnifiedTextModelOutputWithPast(Gemma4TextModelOutputWithPast):
     pass
 
@@ -588,7 +572,7 @@ class Gemma4UnifiedTextDecoderLayer(Gemma2DecoderLayer):
         self.layer_idx = layer_idx
         self.self_attn = Gemma4UnifiedTextAttention(config=config, layer_idx=layer_idx)
         self.mlp = Gemma4UnifiedTextMLP(config, layer_idx)
-        self.register_buffer("layer_scalar", torch.ones(1))
+        self.layer_scalar = nn.Buffer(torch.ones(1))
 
     def forward(
         self,
@@ -638,11 +622,8 @@ class Gemma4UnifiedPreTrainedModel(Gemma4PreTrainedModel):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, Gemma4UnifiedTextRotaryEmbedding):
             for layer_type, rope_init_fn in module.rope_init_fns.items():
-                rope_init_fn_kwargs = {"layer_type": layer_type}
-                if layer_type == "full_attention" and module.rope_type[layer_type] == "proportional":
-                    rope_init_fn_kwargs["head_dim_key"] = "global_head_dim"
-
-                curr_inv_freq, _ = rope_init_fn(module.config, **rope_init_fn_kwargs)
+                rope_config = module.config.per_layer_config[layer_type]
+                curr_inv_freq, _ = rope_init_fn(rope_config, layer_type=layer_type)
                 getattr(module, f"{layer_type}_inv_freq").copy_(curr_inv_freq)
                 getattr(module, f"{layer_type}_original_inv_freq").copy_(curr_inv_freq)
         elif isinstance(module, Gemma4UnifiedTextScaledWordEmbedding):
@@ -820,6 +801,8 @@ class Gemma4UnifiedForCausalLM(Gemma4ForCausalLM):
         )
 
 
+# Actually it should be a VisionModel(PreTrainedModel) and a separate proj module
+# Can't change it due to BC
 class Gemma4UnifiedVisionEmbedder(nn.Module):
     """Encoder-free vision embedder: projects raw merged pixel patches into LM space.
 
@@ -849,21 +832,22 @@ class Gemma4UnifiedVisionEmbedder(nn.Module):
         # Final multimodal projection (same as for audio): RMSNorm → Linear
         self.multimodal_embedder = Gemma4UnifiedMultimodalEmbedder(vision_config, text_config)
 
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor,
         image_position_ids: torch.Tensor,
-    ) -> torch.Tensor:
-        """
-        Args:
-            pixel_values: (batch, num_patches, model_patch_size²*3) — raw merged pixel patches.
-            image_position_ids: (batch, num_patches, 2) — integer XY positions (-1 for padding).
-
-        Returns:
-            (batch, num_patches, mm_embed_dim) — embedded features (including padding positions).
+        return_dict: bool = False,
+    ) -> BaseModelOutputWithPooling:
+        r"""
+        image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
+            The patch positions as (x, y) coordinates in the image. Padding patches are indicated by (-1, -1).
         """
         # Step 1: Patch embedding (LN → Dense → LN)
-        hidden_states = self.patch_ln1(pixel_values.to(self.patch_dense.weight.dtype))
+        if (target_dtype := self.patch_dense.weight.dtype).is_floating_point:
+            pixel_values = pixel_values.to(target_dtype)
+        hidden_states = self.patch_ln1(pixel_values)
         hidden_states = self.patch_dense(hidden_states)
         hidden_states = self.patch_ln2(hidden_states)
 
@@ -876,9 +860,12 @@ class Gemma4UnifiedVisionEmbedder(nn.Module):
         hidden_states = self.pos_norm(hidden_states)
 
         # Step 3: Base multimodal embedder (RMSNorm → Dense)
-        hidden_states = self.multimodal_embedder(hidden_states)
+        pooled_states = self.multimodal_embedder(hidden_states)
 
-        return hidden_states
+        return BaseModelOutputWithPooling(
+            last_hidden_state=hidden_states,
+            pooler_output=pooled_states,
+        )
 
 
 class Gemma4UnifiedMultimodalEmbedder(Gemma4MultimodalEmbedder):
@@ -894,7 +881,8 @@ class Gemma4UnifiedMultimodalEmbedder(Gemma4MultimodalEmbedder):
 
     def forward(self, inputs_embeds: torch.Tensor) -> torch.Tensor:
         # Additional dtype casting
-        inputs_embeds = inputs_embeds.to(self.embedding_projection.weight.dtype)
+        if (target_dtype := self.embedding_projection.weight.dtype).is_floating_point:
+            inputs_embeds = inputs_embeds.to(target_dtype)
         embs_normed = self.embedding_pre_projection_norm(inputs_embeds)
         return self.embedding_projection(embs_normed)
 
@@ -939,24 +927,24 @@ class Gemma4UnifiedModel(Gemma4Model):
         pixel_values: torch.FloatTensor,
         image_position_ids: torch.LongTensor | None = None,
         **kwargs,
-    ) -> Gemma4UnifiedVisionModelOutput:
+    ) -> BaseModelOutputWithPooling:
         r"""
         image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
             The patch positions as (x, y) coordinates in the image. Padding patches are indicated by (-1, -1).
         """
-        vision_outputs = self.embed_vision(pixel_values, image_position_ids)
+        vision_outputs = self.embed_vision(pixel_values, image_position_ids, **kwargs)
 
         # Strip padding patches before scattering into text sequence.
         # Padding patches have position_ids == -1 on both axes.
         # We only scatter non-padding patches into the placeholder token positions.
-        padding_mask = (image_position_ids == -1).all(dim=-1).to(vision_outputs.device)  # (batch, num_patches)
+        non_pad_mask = (image_position_ids != -1).all(dim=-1).to(vision_outputs.pooler_output.device)
 
         # Flatten valid patches: keep only non-padding patches across the batch
-        vision_outputs = vision_outputs[~padding_mask]  # (total_valid_patches, text_hidden_size)
-
-        return Gemma4UnifiedVisionModelOutput(
-            pooler_output=vision_outputs,
-        )
+        # The final output shape is (total_valid_patches, text_hidden_size)
+        pooler_output = vision_outputs.pooler_output[non_pad_mask]
+        split_sizes = non_pad_mask.sum(dim=-1).tolist()
+        vision_outputs.pooler_output = torch.split(pooler_output, split_sizes)
+        return vision_outputs
 
     @can_return_tuple
     @auto_docstring(custom_intro="Projects video frames into language model space via the unified pipeline.")
@@ -965,17 +953,24 @@ class Gemma4UnifiedModel(Gemma4Model):
         pixel_values_videos: torch.FloatTensor,
         video_position_ids: torch.LongTensor | None = None,
         **kwargs,
-    ) -> Gemma4UnifiedVisionModelOutput:
+    ) -> BaseModelOutputWithPooling:
         r"""
         video_position_ids (`torch.LongTensor` of shape `(num_videos, num_frames, max_patches, 2)`, *optional*):
             2D patch position coordinates from the video processor, with `(-1, -1)` indicating padding.
         """
-        # Flatten video frames: (num_videos, num_frames, ...) → (num_videos*num_frames, ...)
-        pixel_values_videos = pixel_values_videos.flatten(0, 1)
-        video_position_ids = video_position_ids.flatten(0, 1)
+        vision_outputs = self.embed_vision(pixel_values_videos.flatten(0, 1), video_position_ids.flatten(0, 1))
 
-        # Use the same unified pipeline as images
-        return self.get_image_features(pixel_values_videos, video_position_ids, **kwargs)
+        # Strip padding patches before scattering into text sequence.
+        non_pad_mask = (video_position_ids != -1).all(dim=-1).to(vision_outputs.pooler_output.device)
+
+        # Flatten valid patches: keep only non-padding patches across all frames
+        pooler_output = vision_outputs.pooler_output[
+            non_pad_mask.flatten(0, 1)
+        ]  # (total_valid_patches, text_hidden_size)
+
+        split_sizes = non_pad_mask.sum(dim=(-2, -1)).tolist()
+        vision_outputs.pooler_output = torch.split(pooler_output, split_sizes)
+        return vision_outputs
 
     @can_return_tuple
     @auto_docstring(
@@ -1025,7 +1020,7 @@ class Gemma4UnifiedModel(Gemma4Model):
         **kwargs: Unpack[TransformersKwargs],
     ) -> Gemma4UnifiedModelOutputWithPast:
         r"""
-        input_features_mask (`torch.FloatTensor]` of shape `(num_images, seq_length)`):
+        input_features_mask (`torch.FloatTensor` of shape `(num_images, seq_length)`):
             The attention mask for the input audio.
         image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
             2D patch position coordinates from the image processor, with `(-1, -1)` indicating padding.
@@ -1050,7 +1045,7 @@ class Gemma4UnifiedModel(Gemma4Model):
         # Merge text and images
         if pixel_values is not None:
             image_features = self.get_image_features(pixel_values, image_position_ids, return_dict=True).pooler_output
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
 
             # Confirm the number of soft tokens from the vision tower matches the number of slots in the embeddings.
             n_image_tokens = image_mask.sum()
@@ -1061,15 +1056,13 @@ class Gemma4UnifiedModel(Gemma4Model):
                 f" {image_features.shape[0]}",
             )
 
-            inputs_embeds = inputs_embeds.masked_scatter(
-                image_mask.to(inputs_embeds.device), image_features.to(inputs_embeds.device)
-            )
+            inputs_embeds = inputs_embeds.masked_scatter(image_mask.to(inputs_embeds.device), image_features)
 
         if pixel_values_videos is not None:
             video_features = self.get_video_features(
                 pixel_values_videos, video_position_ids, return_dict=True
             ).pooler_output
-            video_features = video_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            video_features = torch.cat(video_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
 
             # Confirm the number of soft tokens from the vision tower matches the number of slots in the embeddings.
             n_video_tokens = video_mask.sum()
@@ -1080,14 +1073,12 @@ class Gemma4UnifiedModel(Gemma4Model):
                 f" {video_features.shape[0]}",
             )
 
-            inputs_embeds = inputs_embeds.masked_scatter(
-                video_mask.to(inputs_embeds.device), video_features.to(inputs_embeds.device)
-            )
+            inputs_embeds = inputs_embeds.masked_scatter(video_mask.to(inputs_embeds.device), video_features)
 
         # Merge text and audio
         if input_features is not None and input_features_mask is not None:
             audio_output = self.get_audio_features(input_features, input_features_mask, return_dict=True)
-            audio_features = audio_output.pooler_output
+            audio_features = audio_output.pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             audio_mask_from_encoder = audio_output.attention_mask  # True = valid
 
             # Strip padding tokens: only keep real (non-padding) audio soft tokens.
@@ -1103,9 +1094,7 @@ class Gemma4UnifiedModel(Gemma4Model):
                 f" {audio_features.shape[0] * audio_features.shape[1]}",
             )
 
-            inputs_embeds = inputs_embeds.masked_scatter(
-                audio_mask.to(inputs_embeds.device), audio_features.to(inputs_embeds.device)
-            )
+            inputs_embeds = inputs_embeds.masked_scatter(audio_mask.to(inputs_embeds.device), audio_features)
 
         # It may already have been prepared by, e.g., `generate`
         if position_ids is None:
@@ -1178,7 +1167,7 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4ForConditionalGeneration):
         **kwargs: Unpack[TransformersKwargs],
     ) -> Gemma4UnifiedCausalLMOutputWithPast:
         r"""
-        input_features_mask (`torch.FloatTensor]` of shape `(num_images, seq_length)`):
+        input_features_mask (`torch.FloatTensor` of shape `(num_images, seq_length)`):
             The attention mask for the input audio.
         image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
             2D patch position coordinates from the image processor, with `(-1, -1)` indicating padding.
@@ -1236,45 +1225,11 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4ForConditionalGeneration):
     def set_per_layer_input_embeddings(self, value):
         raise AttributeError("PLE is not used")
 
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        inputs_embeds=None,
-        position_ids=None,
-        pixel_values=None,
-        pixel_values_videos=None,
-        input_features=None,
-        attention_mask=None,
-        input_features_mask=None,
-        token_type_ids=None,
-        use_cache=True,
-        logits_to_keep=None,
-        labels=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        # Overwritten -- custom `position_ids` and `pixel_values` handling
+    def prepare_inputs_for_generation(self, input_ids, use_cache=True, is_first_iteration=False, **kwargs):
         model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            use_cache=use_cache,
-            logits_to_keep=logits_to_keep,
-            token_type_ids=token_type_ids,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
+            input_ids, use_cache=use_cache, is_first_iteration=is_first_iteration, **kwargs
         )
-
-        # If we're in cached decoding stage, multimodal inputs are already cached and can be dropped
-        if is_first_iteration or not use_cache:
-            model_inputs["pixel_values"] = pixel_values
-            model_inputs["pixel_values_videos"] = pixel_values_videos
-            model_inputs["input_features"] = input_features
-            model_inputs["input_features_mask"] = input_features_mask
-        else:
+        if not (is_first_iteration or not use_cache):
             # Don't pass to not apply bidirectional mask on top
             model_inputs["mm_token_type_ids"] = None
 

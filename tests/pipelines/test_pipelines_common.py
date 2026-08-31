@@ -13,12 +13,14 @@
 # limitations under the License.
 
 import gc
+import itertools
 import logging
 import os
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import datasets
 from huggingface_hub import delete_repo, snapshot_download
@@ -54,6 +56,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import direct_transformers_import, is_torch_available
 from transformers.utils import logging as transformers_logging
+from transformers.utils.chat_template_utils import Chat
 
 
 sys.path.append(str(Path(__file__).parent.parent.parent / "utils"))
@@ -180,6 +183,83 @@ class CommonPipelineTest(unittest.TestCase):
             self.assertEqual(nested_simplify(out), {"label": "LABEL_0", "score": 0.504})
             results.append(out)
         self.assertEqual(len(results), 10)
+
+    @require_torch
+    def test_generator_input_not_materialized(self):
+        # Regression test for #47116: passing a generator must stream lazily rather than be pulled into a
+        # list up front, which OOMs on large/streaming inputs.
+        produced = 0
+
+        def data(n: int):
+            nonlocal produced
+            for _ in range(n):
+                produced += 1
+                yield "This is a test"
+
+        pipe = pipeline(model="hf-internal-testing/tiny-random-distilbert")
+
+        outputs = pipe(data(1000))
+        # A generator input returns a lazy iterator, not a fully materialized list of outputs.
+        self.assertNotIsInstance(outputs, list)
+        # Detecting chat-style inputs only peeks at the first item, so at most one element is consumed up
+        # front (the old code did `list(inputs)`, draining all 1000 here).
+        self.assertLessEqual(produced, 1)
+        # Pulling only the first few outputs must not drain the whole generator.
+        first = list(itertools.islice(outputs, 3))
+        self.assertEqual(len(first), 3)
+        self.assertLess(produced, 1000)
+
+    @require_torch
+    def test_chat_input_as_generator(self):
+        # A single chat can be passed as a generator of messages; it is a bounded conversation that gets
+        # detected and wrapped as a `Chat` (one input), matching the list-of-messages behavior. Downstream
+        # tokenization does not understand `Chat` for text-classification, so we short-circuit `run_single`
+        # and only assert on what it receives.
+        messages = [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "Hello!"},
+        ]
+
+        class _Stop(Exception):
+            pass
+
+        captured = {}
+
+        def spy(self, inputs, *args, **kwargs):
+            captured["inputs"] = inputs
+            raise _Stop
+
+        pipe = pipeline(model="hf-internal-testing/tiny-random-distilbert")
+        with mock.patch.object(Pipeline, "run_single", spy), self.assertRaises(_Stop):
+            pipe(m for m in messages)
+
+        self.assertIsInstance(captured["inputs"], Chat)
+        self.assertEqual(captured["inputs"].messages, messages)
+
+    @require_torch
+    def test_chats_as_generator_wrapped_lazily(self):
+        # A generator of chats (each a list of messages) is wrapped as `Chat` per item and streamed lazily,
+        # rather than being materialized to a list of `Chat` up front like the list-of-chats case.
+        chats = [
+            [{"role": "user", "content": "Hello!"}],
+            [{"role": "user", "content": "Goodbye!"}],
+        ]
+
+        captured = {}
+
+        def fake_get_iterator(self, inputs, *args, **kwargs):
+            captured["inputs"] = inputs
+            return iter([])
+
+        pipe = pipeline(model="hf-internal-testing/tiny-random-distilbert")
+        with mock.patch.object(Pipeline, "get_iterator", fake_get_iterator):
+            list(pipe(c for c in chats))
+
+        # `get_iterator` receives a still-unconsumed generator; draining it here yields one `Chat` per item.
+        streamed = list(captured["inputs"])
+        self.assertEqual(len(streamed), 2)
+        self.assertTrue(all(isinstance(chat, Chat) for chat in streamed))
+        self.assertEqual(streamed[0].messages, chats[0])
 
     @require_torch
     def test_unbatch_attentions_hidden_states(self):

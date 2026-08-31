@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -41,7 +41,7 @@ Ulysses sequence parallelism (SP) trains on very long sequences by splitting the
 
 ## Configure
 
-Sequence parallelism requires Accelerate v1.12.0 and at least 2 GPUs. Configure sequence parallelism in Accelerate's [`~accelerate.ParallelismConfig`] and pass it to [TrainingArguments.parallelism_config](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments.parallelism_config) or an [Accelerate config file](./accelerate#accelerate-config-file).
+Sequence parallelism requires Accelerate v1.12.0 and at least 2 GPUs. Configure sequence parallelism in Accelerate's [`~accelerate.ParallelismConfig`] and pass it to [`~TrainingArguments#parallelism_config`] or an [Accelerate config file](./accelerate#accelerate-config-file).
 
 <hfoptions id="launch">
 <hfoption id="parallelism_config">

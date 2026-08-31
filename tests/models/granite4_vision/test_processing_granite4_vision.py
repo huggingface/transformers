@@ -17,7 +17,7 @@ import unittest
 
 import torch
 
-from transformers import Granite4VisionProcessor
+from transformers import Granite4VisionProcessor, LlavaNextImageProcessor
 from transformers.testing_utils import require_vision
 
 from ...test_processing_common import ProcessorTesterMixin
@@ -26,21 +26,24 @@ from ...test_processing_common import ProcessorTesterMixin
 @require_vision
 class Granite4VisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Granite4VisionProcessor
+    # Tiny processor created with make_tiny_processor.py from "ibm-granite/granite-vision-4.1-4b"
+    tiny_model_id = "hf-internal-testing/tiny-processor-granite4_vision"
     # Image token expansion with downsample_rate="1/2" produces more tokens than the defaults
     image_text_kwargs_max_length = 300
     image_text_kwargs_override_max_length = 280
     image_unstructured_max_length = 260
 
     @classmethod
-    def _setup_tokenizer(cls):
-        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
-        tokenizer = tokenizer_class.from_pretrained("huggyllama/llama-7b")
-        tokenizer.add_special_tokens({"additional_special_tokens": ["<image>"]})
-        if not tokenizer.pad_token:
-            tokenizer.pad_token = "[PAD]"
-            if tokenizer.pad_token_id is None:
-                tokenizer.pad_token_id = 0
-        return tokenizer
+    def _setup_image_processor(cls):
+        # Must use LlavaNextImageProcessor (not CLIPImageProcessor from the tiny repo) because
+        # processing_granite4_vision.py calls iter(image_inputs["image_sizes"]), which requires
+        # the image_sizes key that only LlavaNextImageProcessor produces. Small sizes keep
+        # tensor allocations minimal.
+        return LlavaNextImageProcessor(
+            size={"shortest_edge": 64},
+            crop_size={"height": 64, "width": 64},
+            image_grid_pinpoints=[[64, 64]],
+        )
 
     @classmethod
     def _setup_test_attributes(cls, processor):
@@ -52,6 +55,7 @@ class Granite4VisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "chat_template": "{% for message in messages %}{% if message['role'] != 'system' %}{{ message['role'].upper() + ': '}}{% endif %}{# Render all images first #}{% for content in message['content'] | selectattr('type', 'equalto', 'image') %}{{ '<image>\n' }}{% endfor %}{# Render all text next #}{% if message['role'] != 'assistant' %}{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}{{ content['text'] + ' '}}{% endfor %}{% else %}{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}{% generation %}{{ content['text'] + ' '}}{% endgeneration %}{% endfor %}{% endif %}{% endfor %}{% if add_generation_prompt %}{{ 'ASSISTANT:' }}{% endif %}",
             "patch_size": 14,
             "vision_feature_select_strategy": "default",
+            "num_additional_image_tokens": 1,
             "downsample_rate": "1/2",
         }  # fmt: skip
 
@@ -97,10 +101,10 @@ class Granite4VisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         #   aspect: 316/503 = 0.628, 12/24 = 0.5 -> orig > current -> new_height = round(503*(12/316)) = 19
         #   padding = (24-19)//2 = 2, current_height = 24 - 4 = 20
         #   unpadded = 20*12 = 240, newline = 20
-        #   base = 12*12 + 0 = 144
-        #   total = 240 + 20 + 144 = 404
-        #   with "default" strategy: 404 - 1 = 403
-        expected_image_tokens = 403
+        #   base = 12*12 + num_additional_image_tokens(1) = 145
+        #   total = 240 + 20 + 145 = 405
+        #   with "default" strategy: 405 - 1 = 404
+        expected_image_tokens = 404
 
         messages = [
             {

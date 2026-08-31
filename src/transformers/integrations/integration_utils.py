@@ -1069,7 +1069,10 @@ class TrackioCallback(TrainerCallback):
     def on_train_end(self, args: TrainingArguments, state, control, model=None, processing_class=None, **kwargs):
         if not state.is_world_process_zero or not self._initialized:
             return
-        self._trackio.finish()
+        try:
+            self._trackio.finish()
+        finally:
+            self._initialized = False
         if self._space_id:
             try:
                 self._freeze_space(args, model)

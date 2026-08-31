@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -72,7 +72,7 @@ We encourage you to login to your Hugging Face account so you can upload and sha
 
 ```py
 >>> from huggingface_hub import notebook_login
->>> notebook_login()
+>>> notebook_login()  # doctest: +SKIP
 ```
 
 ## Load AudioCaps dataset
@@ -100,11 +100,9 @@ Split the dataset into train and test sets using `.take()` and `.skip()` for str
 Take a look at an example:
 
 ```py
->>> next(iter(train_dataset))
-{'audio': {'array': array([...], dtype=float32),
-  'path': '...',
-  'sampling_rate': 16000},
- 'caption': 'A man speaks followed by footsteps'}
+>>> next(iter(train_dataset))  # doctest: +ELLIPSIS
+{'audiocap_id': 91139, 'youtube_id': 'r1nicOVtvkQ', 'start_time': 130, 'caption': 'A woman talks nearby as water pours', 'audio_length': 480000, 'audio': <datasets.features._torchcodec.AudioDecoder object at ...>}
+
 ```
 
 The dataset contains:
@@ -141,7 +139,7 @@ Create a data collator that processes audio-text pairs into the format expected 
 ...                     "role": "user",
 ...                     "content": [
 ...                         {"type": "text", "text": "Describe the audio."},
-...                         {"type": "audio", "audio": feature["audio"]["array"]},
+...                         {"type": "audio", "audio": feature["audio"].get_all_samples().data},
 ...                     ],
 ...                 },
 ...                 {
@@ -211,6 +209,8 @@ Load the Audio Flamingo model. We use `bfloat16` precision and `device_map="auto
 ... )
 >>> model = get_peft_model(model, lora_config)
 >>> model.print_trainable_parameters()
+trainable params: 44,302,336 || all params: 8,311,517,696 || trainable%: 0.5330
+
 ```
 
 > [!TIP]
@@ -255,7 +255,7 @@ Pass the training arguments to [`Trainer`] along with the model, datasets, and d
 ...     eval_dataset=eval_dataset,
 ...     data_collator=data_collator,
 ... )
->>> trainer.train()
+>>> trainer.train()  # doctest: +SKIP
 ```
 
 Save the LoRA adapter and processor:
@@ -263,12 +263,14 @@ Save the LoRA adapter and processor:
 ```py
 >>> trainer.save_model()
 >>> processor.save_pretrained("audio-flamingo-3-hf-lora-finetuned")
+['audio-flamingo-3-hf-lora-finetuned/processor_config.json']
+
 ```
 
 Once training is completed, share your model to the Hub:
 
 ```py
->>> trainer.push_to_hub()
+>>> trainer.push_to_hub()  # doctest: +SKIP
 ```
 
 ## Inference
@@ -297,6 +299,8 @@ Load an audio sample for inference:
 >>> dataset = load_dataset("OpenSound/AudioCaps", split="test", streaming=True)
 >>> dataset = dataset.cast_column("audio", Audio(sampling_rate=16000))
 >>> sample = next(iter(dataset))
+>>> audio = sample["audio"]
+>>> audio_array = audio.get_all_samples().data if hasattr(audio, "get_all_samples") else audio["array"]
 ```
 
 Prepare the input with a conversation format:
@@ -307,7 +311,7 @@ Prepare the input with a conversation format:
 ...         "role": "user",
 ...         "content": [
 ...             {"type": "text", "text": "Describe the audio."},
-...             {"type": "audio", "audio": sample["audio"]["array"]},
+...             {"type": "audio", "audio": audio_array},
 ...         ],
 ...     }
 ... ]
@@ -316,7 +320,7 @@ Prepare the input with a conversation format:
 ...     tokenize=True,
 ...     add_generation_prompt=True,
 ...     return_dict=True,
-... )
+... ).to(device=model.device, dtype=model.dtype)
 ```
 
 Generate a response:
@@ -333,19 +337,17 @@ Generate a response:
 
 ## Pipeline
 
-You can also use the [`Pipeline`] API for quick inference. First, merge the LoRA adapter with the base model, then create a pipeline:
+You can also use the [`Pipeline`] API for quick inference. Pass the fine-tuned PEFT model directly to the pipeline:
 
 ```py
 >>> from transformers import pipeline
->>> # Merge LoRA adapter for pipeline use
->>> merged_model = model.merge_and_unload()
 >>> pipe = pipeline(
 ...     "audio-text-to-text",
-...     model=merged_model,
+...     model=model,
 ...     processor=processor,
 ... )
 >>> result = pipe(
-...     sample["audio"]["array"],
+...     audio_array,
 ...     generate_kwargs={"max_new_tokens": 100},
 ... )
 >>> print(result[0]["generated_text"])

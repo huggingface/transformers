@@ -314,12 +314,13 @@ class SiglipTokenizer(SentencePieceBackend):
 
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
+        all_special_tokens = set(self.all_special_tokens)
         current_sub_tokens = []
         out_string = ""
         prev_is_special = False
         for token in tokens:
             # make sure that special tokens are not decoded using sentencepiece model
-            if token in self.all_special_tokens:
+            if token in all_special_tokens:
                 if not prev_is_special:
                     out_string += " "
                 out_string += self.sp_model.decode(current_sub_tokens) + token

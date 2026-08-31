@@ -100,15 +100,16 @@ class Glm4vMoeTextConfig(Glm4MoeConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
     ignore_keys_at_rope_validation = {"mrope_section"}
+    attribute_map = {
+        "num_local_experts": "n_routed_experts",
+    }
 
     vocab_size: int = 151424
     max_position_embeddings: int = 65536
     attention_bias: bool = True
     router_aux_loss_coef: float = 0.0001
     use_qk_norm = AttributeError()
-
-    def __post_init__(self, **kwargs):
-        super().__post_init__(self, **kwargs)
+    num_mtp_layers = AttributeError()
 
 
 @auto_docstring(checkpoint="zai-org/GLM-4.5V")

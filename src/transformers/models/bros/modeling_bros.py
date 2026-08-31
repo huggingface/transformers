@@ -75,7 +75,7 @@ class BrosPositionalEmbedding1D(nn.Module):
         inv_freq = 1 / (
             10000 ** (torch.arange(0.0, self.dim_bbox_sinusoid_emb_1d, 2.0) / self.dim_bbox_sinusoid_emb_1d)
         )
-        self.register_buffer("inv_freq", inv_freq)
+        self.inv_freq = nn.Buffer(inv_freq)
 
     def forward(self, pos_seq: torch.Tensor) -> torch.Tensor:
         seq_size = pos_seq.size()
@@ -132,9 +132,8 @@ class BrosTextEmbeddings(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
-        self.register_buffer(
-            "token_type_ids",
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)))
+        self.token_type_ids = nn.Buffer(
             torch.zeros(
                 self.position_ids.size(),
                 dtype=torch.long,
@@ -811,7 +810,9 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
         inv_attention_mask = 1 - attention_mask
         batch_size, max_seq_length = inv_attention_mask.shape
         device = inv_attention_mask.device
-        invalid_token_mask = torch.cat([inv_attention_mask, torch.zeros([batch_size, 1]).to(device)], axis=1).bool()
+        invalid_token_mask = torch.cat(
+            [inv_attention_mask, torch.zeros([batch_size, 1], dtype=inv_attention_mask.dtype, device=device)], axis=1
+        ).bool()
         subsequent_token_logits = subsequent_token_logits.masked_fill(
             invalid_token_mask[:, None, :], torch.finfo(subsequent_token_logits.dtype).min
         )

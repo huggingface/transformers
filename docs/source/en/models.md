@@ -21,7 +21,7 @@ Transformers provides many pretrained models that are ready to use with a single
 Call [`~PreTrainedModel.from_pretrained`] to download and load a model's weights and configuration stored on the Hugging Face [Hub](https://hf.co/models).
 
 > [!TIP]
-> The [`~PreTrainedModel.from_pretrained`] method loads weights stored in the [safetensors](https://hf.co/docs/safetensors/index) file format if they're available. Traditionally, PyTorch model weights are serialized with the [pickle](https://docs.python.org/3/library/pickle.html) utility which is known to be unsecure. Safetensor files are more secure and faster to load.
+> The [`~PreTrainedModel.from_pretrained`] method loads weights stored in the [safetensors](https://hf.co/docs/safetensors/index) file format if they're available. Traditionally, PyTorch model weights are serialized with the [pickle](https://docs.python.org/3/library/pickle.html) utility which is known to be insecure. Safetensor files are more secure and faster to load.
 
 ```py
 from transformers import AutoModelForCausalLM
@@ -213,19 +213,20 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-Set every device budget to `0` to offload the entire model to disk. `max_memory` only overrides the devices you name, so cap each GPU and the CPU to push every weight to disk.
+Set `max_memory={}` to specify that no gpu or cpu memory is available and to force offloading the entire model to disk.
 
 ```py
 model = AutoModelForCausalLM.from_pretrained(
     "google/gemma-7b",
     device_map="auto",
-    max_memory={0: 0, "cpu": 0},
+    max_memory={},
     offload_folder="./offload",
 )
 ```
 
 > [!NOTE]
 > Disk offloading trades memory for speed. Reading weights from disk on every forward pass is slower than reading from CPU or GPU memory.
+> Fully disk offloading requires `accelerate>1.14.0`
 
 ### Model data type
 

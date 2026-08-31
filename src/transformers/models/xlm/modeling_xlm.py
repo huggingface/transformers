@@ -611,20 +611,13 @@ class XLMPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
+        super()._init_weights(module)
         if isinstance(module, nn.Embedding):
             if self.config is not None and self.config.embed_init_std is not None:
                 init.normal_(module.weight, mean=0, std=self.config.embed_init_std)
             # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
             if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
                 init.zeros_(module.weight[module.padding_idx])
-        if isinstance(module, nn.Linear):
-            if self.config is not None and self.config.init_std is not None:
-                init.normal_(module.weight, mean=0, std=self.config.init_std)
-                if module.bias is not None:
-                    init.constant_(module.bias, 0.0)
-        if isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
         if isinstance(module, XLMModel):
             if self.config.sinusoidal_embeddings:
                 init.copy_(
@@ -732,9 +725,7 @@ class XLMModel(XLMPreTrainedModel):
             self.layer_norm2.append(nn.LayerNorm(self.dim, eps=config.layer_norm_eps))
 
         # Initialize weights and apply final processing
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False)
         self.post_init()
 
     def get_input_embeddings(self):

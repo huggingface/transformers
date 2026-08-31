@@ -21,7 +21,11 @@ from transformers.image_utils import load_image
 from transformers.testing_utils import require_torch, require_torch_accelerator, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import (
+    ImageProcessingTester,
+    ImageProcessingTestMixin,
+    load_coco_image,
+)
 from ...test_processing_common import url_to_local_path
 
 
@@ -32,7 +36,7 @@ if is_vision_available():
     from PIL import Image
 
 
-class Pix2StructImageProcessingTester:
+class Pix2StructImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -69,17 +73,6 @@ class Pix2StructImageProcessingTester:
         raw_image = load_image(img_url).convert("RGB")
         return raw_image
 
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
-
 
 @require_torch
 @require_vision
@@ -99,16 +92,7 @@ class Pix2StructImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        import io
-
-        import httpx
-        from PIL import Image
-
-        dummy_image = Image.open(
-            io.BytesIO(
-                httpx.get("http://images.cocodataset.org/val2017/000000039769.jpg", follow_redirects=True).content
-            )
-        )
+        dummy_image = load_coco_image("000000039769.jpg")
 
         # Create processors for each backend
         encodings = {}

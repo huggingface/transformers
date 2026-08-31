@@ -32,6 +32,8 @@ if is_torch_available():
 class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = InternVLProcessor
     videos_input_name = "pixel_values"
+    # Tiny processor created with make_tiny_processor.py from "OpenGVLab/InternVL3-1B-hf"
+    tiny_model_id = "hf-internal-testing/tiny-processor-internvl"
 
     @classmethod
     def _setup_image_processor(cls):
@@ -61,16 +63,6 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             image_std=[0.229, 0.224, 0.225],
             do_convert_rgb=True,
         )
-
-    @classmethod
-    def _setup_tokenizer(cls):
-        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
-        return tokenizer_class.from_pretrained("OpenGVLab/InternVL3-1B-hf", padding_side="left")
-
-    @classmethod
-    def _setup_test_attributes(cls, processor):
-        cls.image_token = processor.image_token
-        cls.video_token = processor.video_token
 
     @unittest.skip("InternVL requires text")
     def test_video_processor_defaults(self):
@@ -106,13 +98,13 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                         {
                             "type": "image",
                             "url": url_to_local_path(
-                                "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
+                                "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/statue_of_liberty_64x64.jpg"
                             ),
                         },
                         {
                             "type": "image",
                             "url": url_to_local_path(
-                                "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg"
+                                "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/golden_gate_64x64.jpg"
                             ),
                         },
                         {"type": "text", "text": "What are the differences between these two images?"},
@@ -126,7 +118,7 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                         {
                             "type": "video",
                             "url": url_to_local_path(
-                                "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"
+                                "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/tennis_320x240.mp4"
                             ),
                         },
                         {"type": "text", "text": "What type of shot is the man performing?"},
@@ -139,7 +131,9 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                     "content": [
                         {
                             "type": "image",
-                            "url": url_to_local_path("https://llava-vl.github.io/static/images/view.jpg"),
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/view_64x64.jpg"
+                            ),
                         },
                         {"type": "text", "text": "Write a haiku for this image"},
                     ],
@@ -204,7 +198,7 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                         {
                             "type": "video",
                             "url": url_to_local_path(
-                                "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/tiny_video.mp4"
+                                "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/tiny_video_320x240.mp4"
                             ),
                         },
                         {"type": "text", "text": "What is shown in this video?"},
@@ -375,15 +369,16 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "<video>\nAre there any cyan objects that enter the scene?\nno",
             "<video>\nAre there any red spheres that enter the scene?\nno",
         ]
-        frames = torch.ones((4, 448, 448, 3), dtype=torch.float32)
+        frames = torch.ones((4, 20, 20, 3), dtype=torch.float32)
         videos = [frames, frames]
 
         processor = self.get_processor()
         inputs = processor(
             text=texts[:batch_size],
             return_tensors="pt",
+            padding=True,
             videos=videos[:batch_size],
-            videos_kwargs={"size": (448, 448)},
+            videos_kwargs={"size": (20, 20)},
         )
 
         actual_num_frames = inputs.pixel_values.shape[0]

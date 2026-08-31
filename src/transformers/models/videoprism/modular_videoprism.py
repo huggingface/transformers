@@ -413,10 +413,10 @@ class VideoPrismTextEmbeddings(nn.Module):
         self.config = config
         embed_dim = config.hidden_size
         self.token_embedding = nn.Embedding(config.vocab_size, embed_dim)
-        self.register_buffer(
-            "position_embedding", create_sinusoidal_positions(config.max_position_embeddings, config.hidden_size)
+        self.position_embedding = nn.Buffer(
+            create_sinusoidal_positions(config.max_position_embeddings, config.hidden_size)
         )
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)))
         self.cls_emb = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         self.scaling = config.hidden_size**0.5
 
@@ -485,8 +485,10 @@ class VideoPrismAttention(VivitAttention):
 
 class VideoPrismLayerNorm(nn.LayerNorm):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        # a custom layernorm formula with gamma -> gamma + 1 is used in this model
-        return F.layer_norm(hidden_states, self.normalized_shape, self.weight + 1, self.bias, self.eps)
+        # a custom layernorm formula with gamma -> gamma + 1 is used in this model. ``+ 1.0`` (not
+        # ``+ 1``) keeps the constant as a float scalar — Python-int addition routes through a
+        # ``prim.device`` graph node that ``run_decompositions`` rejects during ONNX export.
+        return F.layer_norm(hidden_states, self.normalized_shape, self.weight + 1.0, self.bias, self.eps)
 
 
 class VideoPrismLayer(VivitLayer):
