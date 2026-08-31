@@ -119,6 +119,11 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "exported prefill returns only `logits` while eager surfaces the populated KV cache. "
             "Same shape as Voxtral. TODO: align the generate-decomposition path."
         ),
+        "VibeVoiceForConditionalGeneration": (
+            "Generation uses two forward calls with different input shapes (prefill + noise scheduler); "
+            "`decompose_prefill_decode` can't capture the full generate path reliably, causing flaky "
+            "CUDAGraphs / export failures. TODO: handle in a follow-up PR."
+        ),
     },
     # Every backend, dynamic-shape only.
     "dynamic": {
