@@ -894,7 +894,8 @@ class GenerationMixin(ContinuousMixin):
                     if key != "kwargs" and key in model_kwargs
                 }
                 keys_to_pop.update(encoder_kwargs.keys())
-                if encoder_kwargs:
+                # all models use only two arg names to define the main input (only fuyu uses `image_patches`)
+                if any(key in encoder_kwargs for key in ["pixel_values", "pixel_values_videos", "image_patches"]):
                     encoder_kwargs["return_dict"] = True
                     model_kwargs["mm_encoder_outputs"][modality] = encoder_fn(**encoder_kwargs)
 
