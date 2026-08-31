@@ -717,9 +717,8 @@ class Cosmos3EdgeTextModel(Cosmos3EdgePreTrainedModel):
         return BaseModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=past_key_values)
 
 
+@auto_docstring(custom_intro="Packed variable-resolution SigLIP2 vision tower used by Cosmos3 Edge.")
 class Cosmos3EdgeVisionModel(Cosmos3EdgePreTrainedModel):
-    """Packed variable-resolution SigLIP2 vision tower used by Cosmos3 Edge."""
-
     config_class = Cosmos3EdgeVisionConfig
     main_input_name = "pixel_values"
     input_modalities = ("image", "video")
@@ -1175,6 +1174,7 @@ class Cosmos3EdgeCausalLMOutputWithPast(CausalLMOutputWithPast):
     image_hidden_states: torch.FloatTensor | None = None
 
 
+@auto_docstring
 class Cosmos3EdgeForConditionalGeneration(Cosmos3EdgePreTrainedModel, GenerationMixin):
     _tied_weights_keys = {}
     config_class = Cosmos3EdgeConfig

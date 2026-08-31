@@ -16,8 +16,6 @@
 import copy
 import unittest
 
-from parameterized import parameterized
-
 from transformers import (
     CohereCompassConfig,
     CohereCompassTextConfig,
@@ -61,14 +59,16 @@ class CohereCompassTextModelTester(CausalLMModelTester):
         kwargs.setdefault("num_attention_heads", 4)
         kwargs.setdefault("num_key_value_heads", 2)
         kwargs.setdefault("max_position_embeddings", 64)
-        kwargs.setdefault("layer_types", ["full_attention", "full_attention"])
+        kwargs.setdefault("layer_types", ["full_attention", "sliding_attention"])
         kwargs.setdefault(
             "rope_parameters",
             {
                 "full_attention": {
                     "rope_type": "default",
                     "rope_theta": 10_000,
-                }
+                    "mrope_section": [1, 1, 2],
+                },  # RoPE layers
+                "sliding_attention": None,  # NoPE layers
             },
         )
         super().__init__(parent, **kwargs)
@@ -77,15 +77,6 @@ class CohereCompassTextModelTester(CausalLMModelTester):
 @require_torch
 class CohereCompassTextModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = CohereCompassTextModelTester
-
-    @unittest.skip("TODO: compass configures RoPE per layer type")
-    def test_model_rope_scaling_frequencies(self):
-        pass
-
-    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
-    @unittest.skip("TODO: compass configures RoPE per layer type")
-    def test_model_rope_scaling_from_config(self):
-        pass
 
     def test_text_config_is_causal(self):
         config = self.model_tester.get_config().to_dict()
@@ -193,6 +184,7 @@ class CohereCompassModelTester(VLMModelTester):
         kwargs.setdefault("spatial_merge_size", 2)
         kwargs.setdefault("temporal_patch_size", 2)
         kwargs.setdefault("deepstack_visual_indexes", [0])
+        kwargs.setdefault("layer_types", ["full_attention", "sliding_attention"])
         kwargs.setdefault(
             "rope_parameters",
             {
@@ -200,7 +192,8 @@ class CohereCompassModelTester(VLMModelTester):
                     "rope_type": "default",
                     "rope_theta": 10_000,
                     "mrope_section": [1, 1, 2],
-                }
+                },
+                "sliding_attention": None,
             },
         )
         super().__init__(parent, **kwargs)
@@ -380,12 +373,3 @@ class CohereCompassModelTest(VLMModelTest, unittest.TestCase):
                 mm_token_type_ids=mm_token_type_ids,
             )
         self.assertEqual(output.logits.shape[:2], input_ids.shape)
-
-    @unittest.skip("TODO: compass configures RoPE per layer type")
-    def test_model_rope_scaling_frequencies(self):
-        pass
-
-    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
-    @unittest.skip("TODO: compass configures RoPE per layer type")
-    def test_model_rope_scaling_from_config(self):
-        pass

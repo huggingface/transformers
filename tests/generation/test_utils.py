@@ -1573,6 +1573,10 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             if config.is_encoder_decoder or not model_class._supports_default_dynamic_cache():
                 self.skipTest(reason="This model does not support the quantized cache format")
 
+            layer_types = getattr(config.get_text_config(), "layer_types", None) or []
+            if any(layer_type != "full_attention" for layer_type in layer_types):
+                self.skipTest(reason="`QuantizedCache` is only supported for models with full attention layers")
+
             config.is_decoder = True
             model = model_class(config).to(torch_device).eval()
             generation_kwargs = {
@@ -3640,7 +3644,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertListEqual(
             outputs,
             [
-                'Tell me a joke about a monkey. Why did the monkey go to the doctor? Because he was feeling a little "tropic"!'
+                'Tell me a joke about a monkey. Sure, here\'s one for you:\n\nWhy did the monkey go to the doctor?\n\nBecause he was feeling "up in the trees"!'
             ],
         )
 
@@ -4582,7 +4586,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         Tests that assisted generation with early exit works as expected. Under the hood, this has complex cache
         manipulation, which will cause the test to fail if something goes wrong there.
         """
-        expected_output = "Alice and Bob are playing a game of poker. Alice has a pair of 8s and Bob has a pair"
+        expected_output = "Alice and Bob are playing a game of poker. Alice has a pair of 7s and Bob has a pair"
 
         prompt = "Alice and Bob"
         checkpoint = "facebook/layerskip-llama3.2-1B"

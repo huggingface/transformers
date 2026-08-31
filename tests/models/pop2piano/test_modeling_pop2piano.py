@@ -427,6 +427,30 @@ class Pop2PianoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    def test_tie_word_embeddings(self):
+        # Forced to True, see https://github.com/huggingface/transformers/pull/47620
+        config = Pop2PianoConfig(vocab_size=99, d_model=16, d_ff=32, d_kv=8, num_layers=2, num_heads=2)
+        self.assertTrue(config.tie_word_embeddings)
+        self.assertTrue(config.scale_decoder_outputs)
+
+        config = Pop2PianoConfig(
+            vocab_size=99, d_model=16, d_ff=32, d_kv=8, num_layers=2, num_heads=2, tie_word_embeddings=False
+        )
+        self.assertTrue(config.tie_word_embeddings)
+        self.assertFalse(config.scale_decoder_outputs)
+
+        model = Pop2PianoForConditionalGeneration(config)
+        self.assertEqual(
+            len(
+                {
+                    model.shared.weight.data_ptr(),
+                    model.encoder.embed_tokens.weight.data_ptr(),
+                    model.decoder.embed_tokens.weight.data_ptr(),
+                }
+            ),
+            1,
+        )
+
     def test_shift_right(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_prepare_lm_labels_via_shift_left(*config_and_inputs)
@@ -437,9 +461,9 @@ class Pop2PianoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     def test_model_v1_1(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        # check that gated gelu feed forward and different word embeddings work
+        # check that gated gelu feed forward and unscaled decoder outputs work
         config = config_and_inputs[0]
-        config.tie_word_embeddings = False
+        config.scale_decoder_outputs = False
         config.feed_forward_proj = "gated-gelu"
         self.model_tester.create_and_check_model(config, *config_and_inputs[1:])
 

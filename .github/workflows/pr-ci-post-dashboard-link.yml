@@ -57,4 +57,5 @@ jobs:
         if: steps.download.outcome == 'success'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python3 utils/post_mlinter_review.py
+          MLINTER_FINDINGS_DIR: ${{ runner.temp }}/mlinter-findings
+        run: python3 utils/post_mlinter_review.py "$MLINTER_FINDINGS_DIR"

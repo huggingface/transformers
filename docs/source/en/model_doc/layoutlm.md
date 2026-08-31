@@ -123,11 +123,6 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 [[autodoc]] LayoutLMTokenizer
     - __call__
 
-## LayoutLMTokenizerFast
-
-[[autodoc]] LayoutLMTokenizerFast
-    - __call__
-
 ## LayoutLMModel
 
 [[autodoc]] LayoutLMModel

@@ -78,6 +78,7 @@ _deps = [
     "codecarbon>=2.8.1",
     "datasets>=2.15.0",  # We need either this pin or pyarrow<21.0.0
     "deepspeed>=0.9.3",
+    "diffusers==0.35.2",  # Needed for VibeVoice TTS integration tests
     "dill<0.3.5",
     "evaluate>=0.4.6",
     "faiss-cpu",
@@ -125,7 +126,7 @@ _deps = [
     "ruff==0.14.10",
     # When bumping `transformers-mlinter`, sync repo-local rule overrides from
     # `utils/rules.toml` back into the released package.
-    "transformers-mlinter==0.1.2",
+    "transformers-mlinter==0.1.5",
     "ty==0.0.20",
     # `sacrebleu` not used in `transformers`. However, it is needed in several tests, when a test calls
     # `evaluate.load("sacrebleu")`. This metric is used in the examples that we use to test the `Trainer` with, in the
@@ -223,6 +224,7 @@ extras["testing"] = (
         "parameterized",
         "psutil",
         "dill",
+        "diffusers",  # Needed for VibeVoice TTS integration tests
         "evaluate",
         "rouge-score",
         "nltk",

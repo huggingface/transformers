@@ -61,6 +61,10 @@ from ..minimax_m3_vl.modeling_minimax_m3_vl import (
     MiniMaxM3VLVisionAttention,
     MiniMaxM3VLVisionMLP,
 )
+
+# Unused here, but load-bearing: `Step3p7VisionAttention` inherits `MiniMaxM3VLVisionAttention`, so
+# without this import the converter would pull MiniMax's 3-axis `apply_rotary_pos_emb_vision` into the
+# generated file. This tower is 2-D (t=1, spatial_merge_size=1), so it needs Qwen2-VL's 2-axis one.
 from ..qwen2_vl.modeling_qwen2_vl import apply_rotary_pos_emb_vision  # noqa: F401
 from ..siglip.configuration_siglip import SiglipVisionConfig
 from ..siglip.modeling_siglip import SiglipVisionEmbeddings
@@ -673,6 +677,7 @@ class Step3p7VisionEmbeddings(SiglipVisionEmbeddings):
         return patch_pos_embed
 
 
+@auto_docstring
 class Step3p7PreTrainedModel(PreTrainedModel):
     config: Step3p7Config
     base_model_prefix = "model"
@@ -689,9 +694,7 @@ class Step3p7PreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Step3p7VisionEmbeddings):
-            module.register_buffer(
-                "position_ids", torch.arange(module.num_positions).expand((1, -1)), persistent=False
-            )
+            init.copy_(module.position_ids, torch.arange(module.num_positions).expand((1, -1)))
         elif isinstance(module, Step3p7VisionEncoderLayer):
             nn.init.constant_(module.lambda_1, module.config.layer_scale_init_value)
             nn.init.constant_(module.lambda_2, module.config.layer_scale_init_value)
@@ -718,6 +721,7 @@ class Step3p7PreTrainedModel(PreTrainedModel):
             init.zeros_(module.weight)
 
 
+@auto_docstring
 class Step3p7VisionModel(Step3p7PreTrainedModel):
     """Vision encoder: patch embeddings → 2-D RoPE transformer layers → conv downsampler.
 
@@ -779,10 +783,12 @@ class Step3p7RMSNorm(MiniMaxM3VLRMSNorm):
 
 
 class Step3p7MLP(DeepseekV4MLP):
-    def __init__(self, config, intermediate_size=None, swiglu_limit=None):
+    def __init__(self, config, layer_idx, is_shared_expert=False):
         super().__init__(config)
-        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
-        self.limit = float("inf") if swiglu_limit is None else swiglu_limit
+        self.intermediate_size = config.share_expert_dim if is_shared_expert else config.intermediate_size
+        # CODEPATH: stepfun-ai/Step-3.7-Flash clamps layers 43-44 (bound 16) via `swiglu_limits_shared`;
+        # a `0.0` entry or no list at all means "no clamp", hence the `or float("inf")`.
+        self.limit = (config.swiglu_limits_shared[layer_idx] if config.swiglu_limits_shared else 0) or float("inf")
 
     def forward(self, x):
         gate = self.act_fn(self.gate_proj(x)).clamp(max=self.limit)
@@ -813,13 +819,12 @@ class Step3p7TopKRouter(MiniMaxM3VLTopKRouter):
 class Step3p7SparseMoeBlock(MiniMaxM3VLSparseMoeBlock):
     def __init__(self, config, layer_idx):
         nn.Module.__init__(self)
+        # CODEPATH: stepfun-ai/Step-3.7-Flash clamps the routed experts on layers 43-44 (bound 7) via
+        # `swiglu_limits`; a `0.0` entry or no list at all means "no clamp".
         swiglu_limit = (config.swiglu_limits[layer_idx] or None) if config.swiglu_limits else None
-        swiglu_limit_shared = (config.swiglu_limits_shared[layer_idx] or None) if config.swiglu_limits_shared else None
         self.gate = Step3p7TopKRouter(config)
         self.experts = Step3p7Experts(config, swiglu_limit=swiglu_limit)
-        self.shared_experts = Step3p7MLP(
-            config, intermediate_size=config.share_expert_dim, swiglu_limit=swiglu_limit_shared
-        )
+        self.shared_experts = Step3p7MLP(config, layer_idx, is_shared_expert=True)
         self.routed_scaling_factor = config.moe_router_scaling_factor
 
 
@@ -886,12 +891,10 @@ class Step3p7DecoderLayer(LagunaDecoderLayer):
         self.self_attn.config = config
         self.attention_type = config.layer_types[layer_idx]
 
-        swiglu_limit_shared = (config.swiglu_limits_shared[layer_idx] or None) if config.swiglu_limits_shared else None
-        self.mlp = (
-            Step3p7SparseMoeBlock(config, layer_idx)
-            if config.mlp_layer_types[layer_idx] == "sparse"
-            else Step3p7MLP(config, swiglu_limit=swiglu_limit_shared)
-        )
+        # CODEPATH: on stepfun-ai/Step-3.7-Flash `moe_layers_enum` marks layers 3-44 `"sparse"` and 0-2
+        # `"dense"`; a config without it is all-sparse and never builds the dense branch.
+        mlp_class = Step3p7SparseMoeBlock if config.mlp_layer_types[layer_idx] == "sparse" else Step3p7MLP
+        self.mlp = mlp_class(config, layer_idx)
 
         self.input_layernorm = Step3p7RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Step3p7RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -910,6 +913,9 @@ class Step3p7TextModel(Gemma3TextModel):
         self.layers = nn.ModuleList([Step3p7DecoderLayer(config, i) for i in range(config.num_hidden_layers)])
         self.norm = Step3p7RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Step3p7RotaryEmbedding(config=config)
+        # CODEPATH: stepfun-ai/Step-3.7-Flash sets `num_nextn_predict_layers=3`, so its weights carry
+        # three trailing MTP layers that this branch filters out of the plain (non-MTP) load. A
+        # checkpoint without MTP layers leaves the field at 0 and skips it.
         if config.num_nextn_predict_layers:
             # Checkpoints append `num_nextn_predict_layers` MTP layers; ignore them as unexpected keys
             # on regular load. Matches loosely on `layers.<N>.` (not anchored to this model's module
@@ -980,6 +986,7 @@ class Step3p7ForConditionalGeneration(DeepseekOcr2ForConditionalGeneration):
     config: Step3p7Config
 
 
+@auto_docstring
 class Step3p7Processor(ProcessorMixin):
     """Processor for Step-3.7-Flash.
 
