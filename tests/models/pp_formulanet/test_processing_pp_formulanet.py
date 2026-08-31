@@ -30,7 +30,7 @@ class PPFormulaNetProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_model_input_names(self):
         pass
 
-    def maybe_skip_typed_test_for_modality(self, modality: str, attributes: list, processor):
+    def maybe_skip_typed_test_for_modality(self, modality: str, attributes: list):
         self.skipTest("PPFormulaNet does not need input_ids")
 
     @unittest.skip(reason="PPFormulaNet does not need input_ids")

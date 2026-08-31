@@ -139,7 +139,7 @@ class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
     def _test_unstructured_kwargs_batched(self, modality):
         attributes = self.processor_class.get_attributes()
         processor = self.get_processor()
-        self.maybe_skip_typed_test_for_modality(modality, attributes, processor)
+        self.maybe_skip_typed_test_for_modality(modality, attributes)
 
         input_str = self.prepare_text_inputs(batch_size=2, modalities="image")
         modal_input = self._prepare_modality_input(modality, batch_size=2)
