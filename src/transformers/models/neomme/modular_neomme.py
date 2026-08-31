@@ -554,7 +554,7 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor | None = None,
+        input_ids: torch.LongTensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         pixel_values: torch.Tensor | None = None,
@@ -568,8 +568,6 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
             Flattened image patches returned by [`NeoMMEProcessor`]. The model places these patches at image
             placeholders in `input_ids`.
         """
-        if input_ids is None:
-            raise ValueError("NeoMME requires `input_ids` because value embeddings are token-ID lookups.")
         if "inputs_embeds" in kwargs:
             raise ValueError("NeoMME does not support `inputs_embeds`; pass `input_ids` instead.")
 

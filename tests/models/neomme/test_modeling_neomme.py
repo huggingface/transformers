@@ -498,8 +498,6 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
                 model(input_ids=input_ids, pixel_values=pixel_values[:, :-1])
 
             inputs_embeds = model.get_input_embeddings()(input_ids)
-            with self.assertRaisesRegex(ValueError, "requires `input_ids`"):
-                model(inputs_embeds=inputs_embeds, pixel_values=pixel_values)
             with self.assertRaisesRegex(ValueError, "does not support `inputs_embeds`"):
                 model(input_ids=input_ids, inputs_embeds=inputs_embeds, pixel_values=pixel_values)
 
