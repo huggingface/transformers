@@ -66,8 +66,7 @@ class CanaryPositionalEmbedding(nn.Module):
         log_timescale_increment = np.log(self.max_timescale) / (self.channels // 2 - 1)
         inv_timescales = torch.exp(-log_timescale_increment * torch.arange(self.channels // 2).float())
         scaled_time = torch.arange(self.length)[:, np.newaxis] * inv_timescales[np.newaxis, :]
-        emb = torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=1)
-        return emb.to(torch.get_default_dtype())
+        return torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=1)
 
     def forward(self, position_ids: torch.Tensor) -> torch.Tensor:
         return self.positional_embedding[position_ids] / math.sqrt(self.channels)
@@ -371,7 +370,6 @@ class CanaryDecoder(CanaryPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
-    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -410,7 +408,7 @@ class CanaryDecoder(CanaryPreTrainedModel):
 
         # Fixed sinusoidal position embedding added to token embeddings, then layernorm
         pos_emb = self.pos_emb(position_ids.squeeze(0))
-        pos_emb = pos_emb.to(inputs_embeds.device)
+        pos_emb = pos_emb.to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
         inputs_embeds = self.embedding_layernorm(inputs_embeds + pos_emb)
 
         causal_mask = create_causal_mask(
