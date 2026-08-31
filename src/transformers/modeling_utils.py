@@ -402,7 +402,7 @@ def _find_disjoint(tensors: list[set[str]], state_dict: dict[str, torch.Tensor])
                 filtered_tensors.append({name})
             else:
                 filtered_tensors[-1].add(name)
-            last_stop = stop
+            last_stop = max(last_stop, stop)
     disjoint_tensors = []
     shared_tensors = []
     for tensors in filtered_tensors:
@@ -4512,7 +4512,15 @@ class PreTrainedModel(
                         (d.type if isinstance(d, torch.device) else d) == "mps"
                         for d in load_config.device_map.values()
                     )
-                    backend, device = ("pread", "mps") if is_mps else ("mmap", "cpu")
+                    # Use pread on MPS (mmap incompatible) and Windows (mmap reserves
+                    # copy-on-write commit charge for the entire file, exhausting memory
+                    # for large multi-shard checkpoints).
+                    if is_mps:
+                        backend, device = "pread", "mps"
+                    elif sys.platform == "win32":
+                        backend, device = "pread", "cpu"
+                    else:
+                        backend, device = "mmap", "cpu"
                     file_pointer = safe_open(file, framework="pt", device=device, backend=backend)
                     all_pointer.add(file_pointer)
                     for k in file_pointer.keys():
