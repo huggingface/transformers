@@ -17,13 +17,15 @@ from __future__ import annotations
 
 from typing import Literal
 
-import numpy as np
-
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_flat_list_of_images
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
-from ...utils import auto_docstring
+from ...utils import auto_docstring, is_numpy_array, is_torch_available
+
+
+if is_torch_available():
+    import torch
 
 
 @auto_docstring
@@ -167,47 +169,55 @@ class NeoMMEProcessor(ProcessorMixin):
         is stored in `processor` since it requires knowledge about special MM tokens
         """
         input_ids_list = input_ids.tolist() if hasattr(input_ids, "tolist") else input_ids
-        attention_mask = attention_mask.tolist() if hasattr(attention_mask, "tolist") else attention_mask
-        image_grid_hw = image_grid_hw.tolist() if hasattr(image_grid_hw, "tolist") else image_grid_hw
-
         if len({len(input_ids_row) for input_ids_row in input_ids_list}) != 1:
             raise ValueError("NeoMME image batches require padding to a common sequence length.")
-        position_ids = np.zeros((2, len(input_ids_list), len(input_ids_list[0])), dtype=np.int64)
+
+        input_ids_is_tensor = isinstance(input_ids, torch.Tensor)
+        input_ids_is_numpy = is_numpy_array(input_ids)
+        input_ids = torch.as_tensor(input_ids)
+        attention_mask = torch.as_tensor(attention_mask, device=input_ids.device)
+        image_grid_hw = torch.as_tensor(image_grid_hw, device=input_ids.device)
+        # position_ids: (axes, batch, seq_len)
+        position_ids = torch.zeros((2, *input_ids.shape), dtype=torch.long, device=input_ids.device)
         image_index = 0
-        for batch_index, (input_ids_row, attention_mask_row) in enumerate(zip(input_ids_list, attention_mask)):
-            non_padded_indices = np.flatnonzero(attention_mask_row)
-            non_padded_ids = [input_ids_row[index] for index in non_padded_indices]
+
+        for batch_index, (input_ids_row, attention_mask_row) in enumerate(zip(input_ids, attention_mask)):
+            non_padded_indices = torch.nonzero(attention_mask_row, as_tuple=True)[0]
+            non_padded_ids = input_ids_row[non_padded_indices]
             if self.image_token_id in non_padded_ids and image_index < len(image_grid_hw):
-                grid_height, grid_width = image_grid_hw[image_index]
+                grid_height, grid_width = image_grid_hw[image_index].tolist()
                 image_index += 1
-                expected_input_ids = [
-                    self.tokenizer.document_token_id,
-                    self.image_token_id,
-                    *([self.image_token_id] * grid_width + [self.tokenizer.row_token_id]) * grid_height,
-                ]
-                if non_padded_ids != expected_input_ids:
+                expected_input_ids = torch.tensor(
+                    [
+                        self.tokenizer.document_token_id,
+                        self.image_token_id,
+                        *([self.image_token_id] * grid_width + [self.tokenizer.row_token_id]) * grid_height,
+                    ],
+                    device=input_ids.device,
+                )
+                if not torch.equal(non_padded_ids, expected_input_ids):
                     raise ValueError("NeoMME image inputs contain an invalid or truncated token layout.")
-                sample_position_ids = self._image_positions(grid_height, grid_width)
+                sample_position_ids = self._image_positions(grid_height, grid_width, device=input_ids.device)
             else:
-                text_position_ids = np.arange(len(non_padded_indices), dtype=np.int64)
-                sample_position_ids = np.stack((text_position_ids, text_position_ids), axis=-1)
-            position_ids[:, batch_index, non_padded_indices] = sample_position_ids.T
+                text_position_ids = torch.arange(len(non_padded_indices), device=input_ids.device)
+                sample_position_ids = torch.stack((text_position_ids, text_position_ids), dim=-1)
+            # sample_position_ids: (seq_len, axes)
+            position_ids[:, batch_index, non_padded_indices] = sample_position_ids.mT
 
         if image_index != len(image_grid_hw):
             raise ValueError(f"Got {image_index} image prompts for {len(image_grid_hw)} images.")
 
-        if hasattr(input_ids, "new_tensor"):
-            return input_ids.new_tensor(position_ids)
-        return position_ids if isinstance(input_ids, np.ndarray) else position_ids.tolist()
+        if input_ids_is_tensor:
+            return position_ids
+        return position_ids.numpy() if input_ids_is_numpy else position_ids.tolist()
 
     @staticmethod
-    def _image_positions(grid_height: int, grid_width: int) -> np.ndarray:
+    def _image_positions(grid_height: int, grid_width: int, device: torch.device | None = None) -> torch.Tensor:
         """Return positions for `<doc> <img>` followed by the patch grid and row markers."""
-        position_ids = np.empty((2 + grid_height * (grid_width + 1), 2), dtype=np.int64)
-        position_ids[0] = (0, 0)
-        position_ids[1] = (1, 1)
-        rows = np.broadcast_to(np.arange(grid_height)[:, None], (grid_height, grid_width + 1))
-        columns = np.broadcast_to(np.arange(grid_width + 1)[None, :], (grid_height, grid_width + 1))
+        position_ids = torch.empty((2 + grid_height * (grid_width + 1), 2), dtype=torch.long, device=device)
+        position_ids[:2] = torch.arange(2, device=device).unsqueeze(-1)
+        rows = torch.arange(grid_height, device=device).unsqueeze(-1).expand(-1, grid_width + 1)
+        columns = torch.arange(grid_width + 1, device=device).unsqueeze(0).expand(grid_height, -1)
         position_ids[2:, 0] = 2 + rows.ravel()
         position_ids[2:, 1] = 2 + columns.ravel()
         return position_ids
