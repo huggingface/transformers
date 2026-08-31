@@ -578,20 +578,23 @@ class ContinuousBatchProcessor:
         self.inputs_and_outputs.retrieve_device_outputs()
 
     @torch.no_grad()
-    def release_memory(self, offload: bool = True) -> int:
+    def release_memory(self) -> int:
         """Free the KV cache, returning the number of bytes released.
 
         Generation has to be paused: nothing may step the engine until `restore_memory` is called. The memory goes back
         to the caching allocator, so whatever else runs on this device meanwhile, a training step for instance, can use
         it.
 
-        With `offload`, the live requests' cache is copied to the CPU pool and copied back when they are scheduled
-        again, and generation continues exactly as if it had never stopped, token for token. Without it, their cache is
-        discarded and they re-prefill instead, which needs no CPU pool and no bandwidth, but pays for the prefill
-        again, and the continuation is no longer bitwise what an uninterrupted run would have produced: recomputing a
-        prefix in one forward does not give the same floating point result as having decoded it token by token, which
-        is enough to move a greedy pick. Discarding is the better trade when the cache is about to be worthless anyway,
-        for instance when the weights change while generation is paused.
+        The live requests' cache is discarded and they re-prefill when they are scheduled again. That pays for the
+        prefill a second time, and the continuation is not bitwise what an uninterrupted run would have produced, since
+        recomputing a prefix in one forward does not give the same floating point result as having decoded it token by
+        token, which is enough to move a greedy pick. It is the right trade anyway where this is used, because the
+        weights change while generation is paused and the cache is about to be worth little.
+
+        Copying the live cache to the CPU pool instead, so that generation could resume token for token, is not
+        offered: it returns the blocks byte for byte and still produces garbage as soon as anything else uses the
+        memory in between, which is exactly the case this exists for. See `exp/repro_kv_offload.py` in the zero-sync
+        work for a one-GPU reproduction.
         """
         # Async batching keeps a batch in flight while the next one is prepared, and offloading every request from
         # under it corrupts the ones that were mid-generation. Settling the pending pair first is not enough, so this
@@ -602,10 +605,7 @@ class ContinuousBatchProcessor:
                 "release_memory() is not supported with async batching. Pass use_async_batching=False; cuda graphs "
                 "can stay on, since they are recaptured when needed."
             )
-        if offload:
-            self.offloading_manager.offload_all_active()
-        else:
-            self.offloading_manager.discard_all_active()
+        self.offloading_manager.discard_all_active()
         # The offloading manager holds block-shaped views of the cache, and a view keeps its base alive, so they have
         # to go before the tensors can actually be freed.
         self.offloading_manager.drop_gpu_views()
@@ -754,12 +754,12 @@ class ContinuousBatchingManager:
         self.batch_processor.warmup(self.model)
         self.warmed_up = True
 
-    def release_memory(self, offload: bool = True) -> int:
+    def release_memory(self) -> int:
         """Free the KV cache so something else on this device can use the memory, returning the bytes released.
 
         Only for callers that drive the engine themselves, with `step`, and can guarantee nothing steps it until
-        `restore_memory`. Live requests are offloaded first, so no generation is lost: they resume from the CPU pool,
-        or re-prefill if they did not fit in it.
+        `restore_memory`. Live requests keep their place in the queue and re-prefill when they are scheduled again, so
+        no generation is lost, but the prefill is paid for a second time.
 
         ```python
         freed = manager.release_memory()
@@ -769,7 +769,7 @@ class ContinuousBatchingManager:
         """
         if self.batch_processor is None:
             return 0
-        return self.batch_processor.release_memory(offload=offload)
+        return self.batch_processor.release_memory()
 
     def restore_memory(self) -> None:
         """Reallocate the KV cache freed by `release_memory` so generation can run again."""

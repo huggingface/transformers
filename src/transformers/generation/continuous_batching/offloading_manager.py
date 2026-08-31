@@ -229,25 +229,6 @@ class OffloadingManager:
             )
         return len(victims)
 
-    def offload_all_active(self) -> int:
-        """Offload every active request, so that no live request holds a block any more.
-
-        Used when the caller wants to release the cache memory itself rather than make room inside it: with generation
-        paused, a training step can have the memory back. Requests that do not fit in the CPU pool are soft reset and
-        re-prefilled when they are scheduled again, exactly as under memory pressure.
-        """
-        victims = list(self.scheduler.active_requests.values())
-        if not victims:
-            return 0
-        # Only a decoding request can be resumed from its offloaded blocks: one still working through its prefill has
-        # KV that does not correspond to a whole number of processed tokens, and restoring it yields garbage. Those are
-        # soft reset instead, which `_requeue_offloaded` does for anything not in the offloaded set.
-        decoding = [state for state in victims if state._status == RequestStatus.DECODING]
-        cpu_offloaded = self._offload_to_cpu(decoding) if decoding else set()
-        self._requeue_offloaded(victims, cpu_offloaded)
-        logger.info(f"Offloaded all {len(victims)} active requests ({len(cpu_offloaded)} to CPU) to release the cache")
-        return len(victims)
-
     def discard_all_active(self) -> int:
         """Drop every active request's cache instead of offloading it.
 
