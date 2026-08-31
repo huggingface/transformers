@@ -82,6 +82,7 @@ class Glm5NextTextRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
+@use_kernel_forward_from_hub("SwiGLUMLP")
 class Glm5NextTextMLP(nn.Module):
     def __init__(self, config, intermediate_size=None):
         super().__init__()

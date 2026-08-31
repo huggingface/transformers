@@ -118,6 +118,7 @@ class VibeVoiceDiffusionHeadMLP(nn.Module):
         return hidden_states
 
 
+@use_kernel_forward_from_hub("SwiGLUMLP")
 class VibeVoiceMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
