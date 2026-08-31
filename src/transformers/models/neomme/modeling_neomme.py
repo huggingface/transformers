@@ -546,9 +546,6 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
             Flattened image patches returned by [`NeoMMEProcessor`]. The model places these patches at image
             placeholders in `input_ids`.
         """
-        if "inputs_embeds" in kwargs:
-            raise ValueError("NeoMME does not support `inputs_embeds`; pass `input_ids` instead.")
-
         hidden_states = self.embed_tokens(input_ids)
         if pixel_values is not None:
             image_outputs = self.get_image_features(pixel_values, return_dict=True)

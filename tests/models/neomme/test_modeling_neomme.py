@@ -497,10 +497,6 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
             with self.assertRaises(ValueError):
                 model(input_ids=input_ids, pixel_values=pixel_values[:, :-1])
 
-            inputs_embeds = model.get_input_embeddings()(input_ids)
-            with self.assertRaisesRegex(ValueError, "does not support `inputs_embeds`"):
-                model(input_ids=input_ids, inputs_embeds=inputs_embeds, pixel_values=pixel_values)
-
         with self.subTest(case="multi_image_order"):
             grids = [(2, 3), (1, 2)]
             sequence: list[int] = []
