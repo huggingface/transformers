@@ -258,6 +258,58 @@ class GenerationConfigTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 GenerationConfig(assistant_ensemble_weight=invalid).validate()
 
+    def test_validate_pad_token_id_in_eos_token_id(self):
+        """
+        `validate` should warn when `pad_token_id` is in a multi-token `eos_token_id` list, as this can cause
+        `generate` to stop immediately. The single-eos case (pad == eos as int) is the common default for many
+        models and is not flagged. See https://github.com/huggingface/transformers/issues/48016
+        """
+        logger = transformers_logging.get_logger("transformers.generation.configuration_utils")
+
+        # pad_token_id in eos_token_id list -> warning
+        logger.warning_once.cache_clear()
+        logger.info_once.cache_clear()
+        with LoggingLevel(logging.INFO):
+            with CaptureLogger(logger) as captured_logs:
+                GenerationConfig(pad_token_id=12, eos_token_id=[2, 11, 12])
+        self.assertIn("pad_token_id", captured_logs.out)
+        self.assertIn("eos_token_id", captured_logs.out)
+
+        # pad_token_id equals a single int eos_token_id -> no warning (common default)
+        logger.warning_once.cache_clear()
+        logger.info_once.cache_clear()
+        with LoggingLevel(logging.INFO):
+            with CaptureLogger(logger) as captured_logs:
+                GenerationConfig(pad_token_id=2, eos_token_id=2)
+        self.assertEqual(len(captured_logs.out), 0)
+
+        # pad_token_id NOT in eos_token_id -> no warning
+        logger.warning_once.cache_clear()
+        logger.info_once.cache_clear()
+        with CaptureLogger(logger) as captured_logs:
+            GenerationConfig(pad_token_id=1, eos_token_id=[2, 11, 12])
+        self.assertEqual(len(captured_logs.out), 0)
+
+        # pad_token_id is None -> no warning
+        logger.warning_once.cache_clear()
+        logger.info_once.cache_clear()
+        with CaptureLogger(logger) as captured_logs:
+            GenerationConfig(eos_token_id=[2, 11, 12])
+        self.assertEqual(len(captured_logs.out), 0)
+
+        # eos_token_id is None -> no warning
+        logger.warning_once.cache_clear()
+        logger.info_once.cache_clear()
+        with CaptureLogger(logger) as captured_logs:
+            GenerationConfig(pad_token_id=12)
+        self.assertEqual(len(captured_logs.out), 0)
+
+        # strict=True does NOT raise — this is a warning-only check so that
+        # save_pretrained (which calls validate(strict=True)) works for models
+        # that ship with pad_token_id in eos_token_id.
+        generation_config = GenerationConfig(pad_token_id=12, eos_token_id=[2, 11, 12])
+        generation_config.validate(strict=True)  # should not raise
+
     def test_assistant_ensemble_weight_default_and_round_trip(self):
         """Default is `None`; values round-trip through `to_dict`/`from_dict`."""
         self.assertIsNone(GenerationConfig().assistant_ensemble_weight)
