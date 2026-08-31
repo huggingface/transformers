@@ -13,9 +13,7 @@
 # limitations under the License.
 """Tests for Fun-ASR-Nano model."""
 
-import tempfile
 import unittest
-from unittest.mock import patch
 
 from transformers import FunAsrNanoConfig, FunAsrNanoEncoderConfig, Qwen3Config
 from transformers.testing_utils import require_torch, require_torch_gpu, slow
@@ -26,38 +24,8 @@ from ...test_modeling_common import is_torch_available, torch_device
 
 if is_torch_available():
     import torch
-    from safetensors.torch import load_file
 
-    from transformers import AutoProcessor, FunAsrNanoEncoder, FunAsrNanoForConditionalGeneration, FunAsrNanoModel
-    from transformers.conversion_mapping import get_checkpoint_conversion_mapping
-    from transformers.modeling_layers import GradientCheckpointingLayer
-    from transformers.models.audioflamingo3.modeling_audioflamingo3 import (
-        AudioFlamingo3ForConditionalGeneration,
-        AudioFlamingo3Model,
-        AudioFlamingo3PreTrainedModel,
-    )
-    from transformers.models.fun_asr_nano import (
-        convert_fun_asr_nano_to_hf,
-        modeling_fun_asr_nano,
-        modular_fun_asr_nano,
-    )
-    from transformers.models.fun_asr_nano.convert_fun_asr_nano_to_hf import convert_key
-    from transformers.models.fun_asr_nano.modular_fun_asr_nano import (
-        FunAsrNanoAdaptorLayer,
-        FunAsrNanoAttention,
-        FunAsrNanoEncoderLayer,
-    )
-    from transformers.models.fun_asr_nano.modular_fun_asr_nano import (
-        FunAsrNanoForConditionalGeneration as ModularFunAsrNanoForConditionalGeneration,
-    )
-    from transformers.models.fun_asr_nano.modular_fun_asr_nano import (
-        FunAsrNanoModel as ModularFunAsrNanoModel,
-    )
-    from transformers.models.fun_asr_nano.modular_fun_asr_nano import (
-        FunAsrNanoPreTrainedModel as ModularFunAsrNanoPreTrainedModel,
-    )
-    from transformers.models.qwen3_asr.modeling_qwen3_asr import Qwen3ASRAudioEncoderLayer
-    from transformers.models.whisper.modeling_whisper import WhisperEncoderLayer
+    from transformers import AutoProcessor, FunAsrNanoForConditionalGeneration, FunAsrNanoModel
 
 
 class FunAsrNanoModelTester(ALMModelTester):
@@ -97,9 +65,6 @@ class FunAsrNanoModelTester(ALMModelTester):
         kwargs.setdefault("dropout", 0.0)
         kwargs.setdefault("attention_dropout", 0.0)
         kwargs.setdefault("activation_dropout", 0.0)
-        kwargs.setdefault("adaptor_intermediate_size", 64)
-        kwargs.setdefault("adaptor_num_hidden_layers", 1)
-        kwargs.setdefault("adaptor_num_attention_heads", 4)
 
         super().__init__(parent, **kwargs)
 
@@ -129,314 +94,22 @@ class FunAsrNanoForConditionalGenerationModelTest(ALMModelTest, unittest.TestCas
     """Model tester for `FunAsrNanoForConditionalGeneration`."""
 
     model_tester_class = FunAsrNanoModelTester
-    pipeline_model_mapping = {}
+    all_model_classes = (FunAsrNanoForConditionalGeneration, FunAsrNanoModel) if is_torch_available() else ()
+    pipeline_model_mapping = {"audio-text-to-text": FunAsrNanoForConditionalGeneration} if is_torch_available() else {}
     model_split_percents = [0.5, 0.83, 0.9]
 
-    # The adaptor pools/flattens the audio embeddings, so `get_audio_features().pooler_output` is not the standard
-    # `(batch, seq, hidden)` shape the common test expects.
-    skip_test_audio_features_output_shape = True
+    def _audio_features_get_expected_num_attentions(self, model_tester=None):
+        # The SAN-M stack is heterogeneous: one stem block, `encoder_layers - 1` regular blocks and
+        # `num_timestamp_prediction_blocks` timestamp blocks, each with one attention module. The default helper
+        # assumes a single homogeneous `num_hidden_layers` stack, which describes the text tower instead.
+        tester = model_tester or self.model_tester
+        return tester.encoder_layers + tester.num_timestamp_prediction_blocks
 
-    def test_reverse_loading_mapping(self):
-        super().test_reverse_loading_mapping(skip_base_model=True)
-
-    def test_encoder_input_size_is_derived_from_mel_bins_and_stacked_frames(self):
-        config = FunAsrNanoEncoderConfig(num_mel_bins=64, num_stacked_frames=5)
-
-        self.assertEqual(config.input_size, 320)
-
-    def test_main_config_uses_standard_encoder_and_audio_token_names(self):
-        config = FunAsrNanoConfig()
-
-        self.assertIs(config.encoder_config, config.audio_config)
-        self.assertEqual(config.audio_token_id, 151646)
-        self.assertFalse(config.is_encoder_decoder)
-
-    def test_audio_config_alias_is_deserialized(self):
-        encoder_config = {"input_size": 560, "model_type": "fun_asr_nano_encoder"}
-        config = FunAsrNanoConfig(audio_config=encoder_config)
-
-        self.assertIsInstance(config.encoder_config, FunAsrNanoEncoderConfig)
-        self.assertEqual(config.encoder_config.input_size, 560)
-
-    def test_reuses_audioflamingo3_model_wrappers(self):
-        self.assertTrue(issubclass(ModularFunAsrNanoPreTrainedModel, AudioFlamingo3PreTrainedModel))
-        self.assertTrue(issubclass(ModularFunAsrNanoModel, AudioFlamingo3Model))
-        self.assertTrue(issubclass(ModularFunAsrNanoForConditionalGeneration, AudioFlamingo3ForConditionalGeneration))
-
-    def test_generated_model_has_single_causal_lm_output_class(self):
-        self.assertTrue(hasattr(modeling_fun_asr_nano, "FunAsrNanoCausalLMOutputWithPast"))
-        self.assertFalse(hasattr(modeling_fun_asr_nano, "FunAsrNanoCausalLMOutput"))
-
-    def test_checkpoint_key_mapping_matches_reused_component_names(self):
-        self.assertEqual(
-            convert_key("audio_encoder.encoders.0.self_attn.linear_out.weight"),
-            "model.audio_tower.layers.0.self_attn.out_proj.weight",
-        )
-        self.assertEqual(
-            convert_key("audio_encoder.encoders.0.feed_forward.w_1.weight"),
-            "model.audio_tower.layers.0.fc1.weight",
-        )
-        self.assertEqual(
-            convert_key("audio_adaptor.blocks.0.feed_forward.w_2.bias"),
-            "model.audio_adaptor.blocks.0.fc2.bias",
-        )
-        self.assertEqual(
-            convert_key("audio_adaptor.linear1.weight"),
-            "model.multi_modal_projector.linear_1.weight",
-        )
-        self.assertEqual(
-            convert_key("audio_adaptor.linear2.bias"),
-            "model.multi_modal_projector.linear_2.bias",
-        )
-
-    def test_encoder_config_uses_common_initializer_default(self):
-        self.assertNotIn("initializer_range", FunAsrNanoEncoderConfig.__annotations__)
-
-    def test_audio_layers_use_shared_gradient_checkpointing(self):
-        self.assertTrue(issubclass(FunAsrNanoEncoderLayer, GradientCheckpointingLayer))
-        self.assertTrue(issubclass(FunAsrNanoAdaptorLayer, GradientCheckpointingLayer))
-
-    def test_audio_layers_reuse_shared_encoder_components(self):
-        config = self.model_tester.get_config().encoder_config
-        attention = FunAsrNanoAttention(config)
-
-        self.assertTrue(
-            issubclass(modular_fun_asr_nano.FunAsrNanoAttention, modular_fun_asr_nano.Qwen3ASRAudioAttention)
-        )
-        self.assertTrue(issubclass(FunAsrNanoEncoderLayer, Qwen3ASRAudioEncoderLayer))
-        self.assertEqual(attention.num_key_value_groups, 1)
-        self.assertTrue(hasattr(attention, "attention_dropout"))
-        self.assertTrue(issubclass(FunAsrNanoAdaptorLayer, WhisperEncoderLayer))
-        adaptor_layer = FunAsrNanoAdaptorLayer(config)
-        self.assertIs(type(adaptor_layer.self_attn), FunAsrNanoAttention)
-
-    def test_attention_uses_configured_attention_interface(self):
-        config = self.model_tester.get_config().encoder_config
-        attention = FunAsrNanoAttention(config)
-        hidden_states = torch.randn(2, 4, config.d_model)
-
-        with patch.object(
-            modular_fun_asr_nano.ALL_ATTENTION_FUNCTIONS,
-            "get_interface",
-            return_value=modular_fun_asr_nano.eager_attention_forward,
-        ) as get_interface:
-            attention(hidden_states)
-
-        get_interface.assert_called_once_with(
-            config._attn_implementation, modular_fun_asr_nano.eager_attention_forward
-        )
-
-    def test_flash_attention_receives_2d_binary_padding_mask(self):
-        config = self.model_tester.get_config().encoder_config
-        config._attn_implementation = "flash_attention_2"
-        attention = FunAsrNanoAttention(config)
-        hidden_states = torch.randn(2, 4, config.d_model)
-        additive_mask = torch.zeros(2, 1, 1, 4)
-        additive_mask[0, :, :, 3] = torch.finfo(additive_mask.dtype).min
-        captured = {}
-
-        def attention_interface(module, query, key, value, attention_mask, **kwargs):
-            captured["attention_mask"] = attention_mask
-            return torch.zeros_like(query), None
-
-        with patch.object(
-            modular_fun_asr_nano.ALL_ATTENTION_FUNCTIONS,
-            "get_interface",
-            return_value=attention_interface,
-        ):
-            attention(hidden_states, attention_mask=additive_mask)
-
-        self.assertEqual(captured["attention_mask"].ndim, 2)
-        self.assertEqual(captured["attention_mask"].dtype, torch.bool)
-        self.assertTrue(torch.equal(captured["attention_mask"], torch.tensor([[1, 1, 1, 0], [1, 1, 1, 1]])))
-
-    def test_encoder_separates_fsmn_and_uses_reviewed_component_names(self):
-        config = self.model_tester.get_config().encoder_config
-        encoder = FunAsrNanoEncoder(config)
-
-        self.assertTrue(hasattr(modular_fun_asr_nano, "FunAsrNanoFSMN"))
-        self.assertTrue(hasattr(encoder, "stem"))
-        self.assertTrue(hasattr(encoder, "layers"))
-        self.assertTrue(hasattr(encoder, "timestamp_prediction_layers"))
-        self.assertIsInstance(encoder.layers[0].self_attn, modeling_fun_asr_nano.FunAsrNanoAttention)
-        self.assertTrue(hasattr(encoder.layers[0].self_attn, "q_proj"))
-        self.assertTrue(hasattr(encoder.layers[0].self_attn, "k_proj"))
-        self.assertTrue(hasattr(encoder.layers[0].self_attn, "v_proj"))
-        self.assertTrue(hasattr(encoder.layers[0], "feedforward_sequential_memory"))
-
-    def test_legacy_fsmn_checkpoint_keys_map_to_reviewed_component_name(self):
-        mapping = get_checkpoint_conversion_mapping("fun_asr_nano")
-
-        self.assertIsNotNone(mapping)
-        self.assertTrue(
-            any(
-                transform.source_patterns == [r"\.fsmn\."]
-                and transform.target_patterns == [".feedforward_sequential_memory."]
-                for transform in mapping
-            )
-        )
-
-    def test_conditional_generation_checkpoint_round_trip_preserves_hub_keys(self):
-        model = FunAsrNanoForConditionalGeneration(self.model_tester.get_config())
-        expected_weight = model.model.audio_adaptor.blocks[0].fc1.weight.detach().clone()
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir)
-            saved_keys = load_file(f"{tmp_dir}/model.safetensors").keys()
-            reloaded_model, loading_info = FunAsrNanoForConditionalGeneration.from_pretrained(
-                tmp_dir, output_loading_info=True
-            )
-
-        self.assertEqual(loading_info["missing_keys"], set())
-        self.assertEqual(loading_info["unexpected_keys"], set())
-        self.assertTrue(torch.equal(reloaded_model.model.audio_adaptor.blocks[0].fc1.weight, expected_weight))
-        self.assertIn("model.multi_modal_projector.blocks.0.fc1.weight", saved_keys)
-        self.assertNotIn("model.audio_adaptor.blocks.0.fc1.weight", saved_keys)
-
-    def test_legacy_projector_block_checkpoint_keys_load_into_audio_adaptor(self):
-        config = self.model_tester.get_config()
-        model = FunAsrNanoForConditionalGeneration(config)
-        expected_weight = model.model.audio_adaptor.blocks[0].fc1.weight.detach().clone()
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            config.save_pretrained(tmp_dir)
-            checkpoint_path = f"{tmp_dir}/pytorch_model.bin"
-            legacy_state_dict = {
-                key.replace("model.audio_adaptor.blocks.", "model.multi_modal_projector.blocks."): value
-                for key, value in model.state_dict().items()
-            }
-            torch.save(legacy_state_dict, checkpoint_path)
-
-            loaded_model, loading_info = FunAsrNanoForConditionalGeneration.from_pretrained(
-                tmp_dir, output_loading_info=True
-            )
-
-            resaved_dir = f"{tmp_dir}/resaved"
-            loaded_model.save_pretrained(resaved_dir)
-            resaved_keys = load_file(f"{resaved_dir}/model.safetensors").keys()
-            reloaded_model, reloading_info = FunAsrNanoForConditionalGeneration.from_pretrained(
-                resaved_dir, output_loading_info=True
-            )
-
-        self.assertEqual(loading_info["missing_keys"], set())
-        self.assertEqual(loading_info["unexpected_keys"], set())
-        self.assertTrue(torch.equal(loaded_model.model.audio_adaptor.blocks[0].fc1.weight, expected_weight))
-        self.assertIn("model.multi_modal_projector.blocks.0.fc1.weight", resaved_keys)
-        self.assertNotIn("model.audio_adaptor.blocks.0.fc1.weight", resaved_keys)
-        self.assertEqual(reloading_info["missing_keys"], set())
-        self.assertEqual(reloading_info["unexpected_keys"], set())
-        self.assertTrue(torch.equal(reloaded_model.model.audio_adaptor.blocks[0].fc1.weight, expected_weight))
-
-    def test_checkpoint_key_mapping_uses_standard_whisper_component_names(self):
-        self.assertEqual(
-            convert_key("audio_encoder.encoders0.0.norm1.weight"),
-            "model.audio_tower.stem.self_attn_layer_norm.weight",
-        )
-        self.assertEqual(
-            convert_key("audio_encoder.encoders.0.norm2.bias"),
-            "model.audio_tower.layers.0.final_layer_norm.bias",
-        )
-        self.assertEqual(
-            convert_key("audio_encoder.tp_encoders.0.feed_forward.w_1.weight"),
-            "model.audio_tower.timestamp_prediction_layers.0.fc1.weight",
-        )
-        self.assertEqual(
-            convert_key("audio_adaptor.blocks.0.self_attn.linear_q.weight"),
-            "model.audio_adaptor.blocks.0.self_attn.q_proj.weight",
-        )
-
-    def test_checkpoint_conversion_splits_fused_encoder_qkv(self):
-        fused_weight = torch.arange(24, dtype=torch.float32).reshape(6, 4)
-        fused_bias = torch.arange(6, dtype=torch.float32)
-        source = {
-            "audio_encoder.encoders.0.self_attn.linear_q_k_v.weight": fused_weight,
-            "audio_encoder.encoders.0.self_attn.linear_q_k_v.bias": fused_bias,
-        }
-
-        self.assertTrue(hasattr(convert_fun_asr_nano_to_hf, "convert_state_dict"))
-        converted, unconverted = convert_fun_asr_nano_to_hf.convert_state_dict(source)
-
-        self.assertEqual(unconverted, [])
-        self.assertTrue(
-            torch.equal(
-                converted["model.audio_tower.layers.0.self_attn.q_proj.weight"],
-                fused_weight[:2].to(torch.bfloat16),
-            )
-        )
-        self.assertTrue(
-            torch.equal(
-                converted["model.audio_tower.layers.0.self_attn.k_proj.bias"],
-                fused_bias[2:4].to(torch.bfloat16),
-            )
-        )
-        self.assertTrue(
-            torch.equal(
-                converted["model.audio_tower.layers.0.self_attn.v_proj.weight"],
-                fused_weight[4:].to(torch.bfloat16),
-            )
-        )
-
-    def test_conditional_generation_reuses_base_methods_without_duplicate_overrides(self):
-        self.assertNotIn("get_audio_features", ModularFunAsrNanoForConditionalGeneration.__dict__)
-        self.assertNotIn("forward", ModularFunAsrNanoForConditionalGeneration.__dict__)
-        self.assertNotIn("_keep_in_fp32_modules_strict", ModularFunAsrNanoForConditionalGeneration.__dict__)
-        self.assertNotIn("_keep_in_fp32_modules_strict", FunAsrNanoForConditionalGeneration.__dict__)
-
-    def test_encoder_uses_standard_layer_norm(self):
-        config = self.model_tester.get_config().encoder_config
-        encoder = FunAsrNanoEncoder(config)
-        norms = [
-            encoder.layer_norm,
-            encoder.timestamp_prediction_layer_norm,
-            encoder.stem.self_attn_layer_norm,
-            encoder.stem.final_layer_norm,
-        ]
-        for layer in [*encoder.layers, *encoder.timestamp_prediction_layers]:
-            norms.extend([layer.self_attn_layer_norm, layer.final_layer_norm])
-        for norm in norms:
-            self.assertIs(type(norm), torch.nn.LayerNorm)
-
-    @require_torch_gpu
-    def test_standard_layer_norm_matches_float32_accumulation_in_bfloat16(self):
-        hidden_size = self.model_tester.get_config().encoder_config.d_model
-        layer_norm = torch.nn.LayerNorm(hidden_size, device=torch_device, dtype=torch.bfloat16)
-        hidden_states = torch.randn(2, 17, hidden_size, device=torch_device, dtype=torch.bfloat16)
-
-        expected = torch.nn.functional.layer_norm(
-            hidden_states.float(),
-            layer_norm.normalized_shape,
-            layer_norm.weight.float(),
-            layer_norm.bias.float(),
-            layer_norm.eps,
-        ).to(torch.bfloat16)
-        actual = layer_norm(hidden_states)
-
-        torch.testing.assert_close(actual, expected, rtol=0, atol=5e-3)
-
-    @unittest.skip(reason="inputs_embeds is the audio-fused path; can't match raw token-only embeddings.")
+    @unittest.skip(
+        reason="This test does not apply to Fun-ASR-Nano since inputs_embeds corresponding to audio tokens "
+        "are replaced when input features are provided."
+    )
     def test_inputs_embeds_matches_input_ids(self):
-        pass
-
-    @unittest.skip(reason="FunAsrNanoForConditionalGeneration has no separate base model without a generation head.")
-    def test_model_base_model_prefix(self):
-        pass
-
-    @unittest.skip(reason="The tiny Fun-ASR-Nano test config is not split across two GPUs by auto device-map.")
-    def test_model_parallelism(self):
-        pass
-
-    @unittest.skip(
-        reason="The SAN-M encoder uses a custom attention path (stem/layers/timestamp_prediction_layers) that does not expose "
-        "per-layer attentions in the standard way."
-    )
-    def test_get_audio_features_attentions(self):
-        pass
-
-    @unittest.skip(
-        reason="The SAN-M encoder stacks heterogeneous blocks (stem/layers/timestamp_prediction_layers), so the per-layer "
-        "hidden-state count does not match the single `num_hidden_layers` the common test assumes."
-    )
-    def test_get_audio_features_hidden_states(self):
         pass
 
 
@@ -452,9 +125,8 @@ class FunAsrNanoIntegrationTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        model_id = "FunAudioLLM/Fun-ASR-Nano-2512-hf"
+        model_id = "bezzam/Fun-ASR-Nano-2512-hf"
         cls.processor = AutoProcessor.from_pretrained(model_id)
-        cls.processor.tokenizer.padding_side = "left"
         cls.model = FunAsrNanoForConditionalGeneration.from_pretrained(
             model_id, dtype=torch.bfloat16, device_map="auto"
         )
@@ -478,8 +150,6 @@ class FunAsrNanoIntegrationTest(unittest.TestCase):
         return self.processor.apply_transcription_request(
             audio=audio,
             language=language,
-            processor_kwargs={"audio_kwargs": {"sampling_rate": 16000}},
-            return_tensors="pt",
         ).to(self.model.device)
 
     def test_generate_chinese(self):

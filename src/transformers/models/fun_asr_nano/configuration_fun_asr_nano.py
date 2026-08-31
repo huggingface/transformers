@@ -55,14 +55,6 @@ class FunAsrNanoEncoderConfig(PreTrainedConfig):
     def input_size(self) -> int:
         return self.num_mel_bins * self.num_stacked_frames
 
-    def __post_init__(self, **kwargs):
-        legacy_input_size = kwargs.pop("input_size", None)
-        if legacy_input_size is not None and legacy_input_size != self.input_size:
-            raise ValueError(
-                f"`input_size={legacy_input_size}` does not match `num_mel_bins * num_stacked_frames={self.input_size}`."
-            )
-        super().__post_init__(**kwargs)
-
 
 @auto_docstring(checkpoint="FunAudioLLM/Fun-ASR-Nano-2512-hf")
 @strict

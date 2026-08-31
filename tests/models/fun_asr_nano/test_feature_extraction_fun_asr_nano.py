@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import itertools
 import unittest
 
 import numpy as np
@@ -19,10 +20,102 @@ import numpy as np
 from transformers import FunAsrNanoFeatureExtractor
 from transformers.testing_utils import require_torch, require_torchaudio
 
+from ...test_processing_common import floats_list
+from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
+
+
+class FunAsrNanoFeatureExtractionTester:
+    def __init__(
+        self,
+        parent,
+        batch_size=7,
+        min_seq_length=400,
+        max_seq_length=2000,
+        num_mel_bins=8,
+        lfr_m=7,
+        lfr_n=6,
+        padding_value=0.0,
+        sampling_rate=16_000,
+        return_attention_mask=True,
+    ):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.min_seq_length = min_seq_length
+        self.max_seq_length = max_seq_length
+        self.seq_length_diff = (self.max_seq_length - self.min_seq_length) // (self.batch_size - 1)
+        self.num_mel_bins = num_mel_bins
+        self.lfr_m = lfr_m
+        self.lfr_n = lfr_n
+        self.padding_value = padding_value
+        self.sampling_rate = sampling_rate
+        self.return_attention_mask = return_attention_mask
+        # The padded model input is the LFR-stacked frame, i.e. `lfr_m` mel frames concatenated. The common padding
+        # tests assert against this width, while the constructor's `feature_size` is the mel-bin count.
+        self.feature_size = num_mel_bins * lfr_m
+
+    def prepare_feat_extract_dict(self):
+        return {
+            "feature_size": self.num_mel_bins,
+            "lfr_m": self.lfr_m,
+            "lfr_n": self.lfr_n,
+            "padding_value": self.padding_value,
+            "sampling_rate": self.sampling_rate,
+            "return_attention_mask": self.return_attention_mask,
+        }
+
+    def prepare_inputs_for_common(self, equal_length=False, numpify=False):
+        def _flatten(list_of_lists):
+            return list(itertools.chain(*list_of_lists))
+
+        if equal_length:
+            speech_inputs = [floats_list((self.max_seq_length, self.feature_size)) for _ in range(self.batch_size)]
+        else:
+            speech_inputs = [
+                floats_list((x, self.feature_size))
+                for x in range(self.min_seq_length, self.max_seq_length, self.seq_length_diff)
+            ]
+        if numpify:
+            speech_inputs = [np.asarray(x) for x in speech_inputs]
+        return speech_inputs
+
 
 @require_torch
 @require_torchaudio
-class FunAsrNanoFeatureExtractionTest(unittest.TestCase):
+class FunAsrNanoFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
+    feature_extraction_class = FunAsrNanoFeatureExtractor
+
+    def setUp(self):
+        self.feat_extract_tester = FunAsrNanoFeatureExtractionTester(self)
+
+    def test_lfr_stacking_widens_features_by_lfr_m(self):
+        feature_extractor = FunAsrNanoFeatureExtractor()
+        audio = np.zeros(16000, dtype=np.float32)
+
+        outputs = feature_extractor(audio, sampling_rate=16000, return_tensors="np")
+
+        self.assertEqual(outputs["input_features"].shape[-1], feature_extractor.feature_size * feature_extractor.lfr_m)
+
+    def test_integration(self):
+        """Pin the Kaldi fbank + LFR front-end so a change to either is caught.
+
+        Reference values produced on this branch with:
+        >>> audio = np.sin(2 * np.pi * 440 * np.arange(16000, dtype=np.float32) / 16000)
+        >>> FunAsrNanoFeatureExtractor()(audio, sampling_rate=16000, return_tensors="np")["input_features"]
+        """
+        # fmt: off
+        EXPECTED_FIRST_FRAME_HEAD = np.array(
+            [-7.515916, -6.506824, -6.296969, -6.987014, -7.677636, -7.169872, -5.736084, -4.967820]
+        )
+        # fmt: on
+        audio = np.sin(2 * np.pi * 440 * np.arange(16000, dtype=np.float32) / 16000)
+
+        outputs = FunAsrNanoFeatureExtractor()(audio, sampling_rate=16000, return_tensors="np")
+        input_features = outputs["input_features"]
+
+        self.assertEqual(input_features.shape, (1, 17, 560))
+        np.testing.assert_allclose(input_features[0, 0, :8], EXPECTED_FIRST_FRAME_HEAD, atol=1e-4)
+        self.assertEqual(int(outputs["input_features_mask"].sum()), 17)
+
     def test_keeps_torch_features_until_padding(self):
         import torch
 
@@ -36,21 +129,20 @@ class FunAsrNanoFeatureExtractionTest(unittest.TestCase):
 
         self.assertIs(feature_extractor.input_type_at_pad, torch.Tensor)
         self.assertIsInstance(outputs["input_features"], np.ndarray)
-        self.assertIsInstance(outputs["attention_mask"], np.ndarray)
-        self.assertIsInstance(outputs["feature_lengths"], np.ndarray)
+        self.assertIsInstance(outputs["input_features_mask"], np.ndarray)
 
-    def test_returns_attention_mask_and_feature_lengths(self):
-        import torch
-
+    def test_input_features_mask_marks_the_unpadded_frames(self):
         feature_extractor = FunAsrNanoFeatureExtractor()
         audio = [np.ones(16000, dtype=np.float32), np.ones(8000, dtype=np.float32)]
 
         outputs = feature_extractor(audio, sampling_rate=16000, return_tensors="pt")
 
-        self.assertIn("input_features", outputs)
-        self.assertIn("attention_mask", outputs)
-        self.assertIn("feature_lengths", outputs)
-        self.assertTrue(torch.equal(outputs["attention_mask"].sum(-1), outputs["feature_lengths"]))
+        self.assertEqual(set(outputs), {"input_features", "input_features_mask"})
+        self.assertEqual(outputs["input_features_mask"].shape, outputs["input_features"].shape[:2])
+        # The shorter clip is half as long, so it must have strictly fewer valid frames than the longer one.
+        lengths = outputs["input_features_mask"].sum(-1)
+        self.assertGreater(int(lengths[0]), int(lengths[1]))
+        self.assertEqual(int(lengths[0]), outputs["input_features"].shape[1])
 
     def test_batched_valid_frames_match_individual_extraction(self):
         import torch
@@ -61,14 +153,14 @@ class FunAsrNanoFeatureExtractionTest(unittest.TestCase):
 
         single = feature_extractor(short_audio, sampling_rate=16000, return_tensors="pt")
         batch = feature_extractor([short_audio, long_audio], sampling_rate=16000, return_tensors="pt")
-        valid_length = single["feature_lengths"][0]
+        valid_length = int(single["input_features_mask"].sum(-1)[0])
 
         torch.testing.assert_close(
             batch["input_features"][0, :valid_length],
             single["input_features"][0, :valid_length],
         )
-        self.assertTrue(torch.all(batch["attention_mask"][0, :valid_length] == 1))
-        self.assertTrue(torch.all(batch["attention_mask"][0, valid_length:] == 0))
+        self.assertTrue(torch.all(batch["input_features_mask"][0, :valid_length] == 1))
+        self.assertTrue(torch.all(batch["input_features_mask"][0, valid_length:] == 0))
 
 
 if __name__ == "__main__":

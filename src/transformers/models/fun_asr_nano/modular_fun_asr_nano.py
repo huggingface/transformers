@@ -20,11 +20,13 @@ import torch.nn as nn
 from ... import initialization as init
 from ...audio_utils import AudioInput, make_list_of_audio_chat_template
 from ...feature_extraction_utils import BatchFeature
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ProcessingKwargs, Unpack, prepare_prompt_input
 from ...utils import auto_docstring, can_return_tuple, is_torch_available, logging
-from ...utils.generic import is_flash_attention_requested
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..audioflamingo3.modeling_audioflamingo3 import (
     AudioFlamingo3ForConditionalGeneration,
     AudioFlamingo3Model,
@@ -46,28 +48,77 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-LANGUAGE_ALIASES = {
+# The model was trained with these Chinese names in the transcription instruction ("语音转写成<NAME>：").
+LANGUAGE_CODE_TO_NAME = {
     "zh": "中文",
     "chinese": "中文",
-    "中文": "中文",
     "en": "英文",
     "english": "英文",
-    "英文": "英文",
     "ja": "日文",
     "japanese": "日文",
-    "日文": "日文",
 }
 
-
-# TODO: check other implementation
-def _prepare_4d_attention_mask(mask: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
-    if mask.ndim == 3:
-        mask = mask[:, 0]
-    return (1.0 - mask[:, None, None, :].to(dtype=dtype)) * torch.finfo(dtype).min
+SUPPORTED_LANGUAGE_NAMES = set(LANGUAGE_CODE_TO_NAME.values())
 
 
-class FunAsrNanoProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {}
+def resolve_language(language: str | None) -> str | None:
+    """Map a language code or name to the canonical name the checkpoint was trained with, with validation.
+
+    Accepts language codes (e.g. ``"zh"``, ``"en"``), English names (e.g. ``"Chinese"``, ``"English"``), or the
+    checkpoint's own names (``"中文"``, ``"英文"``, ``"日文"``). Returns the checkpoint's name.
+    Raises ``ValueError`` if the language is not recognized. ``None`` passes through unchanged (auto-detect).
+    """
+    if language is None:
+        return None
+    if not isinstance(language, str):
+        raise TypeError("Each language must be a string or `None`.")
+    stripped = language.strip()
+    resolved = LANGUAGE_CODE_TO_NAME.get(stripped.lower())
+    if resolved is not None:
+        return resolved
+    if stripped in SUPPORTED_LANGUAGE_NAMES:
+        return stripped
+    raise ValueError(
+        f"Unsupported language: {language!r}. Use a language code "
+        f"(e.g. 'en', 'zh'), an English name (e.g. 'English', 'Chinese'), "
+        f"or one of the checkpoint's names: {sorted(SUPPORTED_LANGUAGE_NAMES)}."
+    )
+
+
+def _prepare_language_inputs(language: str | list[str] | None, batch_size: int) -> list[str | None]:
+    """Broadcast / validate a language argument to match batch_size, resolving each value."""
+    if language is None:
+        return [None] * batch_size
+    if isinstance(language, str):
+        return [resolve_language(language)] * batch_size
+    if isinstance(language, (list, tuple)):
+        if len(language) != batch_size:
+            raise ValueError(f"Got {len(language)} language(s) for {batch_size} sample(s); counts must match.")
+        return [resolve_language(lang) for lang in language]
+    raise TypeError("`language` must be a string, a list of strings, or `None`.")
+
+
+def _prepare_keyword_inputs(keywords, batch_size: int) -> list[list[str] | None]:
+    """Broadcast / validate the hotword argument to match batch_size."""
+    if isinstance(keywords, str):
+        keywords = [keywords]
+    if isinstance(keywords, (list, tuple)) and all(isinstance(item, str) for item in keywords):
+        keywords = [list(keywords)] * batch_size
+    return prepare_prompt_input(keywords, batch_size, input_name="keywords")
+
+
+def _audio_content_item(audio_item) -> dict:
+    """Build a chat-template content dict for a single audio item."""
+    if isinstance(audio_item, str):
+        return {"type": "audio", "path": audio_item}
+    return {"type": "audio", "audio": audio_item}
+
+
+class FunAsrNanoProcessorKwargs(ProcessingKwargs, total=False):  # trf-ignore: TRF019
+    _defaults = {
+        "audio_kwargs": {"sampling_rate": 16000},
+        "common_kwargs": {"return_tensors": "pt"},
+    }
 
 
 @auto_docstring
@@ -80,42 +131,35 @@ class FunAsrNanoProcessor(AudioFlamingo3Processor):
         tokenizer,
         chat_template=None,
         audio_token="<|object_ref_start|>",
-        **kwargs,
     ):
         r"""
         audio_token (`str`, *optional*, defaults to `"<|object_ref_start|>"`):
             The token used as a placeholder for audio in the text.
         """
-        # Older processor configs stored this parent-class option; the chat template now owns the default prompt.
-        kwargs.pop("default_transcription_prompt", None)
-        if kwargs:
-            raise TypeError(f"Unexpected keyword argument {next(iter(kwargs))}.")
         super().__init__(
             feature_extractor,
             tokenizer,
             chat_template=chat_template,
             audio_token=audio_token,
             max_audio_len=None,
-            **kwargs,
         )
         del self.max_audio_len
         del self.default_transcription_prompt
 
     def _get_audio_token_length(self, audio_lengths):
-        return audio_lengths
+        raise AttributeError("Not needed for Fun-ASR-Nano")
 
     def _process_audio(self, audio, **kwargs):
         audio_inputs = self.feature_extractor(audio, **kwargs)
-        if "attention_mask" not in audio_inputs:
-            raise ValueError("FunAsrNanoProcessor requires an attention mask; set `return_attention_mask=True`.")
-        audio_inputs["input_features_mask"] = audio_inputs.pop("attention_mask")
-        audio_inputs["num_audio_tokens"] = self._get_audio_token_length(audio_inputs["feature_lengths"])
+        if "input_features_mask" not in audio_inputs:
+            raise ValueError("FunAsrNanoProcessor requires an audio padding mask; set `return_attention_mask=True`.")
+        audio_inputs["num_audio_tokens"] = audio_inputs["input_features_mask"].sum(-1)
         audio_replacements = [self.replace_audio_token(audio_inputs, audio_idx=idx) for idx in range(len(audio))]
         return audio_inputs, audio_replacements
 
-    def replace_audio_token(self, audio_inputs: dict, audio_idx: int) -> str:
-        num_audio_tokens = audio_inputs["num_audio_tokens"][audio_idx]
-        return self.audio_token * num_audio_tokens
+    @property
+    def model_input_names(self) -> list[str]:
+        return super().model_input_names
 
     def apply_transcription_request(
         self,
@@ -140,36 +184,28 @@ class FunAsrNanoProcessor(AudioFlamingo3Processor):
                 Hotwords to bias recognition. A string or flat list is shared across the batch; a nested list
                 supplies separate hotwords for each audio sample.
             **kwargs:
-                Additional keyword arguments forwarded to [`~FunAsrNanoProcessor.apply_chat_template`].
+                Additional keyword arguments forwarded to [`~FunAsrNanoProcessor.apply_chat_template`]
+                and the underlying processor call (for example `text_kwargs`, `audio_kwargs`, ...).
 
         Returns:
-            [`BatchFeature`]: Processor outputs ready for [`FunAsrNanoForConditionalGeneration.generate`].
+            [`BatchFeature`]: Processor outputs ready to be passed to
+            [`FunAsrNanoForConditionalGeneration.generate`].
         """
         audio_items = list(make_list_of_audio_chat_template(audio))
-        audio_items = [
-            item.detach().cpu().numpy() if is_torch_available() and isinstance(item, torch.Tensor) else item
-            for item in audio_items
-        ]
+
         batch_size = len(audio_items)
         if batch_size == 0:
             raise ValueError("`audio` must contain at least one sample.")
 
+        languages = _prepare_language_inputs(language, batch_size)
         prompts = prepare_prompt_input(prompt, batch_size, input_name="prompt")
-        if any(item is not None and not isinstance(item, str) for item in prompts):
-            raise TypeError("Each prompt must be a string or `None`.")
-        languages = prepare_prompt_input(language, batch_size, input_name="language")
-        languages = [self._normalize_language(item) if item is not None else None for item in languages]
-        keyword_batches = self._prepare_keyword_inputs(keywords, batch_size)
+        keyword_batches = _prepare_keyword_inputs(keywords, batch_size)
 
         conversations = []
         for audio_item, prompt_text, keyword_list, language_name in zip(
             audio_items, prompts, keyword_batches, languages
         ):
-            content = [
-                {"type": "audio", "path": audio_item}
-                if isinstance(audio_item, str)
-                else {"type": "audio", "audio": audio_item}
-            ]
+            content = [_audio_content_item(audio_item)]
             if prompt_text is not None:
                 content.append({"type": "text", "text": prompt_text})
             if keyword_list:
@@ -178,9 +214,6 @@ class FunAsrNanoProcessor(AudioFlamingo3Processor):
                 content.append({"type": "language", "language": language_name})
             conversations.append([{"role": "user", "content": content}])
 
-        processor_kwargs = dict(kwargs.get("processor_kwargs") or {})
-        processor_kwargs.setdefault("padding", True)
-        kwargs["processor_kwargs"] = processor_kwargs
         return self.apply_chat_template(
             conversations,
             tokenize=True,
@@ -188,42 +221,6 @@ class FunAsrNanoProcessor(AudioFlamingo3Processor):
             return_dict=True,
             **kwargs,
         )
-
-    @staticmethod
-    def _normalize_language(language: str) -> str:
-        if not isinstance(language, str):
-            raise TypeError("Each language must be a string or `None`.")
-        resolved = LANGUAGE_ALIASES.get(language.strip().lower())
-        if resolved is None:
-            raise ValueError(
-                f"Unsupported language {language!r}. Use Chinese/zh, English/en, Japanese/ja, 中文, 英文, or 日文."
-            )
-        return resolved
-
-    @staticmethod
-    def _prepare_keyword_inputs(keywords, batch_size: int) -> list[list[str] | None]:
-        if keywords is None:
-            return [None] * batch_size
-        if isinstance(keywords, str):
-            return [[keywords]] * batch_size
-        if not isinstance(keywords, list | tuple):
-            raise TypeError("`keywords` must be a string, a sequence of strings, or a nested sequence of strings.")
-        if all(isinstance(item, str) for item in keywords):
-            return [list(keywords)] * batch_size
-        if len(keywords) != batch_size:
-            raise ValueError(
-                f"Received keyword lists for {len(keywords)} samples, but the audio batch has {batch_size}."
-            )
-
-        prepared = []
-        for items in keywords:
-            if items is None:
-                prepared.append(None)
-            elif isinstance(items, list | tuple) and all(isinstance(item, str) for item in items):
-                prepared.append(list(items))
-            else:
-                raise TypeError("Each per-sample keyword value must be a sequence of strings or `None`.")
-        return prepared
 
     def decode(self, *args, strip_prefix=False, **kwargs):
         """Decode token IDs and optionally remove common assistant framing from each transcription."""
@@ -235,11 +232,7 @@ class FunAsrNanoProcessor(AudioFlamingo3Processor):
         return [self._strip_assistant_prefix_and_quotes(text) for text in decoded]
 
     def batch_decode(self, *args, **kwargs):
-        raise NotImplementedError("Not needed")
-
-    @property
-    def unused_input_names(self):
-        return ["num_audio_tokens", "feature_lengths"]
+        raise AttributeError("Not needed")
 
 
 @auto_docstring(
@@ -288,10 +281,6 @@ class FunAsrNanoAttention(Qwen3ASRAudioAttention):
         attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
-        if is_flash_attention_requested(self.config) and attention_mask is not None and attention_mask.ndim == 4:
-            # Fun-ASR-Nano is bidirectional, so every query row has the same padding mask. Flash Attention expects
-            # that mask as a 2D binary tensor rather than the additive 4D form used by eager and SDPA.
-            attention_mask = attention_mask[:, 0, 0, :] == 0
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
@@ -326,11 +315,10 @@ class FunAsrNanoFSMN(nn.Module):
         self.pad = nn.ConstantPad1d((left_padding, right_padding), 0.0)
         self.dropout = config.attention_dropout
 
-    def forward(self, value_states: torch.Tensor, attention_mask: torch.Tensor | None = None) -> torch.Tensor:
-        if attention_mask is not None:
-            if attention_mask.ndim == 3:
-                attention_mask = attention_mask[:, 0]
-            expanded_mask = attention_mask.unsqueeze(-1).to(dtype=value_states.dtype)
+    def forward(self, value_states: torch.Tensor, input_features_mask: torch.Tensor | None = None) -> torch.Tensor:
+        # The depthwise convolution mixes neighbouring frames, so padding has to be zeroed out on both sides of it.
+        if input_features_mask is not None:
+            expanded_mask = input_features_mask.unsqueeze(-1).to(dtype=value_states.dtype)
             value_states = value_states * expanded_mask
         else:
             expanded_mask = None
@@ -344,7 +332,11 @@ class FunAsrNanoFSMN(nn.Module):
 
 
 class FunAsrNanoEncoderLayer(Qwen3ASRAudioEncoderLayer):
-    """SAN-M encoder layer combining standard self-attention with a separate feedforward sequential memory FSMN branch."""
+    """SAN-M encoder layer combining standard self-attention with a separate feedforward sequential memory FSMN branch.
+
+    The two branches need different masks: `attention_mask` is the backend-specific mask built by
+    `create_bidirectional_mask`, while the FSMN convolution needs the plain 2D `input_features_mask`.
+    """
 
     def __init__(self, config: FunAsrNanoEncoderConfig):
         super().__init__(config)
@@ -355,20 +347,18 @@ class FunAsrNanoEncoderLayer(Qwen3ASRAudioEncoderLayer):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
+        input_features_mask: torch.Tensor | None = None,
         **kwargs,
     ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
         value_states = self.self_attn.v_proj(hidden_states)
-        additive_attention_mask = (
-            _prepare_4d_attention_mask(attention_mask, hidden_states.dtype) if attention_mask is not None else None
-        )
         attention_output, _ = self.self_attn(
             hidden_states=hidden_states,
-            attention_mask=additive_attention_mask,
+            attention_mask=attention_mask,
             **kwargs,
         )
-        fsmn_output = self.feedforward_sequential_memory(value_states, attention_mask)
+        fsmn_output = self.feedforward_sequential_memory(value_states, input_features_mask)
         hidden_states = residual + nn.functional.dropout(
             attention_output + fsmn_output, p=self.dropout, training=self.training
         )
@@ -401,6 +391,7 @@ class FunAsrNanoEncoderStem(Qwen3ASRAudioEncoderLayer):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
+        input_features_mask: torch.Tensor | None = None,
         **kwargs,
     ) -> torch.Tensor:
         hidden_states = hidden_states * (self.self_attn.embed_dim**0.5)
@@ -412,15 +403,12 @@ class FunAsrNanoEncoderStem(Qwen3ASRAudioEncoderLayer):
 
         hidden_states = self.self_attn_layer_norm(hidden_states)
         value_states = self.self_attn.v_proj(hidden_states)
-        additive_attention_mask = (
-            _prepare_4d_attention_mask(attention_mask, hidden_states.dtype) if attention_mask is not None else None
-        )
         attention_output, _ = self.self_attn(
             hidden_states=hidden_states,
-            attention_mask=additive_attention_mask,
+            attention_mask=attention_mask,
             **kwargs,
         )
-        fsmn_output = self.feedforward_sequential_memory(value_states, attention_mask)
+        fsmn_output = self.feedforward_sequential_memory(value_states, input_features_mask)
         hidden_states = nn.functional.dropout(attention_output + fsmn_output, p=self.dropout, training=self.training)
 
         residual = hidden_states
@@ -443,6 +431,12 @@ class FunAsrNanoEncoderStem(Qwen3ASRAudioEncoderLayer):
     """
 )
 class FunAsrNanoEncoder(Qwen3ASREncoder):
+    _no_split_modules = ["FunAsrNanoEncoderStem", "FunAsrNanoEncoderLayer"]
+    _can_record_outputs = {
+        "hidden_states": [FunAsrNanoEncoderStem, FunAsrNanoEncoderLayer],
+        "attentions": FunAsrNanoAttention,
+    }
+
     def __init__(self, config: FunAsrNanoEncoderConfig):
         PreTrainedModel.__init__(self, config)
         self.stem = FunAsrNanoEncoderStem(config)
@@ -461,7 +455,14 @@ class FunAsrNanoEncoder(Qwen3ASREncoder):
     def set_input_embeddings(self, value: nn.Module):
         self.stem = value
 
-    @can_return_tuple
+    def _freeze_parameters(self):
+        raise AttributeError("Not needed for Fun-ASR-Nano")
+
+    def _post_cnn_length(self):
+        raise AttributeError("Not needed for Fun-ASR-Nano, which has no convolutional front-end")
+
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -471,18 +472,25 @@ class FunAsrNanoEncoder(Qwen3ASREncoder):
     ) -> BaseModelOutput:
         hidden_states = input_features.to(dtype=self.layer_norm.weight.dtype)
 
-        hidden_states = self.stem(hidden_states, input_features_mask, **kwargs)
+        # Every block attends over the same padded sequence, so the mask is built once here.
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=hidden_states,
+            attention_mask=input_features_mask,
+        )
+
+        hidden_states = self.stem(hidden_states, attention_mask, input_features_mask, **kwargs)
 
         for layer in self.layers:
-            hidden_states = layer(hidden_states, input_features_mask, **kwargs)
+            hidden_states = layer(hidden_states, attention_mask, input_features_mask, **kwargs)
 
         hidden_states = self.layer_norm(hidden_states)
 
         for layer in self.timestamp_prediction_layers:
-            hidden_states = layer(hidden_states, input_features_mask, **kwargs)
+            hidden_states = layer(hidden_states, attention_mask, input_features_mask, **kwargs)
 
         hidden_states = self.timestamp_prediction_layer_norm(hidden_states)
-        return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 class FunAsrNanoAdaptorLayer(WhisperEncoderLayer):
@@ -507,12 +515,17 @@ class FunAsrNanoAdaptor(nn.Module):
         super().__init__()
         adaptor_config = config.adaptor_config
         adaptor_config._attn_implementation = config.encoder_config._attn_implementation
+        self.config = adaptor_config
         self.blocks = nn.ModuleList(
             [FunAsrNanoAdaptorLayer(adaptor_config) for _ in range(adaptor_config.encoder_layers)]
         )
 
     def forward(self, hidden_states: torch.Tensor, input_features_mask: torch.Tensor) -> torch.Tensor:
-        attention_mask = _prepare_4d_attention_mask(input_features_mask, hidden_states.dtype)
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=hidden_states,
+            attention_mask=input_features_mask,
+        )
         for block in self.blocks:
             hidden_states = block(hidden_states, attention_mask)
         return hidden_states
@@ -548,7 +561,7 @@ class FunAsrNanoModel(AudioFlamingo3Model):
         Returns:
             [`~modeling_outputs.BaseModelOutputWithPooling`]: `last_hidden_state` holds the audio encoder output,
             `pooler_output` holds the projected audio embeddings (flattened over valid positions), and
-            `hidden_states` holds the per-layer encoder states.
+            `hidden_states`/`attentions` hold the per-layer encoder states and attention weights.
         """
         batch_size, max_len, _ = input_features.shape
         if input_features_mask is None:
@@ -570,6 +583,7 @@ class FunAsrNanoModel(AudioFlamingo3Model):
             last_hidden_state=encoder_out,
             pooler_output=pooler_output,
             hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
         )
 
 

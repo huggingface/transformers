@@ -319,8 +319,9 @@ def convert_checkpoint(
     tokenizer = AutoTokenizer.from_pretrained(
         qwen3_path,
         padding=True,
+        padding_side="left",
     )
-    feature_extractor = FunAsrNanoFeatureExtractor()
+    feature_extractor = FunAsrNanoFeatureExtractor(return_attention_mask=True)
     processor = FunAsrNanoProcessor(
         feature_extractor=feature_extractor,
         tokenizer=tokenizer,

@@ -10,7 +10,7 @@ distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, e
 implied. See the License for the specific language governing permissions and limitations under the
 License.
 -->
-*This model was published in HF papers on 2025-09-15 and contributed to Hugging Face Transformers on 2026-08-28.*
+*This model was published in HF papers on 2025-09-15 and contributed to Hugging Face Transformers on 2026-08-31.*
 
 # Fun-ASR-Nano
 
@@ -49,7 +49,7 @@ processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForSpeechSeq2Seq.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
 
 audio_url = "https://huggingface.co/FunAudioLLM/Fun-ASR-Nano-2512/resolve/main/example/en.mp3"
-inputs = processor.apply_transcription_request(audio=audio_url, return_tensors="pt").to(model.device)
+inputs = processor.apply_transcription_request(audio=audio_url).to(model.device)
 
 generated_ids = model.generate(**inputs, max_new_tokens=200)
 generated_ids = generated_ids[:, inputs.input_ids.shape[1]:]
@@ -71,7 +71,7 @@ audio_urls = [
     "https://huggingface.co/FunAudioLLM/Fun-ASR-Nano-2512/resolve/main/example/en.mp3",
 ]
 languages = ["zh", "en"]
-inputs = processor.apply_transcription_request(audio=audio_urls, language=languages, return_tensors="pt").to(model.device)
+inputs = processor.apply_transcription_request(audio=audio_urls, language=languages).to(model.device)
 
 generated_ids = model.generate(**inputs, max_new_tokens=200)
 generated_ids = generated_ids[:, inputs.input_ids.shape[1]:]
@@ -97,7 +97,6 @@ inputs = processor.apply_transcription_request(
     language="en",
     prompt="A tribal story involving a chieftain and a boy.",
     keywords=["tribal chieftain", "fifty pieces of gold"],
-    return_tensors="pt",
 ).to(model.device)
 
 generated_ids = model.generate(**inputs, max_new_tokens=200)
@@ -156,7 +155,7 @@ processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForSpeechSeq2Seq.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
 
 audio_url = "https://huggingface.co/FunAudioLLM/Fun-ASR-Nano-2512/resolve/main/example/en.mp3"
-inputs = processor.apply_transcription_request(audio=audio_url, return_tensors="pt").to(model.device)
+inputs = processor.apply_transcription_request(audio=audio_url).to(model.device)
 
 with torch.inference_mode():
     generated_ids = model.generate(

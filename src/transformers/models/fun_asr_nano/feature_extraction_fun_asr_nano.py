@@ -13,8 +13,6 @@
 # limitations under the License.
 """Feature extractor for Fun-ASR-Nano (Kaldi mel-filterbank with Low Frame Rate stacking)."""
 
-import numpy as np
-
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
@@ -59,8 +57,6 @@ class FunAsrNanoFeatureExtractor(SequenceFeatureExtractor):
             Subsampling stride for LFR (take every `lfr_n`-th stacked frame).
         window (`str`, *optional*, defaults to `"hamming"`):
             Window function for the STFT.
-        preemphasis (`float`, *optional*, defaults to 0.97):
-            Pre-emphasis coefficient.
         padding_value (`float`, *optional*, defaults to 0.0):
             Value used for padding shorter sequences.
         return_attention_mask (`bool`, *optional*, defaults to `True`):
@@ -79,7 +75,7 @@ class FunAsrNanoFeatureExtractor(SequenceFeatureExtractor):
     ```
     """
 
-    model_input_names = ["input_features", "attention_mask", "feature_lengths"]
+    model_input_names = ["input_features", "input_features_mask"]
 
     def __init__(
         self,
@@ -90,7 +86,6 @@ class FunAsrNanoFeatureExtractor(SequenceFeatureExtractor):
         lfr_m: int = 7,
         lfr_n: int = 6,
         window: str = "hamming",
-        preemphasis: float = 0.97,
         padding_value: float = 0.0,
         return_attention_mask: bool = True,
         **kwargs,
@@ -107,7 +102,6 @@ class FunAsrNanoFeatureExtractor(SequenceFeatureExtractor):
         self.lfr_m = lfr_m
         self.lfr_n = lfr_n
         self.window = window
-        self.preemphasis = preemphasis
 
     def _extract_fbank_features(self, waveform: "torch.Tensor") -> "torch.Tensor":
         """Extract Kaldi mel-filterbank features `(num_frames, feature_size)` from a single 1D waveform tensor."""
@@ -185,13 +179,12 @@ class FunAsrNanoFeatureExtractor(SequenceFeatureExtractor):
             pad_to_multiple_of (`int`, *optional*):
                 If set, pads the LFR sequence length to a multiple of this value.
             return_attention_mask (`bool`, *optional*):
-                Whether to return the padding mask. Defaults to `self.return_attention_mask`.
+                Whether to return `input_features_mask`. Defaults to `self.return_attention_mask`.
 
         Returns:
-            [`BatchFeature`] with `input_features` of shape `(batch, max_lfr_frames, feature_size * lfr_m)`, the
-            frame-level `attention_mask`, and the per-sample `feature_lengths`.
+            [`BatchFeature`] with `input_features` of shape `(batch, max_lfr_frames, feature_size * lfr_m)` and the
+            frame-level `input_features_mask`.
         """
-        output_attention_mask = self.return_attention_mask if return_attention_mask is None else return_attention_mask
         if sampling_rate is not None and sampling_rate != self.sampling_rate:
             raise ValueError(
                 f"Expected sampling rate {self.sampling_rate}, got {sampling_rate}. "
@@ -214,19 +207,12 @@ class FunAsrNanoFeatureExtractor(SequenceFeatureExtractor):
             max_length=max_length,
             truncation=truncation,
             pad_to_multiple_of=pad_to_multiple_of,
-            return_attention_mask=True,
+            return_attention_mask=return_attention_mask,
             return_tensors=return_tensors or "np",
         )
 
-        # `pad` returns the per-frame attention mask; also collapse it to a single length per sample.
-        attention_mask = padded_inputs["attention_mask"]
-        if isinstance(attention_mask, torch.Tensor):
-            feature_lengths = attention_mask.sum(-1).to(torch.long)
-        else:
-            feature_lengths = np.asarray(attention_mask).sum(-1).astype(np.int64)
-        padded_inputs["feature_lengths"] = feature_lengths
-        if not output_attention_mask:
-            padded_inputs.pop("attention_mask")
+        if "attention_mask" in padded_inputs:
+            padded_inputs["input_features_mask"] = padded_inputs.pop("attention_mask")
 
         return padded_inputs
 
