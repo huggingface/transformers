@@ -195,7 +195,7 @@ class DeepseekV32Indexer(nn.Module):
         q_resid: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor,
-        *,
+        position_ids: torch.Tensor,  # Kept for BC
         past_key_values: Cache | None = None,
     ) -> torch.Tensor:
         """
@@ -433,7 +433,7 @@ class DeepseekV32Attention(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor,
         past_key_values: Cache | None = None,
-        position_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,  # Kept for BC
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         batch_size, seq_length = hidden_states.shape[:-1]
@@ -465,7 +465,6 @@ class DeepseekV32Attention(nn.Module):
             q_resid,
             position_embeddings,
             attention_mask[:, 0, :, :],
-            position_ids,
             past_key_values=past_key_values,
         )  # [B, S, topk]
 

@@ -138,7 +138,7 @@ class GlmMoeDsaIndexer(DeepseekV32Indexer):
         q_resid: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor,
-        *,
+        position_ids: torch.Tensor,  # Kept for BC
         past_key_values: Cache | None = None,
     ) -> torch.Tensor:
         """
@@ -214,7 +214,7 @@ class GlmMoeDsaAttention(DeepseekV3Attention):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor,
         past_key_values: Cache | None = None,
-        position_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,  # Kept for BC
         prev_topk_indices: torch.Tensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
@@ -249,7 +249,6 @@ class GlmMoeDsaAttention(DeepseekV3Attention):
                 q_resid,
                 position_embeddings,
                 attention_mask[:, 0, :, :],
-                position_ids,
                 past_key_values=past_key_values,
             )  # [B, S, topk]
         else:
