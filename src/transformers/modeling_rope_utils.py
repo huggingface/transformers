@@ -825,9 +825,8 @@ class RotaryEmbeddingConfigMixin:
         if not rope_parameters_dict:
             return
 
-        if getattr(self, "layer_types", None) is not None and set(rope_parameters_dict.keys()).issubset(
-            self.layer_types
-        ):
+        layer_types = getattr(self, "_rope_type_labels", getattr(self, "layer_types", None))
+        if layer_types is not None and set(rope_parameters_dict.keys()).issubset(layer_types):
             pass
         else:
             rope_parameters_dict = {"full_attention": rope_parameters_dict}

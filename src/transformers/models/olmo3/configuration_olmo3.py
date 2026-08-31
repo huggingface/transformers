@@ -85,6 +85,7 @@ class Olmo3Config(PreTrainedConfig):
 
     sliding_window: int | None = 4096
     layer_types: list[str] | None = None
+    _rope_type_labels = ["sliding_attention", "full_attention"]
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:

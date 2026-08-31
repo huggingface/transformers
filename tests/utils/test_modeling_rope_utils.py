@@ -137,6 +137,11 @@ class RopeTest(unittest.TestCase):
             if same_rope_per_layer:
                 self.assertIn("mrope_sections", logs.output[1])
 
+    def test_gemma3_tiny_rope_validation(self):
+        config = Gemma3TextConfig(num_hidden_layers=2)
+        config.convert_rope_params_to_dict()
+        self.assertIn("sliding_attention", config.rope_parameters)
+
     @parameterized.expand(
         [
             (True, True),

@@ -96,6 +96,7 @@ class Gemma3TextConfig(PreTrainedConfig):
     query_pre_attn_scalar: int = 256
     sliding_window: int | None = 4096
     layer_types: list[str] | None = None
+    _rope_type_labels = ["sliding_attention", "full_attention"]
     final_logit_softcapping: float | None = None
     attn_logit_softcapping: float | None = None
     use_bidirectional_attention: bool | None = False
