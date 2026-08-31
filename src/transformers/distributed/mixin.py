@@ -24,7 +24,7 @@ from .configuration_utils import DistributedConfig
 from .fsdp import apply_fully_sharded_data_parallelism, is_fsdp_managed_module
 from .pipeline_parallel import apply_pipeline_parallelism
 from .tensor_parallel import (
-    ALL_PARALLEL_STYLES,
+    _validate_tp_plan_styles,
     apply_tensor_parallelism,
     gather_state_dict_for_save,
 )
@@ -112,12 +112,7 @@ class DistributedMixin:
         if not isinstance(plan, dict):
             raise ValueError("Can only set a dictionary as `tp_plan`")
 
-        for layer_pattern, parallel_style in plan.items():
-            if parallel_style not in ALL_PARALLEL_STYLES:
-                raise ValueError(
-                    f"Unsupported tensor parallel style '{parallel_style}' for layer '{layer_pattern}'. "
-                    f"Supported styles are {list(ALL_PARALLEL_STYLES.keys())}"
-                )
+        _validate_tp_plan_styles(plan)
 
         model_param_names = [name for name, _ in self.named_parameters()]
         for layer_pattern in plan.keys():
@@ -198,6 +193,8 @@ class DistributedMixin:
 
             if distributed_config.tp_size > 1:
                 tp_mesh = device_mesh["tp"] if device_mesh.ndim > 1 else device_mesh
+                if isinstance(distributed_config.tp_plan, dict):
+                    model.tp_plan = distributed_config.tp_plan
                 model = apply_tensor_parallelism(model, tp_mesh)
 
             elif distributed_config.fsdp_size > 1:
