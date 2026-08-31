@@ -634,6 +634,9 @@ class TensorParallelTesterMixin(ABC):
 
         config = self._get_tp_config()
         text_config = config.get_text_config()
+        tp_plan = getattr(text_config, "base_model_tp_plan", None) or {}
+        if not any(key.endswith("k_proj") and style == "colwise" for key, style in tp_plan.items()):
+            self.skipTest("Model does not shard its key/value projections colwise")
         if getattr(text_config, "num_key_value_heads", None) is None:
             self.skipTest("Model does not use regular KV heads")
         if text_config.num_attention_heads % self.tensor_parallel_size != 0:
