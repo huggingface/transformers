@@ -252,10 +252,16 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         if not self.record_past:
             self.keys = full_key_states[:, :, -self.sliding_window + 1 :, :]
             self.values = full_value_states[:, :, -self.sliding_window + 1 :, :]
-        # If we record the past, we keep them all for now, and they'll be restricted to the window size in `crop`
+        # If we record the past, we keep all states so that `crop` can roll back later, but we can only ever attend to
+        # what `get_mask_sizes` advertises: return the last `sliding_window - 1 + query_length` states
         else:
             self.keys = full_key_states
             self.values = full_value_states
+            num_visible = self.sliding_window - 1 + key_states.shape[-2]
+            return (
+                full_key_states[:, :, -num_visible:, :],
+                full_value_states[:, :, -num_visible:, :],
+            )
 
         # Return the full states
         return full_key_states, full_value_states
