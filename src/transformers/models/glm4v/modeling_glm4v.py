@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import itertools
-import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -703,16 +702,6 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
 
         self.gradient_checkpointing = False
         self.post_init()
-
-    def rot_pos_emb(self, grid_thw):
-        warnings.warn(
-            f"`{self.__class__.__name__}.rot_pos_emb` is deprecated and will be removed in v5.11. Use `get_vision_position_ids` from `transformers.vision_utils` and apply the rotary embedding module.",
-            FutureWarning,
-            stacklevel=2,
-        )
-        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size)
-        rotary_pos_emb = self.rotary_pos_emb(position_ids)
-        return rotary_pos_emb, position_ids
 
     @merge_with_config_defaults
     @capture_outputs
