@@ -182,6 +182,7 @@ if TYPE_CHECKING:
     from .glm4_moe_lite import *
     from .glm4v import *
     from .glm4v_moe import *
+    from .glm5_next import *
     from .glm46v import *
     from .glm_image import *
     from .glm_moe_dsa import *
@@ -326,6 +327,7 @@ if TYPE_CHECKING:
     from .nemotron3_5_asr import *
     from .nemotron_asr_streaming import *
     from .nemotron_h import *
+    from .neomme import *
     from .nllb import *
     from .nllb_moe import *
     from .nomic_bert import *
@@ -404,6 +406,7 @@ if TYPE_CHECKING:
     from .qwen3_omni_moe import *
     from .qwen3_vl import *
     from .qwen3_vl_moe import *
+    from .qwen4_exp import *
     from .radio import *
     from .rag import *
     from .recurrent_gemma import *
@@ -483,6 +486,7 @@ if TYPE_CHECKING:
     from .upernet import *
     from .uvdoc import *
     from .vaultgemma import *
+    from .vibevoice import *
     from .vibevoice_acoustic_tokenizer import *
     from .vibevoice_asr import *
     from .video_llama_3 import *

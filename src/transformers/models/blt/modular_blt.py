@@ -357,7 +357,7 @@ class BltPreTrainedModel(MllamaPreTrainedModel):
     _supports_attention_backend = False
     _supports_flash_attn = False
     _supports_flex_attn = False
-    _no_split_modules = ["BltTransformerLayer"]
+    _no_split_modules = ["BltTransformerLayer", "BltCrossAttention"]
     _can_record_outputs = {
         "hidden_states": OutputRecorder(BltTransformerLayer, index=0),
         "attentions": OutputRecorder(BltSelfAttention, index=1),
@@ -690,7 +690,7 @@ class BltLocalDecoder(BltPreTrainedModel):
                     attention_mask=encoder_attention_mask,
                     **kwargs,
                 )
-                hidden_states = hidden_states + cross_attention_output
+                hidden_states = hidden_states + cross_attention_output.to(hidden_states.device)
             hidden_states = layer(
                 hidden_states,
                 position_embeddings=position_embeddings,
