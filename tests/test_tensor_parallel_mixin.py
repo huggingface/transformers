@@ -19,7 +19,7 @@ from parameterized import parameterized
 
 from transformers import TorchAoConfig, set_seed
 from transformers.distributed.configuration_utils import DistributedConfig
-from transformers.distributed.tensor_parallel import _get_parameter_tp_plan
+from transformers.distributed.tensor_parallel import _get_parameter_tp_plan, get_kv_replication_factor
 from transformers.testing_utils import (
     is_tensor_parallel_test,
     is_torch_available,
@@ -187,6 +187,17 @@ def _verify_tp_sharding(rank, model_tp, model_ref):
                         assert param.size(dim) == expected_size, (
                             f"Packed weight {name} sharding incorrect: expected {expected_size}, got {param.size(dim)}"
                         )
+                    elif param_plan == "colwise_replicate_kv":
+                        # Replicated KV heads are described as a `Shard` of the expanded projection, so the DTensor
+                        # reports a global size `n_rep` times larger than the checkpoint one.
+                        n_rep = get_kv_replication_factor(
+                            model_tp.config.get_text_config().num_key_value_heads, world_size
+                        )
+                        expected_size = param_full.size(dim) * n_rep
+                        assert param.size(dim) == expected_size, (
+                            f"Replicated KV weight {name} sharding incorrect: expected {expected_size}, "
+                            f"got {param.size(dim)}"
+                        )
                     else:
                         expected_size = (param_full.size(dim) + world_size - 1) // world_size
                         assert param.size(dim) <= expected_size, (
@@ -286,6 +297,23 @@ def _test_tp_backward_impl(rank, model_path, model_class, atol, rtol):
     )
 
     dist.barrier()
+
+
+def _test_tp_kv_replication_impl(rank, model_path, model_class, atol, rtol):
+    """Forward + backward for a model with fewer KV heads than ranks, where KV heads are replicated."""
+    model_tp = model_class.from_pretrained(
+        model_path, distributed_config=DistributedConfig(tp_size=dist.get_world_size())
+    )
+    replicated = [
+        name
+        for name, module in model_tp.named_modules()
+        if getattr(module, "_hf_kv_replication", 1) > 1  # set by `ReplicateKVHeadsParallel.shard_param`
+    ]
+    assert replicated, "Expected `k_proj`/`v_proj` to be sharded with KV head replication"
+    del model_tp
+
+    _test_tp_forward_impl(rank, model_path, model_class, atol, rtol)
+    _test_tp_backward_impl(rank, model_path, model_class, atol, rtol)
 
 
 def _test_tp_generation_impl(_rank, model_path, model_class, atol, rtol, max_new_tokens):
@@ -598,6 +626,32 @@ class TensorParallelTesterMixin(ABC):
             model.save_pretrained(tmp_dir, save_original_format=True)
 
             _init_distributed(tp=self.tensor_parallel_size)(_test_tp_backward_impl)(tmp_dir, model_class, atol, rtol)
+
+    @is_tensor_parallel_test
+    def test_tp_kv_head_replication(self):
+        """With fewer KV heads than ranks, KV heads are replicated instead of sharded (`colwise_replicate_kv`)."""
+        self._skip_if_not_supported()
+
+        config = self._get_tp_config()
+        text_config = config.get_text_config()
+        if getattr(text_config, "num_key_value_heads", None) is None:
+            self.skipTest("Model does not use regular KV heads")
+        if text_config.num_attention_heads % self.tensor_parallel_size != 0:
+            self.skipTest("KV head replication requires query heads to be divisible by the world size")
+        text_config.num_key_value_heads = 1
+
+        model_class = self._get_tp_model_class()
+        atol = self.tensor_parallel_atol
+        rtol = self.tensor_parallel_rtol
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            set_seed(42)
+            model = model_class(config)
+            model.save_pretrained(tmp_dir, save_original_format=True)
+
+            _init_distributed(tp=self.tensor_parallel_size)(_test_tp_kv_replication_impl)(
+                tmp_dir, model_class, atol, rtol
+            )
 
     @is_tensor_parallel_test
     def test_tp_generation(self):
