@@ -2631,14 +2631,14 @@ class ClassDocstring:
     The {model_name} Model with an image classification head on top e.g. for ImageNet.
     """
     ForInstanceSegmentation = r"""
-    The {model_name} Model with an instance segmentation head on top e.g. for semantic and panoptic
+    The {model_name} Model with an instance segmentation head on top e.g. for COCO, LVIS,
     segmentation.
     """
     ForSemanticSegmentation = r"""
     The {model_name} Model with a semantic segmentation head on top e.g. for ADE20K, CityScapes.
     """
     ForObjectDetection = r"""
-    The {model_name} Model with an object detection head on top e.g. for ADE20K, CityScapes.
+    The {model_name} Model with an object detection head on top.
     """
     ForAudioClassification = r"""
     The {model_name} Model with an audio classification head on top (a linear layer on top of the pooled
@@ -4309,6 +4309,7 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
     docstring_init = ""
     docstring_args = ""
     name = ""
+    pre_block = ""
 
     # 1) Start from inferring the model name in lower case to format our docstring
     indent_level = get_indent_level(cls)
@@ -4335,22 +4336,25 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
 
     # 2) Start building the docstring from the class-type by fetching relevant docs on
     # each branching or fallback to custom intro if defined
+    if custom_intro is not None:
+        pre_block = equalize_indent(custom_intro, indent_level)
+        pre_block += "\n" if not pre_block.endswith("\n") else ""
+
     if "PreTrainedModel" in (x.__name__ for x in cls.__mro__) or "GenericFor" in cls.__name__:
         # The ending suffix of class name defines which intro docstring will be added before listing args
         # The models we have different types of tasks, so it has to be defined either as `custom_intro` for
         # rare tasks or in `ClassDocstring`
         name = re.findall(rf"({'|'.join(ClassDocstring.__dict__.keys())})$", cls.__name__)
-        if name:
-            pre_block = getattr(ClassDocstring, name[0]).format(**{"model_name": model_name_title})
-        elif model_name_title is not None:
-            task_name_from_cls = cls.__name__[len(model_name_title) :]
-            pre_block = f"A {model_name_title} Model for {task_name_from_cls}."
+        name = name[0] if name else ""
+        if not pre_block:
+            pre_block = getattr(ClassDocstring, name) if name else ClassDocstring.PreTrainedModel
+            pre_block = pre_block.format(**{"model_name": model_name_title})
 
         docstring_init = auto_method_docstring(
             cls.__init__, parent_class=cls, custom_args=custom_args, checkpoint=checkpoint
         ).__doc__.replace("Args:", "Parameters:")
     elif "ProcessorMixin" in (x.__name__ for x in cls.__mro__):
-        pre_block = generate_processor_intro(cls)
+        pre_block = pre_block if pre_block else generate_processor_intro(cls)
         if pre_block:
             pre_block = equalize_indent(pre_block, indent_level)
             pre_block = format_args_docstring(pre_block, model_name_lowercase)
@@ -4365,12 +4369,6 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
             ),
         ).__doc__.replace("Args:", "Parameters:")
     elif "ModelOutput" in (x.__name__ for x in cls.__mro__):
-        if custom_intro:
-            pre_block = equalize_indent(custom_intro, indent_level)
-            pre_block += "\n" if not pre_block.endswith("\n") else ""
-        else:
-            pre_block = ""
-
         is_dataclass = True
         doc_class = cls.__doc__
         if custom_args is None and doc_class:
@@ -4404,7 +4402,7 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
         ).__doc__
     # has to come before checking `BaseImageProcessor in mro` as video classes inherit from image classes
     elif any("BaseVideoProcessor" in x.__name__ for x in cls.__mro__):
-        pre_block = r"Constructs a {video_processor_class} video processor."
+        pre_block = pre_block if pre_block else r"Constructs a {video_processor_class} video processor."
         if pre_block:
             pre_block = equalize_indent(pre_block, indent_level)
             pre_block = format_args_docstring(pre_block, model_name_lowercase)
@@ -4417,7 +4415,7 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
             source_args_dict=get_args_doc_from_source(VideoProcessorArgs),
         ).__doc__
     elif any("BaseImageProcessor" in x.__name__ for x in cls.__mro__):
-        pre_block = r"Constructs a {image_processor_class} image processor."
+        pre_block = pre_block if pre_block else r"Constructs a {image_processor_class} image processor."
         if pre_block:
             pre_block = equalize_indent(pre_block, indent_level)
             pre_block = format_args_docstring(pre_block, model_name_lowercase)
@@ -4430,9 +4428,14 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
             source_args_dict=get_args_doc_from_source(ImageProcessorArgs),
         ).__doc__
     elif "PreTrainedConfig" in (x.__name__ for x in cls.__mro__):
-        pre_block = ClassDocstring.Config.format(
-            **{"model_name": model_name_title, "model_base_class": model_base_class, "model_checkpoint": checkpoint}
-        )
+        if not pre_block:
+            pre_block = ClassDocstring.Config.format(
+                **{
+                    "model_name": model_name_title,
+                    "model_base_class": model_base_class,
+                    "model_checkpoint": checkpoint,
+                }
+            )
 
         is_dataclass = True
         doc_class = cls.__doc__
@@ -4459,11 +4462,7 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
             source_args_dict=get_args_doc_from_source([ConfigArgs]),
             allowed_params=allowed_params,
         ).__doc__
-    elif custom_intro is not None:
-        pre_block = equalize_indent(custom_intro, indent_level)
-        if not pre_block.endswith("\n"):
-            pre_block += "\n"
-    else:
+    elif custom_intro is None:
         raise ValueError(
             f"`{cls.__name__}` is not registered in the auto doc. Here are the available classes: {ClassDocstring.__dict__.keys()}, "
             "Processor, ImageProcessor, VideoProcessor, ModelOutput\n. Add a `custom_intro` to the decorator "
@@ -4515,7 +4514,7 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
                         indent_level + 8,
                     )
     # TODO (Yoni): Add support for Attributes section in docs
-    # Classes didn't match any of the classes by MRO raise a warning unless there isa `custom_intro`  defined,
+    # Classes didn't match any of the classes by MRO raise a warning unless there is a `custom_intro`  defined,
     # we assume that the `custom_intro` already holds the minimal informative docs
     elif custom_intro is None:
         print(
