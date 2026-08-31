@@ -20,7 +20,7 @@ import unittest
 from pathlib import Path
 
 from transformers import CanaryConfig, CanaryDecoderConfig, ParakeetEncoderConfig, is_torch_available
-from transformers.testing_utils import is_flaky, require_torch, require_torch_accelerator, slow, torch_device
+from transformers.testing_utils import is_flaky, require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -395,10 +395,9 @@ class CanaryModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_generate_without_input_ids(self):
         pass
 
-    @require_torch_accelerator
-    @slow
+    @unittest.skip(reason="Canary automatically adds an attention_mask input")
     def test_sdpa_can_dispatch_on_flash(self):
-        self.skipTest("Canary automatically adds an attention_mask input")
+        pass
 
     @is_flaky(description="Large difference with A10. Still flaky after setting larger tolerance")
     def test_generate_continue_from_past_key_values(self):
@@ -528,7 +527,7 @@ class CanaryIntegrationTest(unittest.TestCase):
 
         inputs = self._load_datasamples(self.processor, 1)
         features = self.processor.apply_transcription_request(audio=inputs, source_language="en").to(torch_device)
-        generated = self.model.generate(**features, max_new_tokens=128)
+        generated = self.model.generate(**features, max_new_tokens=128, do_sample=False)
         transcriptions = [text.strip() for text in self.processor.decode(generated, skip_special_tokens=True)]
         self.assertListEqual(transcriptions, expected_transcriptions)
 
@@ -543,7 +542,7 @@ class CanaryIntegrationTest(unittest.TestCase):
         features = self.processor.apply_transcription_request(
             audio=inputs, source_language="en", target_language=["en", "de"]
         ).to(torch_device)
-        generated = self.model.generate(**features, max_new_tokens=128)
+        generated = self.model.generate(**features, max_new_tokens=128, do_sample=False)
         transcriptions = [text.strip() for text in self.processor.decode(generated, skip_special_tokens=True)]
         self.assertListEqual(transcriptions, expected_transcriptions)
 
@@ -558,6 +557,6 @@ class CanaryIntegrationTest(unittest.TestCase):
         features = self.processor.apply_transcription_request(
             audio=inputs, source_language="en", target_language="de"
         ).to(torch_device)
-        generated = self.model.generate(**features, max_new_tokens=128)
+        generated = self.model.generate(**features, max_new_tokens=128, do_sample=False)
         transcriptions = [text.strip() for text in self.processor.decode(generated, skip_special_tokens=True)]
         self.assertListEqual(transcriptions, expected_transcriptions)

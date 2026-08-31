@@ -28,8 +28,6 @@ from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..cohere_asr.modeling_cohere_asr import (
     CohereAsrDecoder,
@@ -189,6 +187,7 @@ class CanaryDecoder(CohereAsrDecoder):
         self.pos_emb = CanaryPositionalEmbedding(config.max_position_embeddings, config.hidden_size)
         del self.proj
 
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

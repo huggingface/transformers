@@ -40,8 +40,8 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
-from ...utils.generic import can_return_tuple, merge_with_config_defaults
-from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ...utils.generic import can_return_tuple
+from ...utils.output_capturing import OutputRecorder
 from ..auto.modeling_auto import AutoModel
 from .configuration_canary import CanaryConfig, CanaryDecoderConfig
 
@@ -368,8 +368,7 @@ class CanaryDecoder(CanaryPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @merge_with_config_defaults
-    @capture_outputs
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
