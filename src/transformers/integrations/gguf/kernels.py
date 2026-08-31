@@ -134,6 +134,19 @@ def get_ggml_layer_mapping() -> dict:
     from kernels import LayerRepository, Mode
 
     return {
+        # Named for the weight convention rather than the model: this is the norm that computes
+        # `x * (1 + w)`, which the plain `RMSNorm` kernels would get silently wrong.
+        "RMSNormZeroCentered": {
+            "mps": {
+                Mode.INFERENCE: LayerRepository(
+                    repo_id="marcsun13/ggml-norm",
+                    layer_name="RMSNormZeroCentered",
+                    version=1,
+                    # TODO: drop once the kernels move under an allow-listed trusted publisher
+                    trust_remote_code=True,
+                )
+            },
+        },
         "Qwen3_5GatedDeltaNet": {
             "mps": {
                 Mode.INFERENCE: LayerRepository(

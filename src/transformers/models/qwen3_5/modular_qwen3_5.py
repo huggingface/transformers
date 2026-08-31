@@ -347,6 +347,7 @@ class Qwen3_5MLP(Qwen3NextMLP):
         self.intermediate_size = intermediate_size
 
 
+@use_kernel_forward_from_hub("RMSNormZeroCentered")
 class Qwen3_5RMSNorm(Qwen3NextRMSNorm):
     pass
 

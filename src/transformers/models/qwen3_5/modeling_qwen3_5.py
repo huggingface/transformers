@@ -720,6 +720,7 @@ class Qwen3_5MLP(nn.Module):
         return down_proj
 
 
+@use_kernel_forward_from_hub("RMSNormZeroCentered")
 class Qwen3_5RMSNorm(nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6):
         super().__init__()
