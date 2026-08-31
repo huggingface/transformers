@@ -25,15 +25,17 @@ from ...audio_utils import AudioInput, make_list_of_audio_chat_template
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
-from ...modeling_outputs import BaseModelOutputWithPooling
-from ...processing_utils import ProcessorMixin, Unpack, prepare_prompt_input
+from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput
+from ...processing_utils import ProcessorMixin, Unpack
+from ...tokenization_utils_base import TextInput
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.import_utils import requires
 from ..audioflamingo3.modeling_audioflamingo3 import (
+    AudioFlamingo3CausalLMOutputWithPast,
     AudioFlamingo3ForConditionalGeneration,
     AudioFlamingo3MultiModalProjector,
 )
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 from ..glmasr.configuration_glmasr import GlmAsrConfig
 from ..glmasr.modeling_glmasr import (
     GlmAsrModel,
@@ -61,16 +63,15 @@ class MossTranscribeDiarizeConfig(GlmAsrConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
 
     _default_text_config_kwargs = {
-        "vocab_size": 151936,
         "hidden_size": 1024,
         "intermediate_size": 3072,
         "num_hidden_layers": 28,
         "num_attention_heads": 16,
         "num_key_value_heads": 8,
-        "head_dim": 128,
-        "max_position_embeddings": 40960,
+        "max_position_embeddings": 131_072,
         "rope_theta": 1_000_000.0,
     }
+
     _default_audio_config_kwargs = {
         "num_mel_bins": 80,
         "d_model": 1024,
@@ -95,16 +96,12 @@ class MossTranscribeDiarizeConfig(GlmAsrConfig):
 
     def __post_init__(self, **kwargs):
         if isinstance(self.audio_config, dict):
-            audio_model_type = self.audio_config.get("model_type", "qwen2_audio_encoder")
-            # Original checkpoints use WhisperConfig (`model_type="whisper"`).
-            if audio_model_type in (None, "whisper"):
-                audio_model_type = "qwen2_audio_encoder"
-            self.audio_config["model_type"] = audio_model_type
-            self.audio_config = CONFIG_MAPPING[audio_model_type](**self.audio_config)
-        elif getattr(self.audio_config, "model_type", None) == "whisper":
-            audio_config_dict = self.audio_config.to_dict()
-            audio_config_dict["model_type"] = "qwen2_audio_encoder"
-            self.audio_config = CONFIG_MAPPING["qwen2_audio_encoder"](**audio_config_dict)
+            audio_config = dict(self.audio_config)
+            model_type = audio_config.get("model_type", "qwen2_audio_encoder")
+            if model_type == "whisper":
+                model_type = "qwen2_audio_encoder"
+            audio_config["model_type"] = model_type
+            self.audio_config = CONFIG_MAPPING[model_type](**audio_config)
         elif self.audio_config is None:
             self.audio_config = CONFIG_MAPPING["qwen2_audio_encoder"](**self._default_audio_config_kwargs)
 
@@ -114,22 +111,14 @@ class MossTranscribeDiarizeConfig(GlmAsrConfig):
                 **{**self._default_text_config_kwargs, **self.text_config}
             )
         elif self.text_config is None:
-            num_layers = self._default_text_config_kwargs["num_hidden_layers"]
-            self.text_config = CONFIG_MAPPING["qwen3"](
-                **self._default_text_config_kwargs,
-                tie_word_embeddings=self.tie_word_embeddings,
-                layer_types=["full_attention"] * num_layers,
-            )
+            self.text_config = CONFIG_MAPPING["qwen3"](**self._default_text_config_kwargs)
 
-        self.text_config.tie_word_embeddings = self.tie_word_embeddings
         if not getattr(self.text_config, "layer_types", None):
             self.text_config.layer_types = ["full_attention"] * self.text_config.num_hidden_layers
 
         if self.adaptor_input_dim is None:
             self.adaptor_input_dim = self.audio_config.d_model * self.audio_merge_size
 
-        self.hidden_size = self.text_config.hidden_size
-        # Skip GlmAsrConfig.__post_init__ (llama / glmasr_encoder defaults).
         PreTrainedConfig.__post_init__(self, **kwargs)
 
 
@@ -141,6 +130,7 @@ class MossTranscribeDiarizeProcessorKwargs(GlmAsrProcessorKwargs):
         },
         "common_kwargs": {
             "return_tensors": "pt",
+            "padding_side": "left",
         },
         "audio_kwargs": {
             "sampling_rate": 16000,
@@ -166,6 +156,11 @@ class MossTranscribeDiarizeProcessor(GlmAsrProcessor):
         audio_encoder_stride: int = 2,
         time_marker_every_seconds: int = 2,
         enable_time_marker: bool = True,
+        default_transcription_prompt: str = (
+            "请将音频转写为文本，每一段需以起始时间戳和说话人编号"
+            "（[S01]、[S02]、[S03]…）开头，正文为对应的语音内容，"
+            "并在段末标注结束时间戳，以清晰标明该段语音范围。"
+        ),
     ):
         r"""
         audio_token (`str`, *optional*, defaults to `"<|audio_pad|>"`):
@@ -180,9 +175,13 @@ class MossTranscribeDiarizeProcessor(GlmAsrProcessor):
             Insert numeric time-marker tokens into the audio span every N seconds.
         enable_time_marker (`bool`, *optional*, defaults to `True`):
             Whether to inject time-marker tokens into the audio placeholder span.
+        default_transcription_prompt (`str`, *optional*):
+            Default prompt used by [`~MossTranscribeDiarizeProcessor.apply_transcription_request`] when `prompt` is
+            `None`. Requests timestamped transcription with speaker labels such as `[S01]`.
         """
         self.audio_token = audio_token
         self.audio_token_id = tokenizer.convert_tokens_to_ids(audio_token)
+        self.default_transcription_prompt = default_transcription_prompt
         ProcessorMixin.__init__(self, feature_extractor, tokenizer, chat_template=chat_template)
         self.audio_tokens_per_second = audio_tokens_per_second
         self.audio_merge_size = int(audio_merge_size)
@@ -200,6 +199,10 @@ class MossTranscribeDiarizeProcessor(GlmAsrProcessor):
         per_sample_windows: list[int] = []
         flat_chunks: list[np.ndarray] = []
         feature_lengths: list[int] = []
+        mel_frames = int(self.feature_extractor.nb_max_frames)
+        max_tokens_per_full_window = (
+            mel_frames // (2 * self.audio_encoder_stride)
+        ) // self.audio_merge_size
         for audio_el in audio:
             waveform = np.asarray(audio_el, dtype=np.float32).squeeze()
             n_samples = int(waveform.shape[0])
@@ -212,7 +215,10 @@ class MossTranscribeDiarizeProcessor(GlmAsrProcessor):
                 end = min((i + 1) * window_size, time_cap)
                 chunk = waveform[start:end]
                 flat_chunks.append(chunk)
-                feature_lengths.append((chunk.shape[0] - 1) // token_stride + 1)
+                token_count = (chunk.shape[0] - 1) // token_stride + 1
+                if chunk.shape[0] >= window_size:
+                    token_count = min(token_count, max_tokens_per_full_window)
+                feature_lengths.append(token_count)
 
         if flat_chunks:
             input_features = self.feature_extractor(flat_chunks, **kwargs)["input_features"]
@@ -238,9 +244,6 @@ class MossTranscribeDiarizeProcessor(GlmAsrProcessor):
 
         audio_replacements = [self.replace_audio_token(audio_inputs, audio_idx=idx) for idx in range(len(audio))]
         return audio_inputs, audio_replacements
-
-    def _get_audio_token_length(self, audio_lengths: torch.Tensor) -> torch.Tensor:
-        raise NotImplementedError("MOSS counts audio tokens per Whisper window in `_process_audio`.")
 
     def replace_audio_token(self, audio_inputs: dict, audio_idx: int, **kwargs) -> str:
         num_tokens = int(audio_inputs["num_audio_tokens"][audio_idx])
@@ -272,8 +275,6 @@ class MossTranscribeDiarizeProcessor(GlmAsrProcessor):
             parts.append(self.audio_token * remainder)
         return "".join(parts)
 
-
-
     @property
     def model_input_names(self) -> list[str]:
         names = [name for name in super().model_input_names if name != "input_features_mask"]
@@ -294,7 +295,7 @@ class MossTranscribeDiarizeProcessor(GlmAsrProcessor):
                 the chat template loader; NumPy arrays and PyTorch tensors are forwarded directly.
             prompt (`str` or `list[str]`, *optional*):
                 Custom prompt(s) to include in the user turn. A list must be the same length as the batch. When `None`,
-                only the audio is included in the user turn.
+                each sample uses the default diarization prompt from [`default_transcription_prompt`].
             **kwargs:
                 Additional keyword arguments forwarded to [`~MossTranscribeDiarizeProcessor.apply_chat_template`].
         """
@@ -305,7 +306,20 @@ class MossTranscribeDiarizeProcessor(GlmAsrProcessor):
         if batch_size == 0:
             raise ValueError("`audio` must contain at least one sample.")
 
-        prompts = prepare_prompt_input(prompt, batch_size, input_name="prompt")
+        if prompt is None:
+            prompts = [self.default_transcription_prompt] * batch_size
+        elif isinstance(prompt, str):
+            prompts = [prompt] * batch_size
+        elif isinstance(prompt, (list, tuple)):
+            if len(prompt) != batch_size:
+                raise ValueError(
+                    f"Received {len(prompt)} prompt(s) for {batch_size} audio sample(s); counts must match."
+                )
+            prompts = [
+                self.default_transcription_prompt if item is None else item for item in prompt
+            ]
+        else:
+            raise TypeError("`prompt` must be a string, a sequence of strings, or `None`.")
 
         conversations = []
         for prompt_text, audio_item in zip(prompts, audio_items):
@@ -315,8 +329,7 @@ class MossTranscribeDiarizeProcessor(GlmAsrProcessor):
             else:
                 content.append({"type": "audio", "audio": audio_item})
 
-            if prompt_text is not None:
-                content.append({"type": "text", "text": prompt_text})
+            content.append({"type": "text", "text": prompt_text})
 
             conversations.append([{"role": "user", "content": content}])
 
@@ -346,15 +359,22 @@ class MossTranscribeDiarizeMultiModalProjector(AudioFlamingo3MultiModalProjector
 
 class MossTranscribeDiarizePreTrainedModel(GlmAsrPreTrainedModel):
     config_class = MossTranscribeDiarizeConfig
-    base_model_prefix = "model"
-    input_modalities = ("audio", "text")
-    _no_split_modules = []
-    _skip_keys_device_placement = ["past_key_values"]
+    _no_split_modules = None
 
 
 @auto_docstring
 @dataclass
 class MossTranscribeDiarizeModelOutputWithPast(GlmAsrModelOutputWithPast):
+    pass
+
+
+@auto_docstring(
+    custom_intro="""
+    Base class for MossTranscribeDiarize causal language model (or autoregressive) outputs.
+    """
+)
+@dataclass
+class MossTranscribeDiarizeCausalLMOutputWithPast(AudioFlamingo3CausalLMOutputWithPast):
     pass
 
 
@@ -408,23 +428,25 @@ class MossTranscribeDiarizeModel(GlmAsrModel):
             audio_outputs.pooler_output = whisper_features.new_zeros(0, self.config.text_config.hidden_size)
             return audio_outputs
 
-        num_samples = int(audio_chunk_mapping.max().item()) + 1
-        per_sample_chunks: list[list[torch.Tensor]] = [[] for _ in range(num_samples)]
-        for chunk_idx in range(num_chunks):
-            sample_idx = int(audio_chunk_mapping[chunk_idx].item())
-            per_sample_chunks[sample_idx].append(whisper_features[chunk_idx, valid_mask[chunk_idx]])
+        _, chunk_counts = torch.unique_consecutive(audio_chunk_mapping, return_counts=True)
+        chunk_starts = torch.nn.functional.pad(chunk_counts.cumsum(0)[:-1], (1, 0), value=0)
+        split_indices = chunk_starts[1:].long().cpu()
+        chunk_groups = torch.tensor_split(whisper_features, split_indices, dim=0)
+        valid_mask_groups = torch.tensor_split(valid_mask, split_indices, dim=0)
 
         projected = []
-        for sample_chunks in per_sample_chunks:
-            if not sample_chunks:
+        for sample_features, sample_valid_mask in zip(chunk_groups, valid_mask_groups):
+            flat_features = sample_features[sample_valid_mask]
+            if flat_features.numel() == 0:
                 continue
-            sample_features = torch.cat(sample_chunks, dim=0).unsqueeze(0).to(self.dtype)
-            batch_size, seq_len, hidden_size = sample_features.shape
+            sample_features = flat_features.unsqueeze(0).to(self.dtype)
+            seq_len = sample_features.shape[1]
             trimmed_seq_len = (seq_len // merge_size) * merge_size
             if trimmed_seq_len == 0:
                 continue
+            hidden_size = sample_features.shape[2]
             sample_features = sample_features[:, :trimmed_seq_len].reshape(
-                batch_size, trimmed_seq_len // merge_size, hidden_size * merge_size
+                1, trimmed_seq_len // merge_size, hidden_size * merge_size
             )
             projected.append(self.multi_modal_projector(sample_features).squeeze(0))
 
@@ -529,8 +551,10 @@ class MossTranscribeDiarizeForConditionalGeneration(AudioFlamingo3ForConditional
         audio_feature_lengths: torch.LongTensor | None = None,
         audio_chunk_mapping: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> tuple | MossTranscribeDiarizeCausalLMOutputWithPast:
         r"""
+        input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`, *optional*):
+            Unused. MOSS reassembles chunked audio via `audio_feature_lengths` and `audio_chunk_mapping` instead.
         audio_feature_lengths (`torch.LongTensor` of shape `(num_chunks,)`, *optional*):
             Number of output tokens per chunked log-mel feature row in `input_features`.
         audio_chunk_mapping (`torch.LongTensor` of shape `(num_chunks,)`, *optional*):

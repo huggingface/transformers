@@ -43,14 +43,12 @@ class MossTranscribeDiarizeConfig(PreTrainedConfig):
     sub_configs = {"text_config": AutoConfig, "audio_config": AutoConfig}
 
     _default_text_config_kwargs = {
-        "vocab_size": 151936,
         "hidden_size": 1024,
         "intermediate_size": 3072,
         "num_hidden_layers": 28,
         "num_attention_heads": 16,
         "num_key_value_heads": 8,
-        "head_dim": 128,
-        "max_position_embeddings": 40960,
+        "max_position_embeddings": 131_072,
         "rope_theta": 1_000_000.0,
     }
 
@@ -61,6 +59,7 @@ class MossTranscribeDiarizeConfig(PreTrainedConfig):
     projector_hidden_act: str = "silu"
     tie_word_embeddings: bool = True
     keys_to_ignore_at_inference = ["past_key_values"]
+
     _default_audio_config_kwargs = {
         "num_mel_bins": 80,
         "d_model": 1024,
@@ -82,16 +81,12 @@ class MossTranscribeDiarizeConfig(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         if isinstance(self.audio_config, dict):
-            audio_model_type = self.audio_config.get("model_type", "qwen2_audio_encoder")
-            # Original checkpoints use WhisperConfig (`model_type="whisper"`).
-            if audio_model_type in (None, "whisper"):
-                audio_model_type = "qwen2_audio_encoder"
-            self.audio_config["model_type"] = audio_model_type
-            self.audio_config = CONFIG_MAPPING[audio_model_type](**self.audio_config)
-        elif getattr(self.audio_config, "model_type", None) == "whisper":
-            audio_config_dict = self.audio_config.to_dict()
-            audio_config_dict["model_type"] = "qwen2_audio_encoder"
-            self.audio_config = CONFIG_MAPPING["qwen2_audio_encoder"](**audio_config_dict)
+            audio_config = dict(self.audio_config)
+            model_type = audio_config.get("model_type", "qwen2_audio_encoder")
+            if model_type == "whisper":
+                model_type = "qwen2_audio_encoder"
+            audio_config["model_type"] = model_type
+            self.audio_config = CONFIG_MAPPING[model_type](**audio_config)
         elif self.audio_config is None:
             self.audio_config = CONFIG_MAPPING["qwen2_audio_encoder"](**self._default_audio_config_kwargs)
 
@@ -101,22 +96,14 @@ class MossTranscribeDiarizeConfig(PreTrainedConfig):
                 **{**self._default_text_config_kwargs, **self.text_config}
             )
         elif self.text_config is None:
-            num_layers = self._default_text_config_kwargs["num_hidden_layers"]
-            self.text_config = CONFIG_MAPPING["qwen3"](
-                **self._default_text_config_kwargs,
-                tie_word_embeddings=self.tie_word_embeddings,
-                layer_types=["full_attention"] * num_layers,
-            )
+            self.text_config = CONFIG_MAPPING["qwen3"](**self._default_text_config_kwargs)
 
-        self.text_config.tie_word_embeddings = self.tie_word_embeddings
         if not getattr(self.text_config, "layer_types", None):
             self.text_config.layer_types = ["full_attention"] * self.text_config.num_hidden_layers
 
         if self.adaptor_input_dim is None:
             self.adaptor_input_dim = self.audio_config.d_model * self.audio_merge_size
 
-        self.hidden_size = self.text_config.hidden_size
-        # Skip GlmAsrConfig.__post_init__ (llama / glmasr_encoder defaults).
         super().__post_init__(**kwargs)
 
 
