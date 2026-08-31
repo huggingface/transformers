@@ -686,7 +686,7 @@ class GroundingDinoTextEnhancerLayer(nn.Module):
             attention_masks = attention_masks.to(dtype=dtype)  # fp16 compatibility
             attention_masks = (1.0 - attention_masks) * torch.finfo(dtype).min
 
-        queries = keys = self.with_pos_embed(hidden_states, position_embeddings).to(hidden_states.dtype)
+        queries = keys = self.with_pos_embed(hidden_states, position_embeddings)
         attention_output, attention_weights = self.self_attn(
             queries=queries,
             keys=keys,
@@ -1427,8 +1427,8 @@ class GroundingDinoEncoder(GroundingDinoPreTrainedModel):
         reference_points_list = []
         for level, (height, width) in enumerate(spatial_shapes_list):
             ref_y, ref_x = torch.meshgrid(
-                torch.linspace(0.5, height - 0.5, height, dtype=torch.float32, device=device),
-                torch.linspace(0.5, width - 0.5, width, dtype=torch.float32, device=device),
+                torch.linspace(0.5, height - 0.5, height, dtype=valid_ratios.dtype, device=device),
+                torch.linspace(0.5, width - 0.5, width, dtype=valid_ratios.dtype, device=device),
                 indexing="ij",
             )
             # TODO: valid_ratios could be useless here. check https://github.com/fundamentalvision/Deformable-DETR/issues/36
@@ -1942,14 +1942,14 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
         for name, param in self.backbone.conv_encoder.model.named_parameters():
             param.requires_grad_(True)
 
-    def get_valid_ratio(self, mask):
+    def get_valid_ratio(self, mask, dtype=torch.float32):
         """Get the valid ratio of all feature maps."""
 
         _, height, width = mask.shape
-        valid_height = torch.sum(mask[:, :, 0], 1)
-        valid_width = torch.sum(mask[:, 0, :], 1)
-        valid_ratio_height = valid_height.float() / height
-        valid_ratio_width = valid_width.float() / width
+        valid_height = torch.sum(mask[:, :, 0], 1, dtype=dtype)
+        valid_width = torch.sum(mask[:, 0, :], 1, dtype=dtype)
+        valid_ratio_height = valid_height / height
+        valid_ratio_width = valid_width / width
         valid_ratio = torch.stack([valid_ratio_width, valid_ratio_height], -1)
         return valid_ratio
 
@@ -2147,8 +2147,7 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
         lvl_pos_embed_flatten = torch.cat(lvl_pos_embed_flatten, 1)
         spatial_shapes = torch.as_tensor(spatial_shapes_list, dtype=torch.long, device=source_flatten.device)
         level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
-        valid_ratios = torch.stack([self.get_valid_ratio(m) for m in masks], 1)
-        valid_ratios = valid_ratios.float()
+        valid_ratios = torch.stack([self.get_valid_ratio(m, dtype=source_flatten.dtype) for m in masks], 1)
 
         # Fourth, sent source_flatten + mask_flatten + lvl_pos_embed_flatten (backbone + proj layer output) through encoder
         # Also provide spatial_shapes, level_start_index and valid_ratios
