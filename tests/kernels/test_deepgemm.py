@@ -46,13 +46,13 @@ from parameterized import parameterized
 from test_utils import make_experts, make_fp8_experts
 
 import transformers.integrations.deepgemm as dg
+from transformers.distributed.utils import is_dtensor
 from transformers.integrations.deepgemm import (
     deepgemm_bf16_experts_forward,
     deepgemm_fp8_fp4_experts_forward,
     deepgemm_fp8_fp4_linear,
     deepgemm_fp8_fp4_megamoe_experts_forward,
 )
-from transformers.integrations.tensor_parallel import to_local
 from transformers.testing_utils import (
     require_torch,
     require_torch_greater_or_equal,
@@ -240,7 +240,7 @@ class DeepGemmLoaderTest(unittest.TestCase):
 
         @torch.compile(fullgraph=True)
         def run(x):
-            return to_local(x) + 1
+            return x.to_local() + 1 if is_dtensor(x) else x + 1
 
         out = run(torch.zeros(3, device=torch_device))  # a graph break / traced probe would raise here
         self.assertTrue(torch.equal(out, torch.ones(3, device=torch_device)))

@@ -233,12 +233,6 @@ class PagedAttentionCache:
         self.num_pages = self.num_blocks * self.block_size
         logger.info(f"Paged cache initialized: {self.max_batch_tokens = }, {self.num_blocks = }, {self.block_size = }")
 
-        # If max_blocks_per_request is not set, initialize it to the non-zero fallback value
-        max_blocks_per_request = continuous_batching_config.max_blocks_per_request
-        if max_blocks_per_request is None:
-            max_blocks_per_request = continuous_batching_config.fallback_max_blocks_per_request
-        self.max_blocks_per_request = max_blocks_per_request
-
         # Initialize the cache
         self.key_cache: list[torch.Tensor] = []
         self.value_cache: list[torch.Tensor] = []
@@ -285,6 +279,19 @@ class PagedAttentionCache:
             else:
                 raise ValueError(f"Invalid group type: {group_type}")
             self.group_cache_managers.append(cm)
+
+        max_blocks_per_request = continuous_batching_config.max_blocks_per_request
+        # If there are sliding window attention groups, we need to set the max blocks per request to 0 (TODO)
+        if self.num_sliding_attention_groups > 0:
+            # Throw a warning if the user provided a non-zero value
+            if max_blocks_per_request is not None and max_blocks_per_request > 0:
+                logger.warning("Sliding window attention groups detected: disabling block table support.")
+            continuous_batching_config.max_blocks_per_request = 0
+            max_blocks_per_request = 0
+        # Otherwise, make sure to use the user-provided value or the fallback value
+        if max_blocks_per_request is None:
+            max_blocks_per_request = continuous_batching_config.fallback_max_blocks_per_request
+        self.max_blocks_per_request = max_blocks_per_request
 
         # We only use prefix sharing if the whole model has only full attention layers and block sharing is allowed
         self.use_prefix_sharing = self.allow_block_sharing and group_types == ["full_attention"]

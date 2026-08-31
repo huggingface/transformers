@@ -1089,7 +1089,7 @@ class Gemma4TextRotaryEmbedding(nn.Module):
         self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
-        self.layer_types = set(config.layer_types)
+        self.layer_types = sorted(set(config.layer_types))
         self.rope_init_fns: dict[str, Callable[..., tuple[torch.Tensor, float]]] = {}
         self.rope_type: dict[str, str] = {}
 
@@ -1998,7 +1998,7 @@ class Gemma4AudioModel(Gemma4PreTrainedModel):
 class Gemma4VisionModel(Gemma4PreTrainedModel):
     """The Gemma 4 Vision Encoder."""
 
-    config = Gemma4VisionConfig
+    config: Gemma4VisionConfig
     _can_record_outputs = {
         "hidden_states": Gemma4VisionEncoderLayer,
         "attentions": Gemma4VisionAttention,
@@ -2341,7 +2341,7 @@ class Gemma4Model(Gemma4PreTrainedModel):
             video_features = self.get_video_features(
                 pixel_values_videos, video_position_ids, return_dict=True
             ).pooler_output
-            video_features = video_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            video_features = torch.cat(video_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
 
             # Confirm the number of soft tokens from the vision tower matches the number of slots in the embeddings.
             n_video_tokens = video_mask.sum()

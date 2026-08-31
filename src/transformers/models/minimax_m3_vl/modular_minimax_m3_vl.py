@@ -67,7 +67,7 @@ from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor, Qwen2VLProcessorKwa
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="MiniMaxAI/MiniMax-M3-preview")
+@auto_docstring(checkpoint="MiniMaxAI/MiniMax-M3")
 @strict
 class MiniMaxM3VLTextConfig(MiniMaxM2Config):
     r"""
@@ -163,7 +163,7 @@ class MiniMaxM3VLTextConfig(MiniMaxM2Config):
             self.mlp_layer_types = ["sparse"] * self.num_hidden_layers
 
 
-@auto_docstring(checkpoint="MiniMaxAI/MiniMax-M3-preview")
+@auto_docstring(checkpoint="MiniMaxAI/MiniMax-M3")
 @strict
 class MiniMaxM3VLVisionConfig(PreTrainedConfig):
     r"""
@@ -191,7 +191,7 @@ class MiniMaxM3VLVisionConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
 
-@auto_docstring(checkpoint="MiniMaxAI/MiniMax-M3-preview")
+@auto_docstring(checkpoint="MiniMaxAI/MiniMax-M3")
 @strict
 class MiniMaxM3VLConfig(PreTrainedConfig):
     model_type = "minimax_m3_vl"

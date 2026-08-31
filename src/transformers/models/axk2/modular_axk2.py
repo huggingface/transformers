@@ -199,9 +199,9 @@ class AXK2GatedRMSNorm(nn.Module):
     return y * sigmoid(gate_mlp(y))
     """
 
-    def __init__(self, config: AXK2Config, eps: float):
+    def __init__(self, config: AXK2Config):
         super().__init__()
-        self.norm = AXK2RMSNorm(config.hidden_size, eps=eps)
+        self.norm = AXK2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.mlp = AXK2GateMLP(config)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -402,9 +402,9 @@ class AXK2Attention(DeepseekV32Attention):
 class AXK2DecoderLayer(DeepseekV32DecoderLayer):
     def __init__(self, config: AXK2Config, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.input_layernorm = AXK2GatedRMSNorm(config, eps=config.rms_norm_eps)
+        self.input_layernorm = AXK2GatedRMSNorm(config)
         self.post_attention_layernorm = (
-            AXK2GatedRMSNorm(config, eps=config.rms_norm_eps)
+            AXK2GatedRMSNorm(config)
             if config.mlp_layer_types[layer_idx] == "sparse"
             else AXK2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         )

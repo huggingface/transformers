@@ -127,6 +127,12 @@ class CohereCompassTextConfig(PreTrainedConfig):
 
         super().__post_init__(**kwargs)
 
+    def convert_rope_params_to_dict(self, **kwargs):
+        # allow per layer rope with optional NoPE layers
+        self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else {}
+        self.standardize_rope_params()
+        return kwargs
+
 
 @auto_docstring(checkpoint="CohereLabs/North-Micro-Vision-Instruct")
 @strict
@@ -137,10 +143,10 @@ class CohereCompassConfig(PreTrainedConfig):
     ```python
     >>> from transformers import CohereCompassForConditionalGeneration, CohereCompassConfig
 
-    >>> # Initializing a Qwen3-VL style configuration
+    >>> # Initializing a "CohereLabs/North-Micro-Vision-Instruct" style configuration
     >>> configuration = CohereCompassConfig()
 
-    >>> # Initializing a model from the Qwen3-VL-4B style configuration
+    >>> # Initializing a model from the "CohereLabs/North-Micro-Vision-Instruct" style configuration
     >>> model = CohereCompassForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration

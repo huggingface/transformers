@@ -202,6 +202,7 @@ class DINOv3ConvNextEncoder(DINOv3ConvNextPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
+    @auto_docstring
     def forward(
         self,
         hidden_states: torch.Tensor,
