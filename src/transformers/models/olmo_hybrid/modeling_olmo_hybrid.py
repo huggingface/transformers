@@ -752,7 +752,7 @@ class OlmoHybridGatedDeltaNet(nn.Module):
         return output
 
 
-@use_kernel_forward_from_hub("SwiGLUMLP")
+@use_kernel_forward_from_hub("SwiGLUMLP", condition=lambda module: module.config.hidden_act == "silu")
 class OlmoHybridMLP(nn.Module):
     def __init__(self, config):
         super().__init__()

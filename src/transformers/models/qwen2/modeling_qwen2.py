@@ -32,7 +32,7 @@ from ...utils.output_capturing import capture_outputs
 from .configuration_qwen2 import Qwen2Config
 
 
-@use_kernel_forward_from_hub("SwiGLUMLP")
+@use_kernel_forward_from_hub("SwiGLUMLP", condition=lambda module: module.config.hidden_act == "silu")
 class Qwen2MLP(nn.Module):
     def __init__(self, config):
         super().__init__()

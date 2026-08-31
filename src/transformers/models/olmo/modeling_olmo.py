@@ -60,7 +60,7 @@ class OlmoLayerNorm(nn.Module):
         )
 
 
-@use_kernel_forward_from_hub("SwiGLUMLP")
+@use_kernel_forward_from_hub("SwiGLUMLP", condition=lambda module: module.config.hidden_act == "silu")
 class OlmoMLP(nn.Module):
     def __init__(self, config):
         super().__init__()

@@ -432,7 +432,7 @@ class MoonshineStreamingEncoder(MoonshineStreamingPreTrainedModel):
         return MoonshineStreamingEncoderModelOutput(last_hidden_state=hidden_states, attention_mask=attention_mask)
 
 
-@use_kernel_forward_from_hub("SwiGLUMLP")
+@use_kernel_forward_from_hub("SwiGLUMLP", condition=lambda module: module.config.hidden_act == "silu")
 class MoonshinMoonshineStreamingDecoderMLP(nn.Module):
     def __init__(self, config):
         super().__init__()

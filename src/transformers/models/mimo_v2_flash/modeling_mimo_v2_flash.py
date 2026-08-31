@@ -237,7 +237,7 @@ class MiMoV2FlashMoE(nn.Module):
         return self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
 
 
-@use_kernel_forward_from_hub("SwiGLUMLP")
+@use_kernel_forward_from_hub("SwiGLUMLP", condition=lambda module: module.config.hidden_act == "silu")
 class MiMoV2FlashMLP(nn.Module):
     def __init__(self, config, intermediate_size=None):
         super().__init__()

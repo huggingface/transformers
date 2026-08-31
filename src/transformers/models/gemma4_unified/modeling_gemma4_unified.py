@@ -456,7 +456,7 @@ class Gemma4UnifiedTextAttention(nn.Module):
         return attn_output, attn_weights
 
 
-@use_kernel_forward_from_hub("GeGLUMLP")
+@use_kernel_forward_from_hub("GeGLUMLP", condition=lambda module: module.config.hidden_act == "gelu_pytorch_tanh")
 class Gemma4UnifiedTextMLP(nn.Module):
     def __init__(self, config: Gemma4UnifiedTextConfig, layer_idx: int):
         super().__init__()

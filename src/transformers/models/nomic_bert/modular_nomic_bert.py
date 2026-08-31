@@ -118,7 +118,7 @@ class NomicBertAttention(JinaEmbeddingsV3Attention):
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
 
 
-@use_kernel_forward_from_hub("SwiGLUMLP")
+@use_kernel_forward_from_hub("SwiGLUMLP", condition=lambda module: module.config.hidden_act == "silu")
 class NomicBertMLP(GemmaMLP):
     pass
 

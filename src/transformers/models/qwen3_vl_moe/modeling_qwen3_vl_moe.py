@@ -302,7 +302,7 @@ class Qwen3VLMoeTextAttention(nn.Module):
         return attn_output, attn_weights
 
 
-@use_kernel_forward_from_hub("SwiGLUMLP")
+@use_kernel_forward_from_hub("SwiGLUMLP", condition=lambda module: module.config.hidden_act == "silu")
 class Qwen3VLMoeTextMLP(nn.Module):
     def __init__(self, config, intermediate_size=None):
         super().__init__()

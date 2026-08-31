@@ -57,7 +57,7 @@ class Qwen2MoeRotaryEmbedding(Gemma2RotaryEmbedding):
     pass
 
 
-@use_kernel_forward_from_hub("SwiGLUMLP")
+@use_kernel_forward_from_hub("SwiGLUMLP", condition=lambda module: module.config.hidden_act == "silu")
 class Qwen2MoeMLP(GemmaMLP):
     def __init__(self, config, intermediate_size=None):
         super().__init__()

@@ -688,7 +688,7 @@ class Gemma4VisionPooler(nn.Module):
         return hidden_states, padding_positions
 
 
-@use_kernel_forward_from_hub("GeGLUMLP")
+@use_kernel_forward_from_hub("GeGLUMLP", condition=lambda module: module.config.hidden_act == "gelu_pytorch_tanh")
 class Gemma4VisionMLP(nn.Module):
     def __init__(self, config: Gemma4VisionConfig):
         super().__init__()
@@ -1063,7 +1063,7 @@ class Gemma4VisionEncoder(nn.Module):
         return BaseModelOutputWithPast(last_hidden_state=hidden_states)
 
 
-@use_kernel_forward_from_hub("GeGLUMLP")
+@use_kernel_forward_from_hub("GeGLUMLP", condition=lambda module: module.config.hidden_act == "gelu_pytorch_tanh")
 class Gemma4TextMLP(nn.Module):
     def __init__(self, config: Gemma4TextConfig, layer_idx: int):
         super().__init__()

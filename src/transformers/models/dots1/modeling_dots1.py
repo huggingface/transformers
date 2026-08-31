@@ -260,7 +260,7 @@ class Dots1Attention(nn.Module):
         return attn_output, attn_weights
 
 
-@use_kernel_forward_from_hub("SwiGLUMLP")
+@use_kernel_forward_from_hub("SwiGLUMLP", condition=lambda module: module.config.hidden_act == "silu")
 class Dots1MLP(nn.Module):
     def __init__(self, config, intermediate_size=None):
         super().__init__()

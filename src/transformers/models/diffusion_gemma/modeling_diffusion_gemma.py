@@ -497,7 +497,7 @@ class DiffusionGemmaDecoderTextAttention(nn.Module):
         return keys, values
 
 
-@use_kernel_forward_from_hub("GeGLUMLP")
+@use_kernel_forward_from_hub("GeGLUMLP", condition=lambda module: module.config.hidden_act == "gelu_pytorch_tanh")
 class DiffusionGemmaText4MLP(nn.Module):
     def __init__(self, config: DiffusionGemmaTextConfig, layer_idx: int):
         super().__init__()

@@ -50,7 +50,7 @@ class Qwen3RMSNorm(Qwen2RMSNorm):
     pass
 
 
-@use_kernel_forward_from_hub("SwiGLUMLP")
+@use_kernel_forward_from_hub("SwiGLUMLP", condition=lambda module: module.config.hidden_act == "silu")
 class Qwen3MLP(GemmaMLP):
     pass
 

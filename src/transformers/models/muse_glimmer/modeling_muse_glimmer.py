@@ -140,7 +140,7 @@ class MuseGlimmerTextCenteredRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.eps}"
 
 
-@use_kernel_forward_from_hub("GeGLUMLP")
+@use_kernel_forward_from_hub("GeGLUMLP", condition=lambda module: module.config.hidden_act == "gelu_pytorch_tanh")
 class MuseGlimmerTextMLP(nn.Module):
     def __init__(self, config):
         super().__init__()

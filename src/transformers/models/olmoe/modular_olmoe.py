@@ -52,7 +52,7 @@ class OlmoeRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 
-@use_kernel_forward_from_hub("SwiGLUMLP")
+@use_kernel_forward_from_hub("SwiGLUMLP", condition=lambda module: module.config.hidden_act == "silu")
 class OlmoeMLP(GemmaMLP):
     pass
 
