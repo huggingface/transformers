@@ -455,7 +455,7 @@ def torch_recurrent_gated_delta_rule(
     return core_attn_out, last_recurrent_state
 
 
-@use_kernel_forward_from_hub("Qwen3_5MoeGatedDeltaNet")
+@use_kernel_forward_from_hub("Qwen3_5GatedDeltaNet")
 @use_kernelized_func(
     [torch_recurrent_gated_delta_rule, torch_chunk_gated_delta_rule, causal_conv1d_fn, causal_conv1d_update]
 )
