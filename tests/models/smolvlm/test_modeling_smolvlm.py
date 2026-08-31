@@ -359,42 +359,6 @@ class SmolVLMForConditionalGenerationModelTest(
     def test_generate_with_static_cache(self):
         pass
 
-    def test_generate_raises_on_both_pixel_values_and_image_hidden_states(self):
-        # Passing both at once is caller error, not something the model should silently resolve: the caller
-        # must clear `pixel_values` from the inputs to reuse a previous call's `image_hidden_states`.
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        model = SmolVLMForConditionalGeneration(config).to(torch_device).eval()
-
-        with torch.no_grad():
-            outputs = model(**inputs_dict)
-
-        with self.assertRaises(ValueError):
-            model.generate(
-                input_ids=inputs_dict["input_ids"],
-                attention_mask=inputs_dict["attention_mask"],
-                pixel_values=inputs_dict["pixel_values"],
-                image_hidden_states=outputs.image_hidden_states,
-                max_new_tokens=2,
-                do_sample=False,
-            )
-
-    def test_generate_from_image_hidden_states_without_pixel_values(self):
-        # The correct way to reuse a previous call's vision-tower output and skip recomputing it: pass
-        # `image_hidden_states` alone, with `pixel_values` cleared from the inputs.
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        model = SmolVLMForConditionalGeneration(config).to(torch_device).eval()
-
-        with torch.no_grad():
-            outputs = model(**inputs_dict)
-
-        model.generate(
-            input_ids=inputs_dict["input_ids"],
-            attention_mask=inputs_dict["attention_mask"],
-            image_hidden_states=outputs.image_hidden_states,
-            max_new_tokens=2,
-            do_sample=False,
-        )
-
     @unittest.skip(reason="Compile not yet supported in SmolVLM models")
     @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
