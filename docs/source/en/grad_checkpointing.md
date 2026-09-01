@@ -43,6 +43,22 @@ args = TrainingArguments(
 )
 ```
 
+## Offloading the saved activations
+
+Gradient checkpointing still keeps one activation per checkpointed layer on the GPU, and at long sequence lengths that alone is large: `layers x sequence x hidden` bytes, so 36 layers of an 8B model at 128k tokens is 36 GB. Set `offload` to hold those in pinned host memory instead, and pay a device-to-host copy in the forward and a host-to-device copy in the backward for them.
+
+```py
+from transformers import TrainingArguments
+
+args = TrainingArguments(
+    ...,
+    gradient_checkpointing=True,
+    gradient_checkpointing_kwargs={"offload": True},
+)
+```
+
+Both copies run on the compute stream, so this trades a slower step for the memory. Reach for it when a run does not fit otherwise, not to speed one up.
+
 ## Next steps
 
 - Read the [GPU memory usage](./model_memory_anatomy) doc to understand what is driving memory usage on the GPU during training.
