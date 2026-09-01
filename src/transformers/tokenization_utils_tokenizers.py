@@ -284,9 +284,12 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         if isinstance(extra_special_tokens, dict):
             extra_special_tokens = list(extra_special_tokens.keys())
 
+        # Retrieve the vocab size from the vocab file (one `<token> <rank>` line per token for tiktoken)
+        with open(vocab_file, "rb") as vocab_handle:
+            base_vocab_size = sum(1 for line in vocab_handle if line.strip())
+
         # If any of the tokens in `added_tokens_decoder` are not in the base vocabulary, they need to be added. To do so
         # we bake them in the `extra_special_tokens` list, with placeholder if `added_tokens_decoder` is not contiguous
-        base_vocab_size = cls._tiktoken_vocab_size(vocab_file)
         max_added_token_id = max(added_tokens_decoder.keys()) if added_tokens_decoder else 0
         if max_added_token_id >= base_vocab_size:
             new_extras = [
@@ -302,12 +305,6 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         converter = TikTokenConverter(vocab_file=vocab_file, extra_special_tokens=extra_special_tokens)
         local_kwargs["tokenizer_object"] = converter.converted()
         return local_kwargs
-
-    @staticmethod
-    def _tiktoken_vocab_size(vocab_file: str) -> int:
-        """Number of base tokens in a tiktoken vocab file, which holds one `<token> <rank>` pair per line."""
-        with open(vocab_file, "rb") as vocab_handle:
-            return sum(1 for line in vocab_handle if line.strip())
 
     @classmethod
     def _convert_from_sentencepiece(cls, vocab_file: str, local_kwargs: dict[str, Any]) -> dict[str, Any]:
