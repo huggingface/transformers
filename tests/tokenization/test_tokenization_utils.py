@@ -123,7 +123,9 @@ class TokenizerUtilsTest(unittest.TestCase):
         self.assertFalse(len(cs.err), msg=f"should have no warning, but got {cs.err}")
 
         batch = BatchEncoding({"inputs": [1, 2, 3], "labels": 0})
-        tensor_batch = batch.convert_to_tensors(tensor_type="np", prepend_batch_axis=True)
+        tensor_batch = batch.convert_to_tensors(
+            tensor_type="np", prepend_batch_axis=True
+        )
         self.assertEqual(tensor_batch["inputs"].shape, (1, 3))
         self.assertEqual(tensor_batch["labels"].shape, (1,))
 
@@ -139,26 +141,39 @@ class TokenizerUtilsTest(unittest.TestCase):
         self.assertFalse(len(cs.err), msg=f"should have no warning, but got {cs.err}")
 
         batch = BatchEncoding({"inputs": [1, 2, 3], "labels": 0})
-        tensor_batch = batch.convert_to_tensors(tensor_type="pt", prepend_batch_axis=True)
+        tensor_batch = batch.convert_to_tensors(
+            tensor_type="pt", prepend_batch_axis=True
+        )
         self.assertEqual(tensor_batch["inputs"].shape, (1, 3))
         self.assertEqual(tensor_batch["labels"].shape, (1,))
 
     def test_padding_accepts_tensors(self):
-        features = [{"input_ids": np.array([0, 1, 2])}, {"input_ids": np.array([0, 1, 2, 3])}]
+        features = [
+            {"input_ids": np.array([0, 1, 2])},
+            {"input_ids": np.array([0, 1, 2, 3])},
+        ]
         tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-cased")
 
         batch = tokenizer.pad(features, padding=True)
         self.assertTrue(isinstance(batch["input_ids"], np.ndarray))
-        self.assertEqual(batch["input_ids"].tolist(), [[0, 1, 2, tokenizer.pad_token_id], [0, 1, 2, 3]])
+        self.assertEqual(
+            batch["input_ids"].tolist(),
+            [[0, 1, 2, tokenizer.pad_token_id], [0, 1, 2, 3]],
+        )
         batch = tokenizer.pad(features, padding=True, return_tensors="np")
         self.assertTrue(isinstance(batch["input_ids"], np.ndarray))
-        self.assertEqual(batch["input_ids"].tolist(), [[0, 1, 2, tokenizer.pad_token_id], [0, 1, 2, 3]])
+        self.assertEqual(
+            batch["input_ids"].tolist(),
+            [[0, 1, 2, tokenizer.pad_token_id], [0, 1, 2, 3]],
+        )
 
     @require_tokenizers
     def test_decoding_single_token(self):
         for tokenizer_class in [BertTokenizer, BertTokenizer]:
             with self.subTest(f"{tokenizer_class}"):
-                tokenizer = tokenizer_class.from_pretrained("google-bert/bert-base-cased")
+                tokenizer = tokenizer_class.from_pretrained(
+                    "google-bert/bert-base-cased"
+                )
 
                 token_id = 2300
                 decoded_flat = tokenizer.decode(token_id)
@@ -199,24 +214,42 @@ class TokenizerUtilsTest(unittest.TestCase):
                 "image_token": "<image>",
             }
         )
-        multimodal_special_tokens_list = attribute_special_tokens_list + ["boi_token", "eoi_token", "image_token"]
-        self.assertListEqual(llama_tokenizer.SPECIAL_TOKENS_ATTRIBUTES, multimodal_special_tokens_list)
+        multimodal_special_tokens_list = attribute_special_tokens_list + [
+            "boi_token",
+            "eoi_token",
+            "image_token",
+        ]
+        self.assertListEqual(
+            llama_tokenizer.SPECIAL_TOKENS_ATTRIBUTES, multimodal_special_tokens_list
+        )
         with tempfile.TemporaryDirectory() as tmpdirname:
             llama_tokenizer.save_pretrained(tmpdirname)
 
             # load back and check we have extra special tokens set
             loaded_tokenizer = LlamaTokenizer.from_pretrained(tmpdirname)
-            multimodal_special_tokens_list = attribute_special_tokens_list + ["boi_token", "eoi_token", "image_token"]
-            self.assertListEqual(loaded_tokenizer.SPECIAL_TOKENS_ATTRIBUTES, multimodal_special_tokens_list)
+            multimodal_special_tokens_list = attribute_special_tokens_list + [
+                "boi_token",
+                "eoi_token",
+                "image_token",
+            ]
+            self.assertListEqual(
+                loaded_tokenizer.SPECIAL_TOKENS_ATTRIBUTES,
+                multimodal_special_tokens_list,
+            )
 
             # We set an image_token_id before, so we can get an "image_token" as str that matches the id
             self.assertTrue(loaded_tokenizer.image_token == "<image>")
-            self.assertTrue(loaded_tokenizer.image_token_id == loaded_tokenizer.convert_tokens_to_ids("<image>"))
+            self.assertTrue(
+                loaded_tokenizer.image_token_id
+                == loaded_tokenizer.convert_tokens_to_ids("<image>")
+            )
 
         # save one more time and make sure the image token can get loaded back
         with tempfile.TemporaryDirectory() as tmpdirname:
             loaded_tokenizer.save_pretrained(tmpdirname)
-            loaded_tokenizer_with_extra_tokens = LlamaTokenizer.from_pretrained(tmpdirname)
+            loaded_tokenizer_with_extra_tokens = LlamaTokenizer.from_pretrained(
+                tmpdirname
+            )
             self.assertTrue(loaded_tokenizer_with_extra_tokens.image_token == "<image>")
 
         # test that we can also indicate extra tokens during load time
@@ -225,15 +258,22 @@ class TokenizerUtilsTest(unittest.TestCase):
             "eoi_token": "<image_end>",
             "image_token": "<image>",
         }
-        tokenizer = LlamaTokenizer.from_pretrained("huggyllama/llama-7b", extra_special_tokens=extra_special_tokens)
+        tokenizer = LlamaTokenizer.from_pretrained(
+            "huggyllama/llama-7b", extra_special_tokens=extra_special_tokens
+        )
         self.assertTrue(tokenizer.image_token == "<image>")
-        self.assertTrue(tokenizer.image_token_id == loaded_tokenizer.convert_tokens_to_ids("<image>"))
+        self.assertTrue(
+            tokenizer.image_token_id
+            == loaded_tokenizer.convert_tokens_to_ids("<image>")
+        )
 
     @require_tokenizers
     def test_decoding_skip_special_tokens(self):
         for tokenizer_class in [BertTokenizer, BertTokenizer]:
             with self.subTest(f"{tokenizer_class}"):
-                tokenizer = tokenizer_class.from_pretrained("google-bert/bert-base-cased")
+                tokenizer = tokenizer_class.from_pretrained(
+                    "google-bert/bert-base-cased"
+                )
                 tokenizer.add_tokens(["ஐ"], special_tokens=True)
 
                 # test special token with other tokens, skip the special tokens
@@ -245,7 +285,9 @@ class TokenizerUtilsTest(unittest.TestCase):
                 # test special token with other tokens, do not skip the special tokens
                 ids = tokenizer(sentence)["input_ids"]
                 decoded_sent = tokenizer.decode(ids, skip_special_tokens=False)
-                self.assertEqual(decoded_sent, "[CLS] This is a beautiful flower ஐ [SEP]")
+                self.assertEqual(
+                    decoded_sent, "[CLS] This is a beautiful flower ஐ [SEP]"
+                )
 
                 # test special token stand alone, skip the special tokens
                 sentence = "ஐ"
@@ -271,15 +313,24 @@ class TokenizerUtilsTest(unittest.TestCase):
     def test_padding_accepts_tensors_pt(self):
         import torch
 
-        features = [{"input_ids": torch.tensor([0, 1, 2])}, {"input_ids": torch.tensor([0, 1, 2, 3])}]
+        features = [
+            {"input_ids": torch.tensor([0, 1, 2])},
+            {"input_ids": torch.tensor([0, 1, 2, 3])},
+        ]
         tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-cased")
 
         batch = tokenizer.pad(features, padding=True)
         self.assertTrue(isinstance(batch["input_ids"], torch.Tensor))
-        self.assertEqual(batch["input_ids"].tolist(), [[0, 1, 2, tokenizer.pad_token_id], [0, 1, 2, 3]])
+        self.assertEqual(
+            batch["input_ids"].tolist(),
+            [[0, 1, 2, tokenizer.pad_token_id], [0, 1, 2, 3]],
+        )
         batch = tokenizer.pad(features, padding=True, return_tensors="pt")
         self.assertTrue(isinstance(batch["input_ids"], torch.Tensor))
-        self.assertEqual(batch["input_ids"].tolist(), [[0, 1, 2, tokenizer.pad_token_id], [0, 1, 2, 3]])
+        self.assertEqual(
+            batch["input_ids"].tolist(),
+            [[0, 1, 2, tokenizer.pad_token_id], [0, 1, 2, 3]],
+        )
 
     @require_tokenizers
     def test_instantiation_from_tokenizers(self):
@@ -291,21 +342,52 @@ class TokenizerUtilsTest(unittest.TestCase):
         bert_tokenizer = Tokenizer(WordPiece(unk_token="[UNK]"))
         with tempfile.TemporaryDirectory() as tmpdirname:
             bert_tokenizer.save(os.path.join(tmpdirname, "tokenizer.json"))
-            PreTrainedTokenizerFast(tokenizer_file=os.path.join(tmpdirname, "tokenizer.json"))
+            PreTrainedTokenizerFast(
+                tokenizer_file=os.path.join(tmpdirname, "tokenizer.json")
+            )
 
     def test_vocab_file_in_config_does_not_escape_repo(self):
         # Regression test for path traversal (CWE-22): a vocab-file argument injected into
         # `tokenizer_config.json` must not override the repository-resolved path nor be opened
         # verbatim. Otherwise an attacker-controlled repo could read an arbitrary local file via
         # `AutoTokenizer.from_pretrained(...)` with no `trust_remote_code`.
-        with tempfile.TemporaryDirectory() as repo, tempfile.TemporaryDirectory() as outside:
+        with (
+            tempfile.TemporaryDirectory() as repo,
+            tempfile.TemporaryDirectory() as outside,
+        ):
             secret_path = os.path.join(outside, "secret.txt")
             with open(secret_path, "w", encoding="utf-8") as f:
-                f.write("\n".join(["[PAD]", "[UNK]", "[CLS]", "[SEP]", "[MASK]", "secret_leaked_token"]))
+                f.write(
+                    "\n".join(
+                        [
+                            "[PAD]",
+                            "[UNK]",
+                            "[CLS]",
+                            "[SEP]",
+                            "[MASK]",
+                            "secret_leaked_token",
+                        ]
+                    )
+                )
             with open(os.path.join(repo, "vocab.txt"), "w", encoding="utf-8") as f:
-                f.write("\n".join(["[PAD]", "[UNK]", "[CLS]", "[SEP]", "[MASK]", "benign_repo_token"]))
-            with open(os.path.join(repo, "tokenizer_config.json"), "w", encoding="utf-8") as f:
-                json.dump({"tokenizer_class": "BertTokenizer", "vocab_file": secret_path}, f)
+                f.write(
+                    "\n".join(
+                        [
+                            "[PAD]",
+                            "[UNK]",
+                            "[CLS]",
+                            "[SEP]",
+                            "[MASK]",
+                            "benign_repo_token",
+                        ]
+                    )
+                )
+            with open(
+                os.path.join(repo, "tokenizer_config.json"), "w", encoding="utf-8"
+            ) as f:
+                json.dump(
+                    {"tokenizer_class": "BertTokenizer", "vocab_file": secret_path}, f
+                )
 
             tokenizer = AutoTokenizer.from_pretrained(repo, use_fast=False)
             vocab = tokenizer.get_vocab()
@@ -322,8 +404,12 @@ class TokenizerUtilsTest(unittest.TestCase):
 
                 tokenizer.add_tokens(["<test_token>"])
                 self.assertEqual(len(tokenizer), tokenizer.vocab_size + 1)
-                self.assertEqual(len(tokenizer.added_tokens_decoder), added_tokens_size + 1)
-                self.assertEqual(len(tokenizer.added_tokens_encoder), added_tokens_size + 1)
+                self.assertEqual(
+                    len(tokenizer.added_tokens_decoder), added_tokens_size + 1
+                )
+                self.assertEqual(
+                    len(tokenizer.added_tokens_encoder), added_tokens_size + 1
+                )
 
     @require_sentencepiece
     def test_sentencepiece_cohabitation(self):
@@ -336,22 +422,30 @@ class TokenizerUtilsTest(unittest.TestCase):
         import_protobuf()
 
     def test_training_new_tokenizer_edge_cases(self):
-        _tokenizer = Tokenizer(tokenizers.models.BPE(vocab={"a": 1, "b": 2, "ab": 3}, merges=[("a", "b")]))
+        _tokenizer = Tokenizer(
+            tokenizers.models.BPE(vocab={"a": 1, "b": 2, "ab": 3}, merges=[("a", "b")])
+        )
         _tokenizer.pre_tokenizer = None
 
         tokenizer = PreTrainedTokenizerFast(tokenizer_object=_tokenizer)
         toy_text_iterator = ("a" for _ in range(1000))
-        tokenizer.train_new_from_iterator(text_iterator=toy_text_iterator, length=1000, vocab_size=50)
+        tokenizer.train_new_from_iterator(
+            text_iterator=toy_text_iterator, length=1000, vocab_size=50
+        )
 
         _tokenizer.normalizer = None
         tokenizer = PreTrainedTokenizerFast(tokenizer_object=_tokenizer)
         toy_text_iterator = ("a" for _ in range(1000))
-        tokenizer.train_new_from_iterator(text_iterator=toy_text_iterator, length=1000, vocab_size=50)
+        tokenizer.train_new_from_iterator(
+            text_iterator=toy_text_iterator, length=1000, vocab_size=50
+        )
 
         _tokenizer.post_processor = None
         tokenizer = PreTrainedTokenizerFast(tokenizer_object=_tokenizer)
         toy_text_iterator = ("a" for _ in range(1000))
-        tokenizer.train_new_from_iterator(text_iterator=toy_text_iterator, length=1000, vocab_size=50)
+        tokenizer.train_new_from_iterator(
+            text_iterator=toy_text_iterator, length=1000, vocab_size=50
+        )
 
     def test_encode_message(self):
         tokenizer = AutoTokenizer.from_pretrained("HuggingFaceH4/zephyr-7b-beta")
@@ -364,12 +458,16 @@ class TokenizerUtilsTest(unittest.TestCase):
         ]
 
         # First, test the default case, where we encode the whole conversation at once
-        whole_conversation_tokens = tokenizer.apply_chat_template(conversation, tokenize=True, return_dict=False)
+        whole_conversation_tokens = tokenizer.apply_chat_template(
+            conversation, tokenize=True, return_dict=False
+        )
 
         # Now, test the message-by-message encoding
         tokens = []
         for i, message in enumerate(conversation):
-            tokens += tokenizer.encode_message_with_chat_template(message, conversation_history=conversation[:i])
+            tokens += tokenizer.encode_message_with_chat_template(
+                message, conversation_history=conversation[:i]
+            )
 
         self.assertEqual(whole_conversation_tokens, tokens)
 
@@ -380,17 +478,25 @@ class TokenizerUtilsTest(unittest.TestCase):
             {"role": "user", "content": "Hey there, how are you?"},
         ]
         with self.assertRaises(ValueError):
-            tokenizer.encode_message_with_chat_template(conversation[0], add_generation_prompt=True)
+            tokenizer.encode_message_with_chat_template(
+                conversation[0], add_generation_prompt=True
+            )
 
     @require_tokenizers
     def test_special_tokens_overwrite(self):
         text_with_nonspecial_tokens = "there are 2 cats"  # '2' is originally special
 
-        tokenizer = LlamaTokenizer.from_pretrained("hf-internal-testing/Ernie4_5_Tokenizer")
+        tokenizer = LlamaTokenizer.from_pretrained(
+            "hf-internal-testing/Ernie4_5_Tokenizer"
+        )
         # Overwrite special tokens 0-9 to non-special
-        tokenizer.add_tokens([AddedToken(f"{i}", normalized=False, special=False) for i in range(10)])
+        tokenizer.add_tokens(
+            [AddedToken(f"{i}", normalized=False, special=False) for i in range(10)]
+        )
         self.assertTrue(
-            tokenizer.decode(tokenizer.encode(text_with_nonspecial_tokens), skip_special_tokens=True)
+            tokenizer.decode(
+                tokenizer.encode(text_with_nonspecial_tokens), skip_special_tokens=True
+            )
             == text_with_nonspecial_tokens
         )
 
@@ -398,7 +504,10 @@ class TokenizerUtilsTest(unittest.TestCase):
         tokenizer.save_pretrained("/tmp/ernie_tokenizer")
         new_tokenizer = AutoTokenizer.from_pretrained("/tmp/ernie_tokenizer")
         self.assertTrue(
-            new_tokenizer.decode(new_tokenizer.encode(text_with_nonspecial_tokens), skip_special_tokens=True)
+            new_tokenizer.decode(
+                new_tokenizer.encode(text_with_nonspecial_tokens),
+                skip_special_tokens=True,
+            )
             == text_with_nonspecial_tokens
         )
 
@@ -407,7 +516,10 @@ class TokenizerUtilsTest(unittest.TestCase):
 
         from transformers.tokenization_utils_base import import_protobuf_decode_error
 
-        with patch("transformers.tokenization_utils_base.is_protobuf_available", return_value=False):
+        with patch(
+            "transformers.tokenization_utils_base.is_protobuf_available",
+            return_value=False,
+        ):
             result = import_protobuf_decode_error()
             self.assertEqual(result, ())
 
@@ -416,9 +528,23 @@ class TokenizerUtilsTest(unittest.TestCase):
 
         from transformers.tokenization_utils_base import import_protobuf_decode_error
 
-        with patch("transformers.tokenization_utils_base.is_protobuf_available", return_value=False):
+        with patch(
+            "transformers.tokenization_utils_base.is_protobuf_available",
+            return_value=False,
+        ):
             with self.assertRaises(ValueError):
                 try:
                     raise ValueError("real error")
                 except import_protobuf_decode_error():
                     pass
+
+    def test_batch_encoding_slice_indexing(self):
+        batch = BatchEncoding(
+            data={
+                "input_ids": [[1, 2], [3, 4], [5, 6]],
+                "attention_mask": [[1, 1], [1, 1], [1, 1]],
+            }
+        )
+        sliced = batch[0:2]
+        self.assertEqual(sliced["input_ids"], [[1, 2], [3, 4]])
+        self.assertEqual(sliced["attention_mask"], [[1, 1], [1, 1]])
