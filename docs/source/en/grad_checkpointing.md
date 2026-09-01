@@ -57,7 +57,7 @@ args = TrainingArguments(
 )
 ```
 
-Both copies run on the compute stream, so this trades a slower step for the memory. Reach for it when a run does not fit otherwise, not to speed one up.
+Both copies run on their own streams, and the reload of the activation the backward asks for next starts while the current layer is still recomputing, so the transfers overlap compute instead of serializing against it. The most recently saved activation stays on the GPU, because the backward reaches it before a copy of it could finish. Reach for this when a run does not fit otherwise: the memory it frees is exact, while what the overlap hides of the copy cost depends on how much compute each layer has to hide it behind.
 
 ## Next steps
 
