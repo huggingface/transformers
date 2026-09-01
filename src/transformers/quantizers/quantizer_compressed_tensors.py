@@ -23,7 +23,7 @@ if is_torch_available():
     import torch
 
     from ..core_model_loading import WeightConverter
-    from ..integrations.compressed_tensors import DecompressExperts
+    from ..integrations.compressed_tensors import DecompressExperts, get_expert_components
 
 
 logger = logging.get_logger(__name__)
@@ -48,32 +48,13 @@ def _is_fp8_scheme(scheme) -> bool:
     return weights is not None and weights.type == "float" and weights.num_bits == 8
 
 
-_EXPERT_COMPONENTS_BY_FORMAT = {
-    "float-quantized": ("weight", "weight_scale"),
-    "pack-quantized": ("weight_packed", "weight_scale", "weight_shape"),
-    "nvfp4-pack-quantized": (
-        "weight_packed",
-        "weight_scale",
-        "weight_global_scale",
-        "input_global_scale",
-    ),
-}
-
-
 def _get_expert_components(quantization_config):
     """Return the expert checkpoint components required by the configured formats."""
-    from compressed_tensors.compressors.format import infer_module_format
-
-    formats = {
-        getattr(scheme.format or infer_module_format(torch.nn.Linear, scheme), "value", scheme.format)
-        for scheme in quantization_config.config_groups.values()
-    }
     return tuple(
         dict.fromkeys(
             component
-            for format, components in _EXPERT_COMPONENTS_BY_FORMAT.items()
-            if format in formats
-            for component in components
+            for scheme in quantization_config.config_groups.values()
+            for component in get_expert_components(scheme)
         )
     )
 

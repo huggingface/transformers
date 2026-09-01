@@ -24,6 +24,26 @@ from ..utils.import_utils import is_torch_greater_or_equal
 logger = logging.get_logger(__name__)
 
 
+_EXPERT_COMPONENTS_BY_FORMAT = {
+    "float-quantized": ("weight", "weight_scale"),
+    "pack-quantized": ("weight_packed", "weight_scale", "weight_shape"),
+    "nvfp4-pack-quantized": (
+        "weight_packed",
+        "weight_scale",
+        "weight_global_scale",
+        "input_global_scale",
+    ),
+}
+
+
+def get_expert_components(scheme):
+    """Return the checkpoint components used by an expert quantization scheme."""
+    from compressed_tensors.compressors.format import infer_module_format
+
+    format = scheme.format or infer_module_format(nn.Linear, scheme)
+    return _EXPERT_COMPONENTS_BY_FORMAT.get(getattr(format, "value", format), ())
+
+
 def get_scheme(quantization_config, module_name):
     """Return the quantization scheme matching a concrete module name."""
     from compressed_tensors.utils.match import match_name
@@ -65,11 +85,8 @@ class DecompressExperts(ConversionOps):
     are stacked/merged for all experts.
     """
 
-    def __init__(self, hf_quantizer, scheme=None):
+    def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
-        # The config group quantizing these experts; mixed configs (e.g. Kimi: FP8
-        # attention + INT4 experts) quantize different layers with different schemes.
-        self.scheme = scheme
 
     def convert(
         self,
@@ -96,7 +113,7 @@ class DecompressExperts(ConversionOps):
             projection = base_key.rsplit(".", 1)[-1]
             expert_parent = full_layer_name.rsplit(".", 1)[0]
             checkpoint_module_name = f"{expert_parent}.0.{projection}"
-            quantization_scheme = self.scheme or get_scheme(ct_quantization_config, checkpoint_module_name)
+            quantization_scheme = get_scheme(ct_quantization_config, checkpoint_module_name)
             if quantization_scheme is None:
                 processed_out[key] = value
                 continue
@@ -104,14 +121,7 @@ class DecompressExperts(ConversionOps):
             format = quantization_scheme.format or infer_module_format(nn.Linear, quantization_scheme)
             compressor = BaseCompressor.get_value_from_registry(format)
             quantized = value if isinstance(value, list) else [value]
-            companion_names = (
-                "weight_scale",
-                "weight_shape",
-                "weight_zero_point",
-                "weight_g_idx",
-                "weight_global_scale",
-                "input_global_scale",
-            )
+            companion_names = get_expert_components(quantization_scheme)[1:]
             companions = {
                 name: input_dict[f"{base_key}.{name}$"]
                 for name in companion_names
@@ -123,9 +133,6 @@ class DecompressExperts(ConversionOps):
                 processed_out[key] = value
                 continue
 
-            # Pre-allocate the stacked output buffer to reduce cuda mem fragmentation
-            # Without pre-allocation the loop accumulates N tensors per expert and next
-            # `MergeModulelist` stacks the full list for MoE kernels compatibility, i.e. x2 memory
             output = None
             for i, quant in enumerate(quantized):
                 state_dict = {"weight_packed" if packed else "weight": quant}
@@ -150,20 +157,18 @@ class DecompressExperts(ConversionOps):
                     dense = dense.to(target_dtype)
 
                 if output is None:
-                    # Use the first expert's decompressed shape/dtype to allocate full buffer.
+                    # Allocate the final stack directly to avoid retaining each dense expert and
+                    # copying them all again in the following `MergeModulelist` operation.
                     output = torch.empty(
                         (len(quantized), *dense.shape),
                         dtype=dense.dtype,
                         device=dense.device,
                     )
                 output[i].copy_(dense)
-                # explicitly free intermediate tensors so it does not accumulate across iterations
+                # Release this dense tensor before decompressing the next expert.
                 del dense
 
-            del quantized
             if output is not None:
-                # Return a single pre-stacked tensor instead of a list. `MergeModulelist`
-                # passes it through without an extra `torch.stack` copy -> no x2 memory overhead
                 processed_out[key] = output
 
         return processed_out
