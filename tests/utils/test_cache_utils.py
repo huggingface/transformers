@@ -1508,51 +1508,6 @@ class CacheCroppingTests(unittest.TestCase):
                 self.assertEqual(layer.indexer_keys.shape[-2], self.seq_len - 3)
                 self.assertTrue((layer.indexer_keys == indexer_states[..., :-3, :]).all())
 
-    def test_crop_with_bounded_past(self):
-        """Same as above, but recording only the past that will actually be cropped instead of all of it."""
-        crop_steps = 3
-        keys = torch.rand(*self.attention_shape)
-        values = torch.rand(*self.attention_shape)
-        conv_states = torch.rand(*self.conv_state_shape)
-        indexer_states = torch.rand(*self.indexer_shape)
-
-        layer_kwargs = {"sliding_window": self.sliding_window}
-        for layer_cls in ALL_DYNAMIC_LAYERS:
-            layer = layer_cls(**layer_kwargs)
-            # Ask only for the steps that will be cropped, rather than for the whole sequence
-            if hasattr(layer, "activate_past_recording"):
-                layer.activate_past_recording(crop_steps)
-
-            if hasattr(layer, "update"):
-                layer.update(keys, values)
-            if hasattr(layer, "update_conv_state"):
-                layer.update_conv_state(conv_states=conv_states, conv_kernel_size=self.conv_kernel_size)
-            if hasattr(layer, "update_indexer"):
-                layer.update_indexer(indexer_states)
-
-            # States that shrink as they go are held to their working size plus the steps that were asked for,
-            # rather than to the whole sequence as they are when recording is unbounded
-            if hasattr(layer, "sliding_window") and hasattr(layer, "keys"):
-                self.assertEqual(layer.keys.shape[-2], self.sliding_window - 1 + crop_steps)
-            if hasattr(layer, "conv_states"):
-                self.assertEqual(layer.conv_states[0].shape[-1], self.conv_kernel_size + crop_steps)
-
-            layer.crop(-crop_steps)
-
-            # ... and the rollback still lands exactly where recording everything would have put it
-            if hasattr(layer, "keys"):
-                if hasattr(layer, "sliding_window"):
-                    self.assertEqual(layer.keys.shape[-2], self.sliding_window - 1)
-                    expected = keys[..., -self.sliding_window + 1 - crop_steps : -crop_steps, :]
-                    self.assertTrue((layer.keys == expected).all())
-                else:
-                    self.assertEqual(layer.keys.shape[-2], self.seq_len - crop_steps)
-                    self.assertTrue((layer.keys == keys[..., :-crop_steps, :]).all())
-            if hasattr(layer, "conv_states"):
-                self.assertEqual(layer.conv_states[0].shape[-1], self.conv_kernel_size)
-                expected = conv_states[..., -self.conv_kernel_size - crop_steps : -crop_steps]
-                self.assertTrue((layer.conv_states[0] == expected).all())
-
     def test_crop_with_zero_still_shrink_states(self):
         """Test that `crop` shrinks state size if called with `0`"""
         keys = torch.rand(*self.attention_shape)

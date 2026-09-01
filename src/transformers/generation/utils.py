@@ -412,9 +412,9 @@ class DeferredStopCheck(StopCheck):
         self.max_length = max_length
         self.cache = cache
         if cache is not None:
-            # Exactly one step ever needs undoing, so the cache only has to hold one step of past -- without the
-            # bound it would keep its whole history for the entire generation instead of shrinking as it goes.
-            cache.activate_past_recording(1)
+            # The extra step has to be undoable, so the cache is told to hold on to what it would otherwise
+            # shrink away. It is released again on every step that turns out to be kept, in `__call__`.
+            cache.activate_past_recording()
         # Each slot holds one step's results on their way to the host, and the event saying they arrived.
         # Pinning only buys anything on CUDA, where it is what makes the copies asynchronous; elsewhere it
         # also hands back uninitialized memory rather than zeros.
@@ -464,7 +464,12 @@ class DeferredStopCheck(StopCheck):
         # `max_length` is the one stop condition the host already knows, so it is answered on time rather than
         # a step late, saving a step that would only be undone again.
         reached_max_length = self.max_length is not None and length >= self.max_length
-        return self.stop_reported or reached_max_length
+        stopping = self.stop_reported or reached_max_length
+        if not stopping and self.cache is not None:
+            # Carrying on means the step just taken is never coming back, so the cache can drop what it was
+            # holding to undo it, and is back to its working size before the next forward reads it.
+            self.cache.crop(0)
+        return stopping
 
     def finish(self) -> int:
         for *_, copy_done in self.slots:
@@ -475,8 +480,8 @@ class DeferredStopCheck(StopCheck):
             _, tokens_cpu, _ = self.slots[1]  # real tokens, written by the last step and never read back
             self.streamer.put(tokens_cpu.clone())
         if self.cache is not None:
-            # Never skipped, even with nothing to undo: this also releases the recording armed in `__init__`,
-            # shrinking sliding window and linear attention layers back to their working size.
+            # Every other step released itself in `__call__` once it was known to be kept. The last one never
+            # was, since it is the one that might need undoing, so it is settled here either way.
             self.cache.crop(-steps_to_undo)
         return steps_to_undo
 

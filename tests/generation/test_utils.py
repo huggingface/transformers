@@ -5674,6 +5674,7 @@ class _CollectingStreamer:
     def end(self):
         pass
 
+
 @require_torch_accelerator
 class DeferredStopCheckIntegrationTest(unittest.TestCase):
     """Deferring the stop decision must not change a single token of what `generate` returns."""
@@ -5684,23 +5685,24 @@ class DeferredStopCheckIntegrationTest(unittest.TestCase):
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         self.model = AutoModelForCausalLM.from_pretrained(self.model_id).to(torch_device).eval()
 
-    def _generate(self, inputs, **kwargs):
+    def _generate(self, inputs, model=None, **kwargs):
         """Generate twice over the same inputs, once collecting the stream, and return both."""
+        model = self.model if model is None else model
         kwargs = {"max_new_tokens": 12, "do_sample": False, **kwargs}
-        outputs = self.model.generate(**inputs, return_dict_in_generate=True, output_scores=True, **kwargs)
+        outputs = model.generate(**inputs, return_dict_in_generate=True, output_scores=True, **kwargs)
         streamer = _CollectingStreamer()
-        self.model.generate(**inputs, streamer=streamer, **kwargs)
+        model.generate(**inputs, streamer=streamer, **kwargs)
         return outputs, torch.cat(streamer.tokens)
 
-    def _generate_deferred_and_immediate(self, inputs, **kwargs):
-        deferred = self._generate(inputs, **kwargs)
+    def _generate_deferred_and_immediate(self, inputs, model=None, **kwargs):
+        deferred = self._generate(inputs, model=model, **kwargs)
         with patch.object(DeferredStopCheck, "is_supported", staticmethod(lambda *args: False)):
-            immediate = self._generate(inputs, **kwargs)
+            immediate = self._generate(inputs, model=model, **kwargs)
         return deferred, immediate
 
-    def _assert_matches(self, inputs, **kwargs):
+    def _assert_matches(self, inputs, model=None, **kwargs):
         prompt_length = inputs["input_ids"].shape[1]
-        (deferred, stream), (immediate, _) = self._generate_deferred_and_immediate(inputs, **kwargs)
+        (deferred, stream), (immediate, _) = self._generate_deferred_and_immediate(inputs, model=model, **kwargs)
 
         # The extra step leaves no trace: same tokens, and one score per token actually returned
         self.assertTrue(torch.equal(deferred.sequences, immediate.sequences))
@@ -5724,6 +5726,24 @@ class DeferredStopCheckIntegrationTest(unittest.TestCase):
         self._assert_matches(inputs, eos_token_id=eos_token_id)
         stopped = self.model.generate(**inputs, max_new_tokens=12, do_sample=False, eos_token_id=eos_token_id)
         self.assertLess(stopped.shape[1], generated.shape[1])
+
+    def test_matches_immediate_check_with_a_sliding_window(self):
+        """A sliding window layer has to hold an extra state for the rollback without widening its window.
+
+        `update` hands attention whatever the layer is holding, so a cache recording past for `crop` must
+        still return the working window - otherwise the model silently attends over `sliding_window + 1`
+        positions and generates different tokens.
+        """
+        model_id = "hf-internal-testing/tiny-random-Gemma3ForCausalLM"
+        config = AutoConfig.from_pretrained(model_id)
+        # Narrow the window so that a short generation still runs past it, which is the only regime where the
+        # states are trimmed, and so the only one where holding an extra one could widen what attention sees
+        config.sliding_window = 4
+        model = AutoModelForCausalLM.from_pretrained(model_id, config=config).to(torch_device).eval()
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer(["Hello world, this is"], return_tensors="pt").to(torch_device)
+
+        self._assert_matches(inputs, model=model)
 
     def test_matches_immediate_check_without_a_cache(self):
         inputs = self.tokenizer(["Hello world, this is"], return_tensors="pt").to(torch_device)
