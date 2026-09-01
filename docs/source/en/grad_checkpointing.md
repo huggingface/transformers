@@ -87,6 +87,10 @@ args = TrainingArguments(
 )
 ```
 
+<div class="flex">
+  <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/partial-grad-ckpt.png" />
+</div>
+
 ## Offloading the saved activations
 
 Gradient checkpointing keeps one activation per checkpointed layer on the GPU. At long sequence lengths, this can
