@@ -3075,6 +3075,12 @@ class GenerationMixin(ContinuousMixin):
             streamer.end()
 
         if return_dict_in_generate:
+            # Looked up again here rather than reused from before the loop: some models only put their cache
+            # in `model_kwargs` once they have run, and callers read `use_cache` off this being present
+            cache = None
+            if any(cache_key in model_kwargs for cache_key in ALL_CACHE_NAMES):
+                cache_key = next(cache_key for cache_key in ALL_CACHE_NAMES if cache_key in model_kwargs)
+                cache = model_kwargs[cache_key]
             if self.config.is_encoder_decoder:
                 return GenerateEncoderDecoderOutput(
                     sequences=input_ids,
