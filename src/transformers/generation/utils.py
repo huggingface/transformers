@@ -447,7 +447,6 @@ class DeferredStopCheck(StopCheck):
                 self.streamer.put(tokens_cpu_before.clone())
             self.stop_reported = bool(should_stop_before)
         self.is_first_step = False
-        reached_max_length = self.max_length is not None and length >= self.max_length
         stopping = self.stop_reported or (self.max_length is not None and length >= self.max_length)
         if not stopping and self.cache is not None:
             self.cache.crop(0)
