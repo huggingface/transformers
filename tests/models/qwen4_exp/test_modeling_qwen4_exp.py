@@ -36,6 +36,7 @@ if is_torch_available():
     from transformers import (
         AutoModelForCausalLM,
         DynamicCache,
+        FineGrainedFP8Config,
         Qwen4ExpConfig,
         Qwen4ExpForCausalLM,
         Qwen4ExpForConditionalGeneration,
@@ -46,6 +47,8 @@ if is_torch_available():
         StaticCache,
     )
     from transformers.distributed.fsdp import verify_fsdp_plan
+    from transformers.integrations import FP8Embedding
+    from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 
 
 class Qwen4ExpTextModelTester(CausalLMModelTester):
@@ -249,6 +252,18 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
                 ple_layer_ids=[2],
                 layer_types=["linear_attention", "qwen_sparse_attention"],
             )
+
+    def test_finegrained_fp8_embedding_conversion(self):
+        config = self.model_tester.get_config(ple_layer_ids=[1], layer_types=["linear_attention"])
+        with torch.device("meta"):
+            model = Qwen4ExpForCausalLM(config)
+
+        quantization_config = FineGrainedFP8Config(
+            modules_to_convert=["ple.ple_embedding.ngram_embedding"], modules_to_not_convert=[]
+        )
+        FineGrainedFP8HfQuantizer(quantization_config).preprocess_model(model)
+
+        self.assertIsInstance(model.model.layers[0].ple.ple_embedding.ngram_embedding, FP8Embedding)
 
     def test_ple_padding_and_static_cache_match_unpadded_sequence(self):
         torch.manual_seed(0)
