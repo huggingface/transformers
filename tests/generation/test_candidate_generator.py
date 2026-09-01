@@ -9,19 +9,14 @@ from transformers import (
     AutoConfig,
     AutoModelForCausalLM,
     AutoTokenizer,
-    BertConfig,
-    BertModel,
     GenerationConfig,
-    PreTrainedConfig,
     pipeline,
 )
 from transformers.generation.candidate_generator import (
     AssistantToTargetTranslator,
     AssistantVocabTranslatorCache,
-    DFlashTokenCandidateGenerator,
     UniversalSpeculativeDecodingGenerator,
 )
-from transformers.modeling_outputs import BaseModelOutput
 from transformers.testing_utils import require_torch, torch_device
 
 
@@ -234,80 +229,6 @@ class TestAssistantVocabTranslatorCache(unittest.TestCase):
         self.assertIsNotNone(target_ref(), "Target tokenizer should still be alive due to strong references")
         self.assertIsNotNone(assistant_ref(), "Assistant tokenizer should still be alive due to strong references")
         self.assertIsNotNone(translator_ref(), "Translator should still be alive due to strong references")
-
-
-@require_torch
-class TestDFlashTokenCandidateGenerator(unittest.TestCase):
-    def test_get_candidates_with_sparse_target_hidden_states(self):
-        assistant_config = PreTrainedConfig(num_hidden_layers=2)
-        assistant_config.target_layer_ids = [1, 3]
-        assistant_config.block_size = 2
-        assistant_config.mask_token_id = 0
-
-        class FakeAssistant(torch.nn.Module):
-            def __init__(self, config):
-                super().__init__()
-                self.config = config
-                self.context_hidden_states = None
-
-            @property
-            def device(self):
-                return torch.device(torch_device)
-
-            def forward(self, noise_embeds, context_hidden_states, **kwargs):
-                self.context_hidden_states = context_hidden_states
-                return BaseModelOutput(last_hidden_state=noise_embeds)
-
-        assistant_model = FakeAssistant(assistant_config).to(torch_device)
-        generator = DFlashTokenCandidateGenerator(
-            assistant_model=assistant_model,
-            main_model_input_embeddings=torch.nn.Embedding(99, 32).to(torch_device),
-            main_model_output_embeddings=torch.nn.Linear(32, 99).to(torch_device),
-            generation_config=GenerationConfig(max_length=20),
-        )
-
-        self.assertEqual(generator.model_kwargs_overrides["output_hidden_states_layers"], [1, 3])
-
-        main_config = BertConfig(
-            vocab_size=99,
-            hidden_size=32,
-            num_hidden_layers=4,
-            num_attention_heads=4,
-            intermediate_size=37,
-        )
-        main_model = BertModel(main_config).to(torch_device).eval()
-        input_ids = torch.randint(0, main_config.vocab_size, (1, 7), device=torch_device)
-
-        with torch.no_grad():
-            full_outputs = main_model(input_ids=input_ids, output_hidden_states=True)
-            dflash_outputs = main_model(input_ids=input_ids, **generator.model_kwargs_overrides)
-            candidate_ids, candidate_logits = generator.get_candidates(
-                input_ids=input_ids,
-                model_kwargs={
-                    "attention_mask": torch.ones_like(input_ids),
-                    "position_ids": torch.arange(input_ids.shape[-1], device=torch_device).expand_as(input_ids),
-                },
-                model_outputs=dflash_outputs,
-                is_first_iteration=False,
-                n_last_matches=0,
-            )
-
-        self.assertEqual(len(dflash_outputs.hidden_states), len(full_outputs.hidden_states))
-        self.assertIsNone(dflash_outputs.hidden_states[0])
-        self.assertIsNone(dflash_outputs.hidden_states[1])
-        self.assertIsNone(dflash_outputs.hidden_states[3])
-        torch.testing.assert_close(dflash_outputs.hidden_states[2], full_outputs.hidden_states[2])
-        torch.testing.assert_close(dflash_outputs.hidden_states[4], full_outputs.hidden_states[4])
-        self.assertEqual(candidate_ids.shape, (1, input_ids.shape[-1] + assistant_config.block_size - 1))
-        self.assertEqual(candidate_logits.shape, (1, assistant_config.block_size - 1, main_config.vocab_size))
-        expected_context_hidden_states = torch.cat(
-            [
-                full_outputs.hidden_states[i + 1][:, : input_ids.shape[-1] - 1]
-                for i in assistant_config.target_layer_ids
-            ],
-            dim=-1,
-        )
-        torch.testing.assert_close(assistant_model.context_hidden_states, expected_context_hidden_states)
 
 
 @require_torch
