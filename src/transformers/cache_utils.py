@@ -28,6 +28,9 @@ class CacheLayerMixin(ABC):
     """Base, abstract class for a single layer's cache."""
 
     is_compileable = False
+    # Whether `crop` can put this layer back exactly as it was. Layers that discard state as they go can, but
+    # only once `activate_past_recording` has told them to hold on to it.
+    is_croppable = False
     supports_early_init = True
     # Subclasses can set `_layer_type` to auto-register themselves in the mappings, if the class definition lives in a modeling
     # file instead of this file. This allows to update the mapping only when the modeling file is imported, which simplifies imports
@@ -117,6 +120,7 @@ class DynamicLayer(CacheLayerMixin):
     """
 
     is_sliding = False
+    is_croppable = True
 
     def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
         self.dtype, self.device = key_states.dtype, key_states.device
@@ -214,13 +218,21 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         self.cumulative_length = 0
         self._sliding_window_tensor = torch.tensor(self.sliding_window, dtype=torch.long)
         self.record_past = False
+        self.past_steps_to_keep = None  # how many steps past the working size to hold; `None` means all of them
 
-    def activate_past_recording(self):
+    def activate_past_recording(self, num_steps: int | None = None):
         """
         Calling this function will activate past state recording, meaning that a call to `update` will wait for a call to `crop`
         before restricting the size of the `k/v_states` to `sliding_window`, to be able to retrieve previous full states.
+
+        Args:
+            num_steps (`int`, *optional*):
+                How many steps of past to hold on to. A caller that will only ever roll back `num_steps` steps should say so,
+                as the states then stay bounded by `sliding_window - 1 + num_steps` instead of growing with the whole
+                sequence. Defaults to `None`, which keeps everything until `crop` is called.
         """
         self.record_past = True
+        self.past_steps_to_keep = num_steps
 
     def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
         super().lazy_initialization(key_states, value_states)
@@ -243,21 +255,30 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         if not self.is_initialized:
             self.lazy_initialization(key_states, value_states)
 
+        # How much attention is allowed to look at, which is the working window and nothing more. Recorded past is
+        # held for `crop`, not for the model, and the mask is built for exactly this many keys (`get_mask_sizes`).
+        visible_length = min(self.cumulative_length, self.sliding_window - 1) + key_states.shape[-2]
+
         self.cumulative_length += key_states.shape[-2]
 
         # Compute the full states
         full_key_states = torch.cat([self.keys, key_states], dim=-2)
         full_value_states = torch.cat([self.values, value_states], dim=-2)
-        # Only cache the last `self.sliding_window - 1` tokens (or all of them if lower than that)
-        if not self.record_past:
-            self.keys = full_key_states[:, :, -self.sliding_window + 1 :, :]
-            self.values = full_value_states[:, :, -self.sliding_window + 1 :, :]
-        # If we record the past, we keep them all for now, and they'll be restricted to the window size in `crop`
-        else:
+        # Only cache the last `self.sliding_window - 1` tokens (or all of them if lower than that). When recording the
+        # past, hold on to `past_steps_to_keep` more than that, so they can be rolled back by `crop` -- or to everything
+        # when no bound was given.
+        if self.record_past and self.past_steps_to_keep is None:
             self.keys = full_key_states
             self.values = full_value_states
+        else:
+            kept = self.sliding_window - 1 + (self.past_steps_to_keep if self.record_past else 0)
+            self.keys = full_key_states[:, :, -kept:, :]
+            self.values = full_value_states[:, :, -kept:, :]
 
-        # Return the full states
+        # Return the states attention may see. Without recording this is already everything just concatenated, so
+        # nothing is sliced and the usual path is untouched.
+        if full_key_states.shape[-2] > visible_length:
+            return full_key_states[:, :, -visible_length:, :], full_value_states[:, :, -visible_length:, :]
         return full_key_states, full_value_states
 
     def get_mask_sizes(self, query_length: int) -> tuple[int, int]:
@@ -893,6 +914,9 @@ class LinearAttentionCacheLayerMixin(ABC):
 
     # All shapes are static by essence in a LinearAttention layer, so it is compilable
     is_compileable = True
+    # `crop` restores the conv states but never the recurrent ones: those are updated in place, and absorb
+    # whatever is rolled back, so the layer cannot be returned to a previous state.
+    is_croppable = False
     # Linear attention layers track their own conv/recurrent states; they don't use the key/value early-init path.
     supports_early_init = False
 
@@ -908,6 +932,7 @@ class LinearAttentionCacheLayerMixin(ABC):
         self.device = None
         self.dtype = None
         self.record_past = False
+        self.past_steps_to_keep = None  # how many steps past the working size to hold; `None` means all of them
 
     def __repr__(self):
         return f"{self.__class__.__name__}"
@@ -960,13 +985,19 @@ class LinearAttentionCacheLayerMixin(ABC):
             if self.is_recurrent_states_initialized[i]:
                 self.recurrent_states[i] = self.recurrent_states[i].index_select(0, beam_idx.to(self.device))
 
-    def activate_past_recording(self):
+    def activate_past_recording(self, num_steps: int | None = None):
         """
         Calling this function will activate past state recording, meaning that a call to `update_conv_states` will
         wait for a call to `crop` before restricting the size of the `conv_states` to `conv_kernel_size`, to be able
         to retrieve previous full states.
+
+        Args:
+            num_steps (`int`, *optional*):
+                How many steps of past to hold on to, keeping the conv states bounded by `conv_kernel_size + num_steps`.
+                Defaults to `None`, which keeps everything until `crop` is called.
         """
         self.record_past = True
+        self.past_steps_to_keep = num_steps
 
     def crop(self, tokens_to_remove: int):
         """
@@ -1067,9 +1098,12 @@ class LinearAttentionLayer(LinearAttentionCacheLayerMixin):
         if not self.record_past:
             # Copy instead of assigning to keep the static address
             self.conv_states[state_idx].copy_(full_conv_states[..., -self.conv_kernel_size[state_idx] :])
-        # If we need to record the past, keep the full states for now to be able to rollback later
-        else:
+        # If we need to record the past, keep enough of it to be able to rollback later
+        elif self.past_steps_to_keep is None:
             self.conv_states[state_idx] = full_conv_states
+        else:
+            kept = self.conv_kernel_size[state_idx] + self.past_steps_to_keep
+            self.conv_states[state_idx] = full_conv_states[..., -kept:]
 
         # Return full states no matter what
         return full_conv_states
@@ -1626,14 +1660,19 @@ class Cache:
         for layer_idx in range(len(self.layers)):
             self.layers[layer_idx].batch_select_indices(indices)
 
-    def activate_past_recording(self):
+    def activate_past_recording(self, num_steps: int | None = None):
         """
         Calling this function will activate past state recording, meaning that cache with fixed size such as a linear cache will
         wait for a call to `crop` before restricting the size of its cached states, in order to be able to retrieve previous full states.
+
+        Args:
+            num_steps (`int`, *optional*):
+                How many steps of past to hold on to. Passing it keeps the recorded states bounded by that many steps past
+                their working size, instead of growing with the whole sequence. Defaults to `None`, i.e. keep everything.
         """
         for layer_idx in range(len(self.layers)):
             if hasattr(self.layers[layer_idx], "activate_past_recording"):
-                self.layers[layer_idx].activate_past_recording()
+                self.layers[layer_idx].activate_past_recording(num_steps)
 
     @property
     def batch_size(self) -> int:
@@ -1661,6 +1700,11 @@ class Cache:
         """Return whether the cache data is initialized"""
         layers = [layer for layer in self.layers if layer.supports_early_init]
         return len(layers) > 0 and all(layer.is_initialized for layer in layers)
+
+    @property
+    def is_croppable(self) -> bool:
+        """Whether `crop` can put the whole cache back exactly as it was."""
+        return all(layer.is_croppable for layer in self.layers)
 
     @property
     def is_sliding(self) -> list[bool]:
@@ -2044,6 +2088,12 @@ class EncoderDecoderCache(Cache):
         self.self_attention_cache.reorder_cache(beam_idx)
         self.cross_attention_cache.reorder_cache(beam_idx)
 
+    @property
+    def is_croppable(self) -> bool:
+        """`crop` goes through `check_dynamic_cache` here, so both wrapped caches must be dynamic as well."""
+        caches = (self.self_attention_cache, self.cross_attention_cache)
+        return all(isinstance(c, DynamicCache) and c.is_croppable for c in caches)
+
     def check_dynamic_cache(self, method: str):
         if not (
             isinstance(self.self_attention_cache, DynamicCache)
@@ -2085,8 +2135,8 @@ class EncoderDecoderCache(Cache):
     def is_compileable(self) -> bool:
         return self.self_attention_cache.is_compileable
 
-    def activate_past_recording(self):
-        self.self_attention_cache.activate_past_recording()
+    def activate_past_recording(self, num_steps: int | None = None):
+        self.self_attention_cache.activate_past_recording(num_steps)
 
     def get_max_cache_shape(self, layer_idx: int = 0) -> int:
         logger.warning_once(

@@ -357,65 +357,128 @@ GenerateBeamOutput = GenerateBeamDecoderOnlyOutput | GenerateBeamEncoderDecoderO
 GenerateOutput = GenerateNonBeamOutput | GenerateBeamOutput
 
 
-class PipelinedStopCheck:
-    """Reads "are all sequences finished?" off the device one step late, so the host never waits for it.
+def _undo_generation_steps(num_steps: int, input_ids: torch.LongTensor, *recorded: "tuple | None") -> tuple:
+    """Undo the last `num_steps` decoding steps, so that they leave no trace in what `generate` returns.
 
-    A streamer needs the same thing for the tokens themselves -- `streamer.put(next_tokens.cpu())` is a host
-    read per step, the very stall this exists to avoid -- so the tokens ride in the same slot behind the same
-    event, and come back through `streamed` one step behind. That is the whole cost: a streamer emits each
-    token one step later. It never emits one *past* the stop, because the token that overshoots is the one
-    left in flight when the loop breaks, and is dropped by `drain` exactly as it is dropped from `input_ids`.
+    Drops the tokens and whatever was recorded alongside them: `scores`, `raw_logits`, attentions, hidden
+    states. The cache entries they wrote are dropped by `DeferredStopCheck.finish`, which crops whether or not
+    there is anything to undo.
+    """
+    return (input_ids[:, :-num_steps], *(record[:-num_steps] if record else record for record in recorded))
+
+
+class StopCheck:
+    """Decides when the decoding loop should stop, and hands each new token to a streamer.
+
+    Both jobs read device data on the host, which blocks until the device has caught up. `DeferredStopCheck`
+    reads a step late instead, by which point there is nothing left to wait for. This is the plain, immediate
+    check, used everywhere that one cannot be.
     """
 
-    def __init__(self, device: torch.device, max_length: int, batch_size: int = 0):
+    def __init__(self, streamer: "BaseStreamer | None" = None):
+        self.streamer = streamer
+
+    def __call__(self, unfinished_sequences: torch.Tensor, tokens: torch.Tensor, length: int) -> bool:
+        if self.streamer is not None:
+            self.streamer.put(tokens.cpu())
+        return bool(unfinished_sequences.max() == 0)
+
+    def finish(self) -> int:
+        """Flush whatever is still held back, and report how many decoding steps have to be undone."""
+        return 0
+
+
+class DeferredStopCheck(StopCheck):
+    """Reports whether generation should stop, one step late, so the host never waits on the device.
+
+    Reading `unfinished_sequences.max() == 0` blocks the host until the device has caught up, every step,
+    leaving it unable to queue the next step meanwhile. Copying that flag asynchronously and reading it on
+    the *following* step removes the stall. It costs one extra forward pass, whose results the caller undoes
+    using the count returned by `finish`.
+
+    Streaming needs the tokens themselves on the host, which is that same stall over again, so they ride in
+    the same slot behind the same event and are streamed one step behind. The extra token is never streamed:
+    it is still in flight when the loop breaks, and `finish` drops it.
+    """
+
+    def __init__(
+        self,
+        input_ids: torch.LongTensor,
+        max_length: int | None = None,
+        cache: "Cache | None" = None,
+        streamer: "BaseStreamer | None" = None,
+    ):
+        super().__init__(streamer)
         self.max_length = max_length
-        pinned = device.type == "cuda"
+        self.cache = cache
+        if cache is not None:
+            # Exactly one step ever needs undoing, so the cache only has to hold one step of past -- without the
+            # bound it would keep its whole history for the entire generation instead of shrinking as it goes.
+            cache.activate_past_recording(1)
+        # Each slot holds one step's results on their way to the host, and the event saying they arrived.
+        # Pinning only buys anything on CUDA, where it is what makes the copies asynchronous; elsewhere it
+        # also hands back uninitialized memory rather than zeros.
+        pinned = input_ids.device.type == "cuda"
         self.slots = deque(
             (
                 torch.zeros((), dtype=torch.bool, pin_memory=pinned),
-                torch.zeros(batch_size, dtype=torch.long, pin_memory=pinned),
-                torch.Event(device=device.type, blocking=True),
+                torch.zeros(input_ids.shape[0], dtype=torch.long, pin_memory=pinned),
+                # The event must live on the same device as `unfinished_sequences`, or it records nothing and
+                # synchronizes instantly.
+                torch.Event(device=input_ids.device, blocking=True),
             )
             for _ in range(2)
         )
-        self.streaming = batch_size > 0
-        self.primed = False  # whether the slot being read has ever been written to
-        self.reported = False  # whether a read has come back saying every sequence was finished
-        self.streamed = None  # the previous step's tokens, on the host, or `None` before there is one
+        self.is_first_step = True
+        self.stop_reported = False
 
-    def __call__(self, unfinished_sequences: torch.Tensor, length: int, tokens: torch.Tensor | None = None) -> bool:
-        all_finished, streamed, copy_done = self.slots[0]
-        all_finished.copy_(unfinished_sequences.max() == 0, non_blocking=True)
-        if tokens is not None:
-            streamed.copy_(tokens, non_blocking=True)
+    @staticmethod
+    def is_supported(device: torch.device, cache: "Cache | None") -> bool:
+        """Whether the stop decision can safely be deferred by a step, given this device and cache."""
+        # Only these two are exercised today; anywhere else the flag is read immediately.
+        if device.type not in ("cuda", "mps"):
+            return False
+        # With no cache, the extra step leaves nothing behind but its token, which is dropped either way.
+        # Otherwise the cache has to be able to give that step back.
+        return cache is None or cache.is_croppable
+
+    def __call__(self, unfinished_sequences: torch.Tensor, tokens: torch.Tensor, length: int) -> bool:
+        should_stop, tokens_cpu, copy_done = self.slots[0]
+        should_stop.copy_(unfinished_sequences.max() == 0, non_blocking=True)
+        if self.streamer is not None:
+            tokens_cpu.copy_(tokens, non_blocking=True)
         copy_done.record()
 
-        self.slots.rotate(-1)  # what was just started is what gets read next step
-        all_finished, streamed, copy_done = self.slots[0]
-        copy_done.synchronize()
-        # The first read comes from a slot nothing was ever copied into: there is no previous step yet. The
-        # clone is because the slot is written again next step, while a streamer may still hold what it got.
-        self.streamed = streamed.clone() if self.streaming and self.primed else None
-        self.primed = True
-        self.reported = bool(all_finished)
-        # `max_length` is the one stop condition the host already knows, and the only one this pipeline may
-        # not run past: a `StaticCache` is allocated to exactly that many positions.
-        return self.reported or length >= self.max_length
+        # What the previous step wrote, whose copies landed a whole step ago, so waiting on them costs nothing.
+        self.slots.rotate(-1)
+        should_stop_before, tokens_cpu_before, copy_done_before = self.slots[0]
+        copy_done_before.synchronize()
+        # On the very first step the slot just read holds nothing any step wrote: there is no previous token to
+        # stream, and nothing to believe about whether generation is over.
+        if not self.is_first_step:
+            if self.streamer is not None:
+                # Clone: this slot is written again next step, while the streamer still holds what it got.
+                self.streamer.put(tokens_cpu_before.clone())
+            self.stop_reported = bool(should_stop_before)
+        self.is_first_step = False
+        # `max_length` is the one stop condition the host already knows, so it is answered on time rather than
+        # a step late, saving a step that would only be undone again.
+        reached_max_length = self.max_length is not None and length >= self.max_length
+        return self.stop_reported or reached_max_length
 
-    def drain(self) -> int:
-        """Wait out the copy still in flight, and report how many tokens ran past the stopping one."""
+    def finish(self) -> int:
         for *_, copy_done in self.slots:
             copy_done.synchronize()
-        return 1 if self.reported else 0
-
-    @property
-    def pending(self) -> "torch.Tensor | None":
-        """The tokens still in flight when the loop ended, which a streamer has not been given yet.
-
-        `None` once `reported` is set: that copy is the token that ran past the stop, and it is dropped from
-        `input_ids` too.
-        """
-        return None if self.reported else self.slots[1][1]
+        # A token still in flight when the loop broke came after the stop, so it is neither streamed nor kept.
+        steps_to_undo = 1 if self.stop_reported else 0
+        if self.streamer is not None and not steps_to_undo:
+            _, tokens_cpu, _ = self.slots[1]  # real tokens, written by the last step and never read back
+            self.streamer.put(tokens_cpu.clone())
+        if self.cache is not None:
+            # Never skipped, even with nothing to undo: this also releases the recording armed in `__init__`,
+            # shrinking sliding window and linear attention layers back to their working size.
+            self.cache.crop(-steps_to_undo)
+        return steps_to_undo
 
 
 class GenerationMixin(ContinuousMixin):
@@ -2916,12 +2979,13 @@ class GenerationMixin(ContinuousMixin):
         this_peer_finished = False
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
 
-        host_max_length = max((c.max_length for c in stopping_criteria if hasattr(c, "max_length")), default=None)
-        stop_check = None
-        if host_max_length is not None and input_ids.device.type != "cpu":
-            # A streamer asks for the tokens on the host every step, so they are pipelined alongside the stop
-            # decision rather than read synchronously.
-            stop_check = PipelinedStopCheck(input_ids.device, host_max_length, batch_size if streamer else 0)
+        # Deciding when to stop costs a host/device sync per step, and so does handing a streamer its tokens.
+        # Where it is safe to, defer both by a step instead.
+        cache = next((model_kwargs[name] for name in ALL_CACHE_NAMES if name in model_kwargs), None)
+        if DeferredStopCheck.is_supported(input_ids.device, cache):
+            stop_check = DeferredStopCheck(input_ids, stopping_criteria.max_length, cache, streamer)
+        else:
+            stop_check = StopCheck(streamer)
 
         # `pad_token_id` is created on `inputs_tensor.device` in `_prepare_special_tokens`. For multimodal models
         # (e.g. BLIP-2, LLaVA) sharded across devices via `device_map="auto"`, `inputs_tensor` (e.g. `pixel_values`
@@ -3002,37 +3066,32 @@ class GenerationMixin(ContinuousMixin):
 
                 # update generated ids, model inputs, and length for next step
                 input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
-                if streamer is not None and stop_check is None:
-                    streamer.put(next_tokens.cpu())
 
                 unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
-
-                if stop_check is None:
-                    this_peer_finished = unfinished_sequences.max() == 0
-                else:
-                    this_peer_finished = stop_check(unfinished_sequences, input_ids.shape[1], next_tokens)
-                    if stop_check.streamed is not None:
-                        streamer.put(stop_check.streamed)
+                this_peer_finished = stop_check(unfinished_sequences, next_tokens, input_ids.shape[1])
 
                 # This is needed to properly delete outputs.logits which may be very large for first iteration
                 # Otherwise a reference to outputs is kept which keeps the logits alive in the next iteration
                 del outputs
 
-        if stop_check is not None:
-            overshoot = stop_check.drain()
-            if overshoot:
-                input_ids = input_ids[:, :-overshoot]
-            elif streamer is not None and stop_check.pending is not None:
-                streamer.put(stop_check.pending)  # the last token, still in flight when the loop ended
+        steps_to_undo = stop_check.finish()
+        if steps_to_undo:
+            input_ids, scores, raw_logits, decoder_attentions, cross_attentions, decoder_hidden_states = (
+                _undo_generation_steps(
+                    steps_to_undo,
+                    input_ids,
+                    scores,
+                    raw_logits,
+                    decoder_attentions,
+                    cross_attentions,
+                    decoder_hidden_states,
+                )
+            )
 
         if streamer is not None:
             streamer.end()
 
         if return_dict_in_generate:
-            cache = None
-            if any(cache_key in model_kwargs for cache_key in ALL_CACHE_NAMES):
-                cache_key = next(cache_key for cache_key in ALL_CACHE_NAMES if cache_key in model_kwargs)
-                cache = model_kwargs[cache_key]
             if self.config.is_encoder_decoder:
                 return GenerateEncoderDecoderOutput(
                     sequences=input_ids,
