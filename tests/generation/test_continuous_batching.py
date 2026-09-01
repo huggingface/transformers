@@ -16,6 +16,9 @@ import functools
 import gc
 import itertools
 import os
+import queue
+import threading
+import time
 import unittest
 from types import SimpleNamespace
 from typing import Any
@@ -41,7 +44,11 @@ from transformers.generation.continuous_batching.cache import (
     group_layers_by_attn_type,
 )
 from transformers.generation.continuous_batching.cache_manager import FullAttentionCacheAllocator
-from transformers.generation.continuous_batching.continuous_api import OutputRouter
+from transformers.generation.continuous_batching.continuous_api import (
+    BackgroundThreadStatus,
+    ContinuousBatchingManager,
+    OutputRouter,
+)
 from transformers.generation.continuous_batching.distributed import DistributedHelper
 from transformers.generation.continuous_batching.input_outputs import build_attention_mask
 from transformers.generation.continuous_batching.offloading_manager import OffloadingManager
@@ -769,6 +776,256 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
                 os.environ.pop("WORLD_SIZE", None)
             else:
                 os.environ["WORLD_SIZE"] = original_ws
+
+
+# Class for the handshake that lets threads sharing the model pause the generation loop. These tests drive the
+# handshake directly, with a stand-in generation loop, so they need no model and no accelerator.
+class ContinuousBatchingPauseTest(unittest.TestCase):
+    @staticmethod
+    def _pause_handshake_manager(status: BackgroundThreadStatus, thread: threading.Thread | None):
+        """Build a manager shell that only supports `pause_generation`, which needs the status object, a thread to tell
+        whether the generation loop is running, and a distributed helper with no CPU comm group (single rank)."""
+        manager = ContinuousBatchingManager.__new__(ContinuousBatchingManager)
+        manager.background_thread_status = status
+        manager._generation_thread = thread
+        manager.distributed_helper = SimpleNamespace(cpu_comm_group=None)
+        return manager
+
+    def test_pause_generation_never_overlaps_generation(self) -> None:
+        """A thread pausing the model at every step, back to back, while the generation loop is running and requests
+        keep coming in. The loop must never launch work while a pause is held, and no queued request may be lost
+        across the pauses."""
+        num_pauses = 200
+        status = BackgroundThreadStatus()
+        request_queue: queue.Queue[int] = queue.Queue()
+        processed: list[int] = []
+        steps = 0
+        pause_held = False
+        overlaps: list[int] = []
+        stop_loop = threading.Event()
+
+        def generation_loop() -> None:
+            nonlocal steps
+            try:
+                while not stop_loop.is_set():
+                    # Mirrors what `ContinuousBatchProcessor._update_tp_group_state` does at every iteration
+                    if status.is_pause_requested():
+                        status.pause_and_wait()
+                    # Everything below stands for the work the loop launches once the all-reduce is done
+                    if pause_held:
+                        overlaps.append(steps)
+                    while True:
+                        try:
+                            processed.append(request_queue.get_nowait())
+                        except queue.Empty:
+                            break
+                    steps += 1
+            finally:
+                status.mark_as_stopped()
+
+        loop_thread = threading.Thread(target=generation_loop)
+        loop_thread.start()
+        manager = self._pause_handshake_manager(status, loop_thread)
+
+        try:
+            for i in range(num_pauses):
+                request_queue.put(2 * i)  # a request submitted while the loop is running
+                with manager.pause_generation():
+                    pause_held = True
+                    request_queue.put(2 * i + 1)  # and one submitted while the pause is held
+                    # The loop is parked, so its step counter cannot move while we are in here
+                    steps_at_pause = steps
+                    time.sleep(0)  # release the GIL, giving the loop every chance to misbehave
+                    self.assertEqual(steps, steps_at_pause, f"the loop ran during pause {i}")
+                    pause_held = False
+            # Let the loop drain what is left before shutting it down, so nothing is pending on exit
+            deadline = time.monotonic() + 10
+            while not request_queue.empty() and time.monotonic() < deadline:
+                time.sleep(0.01)
+        finally:
+            stop_loop.set()
+            loop_thread.join(timeout=10)
+
+        self.assertFalse(loop_thread.is_alive())
+        self.assertEqual(overlaps, [], f"the loop launched work {len(overlaps)} times while a pause was held")
+        # Every request went through exactly once, and the loop kept running between pauses
+        self.assertEqual(processed, list(range(2 * num_pauses)))
+        self.assertGreaterEqual(steps, num_pauses)
+
+    def test_pause_generation_on_a_peer_initiated_pause(self) -> None:
+        """Under TP the pause is MAX-reduced, so a rank parks as soon as ANY rank asks: its loop can be parked before
+        its own threads have asked for anything. A thread arriving on an already parked loop must be let straight in,
+        not rejected or left waiting."""
+        status = BackgroundThreadStatus()
+        resumed = threading.Event()
+
+        def generation_loop() -> None:
+            try:
+                # The all-reduce came back with a pause requested by a peer: this rank parks even though nothing local
+                # asked for it.
+                self.assertFalse(status.is_pause_requested(), "no local thread has asked yet")
+                status.pause_and_wait()
+                resumed.set()
+            finally:
+                status.mark_as_stopped()
+
+        loop_thread = threading.Thread(target=generation_loop)
+        loop_thread.start()
+        manager = self._pause_handshake_manager(status, loop_thread)
+
+        entered = []
+        with manager.pause_generation():
+            entered.append(True)
+            self.assertFalse(resumed.is_set(), "the loop resumed while a thread was holding the pause")
+        loop_thread.join(timeout=10)
+
+        self.assertEqual(entered, [True], "the thread was not let into an already parked loop")
+        self.assertTrue(resumed.is_set(), "the loop never resumed after the pause was released")
+
+    def test_pause_generation_with_several_holders(self) -> None:
+        """Any number of threads may hold the pause at once. The loop must stay parked until the last one leaves, and
+        one holder raising must not release the pause for the others."""
+        num_holders = 4
+        status = BackgroundThreadStatus()
+        resumed_at = []
+        holders_inside = []
+        lock = threading.Lock()
+        release = threading.Event()
+
+        def generation_loop() -> None:
+            try:
+                while not status.is_pause_requested():
+                    time.sleep(0.001)
+                status.pause_and_wait()
+                with lock:
+                    resumed_at.append(len(holders_inside))  # how many were still inside when the loop resumed
+            finally:
+                status.mark_as_stopped()
+
+        loop_thread = threading.Thread(target=generation_loop)
+        loop_thread.start()
+        manager = self._pause_handshake_manager(status, loop_thread)
+
+        def holder(index: int) -> None:
+            try:
+                with manager.pause_generation():
+                    with lock:
+                        holders_inside.append(index)
+                    release.wait(timeout=10)
+                    with lock:
+                        holders_inside.remove(index)
+                    if index == 0:
+                        raise ValueError("this holder fails, the others must be unaffected")
+            except ValueError:
+                pass
+
+        threads = [threading.Thread(target=holder, args=(i,)) for i in range(num_holders)]
+        for thread in threads:
+            thread.start()
+        # Wait for every holder to be inside the pause at the same time
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            with lock:
+                if len(holders_inside) == num_holders:
+                    break
+            time.sleep(0.01)
+        with lock:
+            self.assertEqual(len(holders_inside), num_holders, "not all holders got in")
+        self.assertFalse(resumed_at, "the loop resumed while holders were still inside")
+
+        release.set()
+        for thread in threads:
+            thread.join(timeout=10)
+        loop_thread.join(timeout=10)
+
+        self.assertFalse(loop_thread.is_alive())
+        self.assertEqual(resumed_at, [0], "the loop must resume exactly once, after the last holder left")
+
+    @staticmethod
+    def _pause_in_thread(manager, timeout: float = 10) -> tuple[bool, Exception | None]:
+        """Enter and leave `pause_generation` in a separate thread, so a wait that never returns shows up as a timeout
+        instead of hanging the test suite. Returns whether the thread finished and the exception it raised, if any."""
+        raised: list[Exception] = []
+
+        def enter_and_leave() -> None:
+            try:
+                with manager.pause_generation():
+                    pass
+            except Exception as e:
+                raised.append(e)
+
+        thread = threading.Thread(target=enter_and_leave)
+        thread.start()
+        thread.join(timeout=timeout)
+        finished = not thread.is_alive()
+        return finished, (raised[0] if raised else None)
+
+    def test_pause_generation_raises_when_the_loop_cannot_pause(self) -> None:
+        """A pause request the loop will never honour must raise instead of blocking: whether the loop died on a fatal
+        error, hard-stopped in the window right after reading the request, was never started, or already stopped."""
+        # 1. The loop dies with a fatal error while a pause is pending: the error is chained as `__cause__`
+        fatal_error = RuntimeError("boom in the forward pass")
+        status = BackgroundThreadStatus()
+        keep_unwinding = threading.Event()
+
+        def dying_loop() -> None:
+            try:
+                while not status.is_pause_requested():
+                    time.sleep(0.001)
+                status.record_fatal_error(fatal_error)
+                keep_unwinding.wait(timeout=10)  # the loop is still on its way out when the waiter gives up
+            finally:
+                status.mark_as_stopped()
+
+        loop_thread = threading.Thread(target=dying_loop)
+        loop_thread.start()
+        manager = self._pause_handshake_manager(status, loop_thread)
+        finished, error = self._pause_in_thread(manager)
+        self.assertTrue(finished, "`pause_generation` blocked after the generation loop died")
+        self.assertIsInstance(error, RuntimeError)
+        self.assertIs(error.__cause__, fatal_error)
+        # The half-dead manager is brought down rather than left looking usable
+        self.assertEqual(status.local_status, BackgroundThreadStatus.HARD_STOP)
+        keep_unwinding.set()
+        loop_thread.join(timeout=10)
+
+        # 2. The loop hard-stops with a turn pending. `_update_tp_group_state` returns on HARD_STOP before it
+        # reaches the pause window, so the request is seen and the loop deliberately never parks: no fatal error
+        # but the waiter must not be left hanging either
+        status = BackgroundThreadStatus()
+
+        def hard_stopping_loop() -> None:
+            try:
+                while not status.is_pause_requested():
+                    time.sleep(0.001)
+                # The loop saw the request but hard-stops instead of parking, then exits for good
+            finally:
+                status.mark_as_stopped()
+
+        loop_thread = threading.Thread(target=hard_stopping_loop)
+        loop_thread.start()
+        manager = self._pause_handshake_manager(status, loop_thread)
+        finished, error = self._pause_in_thread(manager)
+        loop_thread.join(timeout=10)
+        self.assertTrue(finished, "`pause_generation` blocked after the generation loop hard-stopped")
+        self.assertIsInstance(error, RuntimeError)
+        self.assertGreaterEqual(status.local_status, BackgroundThreadStatus.HARD_STOP)
+
+        # 3. A manager that was never started fails immediately
+        manager = self._pause_handshake_manager(BackgroundThreadStatus(), None)
+        finished, error = self._pause_in_thread(manager)
+        self.assertTrue(finished, "`pause_generation` blocked on a manager that was never started")
+        self.assertIsInstance(error, RuntimeError)
+
+        # 4. And so does a manager whose generation thread already joined
+        status = BackgroundThreadStatus()
+        loop_thread = threading.Thread(target=status.mark_as_stopped)
+        loop_thread.start()
+        loop_thread.join(timeout=10)
+        manager = self._pause_handshake_manager(status, loop_thread)
+        finished, error = self._pause_in_thread(manager)
+        self.assertTrue(finished, "`pause_generation` blocked on an already stopped manager")
+        self.assertIsInstance(error, RuntimeError)
 
 
 @require_torch_accelerator

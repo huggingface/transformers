@@ -130,17 +130,19 @@ class DistributedHelper:
             dist.broadcast(value, src=self.tp_root_global_rank, async_op=False, group=self.tp_group)
         return value
 
-    def tp_all_reduce_state(self, payload_size: int, stop_status: int, wants_turn: int = 0) -> tuple[int, int, int]:
+    def tp_all_reduce_state(
+        self, payload_size: int, stop_status: int, pause_requested: int = 0
+    ) -> tuple[int, int, int]:
         """Broadcasts three information: 1. the size of the payload held by the TP driver (all other rank broadcast 0),
-        2. the requested stop status (all to all) and 3. whether a thread outside the generation loop is asking for a
-        turn (all to all). These information are broadcasted through a MAX-reduce operation."""
+        2. the requested stop status (all to all) and 3. whether a thread outside the generation loop is asking the
+        loop to pause (all to all). These information are broadcasted through a MAX-reduce operation."""
         if self.tp_size > 1:
             self._cpu_int_acc[0] = payload_size
             self._cpu_int_acc[1] = stop_status
-            self._cpu_int_acc[2] = wants_turn
+            self._cpu_int_acc[2] = pause_requested
             dist.all_reduce(self._cpu_int_acc, op=dist.ReduceOp.MAX, async_op=False, group=self.cpu_comm_group)
-            payload_size, stop_status, wants_turn = self._cpu_int_acc.tolist()
-        return payload_size, stop_status, wants_turn
+            payload_size, stop_status, pause_requested = self._cpu_int_acc.tolist()
+        return payload_size, stop_status, pause_requested
 
     def tp_all_reduce_min(self, value: torch.Tensor, on_cpu: bool = False) -> torch.Tensor:
         """Inside each TP group, all-reduces a tensor with the MIN op. No-op when TP is off. If the tensor is on CPU,
