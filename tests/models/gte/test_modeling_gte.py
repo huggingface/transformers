@@ -240,14 +240,6 @@ class GteModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
 
-    def test_ntk_rope_scaling_is_translated_to_linear(self):
-        config = GteConfig(
-            hidden_size=64, num_attention_heads=4, rope_theta=20000, rope_scaling={"type": "ntk", "factor": 8.0}
-        )
-        self.assertEqual(config.rope_parameters["rope_type"], "linear")
-        self.assertEqual(config.rope_parameters["rope_theta"], 160000.0)
-        self.assertAlmostEqual(config.rope_parameters["factor"], 8.0 ** (2 / 16))
-
 
 @require_torch
 class GteModelIntegrationTest(unittest.TestCase):

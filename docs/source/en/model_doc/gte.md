@@ -28,7 +28,7 @@ The abstract from the paper is the following:
 
 *We present systematic efforts in building long-context multilingual text representation model (TRM) and reranker from scratch for text retrieval. We first introduce a text encoder (base size) enhanced with RoPE and unpadding, pre-trained in a native 8192-token context (longer than 512 of previous multilingual encoders). Then we construct a hybrid TRM and a cross-encoder reranker by contrastive learning. Evaluations show that our text encoder outperforms the same-sized previous state-of-the-art XLM-R. Meanwhile, our TRM and reranker match the performance of large-sized state-of-the-art BGE-M3 models and achieve better results on long-context retrieval benchmarks. Further analysis demonstrate that our proposed models exhibit higher efficiency during both training and inference. We believe their efficiency and effectiveness could benefit various researches and industrial applications.*
 
-GTE is a BERT-style bidirectional encoder that replaces absolute position embeddings with RoPE, uses a gated MLP, and applies layer normalization after each residual connection. The same architecture backs Alibaba's `gte-*-v1.5` and `gte-multilingual-*` checkpoints as well as Snowflake's `snowflake-arctic-embed-m-v2.0`.
+GTE is a BERT-style bidirectional encoder that replaces absolute position embeddings with RoPE, uses a gated MLP, and applies layer normalization after each residual connection. The same architecture backs Alibaba's `gte-*-v1.5`, `gte-multilingual-*` and `gte-en-mlm-*` checkpoints as well as Snowflake's `snowflake-arctic-embed-m-v2.0`.
 
 This model was contributed by [Harshal Janjani](https://huggingface.co/harshaljanjani).
 The original code can be found [here](https://huggingface.co/Alibaba-NLP/new-impl).
@@ -50,7 +50,6 @@ pipeline = pipeline(
     task="feature-extraction",
     model="Alibaba-NLP/gte-multilingual-base",
     revision="refs/pr/31",
-    device=0
 )
 pipeline("Plants create oxygen through a process known as photosynthesis.")
 ```
@@ -70,7 +69,6 @@ model = AutoModel.from_pretrained(
     "Alibaba-NLP/gte-multilingual-base",
     revision="refs/pr/31",
     device_map="auto",
-    attn_implementation="sdpa"
 )
 inputs = tokenizer("Plants create oxygen through a process known as photosynthesis.", return_tensors="pt").to(model.device)
 
@@ -109,9 +107,7 @@ print(f"Embeddings shape: {embeddings.shape}")
 [[autodoc]] GteForSequenceClassification
     - forward
 
-
 ## GteForTokenClassification
 
 [[autodoc]] GteForTokenClassification
     - forward
-

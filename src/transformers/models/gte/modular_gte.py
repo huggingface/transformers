@@ -73,23 +73,6 @@ class GteConfig(BertConfig):
     add_cross_attention = AttributeError()
     use_cache = AttributeError()
 
-    def convert_rope_params_to_dict(self, **kwargs):
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else {}
-        rope_theta = kwargs.pop("rope_theta", self.default_theta)
-
-        # Static NTK scaling in Alibaba-NLP/gte-multilingual-base is exactly a linear scaling of `base * factor`.
-        if rope_scaling is not None and rope_scaling["type"] == "ntk":
-            head_dim = self.hidden_size // self.num_attention_heads
-            factor = rope_scaling["factor"]
-            self.rope_parameters.setdefault("rope_type", "linear")
-            self.rope_parameters.setdefault("factor", factor ** (2 / head_dim))
-            rope_theta = rope_theta * factor
-
-        self.rope_parameters.setdefault("rope_theta", rope_theta)
-        self.standardize_rope_params()
-        return kwargs
-
 
 class GteEmbeddings(JinaEmbeddingsV3Embeddings):
     def __init__(self, config: GteConfig):
@@ -171,10 +154,8 @@ class GtePreTrainedModel(BertPreTrainedModel):
         "attentions": GteAttention,
     }
 
-    @torch.no_grad()
-    def _init_weights(self, module):
-        # None of the inherited buffer initialisations apply, GTE keeps no such buffers.
-        PreTrainedModel._init_weights(self, module)
+    def _init_weights(self, **super_kwargs):
+        raise AttributeError("Uses base super call")
 
 
 @auto_docstring
