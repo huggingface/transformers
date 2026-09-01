@@ -45,6 +45,10 @@ class PaddleOCRVLImageProcessorKwargs(ImagesKwargs, total=False):
         The temporal patch size of the vision encoder.
     merge_size (`int`, *optional*, defaults to 2):
         The merge size of the vision encoder to llm encoder.
+    min_pixels (`int`, *optional*, defaults to `384 * 384`):
+        The min pixels of the image to resize the image.
+    max_pixels (`int`, *optional*, defaults to `1536 * 1536`):
+        The max pixels of the image to resize the image.
     """
 
     min_pixels: int
@@ -174,20 +178,17 @@ class PaddleOCRVLImageProcessor(TorchvisionBackend):
         patches = images.reshape(
             batch_size,
             channel,
-            grid_h // merge_size,
-            merge_size,
+            grid_h,
             patch_size,
-            grid_w // merge_size,
-            merge_size,
+            grid_w,
             patch_size,
         )
         # Reorder dimensions to group grid and patch information for subsequent flattening.
-        # [batch, grid_h/merge, grid_w/merge, merge, merge, channel, patch, patch]
-        patches = patches.permute(0, 2, 5, 3, 6, 1, 4, 7)
-
+        # [batch, grid_h, grid_w, channel, patch, patch]
+        patches = patches.permute(0, 2, 4, 1, 3, 5)
         flatten_patches = (
-            patches.unsqueeze(6)
-            .expand(-1, -1, -1, -1, -1, -1, temporal_patch_size, -1, -1)
+            patches.unsqueeze(4)
+            .expand(-1, -1, -1, -1, temporal_patch_size, -1, -1)
             .reshape(
                 batch_size,
                 grid_h * grid_w,

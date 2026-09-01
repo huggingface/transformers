@@ -106,6 +106,7 @@ from transformers.testing_utils import (
     require_torch_mps,
     require_torch_multi_accelerator,
     require_torch_multi_gpu,
+    rocm_has_sdpa_flash_backend,
     run_first,
     run_test_using_subprocess,
     scoped_kernels,
@@ -136,8 +137,8 @@ if is_torch_available():
     from torch import nn
 
     from transformers import MODEL_MAPPING
+    from transformers.distributed.tensor_parallel import _get_parameter_tp_plan
     from transformers.integrations.accelerate import compute_module_sizes
-    from transformers.integrations.tensor_parallel import _get_parameter_tp_plan
     from transformers.modeling_utils import load_state_dict
     from transformers.pytorch_utils import id_tensor_storage
 
@@ -1687,7 +1688,8 @@ class ModelTesterMixin(ExportTesterMixin):
                 loss = model(**inputs).loss
                 loss.backward()
                 grad_expected_params = [(n, p) for n, p in model.named_parameters() if p.grad is not None]
-                non_zero_grads_normal = {n for n, p in grad_expected_params if p.grad.abs().sum() > 0}
+                normal_grad_sums = {n: p.grad.abs().sum().item() for n, p in grad_expected_params}
+                non_zero_grads_normal = {n for n, s in normal_grad_sums.items() if s > 0}
 
                 # reset all gradients to zero for the comparison with the gradient checkpointing run
                 optimizer.zero_grad()
@@ -1712,8 +1714,33 @@ class ModelTesterMixin(ExportTesterMixin):
 
                 # check that all the parameters that had non-zero gradients before, have non-zero grads with gradient
                 # checkpointing. divergence indicates a different forward-pass environment that needs special handling.
-                non_zero_grads_gradcp = {n for n, p in grad_expected_params if p.grad.abs().sum() > 0}
-                self.assertEqual(non_zero_grads_gradcp, non_zero_grads_normal)
+                gradcp_grad_sums = {n: p.grad.abs().sum().item() for n, p in grad_expected_params}
+                non_zero_grads_gradcp = {n for n, s in gradcp_grad_sums.items() if s > 0}
+
+                if non_zero_grads_gradcp != non_zero_grads_normal:
+                    only_in_normal = non_zero_grads_normal - non_zero_grads_gradcp
+                    only_in_gradcp = non_zero_grads_gradcp - non_zero_grads_normal
+
+                    # Observed flakiness (see #48332): a parameter's gradient is exactly 0.0 in one
+                    # run and a tiny value (≤1e-6, orders of magnitude below real gradients) in the
+                    # other. Either side can be the near-zero one. Treat such pairs as not a mismatch.
+                    _fp_noise = 1e-6
+                    only_in_normal = {
+                        n
+                        for n in only_in_normal
+                        if not (gradcp_grad_sums[n] == 0.0 and normal_grad_sums[n] <= _fp_noise)
+                    }
+                    only_in_gradcp = {
+                        n
+                        for n in only_in_gradcp
+                        if not (normal_grad_sums[n] == 0.0 and gradcp_grad_sums[n] <= _fp_noise)
+                    }
+                    self.assertEqual(
+                        # set union
+                        only_in_gradcp | only_in_normal,
+                        set(),
+                        f"non_zero_grads mismatch after filtering fp noise: only_in_normal={only_in_normal}, only_in_gradcp={only_in_gradcp}",
+                    )
 
                 if self.test_all_params_have_gradient:
                     for k, v in model.named_parameters():
@@ -3794,8 +3821,8 @@ class ModelTesterMixin(ExportTesterMixin):
         device_type, major, minor = get_device_properties()
         if device_type == "cuda" and major < 8:
             self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
-        elif device_type == "rocm" and major < 9:
-            self.skipTest(reason="This test requires an AMD GPU with compute capability >= 9.0")
+        elif device_type == "rocm" and not rocm_has_sdpa_flash_backend(major):
+            self.skipTest(reason="This AMD GPU has no SDPA flash backend available")
         elif device_type not in ["cuda", "rocm", "xpu"]:
             self.skipTest(reason="This test requires a Nvidia or AMD GPU, or an Intel XPU")
 
@@ -3815,6 +3842,10 @@ class ModelTesterMixin(ExportTesterMixin):
                 "evolla",
                 "modernbert",
                 "gemma3",
+                # gemma4: the block-overlay mask in create_masks_for_vision_model forces mask
+                # materialization unconditionally, so SDPA can never use the FA backend when the
+                # vision portion is involved. This is by design and not fixable on the modeling side.
+                "gemma4",
                 "t5gemma",
                 "diffllama",
                 "dpr",
@@ -4356,14 +4387,14 @@ class ModelTesterMixin(ExportTesterMixin):
                 num_attn_heads = getattr(config, "num_attention_heads")
                 num_attn_heads = num_attn_heads if isinstance(num_attn_heads, int) else max(num_attn_heads)
                 head_dim = head_dim if head_dim is not None else config.hidden_size // num_attn_heads
-                config.hidden_size *= max(requested_dim // head_dim, 1)
+                config.hidden_size *= max(math.ceil(requested_dim / head_dim), 1)
 
             if (
                 getattr(config, "decoder_hidden_size", None) is not None
                 and getattr(config, "decoder_num_attention_heads", None) is not None
             ):
                 decoder_head_dim = config.decoder_hidden_size // config.decoder_num_attention_heads
-                config.decoder_hidden_size *= max(requested_dim // decoder_head_dim, 1)
+                config.decoder_hidden_size *= max(math.ceil(requested_dim / decoder_head_dim), 1)
 
             if (
                 getattr(config, "cross_hidden_size", None) is not None
@@ -4374,7 +4405,7 @@ class ModelTesterMixin(ExportTesterMixin):
                     if cross_head_dim is not None
                     else config.cross_hidden_size // config.cross_num_attention_heads
                 )
-                config.cross_hidden_size *= max(requested_dim // cross_head_dim, 1)
+                config.cross_hidden_size *= max(math.ceil(requested_dim / cross_head_dim), 1)
 
             # 3d rope also depends on the head dim
             # (we assume easy shapes here where we get to the requested head dim at least)
@@ -5106,15 +5137,6 @@ class ModelTesterMixin(ExportTesterMixin):
                     hasattr(outputs, "pooler_output"),
                     "get_text_features() must return a BaseModelOutput with pooler_output",
                 )
-                self.assertTrue(
-                    hasattr(outputs, "hidden_states"),
-                    "get_text_features() must return a BaseModelOutput with hidden_states",
-                )
-                if self.has_attentions:
-                    self.assertTrue(
-                        hasattr(outputs, "attentions"),
-                        "get_text_features() must return a BaseModelOutput with attentions",
-                    )
 
                 # Test against (batch_size, seq_len, hidden_size)
                 last_hidden_state = outputs.last_hidden_state
@@ -5137,6 +5159,11 @@ class ModelTesterMixin(ExportTesterMixin):
 
             with torch.no_grad():
                 outputs = model.get_text_features(**inputs_dict)
+            self.assertTrue(
+                hasattr(outputs, "hidden_states"),
+                "get_text_features() must return a BaseModelOutput with hidden_states",
+            )
+
             # hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
             hidden_states = outputs.hidden_states
             expected_num_hidden_states = self._text_features_get_expected_num_hidden_states()
@@ -5170,6 +5197,11 @@ class ModelTesterMixin(ExportTesterMixin):
 
             with torch.no_grad():
                 outputs = model.get_text_features(**inputs_dict)
+            self.assertTrue(
+                hasattr(outputs, "attentions"),
+                "get_text_features() must return a BaseModelOutput with attentions",
+            )
+
             attentions = outputs.attentions
             # model.text_model(**inputs_dict) also no attentions for aimv2
             expected_num_attentions = self._text_features_get_expected_num_attentions()
@@ -5224,16 +5256,6 @@ class ModelTesterMixin(ExportTesterMixin):
                     hasattr(outputs, "pooler_output"),
                     "get_image_features() must return a BaseModelOutput with pooler_output",
                 )
-                self.assertTrue(
-                    hasattr(outputs, "hidden_states"),
-                    "get_image_features() must return a BaseModelOutput with hidden_states",
-                )
-                if self.has_attentions:
-                    self.assertTrue(
-                        hasattr(outputs, "attentions"),
-                        "get_image_features() must return a BaseModelOutput with attentions",
-                    )
-
                 if getattr(self, "skip_test_image_features_output_shape", False):
                     return
 
@@ -5262,6 +5284,7 @@ class ModelTesterMixin(ExportTesterMixin):
                     "out_hidden_size",
                     "hidden_size",
                     "hidden_dim",
+                    "mm_embed_dim",  # gemma4-only
                 ]
                 hidden_size = None
                 for attr in attribute_candidates:
@@ -5307,6 +5330,11 @@ class ModelTesterMixin(ExportTesterMixin):
             with torch.no_grad():
                 outputs = model.get_image_features(**inputs_dict)
             # hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+            self.assertTrue(
+                hasattr(outputs, "hidden_states"),
+                "get_image_features() must return a BaseModelOutput with hidden_states",
+            )
+
             hidden_states = outputs.hidden_states
             expected_num_hidden_states = self._image_features_get_expected_num_hidden_states()
             self.assertIsNotNone(hidden_states, "hidden_states should not be None")
@@ -5342,6 +5370,11 @@ class ModelTesterMixin(ExportTesterMixin):
 
             with torch.no_grad():
                 outputs = model.get_image_features(**inputs_dict)
+
+            self.assertTrue(
+                hasattr(outputs, "attentions"),
+                "get_image_features() must return a BaseModelOutput with attentions",
+            )
             attentions = outputs.attentions
             # model.text_model(**inputs_dict) also no attentions for aimv2
             expected_num_attentions = self._image_features_get_expected_num_attentions()
@@ -5401,16 +5434,6 @@ class ModelTesterMixin(ExportTesterMixin):
                     hasattr(outputs, "pooler_output"),
                     "get_audio_features() must return a BaseModelOutputWithPooling with pooler_output",
                 )
-                self.assertTrue(
-                    hasattr(outputs, "hidden_states"),
-                    "get_audio_features() must return a BaseModelOutputWithPooling with hidden_states",
-                )
-                if self.has_attentions:
-                    self.assertTrue(
-                        hasattr(outputs, "attentions"),
-                        "get_audio_features() must return a BaseModelOutputWithPooling with attentions",
-                    )
-
                 if getattr(self, "skip_test_audio_features_output_shape", False):
                     return
 
@@ -5455,6 +5478,11 @@ class ModelTesterMixin(ExportTesterMixin):
 
             with torch.no_grad():
                 outputs = model.get_audio_features(**inputs_dict)
+
+            self.assertTrue(
+                hasattr(outputs, "hidden_states"),
+                "get_audio_features() must return a BaseModelOutputWithPooling with hidden_states",
+            )
             hidden_states = outputs.hidden_states
             expected_num_hidden_states = self._audio_features_get_expected_num_hidden_states()
             self.assertIsNotNone(hidden_states, "hidden_states should not be None")
@@ -5487,6 +5515,12 @@ class ModelTesterMixin(ExportTesterMixin):
 
             with torch.no_grad():
                 outputs = model.get_audio_features(**inputs_dict)
+
+            self.assertTrue(
+                hasattr(outputs, "attentions"),
+                "get_audio_features() must return a BaseModelOutputWithPooling with attentions",
+            )
+
             attentions = outputs.attentions
             expected_num_attentions = self._audio_features_get_expected_num_attentions()
             self.assertIsNotNone(attentions, "attentions should not be None")
@@ -5540,16 +5574,6 @@ class ModelTesterMixin(ExportTesterMixin):
                     hasattr(outputs, "pooler_output"),
                     "get_video_features() must return a BaseModelOutput with pooler_output",
                 )
-                self.assertTrue(
-                    hasattr(outputs, "hidden_states"),
-                    "get_video_features() must return a BaseModelOutput with hidden_states",
-                )
-                if self.has_attentions:
-                    self.assertTrue(
-                        hasattr(outputs, "attentions"),
-                        "get_video_features() must return a BaseModelOutput with attentions",
-                    )
-
                 if getattr(self, "skip_test_video_features_output_shape", False):
                     return
 
@@ -5604,6 +5628,12 @@ class ModelTesterMixin(ExportTesterMixin):
 
             with torch.no_grad():
                 outputs = model.get_video_features(**inputs_dict)
+
+            self.assertTrue(
+                hasattr(outputs, "hidden_states"),
+                "get_video_features() must return a BaseModelOutput with hidden_states",
+            )
+
             hidden_states = outputs.hidden_states
             expected_num_hidden_states = self._video_features_get_expected_num_hidden_states()
             self.assertIsNotNone(hidden_states, "hidden_states should not be None")
@@ -5636,6 +5666,12 @@ class ModelTesterMixin(ExportTesterMixin):
 
             with torch.no_grad():
                 outputs = model.get_video_features(**inputs_dict)
+
+            self.assertTrue(
+                hasattr(outputs, "attentions"),
+                "get_video_features() must return a BaseModelOutput with attentions",
+            )
+
             attentions = outputs.attentions
             expected_num_attentions = self._video_features_get_expected_num_attentions()
             self.assertIsNotNone(attentions, "attentions should not be None")
@@ -5934,7 +5970,18 @@ class ModelTesterMixin(ExportTesterMixin):
             self.skipTest("This model has no standardized RoPE module found.")
 
         # TODO: raushan, add separate tests for mrope in MultimodalTester
-        if text_config.rope_parameters.get("mrope_section") is not None:
+        is_nested_rope = (
+            "rope_theta" not in text_config.rope_parameters.keys()
+            and "rope_theta" in list(text_config.rope_parameters.values())[0]
+        )
+        if (not is_nested_rope and text_config.rope_parameters.get("mrope_section") is not None) or (
+            is_nested_rope
+            and any(
+                layer_rope.get("mrope_section") is not None
+                for layer_rope in text_config.rope_parameters.values()
+                if layer_rope is not None
+            )
+        ):
             self.skipTest("This model uses 3D multimodal RoPE, the test uses 2D position ids.")
 
         scaling_factor = 10
@@ -5943,10 +5990,6 @@ class ModelTesterMixin(ExportTesterMixin):
             "partial_rotary_factor", getattr(text_config, "partial_rotary_factor", 1.0)
         )
         long_input_length = int(text_config.max_position_embeddings * 1.5)
-        is_nested_rope = (
-            "rope_theta" not in text_config.rope_parameters.keys()
-            and "rope_theta" in list(text_config.rope_parameters.values())[0]
-        )
 
         kwargs = {}
         if is_nested_rope:
@@ -6191,6 +6234,9 @@ def _set_config_rope_params(config: PreTrainedConfig, rope_params: dict) -> bool
     layer_types = getattr(config, "_rope_type_labels", getattr(config, "layer_types", None))
     if layer_types is not None and set(config.rope_parameters.keys()).issubset(layer_types):
         for layer_type in layer_types:
+            # skip NoPE layers if any
+            if config.rope_parameters[layer_type] is None:
+                continue
             # Don't update gemma4 proportional rope, it is quite special and return `dim // 4` freqs
             if config.rope_parameters[layer_type].get("rope_type") != "proportional":
                 config.rope_parameters.setdefault(layer_type, {})

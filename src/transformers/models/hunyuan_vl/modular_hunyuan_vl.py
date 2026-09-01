@@ -65,6 +65,7 @@ from ..qwen2_vl.modeling_qwen2_vl import Qwen2VLModel
 from ..siglip.modeling_siglip import SiglipEncoderLayer, SiglipMLP
 
 
+@auto_docstring
 @dataclass
 class HunYuanVLModelOutputWithPast(BaseModelOutputWithPast):
     r"""
@@ -181,6 +182,8 @@ class HunYuanVLTextConfig(HunYuanDenseV1Config):
     }
 
     attribute_map = {
+        "attention_head_dim": "head_dim",
+        "org_vocab_size": "vocab_size",
         "pad_id": "pad_token_id",
     }
 
@@ -226,7 +229,8 @@ class HunYuanVLTextConfig(HunYuanDenseV1Config):
 
     def __post_init__(self, **kwargs):
         # Legacy aliases (`pad_id`, `attention_head_dim`, `org_vocab_size`) are normalized onto canonical fields by the
-        # base `__setattr__` via `attribute_map`, so no manual translation is needed here.
+        # base `__setattr__` via `attribute_map`, so no manual translation is needed here -- every public Tencent
+        # checkpoint stores them with the same value as the canonical field.
         super().__post_init__(**kwargs)
         rope_parameters = getattr(self, "rope_parameters", None)
         head_dim = self.head_dim if self.head_dim is not None else self.hidden_size // self.num_attention_heads
@@ -302,7 +306,12 @@ class HunYuanVLConfig(Qwen2VLConfig):
         # nested `text_config` block) we fold the recognized text-side keys into the text config payload. This keeps
         # ``HunYuanVLConfig.from_pretrained(...)`` working with both the upstream nested layout and the existing
         # public OCR checkpoints.
-        text_keys = set(self.sub_configs["text_config"].__dataclass_fields__) | {"rope_scaling", "rope_theta"}
+        text_config_class = self.sub_configs["text_config"]
+        text_keys = (
+            set(text_config_class.__dataclass_fields__)
+            | set(text_config_class.attribute_map)
+            | {"rope_scaling", "rope_theta"}
+        )
         text_kwargs = {key: kwargs.pop(key) for key in list(kwargs) if key in text_keys}
 
         if isinstance(self.vision_config, dict):
@@ -311,9 +320,9 @@ class HunYuanVLConfig(Qwen2VLConfig):
             self.vision_config = self.sub_configs["vision_config"]()
 
         if isinstance(self.text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**{**self.text_config, **text_kwargs})
+            self.text_config = text_config_class(**{**self.text_config, **text_kwargs})
         elif self.text_config is None:
-            self.text_config = self.sub_configs["text_config"](**text_kwargs)
+            self.text_config = text_config_class(**text_kwargs)
 
         # Keep the vision tower in sync with the consuming text backbone size.
         self.vision_config.text_hidden_size = self.text_config.hidden_size
@@ -444,6 +453,7 @@ class HunYuanVLImageProcessor(Qwen2VLImageProcessor):
 
 
 @requires(backends=("vision", "torchvision"))
+@auto_docstring
 class HunYuanVLImageProcessorPil(Qwen2VLImageProcessorPil):
     size = {"shortest_edge": 512 * 512, "longest_edge": 2048 * 2048}
     patch_size = 16
@@ -1220,12 +1230,6 @@ class HunYuanVLModel(Qwen2VLModel):
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.FloatTensor`):
-            Flat per-patch pixel features produced by the image processor.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-        """
         vision_dtype = next(self.vision_tower.parameters()).dtype
         pixel_values = pixel_values.to(vision_dtype)
         return self.vision_tower(pixel_values, grid_thw=image_grid_thw, **kwargs)
@@ -1270,12 +1274,6 @@ class HunYuanVLModel(Qwen2VLModel):
         mm_token_type_ids: torch.IntTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> HunYuanVLModelOutputWithPast:
-        r"""
-        pixel_values (`torch.FloatTensor`, *optional*):
-            Flat per-patch pixel features produced by the image processor.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-        """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -1325,7 +1323,7 @@ class HunYuanVLModel(Qwen2VLModel):
 @auto_docstring
 class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
-    _tp_plan = {"lm_head": "colwise_rep"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     config: HunYuanVLConfig
 
@@ -1336,12 +1334,17 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixi
         self.vocab_size = config.text_config.vocab_size
         self.post_init()
 
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.FloatTensor`):
+            Flat per-patch pixel features produced by the image processor.
+        """
         return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
     @can_return_tuple
@@ -1362,11 +1365,6 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixi
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
-        pixel_values (`torch.FloatTensor`, *optional*):
-            Flat per-patch pixel features produced by the image processor.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-
         Example:
 
         ```python

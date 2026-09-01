@@ -68,15 +68,16 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-Use `attn_implementation` to enable [FlashAttention2](../perf_infer_gpu_one#flashattention-2) to further accelerate inference.
+Use `attn_implementation` to enable [FlashAttention2](../attention_interface#set-an-attention-backend) to further accelerate inference.
 
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from accelerate import Accelerator
 
 model = AutoModelForCausalLM.from_pretrained(
   "TheBloke/zephyr-7B-alpha-AWQ",
   attn_implementation="flash_attention_2",
-  device_map="cuda:0"
+  device_map=Accelerator().device
 )
 ```
 

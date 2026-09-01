@@ -33,6 +33,7 @@ from ..utils.import_utils import (
     is_kernels_available,
     is_rocm_platform,
     is_torch_available,
+    is_torchdynamo_exporting,
     resolve_internal_import,
 )
 from .flash_attention import flash_attention_forward
@@ -72,8 +73,10 @@ def _ensure_kernels_enabled() -> None:
 
 # Maps from func name to the internal module path
 _KERNELS_INTERNAL_PATH_MAPPINGS = {
+    "chunk_kda": "ops.kda",
+    "fused_recurrent_kda": "ops.kda",
     "chunk_gated_delta_rule": "ops.gated_delta_rule",
-    "recurrent_gated_delta_rule": "ops.gated_delta_rule",
+    "fused_recurrent_gated_delta_rule": "ops.gated_delta_rule",
     "mamba_split_conv1d_scan_combined": "ops.triton.ssd_combined",
     "selective_state_update": "ops.triton.selective_state_update",
     "mamba_chunk_scan_combined": "ops.triton.ssd_combined",
@@ -198,7 +201,7 @@ if is_kernels_available():
                     ),
                 },
             },
-            "recurrent_gated_delta_rule": {
+            "fused_recurrent_gated_delta_rule": {
                 "cuda": {
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/fla",
@@ -279,6 +282,16 @@ if is_kernels_available():
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="selective_state_update",
                         version=2,
+                    ),
+                },
+            },
+            "EsmFold2TriangleMultiplication": {
+                "cuda": {
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="biohub/esmfold2-trimul",
+                        layer_name="ESMFold2TriangleMultiplication",
+                        revision="9bcafd5b29a6c81645ae299d5364f5b9e503aca8",
+                        trust_remote_code=True,
                     ),
                 },
             },
@@ -474,6 +487,34 @@ if is_kernels_available():
                     )
                 }
             },
+            "chunk_kda": {
+                "cuda": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="chunk_kimi_delta_attention",
+                        version=1,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="chunk_kimi_delta_attention",
+                        version=1,
+                    ),
+                },
+            },
+            "fused_recurrent_kda": {
+                "cuda": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="recurrent_kimi_delta_attention",
+                        version=1,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="recurrent_kimi_delta_attention",
+                        version=1,
+                    ),
+                },
+            },
             "rotary_pos_emb": {
                 "xpu": {
                     Mode.INFERENCE: LayerRepository(
@@ -572,6 +613,7 @@ _HUB_KERNEL_MAPPING: dict[str, dict[str, str]] = {
     "finegrained-fp8": {"repo_id": "kernels-community/finegrained-fp8", "version": 4},
     "deep-gemm": {"repo_id": "kernels-community/deep-gemm", "version": 2},
     "sonic-moe": {"repo_id": "kernels-community/sonic-moe", "revision": "ep-support"},
+    "nvfp4": {"repo_id": "kernels-community/nvfp4-gemm", "version": 1},
 }
 
 _KERNEL_MODULE_MAPPING: dict[str, ModuleType | None] = {}
@@ -583,6 +625,11 @@ def is_kernel(attn_implementation: str | None) -> bool:
         attn_implementation is not None
         and re.search(r"^[^/:]+/[^/:]+(?:@[^/:]+)?(?::[^/:]+)?$", attn_implementation) is not None
     )
+
+
+def get_attn_kernel_version(repo_id: str) -> int:
+    """Return the major version of the hub kernel repo `repo_id` to load, e.g. `3` for `kernels-community/flash-attn2`."""
+    return FLASH_ATTN_KERNEL_VERSIONS.get(repo_id, 1)
 
 
 def load_and_register_attn_kernel(
@@ -624,7 +671,7 @@ def load_and_register_attn_kernel(
 
     # create revision xor version
     rev = rev.strip() if rev else None
-    version = FLASH_ATTN_KERNEL_VERSIONS.get(repo_id, 1) if rev is None else None
+    version = get_attn_kernel_version(repo_id) if rev is None else None
 
     # Load the kernel from hub
     try:
@@ -779,9 +826,15 @@ def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, interna
 
         # Make it "frozen" like to let dynamo not try to look into any ordering
         applicable_params = tuple(inspect.signature(implementation).parameters)
+        # A boolean to track if the implementation is new, i.e. not the original torch function
+        is_new_implementation = implementation is not torch_function
 
         @functools.wraps(torch_function)
         def wrapped(*args, **kwargs):
+            # Some original packages are incompatible with torch.export, so we always use the torch path when exporting
+            if is_new_implementation and is_torchdynamo_exporting():
+                return torch_function(*args, **kwargs)
+
             kwargs = {k: v for k, v in kwargs.items() if k in applicable_params}
             return implementation(*args, **kwargs)
 

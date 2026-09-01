@@ -124,7 +124,6 @@ class Kimi_K25VideoProcessor(BaseVideoProcessor):
         self,
         videos: "torch.Tensor",
         patch_size: int,
-        merge_size: int,
     ) -> tuple["torch.Tensor", int, int]:
         "Patchifies each video into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."
         batch_size, num_frames, channel, resized_height, resized_width = videos.shape
@@ -135,14 +134,12 @@ class Kimi_K25VideoProcessor(BaseVideoProcessor):
             batch_size,
             num_frames,
             channel,
-            grid_h // merge_size,
-            merge_size,
+            grid_h,
             patch_size,
-            grid_w // merge_size,
-            merge_size,
+            grid_w,
             patch_size,
         )
-        patches = patches.permute(0, 1, 3, 6, 4, 7, 2, 5, 8)
+        patches = patches.permute(0, 1, 3, 5, 2, 4, 6)
         flatten_patches = patches.reshape(
             batch_size,
             num_frames * grid_h * grid_w,
@@ -220,7 +217,6 @@ class Kimi_K25VideoProcessor(BaseVideoProcessor):
             patches, grid_t, grid_h, grid_w = self.patchify(
                 stacked_videos,
                 patch_size=patch_size,
-                merge_size=merge_size,
             )
 
             processed_videos_grouped[shape] = patches

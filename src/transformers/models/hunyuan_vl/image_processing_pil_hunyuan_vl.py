@@ -84,6 +84,7 @@ def smart_resize(
 
 
 @requires(backends=("vision", "torchvision"))
+@auto_docstring
 class HunYuanVLImageProcessorPil(PilBackend):
     do_resize = True
     resample = PILImageResampling.BICUBIC

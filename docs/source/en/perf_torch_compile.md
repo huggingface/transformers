@@ -13,7 +13,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# torch.compile
+# torch.compile for inference
 
 [torch.compile](https://pytorch.org/tutorials/intermediate/torch_compile_tutorial.html) compiles PyTorch code into optimized kernels that significantly speed up inference. This feature relies on [TorchDynamo](https://pytorch.org/docs/stable/torch.compiler_dynamo_overview.html) to compile the code into graphs and [TorchInductor](https://dev-discuss.pytorch.org/t/torchinductor-a-pytorch-native-compiler-with-define-by-run-ir-and-symbolic-shapes/747) to further compile the graphs into optimized kernels. It is a powerful optimization tool, and in many cases, only requires adding a single line of code.
 

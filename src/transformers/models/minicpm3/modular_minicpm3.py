@@ -118,6 +118,8 @@ class MiniCPM3Config(LlamaConfig):
     def __post_init__(self, **kwargs):
         # In MLA the per-head dim used by RoPE is the rotary part, not `hidden_size / num_attention_heads`.
         self.head_dim = self.qk_rope_head_dim
+        # Also tells shared code this is an MLA config (key and value head dims differ)
+        self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
         # When explicitly set to `None`, these collapse to no-op scalings (e.g. for a randomly
         # initialised tiny model); the class defaults otherwise match `openbmb/MiniCPM3-4B`.
         if self.v_head_dim is None:
@@ -158,17 +160,6 @@ class MiniCPM3Attention(DeepseekV2Attention):
     module construction and override only `forward`.
     """
 
-    def expand_kv(self, k_nope: torch.Tensor, k_pe: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        key_shape = (*k_nope.shape[:-1], -1, self.qk_nope_head_dim + self.v_head_dim)
-
-        k_nope = self.kv_b_proj(k_nope).view(key_shape).transpose(1, 2)
-        k_nope, value_states = torch.split(k_nope, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
-
-        k_pe = k_pe.expand(*k_nope.shape[:-1], -1)
-        key_states = torch.cat((k_nope, k_pe), dim=-1)
-
-        return key_states, value_states
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -189,7 +180,8 @@ class MiniCPM3Attention(DeepseekV2Attention):
 
         compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
         kv_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
-        k_pass = self.kv_a_layernorm(kv_pass)
+        # Both latents are viewed as single-head, 4D tensors so all cache layers handle them correctly
+        k_pass = self.kv_a_layernorm(kv_pass).view(batch_size, 1, seq_length, self.kv_lora_rank)
         k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
 
         cos, sin = position_embeddings
@@ -197,12 +189,13 @@ class MiniCPM3Attention(DeepseekV2Attention):
         # cos/sin rotary (`apply_rotary_pos_emb`) instead of DeepSeek's complex/interleaved variant.
         q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin)
 
+        # Cache read / write is performed while the latent KV is still compressed
+        if past_key_values is not None:
+            k_pass, k_rot = past_key_values.update(k_pass, k_rot, self.layer_idx)
+
         query_states = torch.cat((q_pass, q_rot), dim=-1)
 
         key_states, value_states = self.expand_kv(k_pass, k_rot)
-
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward

@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Utilities for Generation
+# Utilities for generation
 
 This page lists all the utility functions used by [`~generation.GenerationMixin.generate`].
 

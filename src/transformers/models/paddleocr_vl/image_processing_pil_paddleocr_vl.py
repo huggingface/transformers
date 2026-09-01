@@ -43,6 +43,10 @@ class PaddleOCRVLImageProcessorKwargs(ImagesKwargs, total=False):
         The temporal patch size of the vision encoder.
     merge_size (`int`, *optional*, defaults to 2):
         The merge size of the vision encoder to llm encoder.
+    min_pixels (`int`, *optional*, defaults to `384 * 384`):
+        The min pixels of the image to resize the image.
+    max_pixels (`int`, *optional*, defaults to `1536 * 1536`):
+        The max pixels of the image to resize the image.
     """
 
     min_pixels: int
@@ -165,20 +169,18 @@ class PaddleOCRVLImageProcessorPil(PilBackend):
 
         patches = image.reshape(
             channel,
-            grid_h // merge_size,
-            merge_size,
+            grid_h,
             patch_size,
-            grid_w // merge_size,
-            merge_size,
+            grid_w,
             patch_size,
         )
-        # (gh, gw, mh, mw, C, ph, pw)
-        patches = np.transpose(patches, (1, 4, 2, 5, 0, 3, 6))
+        # [batch, grid_h, grid_w, channel, patch, patch]
+        patches = np.transpose(patches, ((1, 3, 0, 2, 4)))
 
         # expand temporal_patch_size as a broadcast (zero-copy)
         patches = np.broadcast_to(
-            patches[:, :, :, :, :, None, :, :],
-            (*patches.shape[:5], temporal_patch_size, *patches.shape[5:]),
+            patches[:, :, :, None, :, :],
+            (*patches.shape[:3], temporal_patch_size, *patches.shape[3:]),
         )
 
         flatten_patches = patches.reshape(
