@@ -277,10 +277,10 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         # `added_tokens_decoder` is a (token_id -> token) dict of tokens that may not be contiguous
         added_tokens_decoder: dict[int, str] = {
             int(token_id): token["content"] if isinstance(token, dict) else str(token)
-            for token_id, token in local_kwargs.get("added_tokens_decoder", {}).items()
+            for token_id, token in (local_kwargs.get("added_tokens_decoder") or {}).items()
         }
         # `extra_special_tokens` is a list of tokens to append to the base vocabulary
-        extra_special_tokens: list[str] = local_kwargs.get("extra_special_tokens", [])
+        extra_special_tokens: list[str] = local_kwargs.get("extra_special_tokens") or []
         if isinstance(extra_special_tokens, dict):
             extra_special_tokens = list(extra_special_tokens.keys())
 
