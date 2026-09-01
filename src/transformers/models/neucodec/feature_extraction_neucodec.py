@@ -168,9 +168,8 @@ class NeuCodecFeatureExtractor(SequenceFeatureExtractor):
         padded_audio = padded_inputs["audio"][:, None, :]
 
         # 2) Semantic encoder feature extraction (mel spectrogram). Unlike Xcodec2FeatureExtractor, NeuCodec's
-        # reference implementation (https://github.com/neuphonic/neucodec/blob/main/neucodec/model.py) feeds the
-        # acoustic-padded waveform directly into the mel computation, with no extra "valid_len" trimming or
-        # symmetric hop-sized padding: https://github.com/neuphonic/neucodec/blob/main/neucodec/model.py#L128
+        # reference implementation feeds the acoustic-padded waveform directly into the mel computation, with no extra
+        # "valid_len" trimming or symmetric hop-sized padding: https://github.com/neuphonic/neucodec/blob/ed3e6cd1bdc374ce14a21355e5eee66a777149ce/neucodec/model.py#L128
         # Padded per-sample (not via the batch-collated `padded_audio`): the CMVN normalization below is computed
         # over the whole padded signal, so batch-padding a short sample to the batch's longest would skew it.
         mel_features = []

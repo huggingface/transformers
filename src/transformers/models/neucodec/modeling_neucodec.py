@@ -570,8 +570,10 @@ class NeuCodecISTFTHead(nn.Module):
         self.window = nn.Buffer(window, persistent=False)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        stft_pred = self.linear(hidden_states).transpose(1, 2)
-        magnitude, phase = stft_pred.chunk(2, dim=1)
+        stft_pred = self.linear(hidden_states)
+        # Keep the frequency axis last: `torch.polar`'s meta kernel always reports a contiguous
+        # output, so a transposed input makes torch.compile fail an output stride assert
+        magnitude, phase = stft_pred.chunk(2, dim=-1)
         # Cast to float32: complex exponential and irfft are not supported for fp16 (ComplexHalf)
         magnitude = magnitude.float()
         phase = phase.float()
@@ -581,9 +583,9 @@ class NeuCodecISTFTHead(nn.Module):
 
         # Back to audio (ISTFT with manual "same" padding: torch.istft lacks a native same-padding mode,
         # so we use irfft + fold with explicit pre-computed padding to replicate it)
-        time_frames = torch.fft.irfft(spectrogram_complex, self.n_fft, dim=1, norm="backward")
+        time_frames = torch.fft.irfft(spectrogram_complex, self.n_fft, dim=-1, norm="backward").transpose(1, 2)
         time_frames = time_frames * self.window[None, :, None]
-        num_frames = spectrogram_complex.shape[-1]
+        num_frames = spectrogram_complex.shape[1]
         output_size = (num_frames - 1) * self.hop_length + self.n_fft
         audio = F.fold(
             time_frames,
@@ -1010,7 +1012,7 @@ class NeuCodecModel(NeuCodecPreTrainedModel):
         acoustic_hidden_states = self.acoustic_encoder(input_values)
 
         # The two branches downsample independently and can differ by a frame; trim to the shorter one, matching
-        # the reference: https://github.com/neuphonic/neucodec/blob/main/neucodec/model.py
+        # the reference: https://github.com/neuphonic/neucodec/blob/ed3e6cd1bdc374ce14a21355e5eee66a777149ce/neucodec/model.py#L173
         min_length = min(acoustic_hidden_states.shape[-1], semantic_hidden_states.shape[-1])
         acoustic_hidden_states = acoustic_hidden_states[..., :min_length]
         semantic_hidden_states = semantic_hidden_states[..., :min_length]
