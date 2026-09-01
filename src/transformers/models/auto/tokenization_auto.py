@@ -843,13 +843,15 @@ class AutoTokenizer:
             return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
         # Hub repos that declare this but ship ByteLevel (Llama3 style) must use TokenizersBackend
-        # because LlamaTokenizer hardcodes Metaspace.
+        # because LlamaTokenizer hardcodes Metaspace. Skip Mistral checkpoints (also ByteLevel) so
+        # they still go through the tekken-first MistralCommonBackend check below.
         _hub_declared_class = tokenizer_config_class or getattr(config, "tokenizer_class", None)
         if (
             tokenizer_auto_map is None
             and TokenizersBackend is not None
             and _hub_declared_class is not None
             and _hub_declared_class.removesuffix("Fast") == "LlamaTokenizer"
+            and (TOKENIZER_MAPPING_NAMES.get(config_model_type) or "").removesuffix("Fast") != "MistralCommonBackend"
             and _tokenizer_json_has_byte_level(pretrained_model_name_or_path, **kwargs)
         ):
             logger.warning_once(
