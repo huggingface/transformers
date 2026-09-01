@@ -182,6 +182,8 @@ class HunYuanVLTextConfig(HunYuanDenseV1Config):
     }
 
     attribute_map = {
+        "attention_head_dim": "head_dim",
+        "org_vocab_size": "vocab_size",
         "pad_id": "pad_token_id",
     }
 
@@ -227,7 +229,8 @@ class HunYuanVLTextConfig(HunYuanDenseV1Config):
 
     def __post_init__(self, **kwargs):
         # Legacy aliases (`pad_id`, `attention_head_dim`, `org_vocab_size`) are normalized onto canonical fields by the
-        # base `__setattr__` via `attribute_map`, so no manual translation is needed here.
+        # base `__setattr__` via `attribute_map`, so no manual translation is needed here -- every public Tencent
+        # checkpoint stores them with the same value as the canonical field.
         super().__post_init__(**kwargs)
         rope_parameters = getattr(self, "rope_parameters", None)
         head_dim = self.head_dim if self.head_dim is not None else self.hidden_size // self.num_attention_heads
@@ -303,7 +306,12 @@ class HunYuanVLConfig(Qwen2VLConfig):
         # nested `text_config` block) we fold the recognized text-side keys into the text config payload. This keeps
         # ``HunYuanVLConfig.from_pretrained(...)`` working with both the upstream nested layout and the existing
         # public OCR checkpoints.
-        text_keys = set(self.sub_configs["text_config"].__dataclass_fields__) | {"rope_scaling", "rope_theta"}
+        text_config_class = self.sub_configs["text_config"]
+        text_keys = (
+            set(text_config_class.__dataclass_fields__)
+            | set(text_config_class.attribute_map)
+            | {"rope_scaling", "rope_theta"}
+        )
         text_kwargs = {key: kwargs.pop(key) for key in list(kwargs) if key in text_keys}
 
         if isinstance(self.vision_config, dict):
@@ -312,9 +320,9 @@ class HunYuanVLConfig(Qwen2VLConfig):
             self.vision_config = self.sub_configs["vision_config"]()
 
         if isinstance(self.text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**{**self.text_config, **text_kwargs})
+            self.text_config = text_config_class(**{**self.text_config, **text_kwargs})
         elif self.text_config is None:
-            self.text_config = self.sub_configs["text_config"](**text_kwargs)
+            self.text_config = text_config_class(**text_kwargs)
 
         # Keep the vision tower in sync with the consuming text backbone size.
         self.vision_config.text_hidden_size = self.text_config.hidden_size
