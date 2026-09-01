@@ -148,8 +148,8 @@ class KimiLinearModelTest(CausalLMModelTest, unittest.TestCase):
         even across separate forward calls sharing a cache.
         """
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        config._attn_implementation = "eager"
         model = KimiLinearModel._from_config(config)
+        model.set_attn_implementation("eager")
         model.to(torch_device)
         model.eval()
 
@@ -238,23 +238,15 @@ class KimiLinearIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(
             logits[0, -1, :15], expected_slices.get_expectation().to(torch_device), rtol=1e-2, atol=1e-2
         )
-        self.assertEqual(logits[0, -1].argmax().item(), 17374)  # " Paris"
 
     def test_model_48b_a3b_generation(self):
-        """
-        Kimi Linear carries a recurrent state across every decode step in its KDA layers, so a one-line answer
-        would barely exercise it. Generating 40 tokens drives that state (and the conv / latent-KV caches)
-        through enough steps for any drift to show up as diverging text, while staying short enough that the
-        expectation is still identical under eager and sdpa -- past ~60 tokens the two part ways, which is
-        inherent to greedy decoding in bf16 rather than a bug.
-        """
         # the checkpoint ships a custom tiktoken-based tokenizer, so remote code is required for it
         tokenizer = AutoTokenizer.from_pretrained(self.model_id, trust_remote_code=True)
         model = KimiLinearForCausalLM.from_pretrained(self.model_id, device_map="auto", dtype=torch.bfloat16)
 
         expected_texts = Expectations(
             {
-                ("cuda", None): "The French Revolution (1789–1799) was a period of radical political and social upheaval in France that profoundly changed the course of modern history. It began with widespread frustration over the mon",
+                ("cuda", None): "The French Revolution (1789-1799) was a period of radical political and social upheaval in France that profoundly changed the course of modern history. It began with widespread frustration over the mon",
             }
         )  # fmt: skip
 

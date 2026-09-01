@@ -65,10 +65,10 @@ class KimiLinearConfig(DeepseekV3Config):
         Number of groups for routed experts.
     mlp_layer_types (`list[str]`, *optional*):
         List of layer types for the MLP or MoE layers. Defaults to None.
-    linear_key_head_dim (`int`, *optional*):
-        Dimension of each key head in linear attention layers. Defaults to 128.
-    linear_num_key_heads (`int`, *optional*):
-        Number of key heads for the linear attention layers. Defaults to 32.
+    linear_head_dim (`int`, *optional*):
+        Dimension of each head in linear attention layers. Defaults to 128.
+    linear_num_heads (`int`, *optional*):
+        Number of heads for the linear attention layers. Defaults to 32.
     linear_conv_kernel_dim (`int`, *optional*, defaults to 4):
         Kernel size for the short convolution applied to queries, keys, and values in linear attention layers.
     """
@@ -102,8 +102,8 @@ class KimiLinearConfig(DeepseekV3Config):
     eos_token_id: int | list[int] | None = 163586
     layer_types: list[str] | None = None
 
-    linear_key_head_dim: int = 128
-    linear_num_key_heads: int = 32
+    linear_head_dim: int = 128
+    linear_num_heads: int = 32
     linear_conv_kernel_dim: int = 4
 
     rope_parameters = AttributeError()
@@ -115,27 +115,23 @@ class KimiLinearConfig(DeepseekV3Config):
         super().__post_init__(**kwargs)
         # Checkpoint stores linear attention attributes in a config sub-dict: if it's there, extract them
         linear_attn_config = kwargs.pop("linear_attn_config", {})
-        self.linear_key_head_dim = linear_attn_config.get("head_dim", self.linear_key_head_dim)
-        self.linear_num_key_heads = linear_attn_config.get("num_heads", self.linear_num_key_heads)
+        self.linear_head_dim = linear_attn_config.get("head_dim", self.linear_head_dim)
+        self.linear_num_heads = linear_attn_config.get("num_heads", self.linear_num_heads)
         self.linear_conv_kernel_dim = linear_attn_config.get("short_conv_kernel_size", self.linear_conv_kernel_dim)
-        # Values head have the same config as key heads
-        self.linear_value_head_dim = self.linear_key_head_dim
-        self.linear_num_value_heads = self.linear_num_key_heads
 
-        # For layer types, the precedence is: explicit `layer_types` > checkpoint config > default
-        if self.layer_types is not None:
-            pass  # nothing to do here
-        elif "full_attn_layers" in linear_attn_config and "kda_layers" in linear_attn_config:
-            layer_types = [None] * self.num_hidden_layers
-            for layer in linear_attn_config["full_attn_layers"]:
-                layer_types[layer - 1] = "full_attention"  # types are 1-indexed in the checkpoint
-            for layer in linear_attn_config["kda_layers"]:
-                layer_types[layer - 1] = "linear_attention"
-            self.layer_types = layer_types
-        else:
-            self.layer_types = [
-                "full_attention" if i and i % 4 == 0 else "linear_attention" for i in range(self.num_hidden_layers)
-            ]
+        # For layer types, the precedence is: checkpoint config > layer types > default
+        if self.layer_types is None:
+            if "full_attn_layers" in linear_attn_config and "kda_layers" in linear_attn_config:
+                layer_types = [None] * self.num_hidden_layers
+                for layer in linear_attn_config["full_attn_layers"]:
+                    layer_types[layer - 1] = "full_attention"  # types are 1-indexed in the checkpoint
+                for layer in linear_attn_config["kda_layers"]:
+                    layer_types[layer - 1] = "linear_attention"
+                self.layer_types = layer_types
+            else:
+                self.layer_types = [
+                    "full_attention" if i and i % 4 == 0 else "linear_attention" for i in range(self.num_hidden_layers)
+                ]
 
         # Same for MLP layer types, which indicate MLP or MoE
         if self.mlp_layer_types is None:
