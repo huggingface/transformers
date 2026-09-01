@@ -296,7 +296,7 @@ class TestHubKernels(TestCasePlus):
 
         # Check kernelization by fwd matching
         self.assertIsNot(first_rms_norm.forward.__func__, type(first_rms_norm).forward)  # exchanged
-        self.assertIs(first_rope.forward.__func__, type(first_rope).forward)             # not exchanged
+        self.assertIs(first_rope.forward.__func__, type(first_rope).forward)  # not exchanged
 
         del model
 
