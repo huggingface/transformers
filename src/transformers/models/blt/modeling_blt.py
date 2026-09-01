@@ -1056,6 +1056,8 @@ def compute_hash_embeddings(
         3367900313,
     ]
 
+    # Move tokens to the embedding weight's device to respect device_map placements
+    local_encoder_tokens = local_encoder_tokens.to(local_encoder.embed_tokens.weight.device)
     embeddings = local_encoder.embed_tokens(local_encoder_tokens)
     embedding_idx = 0
     for func_nb in range(encoder_hash_byte_group_nb_functions):
@@ -1064,7 +1066,9 @@ def compute_hash_embeddings(
             hash_ids = byte_group_hash_function(local_encoder_tokens, group_size, prime, encoder_hash_byte_group_vocab)
             # Apply offset to get the correct slice of the fused embedding
             offset_hash_ids = hash_ids + embedding_idx * encoder_hash_byte_group_vocab
-            embeddings += encoder_hash_tok_embedding(offset_hash_ids).to(embeddings.device)
+            embeddings += encoder_hash_tok_embedding(offset_hash_ids.to(encoder_hash_tok_embedding.weight.device)).to(
+                embeddings.device
+            )
             embedding_idx += 1
 
     return embeddings

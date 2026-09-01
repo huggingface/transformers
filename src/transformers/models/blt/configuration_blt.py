@@ -277,6 +277,10 @@ class BltConfig(PreTrainedConfig):
 
         super().__post_init__(**kwargs)
 
+    @property
+    def decoder(self):
+        return self.decoder_config
+
 
 __all__ = [
     "BltConfig",
