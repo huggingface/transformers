@@ -426,11 +426,29 @@ class DeferredStopCheck(StopCheck):
         self.stop_reported = False
 
     @staticmethod
-    def is_supported(device: torch.device, cache: "Cache | None") -> bool:
-        """Whether the stop decision can safely be deferred by a step, given this device and cache."""
+    def is_supported(
+        device: torch.device,
+        cache: "Cache | None",
+        use_cache: bool = True,
+        is_assistant: bool = False,
+    ) -> bool:
+        """Whether the stop decision can safely be deferred by a step, in this decoding context.
+
+        Deferring costs one extra forward pass, so it is only safe where that pass leaves no trace.
+        """
         if device.type not in ("cuda", "mps"):
             return False
-        return cache is None or cache.is_croppable
+        # Not as an assistant: the extra step appends `pad_token_id`, and the candidate generator's stopping
+        # criteria index a vocab-sized tensor with it, which is out of bounds when padding sits above the vocab.
+        # Nothing is lost either way, as those criteria read the token back on the host every step regardless.
+        if is_assistant:
+            return False
+        # No cache under any of the cache names. Either there is genuinely none to roll back, or the model
+        # builds its own in `prepare_inputs_for_generation` (mamba, rwkv, minimax, ...) and it is not visible
+        # yet - in which case we cannot tell whether it could be rolled back, so we do not risk it.
+        if cache is None:
+            return not use_cache
+        return cache.is_croppable
 
     def __call__(self, unfinished_sequences: torch.Tensor, tokens: torch.Tensor, length: int) -> bool:
         should_stop, tokens_cpu, copy_done = self.slots[0]
@@ -2965,7 +2983,12 @@ class GenerationMixin(ContinuousMixin):
         # Deciding when to stop costs a host/device sync per step, and so does handing a streamer its tokens.
         # Where it is safe to, defer both by a step instead.
         cache = next((model_kwargs[name] for name in ALL_CACHE_NAMES if name in model_kwargs), None)
-        if DeferredStopCheck.is_supported(input_ids.device, cache):
+        if DeferredStopCheck.is_supported(
+            input_ids.device,
+            cache,
+            use_cache=model_kwargs.get("use_cache", False),
+            is_assistant=generation_config.is_assistant,
+        ):
             stop_check = DeferredStopCheck(input_ids, stopping_criteria.max_length, cache, streamer)
         else:
             stop_check = StopCheck(streamer)

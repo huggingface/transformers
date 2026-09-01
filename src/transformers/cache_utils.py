@@ -289,6 +289,11 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         minimal working size, i.e. `sliding_window - 1` if they reached the sliding window length. This means that `crop(0)` will not
         necessarily always be a no-op, as it may still remove useless states (i.e. states that are not needed for the next `forward`).
         """
+        # Nothing was ever written here (e.g. a `crop(0)` issued before this layer's first forward), so there is
+        # nothing to trim and no `keys` to measure
+        if not self.is_initialized:
+            return
+
         # If we are beyond the sliding window, we need to be more careful
         if self.get_seq_length() >= self.sliding_window:
             if not self.record_past:

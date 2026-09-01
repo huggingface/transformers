@@ -161,6 +161,10 @@ class MiniMaxRMSNorm(MixtralRMSNorm):
 
 
 class MiniMaxCache(DynamicCache):
+    # `crop` raises below, so a rollback cannot be undone here. The inherited property only inspects
+    # `self.layers`, which are all plain dynamic layers, and would otherwise wrongly report `True`.
+    is_croppable = False
+
     def __init__(self):
         super().__init__()
         self.linear_cache: list[torch.Tensor] = []
