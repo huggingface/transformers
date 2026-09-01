@@ -35,7 +35,7 @@ from huggingface_hub import is_offline_mode
 from huggingface_hub.dataclasses import validate_typed_dict
 from huggingface_hub.errors import EntryNotFoundError
 
-from .audio_utils import AudioInput, load_audio, make_list_of_audio
+from .audio_utils import AudioInput, SpectrogramConfig, load_audio, make_list_of_audio
 from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature
 from .image_utils import ChannelDimension, ImageInput, is_vision_available, make_flat_list_of_images
@@ -207,6 +207,18 @@ class TextKwargs(TypedDict, total=False):
             If set, will return tensors of a particular framework. Acceptable values are:
             - `'pt'`: Return PyTorch `torch.Tensor` objects.
             - `'np'`: Return NumPy `np.ndarray` objects.
+        spectrogram_config (`dict` or [`~audio_utils.SpectrogramConfig`], *optional*):
+            Per-call override of the spectrogram extraction parameters (STFT, mel filterbank, log scaling).
+            A plain dict is coerced to [`~audio_utils.SpectrogramConfig`].
+        do_extract_spectrogram (`bool`, *optional*):
+            Whether to extract spectrogram features from the audio (otherwise padded raw waveforms are returned).
+        do_batch_spectrogram (`bool`, *optional*):
+            Whether to extract the spectrogram on the padded batch at once (`True`) or per waveform with
+            feature-level padding (`False`).
+        do_resample (`bool`, *optional*):
+            Whether to resample the input audio to the model's native `sampling_rate`.
+        device (`str`, *optional*):
+            The device to use for processing (e.g. "cpu", "cuda"), only relevant for the torch backend.
     """
 
     text_pair: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None
@@ -385,11 +397,19 @@ class VideosKwargs(TypedDict, total=False):
 
 class AudioKwargs(TypedDict, total=False):
     """
-    Keyword arguments for audio processing.
+    Keyword arguments for audio processing. For extended documentation, check the appropriate AudioProcessor
+    class methods and docstrings.
+
+    Note on `sampling_rate`: a model's native sampling rate is a processor *identity* attribute, set once at
+    init time as `sampling_rate` (e.g. `WhisperAudioProcessor.sampling_rate == 16000`). The per-call
+    `sampling_rate` keyword below reuses the same name as the *caller's assertion* of the rate at which the
+    provided arrays were actually sampled; it is checked against the processor's own `sampling_rate` and never
+    modifies it.
 
     Attributes:
         sampling_rate (`int`, *optional*):
-            The sampling rate at which the `raw_speech` input was sampled.
+            The sampling rate at which the input audio was sampled, asserted by the caller. Passing it lets the
+            processor verify it matches the model's native `sampling_rate` and avoid silent errors.
         raw_speech (`np.ndarray`, `list[float]`, `list[np.ndarray]`, `list[list[float]]`):
             The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
             values, a list of numpy arrays or a list of list of float values. Must be mono channel audio, not
@@ -433,6 +453,11 @@ class AudioKwargs(TypedDict, total=False):
     device: Annotated[Union[str, "torch.device"] | None, device_validator()]
     return_tensors: Annotated[str | TensorType | None, tensor_type_validator()]
     load_audio_backend: str | None
+    spectrogram_config: dict | SpectrogramConfig | None
+    do_extract_spectrogram: bool | None
+    do_batch_spectrogram: bool | None
+    do_resample: bool | None
+    device: Annotated[Union[str, "torch.device"] | None, device_validator()]
 
 
 class ProcessingKwargs(TypedDict, total=False):

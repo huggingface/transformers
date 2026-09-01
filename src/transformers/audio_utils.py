@@ -19,9 +19,11 @@ and remove unnecessary dependencies.
 import base64
 import importlib
 import io
+import math
 import os
 import warnings
 from collections.abc import Sequence
+from dataclasses import dataclass, field, fields
 from io import BytesIO
 from typing import TYPE_CHECKING, Any, Union
 from urllib.parse import urlparse
@@ -34,6 +36,7 @@ from .utils import (
     is_librosa_available,
     is_numpy_array,
     is_soundfile_available,
+    is_torch_available,
     is_torch_tensor,
     is_torchaudio_available,
     is_torchcodec_available,
@@ -61,6 +64,141 @@ if is_torchcodec_available():
     TORCHCODEC_VERSION = version.parse(importlib.metadata.version("torchcodec"))
 
 AudioInput = Union[np.ndarray, "torch.Tensor", Sequence[np.ndarray], Sequence["torch.Tensor"]]
+
+
+@dataclass(frozen=True)
+class StftConfig:
+    n_fft: int = 400
+    win_length: int | None = None
+    hop_length: int | None = None
+    window_fn: str = "hann_window"
+    wkwargs: dict | None = None
+    power: float = 2.0
+    # True: symmetric center padding; False: none; "left": semicausal (USM/Gemma),
+    # `win_length // 2` zeros prepended — forces manual framing.
+    center: bool | str = True
+    pad_mode: str = "reflect"
+    normalized: bool = False
+    onesided: bool | None = None
+    periodic: bool = True
+    left_align_fft: bool = False
+    window_dtype: str | None = None
+    # USM-style extended framing: frame at `win_length + 1`, reduced back to `win_length`
+    # by the per-frame preemphasis. Only 1 is supported.
+    frame_extension: int = 0
+    # Manual-framing FFT dtype. None: legacy rounding (numpy complex64, torch float32);
+    # "float64": both backends; "native": each backend's own (numpy float64, torch float32).
+    # Complements `computation_dtype` (which still controls magnitude dtype).
+    fft_dtype: str | None = None
+    # How the complex STFT becomes a real magnitude. None: each backend's native `abs()`.
+    # "sqrt_sum_squares": `sqrt(re**2 + im**2)` via `view_as_real`, the form NeMo-derived
+    # extractors use — it differs from torch's `abs()` in the last ulp, so it is a
+    # bit-exactness knob, not a stylistic one. No-op for numpy (its `abs()` already agrees).
+    magnitude_mode: str | None = None
+
+    def to_dict(self) -> dict:
+        return {f.name: getattr(self, f.name) for f in fields(self) if getattr(self, f.name) is not None}
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "StftConfig":
+        valid_keys = {f.name for f in fields(cls)}
+        return cls(**{k: v for k, v in d.items() if k in valid_keys})
+
+
+@dataclass(frozen=True)
+class MelScaleConfig:
+    n_mels: int = 128
+    f_min: float = 0.0
+    f_max: float | None = None
+    mel_scale: str = "htk"
+    norm: str | None = None
+    triangularize_in_mel_space: bool = False
+    frequency_bin_mode: str = "rfft"
+    computation_dtype: str | None = None
+    bands_to_zero: int = 0
+    # Precision knob only; `_apply_mel_scale` input is always `(..., freq, time)`.
+    # "filters_first" uses each backend's ecosystem-native op (numpy `matmul`, torch
+    # `F.linear`, matching torchaudio); "filters_first_matmul" forces a plain `matmul` in
+    # both, which is what NeMo-derived extractors (`mel_filters @ magnitudes`) need — the
+    # two torch forms differ in the last ulp.
+    matmul_order: str = "filters_first"
+    # Rounding order used to build the filter bank. None: each backend's ecosystem default
+    # (numpy = librosa, torch = torchaudio). "librosa": build in float64, cast to float32,
+    # then apply the slaney norm with a *second* float32 rounding — the only order that
+    # reproduces librosa's filters bit-exactly. No-op for numpy (already its default).
+    bank_rounding: str | None = None
+
+    def to_dict(self) -> dict:
+        return {f.name: getattr(self, f.name) for f in fields(self) if getattr(self, f.name) is not None}
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "MelScaleConfig":
+        valid_keys = {f.name for f in fields(cls)}
+        return cls(**{k: v for k, v in d.items() if k in valid_keys})
+
+
+@dataclass(frozen=True)
+class SpectrogramConfig:
+    stft_config: StftConfig = field(default_factory=StftConfig)
+    mel_scale_config: MelScaleConfig | None = None
+    log_mode: str = "log10"
+    chunk_length: int | None = None
+    preemphasis: float | None = None
+    preemphasis_mode: str = "per_frame"
+    remove_dc_offset: bool = False
+    mel_floor: float = 1e-10
+    # When set, the log stage computes log(x + pre_log_offset) instead of
+    # log(clamp(x, mel_floor)) — the guard form used by NeMo-style extractors (ADR 0004).
+    pre_log_offset: float | None = None
+    waveform_scale: float | None = None
+    computation_dtype: str | None = None
+    skip_last_frame: bool = False
+    # A frame straddling the audio/padding boundary starts in real audio but ends in padding.
+    # False: only frames lying entirely within the real audio count as valid (the default).
+    # True: frames that merely *start* within it count too, i.e. `ceil(length / hop_length)` —
+    # the convention of extractors that mask by striding the sample mask (Gemma3n, Qwen3-ASR).
+    count_partial_frames: bool = False
+    # Emit features as (..., frames, mels) instead of (..., mels, frames), as the ASR
+    # extractors (Parakeet/Cohere-ASR) do. Applied last, after all log-stage normalization.
+    transpose_features: bool = False
+    clip_max_offset: float | None = None
+    post_log_shift: float | None = None
+    post_log_scale: float | None = None
+
+    def __getitem__(self, key):
+        if hasattr(self, key):
+            return getattr(self, key)
+        raise KeyError(f"Key {key} not found in SpectrogramConfig.")
+
+    def __iter__(self):
+        for f in fields(self):
+            val = getattr(self, f.name)
+            if val is not None:
+                if hasattr(val, "to_dict"):
+                    yield f.name, val.to_dict()
+                else:
+                    yield f.name, val
+
+    def __eq__(self, other):
+        if isinstance(other, dict):
+            return dict(self) == other
+        if isinstance(other, SpectrogramConfig):
+            return tuple(getattr(self, f.name) for f in fields(self)) == tuple(
+                getattr(other, f.name) for f in fields(self)
+            )
+        return NotImplemented
+
+    def to_dict(self) -> dict:
+        return dict(self)
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "SpectrogramConfig":
+        kwargs = {k: v for k, v in d.items() if k in {f.name for f in fields(cls)}}
+        if "stft_config" in kwargs and isinstance(kwargs["stft_config"], dict):
+            kwargs["stft_config"] = StftConfig.from_dict(kwargs["stft_config"])
+        if "mel_scale_config" in kwargs and isinstance(kwargs["mel_scale_config"], dict):
+            kwargs["mel_scale_config"] = MelScaleConfig.from_dict(kwargs["mel_scale_config"])
+        return cls(**kwargs)
 
 
 @retry(exceptions=(httpx.HTTPError,))
@@ -445,76 +583,138 @@ def make_list_of_audio_chat_template(
     return make_list_of_audio(audio)
 
 
-def hertz_to_mel(freq: float | np.ndarray, mel_scale: str = "htk") -> float | np.ndarray:
+def _array_namespace(x):
+    """Return the array module (``numpy`` or ``torch``) matching ``x``.
+
+    Raises ``TypeError`` for unknown types. Use :func:`_xp_or_math` instead when
+    Python scalars are also valid input.
+    """
+    if isinstance(x, np.ndarray):
+        return np
+    if is_torch_available():
+        import torch
+
+        if isinstance(x, torch.Tensor):
+            return torch
+    raise TypeError(f"Unsupported array type: {type(x)}")
+
+
+def _xp_or_math(x):
+    """Like :func:`_array_namespace` but returns ``math`` for Python scalars.
+
+    Lets scalar-or-array math be written once: ``math.log10`` has the right
+    signature for Python floats; numpy and torch use the same names on arrays.
+    """
+    if isinstance(x, (int, float)):
+        return math
+    return _array_namespace(x)
+
+
+def _clamp_min(x, min_value):
+    """Element-wise ``max(x, min_value)`` for numpy arrays or torch tensors.
+
+    Needed because ``np.maximum(arr, scalar)`` accepts a Python scalar but
+    ``torch.maximum(tensor, scalar)`` does not — and ``torch.clamp(x, min=)``
+    has a different kwarg name than ``np.clip(x, a_min=)``.
+    """
+    if isinstance(x, np.ndarray):
+        return np.maximum(x, min_value)
+    return x.clamp(min=min_value)
+
+
+def hertz_to_mel(freq: float | np.ndarray, mel_scale: str = "htk"):
     """
     Convert frequency from hertz to mels.
 
     Args:
-        freq (`float` or `np.ndarray`):
+        freq (`float`, `np.ndarray`, or `torch.Tensor`):
             The frequency, or multiple frequencies, in hertz (Hz).
         mel_scale (`str`, *optional*, defaults to `"htk"`):
             The mel frequency scale to use, `"htk"`, `"kaldi"` or `"slaney"`.
 
     Returns:
-        `float` or `np.ndarray`: The frequencies on the mel scale.
+        The frequencies on the mel scale, in the same form as the input.
     """
-
-    if mel_scale not in ["slaney", "htk", "kaldi"]:
+    if mel_scale not in ("htk", "kaldi", "slaney"):
         raise ValueError('mel_scale should be one of "htk", "slaney" or "kaldi".')
 
-    if mel_scale == "htk":
-        return 2595.0 * np.log10(1.0 + (freq / 700.0))
-    elif mel_scale == "kaldi":
-        return 1127.0 * np.log(1.0 + (freq / 700.0))
+    xp = _xp_or_math(freq)
 
+    if mel_scale == "htk":
+        return 2595.0 * xp.log10(1.0 + freq / 700.0)
+    if mel_scale == "kaldi":
+        return 1127.0 * xp.log(1.0 + freq / 700.0)
+
+    # slaney: linear below 1000 Hz, logarithmic above. The constants are written
+    # differently per backend to preserve bit-exact parity with librosa (numpy) and
+    # torchaudio (torch) — they use different float32 rounding paths.
     min_log_hertz = 1000.0
     min_log_mel = 15.0
-    logstep = 27.0 / np.log(6.4)
-    mels = 3.0 * freq / 200.0
 
-    if isinstance(freq, np.ndarray):
-        log_region = freq >= min_log_hertz
-        mels[log_region] = min_log_mel + np.log(freq[log_region] / min_log_hertz) * logstep
-    elif freq >= min_log_hertz:
-        mels = min_log_mel + np.log(freq / min_log_hertz) * logstep
+    if xp is math:
+        if freq >= min_log_hertz:
+            return min_log_mel + math.log(freq / min_log_hertz) * 27.0 / math.log(6.4)
+        return 3.0 * freq / 200.0
 
-    return mels
+    if xp is np:
+        linear = 3.0 * freq / 200.0
+        logstep = 27.0 / np.log(6.4)
+    else:  # torch — float32-tensor logstep matches torchaudio
+        import torch
+
+        linear = freq / (200.0 / 3.0)
+        logstep = 27.0 / torch.log(torch.tensor(6.4))
+
+    # Guard log against discarded-branch values; xp.where evaluates both branches.
+    safe = _clamp_min(freq, min_log_hertz)
+    log_branch = min_log_mel + xp.log(safe / min_log_hertz) * logstep
+    return xp.where(freq >= min_log_hertz, log_branch, linear)
 
 
-def mel_to_hertz(mels: float | np.ndarray, mel_scale: str = "htk") -> float | np.ndarray:
+def mel_to_hertz(mels: float | np.ndarray, mel_scale: str = "htk"):
     """
     Convert frequency from mels to hertz.
 
     Args:
-        mels (`float` or `np.ndarray`):
+        mels (`float`, `np.ndarray`, or `torch.Tensor`):
             The frequency, or multiple frequencies, in mels.
-        mel_scale (`str`, *optional*, `"htk"`):
+        mel_scale (`str`, *optional*, defaults to `"htk"`):
             The mel frequency scale to use, `"htk"`, `"kaldi"` or `"slaney"`.
 
     Returns:
-        `float` or `np.ndarray`: The frequencies in hertz.
+        The frequencies in hertz, in the same form as the input.
     """
-
-    if mel_scale not in ["slaney", "htk", "kaldi"]:
+    if mel_scale not in ("htk", "kaldi", "slaney"):
         raise ValueError('mel_scale should be one of "htk", "slaney" or "kaldi".')
 
-    if mel_scale == "htk":
-        return 700.0 * (np.power(10, mels / 2595.0) - 1.0)
-    elif mel_scale == "kaldi":
-        return 700.0 * (np.exp(mels / 1127.0) - 1.0)
+    xp = _xp_or_math(mels)
 
+    if mel_scale == "htk":
+        return 700.0 * (10.0 ** (mels / 2595.0) - 1.0)
+    if mel_scale == "kaldi":
+        return 700.0 * (xp.exp(mels / 1127.0) - 1.0)
+
+    # slaney — see note in hertz_to_mel; constants are written per-backend for
+    # bit-exact parity with librosa (numpy) and torchaudio (torch).
     min_log_hertz = 1000.0
     min_log_mel = 15.0
-    logstep = np.log(6.4) / 27.0
-    freq = 200.0 * mels / 3.0
 
-    if isinstance(mels, np.ndarray):
-        log_region = mels >= min_log_mel
-        freq[log_region] = min_log_hertz * np.exp(logstep * (mels[log_region] - min_log_mel))
-    elif mels >= min_log_mel:
-        freq = min_log_hertz * np.exp(logstep * (mels - min_log_mel))
+    if xp is math:
+        if mels >= min_log_mel:
+            return min_log_hertz * math.exp(math.log(6.4) / 27.0 * (mels - min_log_mel))
+        return 200.0 * mels / 3.0
 
-    return freq
+    if xp is np:
+        linear = 200.0 * mels / 3.0
+        logstep = np.log(6.4) / 27.0
+    else:  # torch — match old per-backend precision (Python-float logstep here,
+        # though the reciprocal in hertz_to_mel uses a float32 tensor — old code
+        # was inconsistent and we preserve that for bit-exact parity).
+        linear = (200.0 / 3.0) * mels
+        logstep = math.log(6.4) / 27.0
+
+    log_branch = min_log_hertz * xp.exp(logstep * (mels - min_log_mel))
+    return xp.where(mels >= min_log_mel, log_branch, linear)
 
 
 def hertz_to_octave(freq: float | np.ndarray, tuning: float = 0.0, bins_per_octave: int = 12):
@@ -538,26 +738,28 @@ def hertz_to_octave(freq: float | np.ndarray, tuning: float = 0.0, bins_per_octa
     return octave
 
 
-def _create_triangular_filter_bank(fft_freqs: np.ndarray, filter_freqs: np.ndarray) -> np.ndarray:
+def _create_triangular_filter_bank(fft_freqs, filter_freqs):
     """
-    Creates a triangular filter bank.
+    Triangular filter bank from FFT bin frequencies and filter center frequencies.
 
-    Adapted from *torchaudio* and *librosa*.
+    Adapted from *torchaudio* and *librosa*. Works on numpy or torch inputs.
 
     Args:
-        fft_freqs (`np.ndarray` of shape `(num_frequency_bins,)`):
-            Discrete frequencies of the FFT bins in Hz.
-        filter_freqs (`np.ndarray` of shape `(num_mel_filters,)`):
-            Center frequencies of the triangular filters to create, in Hz.
+        fft_freqs (array of shape `(num_frequency_bins,)`):
+            Discrete frequencies of the FFT bins (in Hz, or in mel space when
+            ``triangularize_in_mel_space=True``).
+        filter_freqs (array of shape `(num_mel_filters + 2,)`):
+            Edges and center frequencies of the triangular filters.
 
     Returns:
-        `np.ndarray` of shape `(num_frequency_bins, num_mel_filters)`
+        Filter bank of shape `(num_frequency_bins, num_mel_filters)`.
     """
-    filter_diff = np.diff(filter_freqs)
-    slopes = np.expand_dims(filter_freqs, 0) - np.expand_dims(fft_freqs, 1)
+    xp = _array_namespace(fft_freqs)
+    filter_diff = filter_freqs[1:] - filter_freqs[:-1]
+    slopes = filter_freqs[None, :] - fft_freqs[:, None]
     down_slopes = -slopes[:, :-2] / filter_diff[:-1]
     up_slopes = slopes[:, 2:] / filter_diff[1:]
-    return np.maximum(np.zeros(1), np.minimum(down_slopes, up_slopes))
+    return _clamp_min(xp.minimum(down_slopes, up_slopes), 0)
 
 
 def chroma_filter_bank(
