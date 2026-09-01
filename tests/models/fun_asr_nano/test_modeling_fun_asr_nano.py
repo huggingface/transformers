@@ -125,7 +125,7 @@ class FunAsrNanoIntegrationTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        model_id = "bezzam/Fun-ASR-Nano-2512-hf"
+        model_id = "FunAudioLLM/Fun-ASR-Nano-2512-hf"
         cls.processor = AutoProcessor.from_pretrained(model_id)
         cls.model = FunAsrNanoForConditionalGeneration.from_pretrained(
             model_id, dtype=torch.bfloat16, device_map="auto"
