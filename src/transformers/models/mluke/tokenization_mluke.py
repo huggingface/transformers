@@ -241,12 +241,12 @@ class MLukeTokenizer(TokenizersBackend):
 
         # we add 2 special tokens for downstream tasks
         entity_token_1 = (
-            AddedToken(entity_token_1, lstrip=False, rstrip=False)
+            AddedToken(entity_token_1, lstrip=False, rstrip=False, normalized=False, special=True)
             if isinstance(entity_token_1, str)
             else entity_token_1
         )
         entity_token_2 = (
-            AddedToken(entity_token_2, lstrip=False, rstrip=False)
+            AddedToken(entity_token_2, lstrip=False, rstrip=False, normalized=False, special=True)
             if isinstance(entity_token_2, str)
             else entity_token_2
         )
@@ -452,6 +452,46 @@ class MLukeTokenizer(TokenizersBackend):
         """Converts a sequence of tokens (strings for sub-words) in a single string."""
         out_string = "".join(tokens).replace(SPIECE_UNDERLINE, " ").strip()
         return out_string
+
+    def _decode(
+        self,
+        token_ids: int | list[int],
+        skip_special_tokens: bool = False,
+        clean_up_tokenization_spaces: bool | None = None,
+        spaces_between_special_tokens: bool = True,
+        **kwargs,
+    ) -> str:
+        # Restores v4's PreTrainedTokenizer._decode, split on entity tokens and strip
+        if isinstance(token_ids, int):
+            token_ids = [token_ids]
+        filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
+        entity_markers = {str(self.entity_token_1), str(self.entity_token_2)}
+
+        sub_texts = []
+        current_sub_text = []
+        for token in filtered_tokens:
+            if skip_special_tokens and token in self.all_special_tokens:
+                continue
+            if token in entity_markers:
+                if current_sub_text:
+                    sub_texts.append(self.convert_tokens_to_string(current_sub_text))
+                    current_sub_text = []
+                sub_texts.append(token)
+            else:
+                current_sub_text.append(token)
+        if current_sub_text:
+            sub_texts.append(self.convert_tokens_to_string(current_sub_text))
+
+        text = " ".join(sub_texts) if spaces_between_special_tokens else "".join(sub_texts)
+
+        clean_up_tokenization_spaces = (
+            clean_up_tokenization_spaces
+            if clean_up_tokenization_spaces is not None
+            else self.clean_up_tokenization_spaces
+        )
+        if clean_up_tokenization_spaces:
+            text = self.clean_up_tokenization(text)
+        return text
 
     def num_special_tokens_to_add(self, pair: bool = False) -> int:
         """
