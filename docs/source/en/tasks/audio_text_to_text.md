@@ -214,7 +214,7 @@ trainable params: 44,302,336 || all params: 8,311,517,696 || trainable%: 0.5330
 ```
 
 > [!TIP]
-> [LoRA](https://huggingface.co/docs/peft/main/conceptual_guides/lora) significantly reduces memory usage and training time by only updating a small number of adapter parameters instead of the full model. This configuration targets the language model's attention and feed-forward layers while keeping the audio encoder frozen, making it possible to fine-tune on a single GPU.
+> LoRA significantly reduces memory usage and training time by only updating a small number of adapter parameters instead of the full model. This configuration targets the language model's attention and feed-forward layers while keeping the audio encoder frozen, making it possible to fine-tune on a single GPU.
 
 
 ### Setup training
@@ -333,6 +333,32 @@ Generate a response:
 >>> response = processor.tokenizer.decode(output_ids[0][input_len:], skip_special_tokens=True)
 >>> print(response)
 ## A sewing machine is running while people are talking
+```
+
+## Pipeline
+
+For quick inference, use the [`Pipeline`] API with an `any-to-any` model. The example below uses [Voxtral](https://huggingface.co/mistralai/Voxtral-Mini-3B-2507), which accepts audio and text inputs and generates text. See the [any-to-any task guide](./any_to_any) for more examples.
+
+```python
+from transformers import pipeline
+
+pipe = pipeline("any-to-any", model="mistralai/Voxtral-Mini-3B-2507")
+
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {
+                "type": "audio",
+                "url": "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/glass-breaking-151256.mp3",
+            },
+            {"type": "text", "text": "What do you hear in this audio?"},
+        ],
+    },
+]
+
+outputs = pipe(text=messages, max_new_tokens=100, return_full_text=False)
+print(outputs[0]["generated_text"])
 ```
 
 ## Further Reading
