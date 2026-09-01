@@ -26,6 +26,12 @@ from safetensors import safe_open
 from .cache_utils import Cache
 from .conversion_mapping import get_model_conversion_mapping
 from .core_model_loading import WeightRenaming, convert_and_load_state_dict_in_model
+from .integrations.heterogeneity import (
+    HeterogeneousModelingSpec,
+    LayerIdxFromArgument,
+    get_heterogeneous_modeling_spec,
+    nest_skip_descriptor_paths,
+)
 from .masking_utils import LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING, create_causal_mask
 from .modeling_outputs import (
     BaseModelOutputWithPast,
@@ -374,7 +380,21 @@ class MtpModel(PreTrainedModel):
     _keys_to_ignore_on_load_missing = ["shared_head.weight", "embed_tokens.weight"]
 
     def __init__(self, main_model: PreTrainedModel, num_mtp_layers: int):
-        super().__init__(main_model.config.get_mtp_config())
+        mtp_config = main_model.config.get_mtp_config()
+
+        if (
+            mtp_config.is_heterogeneous
+            and (main_heterogeneous_modeling_spec := get_heterogeneous_modeling_spec(main_model)) is not None
+        ):
+            self._heterogeneous_modeling_spec = HeterogeneousModelingSpec(
+                layer_cls=MtpLayer,
+                layer_idx_resolver=LayerIdxFromArgument("layer_idx"),
+                skip_descriptors=nest_skip_descriptor_paths(
+                    main_heterogeneous_modeling_spec.skip_descriptors, parent_path="mtp_block"
+                ),
+            )
+
+        super().__init__(mtp_config)
         # Make sure we have the correct loss type in case of training
         self.loss_type = "ForCausalLM"
         self.num_mtp_layers = num_mtp_layers
@@ -430,12 +450,13 @@ class MtpModel(PreTrainedModel):
         self, layer_idx: int, inputs_embeds: torch.Tensor, mtp_cache: MtpCache, position_ids: torch.Tensor
     ):
         """
-        Create the (potentially several) masks required for layer `layer_idx`. This relies on the `layer_type`
-        attribute of the mtp layer if any, otherwise simply create a causal mask for full attention.
+        Create the (potentially several) masks required for layer `layer_idx`. This relies on the `layer_types` from the MTP config
+        if defined, and otherwise uses full attention.
         """
         # Note that `_assisted_decoding` raises on batch_size > 1, so there is no padding mask to add
+        layer_config = self.config.per_layer_config[layer_idx] if self.config.is_heterogeneous else self.config
         mask_kwargs = {
-            "config": self.config,
+            "config": layer_config,
             "inputs_embeds": inputs_embeds,
             "attention_mask": None,
             "past_key_values": mtp_cache,
@@ -444,7 +465,8 @@ class MtpModel(PreTrainedModel):
             "layer_idx": layer_idx,
         }
 
-        mtp_layer_type = getattr(self.layers[layer_idx], "layer_type", None)
+        mtp_layer_types = getattr(self.config, "layer_types", None)
+        mtp_layer_type = mtp_layer_types[layer_idx] if mtp_layer_types is not None else None
         masks = {}
         if mtp_layer_type is not None and mtp_layer_type in LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING:
             mask_function = LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING[mtp_layer_type]

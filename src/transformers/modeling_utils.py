@@ -81,6 +81,10 @@ from .integrations.finegrained_fp8 import ALL_FP8_EXPERTS_FUNCTIONS
 from .integrations.flash_attention import flash_attention_forward
 from .integrations.flash_paged import paged_attention_forward
 from .integrations.flex_attention import flex_attention_forward
+from .integrations.heterogeneity import (
+    apply_generic_heterogeneous_modeling_if_applicable,
+    support_generic_heterogeneous_modeling,
+)
 from .integrations.hub_kernels import allow_all_hub_kernels, is_kernel, kernelize
 from .integrations.moe import ALL_EXPERTS_FUNCTIONS
 from .integrations.peft import maybe_load_adapters
@@ -1327,6 +1331,10 @@ class PreTrainedModel(
         elif full_annotation is not None:
             cls.config_class = full_annotation
 
+        # Support generic heterogeneous modeling
+        if "__init__" in cls.__dict__:
+            cls.__init__ = support_generic_heterogeneous_modeling(cls.__init__)
+
     def __init__(self, config: PreTrainedConfig, *inputs, **kwargs):
         super().__init__()
         if not isinstance(config, PreTrainedConfig):
@@ -1373,6 +1381,9 @@ class PreTrainedModel(
         self.loss_type = loss_type
 
         _CAN_RECORD_REGISTRY[str(self.__class__)] = self._can_record_outputs  # added for executorch support only
+
+        # Support generic heterogeneous modeling
+        apply_generic_heterogeneous_modeling_if_applicable(self)
 
     def post_init(self):
         """

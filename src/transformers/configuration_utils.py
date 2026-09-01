@@ -1387,6 +1387,10 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         """
         # Start from the text config
         text_config = copy.deepcopy(self.get_text_config(decoder=True))
+        mtp_per_layer_config = getattr(text_config, "mtp_per_layer_config", None)
+
+        # MTP uses independent per-layer overrides in its own layer index space.
+        text_config.per_layer_config = None
         num_mtp_layers = getattr(text_config, "num_mtp_layers", None)
         # In this case, raise
         if num_mtp_layers is None:
@@ -1418,6 +1422,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         # In some models this is used to discriminate between MLP or MoE layers, but MTP layers always use MoE -> artifically set to 0
         if hasattr(text_config, "first_k_dense_replace"):
             text_config.first_k_dense_replace = 0
+
+        if mtp_per_layer_config:
+            text_config.per_layer_config = mtp_per_layer_config
 
         return text_config
 
