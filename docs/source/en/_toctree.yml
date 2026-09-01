@@ -1415,6 +1415,8 @@
         title: MM Grounding DINO
       - local: model_doc/musicflamingo
         title: MusicFlamingo
+      - local: model_doc/neomme
+        title: NeoMME
       - local: model_doc/nougat
         title: Nougat
       - local: model_doc/omdet-turbo
