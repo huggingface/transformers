@@ -456,7 +456,9 @@ class MoshiTester:
         self.mimi_sliding_window = mimi_sliding_window
         self.sampling_rate = sampling_rate
 
-        self.num_hidden_states_types = 2
+        # `depth_hidden_states` is returned only if both `text_labels` and `audio_labels` are passed.
+        # `test_attention_outputs` does not pass these, so only the main decoder's `hidden_states` is returned.
+        self.num_hidden_states_types = 1
 
     def prepare_config_and_inputs(self, batch_size=None):
         batch_size = self.batch_size if batch_size is None else batch_size
@@ -526,6 +528,33 @@ class MoshiTester:
     def prepare_config_and_inputs_for_common(self, batch_size=None):
         config, inputs_dict = self.prepare_config_and_inputs(batch_size)
         return config, inputs_dict
+
+    def create_and_check_forward_output_fields(self, config, inputs_dict):
+        model = MoshiForConditionalGeneration(config).to(torch_device).eval()
+
+        inputs_dict["text_labels"] = inputs_dict["input_ids"]
+        inputs_dict["audio_labels"] = inputs_dict["moshi_audio_codes"]
+        inputs_dict["attention_mask"] = None
+
+        outputs = model(
+            **inputs_dict,
+            use_cache=True,
+            output_attentions=True,
+            output_hidden_states=True,
+            depth_decoder_use_cache=True,
+            depth_decoder_output_attentions=True,
+            depth_decoder_output_hidden_states=True,
+        )
+
+        self.parent.assertIsNotNone(outputs.depth_past_key_values)
+        self.parent.assertIsNotNone(outputs.depth_hidden_states)
+        self.parent.assertIsNotNone(outputs.depth_attentions)
+
+        self.parent.assertIsNot(outputs.depth_past_key_values, outputs.past_key_values)
+        self.parent.assertIsNot(outputs.depth_hidden_states, outputs.hidden_states)
+        self.parent.assertIsNot(outputs.depth_attentions, outputs.attentions)
+
+        self.parent.assertIsNot(outputs.depth_past_key_values, outputs.depth_hidden_states)
 
 
 @require_torch
@@ -784,36 +813,15 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             )
 
     def test_forward_output_fields(self):
-        for model_class in self.all_generative_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-            model = model_class(config).to(torch_device).eval()
-
-            inputs_dict = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            inputs_dict["audio_labels"] = inputs_dict["moshi_audio_codes"]
-            inputs_dict["attention_mask"] = None
-
-            outputs = model(
-                **inputs_dict,
-                use_cache=True,
-                output_attentions=True,
-                output_hidden_states=True,
-                depth_decoder_use_cache=True,
-                depth_decoder_output_attentions=True,
-                depth_decoder_output_hidden_states=True,
-            )
-
-            self.assertIsNotNone(outputs.depth_past_key_values)
-            self.assertIsNotNone(outputs.depth_hidden_states)
-            self.assertIsNotNone(outputs.depth_attentions)
-
-            self.assertIsNot(outputs.depth_past_key_values, outputs.past_key_values)
-            self.assertIsNot(outputs.depth_hidden_states, outputs.hidden_states)
-            self.assertIsNot(outputs.depth_attentions, outputs.attentions)
-
-            self.assertIsNot(outputs.depth_past_key_values, outputs.depth_hidden_states)
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_forward_output_fields(*config_and_inputs)
 
     def test_forward_audio_encoder_kwargs(self):
+        """
+        test for `kwargs_audio_encoder` prefix-stripping bug: `argument[len("audio_encoder_")]` indexes a single
+        character instead of slicing the rest of the string, e.g., `audio_encoder_return_dict=False` becomes
+        `{"r": False}`, and forwarding it raises TypeError: MimiModel.encode() got an unexpected keyword argument 'r'
+        """
         for model_class in self.all_generative_model_classes:
             config, input_ids, _, _ = self._get_input_ids_and_config()
 
