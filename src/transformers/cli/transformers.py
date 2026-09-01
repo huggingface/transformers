@@ -16,6 +16,7 @@
 from huggingface_hub import check_cli_update, typer_factory
 
 from transformers.cli.add_new_model_like import add_new_model_like
+from transformers.cli.agentic.app import register_agentic_commands
 from transformers.cli.chat import Chat
 from transformers.cli.download import download
 from transformers.cli.serve import Serve
@@ -30,6 +31,8 @@ app.command()(download)
 app.command()(env)
 app.command(name="serve")(Serve)
 app.command()(version)
+
+register_agentic_commands(app)
 
 
 def main():
