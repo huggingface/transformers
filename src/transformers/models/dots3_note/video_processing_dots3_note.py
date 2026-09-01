@@ -31,6 +31,8 @@ from PIL import Image
 
 from ...tokenization_utils_base import LARGE_INTEGER
 from ...utils import logging, requires_backends
+
+# trf-ignore: TRF009
 from ..qwen2_vl.video_processing_qwen2_vl import Qwen2VLVideoProcessor
 
 

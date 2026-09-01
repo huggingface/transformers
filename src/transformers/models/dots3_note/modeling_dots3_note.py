@@ -89,7 +89,7 @@ class Dots3NoteTextRotaryEmbedding(nn.Module):
         self.dim = dim
         self.base = base
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).float() / dim))
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
 
     @torch.no_grad()
     def forward(self, x, position_ids):
@@ -224,7 +224,7 @@ class Dots3NoteTextIndexer(nn.Module):
         self.wk = Dots3NoteTextIndexerProjection(config, self.head_dim)
         self.k_norm = Dots3NoteTextIndexerLayerNorm(self.head_dim)
         self.weights_proj = Dots3NoteTextIndexerProjection(config, self.n_heads)
-        self.register_buffer("_wk_weights_proj_weight", None, persistent=False)
+        self._wk_weights_proj_weight = None
         self.register_load_state_dict_post_hook(self._clear_projection_cache)
 
     @staticmethod
@@ -234,9 +234,11 @@ class Dots3NoteTextIndexer(nn.Module):
     @torch.no_grad()
     def _project_key_and_weights(self, hidden_states):
         if self._wk_weights_proj_weight is None:
-            self._wk_weights_proj_weight = torch.cat(
-                (self.wk.get_compute_weight(), self.weights_proj.get_compute_weight()), dim=0
-            ).contiguous()
+            del self._wk_weights_proj_weight
+            self._wk_weights_proj_weight = nn.Buffer(
+                torch.cat((self.wk.get_compute_weight(), self.weights_proj.get_compute_weight()), dim=0).contiguous(),
+                persistent=False,
+            )
         if hidden_states.dtype != self._wk_weights_proj_weight.dtype:
             raise ValueError(
                 f"DSA fused projection requires {self._wk_weights_proj_weight.dtype} inputs, got {hidden_states.dtype}"
@@ -1193,7 +1195,7 @@ class Dots3NoteAudioRotaryEmbedding(nn.Module):
         super().__init__()
         self.rotary_dim = (int(head_dim * partial_rotary_factor) // 2) * 2
         self.rope_theta = float(rope_theta)
-        self.register_buffer("inv_freq", self._make_inv_freq(), persistent=False)
+        self.inv_freq = nn.Buffer(self._make_inv_freq(), persistent=False)
 
     def _make_inv_freq(self, device: torch.device | None = None) -> torch.Tensor:
         if self.rotary_dim == 0:
@@ -1724,7 +1726,7 @@ class Dots3NoteVisionRotaryEmbedding(nn.Module):
         self.dim = dim
         self.theta = theta
         inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float32) / dim))
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
 
     def forward(self, position_ids: torch.Tensor) -> torch.Tensor:
         return (position_ids.unsqueeze(-1) * self.inv_freq).flatten(1)
@@ -1794,7 +1796,7 @@ class Dots3NoteVisionMoE(nn.Module):
             ]
         )
         self.gate_weight = nn.Parameter(torch.empty(self.num_experts, config.embed_dim, dtype=torch.float32))
-        self.register_buffer("router_bias", torch.zeros(self.num_experts, dtype=torch.float32))
+        self.router_bias = nn.Buffer(torch.zeros(self.num_experts, dtype=torch.float32))
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         shape = hidden_states.shape

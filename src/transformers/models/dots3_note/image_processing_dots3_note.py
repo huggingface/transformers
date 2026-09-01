@@ -20,6 +20,8 @@ from PIL import Image
 from ...image_processing_backends import PilBackend
 from ...image_utils import PILImageResampling, SizeDict
 from ...utils import auto_docstring
+
+# trf-ignore: TRF009
 from ..qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
 
 
