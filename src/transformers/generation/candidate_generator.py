@@ -1622,21 +1622,21 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
 
     def _get_noise_embeds(self, noise_ids: torch.LongTensor) -> torch.Tensor:
         """
-        Get noise token embeddings from the main model while bypassing its optional embedding normalization.
-
-        DFlash passes these embeddings to the assistant together with hidden states from the main model. Some main
-        model embedding modules apply `embed_norm` internally, but the assistant expects the raw lookup embeddings here
-        because normalization is handled inside the DFlash path when combining them with target hidden states.
+        Get noise token embeddings from the main model while bypassing its optional embedding normalization, which should not be used
+        for DFlash (the embedding may be a subclass of nn.Embedding with the additional normalization).
         """
         embed_norm = getattr(self.main_model_input_embeddings, "embed_norm", None)
         if embed_norm is None:
             return self.main_model_input_embeddings(noise_ids)
 
-        self.main_model_input_embeddings.embed_norm = nn.Identity()
+        # For TP-aware models, the easiest workaround to avoid the norm is to temporarily set it to Identity
         try:
-            return self.main_model_input_embeddings(noise_ids)
+            self.main_model_input_embeddings.embed_norm = nn.Identity()
+            embeds = self.main_model_input_embeddings(noise_ids)
         finally:
             self.main_model_input_embeddings.embed_norm = embed_norm
+
+        return embeds
 
     def get_candidates(
         self,
