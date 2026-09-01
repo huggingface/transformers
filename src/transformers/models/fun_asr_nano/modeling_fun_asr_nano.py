@@ -231,12 +231,14 @@ class FunAsrNanoEncoderLayer(GradientCheckpointingLayer):
         """
         residual = hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
-        value_states = self.self_attn.v_proj(hidden_states)
         attention_output, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             **kwargs,
         )
+
+        # The FSMN branch runs on the value projection
+        value_states = self.self_attn.v_proj(hidden_states)
         fsmn_output = self.feedforward_sequential_memory(value_states, input_features_mask)
         hidden_states = residual + nn.functional.dropout(
             attention_output + fsmn_output, p=self.dropout, training=self.training
@@ -315,12 +317,14 @@ class FunAsrNanoEncoderStem(GradientCheckpointingLayer):
         hidden_states = hidden_states + positions.unsqueeze(0)
 
         hidden_states = self.self_attn_layer_norm(hidden_states)
-        value_states = self.self_attn.v_proj(hidden_states)
         attention_output, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             **kwargs,
         )
+
+        # The FSMN branch runs on the value projection
+        value_states = self.self_attn.v_proj(hidden_states)
         fsmn_output = self.feedforward_sequential_memory(value_states, input_features_mask)
         hidden_states = nn.functional.dropout(attention_output + fsmn_output, p=self.dropout, training=self.training)
 
