@@ -1,7 +1,8 @@
 #!/bin/bash
-# Minimalist TP/FSDP overfitting test on AWS Trainium using the regular transformers Trainer
-# (no LoRA, no SFTTrainer). Trains on a tiny fixed subset of examples for many steps
-# to check that the loss goes to ~0, as a correctness check for TP or FSDP.
+# Minimalist TP/FSDP overfitting test on AWS Trainium or CUDA GPUs using the regular
+# transformers Trainer (no SFTTrainer; LoRA optional via USE_LORA). Trains on a tiny fixed
+# subset of examples for many steps to check that the loss goes to ~0, as a correctness check
+# for TP or FSDP.
 
 set -euo pipefail
 
@@ -12,8 +13,9 @@ set -euo pipefail
 #   PARALLEL_MODE=tp   NUM_PROC=4 -> TP_SIZE=4
 #   PARALLEL_MODE=fsdp NUM_PROC=4 -> FSDP_SIZE=4
 # ---------------------------------------------------------------------------
-PARALLEL_MODE=${PARALLEL_MODE:-fsdp}
+PARALLEL_MODE=${PARALLEL_MODE:-tp}
 NUM_PROC=${NUM_PROC:-4}
+USE_LORA=${USE_LORA:-true}
 
 case "$PARALLEL_MODE" in
     tp)
@@ -31,23 +33,29 @@ case "$PARALLEL_MODE" in
 esac
 
 # ---------------------------------------------------------------------------
-# Neuron runtime environment
+# Neuron runtime environment (Trainium only -- no-op, skipped entirely on CUDA)
 # ---------------------------------------------------------------------------
-export ON_NEURON_EAGER=1
-export NEURON_EAGER_MODEL_CACHE_SIZE=10000
-export OMP_NUM_THREADS=128
-export HF_DEACTIVATE_ASYNC_LOAD=1
+if ! command -v nvidia-smi &> /dev/null || ! nvidia-smi &> /dev/null; then
+    export ON_NEURON_EAGER=1
+    export NEURON_EAGER_MODEL_CACHE_SIZE=10000
+    export OMP_NUM_THREADS=128
+    export HF_DEACTIVATE_ASYNC_LOAD=1
 
-export TORCH_NEURONX_ENABLE_HOST_CC=1
-export TORCH_NEURONX_ENABLE_ASYNC_NRT=1
-#export NEURON_RT_NUM_CORES=1
+    export TORCH_NEURONX_ENABLE_HOST_CC=1
+    export TORCH_NEURONX_ENABLE_ASYNC_NRT=1
+    #export NEURON_RT_NUM_CORES=1
+fi
 
 # ---------------------------------------------------------------------------
 # Model / data / hyperparameters
 # ---------------------------------------------------------------------------
 MODEL_NAME=Qwen/Qwen3-1.7B
 DATASET_NAME=trl-lib/Capybara
-OUTPUT_DIR=Qwen3-1.7B-${PARALLEL_MODE}-Overfit
+LORA_SUFFIX=""
+if [ "$USE_LORA" = "true" ]; then
+    LORA_SUFFIX="-lora"
+fi
+OUTPUT_DIR=Qwen3-1.7B-${PARALLEL_MODE}-Overfit${LORA_SUFFIX}
 
 LEARNING_RATE=5.0e-4
 NUM_TRAIN_EXAMPLES=16
@@ -66,6 +74,7 @@ echo "  PARALLEL_MODE:   $PARALLEL_MODE"
 echo "  NUM_PROC:        $NUM_PROC"
 echo "  TP_SIZE:         $TP_SIZE"
 echo "  FSDP_SIZE:       $FSDP_SIZE"
+echo "  USE_LORA:        $USE_LORA"
 echo "  Num examples:    $NUM_TRAIN_EXAMPLES"
 echo "  Max steps:       $MAX_STEPS"
 echo "  Batch:           $BATCH_SIZE"
@@ -82,6 +91,7 @@ fi
 $LAUNCHER \
     finetune_overfit.py \
     --model_name_or_path "$MODEL_NAME" \
+    --use_lora $USE_LORA \
     --dataset_name "$DATASET_NAME" \
     --num_examples $NUM_TRAIN_EXAMPLES \
     --max_length $MAX_SEQ_LENGTH \

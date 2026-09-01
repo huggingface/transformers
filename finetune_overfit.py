@@ -1,4 +1,6 @@
 import os
+import shutil
+import tempfile
 from dataclasses import dataclass
 
 import torch
@@ -15,6 +17,7 @@ from transformers import (
     TrainingArguments,
 )
 from transformers.distributed import DistributedConfig
+from transformers.distributed.utils import _distributed_barrier, _ensure_torch_distributed
 from transformers.utils import is_torch_neuron_available
 
 
@@ -32,6 +35,7 @@ class ModelArguments:
     model_name_or_path: str
     model_revision: str = "main"
     trust_remote_code: bool = False
+    use_lora: bool = False
 
 
 def main(script_args, training_args, model_args):
@@ -59,21 +63,77 @@ def main(script_args, training_args, model_args):
     elif fsdp_size > 1:
         kwargs["distributed_config"] = DistributedConfig(fsdp_size=fsdp_size)
 
+    if tp_size > 1 or fsdp_size > 1:
+        _ensure_torch_distributed()
+
     config = AutoConfig.from_pretrained(
         model_args.model_name_or_path,
         revision=model_args.model_revision,
         trust_remote_code=model_args.trust_remote_code,
     )
     dtype = torch.bfloat16 if training_args.bf16 else torch.float32
-    model = AutoModelForCausalLM.from_pretrained(
-        model_args.model_name_or_path,
-        config=config,
-        revision=model_args.model_revision,
-        trust_remote_code=model_args.trust_remote_code,
-        torch_dtype=dtype,
-        low_cpu_mem_usage=True,
-        **kwargs,
+
+    from peft import LoraConfig, get_peft_model, PeftModel
+
+    lora_config = LoraConfig(
+        r=16,
+        lora_alpha=32,
+        target_modules=[
+            "q_proj",
+            "k_proj",
+            "v_proj",
+            "o_proj",
+            "gate_proj",
+            "up_proj",
+            "down_proj",
+            "embed_tokens",
+        ],
     )
+
+    # Loading the model once to make a copy of the original state dict for later comparison.
+    # No sharding is performed.
+    if model_args.use_lora:
+        original_model_path = os.path.join(training_args.output_dir, "original_model")
+        if int(os.environ.get("RANK", "0")) == 0:
+            original_model = AutoModelForCausalLM.from_pretrained(
+                model_args.model_name_or_path,
+                config=config,
+                revision=model_args.model_revision,
+                trust_remote_code=model_args.trust_remote_code,
+                torch_dtype=dtype,
+            )
+
+            original_model = get_peft_model(original_model, lora_config)
+
+            shutil.rmtree(original_model_path, ignore_errors=True)
+            original_model.save_pretrained(original_model_path)
+
+        if tp_size > 1 or fsdp_size > 1:
+            _distributed_barrier()
+
+        model = AutoModelForCausalLM.from_pretrained(
+            model_args.model_name_or_path,
+            config=config,
+            revision=model_args.model_revision,
+            trust_remote_code=model_args.trust_remote_code,
+            torch_dtype=dtype,
+            low_cpu_mem_usage=True,
+            **kwargs,
+        )
+
+        model = PeftModel.from_pretrained(model, original_model_path, is_trainable=True)
+        if int(os.environ.get("RANK", "0")) == 0:
+            model.print_trainable_parameters()
+    else:
+        model = AutoModelForCausalLM.from_pretrained(
+            model_args.model_name_or_path,
+            config=config,
+            revision=model_args.model_revision,
+            trust_remote_code=model_args.trust_remote_code,
+            torch_dtype=dtype,
+            low_cpu_mem_usage=True,
+            **kwargs,
+        )
 
     tokenizer = AutoTokenizer.from_pretrained(
         model_args.model_name_or_path,
@@ -113,17 +173,27 @@ def main(script_args, training_args, model_args):
     trainer.save_model(training_args.output_dir)
 
     if rank == 0:
-        original_model = AutoModelForCausalLM.from_pretrained(model_args.model_name_or_path, torch_dtype=dtype)
-        original_state_dict = original_model.state_dict()
+        if model_args.use_lora:
+            original_state_dict = original_model.state_dict()
 
-        unsharded_model = AutoModelForCausalLM.from_pretrained(training_args.output_dir, torch_dtype=dtype)
-        unsharded_state_dict = unsharded_model.state_dict()
+            unsharded_model = PeftModel.from_pretrained(
+                AutoModelForCausalLM.from_pretrained(training_args.output_dir, torch_dtype=dtype),
+                original_model_path,
+            )
+            unsharded_state_dict = unsharded_model.state_dict()
+        else:
+            original_state_dict = original_model.state_dict()
 
+            unsharded_model = AutoModelForCausalLM.from_pretrained(training_args.output_dir, torch_dtype=dtype)
+            unsharded_state_dict = unsharded_model.state_dict()
 
         mismatches = []
+        missing_keys = set(original_state_dict) - set(unsharded_state_dict)
+        if missing_keys:
+            mismatches.append(f"missing from saved checkpoint: {sorted(missing_keys)}")
         for key, expected_value in unsharded_state_dict.items():
             if key not in original_state_dict:
-                mismatches.append(f"{key}: missing from saved checkpoint")
+                mismatches.append(f"{key}: unexpected key in saved checkpoint")
                 continue
             try:
                 torch.testing.assert_close(expected_value, original_state_dict[key], rtol=0, atol=0)
@@ -136,7 +206,6 @@ def main(script_args, training_args, model_args):
             f"Save correctness check passed: {len(unsharded_state_dict)} parameters "
             "match the unsharded checkpoint exactly."
         )
-
 
     # We can start training.
     trainer.train()
