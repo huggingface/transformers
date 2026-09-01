@@ -42,7 +42,7 @@ from ...models.deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3MoE,
     DeepseekV3TopkRouter,
 )
-from ...models.llama.modeling_llama import LlamaRMSNorm, eager_attention_forward  # used in modeling
+from ...models.llama.modeling_llama import LlamaRMSNorm, eager_attention_forward
 from ...models.qwen3_next.modeling_qwen3_next import (
     Qwen3NextModel,
     Qwen3NextRMSNormGated,
@@ -672,9 +672,6 @@ class KimiLinearModel(Qwen3NextModel):
         super().__init__(config)
         del self.rotary_emb
 
-    @merge_with_config_defaults
-    @capture_outputs
-    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

@@ -53,7 +53,7 @@ model_name = "moonshotai/Kimi-Linear-48B-A3B-Instruct"
 
 # the checkpoint ships a custom tiktoken-based tokenizer, hence `trust_remote_code`
 tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
-model = AutoModelForCausalLM.from_pretrained(model_name, dtype="auto", device_map="auto")
+model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto")
 
 messages = [{"role": "user", "content": "Tell me about the french revolution."}]
 text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
