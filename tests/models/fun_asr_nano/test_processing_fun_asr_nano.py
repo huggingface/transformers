@@ -123,6 +123,7 @@ class FunAsrNanoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(processor.decode(token_ids[0]), text)
 
     @require_librosa
+    @require_torch
     def test_output_labels(self):
         import torch
 

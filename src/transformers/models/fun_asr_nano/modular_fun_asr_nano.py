@@ -75,7 +75,10 @@ def _prepare_keyword_inputs(keywords, batch_size: int) -> list[list[str] | None]
 
 
 class FunAsrNanoProcessorKwargs(ProcessingKwargs, total=False):  # trf-ignore: TRF019
-    _defaults = {"audio_kwargs": {"sampling_rate": 16000}}
+    _defaults = {
+        "audio_kwargs": {"sampling_rate": 16000},
+        "common_kwargs": {"return_tensors": "pt"},
+    }
 
 
 @auto_docstring
