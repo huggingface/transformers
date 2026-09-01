@@ -30,10 +30,7 @@ from ...utils import auto_docstring
 
 
 class FunAsrNanoProcessorKwargs(ProcessingKwargs, total=False):  # trf-ignore: TRF019
-    _defaults = {
-        "audio_kwargs": {"sampling_rate": 16000},
-        "common_kwargs": {"return_tensors": "pt"},
-    }
+    _defaults = {"audio_kwargs": {"sampling_rate": 16000}}
 
 
 # The model was trained with these Chinese names in the transcription instruction ("语音转写成<NAME>：").
