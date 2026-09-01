@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Feature extractor for Fun-ASR-Nano (Kaldi mel-filterbank with Low Frame Rate stacking)."""
 
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
@@ -39,8 +38,8 @@ class FunAsrNanoFeatureExtractor(SequenceFeatureExtractor):
     most of the main methods. Users should refer to this superclass for more information regarding those methods.
 
     It extracts Kaldi-compatible mel-filterbank features (via `torchaudio.compliance.kaldi.fbank`, matching the
-    original FunASR front-end) and then applies Low Frame Rate (LFR) processing by stacking `lfr_m` consecutive frames
-    and subsampling with stride `lfr_n`.
+    original FunASR front-end) and then applies Low Frame Rate (LFR) processing by stacking `num_frames_lfr`
+    consecutive frames and subsampling with stride `stride_lfr`.
 
     Args:
         feature_size (`int`, *optional*, defaults to 80):
@@ -51,10 +50,10 @@ class FunAsrNanoFeatureExtractor(SequenceFeatureExtractor):
             Frame length in milliseconds for the STFT.
         frame_shift (`int`, *optional*, defaults to 10):
             Frame shift (hop length) in milliseconds for the STFT.
-        lfr_m (`int`, *optional*, defaults to 7):
+        num_frames_lfr (`int`, *optional*, defaults to 7):
             Number of consecutive frames to stack (LFR stacking factor).
-        lfr_n (`int`, *optional*, defaults to 6):
-            Subsampling stride for LFR (take every `lfr_n`-th stacked frame).
+        stride_lfr (`int`, *optional*, defaults to 6):
+            Subsampling stride for LFR (take every `stride_lfr`-th stacked frame).
         window (`str`, *optional*, defaults to `"hamming"`):
             Window function for the STFT.
         padding_value (`float`, *optional*, defaults to 0.0):
@@ -83,8 +82,8 @@ class FunAsrNanoFeatureExtractor(SequenceFeatureExtractor):
         sampling_rate: int = 16000,
         frame_length: int = 25,
         frame_shift: int = 10,
-        lfr_m: int = 7,
-        lfr_n: int = 6,
+        num_frames_lfr: int = 7,
+        stride_lfr: int = 6,
         window: str = "hamming",
         padding_value: float = 0.0,
         return_attention_mask: bool = True,
@@ -99,8 +98,8 @@ class FunAsrNanoFeatureExtractor(SequenceFeatureExtractor):
         )
         self.frame_length = frame_length
         self.frame_shift = frame_shift
-        self.lfr_m = lfr_m
-        self.lfr_n = lfr_n
+        self.num_frames_lfr = num_frames_lfr
+        self.stride_lfr = stride_lfr
         self.window = window
 
     def _extract_fbank_features(self, waveform: "torch.Tensor") -> "torch.Tensor":
@@ -116,43 +115,39 @@ class FunAsrNanoFeatureExtractor(SequenceFeatureExtractor):
         return fbank
 
     def _apply_lfr(self, features: "torch.Tensor") -> "torch.Tensor":
-        """Apply Low Frame Rate (LFR) by stacking `lfr_m` frames and subsampling with stride `lfr_n`.
+        """Apply Low Frame Rate (LFR) by stacking `num_frames_lfr` frames and subsampling with stride `stride_lfr`.
 
-        `features` has shape `(num_frames, feature_size)`; the output has shape `(num_lfr_frames, feature_size * lfr_m)`.
+        `features` has shape `(num_frames, feature_size)`; the output has shape
+        `(num_lfr_frames, feature_size * num_frames_lfr)`.
         """
-        num_frames = features.shape[0]
-        lfr_m = self.lfr_m
-        lfr_n = self.lfr_n
+        num_input_frames = features.shape[0]
+        num_frames_lfr = self.num_frames_lfr
+        stride_lfr = self.stride_lfr
 
         # Repeat the first and last frames so each stacked window is centered.
-        left_pad = (lfr_m - 1) // 2
-        right_pad = lfr_m - 1 - left_pad
+        left_pad = (num_frames_lfr - 1) // 2
+        right_pad = num_frames_lfr - 1 - left_pad
         padded = torch.cat(
             [features[0:1].expand(left_pad, -1), features, features[-1:].expand(right_pad, -1)],
             dim=0,
         )
 
-        num_output_frames = (num_frames + lfr_n - 1) // lfr_n
-        lfr_features = []
-        for i in range(num_output_frames):
-            start = i * lfr_n
-            end = start + lfr_m
-            if end <= len(padded):
-                stacked = padded[start:end].reshape(-1)
-            else:
-                chunk = padded[start:]
-                pad_frames = lfr_m - len(chunk)
-                chunk = torch.cat([chunk, chunk[-1:].expand(pad_frames, -1)], dim=0)
-                stacked = chunk.reshape(-1)
-            lfr_features.append(stacked)
+        # Repeat the last frame so that the final window is complete, then slide over all windows at once.
+        num_output_frames = (num_input_frames + stride_lfr - 1) // stride_lfr
+        required_length = (num_output_frames - 1) * stride_lfr + num_frames_lfr
+        if required_length > padded.shape[0]:
+            padded = torch.cat([padded, padded[-1:].expand(required_length - padded.shape[0], -1)], dim=0)
 
-        return torch.stack(lfr_features, dim=0)
+        # `unfold` yields `(num_output_frames, feature_size, num_frames_lfr)`, so the stacked frames are moved
+        # back in front of the feature dimension before flattening each window.
+        windows = padded.unfold(0, num_frames_lfr, stride_lfr).transpose(1, 2)
+        return windows.reshape(num_output_frames, num_frames_lfr * features.shape[1])
 
     def __call__(
         self,
         raw_speech: AudioInput,
         sampling_rate: int | None = None,
-        return_tensors: str | TensorType | None = None,
+        return_tensors: str | TensorType | None = "pt",
         padding: bool | str = True,
         max_length: int | None = None,
         truncation: bool = False,
@@ -182,8 +177,8 @@ class FunAsrNanoFeatureExtractor(SequenceFeatureExtractor):
                 Whether to return `input_features_mask`. Defaults to `self.return_attention_mask`.
 
         Returns:
-            [`BatchFeature`] with `input_features` of shape `(batch, max_lfr_frames, feature_size * lfr_m)` and the
-            frame-level `input_features_mask`.
+            [`BatchFeature`] with `input_features` of shape
+            `(batch, max_lfr_frames, feature_size * num_frames_lfr)` and the frame-level `input_features_mask`.
         """
         if sampling_rate is not None and sampling_rate != self.sampling_rate:
             raise ValueError(
@@ -208,7 +203,7 @@ class FunAsrNanoFeatureExtractor(SequenceFeatureExtractor):
             truncation=truncation,
             pad_to_multiple_of=pad_to_multiple_of,
             return_attention_mask=return_attention_mask,
-            return_tensors=return_tensors or "np",
+            return_tensors=return_tensors,
         )
 
         if "attention_mask" in padded_inputs:
