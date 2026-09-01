@@ -3895,6 +3895,30 @@ class PreTrainedModel(
         else:
             self._use_kernels = False
 
+    def reset_kernels(self):
+        """
+        Reset any kernelization applied on the model, i.e. use the torch implementation for any function or module
+        attached with kernels specific decorators (`use_kernel_forward_from_hub`, `use_kernelized_func`).
+        """
+        if not is_kernels_available():
+            return
+
+        from kernels import Mode
+
+        with warnings.catch_warnings():
+            # Temporarily ignore user warnings as this is intentional from our side
+            warnings.filterwarnings(
+                "ignore",
+                message=r"\s*No kernel mapping found for layer .*",
+                category=UserWarning,
+                module=r"kernels\.layer\.layer",
+            )
+
+            # Force kernelization with an empty mapping to force the torch fallbacks in all cases
+            kernelize(self, mode=Mode.FALLBACK, kernel_config=KernelConfig(kernel_mapping={}, inherit_mapping=False))
+
+        self._use_kernels = False
+
     @classmethod
     def from_pretrained(
         cls: type[SpecificPreTrainedModelType],
