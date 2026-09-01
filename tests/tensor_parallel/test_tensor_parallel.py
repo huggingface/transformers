@@ -207,12 +207,12 @@ class TestTensorParallelLayer(TestCasePlus):
         local_shape[shard_dim] = local_size
         return tuple(local_shape)
 
-    def _make_dtensor_shard_op(self, mesh, placement, param_shape, local_shape, kv_replication=1):
+    def _make_dtensor_shard_op(self, mesh, placement, param_shape, local_shape):
         op = object.__new__(DtensorShardOperation)
         op.device_mesh = mesh
         op.placements = (placement,)
         op.param_ndim = len(param_shape)
-        op.kv_replication = kv_replication
+        op.param_shape = tuple(param_shape)
         op._axis0_offset = 0
         op._axis0_local_size = local_shape[0]
         return op
@@ -308,9 +308,7 @@ class TestTensorParallelLayer(TestCasePlus):
         for rank in range(world_size):
             mesh = self.MockDeviceMesh(world_size=world_size, rank=rank)
             # The parameter describes the expanded projection: `world_size` heads instead of `num_key_value_heads`
-            op = self._make_dtensor_shard_op(
-                mesh, Shard(0), (world_size * head_dim, 32), (head_dim, 32), kv_replication=n_rep
-            )
+            op = self._make_dtensor_shard_op(mesh, Shard(0), (world_size * head_dim, 32), (head_dim, 32))
 
             expected = weight[(rank // n_rep) * head_dim : (rank // n_rep + 1) * head_dim]
             torch.testing.assert_close(op.shard_tensor(weight), expected)
