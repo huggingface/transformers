@@ -1685,6 +1685,10 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
             per_layer_inputs = self.get_per_layer_inputs(input_ids)
 
+        if inputs_embeds is not None:
+            # Cast inputs_embeds to the model's dtype to prevent CUBLAS errors when PEFT casts embeddings to fp32
+            inputs_embeds = inputs_embeds.to(self.dtype)
+
         per_layer_inputs = self.project_per_layer_inputs(inputs_embeds, per_layer_inputs)
 
         if use_cache and past_key_values is None:
