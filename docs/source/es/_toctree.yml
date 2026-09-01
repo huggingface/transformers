@@ -76,6 +76,8 @@
     title: Debugging
   - local: torch_compile
     title: torch.compile
+  - local: cache_explanation
+    title: Cómo funciona el caché
   title: Rendimiento y escalabilidad
 - sections:
   - local: add_new_pipeline
