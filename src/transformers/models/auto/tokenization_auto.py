@@ -668,10 +668,9 @@ def _tokenizer_json_has_byte_level(
     )
     if resolved_file is None:
         return False
+
     with open(resolved_file, encoding="utf-8") as reader:
-        tokenizer_json = json.load(reader)
-    pipeline = (tokenizer_json.get("pre_tokenizer"), tokenizer_json.get("decoder"))
-    return "ByteLevel" in str(pipeline)
+        return '"ByteLevel"' in reader.read()
 
 
 class AutoTokenizer:
@@ -821,6 +820,8 @@ class AutoTokenizer:
         tokenizer_config = get_tokenizer_config(pretrained_model_name_or_path, **kwargs)
         tokenizer_config_class = tokenizer_config.get("tokenizer_class", None)
 
+        kwargs["_commit_hash"] = tokenizer_config.get("_commit_hash", kwargs.get("_commit_hash"))
+
         # Check for auto_map early to handle dynamic tokenizers properly
         tokenizer_auto_map = None
         if "auto_map" in tokenizer_config:
@@ -911,9 +912,6 @@ class AutoTokenizer:
                 f"Tokenizer class '{_hub_class}' specified in the tokenizer config was not found. "
                 f"The tokenizer may need to be converted or re-saved."
             )
-
-        if "_commit_hash" in tokenizer_config:
-            kwargs["_commit_hash"] = tokenizer_config["_commit_hash"]
 
         if tokenizer_config_class and tokenizer_config_class.endswith("Fast"):
             tokenizer_config_class = tokenizer_config_class[:-4]
