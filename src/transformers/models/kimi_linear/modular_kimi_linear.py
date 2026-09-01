@@ -51,8 +51,7 @@ from ...models.qwen3_next.modeling_qwen3_next import (
 )
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
-from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ...utils.output_capturing import OutputRecorder
 from ..bamba.modeling_bamba import apply_mask_to_padding_states
 
 

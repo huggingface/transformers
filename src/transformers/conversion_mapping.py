@@ -1834,7 +1834,6 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming(source_patterns=r"layers\.(\d+)\.transformer_block\.", target_patterns=r"layers.\1.mtp_block."),
     ]
 
-
     mapping["kimi_linear"] = [
         # Weight renamings for linear attention layers
         WeightRenaming(source_patterns="self_attn.f_a_proj", target_patterns="self_attn.forget_gate_down"),
