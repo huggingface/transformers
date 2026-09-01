@@ -852,9 +852,6 @@ def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, interna
         # A boolean to track if the implementation is new, i.e. not the original torch function
         is_new_implementation = implementation is not torch_function
 
-        # `fla` is an import name only, there is no such distribution on PyPI
-        distribution = "flash-linear-attention" if package == "fla" else package
-
         @functools.wraps(torch_function)
         def wrapped(*args, **kwargs):
             # Some original packages are incompatible with torch.export, so we always use the torch path when exporting
@@ -864,6 +861,8 @@ def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, interna
             if implementation is torch_function and not is_torchdynamo_compiling():
                 # These torch paths are readable references, not fast kernels, and nothing else tells
                 # the user which one they ended up on. The logger is untraceable, hence the guard.
+                # `fla` is an import name only, there is no such distribution on PyPI.
+                distribution = "flash-linear-attention" if package == "fla" else package
                 logger.warning_once(
                     f"`{func_name}` is falling back to its reference PyTorch implementation because "
                     f"`{distribution}` is not installed. This is correct but much slower; install "
