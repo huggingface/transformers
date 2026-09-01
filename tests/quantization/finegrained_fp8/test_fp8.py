@@ -461,6 +461,44 @@ class FP8LinearTest(unittest.TestCase):
         self.assertEqual(x_.shape, (1, 5, 256))
 
 
+class FP8EmbeddingTest(unittest.TestCase):
+    """
+    Some checkpoints quantize an embedding *table* rather than a linear (Qwen4-Exp's n-gram/PLE
+    table).
+    """
+
+    def test_lookup_applies_the_per_tensor_scale(self):
+        """Without the rescale the rows come back as raw FP8 and blow up the next matmul."""
+        from transformers.integrations import FP8Embedding
+
+        table = torch.randn(64, 16, dtype=torch.bfloat16)
+        scale = table.abs().max().float() / torch.finfo(torch.float8_e4m3fn).max
+        embedding = FP8Embedding(64, 16)
+        embedding.weight = torch.nn.Parameter((table.float() / scale).to(torch.float8_e4m3fn), requires_grad=False)
+        embedding.weight_scale = torch.nn.Parameter(scale.to(torch.bfloat16).reshape(1), requires_grad=False)
+
+        ids = torch.randint(0, 64, (2, 5))
+        rows, expected = embedding(ids), table[ids]
+
+        self.assertEqual(rows.dtype, expected.dtype)
+        error = (rows.float() - expected.float()).abs().max() / expected.float().abs().max()
+        self.assertLess(error, 0.1)
+
+    def test_patterns_match_by_suffix_and_honour_the_skip_list(self):
+        """Suffixes match whether or not the text model is nested under a multimodal wrapper."""
+        from transformers.integrations import FP8Embedding, replace_with_fp8_embedding
+
+        model = torch.nn.ModuleDict(
+            {n: torch.nn.ModuleDict({"table": torch.nn.Embedding(8, 4)}) for n in ("layers", "language_model")}
+        )
+        model.other = torch.nn.Embedding(8, 4)
+        replace_with_fp8_embedding(model, ["table"], modules_to_not_convert=["language_model.table"])
+
+        self.assertIsInstance(model["layers"]["table"], FP8Embedding)  # matched by suffix
+        self.assertIs(type(model["language_model"]["table"]), torch.nn.Embedding)  # skip-listed
+        self.assertIs(type(model.other), torch.nn.Embedding)  # no pattern match
+
+
 class FP8DeepGEMMMultiDeviceTest(unittest.TestCase):
     """`_disable_deepgemm_on_multi_device` must flag FP8 modules based on the devices they actually
     occupy — DeepGEMM's kernels are bound to a single CUDA context and corrupt across devices, but a

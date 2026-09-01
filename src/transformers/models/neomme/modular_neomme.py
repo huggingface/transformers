@@ -37,6 +37,7 @@ from ...utils import (
     TensorType,
     TransformersKwargs,
     auto_docstring,
+    no_inherit_decorator,
     torch_compilable_check,
 )
 from ...utils.constants import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
@@ -328,6 +329,7 @@ class NeoMMESigmoidGatedProjection(nn.Module):
         return self.o_proj(attn_output * torch.sigmoid(self.gate_proj(hidden_states)))
 
 
+@no_inherit_decorator
 class NeoMMEAttention(MuseGlimmerTextAttention):
     """Bidirectional grouped-query attention with QK-norm, M-RoPE, and a sigmoid output gate.
 
