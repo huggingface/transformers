@@ -310,12 +310,11 @@ def yarn_apply_mscale(rope_parameters, scaling):
 
 class GlmMoeDsaAttention(nn.Module):
     """
-    DeepSeek-V3 MLA + a DSA indexer, extended with **cross-layer top-k sharing**.
+    DeepSeek-V3.2 DSA extended with **cross-layer top-k sharing**.
 
-    `config.indexer_types[layer_idx]` decides whether this layer runs its own indexer (`"full"`) or
-    reuses the previous full layer's top-k selection (`"shared"`).
-    `next_skip_topk` signals that the *next* layer will reuse this
-    layer's top-k, so it is propagated upward via `prev_topk_indices`.
+    `config.indexer_types[layer_idx]` decides whether this layer runs its own indexer (`"full"`) or reuses the previous
+    full layer's top-k selection (`"shared"`). `next_skip_topk` signals that the *next* layer will reuse this layer's
+    top-k, so it is propagated upward via `prev_topk_indices`.
     """
 
     def __init__(self, config: GlmMoeDsaConfig, layer_idx: int):
@@ -335,23 +334,9 @@ class GlmMoeDsaAttention(nn.Module):
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
 
         self.is_causal = True
-
-        self.q_proj = (
-            nn.Linear(self.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
-            if self.q_lora_rank is None
-            else None
-        )
-        self.q_a_proj = (
-            nn.Linear(self.hidden_size, config.q_lora_rank, bias=config.attention_bias)
-            if self.q_lora_rank is not None
-            else None
-        )
-        self.q_a_layernorm = GlmMoeDsaRMSNorm(config.q_lora_rank) if self.q_lora_rank is not None else None
-        self.q_b_proj = (
-            nn.Linear(config.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
-            if self.q_lora_rank is not None
-            else None
-        )
+        self.q_a_proj = nn.Linear(self.hidden_size, self.q_lora_rank, bias=config.attention_bias)
+        self.q_a_layernorm = GlmMoeDsaRMSNorm(self.q_lora_rank)
+        self.q_b_proj = nn.Linear(self.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
 
         self.kv_a_proj_with_mqa = nn.Linear(
             self.hidden_size,
@@ -372,9 +357,9 @@ class GlmMoeDsaAttention(nn.Module):
         )
 
         self.scaling = yarn_apply_mscale(config.rope_parameters, self.qk_head_dim ** (-0.5))
+        self.indexer = None if self.skip_topk else GlmMoeDsaIndexer(config, layer_idx)
         # Refer: https://arxiv.org/abs/2603.12201 for more details.
         self.skip_topk = config.indexer_types[layer_idx] == "shared"
-        self.indexer = None if self.skip_topk else GlmMoeDsaIndexer(config, layer_idx)
 
     def expand_kv(self, kv_nope: torch.Tensor, k_rot: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Expands the compressed latents into key and value states. Args:

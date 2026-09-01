@@ -36,8 +36,8 @@ from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
+from ..axk1.modeling_axk1 import AXK1Attention
 from ..deepseek_v3.modeling_deepseek_v3 import (
-    DeepseekV3Attention,
     DeepseekV3ForCausalLM,
     DeepseekV3Model,
     DeepseekV3PreTrainedModel,
@@ -270,7 +270,7 @@ class DeepseekV32Indexer(nn.Module):
         return index_scores.topk(topk, dim=-1).indices.to(torch.int32)  # [B, S, topk]
 
 
-class DeepseekV32Attention(DeepseekV3Attention):
+class DeepseekV32Attention(AXK1Attention):
     """
     DeepSeek-V3 MLA, with a DSA indexer whose top-k sparse mask is folded into the attention mask.
     Qlora rank formulation is dropped as it is never used in released models.

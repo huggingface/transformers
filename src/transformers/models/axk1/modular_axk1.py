@@ -19,12 +19,18 @@ extra `post_mlp_layernorm` applied to the MoE block output. Everything else — 
 the experts, and the model / causal-LM scaffolding — is inherited unchanged from DeepSeek-V3.
 """
 
+from collections.abc import Callable
+
 import torch
 from huggingface_hub.dataclasses import strict
+from torch import nn
 
 from ... import initialization as init
+from ...cache_utils import Cache
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GenericForSequenceClassification, GenericForTokenClassification
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
 from ..deepseek_v3.configuration_deepseek_v3 import DeepseekV3Config
 from ..deepseek_v3.modeling_deepseek_v3 import (
@@ -39,6 +45,9 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3RMSNorm,
     DeepseekV3RotaryEmbedding,
     DeepseekV3TopkRouter,
+    apply_rotary_pos_emb,
+    apply_rotary_pos_emb_interleave,
+    eager_attention_forward,
 )
 
 
@@ -145,7 +154,69 @@ class AXK1MoE(DeepseekV3MoE):
 
 
 class AXK1Attention(DeepseekV3Attention):
-    pass
+    """Multi-headed Latent Attention (MLA) from Deepseek V3, always with a Q-LoRA rank."""
+
+    def __init__(self, config: AXK1Config, layer_idx: int):
+        super().__init__(config, layer_idx)
+        del self.q_proj
+        self.q_a_proj = nn.Linear(self.hidden_size, self.q_lora_rank, bias=config.attention_bias)
+        self.q_a_layernorm = AXK1RMSNorm(self.q_lora_rank)
+        self.q_b_proj = nn.Linear(self.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: torch.Tensor | None,
+        past_key_values: Cache | None = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
+        batch_size, seq_length = hidden_states.shape[:-1]
+        query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
+
+        q_states = self.q_b_proj(self.q_a_layernorm(self.q_a_proj(hidden_states)))
+        q_states = q_states.view(query_shape).transpose(1, 2)
+        q_pass, q_rot = torch.split(q_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
+
+        compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
+        kv_nope, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
+        kv_nope = self.kv_a_layernorm(kv_nope)
+        # Both latents are viewed as single-head, 4D tensors so all cache layers handle them correctly
+        kv_nope = kv_nope.view(batch_size, 1, seq_length, self.kv_lora_rank)
+        k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
+
+        cos, sin = position_embeddings
+        if self.config.rope_interleave:  # support using interleaved weights for efficiency
+            q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
+        else:
+            q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin)
+
+        # Cache read / write is performed while latent KV is still compressed
+        if past_key_values is not None:
+            kv_nope, k_rot = past_key_values.update(kv_nope, k_rot, self.layer_idx)
+
+        query_states = torch.cat((q_pass, q_rot), dim=-1)
+
+        key_states, value_states = self.expand_kv(kv_nope, k_rot)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
 
 
 class AXK1DecoderLayer(DeepseekV3DecoderLayer):
