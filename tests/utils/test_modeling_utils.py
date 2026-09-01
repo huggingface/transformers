@@ -2504,6 +2504,49 @@ class ModelUtilsTest(TestCasePlus):
         with_config_only = model(input_ids, attention_mask=attention_mask).last_hidden_state
         torch.testing.assert_close(reference, with_config_only)
 
+    def test_last_hidden_state_can_be_untied_from_config(self):
+        """Test that `config.tie_last_hidden_states` overrides the default of the `capture_outputs` decorator, so that
+        `hidden_states[-1]` stays the hidden state before the final norm (which embedding models dropping that norm
+        rely on). As for the test above, testing it on Llama is enough as the entry point is the general
+        `capture_outputs` decorator, so this cannot easily be made a common model test."""
+        from transformers import LlamaConfig, LlamaModel
+
+        config = LlamaConfig(
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+            head_dim=16,
+            hidden_size=32,
+            intermediate_size=64,
+            vocab_size=100,
+        )
+        model = LlamaModel(config).to(torch_device).eval()
+        input_ids = torch.randint(5, 95, (2, 17), device=torch_device)
+
+        # By default, the output of the last decoder layer is overwritten with the post-norm `last_hidden_state`
+        with torch.no_grad():
+            tied = model(input_ids, output_hidden_states=True)
+        torch.testing.assert_close(tied.hidden_states[-1], tied.last_hidden_state)
+
+        model.config.tie_last_hidden_states = False
+        with torch.no_grad():
+            untied = model(input_ids, output_hidden_states=True)
+
+        # Neither `last_hidden_state` nor the earlier hidden states are affected
+        torch.testing.assert_close(untied.last_hidden_state, tied.last_hidden_state)
+        for untied_hidden_state, tied_hidden_state in zip(untied.hidden_states[:-1], tied.hidden_states[:-1]):
+            torch.testing.assert_close(untied_hidden_state, tied_hidden_state)
+
+        # But `hidden_states[-1]` is now the input of the final norm instead of its output
+        torch.testing.assert_close(model.norm(untied.hidden_states[-1]), tied.hidden_states[-1])
+
+        # `None` means unset, i.e. fall back to the decorator default, as a config saved with an explicit
+        # `"tie_last_hidden_states": null` must not silently untie the model
+        model.config.tie_last_hidden_states = None
+        with torch.no_grad():
+            unset = model(input_ids, output_hidden_states=True)
+        torch.testing.assert_close(unset.hidden_states[-1], unset.last_hidden_state)
+
     def test_linear_attention_models_can_use_accelerate_hooks(self):
         """
         Test that linear attention models (here only tested on lfm2 as it has small checkpoints) can use device_map and
