@@ -306,7 +306,9 @@ class TrainingArguments:
         gradient_checkpointing_kwargs (`dict`, *optional*, defaults to `None`):
             Keyword arguments passed to `gradient_checkpointing_enable()`. `every_n_layers` checkpoints only every
             n-th decoder layer instead of all of them; `1` is the usual all-or-nothing behavior, and larger values
-            give some memory back to speed. Any other key is forwarded to `torch.utils.checkpoint.checkpoint`.
+            give some memory back to speed. `offload` holds the saved activations in pinned host memory, which
+            frees `layers x sequence x hidden` bytes of device memory and makes the step slower. Any other key is
+            forwarded to `torch.utils.checkpoint.checkpoint`.
 
         > Compilation
 
@@ -906,7 +908,8 @@ class TrainingArguments:
         metadata={
             "help": "Keyword arguments passed to `gradient_checkpointing_enable()`. `every_n_layers` checkpoints "
             "only every n-th decoder layer instead of all of them; `1` is the usual all-or-nothing behavior, and "
-            "larger values give some memory back to speed. Any other key is forwarded to "
+            "larger values give some memory back to speed. `offload` holds the saved activations in pinned host "
+            "memory, which frees device memory and makes the step slower. Any other key is forwarded to "
             "`torch.utils.checkpoint.checkpoint`."
         },
     )
