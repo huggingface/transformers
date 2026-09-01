@@ -256,6 +256,50 @@ class TestHubKernels(TestCasePlus):
 
         del model
 
+    def test_kernels_mapping_functions_registration(self):
+        kernel_config = KernelConfig(
+            kernel_mapping={"rotary_pos_emb": ("kernels-community/rotary:apply_rotary_transformers", {"version": 2})}
+        )
+
+        # Functions would previously raise if not properly handled
+        model = AutoModelForCausalLM.from_pretrained(
+            "unsloth/Llama-3.2-1B-Instruct", use_kernels=True, device_map=torch_device, kernel_config=kernel_config
+        )
+
+        # Sanity checks making sure it is really been found / registered under the model
+        self.assertIn("rotary_pos_emb", model.kernel_config.registered_layer_names.values())
+        self.assertTrue(any(name.endswith(".rotary_pos_emb") for name in model.kernel_config.registered_layer_names))
+
+        del model
+
+    def test_kernels_mapping_no_inherit(self):
+        kernel_config = KernelConfig(
+            kernel_mapping={
+                "RMSNorm": (
+                    "kernels-community/layer-norm:LlamaRMSNorm",
+                    {"version": 1},
+                )
+            },
+            # Force to only inherit the mapping ^
+            inherit_mapping=False,
+        )
+
+        model = AutoModelForCausalLM.from_pretrained(
+            "unsloth/Llama-3.2-1B-Instruct", use_kernels=True, device_map=torch_device, kernel_config=kernel_config
+        )
+        first_rms_norm = model.model.layers[0].input_layernorm
+        first_self_attn = model.model.layers[0].self_attn
+
+        # RoPE should still be registered under attn
+        self.assertIn("rotary_pos_emb", getattr(first_self_attn, "_kernel_funcs", {}))
+        first_rope = first_self_attn._kernel_funcs["rotary_pos_emb"]
+
+        # Check kernelization by fwd matching
+        self.assertIsNot(first_rms_norm.forward.__func__, type(first_rms_norm).forward)  # exchanged
+        self.assertIs(first_rope.forward.__func__, type(first_rope).forward)             # not exchanged
+
+        del model
+
     @require_torch_accelerator
     def test_kernel_fusion(self):
         model_id = "michaelbenayoun/qwen3-tiny-4kv-heads-4layers-random"
