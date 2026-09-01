@@ -24,24 +24,25 @@ from ..utils.import_utils import is_torch_greater_or_equal
 logger = logging.get_logger(__name__)
 
 
-def get_experts_scheme(quantization_config, module_name=None):
-    """Resolve which config group quantizes the MoE experts. Mixed configs quantize
-    different layers with different schemes (e.g. Kimi: FP8 attention + INT4 experts), so
-    the experts' scheme cannot be assumed global. When ``module_name`` is provided, match
-    the concrete checkpoint expert projection against each group's targets. This is needed
-    for configs where different decoder layers use different bit widths (e.g. Laguna INT4).
-    """
+def get_scheme(quantization_config, module_name):
+    """Return the quantization scheme matching a concrete module name."""
     from compressed_tensors.utils.match import match_name
 
     groups = list(quantization_config.config_groups.values())
-    if module_name is not None:
-        for group in groups:
-            for target in group.targets:
-                if target != "Linear" and match_name(module_name, target):
-                    return group
-        for group in groups:
-            if "Linear" in group.targets:
-                return group
+    for group in groups:
+        if any(target != "Linear" and match_name(module_name, target) for target in group.targets):
+            return group
+    # The concrete expert projections represented by checkpoint names are Linear modules.
+    return next((group for group in groups if "Linear" in group.targets), None)
+
+
+def get_experts_scheme(quantization_config):
+    """Resolve which config group quantizes the MoE experts. Mixed configs quantize
+    different layers with different schemes (e.g. Kimi: FP8 attention + INT4 experts), so
+    the experts' scheme cannot be assumed global: the experts' group is the one whose
+    `re:` targets mention the expert modules.
+    """
+    groups = list(quantization_config.config_groups.values())
     for group in groups:
         if any(target.startswith("re:") and "experts" in target for target in group.targets):
             return group
@@ -95,7 +96,7 @@ class DecompressExperts(ConversionOps):
             projection = base_key.rsplit(".", 1)[-1]
             expert_parent = full_layer_name.rsplit(".", 1)[0]
             checkpoint_module_name = f"{expert_parent}.0.{projection}"
-            quantization_scheme = self.scheme or get_experts_scheme(ct_quantization_config, checkpoint_module_name)
+            quantization_scheme = self.scheme or get_scheme(ct_quantization_config, checkpoint_module_name)
             if quantization_scheme is None:
                 processed_out[key] = value
                 continue

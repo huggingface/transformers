@@ -84,7 +84,7 @@ class CompressedTensorsTest(unittest.TestCase):
 
     def test_mixed_expert_scheme_selected_per_layer(self):
         """Laguna INT4 stores layers 1-30 in 4-bit and layers 31-39 in 8-bit."""
-        from transformers.integrations.compressed_tensors import get_experts_scheme
+        from transformers.integrations.compressed_tensors import get_scheme
 
         def group(target, num_bits):
             return {
@@ -109,8 +109,9 @@ class CompressedTensorsTest(unittest.TestCase):
             quantization_status="compressed",
         ).quantization_config
 
-        self.assertEqual(get_experts_scheme(config, "model.layers.1.mlp.experts.0.gate_proj").weights.num_bits, 4)
-        self.assertEqual(get_experts_scheme(config, "model.layers.31.mlp.experts.0.gate_proj").weights.num_bits, 8)
+        self.assertEqual(get_scheme(config, "model.layers.1.mlp.experts.0.gate_proj").weights.num_bits, 4)
+        self.assertEqual(get_scheme(config, "model.layers.31.mlp.experts.0.gate_proj").weights.num_bits, 8)
+        self.assertIsNone(get_scheme(config, "model.embed_tokens"))
 
     def test_block_fp8_experts_use_compressor_dequantization(self):
         """Laguna FP8 expert scales are blockwise and cannot be broadcast directly over weights."""
