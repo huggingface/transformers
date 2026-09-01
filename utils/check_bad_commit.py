@@ -25,6 +25,48 @@ import git
 from github_utils import get_github_json
 
 
+# A gated-repo failure surfaces as the `GatedRepoError` class name, and as the message text raised by
+# `transformers.utils.hub`. Both are matched because this script re-runs a test at older commits, which may predate
+# either wording, and the failure has to be classified the same way at every commit.
+GATED_REPO_FAILURES = (
+    "You are trying to access a gated repo",
+    "is a gated repository",
+    "GatedRepoError",
+)
+
+# Failure messages that depend on the environment rather than on the code under test. They are normalized before
+# comparing the failures observed at two commits, so that e.g. two OOMs reporting different byte counts still count as
+# the same failure.
+ENVIRONMENT_FAILURES = ("torch.OutOfMemoryError: CUDA out of memory", *GATED_REPO_FAILURES)
+
+# Failures that a code change cannot possibly cause, as (patterns, explanation) pairs. Bisecting them is pointless:
+# they reproduce at every commit where the test exists, so the bisect can only ever land on the commit that added the
+# test and blame its author.
+NON_CODE_FAILURES = (
+    (
+        GATED_REPO_FAILURES,
+        "the token used by the CI is not on the allowlist of a gated Hub repo. A maintainer has to grant access to the "
+        "`hf-transformers-bot` account; see the `Gated checkpoints` section of `docs/source/en/testing.md`.",
+    ),
+)
+
+
+def normalize_failure(failure_message):
+    """Collapse an environment-dependent failure message to a stable form, so two occurrences compare equal."""
+    for pattern in ENVIRONMENT_FAILURES:
+        if pattern in failure_message:
+            return pattern
+    return failure_message
+
+
+def get_non_code_failure(failure_message):
+    """Return an explanation if `failure_message` cannot have been caused by a code change, `None` otherwise."""
+    for patterns, explanation in NON_CODE_FAILURES:
+        if any(pattern in failure_message for pattern in patterns):
+            return explanation
+    return None
+
+
 def create_script(target_test, flake_runs=4):
     """Create a python script to be run by `git bisect run` to determine if `target_test` passes or fails.
     If a test is not found in a commit, the script with exit code `0` (i.e. `Success`).
@@ -131,6 +173,7 @@ def find_bad_commit(target_test, start_commit, end_commit):
     result = {
         "bad_commit": None,
         "status": None,
+        "is_environment_failure": False,
         "failure_at_workflow_commit": None,
         "failure_at_base_commit": None,
         "failure_at_bad_commit": None,
@@ -193,15 +236,18 @@ def find_bad_commit(target_test, start_commit, end_commit):
     #   - if the CI is run on PR: this block checks if the test also failed on `start_commit`.
     #   - otherwise: the test passed on `end_commit` --> an actual new failing test, this block is skipped.
 
-    # TODO: A helper method to handle this and other possible error messages in a clean and centralized way.
-    failure_at_workflow_commit_processed = failure_at_workflow_commit
-    failure_at_base_commit_processed = failure_at_base_commit
-    if "torch.OutOfMemoryError: CUDA out of memory" in failure_at_workflow_commit_processed:
-        failure_at_workflow_commit_processed = "torch.OutOfMemoryError: CUDA out of memory"
-    if "torch.OutOfMemoryError: CUDA out of memory" in failure_at_base_commit_processed:
-        failure_at_base_commit_processed = "torch.OutOfMemoryError: CUDA out of memory"
+    # A failure that no code change could have caused is reported as-is, without a bad commit: bisecting it would
+    # burn runner time to blame whoever added the test for a broken environment.
+    non_code_failure = get_non_code_failure(failure_at_workflow_commit)
+    if non_code_failure is not None:
+        result["status"] = f"not caused by a code change: {non_code_failure}"
+        result["is_environment_failure"] = True
+        result["failure_at_workflow_commit"] = failure_at_workflow_commit
+        result["failure_at_base_commit"] = failure_at_base_commit
+        result["failure_at_bad_commit"] = ""
+        return result
 
-    different_failures = failure_at_workflow_commit_processed != failure_at_base_commit_processed
+    different_failures = normalize_failure(failure_at_workflow_commit) != normalize_failure(failure_at_base_commit)
 
     if is_pr_ci and failure_at_base_commit != "" and different_failures:
         result["bad_commit"] = start_commit
