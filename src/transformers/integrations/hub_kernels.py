@@ -820,7 +820,11 @@ def get_kernel(
 
 
 # Import name of the fallback package -> the distribution a user has to install to get it.
-_PACKAGE_TO_DISTRIBUTION = {"fla": "flash-linear-attention", "mamba_ssm": "mamba-ssm"}
+_PACKAGE_TO_DISTRIBUTION = {
+    "causal_conv1d": "causal-conv1d",
+    "fla": "flash-linear-attention",
+    "mamba_ssm": "mamba-ssm",
+}
 
 
 def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, internal_path: str | None = None):
