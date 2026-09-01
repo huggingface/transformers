@@ -821,7 +821,7 @@ class GenerationMixin(ContinuousMixin):
         # NOTE: we need a single entrypoint for multimodal/text encoder-decoder models because some VLMs need to pass
         `mm_encoder_output` to the text encoder backbone, before feeding it to text-decoder (e.g. Florence2)
         """
-        if self.config.is_encoder_decoder:
+        if self.config.is_encoder_decoder and model_kwargs.get("encoder_outputs") is None:
             return self._prepare_text_encoder_decoder_kwargs_for_generation(
                 inputs_tensor=inputs_tensor,
                 model_kwargs=model_kwargs,
@@ -973,10 +973,14 @@ class GenerationMixin(ContinuousMixin):
         inputs_embeds: torch.LongTensor | None = None,
     ) -> dict[str, dict]:
         def repeat_tensor_or_list(inputs: list | torch.Tensor, repeat_times: int):
+            # Tensor of size [bs, seqlen, dim] where `bs` is number of images in this text sample
+            # Each text can have 1+ images associated with it
+            # Inteleaving on first dim does the same thing as `input_ids.repeat_interlave` in leading batch dim!
             if isinstance(inputs, torch.Tensor):
                 return inputs.repeat_interleave(repeat_times, dim=0)
             else:
-                return inputs * repeat_times
+                # List of `bs` length where each entry is a tensor (seqlen, dim) is also repeat interleaved
+                return [beam_entry for entry in inputs for beam_entry in [entry] * repeat_times]
 
         for modality in ["image", "video"]:
             modalily_outputs = mm_encoder_output.get(modality)
