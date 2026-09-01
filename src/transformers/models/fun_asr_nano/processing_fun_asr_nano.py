@@ -17,7 +17,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ...audio_utils import AudioInput, make_list_of_audio_chat_template
+from ...audio_utils import (
+    AudioInput,
+    make_audio_chat_template_content,
+    make_list_of_audio_chat_template,
+    prepare_language_inputs,
+)
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, prepare_prompt_input
 from ...tokenization_utils_base import TextInput
@@ -32,6 +37,7 @@ class FunAsrNanoProcessorKwargs(ProcessingKwargs, total=False):  # trf-ignore: T
 
 
 # The model was trained with these Chinese names in the transcription instruction ("语音转写成<NAME>：").
+# The English names are aliases, so that both `"en"` and `"English"` resolve to the checkpoint's name.
 LANGUAGE_CODE_TO_NAME = {
     "zh": "中文",
     "chinese": "中文",
@@ -41,45 +47,6 @@ LANGUAGE_CODE_TO_NAME = {
     "japanese": "日文",
 }
 
-SUPPORTED_LANGUAGE_NAMES = set(LANGUAGE_CODE_TO_NAME.values())
-
-
-def resolve_language(language: str | None) -> str | None:
-    """Map a language code or name to the canonical name the checkpoint was trained with, with validation.
-
-    Accepts language codes (e.g. ``"zh"``, ``"en"``), English names (e.g. ``"Chinese"``, ``"English"``), or the
-    checkpoint's own names (``"中文"``, ``"英文"``, ``"日文"``). Returns the checkpoint's name.
-    Raises ``ValueError`` if the language is not recognized. ``None`` passes through unchanged (auto-detect).
-    """
-    if language is None:
-        return None
-    if not isinstance(language, str):
-        raise TypeError("Each language must be a string or `None`.")
-    stripped = language.strip()
-    resolved = LANGUAGE_CODE_TO_NAME.get(stripped.lower())
-    if resolved is not None:
-        return resolved
-    if stripped in SUPPORTED_LANGUAGE_NAMES:
-        return stripped
-    raise ValueError(
-        f"Unsupported language: {language!r}. Use a language code "
-        f"(e.g. 'en', 'zh'), an English name (e.g. 'English', 'Chinese'), "
-        f"or one of the checkpoint's names: {sorted(SUPPORTED_LANGUAGE_NAMES)}."
-    )
-
-
-def _prepare_language_inputs(language: str | list[str] | None, batch_size: int) -> list[str | None]:
-    """Broadcast / validate a language argument to match batch_size, resolving each value."""
-    if language is None:
-        return [None] * batch_size
-    if isinstance(language, str):
-        return [resolve_language(language)] * batch_size
-    if isinstance(language, (list, tuple)):
-        if len(language) != batch_size:
-            raise ValueError(f"Got {len(language)} language(s) for {batch_size} sample(s); counts must match.")
-        return [resolve_language(lang) for lang in language]
-    raise TypeError("`language` must be a string, a list of strings, or `None`.")
-
 
 def _prepare_keyword_inputs(keywords, batch_size: int) -> list[list[str] | None]:
     """Broadcast / validate the hotword argument to match batch_size."""
@@ -88,13 +55,6 @@ def _prepare_keyword_inputs(keywords, batch_size: int) -> list[list[str] | None]
     if isinstance(keywords, (list, tuple)) and all(isinstance(item, str) for item in keywords):
         keywords = [list(keywords)] * batch_size
     return prepare_prompt_input(keywords, batch_size, input_name="keywords")
-
-
-def _audio_content_item(audio_item) -> dict:
-    """Build a chat-template content dict for a single audio item."""
-    if isinstance(audio_item, str):
-        return {"type": "audio", "path": audio_item}
-    return {"type": "audio", "audio": audio_item}
 
 
 @auto_docstring
@@ -216,7 +176,7 @@ class FunAsrNanoProcessor(ProcessorMixin):
         if batch_size == 0:
             raise ValueError("`audio` must contain at least one sample.")
 
-        languages = _prepare_language_inputs(language, batch_size)
+        languages = prepare_language_inputs(language, batch_size, LANGUAGE_CODE_TO_NAME, return_code=False)
         prompts = prepare_prompt_input(prompt, batch_size, input_name="prompt")
         keyword_batches = _prepare_keyword_inputs(keywords, batch_size)
 
@@ -224,7 +184,7 @@ class FunAsrNanoProcessor(ProcessorMixin):
         for audio_item, prompt_text, keyword_list, language_name in zip(
             audio_items, prompts, keyword_batches, languages
         ):
-            content = [_audio_content_item(audio_item)]
+            content = [make_audio_chat_template_content(audio_item)]
             if prompt_text is not None:
                 content.append({"type": "text", "text": prompt_text})
             if keyword_list:
