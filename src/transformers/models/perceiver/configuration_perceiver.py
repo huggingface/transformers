@@ -88,7 +88,7 @@ class PerceiverConfig(PreTrainedConfig):
     num_blocks: int = 1
     num_self_attends_per_block: int = 26
     num_self_attention_heads: int = 8
-    num_cross_attention_heads: int = 8
+    num_cross_attention_heads: int = 1
     qk_channels: int | None = None
     v_channels: int | None = None
     cross_attention_shape_for_attention: str = "kv"

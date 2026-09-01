@@ -87,9 +87,9 @@ class HieraConfig(BackboneConfigMixin, PreTrainedConfig):
     initializer_range: float = 0.02
     layer_norm_init: float = 1.0
     layer_norm_eps: float = 1e-6
-    decoder_hidden_size: int | None = None
-    decoder_depth: int | None = None
-    decoder_num_heads: int | None = None
+    decoder_hidden_size: int | None = 512
+    decoder_depth: int | None = 8
+    decoder_num_heads: int | None = 16
     normalize_pixel_loss: bool | None = True
     mask_ratio: float = 0.6
     _out_features: list[str] | None = None

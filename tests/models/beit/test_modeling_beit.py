@@ -271,6 +271,16 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     test_resize_embeddings = False
 
+    def test_can_be_initialized_on_meta_with_default_config(self):
+        # `BeitForSemanticSegmentation` needs 4 backbone feature maps, but the default backbone
+        # config (per the `Backbone` contract) outputs a single stage. Build that head with the
+        # documented base-sized `out_indices`; all other classes use the plain default config.
+        for model_class in self.all_model_classes:
+            kwargs = {"out_indices": [3, 5, 7, 11]} if model_class.__name__ == "BeitForSemanticSegmentation" else {}
+            default_config = model_class.config_class(**kwargs)
+            with torch.device("meta"):
+                _ = model_class(default_config)
+
     def setUp(self):
         self.model_tester = BeitModelTester(self)
         self.config_tester = ConfigTester(self, config_class=BeitConfig, has_text_modality=False, hidden_size=32)

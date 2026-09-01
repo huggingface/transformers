@@ -123,7 +123,7 @@ class ReformerConfig(PreTrainedConfig):
     hidden_dropout_prob: float | int = 0.05
     hidden_size: int = 256
     initializer_range: float = 0.02
-    is_decoder: bool = False
+    is_decoder: bool = True
     layer_norm_eps: float = 1e-12
     local_num_chunks_before: int = 1
     local_num_chunks_after: int = 0

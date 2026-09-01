@@ -70,7 +70,7 @@ class ViltConfig(PreTrainedConfig):
     qkv_bias: bool = True
     max_image_length: int = -1
     tie_word_embeddings: bool = True
-    num_images: int = -1
+    num_images: int = 2
     pad_token_id: int | None = None
 
     def __post_init__(self, **kwargs):

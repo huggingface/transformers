@@ -68,6 +68,9 @@ class MinistralConfig(MistralConfig):
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
 
+        if self.head_dim is None:
+            self.head_dim = self.hidden_size // self.num_attention_heads
+
         if self.layer_types is None:
             self.layer_types = [
                 "sliding_attention" if self.sliding_window is not None else "full_attention"
