@@ -856,6 +856,35 @@ class ContinuousBatchingManager:
             self.stop(block=True, keep_for_next_session=False)
         self.distributed_helper.destroy_cpu_comm_group()
 
+    @contextmanager
+    def pause(self):
+        """A context manager that pauses the generation loop so the calling thread can use the model, typically to
+        update it in place. The thread only enters this context once the loop is parked, and the loop resumes on exit,
+        keeping its cache and its in-flight requests: nothing is drained and no request is lost.
+
+        Several threads may hold the pause at the same time, and the loop resumes once the last one leaves. This does
+        not make them exclusive of each other, it only keeps the generation loop out of their way.
+
+        If TP is on, all ranks must enter this context, otherwise other ranks will hang forever: the pause is
+        MAX-reduced over the TP group, so every rank parks as soon as any rank asks, and each parked loop then waits
+        for its own threads.
+
+        Raises:
+            RuntimeError: if the generation loop is not running, or if it stops or dies before it can pause. In the
+                latter case the error that killed it is chained as `__cause__`, and the rank raises right away rather
+                than waiting for its peers: they unblock when `cpu_group_timeout` fires.
+        """
+        # Error out if the caller asks for a pause while no generation loop is running
+        if not self.is_running():
+            raise RuntimeError("Cannot pause generation while no generation loop is running.")
+
+        self.background_thread_status.request_pause()
+        self.background_thread_status.wait_for_pause()
+        try:
+            yield
+        finally:
+            self.background_thread_status.release_pause()
+
     # ---------------------------- REQUEST SUBMISSION, CANCELLATION AND RETRIEVAL METHODS ---------------------------- #
 
     def add_request(
@@ -1049,35 +1078,6 @@ class ContinuousBatchingManager:
             self._has_new_requests.wait(timeout=0.1)  # wait for new requests instead of busy-spinning.
             self._has_new_requests.clear()
             return True
-
-    @contextmanager
-    def pause_generation(self):
-        """A context manager that pauses the generation loop so the calling thread can use the model, typically to
-        update it in place. The thread only enters this context once the loop is parked, and the loop resumes on exit,
-        keeping its cache and its in-flight requests: nothing is drained and no request is lost.
-
-        Several threads may hold the pause at the same time, and the loop resumes once the last one leaves. This does
-        not make them exclusive of each other, it only keeps the generation loop out of their way.
-
-        If TP is on, all ranks must enter this context, otherwise other ranks will hang forever: the pause is
-        MAX-reduced over the TP group, so every rank parks as soon as any rank asks, and each parked loop then waits
-        for its own threads.
-
-        Raises:
-            RuntimeError: if the generation loop is not running, or if it stops or dies before it can pause. In the
-                latter case the error that killed it is chained as `__cause__`, and the rank raises right away rather
-                than waiting for its peers: they unblock when `cpu_group_timeout` fires.
-        """
-        # Error out if the caller asks for a pause while no generation loop is running
-        if not self.is_running():
-            raise RuntimeError("Cannot pause generation while no generation loop is running.")
-
-        self.background_thread_status.request_pause()
-        self.background_thread_status.wait_for_pause()
-        try:
-            yield
-        finally:
-            self.background_thread_status.release_pause()
 
     def _run_generation_loop(self) -> None:
         """Main processing loop running in the background thread."""

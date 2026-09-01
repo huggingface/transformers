@@ -830,7 +830,7 @@ class ContinuousBatchingPauseTest(unittest.TestCase):
         try:
             for i in range(num_pauses):
                 request_queue.put(2 * i)  # a request submitted while the loop is running
-                with manager.pause_generation():
+                with manager.pause():
                     pause_held = True
                     request_queue.put(2 * i + 1)  # and one submitted while the pause is held
                     # The loop is parked, so its step counter cannot move while we are in here
@@ -874,7 +874,7 @@ class ContinuousBatchingPauseTest(unittest.TestCase):
         manager = self._pause_handshake_manager(status, loop_thread)
 
         entered = []
-        with manager.pause_generation():
+        with manager.pause():
             entered.append(True)
             self.assertFalse(resumed.is_set(), "the loop resumed while a thread was holding the pause")
         loop_thread.join(timeout=10)
@@ -908,7 +908,7 @@ class ContinuousBatchingPauseTest(unittest.TestCase):
 
         def holder(index: int) -> None:
             try:
-                with manager.pause_generation():
+                with manager.pause():
                     with lock:
                         holders_inside.append(index)
                     release.wait(timeout=10)
