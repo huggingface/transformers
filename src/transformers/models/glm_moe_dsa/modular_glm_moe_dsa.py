@@ -25,6 +25,7 @@ from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
+from ..axk1.modeling_axk1 import AXK1Attention
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3RMSNorm,
     apply_rotary_pos_emb_interleave,
@@ -32,7 +33,6 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
 )
 from ..deepseek_v32.configuration_deepseek_v32 import DeepseekV32Config
 from ..deepseek_v32.modeling_deepseek_v32 import (
-    DeepseekV32Attention,
     DeepseekV32DecoderLayer,
     DeepseekV32ForCausalLM,
     DeepseekV32Indexer,
@@ -194,7 +194,7 @@ class GlmMoeDsaIndexer(DeepseekV32Indexer):
         return index_scores.topk(topk, dim=-1).indices.to(torch.int32)  # [B, S, topk]
 
 
-class GlmMoeDsaAttention(DeepseekV32Attention):
+class GlmMoeDsaAttention(AXK1Attention):
     """
     DeepSeek-V3.2 DSA extended with **cross-layer top-k sharing**.
 

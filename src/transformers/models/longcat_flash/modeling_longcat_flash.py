@@ -332,7 +332,7 @@ def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze
 
 
 class LongcatFlashMLA(nn.Module):
-    """Multi-headed Latent Attention (MLA) from Deepseek V3, always with a Q-LoRA rank."""
+    """MLA from Deepseek V3 with with a Q-LoRA rank and LoRA scaling."""
 
     def __init__(self, config: LongcatFlashConfig, layer_idx: int):
         super().__init__()
