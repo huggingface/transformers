@@ -45,7 +45,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from .configuration_kimi_linear import KimiLinearConfig, KimiLinearTextConfig
+from .configuration_kimi_linear import KimiLinearConfig
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -313,7 +313,7 @@ class KimiLinearAttention(nn.Module):
 
 
 class KimiLinearForgetGate(nn.Module):
-    def __init__(self, config: KimiLinearTextConfig):
+    def __init__(self, config: KimiLinearConfig):
         super().__init__()
         self.head_dim = config.linear_head_dim
         self.num_heads = config.linear_num_heads

@@ -221,7 +221,9 @@ def l2norm(x: torch.FloatTensor, dim: int = -1, eps: float = 1e-6):
 
 
 class KimiLinearForgetGate(Glm5NextTextForgetGate):
-    pass
+
+    def __init__(self, config: KimiLinearConfig):
+        super().__init__(config)
 
 
 @use_kernelized_func(
