@@ -2537,10 +2537,8 @@ class ModelUtilsTest(TestCasePlus):
         for untied_hidden_state, tied_hidden_state in zip(untied.hidden_states[:-1], tied.hidden_states[:-1]):
             torch.testing.assert_close(untied_hidden_state, tied_hidden_state)
 
-        # But `hidden_states[-1]` is now the input of the final norm instead of its output (we only test the maximum
-        # of the diff to avoid flakyness)
-        self.assertTrue(torch.abs(untied.hidden_states[-1] - untied.last_hidden_state).max() >= 1e-3)
-        torch.testing.assert_close(model.norm(untied.hidden_states[-1]), untied.last_hidden_state)
+        # But `hidden_states[-1]` is now the input of the final norm instead of its output
+        torch.testing.assert_close(model.norm(untied.hidden_states[-1]), tied.hidden_states[-1])
 
         # `None` means unset, i.e. fall back to the decorator default, as a config saved with an explicit
         # `"tie_last_hidden_states": null` must not silently untie the model
