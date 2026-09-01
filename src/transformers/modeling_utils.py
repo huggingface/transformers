@@ -39,6 +39,7 @@ from safetensors import safe_open
 from safetensors.torch import load as _safe_load_bytes
 from safetensors.torch import save_file as safe_save_file
 from torch import Tensor, nn
+from torch.autograd.graph import save_on_cpu
 from torch.distributions import constraints
 from torch.utils.checkpoint import checkpoint
 
@@ -3183,7 +3184,9 @@ class PreTrainedModel(
         # Tie weights needs to be called here, but it can use the pre-computed `all_tied_weights_keys`
         self.tie_weights(recompute_mapping=False)
 
-    def gradient_checkpointing_enable(self, gradient_checkpointing_kwargs=None, every_n_layers: int = 1):
+    def gradient_checkpointing_enable(
+        self, gradient_checkpointing_kwargs=None, every_n_layers: int = 1, offload: bool = False
+    ):
         """
         Activates gradient checkpointing for the current model.
 
@@ -3195,6 +3198,11 @@ class PreTrainedModel(
                 Checkpoint only every `every_n_layers`-th decoder layer, leaving the rest to keep their activations.
                 `1` checkpoints every layer, which is the usual all-or-nothing behavior. Larger values trade memory
                 back for speed, which is worth it whenever the memory freed by full checkpointing is going unused.
+            offload (`bool`, *optional*, defaults to `False`):
+                Hold the activations saved for the recompute in pinned host memory rather than on the accelerator.
+                This frees `layers x sequence x hidden` bytes of device memory, which is what dominates at long
+                sequence lengths, and costs a device-to-host copy in the forward and a host-to-device copy in the
+                backward. Both copies run on the compute stream, so the step gets slower.
             gradient_checkpointing_kwargs (dict, *optional*):
                 Additional keyword arguments passed along to the `torch.utils.checkpoint.checkpoint` function.
         """
@@ -3204,7 +3212,16 @@ class PreTrainedModel(
         if gradient_checkpointing_kwargs is None:
             gradient_checkpointing_kwargs = {"use_reentrant": False}
 
-        gradient_checkpointing_func = functools.partial(checkpoint, **gradient_checkpointing_kwargs)
+        if offload:
+            device_type = torch.accelerator.current_accelerator().type
+
+            def checkpoint_func(function, *args, **kwargs):
+                with save_on_cpu(pin_memory=True, device_type=device_type):
+                    return checkpoint(function, *args, **kwargs)
+        else:
+            checkpoint_func = checkpoint
+
+        gradient_checkpointing_func = functools.partial(checkpoint_func, **gradient_checkpointing_kwargs)
 
         # For old GC format (transformers < 4.35.0) for models that live on the Hub
         # we will fall back to the overwritten `_set_gradient_checkpointing` method
