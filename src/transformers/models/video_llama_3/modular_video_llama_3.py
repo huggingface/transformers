@@ -705,9 +705,6 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
     def _prepare_position_ids_for_generation(self):
         raise AttributeError("Not needed for VideoLLaMA3")
 
-    def _expand_inputs_for_generation(self):
-        raise AttributeError("Not needed for VideoLLaMA3")
-
 
 class VideoLlama3ProcessorKwargs(Qwen2VLProcessorKwargs):
     _defaults = {

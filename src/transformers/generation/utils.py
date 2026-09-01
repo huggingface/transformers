@@ -1016,6 +1016,23 @@ class GenerationMixin(ContinuousMixin):
             # 3. if `pooler_output` was a tensor, cat it back to follow model expectations
             if not is_split_images:
                 modalily_outputs.pooler_output = torch.stack(modalily_outputs.pooler_output, dim=0)
+
+            # 4. If there are deepstack features, expand them as well. Most models have deeptack features
+            # per layer where each feature is a `list[torch.Tensor]`. GraniteVision has each feature as a
+            # `tuple(layer_idx, list[torch.Tensor])` and we skip it here. FIXME: we need a uniform deepstack layout
+            if getattr(modalily_outputs, "deepstack_features", None) is not None and isinstance(
+                modalily_outputs.deepstack_features[0][0], torch.Tensor
+            ):
+                # Each deepstack feat is `(total_image_len, dim)` tensor
+                modalily_outputs.deepstack_features = [
+                    [
+                        expanded_feats
+                        for start, end in zip(offsets[:-1], offsets[1:])
+                        for expanded_feats in repeat_tensor_or_list(feature_list[start:end], expand_size)
+                    ]
+                    for feature_list in modalily_outputs.deepstack_features
+                ]
+
         return mm_encoder_output
 
     def _expand_inputs_for_generation(
@@ -1049,7 +1066,13 @@ class GenerationMixin(ContinuousMixin):
         if input_ids is not None:
             input_ids = input_ids.repeat_interleave(expand_size, dim=0)
 
+        position_ids = model_kwargs.pop("position_ids", None)
         model_kwargs = _expand_dict_for_generation(model_kwargs)
+
+        # Expand text positions with leading batch dim or multimodal positions with batch as `dim=1`
+        if position_ids is not None:
+            batch_dim = 1 if position_ids.ndim == 3 else 0
+            model_kwargs["position_ids"] = position_ids.repeat_interleave(expand_size, dim=batch_dim)
 
         if is_encoder_decoder:
             if model_kwargs.get("encoder_outputs") is None:

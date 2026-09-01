@@ -15,7 +15,7 @@
 import math
 from dataclasses import dataclass
 from fractions import Fraction
-from typing import Any
+from itertools import accumulate
 
 import numpy as np
 import torch
@@ -497,7 +497,6 @@ class Granite4VisionModel(LlavaNextModel):
         Overrides the parent to apply downsample_rate to height/width calculations.
         """
         new_image_features = []
-        feature_lens = []
         for image_idx, image_feature in enumerate(image_features):
             if image_feature.shape[0] > 1:
                 base_image_feature = image_feature[0]
@@ -545,10 +544,7 @@ class Granite4VisionModel(LlavaNextModel):
                 if image_newline is not None:
                     image_feature = torch.cat((image_feature, image_newline[None].to(image_feature)), dim=0)
             new_image_features.append(image_feature)
-            feature_lens.append(image_feature.size(0))
-        feature_lens = torch.tensor(feature_lens, dtype=torch.long, device=image_features[0].device)
-        new_image_features = torch.cat(new_image_features, dim=0)
-        return new_image_features, feature_lens
+        return new_image_features
 
     @merge_with_config_defaults
     @can_return_tuple
@@ -606,13 +602,12 @@ class Granite4VisionModel(LlavaNextModel):
             projected_features = self.layerwise_projectors[projection_idx](selected_feature)
             projected_features = torch.split(projected_features, image_num_patches, dim=0)
 
-            packed_features, _ = self.pack_image_features(
+            packed_features = self.pack_image_features(
                 projected_features,
                 image_sizes,
                 vision_feature_select_strategy=vision_feature_select_strategy,
                 image_newline=self.image_newline,
             )
-
             all_features.append((llm_layer, packed_features))
 
         # Spatial features: extract 4 offset groups from a single vision layer
@@ -625,13 +620,12 @@ class Granite4VisionModel(LlavaNextModel):
             projected_group = self.spatial_projectors[group_idx](spatial_feature)
             projected_group_split = torch.split(projected_group, image_num_patches, dim=0)
 
-            packed_group, _ = self.pack_image_features(
+            packed_group = self.pack_image_features(
                 projected_group_split,
                 image_sizes,
                 vision_feature_select_strategy=vision_feature_select_strategy,
                 image_newline=self.image_newline,
             )
-
             all_features.append((llm_layer, packed_group))
 
         return Granite4VisionImageFeaturesOutput(
@@ -769,30 +763,55 @@ class Granite4VisionForConditionalGeneration(LlavaNextForConditionalGeneration):
             deepstack_features=outputs.deepstack_features,
         )
 
-    def _expand_inputs_for_generation(
+    def _expand_multimodal_outputs(
         self,
+        input_ids: torch.LongTensor,
+        mm_encoder_output: dict,
         expand_size: int = 1,
-        is_encoder_decoder: bool = False,
-        input_ids: torch.LongTensor | None = None,
-        **model_kwargs,
-    ) -> tuple[torch.LongTensor, dict[str, Any]]:
-        # Overwritten -- model uses list of deepstack features per layer
+        inputs_embeds: torch.LongTensor | None = None,
+    ) -> dict[str, dict]:
+        # override -> model has only deepstack features with no pooler output
 
-        input_ids, model_kwargs = super()._expand_inputs_for_generation(
-            expand_size=expand_size,
-            is_encoder_decoder=is_encoder_decoder,
-            input_ids=input_ids,
-            **model_kwargs,
-        )
+        def repeat_tensor_or_list(inputs: list | torch.Tensor, repeat_times: int):
+            # List of `bs` length where each entry is a tensor (seqlen, dim) is also repeat interleaved
+            return [beam_entry for entry in inputs for beam_entry in [entry] * repeat_times]
 
-        if expand_size != 1:
-            if image_outputs := model_kwargs.get("mm_encoder_outputs", {}).get("image"):
-                image_outputs["deepstack_features"] = [
-                    (tuple_item[0], tuple_item[1].repeat_interleave(expand_size, dim=0))
-                    for tuple_item in image_outputs["deepstack_features"]
-                ]
+        image_outputs = mm_encoder_output.get("image")
+        if image_outputs is None or getattr(image_outputs, "deepstack_features", None) is None:
+            return mm_encoder_output
 
-        return input_ids, model_kwargs
+        # 1. compute cumulative number of placehlder tokens per sample and per each encoded mm-data
+        if (input_ids is None or input_ids.numel() == 0) and inputs_embeds is not None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            num_image_tokens_in_text = special_image_mask.all(-1).sum(-1)
+        else:
+            num_image_tokens_in_text = (input_ids == self.config.image_token_id).sum(-1)
+        num_image_tokens_in_vision = [len(out) for out in image_outputs.deepstack_features[0][1]]
+        num_image_tokens_in_text = list(accumulate(num_image_tokens_in_text))
+        num_image_tokens_in_vision = list(accumulate(num_image_tokens_in_vision))
+
+        # 2. Find offsets to split encoder output into separate groups per text. In a single batch
+        # we might get a text with single image and another with two images, so the most reliable
+        # way to split dynamic-sized images is by checking number of placeholders and encoder output lengths!
+        offsets = [0] + [i + 1 for i, num in enumerate(num_image_tokens_in_vision) if num in num_image_tokens_in_text]
+
+        # 3. GraniteVision has each deepstack feature as a `tuple(layer_idx, list[torch.Tensor])`
+        # Each deepstack feat is `(total_image_len, dim)` tensor
+        image_outputs.deepstack_features = [
+            (
+                tuple_item[0],
+                [
+                    expanded_feats
+                    for start, end in zip(offsets[:-1], offsets[1:])
+                    for expanded_feats in repeat_tensor_or_list(tuple_item[1][start:end], expand_size)
+                ],
+            )
+            for tuple_item in image_outputs.deepstack_features
+        ]
+
+        return mm_encoder_output
 
 
 __all__ = [

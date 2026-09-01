@@ -22,7 +22,6 @@
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
 
 import numpy as np
 import torch
@@ -1860,6 +1859,9 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
         vision_outputs = self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
         split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
+        vision_outputs.deepstack_features = [
+            torch.split(feat, split_sizes) for feat in vision_outputs.deepstack_features
+        ]
         return vision_outputs
 
     @accepts_precomputed_kwargs(modality="image")
@@ -1875,6 +1877,9 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
         vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
+        vision_outputs.deepstack_features = [
+            torch.split(feat, split_sizes) for feat in vision_outputs.deepstack_features
+        ]
         return vision_outputs
 
     @can_return_tuple
@@ -2126,17 +2131,17 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
             video_mask_joint = video_mask[visual_pos_masks]
             for img_embed, vid_embed in zip(image_embeds_multiscale, video_embeds_multiscale):
                 embed_joint = img_embed.new_zeros(visual_pos_masks.sum(), img_embed.shape[-1])
-                embed_joint[image_mask_joint, :] = img_embed
-                embed_joint[video_mask_joint, :] = vid_embed
+                embed_joint[image_mask_joint, :] = torch.cat(img_embed, dim=0)
+                embed_joint[video_mask_joint, :] = torch.cat(vid_embed, dim=0)
                 visual_embeds_multiscale_joint = visual_embeds_multiscale_joint + (embed_joint,)
             visual_embeds_multiscale = visual_embeds_multiscale_joint
         elif image_mask is not None:
             image_mask = image_mask[..., 0]
-            visual_embeds_multiscale = image_embeds_multiscale
+            visual_embeds_multiscale = [torch.cat(feat, dim=0) for feat in image_embeds_multiscale]
             visual_pos_masks = image_mask
         elif video_mask is not None:
             video_mask = video_mask[..., 0]
-            visual_embeds_multiscale = video_embeds_multiscale
+            visual_embeds_multiscale = [torch.cat(feat, dim=0) for feat in video_embeds_multiscale]
             visual_pos_masks = video_mask
 
         if feature_attention_mask is not None:
@@ -2199,26 +2204,6 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
             rope_deltas=self.rope_deltas,
         )
 
-    def _expand_inputs_for_generation(
-        self,
-        expand_size: int = 1,
-        is_encoder_decoder: bool = False,
-        input_ids: torch.LongTensor | None = None,
-        **model_kwargs,
-    ) -> tuple[torch.LongTensor, dict[str, Any]]:
-        # Overwritten -- position ids are packed as `[4, batch_size, seq_len]`, so the batch dim is not `0`
-        position_ids = model_kwargs.pop("position_ids", None)
-        input_ids, model_kwargs = super()._expand_inputs_for_generation(
-            expand_size=expand_size,
-            is_encoder_decoder=is_encoder_decoder,
-            input_ids=input_ids,
-            **model_kwargs,
-        )
-        if position_ids is not None:
-            batch_dim = 1 if position_ids.ndim == 3 else 0
-            model_kwargs["position_ids"] = position_ids.repeat_interleave(expand_size, dim=batch_dim)
-        return input_ids, model_kwargs
-
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
         # Overwritten -- requires 3D position ids
 
@@ -2261,41 +2246,6 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
         position_ids = torch.cat([text_positions, vision_positions], dim=0)
 
         return position_ids
-
-    def _expand_inputs_for_generation(
-        self,
-        expand_size: int = 1,
-        is_encoder_decoder: bool = False,
-        input_ids: torch.LongTensor | None = None,
-        **model_kwargs,
-    ) -> tuple[torch.LongTensor, dict[str, Any]]:
-        # Overwritten -- Qwen3VL uses 3D position ids that has to be expanded on dim=1
-        # and list of deepstack features per layer
-
-        position_ids = model_kwargs.pop("position_ids", None)
-        input_ids, model_kwargs = super()._expand_inputs_for_generation(
-            expand_size=expand_size,
-            is_encoder_decoder=is_encoder_decoder,
-            input_ids=input_ids,
-            **model_kwargs,
-        )
-
-        if position_ids is not None:
-            if expand_size != 1:
-                position_ids = position_ids.repeat_interleave(expand_size, dim=1)
-            model_kwargs["position_ids"] = position_ids
-
-        if expand_size != 1:
-            if image_outputs := model_kwargs.get("mm_encoder_outputs", {}).get("image"):
-                image_outputs["deepstack_features"] = [
-                    item.repeat_interleave(expand_size, dim=0) for item in image_outputs["deepstack_features"]
-                ]
-            if video_outputs := model_kwargs.get("mm_encoder_outputs", {}).get("video"):
-                video_outputs["deepstack_features"] = [
-                    item.repeat_interleave(expand_size, dim=0) for item in video_outputs["deepstack_features"]
-                ]
-
-        return input_ids, model_kwargs
 
 
 class Qwen3OmniMoeTalkerResizeMLP(nn.Module):

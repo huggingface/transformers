@@ -21,7 +21,6 @@
 import itertools
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
 
 import torch
 import torch.nn as nn
@@ -1133,6 +1132,9 @@ class CohereCompassModel(CohereCompassPreTrainedModel):
         image_embeds = vision_output.pooler_output
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         vision_output.pooler_output = torch.split(image_embeds, split_sizes)
+        vision_output.deepstack_features = [
+            torch.split(feat, split_sizes) for feat in vision_output.deepstack_features
+        ]
         return vision_output
 
     def get_placeholder_mask(
@@ -1292,17 +1294,17 @@ class CohereCompassModel(CohereCompassPreTrainedModel):
             video_mask_joint = video_mask[visual_pos_masks]
             for img_embed, vid_embed in zip(deepstack_image_embeds, deepstack_video_embeds):
                 embed_joint = img_embed.new_zeros(visual_pos_masks.sum(), img_embed.shape[-1]).to(img_embed.device)
-                embed_joint[image_mask_joint, :] = img_embed
-                embed_joint[video_mask_joint, :] = vid_embed
+                embed_joint[image_mask_joint, :] = torch.cat(img_embed, dim=0)
+                embed_joint[video_mask_joint, :] = torch.cat(vid_embed, dim=0)
                 deepstack_visual_embeds.append(embed_joint)
         elif image_mask is not None:
             image_mask = image_mask[..., 0]
             visual_pos_masks = image_mask
-            deepstack_visual_embeds = deepstack_image_embeds
+            deepstack_visual_embeds = [torch.cat(feat, dim=0) for feat in deepstack_image_embeds]
         elif video_mask is not None:
             video_mask = video_mask[..., 0]
             visual_pos_masks = video_mask
-            deepstack_visual_embeds = deepstack_video_embeds
+            deepstack_visual_embeds = [torch.cat(feat, dim=0) for feat in deepstack_video_embeds]
 
         if position_ids is None:
             position_ids = self.compute_3d_position_ids(
@@ -1513,41 +1515,6 @@ class CohereCompassForConditionalGeneration(CohereCompassPreTrainedModel, Genera
         position_ids = torch.cat([text_positions, vision_positions], dim=0)
 
         return position_ids
-
-    def _expand_inputs_for_generation(
-        self,
-        expand_size: int = 1,
-        is_encoder_decoder: bool = False,
-        input_ids: torch.LongTensor | None = None,
-        **model_kwargs,
-    ) -> tuple[torch.LongTensor, dict[str, Any]]:
-        # Overwritten -- CohereCompass uses 3D position ids that has to be expanded on dim=1
-        # and list of deepstack features per layer
-
-        position_ids = model_kwargs.pop("position_ids", None)
-        input_ids, model_kwargs = super()._expand_inputs_for_generation(
-            expand_size=expand_size,
-            is_encoder_decoder=is_encoder_decoder,
-            input_ids=input_ids,
-            **model_kwargs,
-        )
-
-        if position_ids is not None:
-            if expand_size != 1:
-                position_ids = position_ids.repeat_interleave(expand_size, dim=1)
-            model_kwargs["position_ids"] = position_ids
-
-        if expand_size != 1:
-            if image_outputs := model_kwargs.get("mm_encoder_outputs", {}).get("image"):
-                image_outputs["deepstack_features"] = [
-                    item.repeat_interleave(expand_size, dim=0) for item in image_outputs["deepstack_features"]
-                ]
-            if video_outputs := model_kwargs.get("mm_encoder_outputs", {}).get("video"):
-                video_outputs["deepstack_features"] = [
-                    item.repeat_interleave(expand_size, dim=0) for item in video_outputs["deepstack_features"]
-                ]
-
-        return input_ids, model_kwargs
 
 
 @auto_docstring(
