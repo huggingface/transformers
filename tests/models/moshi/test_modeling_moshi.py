@@ -530,6 +530,10 @@ class MoshiTester:
         return config, inputs_dict
 
     def create_and_check_forward_output_fields(self, config, inputs_dict):
+        """
+        Test that the outputs of the depth decoder are returned.
+        See https://github.com/huggingface/transformers/pull/48311
+        """
         model = MoshiForConditionalGeneration(config).to(torch_device).eval()
 
         inputs_dict["text_labels"] = inputs_dict["input_ids"]
@@ -555,6 +559,52 @@ class MoshiTester:
         self.parent.assertIsNot(outputs.depth_attentions, outputs.attentions)
 
         self.parent.assertIsNot(outputs.depth_past_key_values, outputs.depth_hidden_states)
+
+    def create_and_check_forward_audio_encoder_kwargs(self, config, inputs_dict):
+        """
+        Test for `kwargs_audio_encoder` prefix-stripping bug: `argument[len("audio_encoder_")]` indexes a single
+        character instead of slicing the rest of the string, e.g., `audio_encoder_return_dict=False` becomes
+        `{"r": False}`, and forwarding it raises TypeError: MimiModel.encode() got an unexpected keyword argument 'r'
+        See https://github.com/huggingface/transformers/pull/48311
+        """
+        model = MoshiForConditionalGeneration(config).to(torch_device).eval()
+
+        input_values_length = int(self.seq_length * config.sampling_rate / config.audio_encoder_config.frame_rate)
+
+        input_ids = inputs_dict.pop("input_ids").to(torch_device)
+
+        user_input_values = floats_tensor((input_ids.shape[0], 1, input_values_length))
+        moshi_input_values = floats_tensor((input_ids.shape[0], 1, input_values_length))
+
+        outputs = model(
+            input_ids=input_ids,
+            user_input_values=user_input_values,
+            moshi_input_values=moshi_input_values,
+            audio_encoder_return_dict=False,
+        )
+
+        self.parent.assertIsNotNone(outputs)
+
+    def create_and_check_prepare_inputs_embeds_for_generation_user_audio_codes_only(self, config, inputs_dict):
+        """
+        Test for `embed_tokens`-indexing in the `user_audio_codes`-only branch.
+        The `model.num_codebooks` offset should be applied to the `embed_tokens` index instead of the `audio_codes`.
+        See https://github.com/huggingface/transformers/pull/48311
+        """
+        model = MoshiForConditionalGeneration(config).to(torch_device).eval()
+
+        user_audio_codes = inputs_dict["user_audio_codes"]
+
+        inputs_embeds, *_ = model._prepare_inputs_embeds_for_generation(
+            user_audio_codes=user_audio_codes,
+        )
+
+        expected_inputs_embeds = sum(
+            model.embed_tokens[codebook + model.num_codebooks](user_audio_codes[:, codebook])
+            for codebook in range(user_audio_codes.shape[1])
+        )
+
+        torch.testing.assert_close(inputs_embeds, expected_inputs_embeds)
 
 
 @require_torch
@@ -817,50 +867,14 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         self.model_tester.create_and_check_forward_output_fields(*config_and_inputs)
 
     def test_forward_audio_encoder_kwargs(self):
-        """
-        test for `kwargs_audio_encoder` prefix-stripping bug: `argument[len("audio_encoder_")]` indexes a single
-        character instead of slicing the rest of the string, e.g., `audio_encoder_return_dict=False` becomes
-        `{"r": False}`, and forwarding it raises TypeError: MimiModel.encode() got an unexpected keyword argument 'r'
-        """
-        for model_class in self.all_generative_model_classes:
-            config, input_ids, _, _ = self._get_input_ids_and_config()
-
-            model = model_class(config).to(torch_device).eval()
-
-            input_values_length = int(
-                self.model_tester.seq_length * config.sampling_rate / config.audio_encoder_config.frame_rate
-            )
-
-            user_input_values = floats_tensor((input_ids.shape[0], 1, input_values_length))
-            moshi_input_values = floats_tensor((input_ids.shape[0], 1, input_values_length))
-
-            outputs = model(
-                input_ids=input_ids,
-                user_input_values=user_input_values,
-                moshi_input_values=moshi_input_values,
-                audio_encoder_return_dict=False,
-            )
-
-            self.assertIsNotNone(outputs)
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_forward_audio_encoder_kwargs(*config_and_inputs)
 
     def test_prepare_inputs_embeds_for_generation_user_audio_codes_only(self):
-        for model_class in self.all_generative_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-            model = model_class(config).to(torch_device).eval()
-
-            user_audio_codes = inputs_dict["user_audio_codes"]
-
-            inputs_embeds, *_ = model._prepare_inputs_embeds_for_generation(
-                user_audio_codes=user_audio_codes,
-            )
-
-            expected_inputs_embeds = sum(
-                model.embed_tokens[codebook + model.num_codebooks](user_audio_codes[:, codebook])
-                for codebook in range(user_audio_codes.shape[1])
-            )
-
-            torch.testing.assert_close(inputs_embeds, expected_inputs_embeds)
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_prepare_inputs_embeds_for_generation_user_audio_codes_only(
+            *config_and_inputs
+        )
 
     @unittest.skip(reason="Compile not yet supported because in Moshi models")
     def test_sdpa_can_dispatch_on_flash(self):
