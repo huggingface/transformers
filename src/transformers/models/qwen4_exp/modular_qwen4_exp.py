@@ -1146,31 +1146,7 @@ class Qwen4ExpModel(Qwen3_5MoeModel):
 
 @auto_docstring
 class Qwen4ExpForConditionalGeneration(Qwen3_5MoeForConditionalGeneration):
-    @staticmethod
-    def create_masks_for_generate(
-        config: PreTrainedConfig,
-        inputs_embeds: torch.Tensor,
-        attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None,
-        position_ids: torch.Tensor | None,
-        **kwargs,
-    ) -> dict:
-        # We need to overwrite to add the `allow_is_causal_skip=False` condition
-        mask_kwargs = {
-            "config": config,
-            "inputs_embeds": inputs_embeds,
-            "attention_mask": attention_mask,
-            "past_key_values": past_key_values,
-            "position_ids": position_ids,
-            # Due to the indexer, we always want to create a mask to then simply overlay the indexer mask in each layer - otherwise
-            # we may have to recreate it in each layer if it gets skipped
-            "allow_is_causal_skip": False,
-        }
-        causal_mask_mapping = {
-            "full_attention": create_causal_mask(**mask_kwargs),
-            "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
-        }
-        return causal_mask_mapping
+    pass
 
 
 __all__ = [
