@@ -78,13 +78,16 @@ class KimiLinearRMSNormGated(nn.Module):
         self.variance_epsilon = eps
         self.activation = "sigmoid"
 
-    def forward(self, hidden_states: torch.Tensor, gate: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states, gate=None) -> torch.Tensor:
         input_dtype = hidden_states.dtype
+
+        # Strict FP32 norm (do not downcast on the weights)
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        # Norm before gate
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        hidden_states = self.weight * hidden_states.to(input_dtype)
+        hidden_states = self.weight.to(torch.float32) * hidden_states
+
+        # Apply gating
         hidden_states = hidden_states * ACT2FN[self.activation](gate.to(torch.float32))
 
         return hidden_states.to(input_dtype)

@@ -41,11 +41,14 @@ from ...models.deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3MoE,
     DeepseekV3TopkRouter,
 )
-from ...models.glm5_next.modeling_glm5_next import chunk_kimi_delta_attention, recurrent_kimi_delta_attention
+from ...models.glm5_next.modeling_glm5_next import (
+    Glm5NextTextRMSNormGated,
+    chunk_kimi_delta_attention,
+    recurrent_kimi_delta_attention,
+)
 from ...models.llama.modeling_llama import LlamaRMSNorm, eager_attention_forward
 from ...models.qwen3_next.modeling_qwen3_next import (
     Qwen3NextModel,
-    Qwen3NextRMSNormGated,
     causal_conv1d_fn,
     causal_conv1d_update,
 )
@@ -147,12 +150,8 @@ class KimiLinearRMSNorm(LlamaRMSNorm):
     pass
 
 
-# NOTE: The `fla` reference stays in fp32 until after the gate is applied, but the qwen norm does not. This is not an
-# issue right now, but if it ever becomes one, change the parent or override `forward`.
-class KimiLinearRMSNormGated(Qwen3NextRMSNormGated):
-    def __init__(self, hidden_size, eps=1e-6, **kwargs):
-        super().__init__(hidden_size, eps=eps, **kwargs)
-        self.activation = "sigmoid"
+class KimiLinearRMSNormGated(Glm5NextTextRMSNormGated):
+    pass
 
 
 class KimiLinearExperts(DeepseekV3Experts):
