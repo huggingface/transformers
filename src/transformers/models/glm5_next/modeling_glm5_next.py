@@ -529,7 +529,14 @@ def chunk_kimi_delta_attention(
     # Main difference to GDN is the per head application of `g` which was broadcasted across heads instead
     g = g.cumsum(dim=-2)
     mask = torch.triu(torch.ones(chunk_size, chunk_size, dtype=torch.bool, device=query.device), diagonal=0)
-    decay_mask = (g.unsqueeze(-2) - g.unsqueeze(-3)).exp().float()
+    # Mask the non-causal pairs *before* the exponential. `g` is a cumulative sum of negative
+    # log-decays, so those pairs produce large positive differences (up to ~+314 for
+    # chunk_size=64) that overflow to inf in float32. They are discarded by the masked_fill
+    # below, but only after exp(), so the backward pass computes 0 * inf = nan and every
+    # parameter ends up with nan gradients. The mask has to be strictly upper: the diagonal
+    # carries g_i - g_i = 0 and is still used by the intra-chunk term further down.
+    strict_mask = torch.triu(torch.ones(chunk_size, chunk_size, dtype=torch.bool, device=query.device), diagonal=1)
+    decay_mask = (g.unsqueeze(-2) - g.unsqueeze(-3)).masked_fill(strict_mask[..., None], float("-inf")).exp().float()
     attn = -(k_beta.unsqueeze(-2) * key.unsqueeze(-3) * decay_mask).sum(dim=-1).masked_fill(mask, 0)
     for i in range(1, chunk_size):
         row = attn[..., i, :i].clone()
