@@ -478,6 +478,61 @@ def recurrent_kimi_delta_attention(
     return core_attn_out.to(initial_dtype), last_recurrent_state if output_final_state else None
 
 
+def _causal_decay_products(
+    k_beta: torch.Tensor,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    g: torch.Tensor,
+    block_size: int = 8,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Compute the causal KDA Aqk/Akk products without materializing
+    [..., chunk_size, chunk_size, head_dim].
+
+    This uses the same local-reference decay factorization as the FLA KDA
+    intra-chunk kernels, applied recursively here for the pure-PyTorch path:
+    exp(g_i - g_j) = exp(g_i - A) * exp(A - g_j).
+
+    With the anchor ``A = g[mid]`` taken between the two halves, monotonicity of the
+    cumulative log-decay puts both factors in [0, 1], so no positive exponent is ever
+    formed and each cross-block term is a plain matmul over ``head_dim``. Only the small
+    diagonal blocks keep a pairwise tensor, where the strict mask is applied before the
+    exponential: the full pairwise form exponentiates non-causal pairs whose large
+    positive exponents overflow to inf in float32, and masking them afterwards leaves the
+    backward pass computing 0 * inf = nan.
+    """
+    chunk_size = g.shape[-2]
+    akk = g.new_zeros(*g.shape[:-1], chunk_size)
+    aqk = g.new_zeros(*g.shape[:-1], chunk_size)
+    non_causal = torch.ones(block_size, block_size, dtype=torch.bool, device=g.device).triu(1)
+
+    def fill(lo: int, hi: int) -> None:
+        size = hi - lo
+        if size <= block_size:
+            g_block = g[..., lo:hi, :]
+            decay = (
+                (g_block.unsqueeze(-2) - g_block.unsqueeze(-3))
+                .masked_fill(non_causal[:size, :size, None], float("-inf"))
+                .exp()
+            )
+            keys = key[..., lo:hi, :].unsqueeze(-3)
+            # the strict mask already zeroed the upper triangle; the UT transform also drops the diagonal
+            akk[..., lo:hi, lo:hi] = (k_beta[..., lo:hi, :].unsqueeze(-2) * keys * decay).sum(dim=-1).tril(-1)
+            aqk[..., lo:hi, lo:hi] = (query[..., lo:hi, :].unsqueeze(-2) * keys * decay).sum(dim=-1)
+            return
+
+        mid = (lo + hi) // 2
+        fill(lo, mid)
+        fill(mid, hi)
+        anchor = g[..., mid : mid + 1, :]
+        row_decay = (g[..., mid:hi, :] - anchor).exp()
+        scaled_key = (key[..., lo:mid, :] * (anchor - g[..., lo:mid, :]).exp()).transpose(-1, -2)
+        akk[..., mid:hi, lo:mid] = (k_beta[..., mid:hi, :] * row_decay) @ scaled_key
+        aqk[..., mid:hi, lo:mid] = (query[..., mid:hi, :] * row_decay) @ scaled_key
+
+    fill(0, chunk_size)
+    return akk, aqk
+
+
 @use_kernel_func_from_hub_with_fallback("chunk_kda", "fla")
 def chunk_kimi_delta_attention(
     query,
@@ -528,16 +583,8 @@ def chunk_kimi_delta_attention(
     # Intra chunk
     # Main difference to GDN is the per head application of `g` which was broadcasted across heads instead
     g = g.cumsum(dim=-2)
-    mask = torch.triu(torch.ones(chunk_size, chunk_size, dtype=torch.bool, device=query.device), diagonal=0)
-    # Mask the non-causal pairs *before* the exponential. `g` is a cumulative sum of negative
-    # log-decays, so those pairs produce large positive differences (up to ~+314 for
-    # chunk_size=64) that overflow to inf in float32. They are discarded by the masked_fill
-    # below, but only after exp(), so the backward pass computes 0 * inf = nan and every
-    # parameter ends up with nan gradients. The mask has to be strictly upper: the diagonal
-    # carries g_i - g_i = 0 and is still used by the intra-chunk term further down.
-    strict_mask = torch.triu(torch.ones(chunk_size, chunk_size, dtype=torch.bool, device=query.device), diagonal=1)
-    decay_mask = (g.unsqueeze(-2) - g.unsqueeze(-3)).masked_fill(strict_mask[..., None], float("-inf")).exp().float()
-    attn = -(k_beta.unsqueeze(-2) * key.unsqueeze(-3) * decay_mask).sum(dim=-1).masked_fill(mask, 0)
+    akk, aqk = _causal_decay_products(k_beta, query, key, g)
+    attn = -akk
     for i in range(1, chunk_size):
         row = attn[..., i, :i].clone()
         sub = attn[..., :i, :i].clone()
@@ -554,7 +601,6 @@ def chunk_kimi_delta_attention(
     )
     core_attn_out = torch.zeros_like(value)
 
-    mask = torch.triu(torch.ones(chunk_size, chunk_size, dtype=torch.bool, device=query.device), diagonal=1)
     for i in range(total_sequence_length // chunk_size):
         q_i = query[:, :, i]
         k_i = key[:, :, i]
@@ -564,7 +610,7 @@ def chunk_kimi_delta_attention(
         # Inter chunk
         attn_inter = (q_i * g_i.exp()) @ last_recurrent_state
         # Intra chunk
-        attn_intra = (q_i.unsqueeze(-2) * k_i.unsqueeze(-3) * decay_mask[:, :, i]).sum(dim=-1).masked_fill(mask, 0)
+        attn_intra = aqk[:, :, i]
         # New update rule
         v_prime = k_cumdecay[:, :, i] @ last_recurrent_state
         v_new = v_i - v_prime
