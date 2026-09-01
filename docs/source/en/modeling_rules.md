@@ -15,6 +15,9 @@ specific language governing permissions and limitations under the License.
 
 Transformers enforces a set of static rules on every `modeling_*.py`, `modular_*.py`, and `configuration_*.py` file. The [mlinter](https://github.com/huggingface/transformers-mlinter) package provides the checker engine, and the repository keeps its active rule set in `utils/rules.toml`. That local TOML lets us enable, disable, or tweak rules quickly without waiting for a new `transformers-mlinter` release.
 
+> [!TIP]
+> See the [mlinter documentation](https://huggingface.github.io/transformers-mlinter/) for the complete checker reference and usage details.
+
 These are the expected model conventions for adding or changing modeling code. They keep the codebase consistent and ensure compatibility with features like pipeline parallelism, device maps, and weight tying.
 
 ## Running the checker
