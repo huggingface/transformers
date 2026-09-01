@@ -1191,6 +1191,14 @@ def is_flash_attn_2_available(kernels_fallback_ok: bool = False) -> bool:
 
     # If the kernels fallback is allowed, check if it is available
     if kernels_fallback_ok and is_kernels_available():
+        if is_torch_cuda_available():
+            try:
+                import torch
+
+                if torch.cuda.get_device_capability() < (8, 0):
+                    return False
+            except Exception:  # noqa: S110
+                pass
         try:
             from kernels import get_kernel
 
@@ -1219,6 +1227,14 @@ def is_flash_attn_3_available(kernels_fallback_ok: bool = False) -> bool:
 
     # If the kernels fallback is allowed, check if it is available
     if kernels_fallback_ok and is_kernels_available():
+        if is_torch_cuda_available():
+            try:
+                import torch
+
+                if torch.cuda.get_device_capability() < (8, 0):
+                    return False
+            except Exception:  # noqa: S110
+                pass
         try:
             from kernels import get_kernel
 
