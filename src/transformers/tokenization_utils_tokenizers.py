@@ -274,11 +274,40 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         """Path to a vocab file and a list of extra special tokens."""
         from .convert_slow_tokenizer import TikTokenConverter
 
-        extra_special_tokens = local_kwargs.get("extra_special_tokens")
-        print(f"Converting from TikToken: {vocab_file} with extra special tokens: {extra_special_tokens}")
+        # `added_tokens_decoder` is a (token_id -> token) dict of tokens that may not be contiguous
+        added_tokens_decoder: dict[int, str] = {
+            int(token_id): token["content"] if isinstance(token, dict) else str(token)
+            for token_id, token in local_kwargs.get("added_tokens_decoder", {}).items()
+        }
+        # `extra_special_tokens` is a list of tokens to append to the base vocabulary
+        extra_special_tokens: list[str] = local_kwargs.get("extra_special_tokens", [])
+        if isinstance(extra_special_tokens, dict):
+            extra_special_tokens = list(extra_special_tokens.keys())
+
+        # If any of the tokens in `added_tokens_decoder` are not in the base vocabulary, they need to be added. To do so
+        # we bake them in the `extra_special_tokens` list, with placeholder if `added_tokens_decoder` is not contiguous
+        base_vocab_size = cls._tiktoken_vocab_size(vocab_file)
+        max_added_token_id = max(added_tokens_decoder.keys()) if added_tokens_decoder else 0
+        if max_added_token_id >= base_vocab_size:
+            new_extras = [
+                added_tokens_decoder.get(index, f"<|reserved_token_{index}|>")
+                for index in range(base_vocab_size, max_added_token_id + 1)
+            ]
+            set_new_extras = set(new_extras)
+            for special_token in extra_special_tokens:
+                if special_token not in set_new_extras:
+                    new_extras.append(special_token)
+            extra_special_tokens = new_extras
+
         converter = TikTokenConverter(vocab_file=vocab_file, extra_special_tokens=extra_special_tokens)
         local_kwargs["tokenizer_object"] = converter.converted()
         return local_kwargs
+
+    @staticmethod
+    def _tiktoken_vocab_size(vocab_file: str) -> int:
+        """Number of base tokens in a tiktoken vocab file, which holds one `<token> <rank>` pair per line."""
+        with open(vocab_file, "rb") as vocab_handle:
+            return sum(1 for line in vocab_handle if line.strip())
 
     @classmethod
     def _convert_from_sentencepiece(cls, vocab_file: str, local_kwargs: dict[str, Any]) -> dict[str, Any]:
@@ -305,9 +334,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         # 3. For non-model specific tokenizers (e.g. TokenizersBackend used
         #    for MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS), build a _tokenizer
         #    from the proto so normalizer/decoder are configured correctly.
-        if "tokenizer_object" not in local_kwargs and (
-            cls is TokenizersBackend or "__init__" not in cls.__dict__
-        ):
+        if "tokenizer_object" not in local_kwargs and (cls is TokenizersBackend or "__init__" not in cls.__dict__):
             vocab = local_kwargs.pop("vocab", None)
             merges = local_kwargs.pop("merges", None)
 
@@ -341,7 +368,6 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 if proto_spec.unk_id >= 0:
                     local_kwargs.setdefault("unk_token", proto_spec.unk_piece or "<unk>")
         return local_kwargs
-
 
     def __init__(self, *args, **kwargs):
         # Truncation/padding dicts extracted from tokenizer.json by convert_to_native_format
