@@ -1727,14 +1727,17 @@ def convert_and_load_state_dict_in_model(
             if sharding_op is None and isinstance(mapping, WeightConverter) and mapping.force_cpu:
                 param_device = "cpu"
 
-            future_or_tensor = spawn_materialize(
-                thread_pool,
-                tensor,
-                param_device,
-                _dtype,
-                sharding_op=sharding_op,
-                tensor_idx=tensor_idx,
-            )
+            if is_dtensor(tensor):
+                future_or_tensor = tensor
+            else:
+                future_or_tensor = spawn_materialize(
+                    thread_pool,
+                    tensor,
+                    param_device,
+                    _dtype,
+                    sharding_op=sharding_op,
+                    tensor_idx=tensor_idx,
+                )
 
             mapping.add_tensor(renamed_key, original_key, source_pattern, future_or_tensor)
         elif source_pattern is not None:  # add all target keys as unexpected
