@@ -304,7 +304,11 @@ class TrainingArguments:
             clearing activations during forward pass and recomputing them during backward pass.
             Enables training larger models or batch sizes at the cost of ~20% slower training.
         gradient_checkpointing_kwargs (`dict`, *optional*, defaults to `None`):
-            Keyword arguments passed to `gradient_checkpointing_enable()`.
+            Keyword arguments passed to `gradient_checkpointing_enable()`. `every_n_layers` checkpoints only every
+            n-th decoder layer instead of all of them; `1` is the usual all-or-nothing behavior, and larger values
+            give some memory back to speed. `offload` holds the saved activations in pinned host memory, which
+            frees `layers x sequence x hidden` bytes of device memory and makes the step slower. Any other key is
+            forwarded to `torch.utils.checkpoint.checkpoint`.
 
         > Compilation
 
@@ -901,7 +905,13 @@ class TrainingArguments:
     )
     gradient_checkpointing_kwargs: dict[str, Any] | str | None = field(
         default=None,
-        metadata={"help": "Keyword arguments passed to `gradient_checkpointing_enable()`."},
+        metadata={
+            "help": "Keyword arguments passed to `gradient_checkpointing_enable()`. `every_n_layers` checkpoints "
+            "only every n-th decoder layer instead of all of them; `1` is the usual all-or-nothing behavior, and "
+            "larger values give some memory back to speed. `offload` holds the saved activations in pinned host "
+            "memory, which frees device memory and makes the step slower. Any other key is forwarded to "
+            "`torch.utils.checkpoint.checkpoint`."
+        },
     )
 
     # --- Compilation ---

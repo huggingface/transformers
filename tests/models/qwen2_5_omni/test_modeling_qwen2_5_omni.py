@@ -34,6 +34,7 @@ from transformers import (
 from transformers.testing_utils import (
     Expectations,
     cleanup,
+    require_deterministic_for_xpu,
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
@@ -664,7 +665,7 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
 
         EXPECTED_DECODED_TEXT = Expectations({
             ("xpu", None): "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog is a Labrador Retriever.",
-            ("cuda", (8, 6)): "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is a glass shattering. The dog in the picture is a Labrador Retriever.",
+            ("cuda", (8, 6)): "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog is a Labrador Retriever.",
             ("rocm", (9, 4)): "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog is a Labrador Retriever.",
         }).get_expectation()  # fmt: skip
 
@@ -700,8 +701,8 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
                     "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is of glass shattering, and the dog in the picture is a Labrador Retriever",
                 ],
                 ("cuda", 8): [
-                    "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is a glass shattering. The dog in the picture is a Labrador Retriever.",
-                    "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is a glass shattering. The dog in the picture is a Labrador Retriever.",
+                    "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog is a Labrador Retriever.",
+                    "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog is a Labrador Retriever.",
                 ],
                 ("rocm", (9, 4)): [
                     "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog is a Labrador Retriever.",
@@ -891,6 +892,7 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
             torch.testing.assert_close(batch_audio, single_audio, rtol=1e-3, atol=1e-3)
 
     @slow
+    @require_deterministic_for_xpu
     def test_small_model_integration_test_token2wav_regression(self):
         """
         reproducer (for the expected values below): https://gist.github.com/ebezzam/12286028df44e91434f7c770efc4e5b5
@@ -949,6 +951,18 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
                     0.026562, 0.038278, 0.024461, -0.029035, 0.022179,
                     -0.024967, -0.020832, 0.000076, 0.005978, -0.004948,
                 ]),
+                ("xpu", 5): torch.tensor([
+                    0.000079, 0.000007, 0.000007, 0.000009, 0.000009,
+                    0.000009, 0.000009, 0.000009, 0.000007, 0.000007,
+                    0.000437, -0.024044, 0.007317, 0.009368, -0.010095,
+                    0.004741, -0.000148, -0.000571, 0.000053, 0.000115,
+                    -0.015919, -0.083993, -0.022337, 0.073761, -0.004467,
+                    -0.015707, 0.066828, -0.010275, -0.026381, 0.024461,
+                    -0.000152, 0.038552, -0.048546, 0.045631, 0.064988,
+                    -0.025891, -0.017596, -0.004525, 0.011530, 0.036717,
+                    0.029228, 0.039576, 0.020596, -0.031977, 0.023230,
+                    -0.027009, -0.020315, -0.001209, 0.006347, -0.005459,
+                ]),
             }
         )  # fmt: skip
         expected_signature = expected_signatures.get_expectation()
@@ -959,6 +973,7 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
             {
                 ("cuda", 8): (0.027017, 0.027016),
                 ("cuda", 9): (0.027019, 0.027018),
+                ("xpu", 5): (0.027777, 0.027777),
             }
         )  # fmt: skip
         expected_std, expected_rms = expected_stats.get_expectation()

@@ -97,7 +97,7 @@ model.generate(**inputs, num_beams=4, do_sample=True)
 
 1. the `logits_processor` parameter accepts custom [`LogitsProcessor`] instances for manipulating the next token probability distribution;
 2. the `stopping_criteria` parameters supports custom [`StoppingCriteria`] to stop text generation;
-3. other custom generation methods can be loaded through the `custom_generate` flag ([docs](generation_strategies.md/#custom-decoding-methods)).
+3. other custom generation methods can be loaded through the `custom_generate` flag ([docs](generation_strategies#custom-decoding-methods)).
 
 Refer to the [Generation strategies](./generation_strategies) guide to learn more about search, sampling, and decoding strategies.
 
