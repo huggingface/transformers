@@ -17,7 +17,6 @@ import itertools
 import os
 import tempfile
 import unittest
-from collections.abc import Sequence
 
 import numpy as np
 from parameterized import parameterized
@@ -61,8 +60,6 @@ class Gemma3nAudioFeatureExtractionTester:
         dither: float = 0.0,
         input_scale_factor: float = 1.0,
         mel_floor: float = 1e-5,
-        per_bin_mean: Sequence[float] | None = None,
-        per_bin_stddev: Sequence[float] | None = None,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -84,8 +81,6 @@ class Gemma3nAudioFeatureExtractionTester:
         self.dither = dither
         self.input_scale_factor = input_scale_factor
         self.mel_floor = mel_floor
-        self.per_bin_mean = per_bin_mean
-        self.per_bin_stddev = per_bin_stddev
 
     def prepare_feat_extract_dict(self):
         return {
@@ -101,8 +96,6 @@ class Gemma3nAudioFeatureExtractionTester:
             "dither": self.dither,
             "input_scale_factor": self.input_scale_factor,
             "mel_floor": self.mel_floor,
-            "per_bin_mean": self.per_bin_mean,
-            "per_bin_stddev": self.per_bin_stddev,
         }
 
     def prepare_inputs_for_common(self, equal_length=False, numpify=False):
