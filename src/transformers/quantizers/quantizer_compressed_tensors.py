@@ -48,6 +48,36 @@ def _is_fp8_scheme(scheme) -> bool:
     return weights is not None and weights.type == "float" and weights.num_bits == 8
 
 
+_EXPERT_COMPONENTS_BY_FORMAT = {
+    "float-quantized": ("weight", "weight_scale"),
+    "pack-quantized": ("weight_packed", "weight_scale", "weight_shape"),
+    "nvfp4-pack-quantized": (
+        "weight_packed",
+        "weight_scale",
+        "weight_global_scale",
+        "input_global_scale",
+    ),
+}
+
+
+def _get_expert_components(quantization_config):
+    """Return the expert checkpoint components required by the configured formats."""
+    from compressed_tensors.compressors.format import infer_module_format
+
+    formats = {
+        getattr(scheme.format or infer_module_format(torch.nn.Linear, scheme), "value", scheme.format)
+        for scheme in quantization_config.config_groups.values()
+    }
+    return tuple(
+        dict.fromkeys(
+            component
+            for format, components in _EXPERT_COMPONENTS_BY_FORMAT.items()
+            if format in formats
+            for component in components
+        )
+    )
+
+
 class CompressedTensorsHfQuantizer(HfQuantizer):
     """
     Quantizer for the compressed_tensors package. Loads and restores models to
@@ -212,20 +242,12 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
             weight_sources = [p for p in conv.source_patterns if p.endswith(".weight")]
             if weight_sources:
                 other = [p for p in conv.source_patterns if not p.endswith(".weight")]
-                companion_suffixes = (
-                    "_scale$",
-                    "_shape$",
-                    "_zero_point$",
-                    "_g_idx$",
-                    "_global_scale$",
-                )
-                # Accept both plain FP8 weights and packed INT/FP4 weights. Scheme selection is
-                # deferred until conversion time because mixed checkpoints can use a different
-                # bit width or format in different decoder layers.
-                new_sources = [p + "$" for p in weight_sources]
-                new_sources += [p + "_packed$" for p in weight_sources]
-                new_sources += [p + suffix for p in weight_sources for suffix in companion_suffixes]
-                new_sources += [p.removesuffix(".weight") + ".input_global_scale$" for p in weight_sources]
+                components = _get_expert_components(self.compressor.quantization_config)
+                new_sources = [
+                    f"{weight_source.removesuffix('.weight')}.{component}$"
+                    for weight_source in weight_sources
+                    for component in components
+                ]
                 new_sources += other
                 new_ops = [DecompressExperts(self)] + list(conv.operations)
                 conv = WeightConverter(

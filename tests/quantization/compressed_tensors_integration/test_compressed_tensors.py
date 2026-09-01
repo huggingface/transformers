@@ -161,21 +161,38 @@ class CompressedTensorsTest(unittest.TestCase):
         expected = dequantize(weight, scale, args=scheme.weights)
         torch.testing.assert_close(converted[weight_key], expected.unsqueeze(0))
 
-    def test_expert_conversion_collects_nvfp4_metadata(self):
+    def test_expert_conversion_collects_metadata_by_format(self):
         from transformers.core_model_loading import Concatenate, MergeModulelist, WeightConverter
         from transformers.quantizers.quantizer_compressed_tensors import CompressedTensorsHfQuantizer
 
+        config = SimpleNamespace(
+            config_groups={
+                name: SimpleNamespace(format=format)
+                for name, format in {
+                    "fp8": "float-quantized",
+                    "int4": "pack-quantized",
+                    "nvfp4": "nvfp4-pack-quantized",
+                }.items()
+            }
+        )
         converter = WeightConverter(
             ["mlp.experts.*.gate_proj.weight", "mlp.experts.*.up_proj.weight"],
             "mlp.experts.gate_up_proj",
             [MergeModulelist(dim=0), Concatenate(dim=1)],
         )
-        quantizer = SimpleNamespace(get_weight_conversions=lambda: [])
+        quantizer = SimpleNamespace(
+            compressor=SimpleNamespace(quantization_config=config), get_weight_conversions=lambda: []
+        )
         converted = CompressedTensorsHfQuantizer.update_weight_conversions(quantizer, [converter])[0]
 
+        self.assertIn("mlp.experts.*.gate_proj.weight$", converted.source_patterns)
         self.assertIn("mlp.experts.*.gate_proj.weight_packed$", converted.source_patterns)
+        self.assertIn("mlp.experts.*.gate_proj.weight_shape$", converted.source_patterns)
         self.assertIn("mlp.experts.*.gate_proj.weight_global_scale$", converted.source_patterns)
         self.assertIn("mlp.experts.*.gate_proj.input_global_scale$", converted.source_patterns)
+        self.assertNotIn("mlp.experts.*.gate_proj.weight_zero_point$", converted.source_patterns)
+        self.assertNotIn("mlp.experts.*.gate_proj.weight_g_idx$", converted.source_patterns)
+        self.assertEqual(len(converted.source_patterns), len(set(converted.source_patterns)))
 
     def test_tinyllama_w4a16(self):
         # Non-FP8 schemes have no kernels and are dequantized at load time.
