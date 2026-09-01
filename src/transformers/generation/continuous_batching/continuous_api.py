@@ -644,6 +644,7 @@ class ContinuousBatchingManager:
             cb_config=continuous_batching_config,
             workload_hints=workload_hints,
             has_logit_processors=self.logit_processor.do_processing,
+            requires_full_history=self.logit_processor.requires_full_history,
         )
         # This is an approximation until the cache is created: it will infer the correct value in cache.__init__
         self._use_prefix_sharing = self.continuous_batching_config.allow_block_sharing

@@ -41,6 +41,7 @@ def resolve_continuous_batching_config(
     cb_config: ContinuousBatchingConfig,
     workload_hints: WorkloadHints | None,
     has_logit_processors: bool,
+    requires_full_history: bool = False,
 ) -> ContinuousBatchingConfig:
     """Returns a deep-copied and fully-resolved `ContinuousBatchingConfig`. The original `cb_config` is not mutated."""
     cb_config = deepcopy(cb_config)
@@ -75,6 +76,9 @@ def resolve_continuous_batching_config(
 
     # Decide if asynchronous batching should be used. Should happen after CUDA graphs are decided.
     decide_use_async_batching(cb_config=cb_config, is_attn_mask_needed=is_attn_mask_needed)
+
+    if requires_full_history:
+        disable_acceleration_for_full_history_processors(cb_config)
 
     # Resolve the max memory percent. This can happen anytime before cache creation.
     resolve_max_memory_percent(cb_config=cb_config, has_logit_processors=has_logit_processors)
@@ -264,6 +268,28 @@ def decide_use_async_batching(cb_config: ContinuousBatchingConfig, is_attn_mask_
             f"No behavior specified for use_async_batching, choosing {cb_config.use_async_batching = } because "
             f"{use_cuda_graphs = } and {is_attn_mask_needed = }. If you want to save memory, you can "
             "disable asynchronous batching but it will degrade performance."
+        )
+
+
+def disable_acceleration_for_full_history_processors(cb_config: ContinuousBatchingConfig) -> None:
+    """Use eager synchronous execution when logits processors require variable-length request histories."""
+    disabled = []
+    if cb_config.varlen_compile_config is not None or cb_config.decode_compile_config is not None:
+        disabled.append("torch.compile")
+    if any(cb_config.cuda_graph_booleans):
+        disabled.append("CUDA graphs")
+    if cb_config.use_async_batching:
+        disabled.append("asynchronous batching")
+
+    cb_config.varlen_compile_config = None
+    cb_config.decode_compile_config = None
+    cb_config.use_cuda_graph = (False, False)
+    cb_config.use_async_batching = False
+
+    if disabled:
+        logger.warning(
+            "Logits processors that inspect token history require eager synchronous execution. Disabling "
+            f"{', '.join(disabled)}."
         )
 
 

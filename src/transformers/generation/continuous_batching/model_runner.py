@@ -184,9 +184,14 @@ class ModelRunner:
             # Handle shape inconsistency between generate and continuous batching (dummy_dim is always 1)
             dummy_dim, num_logits, vocab_size = logits.shape
             logits_2d = logits.view(dummy_dim * num_logits, vocab_size)
-            sliced_input_ids_2d = batch_data["input_ids"][0, logits_indices]  # shape [num_logits]
-            # Process with 2D tensors
-            logits_2d = self.logit_processor(sliced_input_ids_2d, logits_2d, batch_data["logits_processor_args"])
+            if self.logit_processor.requires_full_history:
+                token_histories = self.inputs_and_outputs.get_token_histories(logits.device)
+                logits_2d = self.logit_processor.apply_with_full_history(
+                    token_histories, logits_2d, batch_data["logits_processor_args"]
+                )
+            else:
+                sliced_input_ids_2d = batch_data["input_ids"][0, logits_indices]  # shape [num_logits]
+                logits_2d = self.logit_processor(sliced_input_ids_2d, logits_2d, batch_data["logits_processor_args"])
             # Reshape back to 3D
             scores = logits_2d.view(dummy_dim, num_logits, vocab_size)
         else:
