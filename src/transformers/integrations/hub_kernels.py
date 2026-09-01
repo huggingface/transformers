@@ -860,10 +860,9 @@ def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, interna
 
             if implementation is torch_function and not is_torchdynamo_compiling():
                 # These torch paths are readable references, not fast kernels: for
-                # `chunk_gated_delta_rule` the gap is more than an order of magnitude on a H100, and
-                # nothing else tells the user which one they ended up on. The logger is untraceable,
-                # hence the guard.
-                # `fla` is an import name only, there is no such distribution on PyPI.
+                # `chunk_gated_delta_rule` the gap is more than an order of magnitude on a H100.
+                # Warn the user when they end up on one. The logger is untraceable, hence the guard.
+                # `flash-linear-attention` is the distribution that ships the `fla` import name.
                 distribution = "flash-linear-attention" if package == "fla" else package
                 logger.warning_once(
                     f"`{func_name}` is falling back to its reference PyTorch implementation because "
