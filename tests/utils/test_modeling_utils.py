@@ -3903,3 +3903,22 @@ class RemoteAndCustomCodeModelTests(unittest.TestCase):
 
         self.assertTrue(model.is_custom_code())
         self.assertFalse(model.is_remote_code())
+
+
+@require_accelerate
+class GetBalancedMemoryTest(unittest.TestCase):
+    def test_get_balanced_memory_small_model_large_layer(self):
+        from transformers.integrations.accelerate import get_balanced_memory
+
+        model = nn.Sequential(
+            nn.Sequential(nn.Embedding(1000, 128), nn.Linear(128, 128)),
+            nn.Linear(128, 128),
+            nn.Linear(128, 10),
+        )
+        max_memory = {0: 2 * 1024**3, 1: 2 * 1024**3, "cpu": 50 * 1024**3}
+
+        result = get_balanced_memory(model, max_memory=max_memory)
+
+        embedding_size = model[0][0].weight.numel() * model[0][0].weight.element_size()
+        self.assertEqual(result[0], int(1.25 * embedding_size))
+        self.assertEqual(result[1], max_memory[1])
