@@ -54,6 +54,15 @@ class MuseGlimmerVisionConfig(PreTrainedConfig):
     hidden_act: str = "gelu"
     rope_parameters: dict | None = None  # defaults set by `RopeConfigMixin`
     max_position_embeddings: int = 32 * 32  # == `pos_h * pos_w`
+    base_model_tp_plan = {
+        "patch_embedder.patch_embedding": "colwise_gather_output",
+        "layers.*.attn.q_proj": "colwise",
+        "layers.*.attn.k_proj": "colwise",
+        "layers.*.attn.v_proj": "colwise",
+        "layers.*.attn.proj": "rowwise",
+        "layers.*.mlp.fc1": "colwise",
+        "layers.*.mlp.fc2": "rowwise",
+    }
     patch_temporal: int = 2
     merge_size: int = 2
     layer_norm_eps: float = 1e-05
@@ -91,6 +100,7 @@ class MuseGlimmerTextConfig(PreTrainedConfig):
     model_type = "muse_glimmer_text"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
+        "embed_tokens": "embedding_rowwise",
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
@@ -188,6 +198,11 @@ class MuseGlimmerConfig(PreTrainedConfig):
 
     model_type = "muse_glimmer"
     sub_configs = {"text_config": MuseGlimmerTextConfig, "vision_config": MuseGlimmerVisionConfig}
+    base_model_tp_plan = {
+        "vision_adapter.fc1": "colwise",
+        "vision_adapter.fc2": "rowwise",
+        "vision_projection": "colwise_gather_output",
+    }
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
