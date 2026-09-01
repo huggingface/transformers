@@ -780,19 +780,16 @@ class KimiLinearDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: KimiLinearConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
+        self.self_attn = (
+            KimiLinearAttention(config, layer_idx)
+            if config.layer_types[layer_idx] == "full_attention"
+            else KimiLinearDeltaAttention(config, layer_idx)
+        )
 
-        if config.layer_types[layer_idx] == "full_attention":
-            self.self_attn = KimiLinearAttention(config=config, layer_idx=layer_idx)
-        else:
-            self.self_attn = KimiLinearDeltaAttention(config=config, layer_idx=layer_idx)
+        self.mlp = KimiLinearMoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else KimiLinearMLP(config)
 
-        if config.mlp_layer_types[layer_idx] == "sparse":
-            self.mlp = KimiLinearMoE(config)
-        else:
-            self.mlp = KimiLinearMLP(config)
-
-        self.input_layernorm = KimiLinearRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = KimiLinearRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = KimiLinearRMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.post_attention_layernorm = KimiLinearRMSNorm(config.hidden_size, config.rms_norm_eps)
 
     def forward(
         self,

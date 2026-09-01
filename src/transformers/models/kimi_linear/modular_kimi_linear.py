@@ -32,13 +32,13 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...models.deepseek_v3.configuration_deepseek_v3 import DeepseekV3Config
 from ...models.deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Attention,
-    DeepseekV3DecoderLayer,
     DeepseekV3Experts,
     DeepseekV3ForCausalLM,
     DeepseekV3MLP,
     DeepseekV3MoE,
     DeepseekV3TopkRouter,
 )
+from ...models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32DecoderLayer
 from ...models.glm5_next.modeling_glm5_next import (
     Glm5NextTextForgetGate,
     Glm5NextTextLinearAttention,
@@ -249,23 +249,15 @@ class KimiLinearMoE(DeepseekV3MoE):
     pass
 
 
-class KimiLinearDecoderLayer(DeepseekV3DecoderLayer):
+class KimiLinearDecoderLayer(DeepseekV32DecoderLayer):
+    
     def __init__(self, config: KimiLinearConfig, layer_idx: int):
-        nn.Module.__init__(self)
-        self.hidden_size = config.hidden_size
-
-        if config.layer_types[layer_idx] == "full_attention":
-            self.self_attn = KimiLinearAttention(config=config, layer_idx=layer_idx)
-        else:
-            self.self_attn = KimiLinearDeltaAttention(config=config, layer_idx=layer_idx)
-
-        if config.mlp_layer_types[layer_idx] == "sparse":
-            self.mlp = KimiLinearMoE(config)
-        else:
-            self.mlp = KimiLinearMLP(config)
-
-        self.input_layernorm = KimiLinearRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = KimiLinearRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        super().__init__(config, layer_idx)
+        self.self_attn = (
+            KimiLinearAttention(config, layer_idx)
+            if config.layer_types[layer_idx] == "full_attention"
+            else KimiLinearDeltaAttention(config, layer_idx)
+        )
 
 
 @auto_docstring
