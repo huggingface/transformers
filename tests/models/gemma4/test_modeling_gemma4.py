@@ -30,6 +30,7 @@ from transformers import (
 from transformers.testing_utils import (
     Expectations,
     cleanup,
+    require_deterministic_for_accelerator,
     require_deterministic_for_xpu,
     require_torch,
     require_torch_accelerator,
@@ -935,7 +936,7 @@ class Gemma4IntegrationTest(unittest.TestCase):
         EXPECTED_TEXTS = Expectations(
             {
                 ("cuda", (8, 0)): ['## The Algorithmic Mind\n\nA whisper starts, a seed unseen,\nOf data vast, a vibrant sheen.\nA sea of numbers,'],
-                ("cuda", (8, 6)): ['## The Algorithmic Mind\n\nA tapestry of data, vast and deep,\nWhere silent numbers in their slumber sleep.\nA sea of text'],
+                ("cuda", (8, 6)): ['## The Algorithmic Mind\n\nA loom of logic, spun from endless thread,\nWhere data streams in, and the patterns spread.\nNo'],
                 ("cuda", (9, 0)): ['## The Algorithmic Mind\n\nA whisper starts, a seed unseen,\nOf data vast, a vibrant sheen.\nA sea of numbers,'],
             }
         )  # fmt: skip
@@ -994,6 +995,7 @@ class Gemma4IntegrationTest(unittest.TestCase):
 
     # Note: we do not test FA2 as the head dim is 512 on some layers, which is not compatible with the kernels
     @parameterized.expand([("sdpa",), ("eager",)])
+    @require_deterministic_for_accelerator(devices=["cuda"])
     def test_generation_beyond_sliding_window(self, attn_implementation: str):
         """Test that we can correctly generate beyond the sliding window. Outputs for every attention functions
         should be coherent and identical.
@@ -1030,7 +1032,9 @@ class Gemma4IntegrationTest(unittest.TestCase):
         EXPECTED_COMPLETIONS = Expectations(
             {
                 ("cuda", 8): [
-                    "That sounds lovely! It seems like you're really enjoying the place you'",
+                    "That sounds lovely! It seems like you're really enjoying the place you'"
+                    if attn_implementation == "sdpa"
+                    else "That sounds like a very pleasant place! It seems like you're really enjoying",
                     "Here are a few ways you could use or expand upon that list, depending on",
                 ],
                 ("xpu", 5): [

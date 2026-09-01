@@ -21,9 +21,9 @@ from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import (
+    ImageProcessingTester,
     ImageProcessingTestMixin,
     load_coco_image,
-    prepare_image_inputs,
 )
 
 
@@ -44,7 +44,7 @@ else:
     FLAVA_IMAGE_MEAN = FLAVA_IMAGE_STD = FLAVA_CODEBOOK_MEAN = FLAVA_CODEBOOK_STD = None
 
 
-class FlavaImageProcessingTester:
+class FlavaImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -157,16 +157,8 @@ class FlavaImageProcessingTester:
     def get_expected_codebook_image_size(self):
         return (self.codebook_size["height"], self.codebook_size["width"])
 
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
+    def expected_output_image_shape(self, images):
+        return self.num_channels, self.size["height"], self.size["width"]
 
 
 @require_torch
