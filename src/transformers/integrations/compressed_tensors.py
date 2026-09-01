@@ -154,6 +154,8 @@ class DecompressExperts(ConversionOps):
                     )
                 dense = compressor.decompress(state_dict, quantization_scheme)["weight"]
                 if target_dtype is not None:
+                    # The compressor has no output-dtype argument and returns a format-specific
+                    # dtype. The loader installs converted tensors directly, so match the model.
                     dense = dense.to(target_dtype)
 
                 if output is None:

@@ -150,15 +150,18 @@ class CompressedTensorsTest(unittest.TestCase):
         weight_key = "mlp.experts.*.gate_proj.weight$"
         scale_key = "mlp.experts.*.gate_proj.weight_scale$"
         quantizer = SimpleNamespace(compressor=SimpleNamespace(quantization_config=config))
+        model = SimpleNamespace(get_parameter=lambda _: SimpleNamespace(dtype=torch.bfloat16))
 
         converted = DecompressExperts(quantizer).convert(
             {weight_key: [weight], scale_key: [scale]},
             source_patterns=[weight_key, scale_key],
             target_patterns=["mlp.experts.gate_up_proj"],
             full_layer_name="model.layers.1.mlp.experts.gate_up_proj",
+            model=model,
         )
 
-        expected = dequantize(weight, scale, args=scheme.weights)
+        expected = dequantize(weight, scale, args=scheme.weights).to(torch.bfloat16)
+        self.assertEqual(converted[weight_key].dtype, torch.bfloat16)
         torch.testing.assert_close(converted[weight_key], expected.unsqueeze(0))
 
     def test_expert_conversion_collects_metadata_by_format(self):
