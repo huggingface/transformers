@@ -155,7 +155,7 @@ class LongcatFlashMoE(nn.Module):
 
 
 class LongcatFlashMLA(AXK1Attention):
-    """MLA from Deepseek V3 with with a Q-LoRA rank and LoRA scaling."""
+    """MLA from Deepseek V3 with a Q-LoRA rank and LoRA scaling."""
 
     def __init__(self, config: LongcatFlashConfig, layer_idx: int):
         super().__init__(config, layer_idx)
