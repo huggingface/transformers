@@ -106,7 +106,6 @@ class CwmDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: CwmConfig, layer_idx: int):
         super().__init__(config=config, layer_idx=layer_idx)
         self.self_attn = CwmAttention(config=config, layer_idx=layer_idx)
-        self.attention_type = config.layer_types[layer_idx]
 
 
 class CwmPreTrainedModel(LlamaPreTrainedModel):
