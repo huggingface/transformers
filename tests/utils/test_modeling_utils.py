@@ -67,6 +67,9 @@ from transformers.testing_utils import (
     LoggingLevel,
     TemporaryHubRepo,
     TestCasePlus,
+    backend_empty_cache,
+    backend_memory_allocated,
+    backend_synchronize,
     force_serialization_as_bin_files,
     hub_retry,
     is_staging_test,
@@ -3953,14 +3956,14 @@ class GradientCheckpointingOffloadTest(unittest.TestCase):
             input_ids = torch.randint(0, 128, (1, seq_len), device=torch_device)
             self._backward(model, input_ids)  # warm the allocator
             model.zero_grad(set_to_none=True)
-            torch.accelerator.synchronize()
-            torch.accelerator.empty_cache()
+            backend_synchronize(torch_device)
+            backend_empty_cache(torch_device)
 
             # Sampled after the forward, where every layer's saved input is still live.
-            base = torch.accelerator.memory_allocated()
+            base = backend_memory_allocated(torch_device)
             output = model(input_ids=input_ids)
-            torch.accelerator.synchronize()
-            resident.append(torch.accelerator.memory_allocated() - base)
+            backend_synchronize(torch_device)
+            resident.append(backend_memory_allocated(torch_device) - base)
             del output, model
 
         self.assertEqual(resident[0] - resident[1], saved_bytes)
