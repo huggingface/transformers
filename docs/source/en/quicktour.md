@@ -226,6 +226,27 @@ pipeline("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/1.flac")
 ```
 
 </hfoption>
+<hfoption id="text classification">
+
+Use [`Accelerator`] to automatically detect an available accelerator for inference.
+
+```py
+from transformers import pipeline
+from accelerate import Accelerator
+
+device = Accelerator().device
+
+classifier = pipeline("text-classification", model="distilbert/distilbert-base-uncased-finetuned-sst-2-english", device=device)
+```
+
+Pass some text to [`Pipeline`] for sentiment analysis.
+
+```py
+classifier("I've been waiting for a HuggingFace course my whole life.")
+[{'label': 'POSITIVE', 'score': 0.9998}]
+```
+
+</hfoption>
 </hfoptions>
 
 ## Trainer
