@@ -2133,8 +2133,11 @@ class GenerationMixin(ContinuousMixin):
             generation_config.compile_config is not None and generation_config.compile_config._compile_all_devices
         )
         # Note: for some models that only use linear attention (e.g. Mamba), even a DynamicCache is compilable since all
+        # Encoder-decoder models hold that cache in a subcache, so we unwrap it to check the cache the decoder actually generates with
+        decoder_cache = cache.self_attention_cache if isinstance(cache, EncoderDecoderCache) else cache
+        # Note: for some models that only use linear attention (e.g. Mamba), even a DynamicCache is compilable since all
         # layers are, but we don't want to ALWAYS compile when calling `generate`, so we check the type
-        using_compilable_cache = cache is not None and cache.is_compileable and type(cache) is not DynamicCache
+        using_compilable_cache = cache is not None and cache.is_compileable and type(decoder_cache) is not DynamicCache
         can_compile = valid_hardware and using_compilable_cache
 
         # Exception 1: Some quantization methods do not support compilation
