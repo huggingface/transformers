@@ -271,69 +271,6 @@ class MergeModulelist(ConversionOps):
         return SplitModulelist(self.dim)
 
 
-class Reshape(ConversionOps):
-    """
-    Reshapes a tensor with a known shape into a new shape. Both shapes have to be known for this op to be reversible.
-    The shape is a tuple, containing either:
-        - a positive integer
-        - `-1` to indicate that the dimension is unknown and should be inferred from the input tensor (once at most)
-        - the name of an attribute of the config, like "head_dim" or "hidden_size"
-    This checks if the initial shape matches the input tensor shape. If it does not, but matches the final shape,
-    nothing happens. Otherwise, it raises an error. This way, this conversion is idempotent.
-    """
-
-    def __init__(self, initial_shape: tuple[int | str, ...], final_shape: tuple[int | str, ...]):
-        self.initial_shape = initial_shape
-        self.final_shape = final_shape
-
-    @torch.no_grad
-    def convert(
-        self,
-        input_dict: dict[str, torch.Tensor],
-        source_patterns: list[str],
-        target_patterns: list[str],
-        config: PretrainedConfig,
-        **kwargs,
-    ) -> dict[str, torch.Tensor]:
-        # Replace any attribute name with the actual value from the config
-        initial_shape = [getattr(config, x) if isinstance(x, str) else x for x in self.initial_shape]
-        final_shape = [getattr(config, x) if isinstance(x, str) else x for x in self.final_shape]
-        # Retrieve the tensor to reshape
-        target_pattern = self.get_target_pattern(input_dict, source_patterns, target_patterns)
-        tensors = next(iter(input_dict.values()))
-        tensor = tensors[0] if isinstance(tensors, list) else tensors
-
-        # If the initial shape matches, reshape to the final shape and return
-        initial_match = all(x == y or y == -1 for x, y in zip(tensor.shape, initial_shape))
-        if initial_match:
-            return {target_pattern: tensor.reshape(final_shape).contiguous()}
-
-        # Otherwise, raise an error, unless the final shape matches
-        final_match = all(x == y or y == -1 for x, y in zip(tensor.shape, final_shape))
-        if final_match:
-            return {target_pattern: tensor}
-        raise ValueError(f"Initial shape {tensor.shape} does not match {initial_shape}")
-
-    def get_target_pattern(
-        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str]
-    ) -> str:
-        if len(input_dict) != 1:
-            raise ValueError("Undefined Operation encountered!")
-        # Here it's the first operation of a chain, so return the source
-        if len(target_patterns) > 1:
-            if len(source_patterns) == 1:
-                return source_patterns[0]
-            else:
-                raise ValueError("Undefined Operation encountered!")
-        # Here it's the only operation, or the last operation in a chain, so we return the target
-        else:
-            return target_patterns[0]
-
-    @property
-    def reverse_op(self) -> ConversionOps:
-        return Reshape(self.final_shape, self.initial_shape)
-
-
 class SplitModulelist(ConversionOps):
     """Inverse of `MergeModulelist` using explicit split sizes per group."""
 
