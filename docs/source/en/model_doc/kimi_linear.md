@@ -51,13 +51,11 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 model_name = "moonshotai/Kimi-Linear-48B-A3B-Instruct"
 
-# the checkpoint ships a custom tiktoken-based tokenizer, hence `trust_remote_code`
-tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
 model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto")
+tokenizer = AutoTokenizer.from_pretrained(model_name)
 
 messages = [{"role": "user", "content": "Tell me about the french revolution."}]
-text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-model_inputs = tokenizer(text, return_tensors="pt", add_special_tokens=False).to(model.device)
+model_inputs = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_tensors="pt").to(model.device)
 
 generated_ids = model.generate(**model_inputs, max_new_tokens=128)
 output_ids = generated_ids[0][len(model_inputs.input_ids[0]) :]
@@ -66,8 +64,8 @@ print(tokenizer.decode(output_ids, skip_special_tokens=True))
 ```
 
 The KDA layers run on a pure PyTorch implementation by default. Installing
-[`fla-core`](https://github.com/fla-org/flash-linear-attention) (`pip install -U fla-core`) makes them dispatch to the
-original Triton kernels instead, which is considerably faster for long sequences.
+[`kernels`](https://github.com/huggingface/kernels) (`pip install -U kernels`) makes them dispatch to custom kernels
+instead, which is considerably faster for long sequences.
 
 ## KimiLinearConfig
 
