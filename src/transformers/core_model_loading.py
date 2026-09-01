@@ -30,7 +30,6 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-from .configuration_utils import PretrainedConfig
 from .distributed.sharding_utils import DtensorShardOperation, _dtensor_from_local_like
 from .distributed.utils import is_dtensor
 from .integrations.accelerate import get_device, offload_weight

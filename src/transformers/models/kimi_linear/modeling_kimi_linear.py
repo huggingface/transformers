@@ -832,6 +832,7 @@ class KimiLinearPreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
+    _keys_to_ignore_on_load_unexpected = None
     _can_record_outputs = {
         "router_logits": OutputRecorder(KimiLinearTopkRouter, index=0),
         "hidden_states": KimiLinearDecoderLayer,

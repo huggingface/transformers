@@ -17,7 +17,6 @@ from collections.abc import Callable
 
 import torch
 from huggingface_hub.dataclasses import strict
-from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
@@ -49,6 +48,7 @@ from ...models.glm5_next.modeling_glm5_next import (
 from ...models.llama.modeling_llama import LlamaRMSNorm, eager_attention_forward
 from ...models.qwen3_next.modeling_qwen3_next import (
     Qwen3NextModel,
+    Qwen3NextPreTrainedModel,
     causal_conv1d_fn,
     causal_conv1d_update,
 )
@@ -250,7 +250,6 @@ class KimiLinearMoE(DeepseekV3MoE):
 
 
 class KimiLinearDecoderLayer(DeepseekV32DecoderLayer):
-    
     def __init__(self, config: KimiLinearConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.self_attn = (
@@ -261,25 +260,17 @@ class KimiLinearDecoderLayer(DeepseekV32DecoderLayer):
 
 
 @auto_docstring
-class KimiLinearPreTrainedModel(PreTrainedModel):
-    config: KimiLinearConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["KimiLinearDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn = True
-    _supports_sdpa = True
+class KimiLinearPreTrainedModel(Qwen3NextPreTrainedModel):
     _can_record_outputs = {
         "router_logits": OutputRecorder(KimiLinearTopkRouter, index=0),
         "hidden_states": KimiLinearDecoderLayer,
         "attentions": KimiLinearAttention,
     }
-    _is_stateful = True
-    _can_compile_fullgraph = True
+    _keys_to_ignore_on_load_unexpected = None
 
     @torch.no_grad()
     def _init_weights(self, module):
-        super()._init_weights(module)
+        PreTrainedModel._init_weights(self, module)
         if isinstance(module, KimiLinearDeltaAttention):
             init.ones_(module.dt_bias)
             # Lower bound kept away from 0 so log(A) never becomes -inf

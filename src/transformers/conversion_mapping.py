@@ -27,7 +27,6 @@ from .core_model_loading import (
     MergeModulelist,
     PermuteForRope,
     PrefixChange,
-    Reshape,
     Transpose,
     WeightConverter,
     WeightRenaming,
