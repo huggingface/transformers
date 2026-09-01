@@ -1724,6 +1724,7 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
         if modules_to_not_convert is None and "ignored_layers" in kwargs:
             modules_to_not_convert = kwargs.pop("ignored_layers")
         self.modules_to_not_convert = modules_to_not_convert
+        # TODO: check overlap with not to convert
         self.modules_to_convert = modules_to_convert
         self.activation_scheme = activation_scheme
         self.weight_block_size = weight_block_size

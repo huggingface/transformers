@@ -270,6 +270,14 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         scale_rename = WeightRenaming(source_patterns=r"^(.+)\.scale$", target_patterns=r"\1.weight_scale_inv")
         weight_conversions = [scale_rename] + list(weight_conversions)
 
+        # Some checkpoints shard weights (e.g. Qwen4-Exp's `ngram_embedding`). Since WeightConverter targets become source
+        # patterns when saving, anchor them to avoid matching the corresponding scale parameters.
+        for conv in weight_conversions:
+            if isinstance(conv, WeightConverter):
+                conv._original_target_patterns = [
+                    f"{p}$" if p.endswith(".weight") else p for p in conv._original_target_patterns
+                ]
+
         if not (self.pre_quantized and self.quantization_config.dequantize):
             return weight_conversions + self.get_weight_conversions()
 
