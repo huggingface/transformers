@@ -22,11 +22,9 @@ from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
-from ...utils.generic import can_return_tuple
+from ...utils.generic import can_return_tuple, no_inherit_decorator
 from ..bert.configuration_bert import BertConfig
 from ..bert.modeling_bert import (
-    BertForMultipleChoice,
-    BertForQuestionAnswering,
     BertForSequenceClassification,
     BertForTokenClassification,
     BertPreTrainedModel,
@@ -44,7 +42,7 @@ from ..jina_embeddings_v3.modeling_jina_embeddings_v3 import (
 from ..llama.modeling_llama import LlamaRotaryEmbedding
 
 
-@auto_docstring(checkpoint="harshaljanjani/gte-multilingual-base-hf")
+@auto_docstring(checkpoint="Alibaba-NLP/gte-multilingual-base")
 @strict
 class GteConfig(BertConfig):
     r"""
@@ -80,7 +78,7 @@ class GteConfig(BertConfig):
         self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else {}
         rope_theta = kwargs.pop("rope_theta", self.default_theta)
 
-        # GTE's static NTK scaling is exactly a linear scaling of `base * factor`.
+        # Static NTK scaling in Alibaba-NLP/gte-multilingual-base is exactly a linear scaling of `base * factor`.
         if rope_scaling is not None and rope_scaling["type"] == "ntk":
             head_dim = self.hidden_size // self.num_attention_heads
             factor = rope_scaling["factor"]
@@ -99,9 +97,10 @@ class GteEmbeddings(JinaEmbeddingsV3Embeddings):
         # GTE is rope-only: absolute position ids are never read, and token types always default to zeros.
         del self.position_ids
         del self.token_type_ids
-        # CODEPATH: gte-base-en-v1.5 alone sets type_vocab_size=0, the other checkpoints ship token type embeddings.
-        if config.type_vocab_size == 0:
-            self.token_type_embeddings = None
+        self.token_type_embeddings = (
+            # CODEPATH: Only gte-base-en-v1.5 sets type_vocab_size=0, the others ship token type embeddings.
+            nn.Embedding(config.type_vocab_size, config.hidden_size) if config.type_vocab_size else None
+        )
 
     def forward(
         self,
@@ -110,18 +109,22 @@ class GteEmbeddings(JinaEmbeddingsV3Embeddings):
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
     ) -> torch.Tensor:
-        # Unlike JinaEmbeddingsV3Embeddings, token types default to zeros and are skipped when type_vocab_size is 0.
+        # Unlike JinaEmbeddingsV3Embeddings, the token type embedding is skipped when type_vocab_size is 0.
         embeddings = inputs_embeds
         if inputs_embeds is None:
             embeddings = self.word_embeddings(input_ids)
 
+        input_shape = embeddings.shape[:-1]
+        device = embeddings.device
+
         if self.token_type_embeddings is not None:
             if token_type_ids is None:
-                token_type_ids = torch.zeros(embeddings.shape[:-1], dtype=torch.long, device=embeddings.device)
+                token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
             embeddings = embeddings + self.token_type_embeddings(token_type_ids)
 
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
+
         return embeddings
 
 
@@ -133,6 +136,7 @@ class GteAttention(JinaEmbeddingsV3Attention):
     pass
 
 
+@no_inherit_decorator
 class GteMLP(GemmaMLP):
     def __init__(self, config: GteConfig):
         super().__init__(config)
@@ -259,16 +263,6 @@ class GteForTokenClassification(BertForTokenClassification):
     pass
 
 
-class GteForQuestionAnswering(BertForQuestionAnswering):
-    pass
-
-
-class GteForMultipleChoice(BertForMultipleChoice):
-    def __init__(self, config: GteConfig):
-        super().__init__(config)
-        self.gte = GteModel(config, add_pooling_layer=True)
-
-
 __all__ = [
     "GteConfig",
     "GtePreTrainedModel",
@@ -276,6 +270,4 @@ __all__ = [
     "GteForMaskedLM",
     "GteForSequenceClassification",
     "GteForTokenClassification",
-    "GteForQuestionAnswering",
-    "GteForMultipleChoice",
 ]

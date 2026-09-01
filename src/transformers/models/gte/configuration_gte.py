@@ -25,7 +25,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="harshaljanjani/gte-multilingual-base-hf")
+@auto_docstring(checkpoint="Alibaba-NLP/gte-multilingual-base")
 @strict
 class GteConfig(PreTrainedConfig):
     r"""
@@ -70,7 +70,7 @@ class GteConfig(PreTrainedConfig):
         self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else {}
         rope_theta = kwargs.pop("rope_theta", self.default_theta)
 
-        # GTE's static NTK scaling is exactly a linear scaling of `base * factor`.
+        # Static NTK scaling in Alibaba-NLP/gte-multilingual-base is exactly a linear scaling of `base * factor`.
         if rope_scaling is not None and rope_scaling["type"] == "ntk":
             head_dim = self.hidden_size // self.num_attention_heads
             factor = rope_scaling["factor"]

@@ -16,7 +16,7 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was published in HF papers on 2024-07-29 and contributed to Hugging Face Transformers on 2026-08-30.*
+*This model was published in HF papers on 2024-07-29 and contributed to Hugging Face Transformers on 2026-09-01.*
 
 # GTE
 
@@ -33,94 +33,56 @@ GTE is a BERT-style bidirectional encoder that replaces absolute position embedd
 This model was contributed by [Harshal Janjani](https://huggingface.co/harshaljanjani).
 The original code can be found [here](https://huggingface.co/Alibaba-NLP/new-impl).
 
-## Usage examples
+> [!TIP]
+> Click on the GTE models in the right sidebar for more examples of how to apply GTE to different language tasks.
 
-Embeddings are taken from the `[CLS]` token and normalized.
+The example below demonstrates how to extract features (embeddings) with [`Pipeline`] and [`AutoModel`].
+
+<hfoptions id="usage">
+<hfoption id="Pipeline">
+
+```python
+from transformers import pipeline
+
+
+# TODO: Remove revision
+pipeline = pipeline(
+    task="feature-extraction",
+    model="Alibaba-NLP/gte-multilingual-base",
+    revision="refs/pr/31",
+    device=0
+)
+pipeline("Plants create oxygen through a process known as photosynthesis.")
+```
+
+</hfoption>
+<hfoption id="AutoModel">
 
 ```python
 import torch
-import torch.nn.functional as F
+
 from transformers import AutoModel, AutoTokenizer
 
-model_id = "harshaljanjani/gte-multilingual-base-hf"
-tokenizer = AutoTokenizer.from_pretrained(model_id)
-model = AutoModel.from_pretrained(model_id, device_map="auto")
 
-inputs = tokenizer("what is the capital of China?", return_tensors="pt").to(model.device)
+# TODO: Remove revision
+tokenizer = AutoTokenizer.from_pretrained("Alibaba-NLP/gte-multilingual-base", revision="refs/pr/31")
+model = AutoModel.from_pretrained(
+    "Alibaba-NLP/gte-multilingual-base",
+    revision="refs/pr/31",
+    device_map="auto",
+    attn_implementation="sdpa"
+)
+inputs = tokenizer("Plants create oxygen through a process known as photosynthesis.", return_tensors="pt").to(model.device)
+
 with torch.no_grad():
     outputs = model(**inputs)
+    embeddings = outputs.last_hidden_state[:, 0]
 
-embeddings = F.normalize(outputs.last_hidden_state[:, 0], p=2, dim=-1)
+print(f"Embeddings shape: {embeddings.shape}")
 ```
 
-Batched inference scores a query against several documents:
-
-```python
-import torch
-import torch.nn.functional as F
-from transformers import AutoModel, AutoTokenizer
-
-model_id = "harshaljanjani/gte-multilingual-base-hf"
-tokenizer = AutoTokenizer.from_pretrained(model_id)
-model = AutoModel.from_pretrained(model_id, device_map="auto")
-
-texts = ["what is the capital of China?", "Beijing", "sorting algorithms"]
-inputs = tokenizer(texts, padding=True, truncation=True, max_length=8192, return_tensors="pt").to(model.device)
-with torch.no_grad():
-    outputs = model(**inputs)
-
-embeddings = F.normalize(outputs.last_hidden_state[:, 0], p=2, dim=-1)
-scores = embeddings[:1] @ embeddings[1:].T
-```
-
-The reranker checkpoints are cross-encoders and expose a single relevance logit per pair:
-
-```python
-import torch
-from transformers import AutoModelForSequenceClassification, AutoTokenizer
-
-model_id = "harshaljanjani/gte-multilingual-reranker-base-hf"
-tokenizer = AutoTokenizer.from_pretrained(model_id)
-model = AutoModelForSequenceClassification.from_pretrained(model_id, device_map="auto")
-
-pairs = [["what is the capital of China?", "Beijing"], ["what is the capital of China?", "sorting algorithms"]]
-inputs = tokenizer(pairs, padding=True, truncation=True, max_length=8192, return_tensors="pt").to(model.device)
-with torch.no_grad():
-    scores = model(**inputs).logits.view(-1)
-```
-
-Fine-tuning uses the standard forward and backward pass:
-
-```python
-import torch
-from transformers import AutoModelForSequenceClassification, AutoTokenizer
-
-model_id = "harshaljanjani/gte-multilingual-base-hf"
-tokenizer = AutoTokenizer.from_pretrained(model_id)
-model = AutoModelForSequenceClassification.from_pretrained(model_id, num_labels=2, device_map="auto")
-
-inputs = tokenizer(["a positive review", "a negative review"], padding=True, return_tensors="pt").to(model.device)
-labels = torch.tensor([1, 0], device=model.device)
-
-loss = model(**inputs, labels=labels).loss
-loss.backward()
-```
-
-The model is compatible with [`torch.compile`]:
-
-```python
-import torch
-from transformers import AutoModel, AutoTokenizer
-
-model_id = "harshaljanjani/gte-multilingual-base-hf"
-tokenizer = AutoTokenizer.from_pretrained(model_id)
-model = AutoModel.from_pretrained(model_id, device_map="auto")
-model = torch.compile(model)
-
-inputs = tokenizer("what is the capital of China?", return_tensors="pt").to(model.device)
-with torch.no_grad():
-    outputs = model(**inputs)
-```
+</hfoption>
+</hfoptions>
 
 ## Notes
 
@@ -147,17 +109,9 @@ with torch.no_grad():
 [[autodoc]] GteForSequenceClassification
     - forward
 
-## GteForMultipleChoice
-
-[[autodoc]] GteForMultipleChoice
-    - forward
 
 ## GteForTokenClassification
 
 [[autodoc]] GteForTokenClassification
     - forward
 
-## GteForQuestionAnswering
-
-[[autodoc]] GteForQuestionAnswering
-    - forward
