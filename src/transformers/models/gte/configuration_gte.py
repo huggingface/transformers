@@ -63,6 +63,7 @@ class GteConfig(PreTrainedConfig):
     bos_token_id: int | None = None
     eos_token_id: int | list[int] | None = None
     tie_word_embeddings: bool = True
+    default_theta = 160_000.0
     rope_parameters: RopeParameters | dict | None = None
 
 

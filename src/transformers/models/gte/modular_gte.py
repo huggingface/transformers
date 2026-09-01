@@ -62,6 +62,7 @@ class GteConfig(BertConfig):
     ```"""
 
     model_type = "gte"
+    default_theta = 160_000.0
 
     vocab_size: int = 250048
     attention_probs_dropout_prob: float | int = 0.0
