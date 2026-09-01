@@ -418,8 +418,6 @@ class DeferredStopCheck(StopCheck):
             (
                 torch.zeros((), dtype=torch.bool, pin_memory=pinned),
                 torch.zeros(input_ids.shape[0], dtype=torch.long, pin_memory=pinned),
-                # The event must live on the same device as `unfinished_sequences`, or it records nothing and
-                # synchronizes instantly.
                 torch.Event(device=input_ids.device, blocking=True),
             )
             for _ in range(2)
@@ -460,7 +458,7 @@ class DeferredStopCheck(StopCheck):
             copy_done.synchronize()
         steps_to_undo = 1 if self.stop_reported else 0
         if self.streamer is not None and not steps_to_undo:
-            _, tokens_cpu, _ = self.slots[1]  # real tokens, written by the last step and never read back
+            _, tokens_cpu, _ = self.slots[1]
             self.streamer.put(tokens_cpu.clone())
         if self.cache is not None:
             self.cache.crop(-steps_to_undo)
