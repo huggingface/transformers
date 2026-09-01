@@ -938,6 +938,9 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
         generation_config,
     ) -> dict[str, Any]:
         # override to handle merging image and text embeddings before passing to language encoder
+        if model_kwargs.get("encoder_outputs") is not None:
+            return model_kwargs
+
         inputs_embeds = model_kwargs.pop("inputs_embeds", None)
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(inputs_tensor)

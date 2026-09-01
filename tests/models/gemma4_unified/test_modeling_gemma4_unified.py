@@ -257,6 +257,10 @@ class Gemma4UnifiedAudio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, 
             if self._testMethodName.startswith(test):
                 self.skipTest(reason="Gemma4 unified does not collect any hidden states or attentions (no mm tower)")
 
+    @unittest.skip("The tester has no image in input dict and mm-encoder-output don't yet support audio")
+    def test_generate_from_multimodal_encoder_outputs(self):
+        pass
+
     @unittest.skip("We need 4 layers to correctly test cache sharing.")
     def test_num_layers_is_small(self):
         pass

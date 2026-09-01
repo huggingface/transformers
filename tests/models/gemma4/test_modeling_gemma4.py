@@ -296,6 +296,10 @@ class Gemma4Audio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
         self.model_tester = Gemma4Audio2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Gemma4Config, hidden_size=37)
 
+    @unittest.skip("The tester has no image in input dict and mm-encoder-output don't yet support audio")
+    def test_generate_from_multimodal_encoder_outputs(self):
+        pass
+
     @unittest.skip("The tester has no image in input dict")
     def test_get_image_features_hidden_states(self):
         pass
