@@ -16,9 +16,7 @@ from huggingface_hub.dataclasses import strict
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, logging
 from ...utils.generic import is_flash_attention_requested
-from ..nemotron_h import NemotronHConfig
-from ..parakeet.configuration_parakeet import ParakeetEncoderConfig
-from ..radio.configuration_radio import RadioConfig
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 __all__ = ["NemotronH_Omni_Reasoning_V3_Config"]
@@ -58,15 +56,15 @@ class NemotronH_Omni_Reasoning_V3_Config(PreTrainedConfig):
 
     model_type = "nemotron_h_omni"
     sub_configs = {
-        "vision_config": RadioConfig,
-        "llm_config": NemotronHConfig,
-        "sound_config": ParakeetEncoderConfig,
+        "vision_config": AutoConfig,
+        "llm_config": AutoConfig,
+        "sound_config": AutoConfig,
     }
     is_composition = True
 
-    vision_config: dict | RadioConfig | None = None
-    llm_config: dict | NemotronHConfig | None = None
-    sound_config: dict | ParakeetEncoderConfig | None = None
+    vision_config: dict | PreTrainedConfig | None = None
+    llm_config: dict | PreTrainedConfig | None = None
+    sound_config: dict | PreTrainedConfig | None = None
     force_image_size: int | None = None
     downsample_ratio: float = 0.5
     projector_hidden_size: int = 4096
@@ -81,25 +79,25 @@ class NemotronH_Omni_Reasoning_V3_Config(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         if isinstance(self.vision_config, dict):
-            self.vision_config = RadioConfig(**self.vision_config)
+            self.vision_config = CONFIG_MAPPING["radio"](**self.vision_config)
         elif self.vision_config is None:
-            self.vision_config = RadioConfig()
+            self.vision_config = CONFIG_MAPPING["radio"]()
         # The vision tower needs the temporal patch size to build its video patch projection.
         self.vision_config.video_temporal_patch_size = self.video_temporal_patch_size
 
         # Handle both cases: when loading from JSON (llm_config is dict) and when called
         # internally by transformers (llm_config is None).
         if isinstance(self.llm_config, dict):
-            self.llm_config = NemotronHConfig(**self.llm_config)
+            self.llm_config = CONFIG_MAPPING["nemotron_h"](**self.llm_config)
         elif self.llm_config is None:
-            self.llm_config = NemotronHConfig()
+            self.llm_config = CONFIG_MAPPING["nemotron_h"]()
 
         # This checkpoint's sound_config omits `attention_bias`/`scale_input`, which are `False` for
         # its Parakeet variant, so supply them before building the encoder config.
         if isinstance(self.sound_config, dict):
             sound_config = {"attention_bias": False, "scale_input": False, **self.sound_config}
             sound_config.pop("model_type", None)
-            self.sound_config = ParakeetEncoderConfig(**sound_config)
+            self.sound_config = CONFIG_MAPPING["parakeet_encoder"](**sound_config)
 
         super().__post_init__(**kwargs)
 
