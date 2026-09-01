@@ -412,12 +412,7 @@ class DeferredStopCheck(StopCheck):
         self.max_length = max_length
         self.cache = cache
         if cache is not None:
-            # The extra step has to be undoable, so the cache is told to hold on to what it would otherwise
-            # shrink away. It is released again on every step that turns out to be kept, in `__call__`.
             cache.activate_past_recording()
-        # Each slot holds one step's results on their way to the host, and the event saying they arrived.
-        # Pinning only buys anything on CUDA, where it is what makes the copies asynchronous; elsewhere it
-        # also hands back uninitialized memory rather than zeros.
         pinned = input_ids.device.type == "cuda"
         self.slots = deque(
             (
@@ -435,11 +430,8 @@ class DeferredStopCheck(StopCheck):
     @staticmethod
     def is_supported(device: torch.device, cache: "Cache | None") -> bool:
         """Whether the stop decision can safely be deferred by a step, given this device and cache."""
-        # Only these two are exercised today; anywhere else the flag is read immediately.
         if device.type not in ("cuda", "mps"):
             return False
-        # With no cache, the extra step leaves nothing behind but its token, which is dropped either way.
-        # Otherwise the cache has to be able to give that step back.
         return cache is None or cache.is_croppable
 
     def __call__(self, unfinished_sequences: torch.Tensor, tokens: torch.Tensor, length: int) -> bool:
@@ -449,39 +441,28 @@ class DeferredStopCheck(StopCheck):
             tokens_cpu.copy_(tokens, non_blocking=True)
         copy_done.record()
 
-        # What the previous step wrote, whose copies landed a whole step ago, so waiting on them costs nothing.
         self.slots.rotate(-1)
         should_stop_before, tokens_cpu_before, copy_done_before = self.slots[0]
         copy_done_before.synchronize()
-        # On the very first step the slot just read holds nothing any step wrote: there is no previous token to
-        # stream, and nothing to believe about whether generation is over.
         if not self.is_first_step:
             if self.streamer is not None:
-                # Clone: this slot is written again next step, while the streamer still holds what it got.
                 self.streamer.put(tokens_cpu_before.clone())
             self.stop_reported = bool(should_stop_before)
         self.is_first_step = False
-        # `max_length` is the one stop condition the host already knows, so it is answered on time rather than
-        # a step late, saving a step that would only be undone again.
         reached_max_length = self.max_length is not None and length >= self.max_length
-        stopping = self.stop_reported or reached_max_length
+        stopping = self.stop_reported or (self.max_length is not None and length >= self.max_length)
         if not stopping and self.cache is not None:
-            # Carrying on means the step just taken is never coming back, so the cache can drop what it was
-            # holding to undo it, and is back to its working size before the next forward reads it.
             self.cache.crop(0)
         return stopping
 
     def finish(self) -> int:
         for *_, copy_done in self.slots:
             copy_done.synchronize()
-        # A token still in flight when the loop broke came after the stop, so it is neither streamed nor kept.
         steps_to_undo = 1 if self.stop_reported else 0
         if self.streamer is not None and not steps_to_undo:
             _, tokens_cpu, _ = self.slots[1]  # real tokens, written by the last step and never read back
             self.streamer.put(tokens_cpu.clone())
         if self.cache is not None:
-            # Every other step released itself in `__call__` once it was known to be kept. The last one never
-            # was, since it is the one that might need undoing, so it is settled here either way.
             self.cache.crop(-steps_to_undo)
         return steps_to_undo
 

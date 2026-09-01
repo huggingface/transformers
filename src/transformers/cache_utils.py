@@ -28,7 +28,6 @@ class CacheLayerMixin(ABC):
     """Base, abstract class for a single layer's cache."""
 
     is_compileable = False
-    # Whether `crop` can put this layer back as it was, which is the only thing `crop` is for
     is_croppable = False
     supports_early_init = True
     # Subclasses can set `_layer_type` to auto-register themselves in the mappings, if the class definition lives in a modeling
