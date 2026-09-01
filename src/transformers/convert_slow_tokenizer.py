@@ -1920,15 +1920,18 @@ class TikTokenConverter:
             extra_special_tokens.keys() if isinstance(extra_special_tokens, dict) else extra_special_tokens
         )
 
-    def extract_vocab_merges_from_model(self, tiktoken_url: str):
+    @staticmethod
+    def load_tiktoken_bpe(tiktoken_url: str) -> dict[bytes, int]:
         try:
             from tiktoken.load import load_tiktoken_bpe
         except Exception:
             raise ValueError(
                 "`tiktoken` is required to read a `tiktoken` file. Install it with `pip install tiktoken`."
             )
+        return load_tiktoken_bpe(tiktoken_url)
 
-        bpe_ranks = load_tiktoken_bpe(tiktoken_url)
+    def extract_vocab_merges_from_model(self, tiktoken_url: str):
+        bpe_ranks = self.load_tiktoken_bpe(tiktoken_url)
         byte_encoder = bytes_to_unicode()
 
         def token_bytes_to_string(b):

@@ -284,9 +284,8 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         if isinstance(extra_special_tokens, dict):
             extra_special_tokens = list(extra_special_tokens.keys())
 
-        # Retrieve the vocab size from the vocab file (one `<token> <rank>` line per token for tiktoken)
-        with open(vocab_file, "rb") as vocab_handle:
-            base_vocab_size = sum(1 for line in vocab_handle if line.strip())
+        # Retrieve the vocab size from the vocab file
+        base_vocab_size = len(TikTokenConverter.load_tiktoken_bpe(vocab_file))
 
         # If any of the tokens in `added_tokens_decoder` are not in the base vocabulary, they need to be added. To do so
         # we bake them in the `extra_special_tokens` list, with placeholder if `added_tokens_decoder` is not contiguous
