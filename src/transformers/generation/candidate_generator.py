@@ -1620,6 +1620,24 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
 
         self.is_main_model_prefill = True
 
+    def _get_noise_embeds(self, noise_ids: torch.LongTensor) -> torch.Tensor:
+        """
+        Get noise token embeddings from the main model while bypassing its optional embedding normalization, which should not be used
+        for DFlash (the embedding may be a subclass of nn.Embedding with the additional normalization).
+        """
+        embed_norm = getattr(self.main_model_input_embeddings, "embed_norm", None)
+        if embed_norm is None:
+            return self.main_model_input_embeddings(noise_ids)
+
+        # For TP-aware models, the easiest workaround to avoid the norm is to temporarily set it to Identity
+        try:
+            self.main_model_input_embeddings.embed_norm = nn.Identity()
+            embeds = self.main_model_input_embeddings(noise_ids)
+        finally:
+            self.main_model_input_embeddings.embed_norm = embed_norm
+
+        return embeds
+
     def get_candidates(
         self,
         input_ids: torch.LongTensor,
@@ -1673,8 +1691,7 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
         # Create the new inputs corresponding to only the "noise", or "diffusion window". It's the last bonus token (or "anchor") from
         # the main model, and the noise tokens
         noise_ids = torch.cat([input_ids[:, -1:], self.noise_ids_mask.to(input_ids.device)], dim=-1)
-        # The assistant needs embedding without norm thus take the lookup table and call `F.embedding`
-        noise_embeds = torch.nn.functional.embedding(noise_ids, self.main_model_input_embeddings.weight)
+        noise_embeds = self._get_noise_embeds(noise_ids)
 
         # Append positions and mask for the noise tokens, because they correspond to positions beyond the last `num_last_main_model_tokens`
         # that will first be used to populate the assistant kv cache at those positions through the `context_hidden_states`

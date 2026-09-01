@@ -533,6 +533,52 @@ def _build_checkpoint_conversion_mapping():
                 operations=[MergeModulelist(dim=0)],
             ),
         ],
+        "glm5_next": [
+            WeightRenaming(
+                source_patterns=r"self_attn\.f_a_proj\.",
+                target_patterns=r"self_attn.forget_gate.f_a_proj.",
+            ),
+            WeightRenaming(
+                source_patterns=r"self_attn\.f_b_proj\.",
+                target_patterns=r"self_attn.forget_gate.f_b_proj.",
+            ),
+            WeightRenaming(
+                source_patterns=r"self_attn\.dt_bias",
+                target_patterns=r"self_attn.forget_gate.dt_bias",
+            ),
+            WeightRenaming(
+                source_patterns=r"self_attn\.A_log",
+                target_patterns=r"self_attn.forget_gate.A_log",
+            ),
+            WeightRenaming(source_patterns="hc_attn_fn", target_patterns="attn_hc.fn"),
+            WeightRenaming(source_patterns="hc_attn_base", target_patterns="attn_hc.base"),
+            WeightRenaming(source_patterns="hc_attn_scale", target_patterns="attn_hc.scale"),
+            WeightRenaming(source_patterns="hc_ffn_fn", target_patterns="ffn_hc.fn"),
+            WeightRenaming(source_patterns="hc_ffn_base", target_patterns="ffn_hc.base"),
+            WeightRenaming(source_patterns="hc_ffn_scale", target_patterns="ffn_hc.scale"),
+            WeightConverter(
+                source_patterns=[
+                    "mlp.experts.*.gate_proj.weight",
+                    "mlp.experts.*.up_proj.weight",
+                ],
+                target_patterns="mlp.experts.gate_up_proj",
+                operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+            ),
+            WeightConverter(
+                source_patterns="mlp.experts.*.down_proj.weight",
+                target_patterns="mlp.experts.down_proj",
+                operations=[MergeModulelist(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns=[
+                    "self_attn.q_conv1d.weight",
+                    "self_attn.k_conv1d.weight",
+                    "self_attn.v_conv1d.weight",
+                ],
+                target_patterns="self_attn.conv1d.weight",
+                operations=[Concatenate(dim=0)],
+            ),
+        ],
         "LlavaModel": [
             WeightRenaming(source_patterns=r"^language_model.model", target_patterns="language_model"),
         ],
@@ -1758,6 +1804,37 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming("post_mlp_layernorm", "mlp.post_mlp_layernorm"),
     ]
 
+    mapping["qwen4_exp_text"] = mapping["qwen3_5_moe_text"].copy()
+    mapping["qwen4_exp_text"] += [
+        WeightConverter(
+            source_patterns="ngram_embedding.shard_*.weight",
+            target_patterns="ngram_embedding.weight",
+            operations=[Concatenate(dim=0, num_shards_attribute="split_ngram_parts")],
+            # The size of the embedding is ~95 GiB, so we cannot afford to perform the Cat on device, as it will need
+            # a temporary memory buffer of the same size
+            force_cpu=True,
+        ),
+    ]
+
+    mapping["MtpModel"] = [
+        PrefixChange(prefix_to_remove="model"),
+        PrefixChange(prefix_to_remove="mtp"),
+        WeightRenaming(source_patterns=".shared_head.norm.", target_patterns=".post_norm."),
+        WeightRenaming(source_patterns=".mtp_block.enorm.", target_patterns=".enorm."),
+        WeightRenaming(source_patterns=".mtp_block.hnorm.", target_patterns=".hnorm."),
+        WeightRenaming(source_patterns=".mtp_block.eh_proj.", target_patterns=".eh_proj."),
+        WeightRenaming(source_patterns=".mtp_block.post_norm.", target_patterns=".post_norm."),
+        # Inkling checkpoint layout: per-depth extras sit at `layers.{k}.` while the decoder block
+        # is nested under `layers.{k}.transformer_block.`; the main-model conversions (applied after)
+        # rename the block internals
+        WeightRenaming(source_patterns=r"\.hidden_norm\.", target_patterns=r".hnorm."),
+        WeightRenaming(source_patterns=r"\.embed_norm\.", target_patterns=r".enorm."),
+        WeightRenaming(source_patterns=r"\.input_proj\.", target_patterns=r".eh_proj."),
+        WeightRenaming(source_patterns=r"^chain_norm\.", target_patterns=r"shared_post_norm."),
+        WeightRenaming(source_patterns=r"layers\.(\d+)\.transformer_block\.", target_patterns=r"layers.\1.mtp_block."),
+    ]
+
+
     mapping["kimi_linear"] = [
         # Weight renamings for linear attention layers
         WeightRenaming(source_patterns="self_attn.f_a_proj", target_patterns="self_attn.forget_gate_down"),
@@ -1803,24 +1880,6 @@ def _build_checkpoint_conversion_mapping():
             target_patterns=r"\.experts.down_proj",
             operations=[MergeModulelist(dim=0)],
         ),
-    ]
-
-    mapping["MtpModel"] = [
-        PrefixChange(prefix_to_remove="model"),
-        PrefixChange(prefix_to_remove="mtp"),
-        WeightRenaming(source_patterns=".shared_head.norm.", target_patterns=".post_norm."),
-        WeightRenaming(source_patterns=".mtp_block.enorm.", target_patterns=".enorm."),
-        WeightRenaming(source_patterns=".mtp_block.hnorm.", target_patterns=".hnorm."),
-        WeightRenaming(source_patterns=".mtp_block.eh_proj.", target_patterns=".eh_proj."),
-        WeightRenaming(source_patterns=".mtp_block.post_norm.", target_patterns=".post_norm."),
-        # Inkling checkpoint layout: per-depth extras sit at `layers.{k}.` while the decoder block
-        # is nested under `layers.{k}.transformer_block.`; the main-model conversions (applied after)
-        # rename the block internals
-        WeightRenaming(source_patterns=r"\.hidden_norm\.", target_patterns=r".hnorm."),
-        WeightRenaming(source_patterns=r"\.embed_norm\.", target_patterns=r".enorm."),
-        WeightRenaming(source_patterns=r"\.input_proj\.", target_patterns=r".eh_proj."),
-        WeightRenaming(source_patterns=r"^chain_norm\.", target_patterns=r"shared_post_norm."),
-        WeightRenaming(source_patterns=r"layers\.(\d+)\.transformer_block\.", target_patterns=r"layers.\1.mtp_block."),
     ]
 
     for model_type, base_pattern in _MODEL_TO_CONVERSION_PATTERN.items():
@@ -1968,7 +2027,7 @@ def get_model_conversion_mapping(
             # arbitrary add/remove base_model_prefix to load ForXXX model from BaseModel and the opposite
             # Note that we need 2 removeprefix calls here, as only one level of nesting would not have the ending dot to module_name
             scope_prefix = module_name.removeprefix(model.base_model_prefix)
-            scope_prefix = module_name.removeprefix(".")
+            scope_prefix = scope_prefix.removeprefix(".")
             for transform in conversions:
                 transform.scope_prefix = scope_prefix
                 transform.base_model_prefix = model.base_model_prefix
