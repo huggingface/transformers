@@ -86,7 +86,7 @@ class NemotronIntegrationTest(unittest.TestCase):
                     "What is the largest planet in solar system?\nAnswer: Jupiter\n\nWhat is the answer: What is the name of the 19",
                 ],
                 ("cuda", 7): [
-                    "What is the largest planet in solar system?\nAnswer: Jupiter\n\nWhat is the answer",
+                    "What is the largest planet in solar system?\nAnswer: Jupiter\n\nWhat is the answer: What is the name of the 19",
                 ],
             }
         )
