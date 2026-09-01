@@ -20,13 +20,13 @@ A kernel works as a drop-in replacement for standard PyTorch operations. It swap
 
 This guide shows how to load kernels to accelerate inference.
 
-Install the kernels package. We recommend the latest version which provides the best performance and bug fixes.
+Install a compatible version of the kernels package. Transformers currently requires `kernels>=0.16.0,<0.17.0`.
 
 > [!NOTE]
-> kernels >=0.11.0 is the minimum required version for working with Transformers.
+> Use the latest compatible `kernels` release for the best performance and bug fixes.
 
 ```bash
-pip install -U kernels
+pip install -U "kernels>=0.16.0,<0.17.0"
 ```
 
 Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to load the most performant kernels available on the Hub for your device. This replaces supported PyTorch operations with the kernel implementation.
@@ -41,7 +41,9 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-The default kernels differ by device type. The table below lists the Hub repository that supplies each operation's default kernel. When no default kernel is registered, the operation falls back to standard PyTorch.
+The default mapping depends on the model, device, and execution mode. The table below lists common Hub repositories for
+the devices shown. When no kernel is registered for a particular combination, the operation falls back to standard
+PyTorch.
 
 | Operation | NVIDIA (CUDA) | AMD (ROCm) | Intel (XPU) |
 |---|---|---|---|
@@ -53,6 +55,9 @@ The default kernels differ by device type. The table below lists the Hub reposit
 | Rotary embeddings | `kernels-community/rotary` | `kernels-community/aiter-rope` | `kernels-community/rotary` |
 | Causal LM loss | `kernels-community/liger-kernels` | — | — |
 | Deformable attention | `kernels-community/deformable-detr` | — | — |
+
+The table is not exhaustive. Models can register additional layers and functions, and some mappings are available only
+for specific execution modes.
 
 > [!NOTE]
 > AMD GPUs report their device type as `cuda` in PyTorch. Transformers detects ROCm at runtime and routes supported operations to the AMD kernels above, including [AITER](https://github.com/ROCm/aiter) builds such as `kernels-community/aiter-rope`. You don't need to set the device type yourself.
@@ -171,19 +176,21 @@ kernelize(model, mode=Mode.TRAINING | Mode.TORCH_COMPILE)
 
 [`KernelConfig`] customizes which kernels are used in a model.
 
-The `:` separator names a specific kernel entry inside the repository and maps it to a layer.
+The `kernel_mapping` keys are names registered by the model. They can refer to a layer, such as `"RMSNorm"`, or a
+registered function, such as `"rotary_pos_emb"`. The `:` separator names a specific kernel entry inside the repository
+and maps it to that layer or function.
 
 ```py
 from transformers import AutoModelForCausalLM, KernelConfig
 
 kernel_config = KernelConfig(
     kernel_mapping={
-        "RMSNorm": "kernels-community/liger_kernels:LigerRMSNorm",
+        "RMSNorm": "kernels-community/liger-kernels:LigerRMSNorm",
     }
 )
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-0.6B",
-    attn_implementation="kernels-community/flash-attn2:FlashAttention2",
+    attn_implementation="kernels-community/flash-attn2",
     use_kernels=True,
     kernel_config=kernel_config,
     device_map="auto"
@@ -198,12 +205,40 @@ from transformers import KernelConfig
 kernel_config = KernelConfig(
     kernel_mapping={
         "RMSNorm": {
-            "cuda": "kernels-community/liger_kernels:LigerRMSNorm",
-            "rocm": "kernels-community/rocm-kernels:RocmRMSNorm",
-            "metal": "kernels-community/metal-kernels:MetalRMSNorm",
-            "xpu": "kernels-community/xpu-kernels:XpuRMSNorm"
+            "cuda": "kernels-community/liger-kernels:LigerRMSNorm",
+            "rocm": "kernels-community/liger-kernels:LigerRMSNorm",
+            "xpu": "kernels-community/rmsnorm:RMSNorm"
         }
     }
+)
+```
+
+When using Hub kernels, a `KernelConfig` inherits the default Transformers kernel mapping by default
+(`inherit_mapping=True`). Entries in `kernel_mapping` override the default mapping for the corresponding layers or
+functions. Set `inherit_mapping=False` to use only the entries in `kernel_mapping`. This is useful when benchmarking a
+specific kernel or testing a custom implementation without applying the other defaults.
+
+For example, the following configuration maps the `rotary_pos_emb` function to a RoPE kernel and leaves all other
+kernel mappings disabled. The function name must be registered by the model.
+
+```py
+from transformers import AutoModelForCausalLM, KernelConfig
+
+kernel_config = KernelConfig(
+    kernel_mapping={
+        "rotary_pos_emb": (
+            "kernels-community/rotary:apply_rotary_transformers",
+            {"version": 2},
+        ),
+    },
+    inherit_mapping=False,
+)
+
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen3-0.6B",
+    use_kernels=True,
+    kernel_config=kernel_config,
+    device_map="auto",
 )
 ```
 
@@ -242,7 +277,7 @@ Local kernels use `/abs/path:layer_name` instead of the Hub format `org/repo:lay
 from transformers import KernelConfig, AutoModelForCausalLM
 
 kernel_mapping = {
-    "RMSNorm": "/path/to/liger_kernels:LigerRMSNorm",
+    "RMSNorm": "/path/to/liger-kernels:LigerRMSNorm",
 }
 kernel_config = KernelConfig(kernel_mapping, use_local_kernel=True)
 
@@ -255,28 +290,9 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-## Disabling kernels
+## Disable kernels globally
 
-Disable kernels for specific layers with an empty kernel mapping in [`KernelConfig`].
-
-```py
-from transformers import AutoModelForCausalLM, KernelConfig
-
-kernel_config = KernelConfig(
-    kernel_mapping={
-        "RMSNorm": "",
-    }
-)
-
-model = AutoModelForCausalLM.from_pretrained(
-    "Qwen/Qwen3-0.6B",
-    use_kernels=True,
-    kernel_config=kernel_config,
-    device_map="auto"
-)
-```
-
-Set the environment variable to disable kernels globally.
+Set the environment variable to disable Hub kernels globally.
 
 ```bash
 export USE_HUB_KERNELS=0  # or OFF or NO
@@ -288,10 +304,10 @@ Kernel integration depends on hardware, drivers, and package versions working to
 
 ### Installation issues
 
-Import errors indicate the kernels library isn't installed.
+Import errors can indicate that the kernels library is not installed or that its version is incompatible.
 
 ```bash
-pip install -U kernels
+pip install -U "kernels>=0.16.0,<0.17.0"
 ```
 
 ### Kernel loading failures
