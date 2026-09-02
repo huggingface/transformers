@@ -432,6 +432,7 @@ class Qwen4ExpVisionText2TextModelTester(VLMModelTester):
 @require_torch
 class Qwen4ExpVisionText2TextModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = Qwen4ExpVisionText2TextModelTester
+    model_split_percents = [0.5, 0.8, 0.9]
     test_all_params_have_gradient = False
     test_torch_exportable = False  # QSA index selection has data-dependent control flow
 
