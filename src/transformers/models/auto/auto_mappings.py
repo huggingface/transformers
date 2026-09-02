@@ -1041,6 +1041,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("phi4_multimodal", "Phi4MultimodalFeatureExtractor"),
         ("pop2piano", "Pop2PianoFeatureExtractor"),
         ("qwen3_asr", "Qwen3ASRFeatureExtractor"),
+        ("qwen3_tts_tokenizer_single_codebook", "Qwen3TTSTokenizerSingleCodebookFeatureExtractor"),
         ("seamless_m4t", "SeamlessM4TFeatureExtractor"),
         ("speech_to_text", "Speech2TextFeatureExtractor"),
         ("speecht5", "SpeechT5FeatureExtractor"),
