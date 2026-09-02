@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """PyTorch HYV4 model."""
+import math
 from collections.abc import Callable
 
 import torch
@@ -50,7 +51,7 @@ from ..glm_moe_dsa.modeling_glm_moe_dsa import GlmMoeDsaAttention, GlmMoeDsaRota
 from ..gpt_oss.modeling_gpt_oss import eager_attention_forward
 
 
-@auto_docstring(custom_intro="HYV4")
+@auto_docstring(custom_intro="tencent/Hy4-preview")
 @strict
 class HYV4Config(PreTrainedConfig):
     r"""
@@ -70,20 +71,12 @@ class HYV4Config(PreTrainedConfig):
     indexer_types (`list[str]`, *optional*):
         Per-layer DSA indexer type, either `"full"` or `"shared"`. A shared layer reuses the
         most recent full indexer in the same forward request.
-    enable_lm_head_fp32 (`bool`, *optional*, defaults to `True`):
-        Whether the language-model head is evaluated in float32.
-    enable_ihc (`bool`, *optional*, defaults to `True`):
-        Whether independent Hyper-Connections are enabled.
     hc_mult (`int`, *optional*, defaults to 4):
         Number of hidden-state channels maintained by iHC.
     hc_magnitude (`float`, *optional*, defaults to 2.0):
         Scale applied to the iHC post-gating branch.
     hc_eps (`float`, *optional*, defaults to 1e-6):
         Numerical epsilon added to iHC sigmoid gates.
-    gated_mla (`bool`, *optional*, defaults to `True`):
-        Whether to gate the MLA output.
-    gating_type (`str`, *optional*, defaults to `"elementwise"`):
-        MLA gate granularity, either `"elementwise"` or `"headwise"`.
     learnable_sink (`bool`, *optional*, defaults to `True`):
         Whether to add a learned per-head attention sink.
     learnable_sink_init (`float`, *optional*, defaults to 0.0):
@@ -102,7 +95,7 @@ class HYV4Config(PreTrainedConfig):
         "layers.*.self_attn.kv_a_proj_with_mqa": "mla_kv_a_proj",
         "layers.*.self_attn.kv_b_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.self_attn.linear_gate": "colwise",
+        "layers.*.self_attn.gate_proj": "colwise",
         "layers.*.self_attn.sinks": "colwise",
         "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
@@ -163,13 +156,9 @@ class HYV4Config(PreTrainedConfig):
     index_head_dim: int = 128
     index_n_heads: int = 16
     indexer_types: list[str] | None = None
-    enable_lm_head_fp32: bool = True
-    enable_ihc: bool = True
     hc_mult: int = 4
     hc_magnitude: float = 2.0
     hc_eps: float = 1e-6
-    gated_mla: bool = True
-    gating_type: str = "elementwise"
     learnable_sink: bool = True
     learnable_sink_init: float = 0.0
     swiglu_limit: float = 10.0
@@ -506,21 +495,21 @@ class HYV4PreTrainedModel(Glm4MoeLitePreTrainedModel):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, HYV4HyperConnection):
-            init.normal_(module.fn, mean=0.0, std=6e-3)
+            init.normal_(module.fn, mean=0.0, std=self.config.initializer_range)
             init.constant_(module.scale, 0.01)
-            if not getattr(module.base, "_is_hf_initialized", False):
-                base_value = -float(torch.log(torch.tensor(max(module.hc_mult - 1, 1), dtype=torch.float32)))
-                module.base[: module.hc_mult].fill_(base_value)
-                module.base[module.hc_mult :].zero_()
+
+            base_value = -math.log(max(module.hc_mult - 1, 1))
+            base = torch.zeros_like(module.base)
+            base[: module.hc_mult] = base_value
+            init.copy_(module.base, base)
         elif isinstance(module, HYV4HyperHead):
-            init.normal_(module.hc_fn, mean=0.0, std=6e-3)
+            init.normal_(module.hc_fn, mean=0.0, std=self.config.initializer_range)
             init.constant_(module.hc_scale, 0.01)
-            if not getattr(module.hc_base, "_is_hf_initialized", False):
-                base_value = -float(torch.log(torch.tensor(max(module.hc_mult - 1, 1), dtype=torch.float32)))
-                module.hc_base.fill_(base_value)
+
+            base_value = -math.log(max(module.hc_mult - 1, 1))
+            init.constant_(module.hc_base, base_value)
         elif isinstance(module, HYV4Attention):
-            if not getattr(module.sinks, "_is_hf_initialized", False):
-                init.constant_(module.sinks, self.config.learnable_sink_init)
+            init.constant_(module.sinks, self.config.learnable_sink_init)
 
 
 class HYV4Model(Glm4MoeLiteModel):

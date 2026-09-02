@@ -24,7 +24,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
-@auto_docstring(custom_intro="HYV4")
+@auto_docstring(custom_intro="tencent/Hy4-preview")
 @strict
 class HYV4Config(PreTrainedConfig):
     r"""
@@ -44,20 +44,12 @@ class HYV4Config(PreTrainedConfig):
     indexer_types (`list[str]`, *optional*):
         Per-layer DSA indexer type, either `"full"` or `"shared"`. A shared layer reuses the
         most recent full indexer in the same forward request.
-    enable_lm_head_fp32 (`bool`, *optional*, defaults to `True`):
-        Whether the language-model head is evaluated in float32.
-    enable_ihc (`bool`, *optional*, defaults to `True`):
-        Whether independent Hyper-Connections are enabled.
     hc_mult (`int`, *optional*, defaults to 4):
         Number of hidden-state channels maintained by iHC.
     hc_magnitude (`float`, *optional*, defaults to 2.0):
         Scale applied to the iHC post-gating branch.
     hc_eps (`float`, *optional*, defaults to 1e-6):
         Numerical epsilon added to iHC sigmoid gates.
-    gated_mla (`bool`, *optional*, defaults to `True`):
-        Whether to gate the MLA output.
-    gating_type (`str`, *optional*, defaults to `"elementwise"`):
-        MLA gate granularity, either `"elementwise"` or `"headwise"`.
     learnable_sink (`bool`, *optional*, defaults to `True`):
         Whether to add a learned per-head attention sink.
     learnable_sink_init (`float`, *optional*, defaults to 0.0):
@@ -76,7 +68,7 @@ class HYV4Config(PreTrainedConfig):
         "layers.*.self_attn.kv_a_proj_with_mqa": "mla_kv_a_proj",
         "layers.*.self_attn.kv_b_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.self_attn.linear_gate": "colwise",
+        "layers.*.self_attn.gate_proj": "colwise",
         "layers.*.self_attn.sinks": "colwise",
         "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
@@ -137,13 +129,9 @@ class HYV4Config(PreTrainedConfig):
     index_head_dim: int = 128
     index_n_heads: int = 16
     indexer_types: list[str] | None = None
-    enable_lm_head_fp32: bool = True
-    enable_ihc: bool = True
     hc_mult: int = 4
     hc_magnitude: float = 2.0
     hc_eps: float = 1e-6
-    gated_mla: bool = True
-    gating_type: str = "elementwise"
     learnable_sink: bool = True
     learnable_sink_init: float = 0.0
     swiglu_limit: float = 10.0

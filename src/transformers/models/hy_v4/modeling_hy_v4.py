@@ -784,21 +784,21 @@ class HYV4PreTrainedModel(PreTrainedModel):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, HYV4HyperConnection):
-            init.normal_(module.fn, mean=0.0, std=6e-3)
+            init.normal_(module.fn, mean=0.0, std=self.config.initializer_range)
             init.constant_(module.scale, 0.01)
-            if not getattr(module.base, "_is_hf_initialized", False):
-                base_value = -float(torch.log(torch.tensor(max(module.hc_mult - 1, 1), dtype=torch.float32)))
-                module.base[: module.hc_mult].fill_(base_value)
-                module.base[module.hc_mult :].zero_()
+
+            base_value = -math.log(max(module.hc_mult - 1, 1))
+            base = torch.zeros_like(module.base)
+            base[: module.hc_mult] = base_value
+            init.copy_(module.base, base)
         elif isinstance(module, HYV4HyperHead):
-            init.normal_(module.hc_fn, mean=0.0, std=6e-3)
+            init.normal_(module.hc_fn, mean=0.0, std=self.config.initializer_range)
             init.constant_(module.hc_scale, 0.01)
-            if not getattr(module.hc_base, "_is_hf_initialized", False):
-                base_value = -float(torch.log(torch.tensor(max(module.hc_mult - 1, 1), dtype=torch.float32)))
-                module.hc_base.fill_(base_value)
+
+            base_value = -math.log(max(module.hc_mult - 1, 1))
+            init.constant_(module.hc_base, base_value)
         elif isinstance(module, HYV4Attention):
-            if not getattr(module.sinks, "_is_hf_initialized", False):
-                init.constant_(module.sinks, self.config.learnable_sink_init)
+            init.constant_(module.sinks, self.config.learnable_sink_init)
 
 
 @auto_docstring
