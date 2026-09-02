@@ -71,9 +71,7 @@ class BitNetMLP(nn.Module):
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
-        self.ffn_sub_norm = (BitNetRMSNorm(config.intermediate_size, eps=config.rms_norm_eps) if config.use_sub_norms else nn.Identity())
-        
-
+        self.ffn_sub_norm = BitNetRMSNorm(config.intermediate_size, eps=config.rms_norm_eps) if config.use_sub_norms else nn.Identity()
     def forward(self, x):
         down_proj = self.down_proj(self.ffn_sub_norm(self.act_fn(self.gate_proj(x)) * self.up_proj(x)))
         return down_proj

@@ -45,7 +45,7 @@ class BitNetRMSNorm(LlamaRMSNorm):
 class BitNetMLP(GemmaMLP):
     def __init__(self, config: BitNetConfig):
         super().__init__(config)
-        self.ffn_sub_norm = (BitNetRMSNorm(config.intermediate_size, eps=config.rms_norm_eps) if config.use_sub_norms else torch.nn.Identity())
+        self.ffn_sub_norm = BitNetRMSNorm(config.intermediate_size, eps=config.rms_norm_eps) if config.use_sub_norms else torch.nn.Identity()
 
     def forward(self, x):
         down_proj = self.down_proj(self.ffn_sub_norm(self.act_fn(self.gate_proj(x)) * self.up_proj(x)))
@@ -55,7 +55,7 @@ class BitNetMLP(GemmaMLP):
 class BitNetAttention(LlamaAttention):
     def __init__(self, config: BitNetConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.attn_sub_norm = (BitNetRMSNorm(config.hidden_size, eps=config.rms_norm_eps) if config.use_sub_norms else torch.nn.Identity())
+        self.attn_sub_norm = BitNetRMSNorm(config.hidden_size, eps=config.rms_norm_eps) if config.use_sub_norms else torch.nn.Identity()
 
     def forward(
         self,
