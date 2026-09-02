@@ -173,10 +173,6 @@ This implementation is the same as RoBERTa. Refer to the [documentation of RoBER
     - get_special_tokens_mask
     - save_vocabulary
 
-## XLMRobertaTokenizerFast
-
-[[autodoc]] XLMRobertaTokenizerFast
-
 ## XLMRobertaModel
 
 [[autodoc]] XLMRobertaModel

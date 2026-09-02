@@ -352,9 +352,7 @@ class Step3p7PreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Step3p7VisionEmbeddings):
-            module.register_buffer(
-                "position_ids", torch.arange(module.num_positions).expand((1, -1)), persistent=False
-            )
+            init.copy_(module.position_ids, torch.arange(module.num_positions).expand((1, -1)))
         elif isinstance(module, Step3p7VisionEncoderLayer):
             nn.init.constant_(module.lambda_1, module.config.layer_scale_init_value)
             nn.init.constant_(module.lambda_2, module.config.layer_scale_init_value)
@@ -439,7 +437,7 @@ class Step3p7RotaryEmbedding(nn.Module):
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
         self.config = config
-        self.layer_types = list(set(config.layer_types))
+        self.layer_types = sorted(set(config.layer_types))
         self.rope_type = {}
         for layer_type in self.layer_types:
             rope_params = self.config.rope_parameters[layer_type]

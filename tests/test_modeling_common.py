@@ -91,6 +91,7 @@ from transformers.testing_utils import (
     get_device_properties,
     hub_retry,
     is_flaky,
+    preserve_module_forwards,
     require_accelerate,
     require_bitsandbytes,
     require_deepspeed,
@@ -105,6 +106,7 @@ from transformers.testing_utils import (
     require_torch_mps,
     require_torch_multi_accelerator,
     require_torch_multi_gpu,
+    rocm_has_sdpa_flash_backend,
     run_first,
     run_test_using_subprocess,
     set_config_for_less_flaky_test,
@@ -135,8 +137,8 @@ if is_torch_available():
     from torch import nn
 
     from transformers import MODEL_MAPPING
+    from transformers.distributed.tensor_parallel import _get_parameter_tp_plan
     from transformers.integrations.accelerate import compute_module_sizes
-    from transformers.integrations.tensor_parallel import _get_parameter_tp_plan
     from transformers.modeling_utils import load_state_dict
     from transformers.pytorch_utils import id_tensor_storage
 
@@ -1697,7 +1699,8 @@ class ModelTesterMixin(ExportTesterMixin):
                 loss = model(**inputs).loss
                 loss.backward()
                 grad_expected_params = [(n, p) for n, p in model.named_parameters() if p.grad is not None]
-                non_zero_grads_normal = {n for n, p in grad_expected_params if p.grad.abs().sum() > 0}
+                normal_grad_sums = {n: p.grad.abs().sum().item() for n, p in grad_expected_params}
+                non_zero_grads_normal = {n for n, s in normal_grad_sums.items() if s > 0}
 
                 # reset all gradients to zero for the comparison with the gradient checkpointing run
                 optimizer.zero_grad()
@@ -1722,8 +1725,33 @@ class ModelTesterMixin(ExportTesterMixin):
 
                 # check that all the parameters that had non-zero gradients before, have non-zero grads with gradient
                 # checkpointing. divergence indicates a different forward-pass environment that needs special handling.
-                non_zero_grads_gradcp = {n for n, p in grad_expected_params if p.grad.abs().sum() > 0}
-                self.assertEqual(non_zero_grads_gradcp, non_zero_grads_normal)
+                gradcp_grad_sums = {n: p.grad.abs().sum().item() for n, p in grad_expected_params}
+                non_zero_grads_gradcp = {n for n, s in gradcp_grad_sums.items() if s > 0}
+
+                if non_zero_grads_gradcp != non_zero_grads_normal:
+                    only_in_normal = non_zero_grads_normal - non_zero_grads_gradcp
+                    only_in_gradcp = non_zero_grads_gradcp - non_zero_grads_normal
+
+                    # Observed flakiness (see #48332): a parameter's gradient is exactly 0.0 in one
+                    # run and a tiny value (≤1e-6, orders of magnitude below real gradients) in the
+                    # other. Either side can be the near-zero one. Treat such pairs as not a mismatch.
+                    _fp_noise = 1e-6
+                    only_in_normal = {
+                        n
+                        for n in only_in_normal
+                        if not (gradcp_grad_sums[n] == 0.0 and normal_grad_sums[n] <= _fp_noise)
+                    }
+                    only_in_gradcp = {
+                        n
+                        for n in only_in_gradcp
+                        if not (normal_grad_sums[n] == 0.0 and gradcp_grad_sums[n] <= _fp_noise)
+                    }
+                    self.assertEqual(
+                        # set union
+                        only_in_gradcp | only_in_normal,
+                        set(),
+                        f"non_zero_grads mismatch after filtering fp noise: only_in_normal={only_in_normal}, only_in_gradcp={only_in_gradcp}",
+                    )
 
                 if self.test_all_params_have_gradient:
                     for k, v in model.named_parameters():
@@ -3804,8 +3832,8 @@ class ModelTesterMixin(ExportTesterMixin):
         device_type, major, minor = get_device_properties()
         if device_type == "cuda" and major < 8:
             self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
-        elif device_type == "rocm" and major < 9:
-            self.skipTest(reason="This test requires an AMD GPU with compute capability >= 9.0")
+        elif device_type == "rocm" and not rocm_has_sdpa_flash_backend(major):
+            self.skipTest(reason="This AMD GPU has no SDPA flash backend available")
         elif device_type not in ["cuda", "rocm", "xpu"]:
             self.skipTest(reason="This test requires a Nvidia or AMD GPU, or an Intel XPU")
 
@@ -3825,6 +3853,10 @@ class ModelTesterMixin(ExportTesterMixin):
                 "evolla",
                 "modernbert",
                 "gemma3",
+                # gemma4: the block-overlay mask in create_masks_for_vision_model forces mask
+                # materialization unconditionally, so SDPA can never use the FA backend when the
+                # vision portion is involved. This is by design and not fixable on the modeling side.
+                "gemma4",
                 "t5gemma",
                 "diffllama",
                 "dpr",
@@ -4366,14 +4398,14 @@ class ModelTesterMixin(ExportTesterMixin):
                 num_attn_heads = getattr(config, "num_attention_heads")
                 num_attn_heads = num_attn_heads if isinstance(num_attn_heads, int) else max(num_attn_heads)
                 head_dim = head_dim if head_dim is not None else config.hidden_size // num_attn_heads
-                config.hidden_size *= max(requested_dim // head_dim, 1)
+                config.hidden_size *= max(math.ceil(requested_dim / head_dim), 1)
 
             if (
                 getattr(config, "decoder_hidden_size", None) is not None
                 and getattr(config, "decoder_num_attention_heads", None) is not None
             ):
                 decoder_head_dim = config.decoder_hidden_size // config.decoder_num_attention_heads
-                config.decoder_hidden_size *= max(requested_dim // decoder_head_dim, 1)
+                config.decoder_hidden_size *= max(math.ceil(requested_dim / decoder_head_dim), 1)
 
             if (
                 getattr(config, "cross_hidden_size", None) is not None
@@ -4384,7 +4416,7 @@ class ModelTesterMixin(ExportTesterMixin):
                     if cross_head_dim is not None
                     else config.cross_hidden_size // config.cross_num_attention_heads
                 )
-                config.cross_hidden_size *= max(requested_dim // cross_head_dim, 1)
+                config.cross_hidden_size *= max(math.ceil(requested_dim / cross_head_dim), 1)
 
             # 3d rope also depends on the head dim
             # (we assume easy shapes here where we get to the requested head dim at least)
@@ -5782,6 +5814,66 @@ class ModelTesterMixin(ExportTesterMixin):
                             is_valid_recorder = isinstance(recorder, (str, type, OutputRecorder))
                             self.assertTrue(is_valid_recorder, f"Invalid recorder: {recorder}")
 
+    def test_can_capture_specific_layers_hidden_states(self):
+        """
+        Test that we can capture only a subset of the hidden states with `output_hidden_states`.
+        """
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            # Each individual model is a subtest
+            with self.subTest(model_class.__name__):
+                model = model_class(copy.deepcopy(config)).to(device=torch_device)
+                model.eval()
+
+                can_set_hidden_states_layers = any(
+                    "hidden_states" in (module._can_record_outputs or {})
+                    and not isinstance(module._can_record_outputs["hidden_states"], list)
+                    for module in model.modules()
+                    if isinstance(module, PreTrainedModel)
+                )
+                if not can_set_hidden_states_layers:
+                    self.skipTest(
+                        "Cannot capture hidden states, or cannot correctly set layer indices due to several classes capturing at the same time"
+                    )
+
+                # Prepare inputs
+                inputs = self._prepare_for_class(inputs_dict, model_class)
+
+                # Despite the previous skip based on decorators, some models do not propagate the outputs correctly.......
+                out = model(**inputs, output_hidden_states=True)
+                if "hidden_states" in out:
+                    hidden_states = out.hidden_states
+                elif "text_model_output" in out and "hidden_states" in out.text_model_output:
+                    hidden_states = out.text_model_output.hidden_states
+                else:
+                    self.skipTest(
+                        f"{model_class.__name__} does not propagate hidden states correctly or uses another name"
+                    )
+
+                skips_first_input = any(
+                    not module._can_record_outputs["hidden_states"].capture_initial_hidden_state
+                    for module in model.modules()
+                    if isinstance(module, PreTrainedModel)
+                    and hasattr(
+                        (module._can_record_outputs or {}).get("hidden_states", None), "capture_initial_hidden_state"
+                    )
+                )
+                N_layers = len(hidden_states) if skips_first_input else len(hidden_states) - 1
+                # Capture one every 2 layers
+                indices_to_capture = list(range(0, N_layers, 2))
+                out = model(**inputs, output_hidden_states=indices_to_capture)
+
+                hidden_states = out.hidden_states if "hidden_states" in out else out.text_model_output.hidden_states
+                # hidden_states = out.hidden_states
+                # We should have the same number of captured hidden_states, i.e. we do not add the first input
+                self.assertEqual(len(hidden_states), N_layers)
+                # assert we correctly captured the layers
+                self.assertTrue(all(hidden_states[i] is None for i in range(N_layers) if i not in indices_to_capture))
+                self.assertTrue(
+                    all(isinstance(hidden_states[i], torch.Tensor) for i in range(N_layers) if i in indices_to_capture)
+                )
+
     @require_kernels
     @require_torch_accelerator
     def test_kernels_can_load_without_crashing(self):
@@ -5791,8 +5883,10 @@ class ModelTesterMixin(ExportTesterMixin):
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
 
-            # Using kernels should not raise a `ValueError`
-            model.use_kernels = True
+            # `kernelize` mutates module-level singletons, so restore them to keep later tests kernel-free
+            with preserve_module_forwards(model):
+                # Using kernels should not raise a `ValueError`
+                model.use_kernels = True
 
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
     def test_model_rope_scaling_from_config(self, scaling_type):
