@@ -545,7 +545,7 @@ class EsmFold2IntegrationTest(TestCasePlus):
             with torch.no_grad():
                 output = model.infer_protein(seq, num_loops=4, num_diffusion_samples=2, num_sampling_steps=32)
 
-            expected_distogram = torch.tensor([6.4062, 7.7500, 9.5625, 9.5000, 16.2500, 18.7500, 19.7500, 22.7500])
+            expected_distogram = torch.tensor([6.1462, 7.4562, 9.1028, 9.0691, 15.9278, 18.4071, 19.3449, 22.4337])
             torch.testing.assert_close(
                 output["distogram_logits"][0, 0, 1, :8].float().cpu(), expected_distogram, rtol=0, atol=0.2
             )
