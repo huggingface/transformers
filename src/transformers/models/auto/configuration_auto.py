@@ -386,15 +386,6 @@ class AutoConfig:
         code_revision = kwargs.pop("code_revision", None)
 
         config_dict, unused_kwargs = PreTrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)
-        # GTE checkpoints ship the `new` model type, and the ones without NTK scaling need nothing else to load natively
-        if (
-            config_dict.get("model_type") == "new"
-            and config_dict.get("pack_qkv")
-            and config_dict.get("position_embedding_type") == "rope"
-            and (config_dict.get("rope_scaling") or {}).get("type") != "ntk"
-        ):
-            config_dict["model_type"] = "gte"
-
         has_remote_code = "auto_map" in config_dict and "AutoConfig" in config_dict["auto_map"]
         has_local_code = "model_type" in config_dict and config_dict["model_type"] in CONFIG_MAPPING
         explicit_local_code = has_local_code and not CONFIG_MAPPING[config_dict["model_type"]].__module__.startswith(
