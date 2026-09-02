@@ -473,7 +473,6 @@ class HYV4PreTrainedModel(Glm4MoeLitePreTrainedModel):
     _supports_flash_attn = False
     _supports_sdpa = False
     _supports_flex_attn = False
-    _can_compile_fullgraph = False
     _keep_in_fp32_modules_strict = [
         "e_score_correction_bias",
         "fn",
@@ -624,7 +623,7 @@ class HYV4ForCausalLM(Glm4MoeLiteForCausalLM):
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         # Key difference of the lm_head being kept in float
-        logits = self.lm_head(hidden_states[:, slice_indices, :].to(self.lm_head.weight))
+        logits = self.lm_head(hidden_states[:, slice_indices, :].to(dtype=self.lm_head.weight.dtype))
 
         loss = None
         if labels is not None:

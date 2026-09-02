@@ -754,7 +754,8 @@ class HYV4PreTrainedModel(PreTrainedModel):
     _supports_flash_attn = False
     _supports_sdpa = False
     _supports_flex_attn = False
-    _can_compile_fullgraph = False
+
+    _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": HYV4DecoderLayer,
@@ -961,7 +962,7 @@ class HYV4ForCausalLM(HYV4PreTrainedModel, GenerationMixin):
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         # Key difference of the lm_head being kept in float
-        logits = self.lm_head(hidden_states[:, slice_indices, :].to(self.lm_head.weight))
+        logits = self.lm_head(hidden_states[:, slice_indices, :].to(dtype=self.lm_head.weight.dtype))
 
         loss = None
         if labels is not None:
