@@ -1422,7 +1422,8 @@ class SinglePositionMultiTokenCandidateGenerator(AssistedCandidateGenerator):
 
 class MTPCandidateGenerator(AssistedCandidateGenerator):
     requires_model_outputs: bool = True
-    # We always need to pass the hidden states from the main model
+    # We always need to pass the hidden states from the main model - it will be overriden in the __init__ to capture only the
+    # last layer's hidden_states
     model_kwargs_overrides: dict[str, Any] = {"output_hidden_states": True}
 
     def __init__(
@@ -1441,6 +1442,10 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
                 "Could not find `num_mtp_layers` in the model config. This model probably has no associated "
                 "mtp weights."
             )
+
+        # Override to capture only the last main model's layer to save memory
+        last_layer_idx = main_model.config.get_text_config().num_hidden_layers - 1
+        self.model_kwargs_overrides = {"output_hidden_states": [last_layer_idx]}
 
         # Heuristic: use the device of the last layer of the main model for the MTP layers
         base_model = main_model.get_decoder()
