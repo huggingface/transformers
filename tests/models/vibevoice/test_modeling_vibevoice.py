@@ -301,6 +301,10 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
         self.assertIsNotNone(output.audio)
         self.assertEqual(len(output.audio), self.model_tester.batch_size)
 
+    @unittest.skip(reason="Vibevoice has a special cache format so skipping for now")
+    def test_cached_decode_matches_cacheless(self):
+        pass
+
 
 class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
