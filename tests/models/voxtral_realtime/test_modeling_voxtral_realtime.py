@@ -19,6 +19,7 @@ import unittest
 from threading import Thread
 
 import numpy as np
+import pytest
 from parameterized import parameterized
 
 from transformers import (
@@ -260,15 +261,12 @@ class VoxtralRealtimeForConditionalGenerationModelTest(ALMModelTest, unittest.Te
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
-    @unittest.skip(reason="VoxtralRealtime uses sliding attention layers, which are not supported by `QuantizedCache`")
-    def test_generate_with_quant_cache(self):
-        pass
-
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
     @unittest.skip("Model needs special input preparation!")
     def test_model_rope_scaling_from_config(self, scaling_type):
         pass
 
+    @pytest.mark.generate
     @parameterized.expand([("dynamic",), ("static",)])
     def test_generate_with_cache_implementation(self, cache_implementation):
         """Any `cache_implementation` should match the default one, which already uses a `DynamicCache`."""
