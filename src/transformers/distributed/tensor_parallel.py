@@ -245,10 +245,8 @@ def get_shard_replication_factor(num_units: int | None, tp_size: int) -> int:
     """
     Number of times each unit has to be replicated so that every TP rank owns a whole unit.
 
-    Some parameters can only be split at a coarser granularity than a single element -- `num_units` is how many
-    such indivisible units the sharded dimension holds. Returns 1 when there are at least as many units as ranks
-    (the usual case, where units are simply sharded). Otherwise each unit is duplicated `tp_size // num_units`
-    times, which requires `num_units` to divide `tp_size`.
+    `num_units` is how many indivisible units the sharded dimension holds. Returns 1 when there are at least as
+    many units as ranks, i.e. when they can simply be sharded.
     """
     if not num_units or tp_size <= 1 or num_units >= tp_size:
         return 1
@@ -266,19 +264,16 @@ class ShardUnitsParallel(ColwiseParallel):
     Colwise sharding for parameters that can only be split at the granularity of `module._tp_shard_units`
     indivisible units, replicating them when there are fewer units than tensor parallel ranks.
 
-    Plain colwise sharding splits the dimension evenly across ranks, which silently cuts a unit in half as soon
-    as `num_units % tp_size != 0`. The typical case is `k_proj`/`v_proj`, whose unit is one KV head: attention
-    reshapes the projection output to `head_dim`, so a partial head is not usable, and GQA/MQA models with very
-    few KV heads therefore cannot be run on many memory-constrained GPUs. Following vLLM's KV head replication
-    scheme, each unit is instead duplicated `tp_size // num_units` times so that every rank holds a whole one.
+    The typical case is `k_proj`/`v_proj`, whose unit is one KV head: attention reshapes the projection output to
+    `head_dim`, so plain colwise sharding cuts a head in half as soon as `num_key_value_heads < tp_size`. Each
+    unit is instead duplicated, as vLLM does, so that every rank holds a whole one -- at the cost of a duplicated
+    KV cache.
 
     In DTensor terms the parameter is described as a plain `Shard` of the *expanded* dimension, which is `n_rep`
     times larger than the checkpoint one. Rank `r` therefore owns unit `r // n_rep`, and the loader detects the
-    size mismatch to read the right slice from the checkpoint.
-
-    Because DTensor sees those `n_rep` copies as independent shards, the gradient of a replicated unit would only
-    hold the contribution of its own rank. They are summed back with an explicit all-reduce inside each
-    replication group, which also keeps the copies identical so that saving can drop the duplicates.
+    size mismatch to read the right slice from the checkpoint. DTensor sees those copies as independent shards,
+    so their gradients are summed back with an explicit all-reduce inside each replication group, which also
+    keeps the copies identical so that saving can drop the duplicates.
     """
 
     # Cached process groups, so that the collective `dist.new_group` calls happen once per mesh instead of once
@@ -289,9 +284,9 @@ class ShardUnitsParallel(ColwiseParallel):
     def _tp_rows(mesh) -> tuple[tuple[int, ...], ...]:
         """Global ranks of every TP group in `mesh`, one tuple per group.
 
-        KV heads are only replicated along the TP dimension, so a 2D ``(dp, tp)`` mesh has one row per DP rank.
-        The result doubles as a cache key: ``DeviceMesh`` objects are rebuilt on the fly (``mesh["tp"]`` returns a
-        new object every time), so their identity cannot be used.
+        Units are only replicated along the TP dimension, so a 2D ``(dp, tp)`` mesh has one row per DP rank. The
+        result doubles as a cache key: ``DeviceMesh`` objects are rebuilt on the fly (``mesh["tp"]`` returns a new
+        object every time), so their identity cannot be used.
         """
         mesh_tensor = mesh.mesh
         if mesh.ndim == 1:
@@ -302,7 +297,7 @@ class ShardUnitsParallel(ColwiseParallel):
 
     @classmethod
     def _get_replication_group(cls, mesh, n_rep: int):
-        """Process group holding the `n_rep` ranks that own the same (replicated) KV head.
+        """Process group holding the `n_rep` ranks that own the same (replicated) unit.
 
         ``dist.new_group`` is collective, so every rank walks through all the groups of every TP row in the same
         order and keeps the one it belongs to.
@@ -331,10 +326,6 @@ class ShardUnitsParallel(ColwiseParallel):
             return super().shard_param(module, param, mesh)
 
         shard_dim = meta.ndim - 2
-        if meta.shape[shard_dim] % num_units != 0:
-            raise ValueError(
-                f"Cannot shard `{param}` of shape {tuple(meta.shape)} into {num_units} units along dim {shard_dim}."
-            )
         local_shape = list(meta.shape)
         local_shape[shard_dim] //= num_units
         local_meta = torch.empty(local_shape, dtype=meta.dtype, device=meta.device)
@@ -940,13 +931,10 @@ def _declare_attention_shard_units(model, tp_plan: dict[str, str], tp_size: int)
         ):
             continue
 
-        if (
-            module.v_proj.out_features != module.k_proj.out_features
-            or (module.q_proj.out_features // head_dim) % tp_size
-        ):
+        if (module.q_proj.out_features // head_dim) % tp_size:
             raise ValueError(
-                f"Cannot replicate KV heads for `{module_name}`: its key/value projections must have the same "
-                f"shape and its number of query heads must be divisible by tp_size={tp_size}."
+                f"Cannot replicate KV heads for `{module_name}`: its number of query heads must be divisible by "
+                f"tp_size={tp_size}."
             )
         module.k_proj._tp_shard_units = num_key_value_heads
         module.v_proj._tp_shard_units = num_key_value_heads
