@@ -14,7 +14,6 @@
 """PyTorch SuperPoint model."""
 
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -71,7 +70,6 @@ def simple_nms(scores: torch.Tensor, nms_radius: int) -> torch.Tensor:
     return torch.where(max_mask, scores, zeros)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of image point description models. Due to the nature of keypoint detection, the number of
@@ -81,6 +79,7 @@ def simple_nms(scores: torch.Tensor, nms_radius: int) -> torch.Tensor:
     and which are padding.
     """
 )
+@dataclass
 class SuperPointKeypointDescriptionOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
@@ -100,12 +99,12 @@ class SuperPointKeypointDescriptionOutput(ModelOutput):
         (also called feature maps) of the model at the output of each stage.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    keypoints: Optional[torch.IntTensor] = None
-    scores: Optional[torch.FloatTensor] = None
-    descriptors: Optional[torch.FloatTensor] = None
-    mask: Optional[torch.BoolTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    loss: torch.FloatTensor | None = None
+    keypoints: torch.IntTensor | None = None
+    scores: torch.FloatTensor | None = None
+    descriptors: torch.FloatTensor | None = None
+    mask: torch.BoolTensor | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
 
 
 class SuperPointConvBlock(nn.Module):
@@ -169,9 +168,9 @@ class SuperPointEncoder(nn.Module):
     def forward(
         self,
         input,
-        output_hidden_states: Optional[bool] = False,
-        return_dict: Optional[bool] = True,
-    ) -> Union[tuple, BaseModelOutputWithNoAttention]:
+        output_hidden_states: bool | None = False,
+        return_dict: bool | None = True,
+    ) -> tuple | BaseModelOutputWithNoAttention:
         all_hidden_states = () if output_hidden_states else None
 
         for conv_block in self.conv_blocks:
@@ -375,11 +374,11 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        labels: Optional[torch.LongTensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        labels: torch.LongTensor | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, SuperPointKeypointDescriptionOutput]:
+    ) -> tuple | SuperPointKeypointDescriptionOutput:
         r"""
         Examples:
 
@@ -387,10 +386,12 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
         >>> from transformers import AutoImageProcessor, SuperPointForKeypointDetection
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> processor = AutoImageProcessor.from_pretrained("magic-leap-community/superpoint")
         >>> model = SuperPointForKeypointDetection.from_pretrained("magic-leap-community/superpoint")
@@ -405,7 +406,7 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         pixel_values = self.extract_one_channel_pixel_values(pixel_values)
 

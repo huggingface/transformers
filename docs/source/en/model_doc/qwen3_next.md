@@ -9,11 +9,11 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on {release_date} and added to Hugging Face Transformers on 2025-09-10.*
+*This model was contributed to Hugging Face Transformers on 2025-09-10.*
 
 ## Overview
 
@@ -37,13 +37,13 @@ For more details, please visit our blog [Qwen3-Next](qwen3_next) ([blog post](ht
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+
 model_name = "Qwen/Qwen3-Next-80B-A3B-Instruct"
 
 # load the tokenizer and the model
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 model = AutoModelForCausalLM.from_pretrained(
     model_name,
-    dtype="auto",
     device_map="auto"
 )
 

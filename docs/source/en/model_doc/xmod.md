@@ -13,13 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2022-05-12 and added to Hugging Face Transformers on 2023-02-10.*
+*This model was published in HF papers on 2022-05-12 and contributed to Hugging Face Transformers on 2023-02-10.*
 
 # X-MOD
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -51,7 +48,8 @@ There are two ways to specify the input language:
 ```python
 from transformers import XmodModel
 
-model = XmodModel.from_pretrained("facebook/xmod-base")
+
+model = XmodModel.from_pretrained("facebook/xmod-base", device_map="auto")
 model.set_default_language("en_XX")
 ```
 
@@ -59,6 +57,7 @@ model.set_default_language("en_XX")
 
 ```python
 import torch
+
 
 input_ids = torch.tensor(
     [

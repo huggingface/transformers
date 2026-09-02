@@ -161,24 +161,28 @@ class EfficientLoFTRModelTest(ModelTesterMixin, unittest.TestCase):
     def test_feed_forward_chunking(self):
         pass
 
-    @unittest.skip(reason="EfficientLoFTRForKeypointMatching is not trainable")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="EfficientLoFTRForKeypointMatching is not trainable")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(reason="EfficientLoFTRForKeypointMatching is not trainable")
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="EfficientLoFTRForKeypointMatching is not trainable")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @unittest.skip(reason="EfficientLoFTR does not output any loss term in the forward pass")
     def test_retain_grad_hidden_states_attentions(self):
+        pass
+
+    @unittest.skip("Uses rope for backbone vision features which are fixed shape, no support for rope scaling")
+    def test_model_rope_scaling_frequencies(self):
         pass
 
     def test_model(self):
@@ -326,7 +330,7 @@ class EfficientLoFTRModelTest(ModelTesterMixin, unittest.TestCase):
             else:
                 # indexing the first element does not always work
                 # e.g. models that output similarity scores of size (N, M) would need to index [0, 0]
-                slice_ids = [slice(0, index) for index in single_row_object.shape]
+                slice_ids = tuple(slice(0, index) for index in single_row_object.shape)
                 batched_row = batched_object[slice_ids]
                 if key == "keypoints":
                     batched_row = torch.sum(batched_row, dim=-1)

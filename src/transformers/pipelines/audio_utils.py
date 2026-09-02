@@ -126,8 +126,7 @@ def ffmpeg_microphone(
 
     chunk_len = int(round(sampling_rate * chunk_length_s)) * size_of_sample
     iterator = _ffmpeg_stream(ffmpeg_command, chunk_len)
-    for item in iterator:
-        yield item
+    yield from iterator
 
 
 def ffmpeg_microphone_live(

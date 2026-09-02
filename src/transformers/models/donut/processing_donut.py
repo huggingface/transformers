@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,82 +16,50 @@ Processor class for Donut.
 """
 
 import re
-from typing import Optional, Union
 
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 class DonutProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {}
+    _defaults = {
+        "text_kwargs": {
+            "return_mm_token_type_ids": False,
+            "return_text_replacement_offsets": False,
+        },
+    }
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring
 class DonutProcessor(ProcessorMixin):
-    r"""
-    Constructs a Donut processor which wraps a Donut image processor and an XLMRoBERTa tokenizer into a single
-    processor.
-
-    [`DonutProcessor`] offers all the functionalities of [`DonutImageProcessor`] and
-    [`XLMRobertaTokenizer`/`XLMRobertaTokenizerFast`]. See the [`~DonutProcessor.__call__`] and
-    [`~DonutProcessor.decode`] for more information.
-
-    Args:
-        image_processor ([`DonutImageProcessor`], *optional*):
-            An instance of [`DonutImageProcessor`]. The image processor is a required input.
-        tokenizer ([`XLMRobertaTokenizer`/`XLMRobertaTokenizerFast`], *optional*):
-            An instance of [`XLMRobertaTokenizer`/`XLMRobertaTokenizerFast`]. The tokenizer is a required input.
-    """
+    valid_processor_kwargs = DonutProcessorKwargs
 
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
         super().__init__(image_processor, tokenizer)
 
+    @auto_docstring
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Optional[Union[str, list[str], TextInput, PreTokenizedInput]] = None,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         **kwargs: Unpack[DonutProcessorKwargs],
     ):
-        """
-        When used in normal mode, this method forwards all its arguments to AutoImageProcessor's
-        [`~AutoImageProcessor.__call__`] and returns its output. If used in the context
-        [`~DonutProcessor.as_target_processor`] this method forwards all its arguments to DonutTokenizer's
-        [`~DonutTokenizer.__call__`]. Please refer to the docstring of the above two methods for more information.
-        """
-        if images is None and text is None:
-            raise ValueError("You need to specify either an `images` or `text` input to process.")
+        if images is not None and text is not None:
+            kwargs.setdefault("add_special_tokens", False)
 
-        output_kwargs = self._merge_kwargs(
-            DonutProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
-
-        if images is not None:
-            inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
-        if text is not None:
-            if images is not None:
-                output_kwargs["text_kwargs"].setdefault("add_special_tokens", False)
-            encodings = self.tokenizer(text, **output_kwargs["text_kwargs"])
-
-        if text is None:
-            return inputs
-        elif images is None:
-            return encodings
-        else:
-            inputs["labels"] = encodings["input_ids"]  # for BC
-            inputs["input_ids"] = encodings["input_ids"]
-            return inputs
+        model_inputs = super().__call__(images=images, text=text, **kwargs)
+        if text is not None and images is not None:
+            model_inputs["labels"] = model_inputs["input_ids"]
+        return model_inputs
 
     @property
     def model_input_names(self):
-        image_processor_input_names = self.image_processor.model_input_names
-
-        return list(image_processor_input_names + ["input_ids", "labels"])
+        return super().model_input_names + ["labels"]
 
     def token2json(self, tokens, is_inner_value=False, added_vocab=None):
         """

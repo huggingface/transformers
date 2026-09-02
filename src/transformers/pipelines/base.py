@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,6 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from __future__ import annotations
+
 import collections
 import copy
 import csv
@@ -26,13 +27,12 @@ from abc import ABC, abstractmethod
 from collections import UserDict
 from contextlib import contextmanager
 from os.path import abspath, exists
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Union
 
+from ..distributed.utils import _is_torch_distributed_initialized
 from ..dynamic_module_utils import custom_object_save
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
-from ..generation import GenerationConfig
 from ..image_processing_utils import BaseImageProcessor
-from ..modelcard import ModelCard
 from ..models.auto import AutoConfig, AutoTokenizer
 from ..processing_utils import ProcessorMixin
 from ..tokenization_python import PreTrainedTokenizer
@@ -52,6 +52,7 @@ from ..utils import (
     logging,
 )
 from ..utils.chat_template_utils import Chat, is_valid_message
+from ..video_processing_utils import BaseVideoProcessor
 
 
 GenericTensor = Union[list["GenericTensor"], "torch.Tensor"]
@@ -73,6 +74,13 @@ def no_collate_fn(items):
     if len(items) != 1:
         raise ValueError("This collate_fn is meant to be used with batch_size=1")
     return items[0]
+
+
+def _reform_generator(first_item, remaining):
+    # Sticks an item back onto the start of a generator. Used when we pop the first item
+    # to infer data formats.
+    yield first_item
+    yield from remaining
 
 
 def _pad(items, key, padding_value, padding_side):
@@ -281,8 +289,7 @@ def get_default_model_and_revision(targeted_task: dict, task_options: Any | None
            Dictionary representing the given task, that should contain default models
 
         task_options (`Any`, None)
-           Any further value required by the task to get fully specified, for instance (SRC, TGT) languages for
-           translation task.
+           Any further value required by the task to get fully specified.
 
     Returns
 
@@ -298,18 +305,16 @@ def get_default_model_and_revision(targeted_task: dict, task_options: Any | None
     elif "model" in defaults:
         default_models = targeted_task["default"]["model"]
     else:
-        # XXX This error message needs to be updated to be more generic if more tasks are going to become
-        # parametrized
-        raise ValueError('The task defaults can\'t be correctly selected. You probably meant "translation_xx_to_yy"')
+        raise ValueError("The task defaults can't be correctly selected.")
 
     return default_models
 
 
 def load_assistant_model(
-    model: "PreTrainedModel",
-    assistant_model: Union[str, "PreTrainedModel"] | None,
+    model: PreTrainedModel,
+    assistant_model: str | PreTrainedModel | None,
     assistant_tokenizer: PreTrainedTokenizer | None,
-) -> tuple[Optional["PreTrainedModel"], PreTrainedTokenizer | None]:
+) -> tuple[PreTrainedModel | None, PreTrainedTokenizer | None]:
     """
     Prepares the assistant model and the assistant tokenizer for a pipeline whose model that can call `generate`.
 
@@ -339,9 +344,11 @@ def load_assistant_model(
 
     # Finally, let's check the tokenizers: if the two models have different tokenizers, we need to keep the assistant
     # tokenizer
-    same_vocab_size = model.config.vocab_size == loaded_assistant_model.config.vocab_size
+    model_text_config = model.config.get_text_config()
+    assistant_text_config = loaded_assistant_model.config.get_text_config()
+    same_vocab_size = model_text_config.vocab_size == assistant_text_config.vocab_size
     same_special_tokens = all(
-        getattr(model.config, token) == getattr(loaded_assistant_model.config, token)
+        getattr(model_text_config, token) == getattr(assistant_text_config, token)
         for token in ("eos_token_id", "pad_token_id", "bos_token_id")
     )
     if same_vocab_size and same_special_tokens:
@@ -466,7 +473,7 @@ class PipelineDataFormat:
         input_path: str | None,
         column: str | None,
         overwrite=False,
-    ) -> "PipelineDataFormat":
+    ) -> PipelineDataFormat:
         """
         Creates an instance of the right subclass of [`~pipelines.PipelineDataFormat`] depending on `format`.
 
@@ -647,6 +654,7 @@ def build_pipeline_init_args(
     has_tokenizer: bool = False,
     has_feature_extractor: bool = False,
     has_image_processor: bool = False,
+    has_video_processor: bool = False,
     has_processor: bool = False,
     supports_binary_output: bool = True,
 ) -> str:
@@ -670,6 +678,11 @@ def build_pipeline_init_args(
         image_processor ([`BaseImageProcessor`]):
             The image processor that will be used by the pipeline to encode data for the model. This object inherits from
             [`BaseImageProcessor`]."""
+    if has_video_processor:
+        docstring += r"""
+        video_processor ([`BaseVideoProcessor`]):
+            The video processor that will be used by the pipeline to encode video data for the model. This object
+            inherits from [`BaseVideoProcessor`]."""
     if has_processor:
         docstring += r"""
         processor ([`ProcessorMixin`]):
@@ -677,8 +690,6 @@ def build_pipeline_init_args(
             [`ProcessorMixin`]. Processor is a composite object that might contain `tokenizer`, `feature_extractor`, and
             `image_processor`."""
     docstring += r"""
-        modelcard (`str` or [`ModelCard`], *optional*):
-            Model card attributed to the model for this pipeline.
         task (`str`, defaults to `""`):
             A task-identifier for the pipeline.
         num_workers (`int`, *optional*, defaults to 8):
@@ -690,12 +701,16 @@ def build_pipeline_init_args(
             pipelines](https://huggingface.co/transformers/main_classes/pipelines.html#pipeline-batching) .
         args_parser ([`~pipelines.ArgumentHandler`], *optional*):
             Reference to the object in charge of parsing supplied pipeline parameters.
-        device (`int`, *optional*, defaults to -1):
-            Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, a positive will run the model on
-            the associated CUDA device id. You can pass native `torch.device` or a `str` too
-        dtype (`str` or `torch.dtype`, *optional*):
-            Sent directly as `model_kwargs` (just a simpler shortcut) to use the available precision for this model
-            (`torch.float16`, `torch.bfloat16`, ... or `"auto"`)"""
+        device (`int` or `str` or `torch.device`, *optional*):
+            Device on which the pipeline is allocated. When left unset, the pipeline is placed on the first available
+            accelerator (CUDA, MPS, XPU, ...) and falls back to CPU only when none is available; the model is moved
+            there automatically. Pass `device="cpu"` (or `-1`) to force CPU, a positive ordinal or `"cuda:1"` to select
+            a specific accelerator, or a native `torch.device`/`str`. This argument cannot be combined with a model
+            already loaded via `accelerate` (i.e. one with an `hf_device_map`).
+        dtype (`str` or `torch.dtype`, *optional*, defaults to `"auto"`):
+            Precision the model is loaded in, forwarded to `from_pretrained`. Defaults to `"auto"`, which loads the
+            model in the dtype it was saved in (read from the checkpoint's `config.dtype`, otherwise inferred from the
+            weights). Pass an explicit `torch.float16`, `torch.bfloat16`, `torch.float32`, ... to override it."""
     if supports_binary_output:
         docstring += r"""
         binary_output (`bool`, *optional*, defaults to `False`):
@@ -715,17 +730,13 @@ PIPELINE_INIT_ARGS = build_pipeline_init_args(
 SUPPORTED_PEFT_TASKS = {
     "document-question-answering": ["PeftModelForQuestionAnswering"],
     "feature-extraction": ["PeftModelForFeatureExtraction", "PeftModel"],
-    "question-answering": ["PeftModelForQuestionAnswering"],
     "summarization": ["PeftModelForSeq2SeqLM"],
     "table-question-answering": ["PeftModelForQuestionAnswering"],
-    "text2text-generation": ["PeftModelForSeq2SeqLM"],
     "text-classification": ["PeftModelForSequenceClassification"],
     "sentiment-analysis": ["PeftModelForSequenceClassification"],
     "text-generation": ["PeftModelForCausalLM"],
     "token-classification": ["PeftModelForTokenClassification"],
     "ner": ["PeftModelForTokenClassification"],
-    "translation": ["PeftModelForSeq2SeqLM"],
-    "translation_xx_to_yy": ["PeftModelForSeq2SeqLM"],
     "zero-shot-classification": ["PeftModelForSequenceClassification"],
 }
 
@@ -767,6 +778,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
     # - False (the class is never used by the pipeline and should not be loaded even if present)
     _load_processor = None
     _load_image_processor = None
+    _load_video_processor = None
     _load_feature_extractor = None
     _load_tokenizer = None
 
@@ -777,14 +789,14 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
 
     def __init__(
         self,
-        model: "PreTrainedModel",
+        model: PreTrainedModel,
         tokenizer: PreTrainedTokenizer | None = None,
-        feature_extractor: Optional[PreTrainedFeatureExtractor] = None,
+        feature_extractor: PreTrainedFeatureExtractor | None = None,
         image_processor: BaseImageProcessor | None = None,
+        video_processor: BaseVideoProcessor | None = None,
         processor: ProcessorMixin | None = None,
-        modelcard: ModelCard | None = None,
         task: str = "",
-        device: Union[int, "torch.device"] | None = None,
+        device: int | torch.device | None = None,
         binary_output: bool = False,
         **kwargs,
     ):
@@ -796,8 +808,8 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         self.tokenizer = tokenizer
         self.feature_extractor = feature_extractor
         self.image_processor = image_processor
+        self.video_processor = video_processor
         self.processor = processor
-        self.modelcard = modelcard
 
         # `accelerate` device map
         hf_device_map = getattr(self.model, "hf_device_map", None)
@@ -850,7 +862,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         else:
             self.device = torch.device("cpu")
 
-        if torch.distributed.is_available() and torch.distributed.is_initialized():
+        if _is_torch_distributed_initialized():
             self.device = self.model.device
         logger.debug(f"Device set to use {self.device}")
 
@@ -873,25 +885,27 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
                 self.model, kwargs.pop("assistant_model", None), kwargs.pop("assistant_tokenizer", None)
             )
             self.prefix = self.model.config.prefix if hasattr(self.model.config, "prefix") else None
-            # each pipeline with text generation capabilities should define its own default generation in a
-            # `_default_generation_config` class attribute
-            default_pipeline_generation_config = getattr(self, "_default_generation_config", GenerationConfig())
+            # Priority order: kwargs > user_generation_config > model.generation_config > default_pipeline_generation_config
+            default_pipeline_generation_config = getattr(self, "_default_generation_config", None)
+            user_generation_config = kwargs.pop("generation_config", None)
             if hasattr(self.model, "_prepare_generation_config"):
-                # Uses `generate`'s logic to enforce the following priority of arguments:
-                # 1. user-defined config options in `**kwargs`
-                # 2. model's generation config values
-                # 3. pipeline's default generation config values
-                # NOTE: _prepare_generation_config creates a deep copy of the generation config before updating it,
-                # and returns all kwargs that were not used to update the generation config
+                base_config = user_generation_config or copy.deepcopy(self.model.generation_config)
+                if default_pipeline_generation_config is not None:
+                    base_config.update(
+                        **default_pipeline_generation_config.to_dict(),
+                        defaults_only=True,
+                        allow_custom_entries=True,
+                    )
                 prepared_generation_config, kwargs = self.model._prepare_generation_config(
-                    generation_config=default_pipeline_generation_config, **kwargs
+                    generation_config=base_config, **kwargs
                 )
                 self.generation_config = prepared_generation_config
                 # if the `max_new_tokens` is set to the pipeline default, but `max_length` is set to a non-default
                 # value: let's honor `max_length`. E.g. we want Whisper's default `max_length=448` take precedence
                 # over over the pipeline's length default.
                 if (
-                    default_pipeline_generation_config.max_new_tokens is not None  # there's a pipeline default
+                    default_pipeline_generation_config is not None
+                    and default_pipeline_generation_config.max_new_tokens is not None  # there's a pipeline default
                     and self.generation_config.max_new_tokens == default_pipeline_generation_config.max_new_tokens
                     and self.generation_config.max_length is not None
                     and self.generation_config.max_length != 20  # global default
@@ -905,7 +919,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
             # Update the generation config with task specific params if they exist.
             # NOTE: 1. `prefix` is pipeline-specific and doesn't exist in the generation config.
             #       2. `task_specific_params` is a legacy feature and should be removed in a future version.
-            task_specific_params = self.model.config.task_specific_params
+            task_specific_params = getattr(self.model.config, "task_specific_params", None)
             if task_specific_params is not None and task in task_specific_params:
                 this_task_params = task_specific_params.get(task)
                 if "prefix" in this_task_params:
@@ -996,9 +1010,6 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         if self.image_processor is not None:
             self.image_processor.save_pretrained(save_directory, **kwargs)
 
-        if self.modelcard is not None:
-            self.modelcard.save_pretrained(save_directory)
-
     def transform(self, X):
         """
         Scikit / Keras interface to transformers' pipelines. This method will forward to __call__().
@@ -1012,14 +1023,14 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         return self(X)
 
     @property
-    def dtype(self) -> Optional["torch.dtype"]:
+    def dtype(self) -> torch.dtype | None:
         """
         Dtype of the model (if it's Pytorch model), `None` otherwise.
         """
         return getattr(self.model, "dtype", None)
 
     @property
-    def torch_dtype(self) -> Optional["torch.dtype"]:
+    def torch_dtype(self) -> torch.dtype | None:
         """
         Torch dtype of the model (if it's Pytorch model), `None` otherwise.
         """
@@ -1112,7 +1123,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
                     supported_models_names.append(model_name)
             if hasattr(supported_models, "_model_mapping"):
                 for model in supported_models._model_mapping._extra_content.values():
-                    if isinstance(model_name, tuple):
+                    if isinstance(model, tuple):
                         supported_models_names.extend([m.__name__ for m in model])
                     else:
                         supported_models_names.append(model.__name__)
@@ -1207,17 +1218,33 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         if args:
             logger.warning(f"Ignoring args : {args}")
 
-        # Detect if inputs are a chat-style input(s) and cast as `Chat` or list of `Chat`
-        container_types = (list, tuple, types.GeneratorType)
-        if is_torch_available():
-            container_types = (*container_types, KeyDataset)
-        if isinstance(inputs, container_types):
-            if isinstance(inputs, types.GeneratorType):
-                inputs = list(inputs)
-            if is_valid_message(inputs[0]):
-                inputs = Chat(inputs)
-            elif isinstance(inputs[0], (list, tuple)) and all(chat and is_valid_message(chat[0]) for chat in inputs):
-                inputs = [Chat(chat) for chat in inputs]
+        # Detect if inputs are a chat-style input(s) and cast as `Chat` or list of `Chat`.
+        # We peek at the first output of generators to decide the data format, which means we
+        # then have to stick it back on afterward using _reform_generator()
+        if isinstance(inputs, types.GeneratorType):
+            try:
+                first = next(inputs)
+            except StopIteration:
+                inputs = []
+            else:
+                if is_valid_message(first):
+                    inputs = Chat([first, *inputs])
+                elif isinstance(first, (list, tuple)) and first and is_valid_message(first[0]):
+                    # Keep this a generator expression, not a list, so it doesn't materialize everything
+                    inputs = (Chat(chat) for chat in _reform_generator(first, inputs))
+                else:
+                    inputs = _reform_generator(first, inputs)
+        else:
+            container_types = (list, tuple)
+            if is_torch_available():
+                container_types = (*container_types, KeyDataset)
+            if isinstance(inputs, container_types):
+                if is_valid_message(inputs[0]):
+                    inputs = Chat(inputs)
+                elif isinstance(inputs[0], (list, tuple)) and all(
+                    chat and is_valid_message(chat[0]) for chat in inputs
+                ):
+                    inputs = [Chat(chat) for chat in inputs]
 
         if num_workers is None:
             if self._num_workers is None:
@@ -1248,24 +1275,18 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         is_generator = isinstance(inputs, types.GeneratorType)
         is_list = isinstance(inputs, list)
 
-        is_iterable = is_dataset or is_generator or is_list
-        can_use_iterator = is_dataset or is_generator or is_list
-
         if is_list:
-            if can_use_iterator:
-                final_iterator = self.get_iterator(
-                    inputs, num_workers, batch_size, preprocess_params, forward_params, postprocess_params
-                )
-                outputs = list(final_iterator)
-                return outputs
-            else:
-                return self.run_multi(inputs, preprocess_params, forward_params, postprocess_params)
-        elif can_use_iterator:
+            # A list input is eagerly consumed and returns a list of outputs.
+            final_iterator = self.get_iterator(
+                inputs, num_workers, batch_size, preprocess_params, forward_params, postprocess_params
+            )
+            return list(final_iterator)
+        elif is_dataset or is_generator:
+            # Datasets and generators stream lazily: return an iterator consumed on demand so the input is
+            # never fully materialized.
             return self.get_iterator(
                 inputs, num_workers, batch_size, preprocess_params, forward_params, postprocess_params
             )
-        elif is_iterable:
-            return self.iterate(inputs, preprocess_params, forward_params, postprocess_params)
         elif isinstance(self, ChunkPipeline):
             return next(
                 iter(
@@ -1277,20 +1298,11 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         else:
             return self.run_single(inputs, preprocess_params, forward_params, postprocess_params)
 
-    def run_multi(self, inputs, preprocess_params, forward_params, postprocess_params):
-        return [self.run_single(item, preprocess_params, forward_params, postprocess_params) for item in inputs]
-
     def run_single(self, inputs, preprocess_params, forward_params, postprocess_params):
         model_inputs = self.preprocess(inputs, **preprocess_params)
         model_outputs = self.forward(model_inputs, **forward_params)
         outputs = self.postprocess(model_outputs, **postprocess_params)
         return outputs
-
-    def iterate(self, inputs, preprocess_params, forward_params, postprocess_params):
-        # This function should become `get_iterator` again, this is a temporary
-        # easy solution.
-        for input_ in inputs:
-            yield self.run_single(input_, preprocess_params, forward_params, postprocess_params)
 
 
 Pipeline.push_to_hub = copy_func(Pipeline.push_to_hub)
@@ -1349,17 +1361,7 @@ class PipelineRegistry:
             targeted_task = self.supported_tasks[task]
             return task, targeted_task, None
 
-        if task.startswith("translation"):
-            tokens = task.split("_")
-            if len(tokens) == 4 and tokens[0] == "translation" and tokens[2] == "to":
-                targeted_task = self.supported_tasks["translation"]
-                task = "translation"
-                return task, targeted_task, (tokens[1], tokens[3])
-            raise KeyError(f"Invalid translation task {task}, use 'translation_XX_to_YY' format")
-
-        raise KeyError(
-            f"Unknown task {task}, available tasks are {self.get_supported_tasks() + ['translation_XX_to_YY']}"
-        )
+        raise KeyError(f"Unknown task {task}, available tasks are {self.get_supported_tasks()}")
 
     def register_pipeline(
         self,

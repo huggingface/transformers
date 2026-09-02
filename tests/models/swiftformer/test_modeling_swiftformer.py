@@ -18,6 +18,7 @@ from functools import cached_property
 
 from transformers import SwiftFormerConfig
 from transformers.testing_utils import (
+    Expectations,
     require_torch,
     require_vision,
     slow,
@@ -40,7 +41,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ViTImageProcessor
+    from transformers import ViTImageProcessorPil
 
 
 class SwiftFormerModelTester:
@@ -143,7 +144,6 @@ class SwiftFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     test_resize_embeddings = False
     has_attentions = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = SwiftFormerModelTester(self)
@@ -151,7 +151,7 @@ class SwiftFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
             self,
             config_class=SwiftFormerConfig,
             has_text_modality=False,
-            hidden_size=37,
+            hidden_size=32,
             num_attention_heads=12,
             num_hidden_layers=12,
         )
@@ -242,7 +242,7 @@ def prepare_img():
 class SwiftFormerModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return ViTImageProcessor.from_pretrained("MBZUAI/swiftformer-xs") if is_vision_available() else None
+        return ViTImageProcessorPil.from_pretrained("MBZUAI/swiftformer-xs") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
@@ -260,5 +260,11 @@ class SwiftFormerModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([[-2.1703e00, 2.1107e00, -2.0811e00]]).to(torch_device)
-        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
+        expected_slice = Expectations(
+            {
+                (None, None): [[-2.1726, 2.1093, -2.0801]],
+                ("cuda", 8): [[-2.1703, 2.1107, -2.0811]],
+            }
+        ).get_expectation()  # fmt: skip
+        expected_slice = torch.tensor(expected_slice).to(torch_device)
+        torch.testing.assert_close(outputs.logits[:, :3], expected_slice, rtol=1e-4, atol=1e-4)

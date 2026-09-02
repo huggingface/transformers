@@ -25,7 +25,6 @@ import logging
 import os
 import sys
 from dataclasses import dataclass, field
-from typing import Optional
 
 import torch
 from datasets import load_dataset
@@ -64,10 +63,10 @@ class DataTrainingArguments:
     the command line.
     """
 
-    dataset_name: Optional[str] = field(
+    dataset_name: str | None = field(
         default="cifar10", metadata={"help": "Name of a dataset from the datasets package"}
     )
-    dataset_config_name: Optional[str] = field(
+    dataset_config_name: str | None = field(
         default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
     )
     trust_remote_code: bool = field(
@@ -80,15 +79,15 @@ class DataTrainingArguments:
             )
         },
     )
-    image_column_name: Optional[str] = field(
+    image_column_name: str | None = field(
         default=None, metadata={"help": "The column name of the images in the files."}
     )
-    train_dir: Optional[str] = field(default=None, metadata={"help": "A folder containing the training data."})
-    validation_dir: Optional[str] = field(default=None, metadata={"help": "A folder containing the validation data."})
-    train_val_split: Optional[float] = field(
+    train_dir: str | None = field(default=None, metadata={"help": "A folder containing the training data."})
+    validation_dir: str | None = field(default=None, metadata={"help": "A folder containing the validation data."})
+    train_val_split: float | None = field(
         default=0.15, metadata={"help": "Percent to split off of train for validation."}
     )
-    max_train_samples: Optional[int] = field(
+    max_train_samples: int | None = field(
         default=None,
         metadata={
             "help": (
@@ -97,7 +96,7 @@ class DataTrainingArguments:
             )
         },
     )
-    max_eval_samples: Optional[int] = field(
+    max_eval_samples: int | None = field(
         default=None,
         metadata={
             "help": (
@@ -130,10 +129,10 @@ class ModelArguments:
             )
         },
     )
-    config_name: Optional[str] = field(
+    config_name: str | None = field(
         default=None, metadata={"help": "Pretrained config name or path if not the same as model_name_or_path"}
     )
-    config_overrides: Optional[str] = field(
+    config_overrides: str | None = field(
         default=None,
         metadata={
             "help": (
@@ -142,7 +141,7 @@ class ModelArguments:
             )
         },
     )
-    cache_dir: Optional[str] = field(
+    cache_dir: str | None = field(
         default=None, metadata={"help": "Where do you want to store the pretrained models downloaded from s3"}
     )
     model_revision: str = field(

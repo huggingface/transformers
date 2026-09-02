@@ -16,23 +16,21 @@
 import unittest
 
 from transformers.testing_utils import require_torch, require_vision, slow
-from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
 
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import AutoProcessor, Owlv2ForObjectDetection, Owlv2ImageProcessor
+    from transformers import AutoProcessor, Owlv2ForObjectDetection
 
 if is_torch_available():
     import torch
 
-    from transformers import Owlv2ImageProcessorFast
 
-
-class Owlv2ImageProcessingTester:
+class Owlv2ImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -70,27 +68,10 @@ class Owlv2ImageProcessingTester:
             "image_std": self.image_std,
         }
 
-    def expected_output_image_shape(self, images):
-        return self.num_channels, self.size["height"], self.size["width"]
-
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
-
 
 @require_torch
 @require_vision
 class Owlv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = Owlv2ImageProcessor if is_vision_available() else None
-    fast_image_processing_class = Owlv2ImageProcessorFast if is_torchvision_available() else None
-
     def setUp(self):
         super().setUp()
         self.image_processor_tester = Owlv2ImageProcessingTester(self)
@@ -100,7 +81,7 @@ class Owlv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "do_resize"))
             self.assertTrue(hasattr(image_processing, "size"))
@@ -109,7 +90,7 @@ class Owlv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "image_std"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.size, {"height": 18, "width": 18})
 
@@ -120,7 +101,7 @@ class Owlv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     @slow
     def test_image_processor_integration_test(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             processor = image_processing_class()
 
             image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
@@ -131,9 +112,9 @@ class Owlv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     @slow
     def test_image_processor_integration_test_resize(self):
-        for use_fast in [False, True]:
+        for backend_name in self.image_processing_classes.keys():
             checkpoint = "google/owlv2-base-patch16-ensemble"
-            processor = AutoProcessor.from_pretrained(checkpoint, use_fast=use_fast)
+            processor = AutoProcessor.from_pretrained(checkpoint, backend=backend_name)
             model = Owlv2ForObjectDetection.from_pretrained(checkpoint)
 
             image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
@@ -151,7 +132,7 @@ class Owlv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**inputs)
 
-            results = processor.image_processor.post_process_object_detection(
+            results = processor.post_process_grounded_object_detection(
                 outputs, threshold=0.2, target_sizes=[target_size]
             )[0]
 
@@ -162,7 +143,7 @@ class Owlv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             inputs = processor(text=[text, text], images=[image, image], return_tensors="pt")
             with torch.no_grad():
                 outputs = model(**inputs)
-            results = processor.image_processor.post_process_object_detection(
+            results = processor.post_process_grounded_object_detection(
                 outputs, threshold=0.2, target_sizes=[target_size, target_size]
             )
 

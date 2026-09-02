@@ -120,7 +120,5 @@ class MyNewModelConfig(LlamaConfig):
     ```
     """
 
-    def __init__(self, mlp_bias=True, new_param=0, **super_kwargs):
-        super().__init__(self, **super_kwargs)
-        self.mlp_bias = mlp_bias
-        self.new_param = new_param
+    mlp_bias: bool = True
+    new_param: int = 0

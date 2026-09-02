@@ -543,8 +543,8 @@ class GPTBigCodeMQATest(unittest.TestCase):
         config = GPTBigCodeConfig.from_pretrained(
             "bigcode/gpt_bigcode-santacoder",
             multi_query=multi_query,
-            attn_pdrop=0,
-            resid_pdrop=0,
+            attn_pdrop=0.0,
+            resid_pdrop=0.0,
         )
         # We need to set it here as it's normally set by the Model's __init__
         config._attn_implementation = "sdpa"

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,9 +15,10 @@
 
 import argparse
 import json
+from io import BytesIO
 from pathlib import Path
 
-import requests
+import httpx
 import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
@@ -490,11 +490,8 @@ def create_rename_keys(config):
 
 
 def rename_key(state_dict, old, new):
-    try:
-        val = state_dict.pop(old)
-        state_dict[new] = val
-    except Exception:
-        pass
+    if old in state_dict:
+        state_dict[new] = state_dict.pop(old)
 
 
 def read_in_q_k_v(state_dict, config):
@@ -538,9 +535,9 @@ def read_in_q_k_v(state_dict, config):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-
-    return im
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
+    return image
 
 
 @torch.no_grad()

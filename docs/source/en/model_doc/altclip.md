@@ -9,16 +9,11 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2022-11-12 and added to Hugging Face Transformers on 2023-01-04.*
-
-<div style="float: right;">
-  <div class="flex flex-wrap space-x-1">
-    <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+*This model was published in HF papers on 2022-11-12 and contributed to Hugging Face Transformers on 2023-01-04.*
 
 # AltCLIP
 
@@ -29,24 +24,25 @@ You can find all the original AltCLIP checkpoints under the [AltClip](https://hu
 > [!TIP]
 > Click on the AltCLIP models in the right sidebar for more examples of how to apply AltCLIP to different tasks.
 
-The examples below demonstrates how to calculate similarity scores between an image and one or more captions with the [`AutoModel`] class.
+The examples below demonstrate how to calculate similarity scores between an image and one or more captions with the [`AutoModel`] class.
 
 <hfoptions id="usage">
 <hfoption id="AutoModel">
 
 ```python
-import torch
 import requests
 from PIL import Image
+
 from transformers import AltCLIPModel, AltCLIPProcessor
 
-model = AltCLIPModel.from_pretrained("BAAI/AltCLIP", dtype=torch.bfloat16)
+
+model = AltCLIPModel.from_pretrained("BAAI/AltCLIP", device_map="auto")
 processor = AltCLIPProcessor.from_pretrained("BAAI/AltCLIP")
 
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
 
-inputs = processor(text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True)
+inputs = processor(text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True).to(model.device)
 
 outputs = model(**inputs)
 logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
@@ -66,15 +62,16 @@ The example below uses [torchao](../quantization/torchao) to only quantize the w
 
 ```python
 # !pip install torchao
-import torch
 import requests
 from PIL import Image
+
 from transformers import AltCLIPModel, AltCLIPProcessor, TorchAoConfig
+
 
 model = AltCLIPModel.from_pretrained(
     "BAAI/AltCLIP",
     quantization_config=TorchAoConfig("int4_weight_only", group_size=128),
-    dtype=torch.bfloat16,
+    device_map="auto",
 )
 
 processor = AltCLIPProcessor.from_pretrained("BAAI/AltCLIP")
@@ -82,7 +79,7 @@ processor = AltCLIPProcessor.from_pretrained("BAAI/AltCLIP")
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
 
-inputs = processor(text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True)
+inputs = processor(text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True).to(model.device)
 
 outputs = model(**inputs)
 logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
@@ -126,3 +123,4 @@ for label, prob in zip(labels, probs[0]):
 ## AltCLIPProcessor
 
 [[autodoc]] AltCLIPProcessor
+    - __call__

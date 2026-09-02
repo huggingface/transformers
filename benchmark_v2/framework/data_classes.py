@@ -136,7 +136,7 @@ class BenchmarkResult:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, None | int | float]) -> "BenchmarkResult":
+    def from_dict(cls, data: dict[str, Any]) -> "BenchmarkResult":
         # Handle GPU metrics, which is saved as None if it contains only None values
         if data["gpu_metrics"] is None:
             gpu_metrics = [None for _ in range(len(data["e2e_latency"]))]

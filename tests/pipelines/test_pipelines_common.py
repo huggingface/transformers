@@ -13,12 +13,14 @@
 # limitations under the License.
 
 import gc
+import itertools
 import logging
 import os
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import datasets
 from huggingface_hub import delete_repo, snapshot_download
@@ -30,7 +32,6 @@ from transformers import (
     AutoTokenizer,
     DistilBertForSequenceClassification,
     MaskGenerationPipeline,
-    T5ForConditionalGeneration,
     TextClassificationPipeline,
     TextGenerationPipeline,
     pipeline,
@@ -46,6 +47,7 @@ from transformers.testing_utils import (
     is_pipeline_test,
     is_staging_test,
     nested_simplify,
+    require_peft,
     require_torch,
     require_torch_accelerator,
     require_torch_multi_accelerator,
@@ -54,6 +56,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import direct_transformers_import, is_torch_available
 from transformers.utils import logging as transformers_logging
+from transformers.utils.chat_template_utils import Chat
 
 
 sys.path.append(str(Path(__file__).parent.parent.parent / "utils"))
@@ -140,6 +143,17 @@ class CommonPipelineTest(unittest.TestCase):
 
         self.assertIsInstance(text_classifier, MyPipeline)
 
+    @require_torch
+    def test_pipeline_tokenizer_tuple_respects_use_fast_override(self):
+        text_classifier = pipeline(
+            task="text-classification",
+            model="hf-internal-testing/tiny-random-bert",
+            tokenizer=("hf-internal-testing/tiny-random-bert", {"use_fast": False}),
+        )
+
+        self.assertIsInstance(text_classifier, TextClassificationPipeline)
+        self.assertEqual(type(text_classifier.tokenizer).__name__, "BertTokenizer")
+
     def test_check_task(self):
         task = get_task("openai-community/gpt2")
         self.assertEqual(task, "text-generation")
@@ -169,6 +183,83 @@ class CommonPipelineTest(unittest.TestCase):
             self.assertEqual(nested_simplify(out), {"label": "LABEL_0", "score": 0.504})
             results.append(out)
         self.assertEqual(len(results), 10)
+
+    @require_torch
+    def test_generator_input_not_materialized(self):
+        # Regression test for #47116: passing a generator must stream lazily rather than be pulled into a
+        # list up front, which OOMs on large/streaming inputs.
+        produced = 0
+
+        def data(n: int):
+            nonlocal produced
+            for _ in range(n):
+                produced += 1
+                yield "This is a test"
+
+        pipe = pipeline(model="hf-internal-testing/tiny-random-distilbert")
+
+        outputs = pipe(data(1000))
+        # A generator input returns a lazy iterator, not a fully materialized list of outputs.
+        self.assertNotIsInstance(outputs, list)
+        # Detecting chat-style inputs only peeks at the first item, so at most one element is consumed up
+        # front (the old code did `list(inputs)`, draining all 1000 here).
+        self.assertLessEqual(produced, 1)
+        # Pulling only the first few outputs must not drain the whole generator.
+        first = list(itertools.islice(outputs, 3))
+        self.assertEqual(len(first), 3)
+        self.assertLess(produced, 1000)
+
+    @require_torch
+    def test_chat_input_as_generator(self):
+        # A single chat can be passed as a generator of messages; it is a bounded conversation that gets
+        # detected and wrapped as a `Chat` (one input), matching the list-of-messages behavior. Downstream
+        # tokenization does not understand `Chat` for text-classification, so we short-circuit `run_single`
+        # and only assert on what it receives.
+        messages = [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "Hello!"},
+        ]
+
+        class _Stop(Exception):
+            pass
+
+        captured = {}
+
+        def spy(self, inputs, *args, **kwargs):
+            captured["inputs"] = inputs
+            raise _Stop
+
+        pipe = pipeline(model="hf-internal-testing/tiny-random-distilbert")
+        with mock.patch.object(Pipeline, "run_single", spy), self.assertRaises(_Stop):
+            pipe(m for m in messages)
+
+        self.assertIsInstance(captured["inputs"], Chat)
+        self.assertEqual(captured["inputs"].messages, messages)
+
+    @require_torch
+    def test_chats_as_generator_wrapped_lazily(self):
+        # A generator of chats (each a list of messages) is wrapped as `Chat` per item and streamed lazily,
+        # rather than being materialized to a list of `Chat` up front like the list-of-chats case.
+        chats = [
+            [{"role": "user", "content": "Hello!"}],
+            [{"role": "user", "content": "Goodbye!"}],
+        ]
+
+        captured = {}
+
+        def fake_get_iterator(self, inputs, *args, **kwargs):
+            captured["inputs"] = inputs
+            return iter([])
+
+        pipe = pipeline(model="hf-internal-testing/tiny-random-distilbert")
+        with mock.patch.object(Pipeline, "get_iterator", fake_get_iterator):
+            list(pipe(c for c in chats))
+
+        # `get_iterator` receives a still-unconsumed generator; draining it here yields one `Chat` per item.
+        streamed = list(captured["inputs"])
+        self.assertEqual(len(streamed), 2)
+        self.assertTrue(all(isinstance(chat, Chat) for chat in streamed))
+        self.assertEqual(streamed[0].messages, chats[0])
 
     @require_torch
     def test_unbatch_attentions_hidden_states(self):
@@ -214,30 +305,50 @@ class CommonPipelineTest(unittest.TestCase):
 
             self.assertIsInstance(pipe, TextGenerationPipeline)  # Assert successful load
 
+    @require_peft
     @require_torch
-    def test_pipeline_with_task_parameters_no_side_effects(self):
+    def test_pipeline_from_local_with_embedded_adapter(self):
         """
-        Regression test: certain pipeline flags, like `task`, modified the model configuration, causing unexpected
-        side-effects
+        Test for issue #43746: Only overwrite the pretrained_model_name_or_path if needed with adapter.
+
+        This test ensures that when a pipeline loads from a local directory that contains a base model
+        with an embedded adapter (i.e., it has a config.json file), the path should NOT be overwritten
+        with the base_model_name_or_path from the adapter config. The fix is applied in
+        src/transformers/pipelines/__init__.py in the pipeline function.
         """
-        # This checkpoint has task-specific parameters that will modify the behavior of the pipeline
-        model = T5ForConditionalGeneration.from_pretrained("t5-small")
-        self.assertTrue(model.config.num_beams == 1)
+        peft_test_model = "peft-internal-testing/tiny-OPTForCausalLM-lora"
+        transformers_test_model = "hf-internal-testing/tiny-random-OPTForCausalLM"
 
-        # The task-specific parameters used to cause side-effects on `model.config` -- not anymore
-        pipe = pipeline(model=model, tokenizer=AutoTokenizer.from_pretrained("t5-small"), task="translation_en_to_de")
-        self.assertTrue(model.config.num_beams == 1)
-        self.assertTrue(model.generation_config.num_beams == 1)
+        # Create a temporary directory with a complete adapter model structure
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_dir = Path(tmp_dir)
 
-        # Under the hood: we now store a generation config in the pipeline. This generation config stores the
-        # task-specific parameters.
-        self.assertTrue(pipe.generation_config.num_beams == 4)
+            # Save the model and adapter locally
+            from transformers import AutoConfig, AutoModel
 
-        # We can confirm that the task-specific parameters have an effect. (In this case, the default is `num_beams=1`,
-        # which would crash when `num_return_sequences=4` is passed.)
-        pipe("Hugging Face doesn't sell hugs.", num_return_sequences=4)
-        with self.assertRaises(ValueError):
-            pipe("Hugging Face doesn't sell hugs.", num_return_sequences=4, num_beams=1)
+            config = AutoConfig.from_pretrained(transformers_test_model)
+            model = AutoModel.from_pretrained(transformers_test_model)
+            adapter_model = AutoModel.from_pretrained(peft_test_model)
+            config.save_pretrained(tmp_dir)
+            model.save_pretrained(tmp_dir)
+            adapter_model.save_pretrained(tmp_dir)
+
+            # Overwrite the base_model_name_or_path to an invalid value that
+            # would cause the pipeline load to fail later
+            import json
+
+            from transformers.utils import ADAPTER_CONFIG_NAME
+
+            adapter_config_path = tmp_dir / ADAPTER_CONFIG_NAME
+            with open(adapter_config_path, "r") as handle:
+                adapter_config = json.load(handle)
+            adapter_config["base_model_name_or_path"] = "some/model/that/does/not/exist"
+            with open(adapter_config_path, "w") as handle:
+                json.dump(adapter_config, handle)
+
+            # Load from the saved path and make sure it actually loads despite
+            # the invalid adapter config path
+            pipeline("text-generation", tmp_dir)
 
 
 @is_pipeline_test
@@ -640,24 +751,11 @@ class PipelineUtilsTest(unittest.TestCase):
         auto_model_cls = relevant_auto_classes[0]
 
         # retrieve correct model ids
-        if task == "translation":
-            # special case for translation pipeline which has multiple languages
-            model_ids = []
-            revisions = []
-            tasks = []
-            for translation_pair in task_dict["default"]:
-                model_id, revision = task_dict["default"][translation_pair]["model"]
+        model_id, revision = task_dict["default"]["model"]
 
-                model_ids.append(model_id)
-                revisions.append(revision)
-                tasks.append(task + f"_{'_to_'.join(translation_pair)}")
-        else:
-            # normal case - non-translation pipeline
-            model_id, revision = task_dict["default"]["model"]
-
-            model_ids = [model_id]
-            revisions = [revision]
-            tasks = [task]
+        model_ids = [model_id]
+        revisions = [revision]
+        tasks = [task]
 
         # check for equality
         for model_id, revision, task in zip(model_ids, revisions, tasks):

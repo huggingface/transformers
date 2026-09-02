@@ -19,6 +19,7 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_sam3 import *
+    from .image_processing_sam3 import *
     from .modeling_sam3 import *
     from .processing_sam3 import *
 else:

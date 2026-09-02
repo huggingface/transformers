@@ -2,7 +2,7 @@
 
 import re
 import unicodedata
-from typing import Any, Optional, Union
+from typing import Any, Union
 
 from ...tokenization_utils_sentencepiece import SentencePieceBackend
 from ...utils import is_torch_available, logging
@@ -94,7 +94,7 @@ class GPTSw3Tokenizer(SentencePieceBackend):
         unk_token=None,
         eos_token=None,
         bos_token=None,
-        sp_model_kwargs: Optional[dict[str, Any]] = None,
+        sp_model_kwargs: dict[str, Any] | None = None,
         **kwargs,
     ) -> None:
         name_or_path = kwargs.get("name_or_path")
@@ -168,12 +168,13 @@ class GPTSw3Tokenizer(SentencePieceBackend):
 
     def convert_tokens_to_string(self, tokens: list[str]) -> str:
         """Converts a sequence of tokens (strings) to a single string. Special tokens remain intact."""
+        all_special_tokens = set(self.all_special_tokens)
         current_sub_tokens = []
         out_string = ""
         prev_is_special = False
         for token in tokens:
             # make sure that special tokens are not decoded using sentencepiece model
-            if token in self.all_special_tokens:
+            if token in all_special_tokens:
                 # TODO: Check if this is needed, as it ensures that decode(encode(doc)) != doc by adding extra whitespace in the decoded document
                 if not prev_is_special:
                     out_string += " "
@@ -189,7 +190,7 @@ class GPTSw3Tokenizer(SentencePieceBackend):
         return out_string
 
     def encode_fast(
-        self, text: Union[str, list[str]], return_tensors: Union[str, bool] = False
+        self, text: str | list[str], return_tensors: str | bool = False
     ) -> Union[list[int], list[list[int]], "torch.Tensor"]:
         """
         Encodes a text or batch of texts to token ids using preprocessing and the raw SP tokenizer. This has reduced
@@ -221,7 +222,7 @@ class GPTSw3Tokenizer(SentencePieceBackend):
 
         return token_ids
 
-    def decode_fast(self, token_ids: Union[int, list[int]]) -> str:
+    def decode_fast(self, token_ids: int | list[int]) -> str:
         """
         Encodes a text or batch of texts to token ids using preprocessing and the raw SP tokenizer. This has reduced
         functionality but is often much faster.

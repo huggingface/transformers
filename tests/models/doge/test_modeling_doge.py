@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +17,7 @@ import unittest
 
 from transformers import AutoTokenizer, DogeConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
-    require_read_token,
+    Expectations,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -343,9 +342,9 @@ class DogeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         # They are valid but not always used, depending on config.is_moe flag (the modules are not the same in both cases)
         problematic_keys = {
-            "layers.*.mlp.router_gate": "colwise_rep",
-            "layers.*.mlp.down_embed": "rowwise_rep",
-            "layers.*.mlp.up_embed": "rowwise_rep",
+            "layers.*.mlp.router_gate": "colwise_gather_output",
+            "layers.*.mlp.down_embed": "rowwise_split_input",
+            "layers.*.mlp.up_embed": "rowwise_split_input",
         }
         if not config.is_moe:
             for key in problematic_keys:
@@ -368,17 +367,21 @@ class DogeIntegrationTest(unittest.TestCase):
             cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
 
     @slow
-    @require_read_token
     def test_Doge_20M_hard(self):
         """
         An integration test for Doge-20M. It tests against a long output to ensure the subtle numerical differences
         """
-        EXPECTED_TEXT = "Here's everything I know about dogs. Dogs is the best animal in the world. It is a very popular and popular dog in the United States. It is a very popular"
+        EXPECTED_TEXT = Expectations(
+            {
+                (None, None): "Here's everything I know about dogs. Dogs is the best animal in the world. It is a very popular and popular dog in the United States. It is a very popular",
+                ("cuda", 8): "Here's everything I know about dogs. Dogs is the best animal in the world. It is a very popular and popular breed for dogs. It is a very popular and popular",
+            }
+        ).get_expectation()  # fmt: skip
 
         tokenizer = AutoTokenizer.from_pretrained("SmallDoge/Doge-20M")
         model = DogeForCausalLM.from_pretrained("SmallDoge/Doge-20M", device_map="auto", dtype=torch.bfloat16)
         input_text = ["Here's everything I know about dogs. Dogs is the best animal in the"]
-        set_seed(0)
+        set_seed(42)
         model_inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
 
         generated_ids = model.generate(**model_inputs, max_new_tokens=20, do_sample=False)

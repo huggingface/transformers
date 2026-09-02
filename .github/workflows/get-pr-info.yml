@@ -62,6 +62,9 @@ on:
         value: ${{ jobs.get-pr-info.outputs.PR_FILES }}
 
 
+permissions:
+  contents: read
+
 jobs:
   get-pr-info:
     runs-on: ubuntu-22.04
@@ -89,22 +92,26 @@ jobs:
     steps:
       - name: Extract PR details
         id: pr_info
-        uses: actions/github-script@v6
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          PR_NUMBER: ${{ inputs.pr_number }}
         with:
-          script: |            
+          script: |
+            const pull_number = parseInt(process.env.PR_NUMBER, 10);
+
             const { data: pr } = await github.rest.pulls.get({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              pull_number: ${{ inputs.pr_number }}
+              pull_number,
             });
 
-            const { data: head_commit }  = await github.rest.repos.getCommit({
+            const { data: head_commit } = await github.rest.repos.getCommit({
               owner: pr.head.repo.owner.login,
               repo: pr.head.repo.name,
               ref: pr.head.ref
             });
 
-            const { data: merge_commit }  = await github.rest.repos.getCommit({
+            const { data: merge_commit } = await github.rest.repos.getCommit({
               owner: pr.base.repo.owner.login,
               repo: pr.base.repo.name,
               ref: pr.merge_commit_sha,
@@ -113,7 +120,7 @@ jobs:
             const { data: files } = await github.rest.pulls.listFiles({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              pull_number: ${{ inputs.pr_number }}
+              pull_number,
             });
 
             core.setOutput('head_repo_full_name', pr.head.repo.full_name);

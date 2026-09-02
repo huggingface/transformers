@@ -75,13 +75,6 @@ output = model.generate(**input_ids, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 </hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "Plants create energy through a process known as" | transformers run --task text-generation --model ai21labs/AI21-Jamba-Mini-1.6 --device 0
-```
-
-</hfoption>
 </hfoptions>
 
 양자화는 가중치를 더 낮은 정밀도로 표현하여 대규모 모델의 메모리 부담을 줄여줍니다. 사용할 수 있는 다양한 양자화 백엔드에 대해서는 [Quantization](../quantization/overview)를 참고하세요.

@@ -21,6 +21,7 @@ from .base import HfQuantizer
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
+    from ..utils.quantization_config import AwqConfig
 
 from ..utils import is_accelerate_available, is_gptqmodel_available, is_torch_available, logging
 from ..utils.quantization_config import AwqBackend
@@ -39,6 +40,7 @@ class AwqQuantizer(HfQuantizer):
 
     # AWQ requires data calibration - we support only inference
     requires_calibration = True
+    quantization_config: "AwqConfig"
 
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)

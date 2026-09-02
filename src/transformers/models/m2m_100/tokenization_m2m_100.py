@@ -17,7 +17,7 @@ import json
 import os
 from pathlib import Path
 from shutil import copyfile
-from typing import Any, Optional, Union
+from typing import Any
 
 import sentencepiece
 
@@ -123,7 +123,7 @@ class M2M100Tokenizer(PreTrainedTokenizer):
         pad_token="<pad>",
         unk_token="<unk>",
         language_codes="m2m100",
-        sp_model_kwargs: Optional[dict[str, Any]] = None,
+        sp_model_kwargs: dict[str, Any] | None = None,
         num_madeup_words=8,
         **kwargs,
     ) -> None:
@@ -209,11 +209,12 @@ class M2M100Tokenizer(PreTrainedTokenizer):
 
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
+        all_special_tokens = set(self.all_special_tokens)
         current_sub_tokens = []
         out_string = ""
         for token in tokens:
             # make sure that special tokens are not decoded using sentencepiece model
-            if token in self.all_special_tokens:
+            if token in all_special_tokens:
                 out_string += self.sp_model.decode(current_sub_tokens) + token
                 current_sub_tokens = []
             else:
@@ -222,7 +223,7 @@ class M2M100Tokenizer(PreTrainedTokenizer):
         return out_string.strip()
 
     def get_special_tokens_mask(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
+        self, token_ids_0: list[int], token_ids_1: list[int] | None = None, already_has_special_tokens: bool = False
     ) -> list[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
@@ -252,7 +253,7 @@ class M2M100Tokenizer(PreTrainedTokenizer):
         return prefix_ones + ([0] * len(token_ids_0)) + ([0] * len(token_ids_1)) + suffix_ones
 
     def build_inputs_with_special_tokens(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+        self, token_ids_0: list[int], token_ids_1: list[int] | None = None
     ) -> list[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
@@ -292,7 +293,7 @@ class M2M100Tokenizer(PreTrainedTokenizer):
 
         self.sp_model = load_spm(self.spm_file, self.sp_model_kwargs)
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str]:
         save_dir = Path(save_directory)
         if not save_dir.is_dir():
             raise OSError(f"{save_directory} should be a directory")
@@ -318,7 +319,7 @@ class M2M100Tokenizer(PreTrainedTokenizer):
         self,
         src_texts: list[str],
         src_lang: str = "en",
-        tgt_texts: Optional[list[str]] = None,
+        tgt_texts: list[str] | None = None,
         tgt_lang: str = "ro",
         **kwargs,
     ) -> BatchEncoding:
@@ -327,7 +328,7 @@ class M2M100Tokenizer(PreTrainedTokenizer):
         self.set_src_lang_special_tokens(self.src_lang)
         return super().prepare_seq2seq_batch(src_texts, tgt_texts, **kwargs)
 
-    def _build_translation_inputs(self, raw_inputs, src_lang: Optional[str], tgt_lang: Optional[str], **extra_kwargs):
+    def _build_translation_inputs(self, raw_inputs, src_lang: str | None, tgt_lang: str | None, **extra_kwargs):
         """Used by translation pipeline, to prepare inputs for the generate function"""
         if src_lang is None or tgt_lang is None:
             raise ValueError("Translation requires a `src_lang` and a `tgt_lang` for this model")
@@ -371,7 +372,7 @@ def load_spm(path: str, sp_model_kwargs: dict[str, Any]) -> sentencepiece.Senten
     return spm
 
 
-def load_json(path: str) -> Union[dict, list]:
+def load_json(path: str) -> dict | list:
     with open(path, "r") as f:
         return json.load(f)
 

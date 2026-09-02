@@ -27,7 +27,6 @@ from transformers.testing_utils import (
     Expectations,
     cleanup,
     require_deterministic_for_xpu,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -175,7 +174,10 @@ class Mistral3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         if is_torch_available()
         else {}
     )
+    # Mistral3 merges batch_size and num_patches in index 1, with index 0 hardcoded to 1
+    skip_test_image_features_output_shape = True
     _is_composite = True
+    test_torch_exportable = False  # data-dependent multimodal placeholder mask
 
     def setUp(self):
         self.model_tester = Mistral3VisionText2TextModelTester(self)
@@ -232,7 +234,6 @@ class Mistral3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 @slow
 @require_torch_accelerator
 class Mistral3IntegrationTest(unittest.TestCase):
-    @require_read_token
     def setUp(self):
         cleanup(torch_device, gc_collect=True)
         self.model_checkpoint = "mistralai/Mistral-Small-3.1-24B-Instruct-2503"
@@ -242,7 +243,6 @@ class Mistral3IntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
-    @require_read_token
     def test_mistral3_integration_generate_text_only(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
         processor.chat_template = processor.chat_template.replace('strftime_now("%Y-%m-%d")', '"2025-06-20"')
@@ -274,7 +274,6 @@ class Mistral3IntegrationTest(unittest.TestCase):
         expected_output = expected_outputs.get_expectation()
         self.assertEqual(decoded_output, expected_output)
 
-    @require_read_token
     @require_deterministic_for_xpu
     def test_mistral3_integration_generate(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
@@ -301,7 +300,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "The image features two tabby cats lying on a pink surface, which appears to be a cushion or",
-                ("cuda", 8): 'The image features two cats lying on a pink surface, which appears to be a couch or a bed',
+                ("cuda", 8): 'The image features two tabby cats lying on a pink surface, which appears to be a couch or',
                 ("rocm", (9, 4)): "The image features two cats lying on a pink surface, which appears to be a couch or a bed",
                 ("rocm", (9, 5)): "The image features two tabby cats lying on a pink surface, which appears to be a cushion or"
             }
@@ -309,10 +308,10 @@ class Mistral3IntegrationTest(unittest.TestCase):
         expected_output = expected_outputs.get_expectation()
         self.assertEqual(decoded_output, expected_output)
 
-    @require_read_token
     @require_deterministic_for_xpu
     def test_mistral3_integration_batched_generate(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
+        processor.tokenizer.padding_side = "left"
         processor.chat_template = processor.chat_template.replace('strftime_now("%Y-%m-%d")', '"2025-06-20"')
         messages = [
             [
@@ -356,7 +355,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): "Calm lake's mirror gleams,\nWhispering pines stand in silence,\nPath to peace begins.",
                 ("cuda", (8, 0)): "Wooden path to calm,\nReflections whisper secrets,\nNature's peace unfolds.",
-                ("cuda", (8, 6)): "Calm waters reflect\nWooden path to distant shore\nSilence in the woods",
+                ("cuda", (8, 6)): "Calm waters reflect\nWooden path to distant shore\nSilence in the scene",
                 ("rocm", (9, 5)): "Calm waters reflect\nWooden path to distant shore\nSilence in the scene"
             }
         )  # fmt: skip
@@ -382,10 +381,10 @@ class Mistral3IntegrationTest(unittest.TestCase):
             f"Decoded output: {decoded_output}\nExpected output: {expected_output}",
         )
 
-    @require_read_token
     @require_deterministic_for_xpu
     def test_mistral3_integration_batched_generate_multi_image(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
+        processor.tokenizer.padding_side = "left"
         processor.chat_template = processor.chat_template.replace('strftime_now("%Y-%m-%d")', '"2025-06-20"')
 
         # Prepare inputs
@@ -433,7 +432,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
         decoded_output = processor.decode(gen_tokens[0], skip_special_tokens=True)
         expected_outputs = Expectations(
             {
-                ("cuda", 8): "Calm waters reflect\nWooden path to distant shore\nPeace in nature's hold",
+                ("cuda", 8): "Calm waters reflect\nWooden path to distant shore\nSilence in the scene",
                 ("rocm", (9, 4)): "Calm waters reflect\nWooden path to distant shore\nSilence in the pines"
             }
         )  # fmt: skip

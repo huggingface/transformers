@@ -4,17 +4,18 @@ on:
   workflow_dispatch:
     inputs:
       runner_type:
-        description: 'Type of runner to test (a10)'
+        description: 'Type of runner to test (a10, cpu)'
         required: true
       docker_image:
         description: 'Name of the Docker image'
         required: true
       num_gpus:
-        description: 'Type of the number of gpus to use (`single` or `multi`)'
-        required: true
+        description: 'Number of GPUs to use (`single` or `multi`; not needed for cpu runner)'
+        required: false
+        default: 'none'
 
 env:
-  HF_HUB_READ_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+  HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
   HF_HOME: /mnt/cache
   TRANSFORMERS_IS_CI: yes
   OMP_NUM_THREADS: 8
@@ -22,6 +23,9 @@ env:
   RUN_SLOW: yes # For gated repositories, we still need to agree to share information on the Hub repo. page in order to get access. # This token is created under the bot `hf-transformers-bot`.
   TF_FORCE_GPU_ALLOW_GROWTH: true
   CUDA_VISIBLE_DEVICES: 0,1
+
+permissions:
+  contents: read
 
 jobs:
   get_runner:
@@ -36,10 +40,18 @@ jobs:
           NUM_GPUS: ${{ github.event.inputs.num_gpus }}
           RUNNER_TYPE: ${{ github.event.inputs.runner_type }}
         run: |
-          if [[ "$NUM_GPUS" == "single" && "$RUNNER_TYPE" == "a10" ]]; then
-            echo "RUNNER=aws-g5-4xlarge-cache-ssh" >> $GITHUB_ENV
-          elif [[ "$NUM_GPUS" == "multi" && "$RUNNER_TYPE" == "a10" ]]; then
-            echo "RUNNER=aws-g5-12xlarge-cache-ssh" >> $GITHUB_ENV
+          if [[ "$RUNNER_TYPE" == "a10" ]]; then
+            if [[ "$NUM_GPUS" != "single" && "$NUM_GPUS" != "multi" ]]; then
+              echo "WARNING: num_gpus not set or invalid for a10 runner, defaulting to 'single'"
+              NUM_GPUS="single"
+            fi
+            if [[ "$NUM_GPUS" == "single" ]]; then
+              echo "RUNNER=aws-g5-4xlarge-cache-ssh" >> $GITHUB_ENV
+            else
+              echo "RUNNER=aws-g5-12xlarge-cache-ssh" >> $GITHUB_ENV
+            fi
+          elif [[ "$RUNNER_TYPE" == "cpu" ]]; then
+            echo "RUNNER=aws-m8i-l-cache" >> $GITHUB_ENV
           else
             echo "RUNNER=" >> $GITHUB_ENV
           fi
@@ -59,6 +71,7 @@ jobs:
       image: ${{ github.event.inputs.docker_image }}
     steps:
       - name: Update clone
+        if: ${{ github.event.inputs.runner_type != 'cpu' }}
         working-directory: /transformers
         env:
           commit_sha: ${{ github.sha }}
@@ -66,6 +79,7 @@ jobs:
           git fetch && git checkout "$commit_sha"
 
       - name: Cleanup
+        if: ${{ github.event.inputs.runner_type != 'cpu' }}
         working-directory: /transformers
         run: |
           rm -rf tests/__pycache__
@@ -73,10 +87,12 @@ jobs:
           rm -rf reports
 
       - name: Show installed libraries and their versions
+        if: ${{ github.event.inputs.runner_type != 'cpu' }}
         working-directory: /transformers
         run: pip freeze
 
       - name: NVIDIA-SMI
+        if: ${{ github.event.inputs.runner_type != 'cpu' }}
         run: |
           nvidia-smi
 
@@ -91,12 +107,14 @@ jobs:
           pip install psutil --break-system-packages
 
       - name: Download memory monitor script
+        if: ${{ github.event.inputs.runner_type != 'cpu' }}
         working-directory: /transformers
         run: |
           apt-get update && apt-get install -y curl
           curl -o memory_monitor.py https://raw.githubusercontent.com/huggingface/transformers/refs/heads/utility_scripts/utils/memory_monitor.py
 
       - name: Start memory monitor
+        if: ${{ github.event.inputs.runner_type != 'cpu' }}
         working-directory: /transformers
         continue-on-error: true  # Don't fail workflow if monitor has issues
         run: |
@@ -111,18 +129,6 @@ jobs:
       - name: Install utilities
         run: |
           apt-get install -y nano
-
-      - name: Store Slack infos
-        #because the SSH can be enabled dynamically if the workflow failed, so we need to store slack infos to be able to retrieve them during the waitforssh step
-        shell: bash
-        env:
-          GITHUB_ACTOR: ${{ github.actor }}
-        run: |
-          echo "$GITHUB_ACTOR"
-          github_actor=$GITHUB_ACTOR
-          github_actor=${github_actor/'-'/'_'}
-          echo "$github_actor"
-          echo "github_actor=$github_actor" >> $GITHUB_ENV
 
       - name: Setup automatic environment for SSH login
         run: |
@@ -140,11 +146,11 @@ jobs:
           cd /transformers 2>/dev/null || true
           
           # Remind user to set token if needed
-          if [ -z "$HF_HUB_READ_TOKEN" ]; then
-              echo "⚠️  HF_HUB_READ_TOKEN not set. Set it with:"
-              echo "    export HF_HUB_READ_TOKEN=hf_xxxxx"
+          if [ -z "$HF_TOKEN" ]; then
+              echo "⚠️  HF_TOKEN not set. Set it with:"
+              echo "    export HF_TOKEN=hf_xxxxx"
           else
-              echo "✅ HF_HUB_READ_TOKEN is set"
+              echo "✅ HF_TOKEN is set"
           fi
           
           echo "📁 Working directory: $(pwd)"
@@ -154,25 +160,11 @@ jobs:
           echo 'source /root/.env_setup' >> /root/.bash_profile
           echo 'source /root/.env_setup' >> /root/.bashrc
 
-      - name: Store Slack infos
-        #because the SSH can be enabled dynamically if the workflow failed, so we need to store slack infos to be able to retrieve them during the waitforssh step
-        shell: bash
-        env:
-          user_slack_id: ${{ secrets[format('{0}_{1}', env.github_actor, 'SLACK_ID')] }}
-          default_slack_channel: ${{ secrets.SLACK_CIFEEDBACK_CHANNEL }}
-        run: |
-          echo "$github_actor"
-          if [ "$user_slack_id" != "" ]; then
-            echo "SLACKCHANNEL=$user_slack_id" >> $GITHUB_ENV
-          else
-            echo "SLACKCHANNEL=$default_slack_channel" >> $GITHUB_ENV
-          fi
-        
       - name: Tailscale # In order to be able to SSH when a test fails
-        uses: huggingface/tailscale-action@main
+        uses: huggingface/tailscale-action@9d1a67c46875a956cf2d1975473da978a970a2a9  # main
         with:
           authkey: ${{ secrets.TAILSCALE_SSH_AUTHKEY }}
-          slackChannel: ${{ env.SLACKCHANNEL }}
+          slackChannel: ${{ secrets.SLACK_CIFEEDBACK_CHANNEL }}
           slackToken: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
           waitForSSH: true
           sshTimeout: 15m

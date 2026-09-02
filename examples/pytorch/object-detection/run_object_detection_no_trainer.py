@@ -33,7 +33,7 @@ import os
 from collections.abc import Mapping
 from functools import partial
 from pathlib import Path
-from typing import Any, Union
+from typing import Any
 
 import albumentations as A
 import datasets
@@ -164,7 +164,7 @@ def augment_and_transform_batch(
 
 
 # Copied from examples/pytorch/object-detection/run_object_detection.collate_fn
-def collate_fn(batch: list[BatchFeature]) -> Mapping[str, Union[torch.Tensor, list[Any]]]:
+def collate_fn(batch: list[BatchFeature]) -> Mapping[str, torch.Tensor | list[Any]]:
     data = {}
     data["pixel_values"] = torch.stack([x["pixel_values"] for x in batch])
     data["labels"] = [x["labels"] for x in batch]

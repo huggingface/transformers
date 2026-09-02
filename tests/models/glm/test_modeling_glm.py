@@ -43,6 +43,13 @@ class GlmModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = GlmModel
 
+    def __init__(self, parent):
+        super().__init__(parent=parent)
+        # NOTE(3outeille): must be 0.0 for TP backward tests. In train mode, non-zero dropout causes
+        # different RNG states between the non-TP and TP model forward passes (they run sequentially),
+        # leading to different dropout masks and mismatched losses.
+        self.attention_dropout = 0.0
+
 
 @require_torch
 class GlmModelTest(CausalLMModelTest, unittest.TestCase):
@@ -100,7 +107,11 @@ class GlmIntegrationTest(unittest.TestCase):
             ],
             ("cuda", 8): [
                 'Hello I am doing a project on the history of the internetSolution:\n\nStep 1: Introduction\nThe history of the',
-                'Hi today I am going to show you how to make a simple and easy to make a DIY paper lantern.',
+                'Hi today I am going to show you how to make a simple and easy to make a DIY paper flower.',
+            ],
+            ("xpu", 5): [
+                "Hello I am doing a project on the history of the internetSolution:\n\nStep 1: Introduction\nThe history of the",
+                "Hi today I am going to show you how to make a simple and easy to make a DIY paper lantern.",
             ],
             ("rocm", (9, 5)) : [
                 "Hello I am doing a project on the history of the internetSolution:\n\nStep 1: Introduction\nThe history of the",

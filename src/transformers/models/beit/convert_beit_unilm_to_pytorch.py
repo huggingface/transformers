@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,9 +15,10 @@
 
 import argparse
 import json
+from io import BytesIO
 from pathlib import Path
 
-import requests
+import httpx
 import torch
 from datasets import load_dataset
 from huggingface_hub import hf_hub_download
@@ -162,8 +162,9 @@ def rename_key(dct, old, new):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-    return im
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
+    return image
 
 
 @torch.no_grad()
@@ -225,7 +226,8 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
 
     # size of the architecture
     if "base" in checkpoint_url:
-        pass
+        if "ade20k" in checkpoint_url:
+            config.out_indices = [3, 5, 7, 11]
     elif "large" in checkpoint_url:
         config.hidden_size = 1024
         config.intermediate_size = 4096

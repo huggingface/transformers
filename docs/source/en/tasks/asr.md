@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -36,7 +36,7 @@ To see all architectures and checkpoints compatible with this task, we recommend
 Before you begin, make sure you have all the necessary libraries installed:
 
 ```bash
-pip install transformers datasets evaluate jiwer
+pip install transformers datasets evaluate jiwer soundfile librosa torchcodec
 ```
 
 We encourage you to login to your Hugging Face account so you can upload and share your model with the community. When prompted, enter your token to login:
@@ -188,7 +188,7 @@ Unlike other data collators, this specific data collator needs to apply a differ
 ...         return batch
 ```
 
-Now instantiate your `DataCollatorForCTCWithPadding`:
+Now instantiate your `DataCollatorCTCWithPadding`:
 
 ```py
 >>> data_collator = DataCollatorCTCWithPadding(processor=processor, padding="longest")
@@ -262,7 +262,7 @@ At this point, only three steps remain:
 ...     max_steps=2000,
 ...     gradient_checkpointing=True,
 ...     fp16=True,
-...     group_by_length=True,
+...     train_sampling_strategy="group_by_length",
 ...     eval_strategy="steps",
 ...     per_device_eval_batch_size=8,
 ...     save_steps=1000,
@@ -272,6 +272,7 @@ At this point, only three steps remain:
 ...     metric_for_best_model="wer",
 ...     greater_is_better=False,
 ...     push_to_hub=True,
+...     report_to="trackio",
 ... )
 
 >>> trainer = Trainer(

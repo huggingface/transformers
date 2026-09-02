@@ -126,7 +126,7 @@
     title: Trainer API
   - sections:
     - local: accelerator_selection
-      title: (번역중) Accelerator selection
+      title: 가속기 선택
     - local: accelerate
       title: 🤗 Accelerate로 분산 학습 구성하기
     - local: fsdp
@@ -191,8 +191,8 @@
     title: (번역중) HIGGS
   - local: in_translation
     title: (번역중) HQQ
-  - local: in_translation
-    title: (번역중) Optimum
+  - local: quantization/optimum
+    title: Optimum
   - local: quantization/quanto
     title: Quanto
   - local: quantization/quark
@@ -255,8 +255,6 @@
         title: 제로샷(zero-shot) 이미지 분류
       - local: tasks/monocular_depth_estimation
         title: 단일 영상 기반 깊이 추정
-      - local: tasks/image_to_image
-        title: Image-to-Image
       - local: tasks/image_feature_extraction
         title: 이미지 특징 추출
       - local: tasks/mask_generation
@@ -323,8 +321,8 @@
     title: EETQ
   - local: in_translation
     title: (번역중) HQQ
-  - local: in_translation
-    title: (번역중) Optimum
+  - local: quantization/optimum
+    title: Optimum
   - local: in_translation
     title: (번역중) Contribute new quantization method
   title: (번역중) 경량화 메소드
@@ -527,6 +525,10 @@
         title: ESM
       - local: model_doc/exaone4
         title: EXAONE-4.0
+      - local: model_doc/exaone_moe
+        title: EXAONE-MoE
+      - local: model_doc/exaone4_5
+        title: EXAONE-4.5
       - local: in_translation
         title: Falcon
       - local: in_translation

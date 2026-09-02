@@ -9,15 +9,14 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-02-19 and added to Hugging Face Transformers on 2025-01-23.*
+*This model was published in HF papers on 2025-02-19 and contributed to Hugging Face Transformers on 2025-01-23.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">    </div>
 </div>
@@ -30,20 +29,22 @@ You can find all the original Qwen2.5-VL checkpoints under the [Qwen2.5-VL](http
 
 > [!TIP]
 > Click on the Qwen2.5-VL models in the right sidebar for more examples of how to apply Qwen2.5-VL to different vision and language tasks.
+>
+> Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Refer to [Loading kernels](../kernel_doc/loading_kernels) to learn more.
 
 The example below demonstrates how to generate text based on an image with [`Pipeline`] or the [`AutoModel`] class.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
+
 pipe = pipeline(
     task="image-text-to-text",
     model="Qwen/Qwen2.5-VL-7B-Instruct",
     device=0,
-    dtype=torch.bfloat16
 )
 messages = [
     {
@@ -58,20 +59,18 @@ messages = [
     }
 ]
 pipe(text=messages,max_new_tokens=20, return_full_text=False)
-
 ```
 
 </hfoption>
 
 <hfoption id="AutoModel">
 
-```py
-import torch
-from transformers import Qwen2_5_VLForConditionalGeneration, AutoProcessor
+```python
+from transformers import AutoProcessor, Qwen2_5_VLForConditionalGeneration
+
 
 model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
     "Qwen/Qwen2.5-VL-7B-Instruct",
-    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -119,20 +118,18 @@ Quantization reduces the memory burden of large models by representing the weigh
 The example below uses [torchao](../quantization/torchao) to only quantize the weights to int4.
 
 ```python
-import torch
-from transformers import TorchAoConfig, Qwen2_5_VLForConditionalGeneration, AutoProcessor
+from transformers import Qwen2_5_VLForConditionalGeneration, TorchAoConfig
+
 
 quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
 model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
     "Qwen/Qwen2.5-VL-7B-Instruct",
-    dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config
 )
-
 ```
 
-### Notes
+## Notes
 
 - Use Qwen2.5-VL for video inputs by setting `"type": "video"` as shown below.
 
@@ -164,7 +161,7 @@ model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
     ```
 
 - Use Qwen2.5-VL for a mixed batch of inputs (images, videos, text). Add labels when handling multiple images or videos for better reference
- as show below.
+ as shown below.
 
     ```python
     import torch
@@ -172,7 +169,6 @@ model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
     
     model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
         "Qwen/Qwen2.5-VL-7B-Instruct",
-        dtype=torch.float16,
         device_map="auto",
         attn_implementation="sdpa"
     )
@@ -239,6 +235,10 @@ model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
 
 [[autodoc]] Qwen2_5_VLConfig
 
+## Qwen2_5_VLVisionConfig
+
+[[autodoc]] Qwen2_5_VLVisionConfig
+
 ## Qwen2_5_VLTextConfig
 
 [[autodoc]] Qwen2_5_VLTextConfig
@@ -246,6 +246,7 @@ model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
 ## Qwen2_5_VLProcessor
 
 [[autodoc]] Qwen2_5_VLProcessor
+    - __call__
 
 ## Qwen2_5_VLTextModel
 
@@ -256,8 +257,12 @@ model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
 
 [[autodoc]] Qwen2_5_VLModel
     - forward
+    - get_video_features
+    - get_image_features
 
 ## Qwen2_5_VLForConditionalGeneration
 
 [[autodoc]] Qwen2_5_VLForConditionalGeneration
     - forward
+    - get_video_features
+    - get_image_features

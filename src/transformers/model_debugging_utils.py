@@ -19,24 +19,19 @@ import os
 import re
 from contextlib import contextmanager, redirect_stdout
 from io import StringIO
-from typing import Optional
 
+from .distributed.utils import _get_torch_distributed_rank
 from .utils import logging
-from .utils.import_utils import is_torch_available, requires
+from .utils.import_utils import is_torch_available, is_torch_distributed_available, requires
 
 
 if is_torch_available():
     import torch
     from safetensors.torch import save_file
 
-    _torch_distributed_available = False
     # Note to code inspectors: this toolbox is intended for people who add models to `transformers`.
-    if torch.distributed.is_available():
+    if is_torch_distributed_available():
         import torch.distributed.tensor
-
-        _torch_distributed_available = True
-else:
-    _torch_distributed_available = False
 
 
 logger = logging.get_logger(__name__)
@@ -44,9 +39,7 @@ logger = logging.get_logger(__name__)
 
 def _is_rank_zero():
     """Return True if rank=0 or we aren't running distributed."""
-    if not (_torch_distributed_available and torch.distributed.is_initialized()):
-        return True
-    return torch.distributed.get_rank() == 0
+    return _get_torch_distributed_rank() == 0
 
 
 MEMORY_ADDRESS_REGEX = re.compile(r"object at 0x[0-9A-Fa-f]+")
@@ -68,7 +61,7 @@ def _dtensor_repr(x):
 
 
 def _serialize_tensor_like_io(
-    value, debug_path: Optional[str] = None, use_repr: bool = True, path_to_value: Optional[str] = None
+    value, debug_path: str | None = None, use_repr: bool = True, path_to_value: str | None = None
 ):
     """
     Converts Tensors and DTensors to a JSON-serializable dictionary representation.
@@ -77,7 +70,7 @@ def _serialize_tensor_like_io(
         value: Any Python object, often including torch Tensors, lists, dicts, etc.
         debug_path (`str`, *optional*, defaults to `None`): Directory to dump debug JSON and SafeTensors files.
         use_repr (bool, *optional*, defaults to `True`): Whether to save a `repr()`-ized version of the tensor as the
-            `value` property in the asscoiated FULL_TENSORS.json file, or to store the full tensors in separate
+            `value` property in the associated FULL_TENSORS.json file, or to store the full tensors in separate
             SafeTensors file and store the relative path to that file in the `value` property in the dictionary.
         path_to_value (`str`, *optional*, defaults to `None`): The file name for the SafeTensors file holding the full
             tensor value if `use_repr=False`.
@@ -116,7 +109,7 @@ def _serialize_tensor_like_io(
     return out
 
 
-def _serialize_io(value, debug_path: Optional[str] = None, use_repr: bool = True, path_to_value: Optional[str] = None):
+def _serialize_io(value, debug_path: str | None = None, use_repr: bool = True, path_to_value: str | None = None):
     """
     Recursively build a JSON-serializable Python structure from `value`.
     Tensors and DTensors become either sanitized repr strings, or are saved to disk as SafeTensors files and their
@@ -128,7 +121,7 @@ def _serialize_io(value, debug_path: Optional[str] = None, use_repr: bool = True
         value: Any Python object, often including torch Tensors, lists, dicts, etc.
         debug_path (`str`, *optional*, defaults to `None`): Directory to dump debug JSON and SafeTensors files.
         use_repr (bool, *optional*, defaults to `True`): Whether to save a `repr()`-ized version of the tensors as the
-            `value` property in the asscoiated FULL_TENSORS.json file, or to store full tensors in separate SafeTensors
+            `value` property in the associated FULL_TENSORS.json file, or to store full tensors in separate SafeTensors
             files and store the relative path to that file in the `value` property.
         path_to_value (`str`, *optional*, defaults to `None`): The file name for the SafeTensors file holding the full
             tensor value if `use_repr=False`.
@@ -225,7 +218,7 @@ def prune_intermediate_layers(node):
         prune_intermediate_layers(child)
 
 
-def log_model_debug_trace(debug_path: Optional[str], model):
+def log_model_debug_trace(debug_path: str | None, model):
     if debug_path:
         try:
             os.makedirs(debug_path, exist_ok=True)
@@ -399,7 +392,7 @@ def _attach_debugger_logic(
 @contextmanager
 def model_addition_debugger_context(
     model,
-    debug_path: Optional[str] = None,
+    debug_path: str | None = None,
     do_prune_layers: bool = True,
     use_repr: bool = True,
 ):

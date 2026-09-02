@@ -256,7 +256,7 @@ class RagRetrieverTest(TestCase):
         hidden_states = np.array(
             [np.ones(self.retrieval_vector_size), -np.ones(self.retrieval_vector_size)], dtype=np.float32
         )
-        out = retriever(question_input_ids, hidden_states, prefix=retriever.config.generator.prefix, n_docs=n_docs)
+        out = retriever(question_input_ids, hidden_states, prefix=None, n_docs=n_docs)
         context_input_ids, context_attention_mask, retrieved_doc_embeds = (
             out["context_input_ids"],
             out["context_attention_mask"],
@@ -270,7 +270,7 @@ class RagRetrieverTest(TestCase):
         out = retriever(
             question_input_ids,
             hidden_states,
-            prefix=retriever.config.generator.prefix,
+            prefix=None,
             n_docs=n_docs,
             return_tensors="pt",
         )
@@ -298,7 +298,7 @@ class RagRetrieverTest(TestCase):
         hidden_states = np.array(
             [np.ones(self.retrieval_vector_size), -np.ones(self.retrieval_vector_size)], dtype=np.float32
         )
-        out = retriever(question_input_ids, hidden_states, prefix=retriever.config.generator.prefix, n_docs=n_docs)
+        out = retriever(question_input_ids, hidden_states, prefix=None, n_docs=n_docs)
 
         self.assertEqual(
             len(out), 6

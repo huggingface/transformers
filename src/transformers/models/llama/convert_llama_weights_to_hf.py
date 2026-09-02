@@ -266,7 +266,7 @@ def write_model(
                 }
             else:
                 # Sharded
-                # Note that attention.w{q,k,v,o}, feed_fordward.w[1,2,3], attention_norm.weight and ffn_norm.weight share
+                # Note that attention.w{q,k,v,o}, feed_forward.w[1,2,3], attention_norm.weight and ffn_norm.weight share
                 # the same storage object, saving attention_norm and ffn_norm will save other weights too, which is
                 # redundant as other weights will be stitched from multiple shards. To avoid that, they are cloned.
 
@@ -465,7 +465,7 @@ class Llama3Converter(TikTokenConverter):
             eos_token="<|end_of_text|>" if not instruct else "<|eot_id|>",
             model_input_names=["input_ids", "attention_mask"],
             model_max_length=CONTEXT_LENGTH_FOR_VERSION[llama_version],
-            clean_up_tokenization_spaces=True,
+            clean_up_tokenization_spaces=False,
             **additional_kwargs,
         )
         self.update_post_processor(self.converted_tokenizer)

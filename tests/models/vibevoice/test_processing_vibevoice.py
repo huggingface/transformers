@@ -1,4 +1,4 @@
-# Copyright 2025 HuggingFace Inc.
+# Copyright 2026 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import shutil
 import tempfile
 import unittest
 
@@ -32,45 +31,43 @@ if is_torch_available():
 @require_torch
 class VibeVoiceProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = VibeVoiceProcessor
+    audio_input_name = "input_values"
 
     @classmethod
     def setUpClass(cls):
-        cls.checkpoint = "bezzam/VibeVoice-1.5B"
+        cls.checkpoint = "vibevoice/VibeVoice-1.5B-hf"
         processor = VibeVoiceProcessor.from_pretrained(cls.checkpoint)
-        cls.speech_start_token = processor.speech_start_token
-        cls.speech_start_id = processor.speech_start_id
-        cls.speech_end_token = processor.speech_end_token
-        cls.speech_end_id = processor.speech_end_id
-        cls.speech_diffusion_token = processor.speech_diffusion_token
-        cls.speech_diffusion_id = processor.speech_diffusion_id
-        cls.pad_token_id = processor.tokenizer.pad_token_id
-        cls.bos_token_id = processor.tokenizer.bos_token_id
         cls.tmpdirname = tempfile.mkdtemp()
         processor.save_pretrained(cls.tmpdirname)
-
 
     def prepare_processor_dict(self):
         return {
             "chat_template": """{%- set system_prompt = system_prompt | default(" Transform the text provided by various speakers into speech output, utilizing the distinct voice of each respective speaker.\n") -%}
 {{ system_prompt -}}
-{%- set speech_start_token = speech_start_token | default("<|vision_start|>") %}
-{%- set speech_end_token = speech_end_token | default("<|vision_end|>") %}
-{%- set speech_diffusion_token = speech_diffusion_token | default("<|vision_pad|>") %}
-{%- set ns = namespace(speakers_with_audio="") %}
+{%- set audio_bos_token = audio_bos_token | default("<|vision_start|>") %}
+{%- set audio_eos_token = audio_eos_token | default("<|vision_end|>") %}
+{%- set audio_token = audio_token | default("<|vision_pad|>") %}
+{%- set eos_token = eos_token | default("<|endoftext|>") %}
+{%- set ns = namespace(num_audio=0, num_seen=0, speakers_with_audio="") %}
+{%- for message in messages %}
+    {%- set ns.num_audio = ns.num_audio + (message['content'] | selectattr('type', 'equalto', 'audio') | list | length) %}
+{%- endfor %}
+{%- set has_target_audio = not add_generation_prompt and ns.num_audio > 0 %}
+{%- set num_voice_prompts = ns.num_audio - 1 if has_target_audio else ns.num_audio %}
 {%- for message in messages %}
     {%- set role = message['role'] %}
-    {%- set content = message['content'] %}
-    {%- set has_audio = content | selectattr('type', 'equalto', 'audio') | list | length > 0 %}
-    {%- if has_audio and role not in ns.speakers_with_audio %}
+    {%- set audio_count = message['content'] | selectattr('type', 'equalto', 'audio') | list | length %}
+    {%- if audio_count > 0 and ns.num_seen < num_voice_prompts and role not in ns.speakers_with_audio %}
         {%- set ns.speakers_with_audio = ns.speakers_with_audio + role + "," %}
     {%- endif %}
+    {%- set ns.num_seen = ns.num_seen + audio_count %}
 {%- endfor %}
 
 {%- if ns.speakers_with_audio %}
 {{ " Voice input:\n" }}
 {%- for speaker in ns.speakers_with_audio.rstrip(',').split(',') %}
 {%- if speaker %}
- Speaker {{ speaker }}:{{ speech_start_token }}{{ speech_diffusion_token }}{{ speech_end_token }}{{ "\n" }}
+ Speaker {{ speaker }}:{{ audio_bos_token }}{{ audio_token }}{{ audio_eos_token }}{{ "\n" }}
 {%- endif %}
 {%- endfor %}
 {%- endif %}
@@ -83,7 +80,10 @@ class VibeVoiceProcessorTest(ProcessorTesterMixin, unittest.TestCase):
  Speaker {{ role }}: {{ item['text'] }}{{ "\n" }}
     {%- endfor %}
 {%- endfor %}
- Speech output:{{ "\n" }}{{ speech_start_token }}"""
+ Speech output:{{ "\n" }}{{ audio_bos_token }}
+{%- if not add_generation_prompt %}
+{%- if has_target_audio %}{{ audio_token }}{{ audio_eos_token }}{% endif %}{{ eos_token }}
+{%- endif %}"""
         }
 
     @require_librosa

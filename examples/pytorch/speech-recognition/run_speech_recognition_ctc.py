@@ -33,9 +33,7 @@ import logging
 import os
 import re
 import sys
-import warnings
 from dataclasses import dataclass, field
-from typing import Optional, Union
 
 import datasets
 import evaluate
@@ -52,7 +50,6 @@ from transformers import (
     HfArgumentParser,
     Trainer,
     TrainingArguments,
-    Wav2Vec2Processor,
     set_seed,
 )
 from transformers.trainer_utils import is_main_process
@@ -85,11 +82,11 @@ class ModelArguments:
     model_name_or_path: str = field(
         metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"}
     )
-    tokenizer_name_or_path: Optional[str] = field(
+    tokenizer_name_or_path: str | None = field(
         default=None,
         metadata={"help": "Path to pretrained tokenizer or tokenizer identifier from huggingface.co/models"},
     )
-    cache_dir: Optional[str] = field(
+    cache_dir: str | None = field(
         default=None,
         metadata={"help": "Where do you want to store the pretrained models downloaded from huggingface.co"},
     )
@@ -145,18 +142,18 @@ class ModelArguments:
         metadata={"help": "Length of vector span to mask along the feature axis."},
     )
     layerdrop: float = field(default=0.0, metadata={"help": "The LayerDrop probability."})
-    ctc_loss_reduction: Optional[str] = field(
+    ctc_loss_reduction: str | None = field(
         default="mean",
         metadata={"help": "The way the ctc loss should be reduced. Should be one of 'mean' or 'sum'."},
     )
-    ctc_zero_infinity: Optional[bool] = field(
+    ctc_zero_infinity: bool | None = field(
         default=False,
         metadata={
             "help": "Whether to zero infinite losses and the associated gradients of `torch.nn.CTCLoss`. Infinite losses mainly"
             " occur when the inputs are too short to be aligned to the targets."
         },
     )
-    add_adapter: Optional[bool] = field(
+    add_adapter: bool | None = field(
         default=False,
         metadata={
             "help": "Whether a convolutional attention network should be stacked on top of the Wav2Vec2Bert Encoder. Can be very"
@@ -211,11 +208,11 @@ class DataTrainingArguments:
         default=False,
         metadata={"help": "Overwrite the cached preprocessed datasets or not."},
     )
-    preprocessing_num_workers: Optional[int] = field(
+    preprocessing_num_workers: int | None = field(
         default=None,
         metadata={"help": "The number of processes to use for the preprocessing."},
     )
-    max_train_samples: Optional[int] = field(
+    max_train_samples: int | None = field(
         default=None,
         metadata={
             "help": (
@@ -224,7 +221,7 @@ class DataTrainingArguments:
             )
         },
     )
-    max_eval_samples: Optional[int] = field(
+    max_eval_samples: int | None = field(
         default=None,
         metadata={
             "help": (
@@ -233,7 +230,7 @@ class DataTrainingArguments:
             )
         },
     )
-    chars_to_ignore: Optional[list[str]] = list_field(
+    chars_to_ignore: list[str] | None = list_field(
         default=None,
         metadata={"help": "A list of characters to remove from the transcripts."},
     )
@@ -296,7 +293,7 @@ class DataTrainingArguments:
         default="|",
         metadata={"help": "The word delimiter token for the tokenizer"},
     )
-    phoneme_language: Optional[str] = field(
+    phoneme_language: str | None = field(
         default=None,
         metadata={
             "help": (
@@ -336,12 +333,12 @@ class DataCollatorCTCWithPadding:
     """
 
     processor: AutoProcessor
-    padding: Union[bool, str] = "longest"
-    pad_to_multiple_of: Optional[int] = None
-    pad_to_multiple_of_labels: Optional[int] = None
-    feature_extractor_input_name: Optional[str] = "input_values"
+    padding: bool | str = "longest"
+    pad_to_multiple_of: int | None = None
+    pad_to_multiple_of_labels: int | None = None
+    feature_extractor_input_name: str | None = "input_values"
 
-    def __call__(self, features: list[dict[str, Union[list[int], torch.Tensor]]]) -> dict[str, torch.Tensor]:
+    def __call__(self, features: list[dict[str, list[int] | torch.Tensor]]) -> dict[str, torch.Tensor]:
         # split inputs and labels since they have to be of different lengths and need
         # different padding methods
         input_features = [
@@ -375,9 +372,9 @@ class DataCollatorCTCWithPadding:
 
 def create_vocabulary_from_data(
     datasets: DatasetDict,
-    word_delimiter_token: Optional[str] = None,
-    unk_token: Optional[str] = None,
-    pad_token: Optional[str] = None,
+    word_delimiter_token: str | None = None,
+    unk_token: str | None = None,
+    pad_token: str | None = None,
 ):
     # Given training and test labels create vocabulary
     def extract_all_chars(batch):
@@ -565,11 +562,9 @@ def main():
                 with open(vocab_file, "w") as file:
                     json.dump(vocab_dict, file)
 
-        # if tokenizer has just been created
-        # it is defined by `tokenizer_class` if present in config else by `model_type`
         tokenizer_kwargs = {
-            "config": config if config.tokenizer_class is not None else None,
-            "tokenizer_type": (config.model_type if config.tokenizer_class is None else None),
+            "config": config,
+            "tokenizer_type": config.model_type,
             "unk_token": unk_token,
             "pad_token": pad_token,
             "word_delimiter_token": word_delimiter_token,
@@ -732,17 +727,7 @@ def main():
             tokenizer.save_pretrained(training_args.output_dir)
             config.save_pretrained(training_args.output_dir)
 
-    try:
-        processor = AutoProcessor.from_pretrained(training_args.output_dir)
-    except (OSError, KeyError):
-        warnings.warn(
-            "Loading a processor from a feature extractor config that does not"
-            " include a `processor_class` attribute is deprecated and will be removed in v5. Please add the following "
-            " attribute to your `preprocessor_config.json` file to suppress this warning: "
-            " `'processor_class': 'Wav2Vec2Processor'`",
-            FutureWarning,
-        )
-        processor = Wav2Vec2Processor.from_pretrained(training_args.output_dir)
+    processor = AutoProcessor.from_pretrained(training_args.output_dir)
 
     # Instantiate custom data collator
     data_collator = DataCollatorCTCWithPadding(

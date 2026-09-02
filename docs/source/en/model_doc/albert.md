@@ -9,11 +9,11 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2019-09-26 and added to Hugging Face Transformers on 2020-11-16.*
+*This model was published in HF papers on 2019-09-26 and contributed to Hugging Face Transformers on 2020-11-16.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -31,7 +31,7 @@ ALBERT was created to address problems like -- GPU/TPU memory limitations, longe
 - **Factorized embedding parameterization:** The large vocabulary embedding matrix is decomposed into two smaller matrices, reducing memory consumption.
 - **Cross-layer parameter sharing:** Instead of learning separate parameters for each transformer layer, ALBERT shares parameters across layers, further reducing the number of learnable weights.
 
-ALBERT uses absolute position embeddings (like BERT) so padding is applied at right. Size of embeddings is 128 While BERT uses 768. ALBERT can processes maximum 512 token at a time.
+ALBERT uses absolute position embeddings (like BERT) so padding is applied on the right. Size of embeddings is 128. While BERT uses 768. ALBERT can processes maximum 512 token at a time.
 
 You can find all the original ALBERT checkpoints under the [ALBERT community](https://huggingface.co/albert) organization.
 
@@ -43,14 +43,13 @@ The example below demonstrates how to predict the `[MASK]` token with [`Pipeline
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="fill-mask",
     model="albert-base-v2",
-    dtype=torch.float16,
     device=0
 )
 pipeline("Plants create [MASK] through a process known as photosynthesis.", top_k=5)
@@ -59,14 +58,15 @@ pipeline("Plants create [MASK] through a process known as photosynthesis.", top_
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 import torch
+
 from transformers import AutoModelForMaskedLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained("albert/albert-base-v2")
 model = AutoModelForMaskedLM.from_pretrained(
     "albert/albert-base-v2",
-    dtype=torch.float16,
     attn_implementation="sdpa",
     device_map="auto"
 )
@@ -85,13 +85,6 @@ for token_id in top_k[0]:
 ```
 
 </hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "Plants create [MASK] through a process known as photosynthesis." | transformers run --task fill-mask --model albert-base-v2 --device 0
-```
-
-</hfoption>
 
 </hfoptions>
 
@@ -102,7 +95,7 @@ echo -e "Plants create [MASK] through a process known as photosynthesis." | tran
 
 ## Resources
 
-The resources provided in the following sections consist of a list of official Hugging Face and community (indicated by 🌎) resources to help you get started with AlBERT. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+The resources provided in the following sections consist of a list of official Hugging Face and community (indicated by 🌎) resources to help you get started with ALBERT. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
 
 <PipelineTag pipeline="text-classification"/>
 
@@ -141,10 +134,6 @@ The resources provided in the following sections consist of a list of official H
 ## AlbertTokenizer
 
 [[autodoc]] AlbertTokenizer - build_inputs_with_special_tokens - get_special_tokens_mask - create_token_type_ids_from_sequences - save_vocabulary
-
-## AlbertTokenizerFast
-
-[[autodoc]] AlbertTokenizerFast
 
 ## Albert specific outputs
 

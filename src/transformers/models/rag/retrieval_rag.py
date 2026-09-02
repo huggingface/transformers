@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020, The RAG Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +17,6 @@ import os
 import pickle
 import time
 from collections.abc import Iterable
-from typing import Optional
 
 import numpy as np
 
@@ -266,8 +264,8 @@ class CanonicalHFIndex(HFIndexBase):
         vector_size: int,
         dataset_name: str = "wiki_dpr",
         dataset_split: str = "train",
-        index_name: Optional[str] = None,
-        index_path: Optional[str] = None,
+        index_name: str | None = None,
+        index_path: str | None = None,
         use_dummy_dataset=False,
         dataset_revision=None,
     ):
@@ -371,24 +369,24 @@ class RagRetriever:
     >>> from transformers import RagRetriever
 
     >>> retriever = RagRetriever.from_pretrained(
-    ...     "facebook/dpr-ctx_encoder-single-nq-base", dataset="wiki_dpr", index_name="compressed"
+    ...     "facebook/rag-sequence-nq", dataset="wiki_dpr", index_name="compressed"
     ... )
 
-    >>> # To load your own indexed dataset built with the datasets library. More info on how to build the indexed dataset in examples/rag/use_own_knowledge_dataset.py
+    >>> # To load your own indexed dataset built with the datasets library.
     >>> from transformers import RagRetriever
 
     >>> dataset = (
     ...     ...
     ... )  # dataset must be a datasets.Datasets object with columns "title", "text" and "embeddings", and it must have a supported index (e.g., Faiss or other index types depending on your setup)
-    >>> retriever = RagRetriever.from_pretrained("facebook/dpr-ctx_encoder-single-nq-base", indexed_dataset=dataset)
+    >>> retriever = RagRetriever.from_pretrained("facebook/rag-sequence-nq", indexed_dataset=dataset)
 
-    >>> # To load your own indexed dataset built with the datasets library that was saved on disk. More info in examples/rag/use_own_knowledge_dataset.py
+    >>> # To load your own indexed dataset built with the datasets library that was saved on disk.
     >>> from transformers import RagRetriever
 
     >>> dataset_path = "path/to/my/dataset"  # dataset saved via *dataset.save_to_disk(...)*
     >>> index_path = "path/to/my/index"  # index saved via *dataset.get_index("embeddings").save(...)*
     >>> retriever = RagRetriever.from_pretrained(
-    ...     "facebook/dpr-ctx_encoder-single-nq-base",
+    ...     "facebook/rag-sequence-nq",
     ...     index_name="custom",
     ...     passages_path=dataset_path,
     ...     index_path=index_path,
@@ -397,7 +395,7 @@ class RagRetriever:
     >>> # To load the legacy index built originally for Rag's paper
     >>> from transformers import RagRetriever
 
-    >>> retriever = RagRetriever.from_pretrained("facebook/dpr-ctx_encoder-single-nq-base", index_name="legacy")
+    >>> retriever = RagRetriever.from_pretrained("facebook/rag-sequence-nq", index_name="legacy")
     ```"""
 
     def __init__(self, config, question_encoder_tokenizer, generator_tokenizer, index=None, init_retrieval=True):
@@ -626,7 +624,7 @@ class RagRetriever:
         """
 
         n_docs = n_docs if n_docs is not None else self.n_docs
-        prefix = prefix if prefix is not None else self.config.generator.prefix
+        prefix = prefix if prefix is not None else getattr(self.config.generator, "prefix", None)
         retrieved_doc_embeds, doc_ids, docs = self.retrieve(question_hidden_states, n_docs)
 
         input_strings = self.question_encoder_tokenizer.decode(question_input_ids, skip_special_tokens=True)

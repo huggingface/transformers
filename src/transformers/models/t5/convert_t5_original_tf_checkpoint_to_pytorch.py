@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The T5 authors and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");

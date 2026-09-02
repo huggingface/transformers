@@ -9,11 +9,11 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-01-30 and added to Hugging Face Transformers on 2025-03-18.*
+*This model was contributed to Hugging Face Transformers on 2025-03-18.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -30,15 +30,17 @@ You can find the original Mistral 3 checkpoints under the [Mistral AI](https://h
 > [!TIP]
 > This model was contributed by [cyrilvallez](https://huggingface.co/cyrilvallez) and [yonigozlan](https://huggingface.co/yonigozlan).
 > Click on the Mistral3 models in the right sidebar for more examples of how to apply Mistral3 to different tasks.
+>
+> Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Refer to [Loading kernels](../kernel_doc/loading_kernels) to learn more.
 
 The example below demonstrates how to generate text for an image with [`Pipeline`] and the [`AutoModel`] class.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 messages = [
     {"role": "user",
@@ -51,9 +53,8 @@ messages = [
 ,]
 
 pipeline = pipeline(
-    task="image-text-to-text", 
-    model="mistralai/Mistral-Small-3.1-24B-Instruct-2503", 
-    dtype=torch.bfloat16,
+    task="image-text-to-text",
+    model="mistralai/Mistral-Small-3.1-24B-Instruct-2503",
     device=0
 )
 outputs = pipeline(text=messages, max_new_tokens=50, return_full_text=False)
@@ -65,18 +66,15 @@ outputs[0]["generated_text"]
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch
-from transformers import AutoProcessor, AutoModelForImageTextToText
-from accelerate import Accelerator 
+```python
+from transformers import AutoModelForImageTextToText, AutoProcessor
 
-torch_device = Accelerator().device
+
 model_checkpoint = "mistralai/Mistral-Small-3.1-24B-Instruct-2503"
 processor = AutoProcessor.from_pretrained(model_checkpoint)
 model = AutoModelForImageTextToText.from_pretrained(
-    model_checkpoint, 
-    device_map=torch_device, 
-    dtype=torch.bfloat16
+    model_checkpoint,
+    device_map="auto",
 )
 
 messages = [
@@ -90,10 +88,10 @@ messages = [
 ,]
 
 inputs = processor.apply_chat_template(
-    messages, 
-    add_generation_prompt=True, 
-    tokenize=True, return_dict=True, 
-    return_tensors="pt").to(model.device, dtype=torch.bfloat16)
+    messages,
+    add_generation_prompt=True,
+    tokenize=True, return_dict=True,
+    return_tensors="pt").to(model.device)
 
 generate_ids = model.generate(**inputs, max_new_tokens=20)
 decoded_output = processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
@@ -112,12 +110,10 @@ decoded_output
 ```py
 import torch
 from transformers import AutoProcessor, AutoModelForImageTextToText
-from accelerate import Accelerator
 
-torch_device = Accelerator().device
 model_checkpoint = ".mistralai/Mistral-Small-3.1-24B-Instruct-2503"
 processor = AutoProcessor.from_pretrained(model_checkpoint)
-model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device, dtype=torch.bfloat16)
+model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map="auto")
 
 SYSTEM_PROMPT = "You are a conversational agent that always answers straight to the point, always end your accurate response with an ASCII drawing of a cat."
 user_prompt = "Give me 5 non-formal ways to say 'See you later' in French."
@@ -128,7 +124,7 @@ messages = [
 ]
 
 text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-inputs = processor(text=text, return_tensors="pt").to(0, dtype=torch.float16)
+inputs = processor(text=text, return_tensors="pt").to(0)
 generate_ids = model.generate(**inputs, max_new_tokens=50, do_sample=False)
 decoded_output = processor.batch_decode(generate_ids[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True)[0]
 
@@ -153,12 +149,10 @@ print(decoded_output)
 ```py
 import torch
 from transformers import AutoProcessor, AutoModelForImageTextToText
-from accelerate import Accelerator
 
-torch_device = Accelerator().device
 model_checkpoint = "mistralai/Mistral-Small-3.1-24B-Instruct-2503"
 processor = AutoProcessor.from_pretrained(model_checkpoint)
-model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device, dtype=torch.bfloat16)
+model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map="auto")
 
 messages = [
      [
@@ -182,7 +176,7 @@ messages = [
  ]
 
 
- inputs = processor.apply_chat_template(messages, padding=True, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(model.device, dtype=torch.bfloat16)
+ inputs = processor.apply_chat_template(messages, padding=True, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(model.device)
 
  output = model.generate(**inputs, max_new_tokens=25)
 
@@ -197,15 +191,13 @@ messages = [
 ```py
 import torch
 from transformers import AutoProcessor, AutoModelForImageTextToText, BitsAndBytesConfig
-from accelerate import Accelerator
 
-torch_device = Accelerator().device
 model_checkpoint = "mistralai/Mistral-Small-3.1-24B-Instruct-2503"
 processor = AutoProcessor.from_pretrained(model_checkpoint)
 quantization_config = BitsAndBytesConfig(load_in_4bit=True)
 model = AutoModelForImageTextToText.from_pretrained(
      model_checkpoint, quantization_config=quantization_config
- )
+ device_map="auto")
 
 messages = [
      [
@@ -229,7 +221,7 @@ messages = [
      ],
  ]
 
- inputs = processor.apply_chat_template(messages, padding=True, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(model.device, dtype=torch.bfloat16)
+ inputs = processor.apply_chat_template(messages, padding=True, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(model.device)
 
  output = model.generate(**inputs, max_new_tokens=25)
 
@@ -254,3 +246,4 @@ messages = [
 
 [[autodoc]] Mistral3ForConditionalGeneration
     - forward
+    - get_image_features

@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -65,6 +65,14 @@ The `.optimization` module provides:
 [[autodoc]] get_cosine_with_min_lr_schedule_with_warmup_lr_rate
 
 <img alt="" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/warmup_cosine_hard_restarts_schedule.png"/>
+
+### GreedyLR
+
+[[autodoc]] GreedyLR
+
+### get_greedy_schedule
+
+[[autodoc]] get_greedy_schedule
 
 ### get_linear_schedule_with_warmup
 

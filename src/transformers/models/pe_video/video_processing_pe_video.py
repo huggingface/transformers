@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional, Union
 
 import torch
 
@@ -29,8 +27,8 @@ class PeVideoVideoProcessor(BaseVideoProcessor):
     def sample_frames(
         self,
         metadata: VideoMetadata,
-        num_frames: Optional[int] = None,
-        fps: Optional[Union[int, float]] = None,
+        num_frames: int | None = None,
+        fps: int | float | None = None,
         **kwargs,
     ):
         if num_frames:
@@ -48,7 +46,7 @@ class PeVideoVideoProcessor(BaseVideoProcessor):
         **kwargs: Unpack[VideosKwargs],
     ) -> BatchFeature:
         # Always set `return_tensors` to `None` since it won't pad variable length videos
-        # We'll handle this after we call the parent' method
+        # We'll handle this after we call the parent's method
         return_tensors = kwargs.pop("return_tensors", None)
         result = super()._preprocess(videos, **kwargs)
         pixels = result.pixel_values_videos

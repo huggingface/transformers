@@ -246,22 +246,7 @@ pip install transformers datasets evaluate
 >>> context = "BLOOM has 176 billion parameters and can generate text in 46 languages natural languages and 13 programming languages."
 ```
 
-추론을 위해 미세 조정한 모델을 테스트하는 가장 쉬운 방법은 [`pipeline`]을 사용하는 것 입니다. 모델을 사용해 질의 응답을 하기 위해서 `pipeline`을 인스턴스화하고 텍스트를 입력합니다:
-
-```py
->>> from transformers import pipeline
-
->>> question_answerer = pipeline("question-answering", model="my_awesome_qa_model")
->>> question_answerer(question=question, context=context)
-{'score': 0.2058267742395401,
- 'start': 10,
- 'end': 95,
- 'answer': '176 billion parameters and can generate text in 46 languages natural languages and 13'}
-```
-
-원한다면 `pipeline`의 결과를 직접 복제할 수도 있습니다:
-
-텍스트를 토큰화해서 PyTorch 텐서를 반환합니다:
+추론을 위해 미세 조정된 모델을 테스트하는 가장 쉬운 방법은 tokenizer와 model을 직접 사용하는 것 입니다. 텍스트를 토큰화해서 PyTorch 텐서를 반환합니다:
 
 ```py
 >>> from transformers import AutoTokenizer

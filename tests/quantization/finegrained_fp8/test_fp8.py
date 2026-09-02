@@ -18,15 +18,18 @@ import unittest
 from contextlib import ExitStack, contextmanager
 from unittest.mock import patch
 
+from parameterized import parameterized
+
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, FineGrainedFP8Config, OPTForCausalLM
 from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 from transformers.testing_utils import (
     backend_empty_cache,
     get_device_properties,
     require_accelerate,
-    require_read_token,
     require_torch_accelerator,
+    require_torch_gpu,
     require_torch_multi_accelerator,
+    require_torch_multi_gpu,
     slow,
     torch_device,
 )
@@ -74,7 +77,6 @@ class FineGrainedFP8ConfigTest(unittest.TestCase):
 
 @slow
 @require_accelerate
-@require_read_token
 @require_torch_accelerator
 @unittest.skipIf(
     get_device_properties()[0] == "cuda"
@@ -126,10 +128,28 @@ class FP8QuantizerTest(unittest.TestCase):
             cls.model_name, device_map=cls.device_map, quantization_config=cls.quantization_config
         )
 
+    def setup(self):
+        """
+        Clear also on each setup (e.g. if a different model is used than the base cls one)
+        """
+        gc.collect()
+        backend_empty_cache(torch_device)
+        gc.collect()
+
     def tearDown(self):
         gc.collect()
         backend_empty_cache(torch_device)
         gc.collect()
+
+    @parameterized.expand(
+        [
+            "hf-internal-testing/tiny-random-Qwen3MoeForCausalLM",
+            "hf-internal-testing/tiny-random-MixtralForCausalLM",
+        ]
+    )
+    def test_moe_conversion_doesnt_raise(self, model_id):
+        quantization_config = FineGrainedFP8Config(weight_block_size=(32, 32))
+        AutoModelForCausalLM.from_pretrained(model_id, quantization_config=quantization_config)
 
     def test_quantized_model_conversion(self):
         """
@@ -368,6 +388,44 @@ class FP8QuantizerTest(unittest.TestCase):
         # we should at least have 1.5 times memory reduction in total
         assert model_size[""] > quantized_model_size[""] * 1.5
 
+    @parameterized.expand(["eager", "batched_mm", "grouped_mm", "deepgemm"])
+    def test_quantized_moe_forward(self, experts_implementation):
+        """
+        Checks implicitly if the moe implementation is correct, i.e. it does not crash for cases
+        where the indices go over `top_k` as shown within the Minimax M2 model
+        """
+        # deepgemm only has CUDA kernels, skip on other devices
+        if experts_implementation == "deepgemm" and torch_device != "cuda":
+            self.skipTest("deepgemm is only supported on CUDA")
+
+        model = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/MiniMax-M2-Tiny-FP8",  # single layer version
+            experts_implementation=experts_implementation,
+            device_map=self.device_map,
+        )
+        assert model.config._experts_implementation == experts_implementation
+
+        tokenizer = AutoTokenizer.from_pretrained("MiniMaxAI/MiniMax-M2")
+        messages = [
+            {"role": "user", "content": [{"type": "text", "text": "What is your favourite condiment?"}]},
+            {
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "Well, I'm quite partial to a good squeeze of fresh lemon juice. It adds just the right amount of zesty flavour to whatever I'm cooking up in the kitchen!",
+                    }
+                ],
+            },
+            {"role": "user", "content": [{"type": "text", "text": "Do you have mayonnaise recipes?"}]},
+        ]
+        model_inputs = tokenizer.apply_chat_template(messages, return_tensors="pt", add_generation_prompt=True).to(
+            self.device_map
+        )
+
+        # Only caring about this not crashing
+        _ = model.generate(**model_inputs, max_new_tokens=24)
+
 
 @require_torch_accelerator
 @unittest.skipIf(
@@ -401,3 +459,76 @@ class FP8LinearTest(unittest.TestCase):
 
         x_ = linear(x)
         self.assertEqual(x_.shape, (1, 5, 256))
+
+
+class FP8EmbeddingTest(unittest.TestCase):
+    """
+    Some checkpoints quantize an embedding *table* rather than a linear (Qwen4-Exp's n-gram/PLE
+    table).
+    """
+
+    def test_lookup_applies_the_per_tensor_scale(self):
+        """Without the rescale the rows come back as raw FP8 and blow up the next matmul."""
+        from transformers.integrations import FP8Embedding
+
+        table = torch.randn(64, 16, dtype=torch.bfloat16)
+        scale = table.abs().max().float() / torch.finfo(torch.float8_e4m3fn).max
+        embedding = FP8Embedding(64, 16)
+        embedding.weight = torch.nn.Parameter((table.float() / scale).to(torch.float8_e4m3fn), requires_grad=False)
+        embedding.weight_scale = torch.nn.Parameter(scale.to(torch.bfloat16).reshape(1), requires_grad=False)
+
+        ids = torch.randint(0, 64, (2, 5))
+        rows, expected = embedding(ids), table[ids]
+
+        self.assertEqual(rows.dtype, expected.dtype)
+        error = (rows.float() - expected.float()).abs().max() / expected.float().abs().max()
+        self.assertLess(error, 0.1)
+
+    def test_patterns_match_by_suffix_and_honour_the_skip_list(self):
+        """Suffixes match whether or not the text model is nested under a multimodal wrapper."""
+        from transformers.integrations import FP8Embedding, replace_with_fp8_embedding
+
+        model = torch.nn.ModuleDict(
+            {n: torch.nn.ModuleDict({"table": torch.nn.Embedding(8, 4)}) for n in ("layers", "language_model")}
+        )
+        model.other = torch.nn.Embedding(8, 4)
+        replace_with_fp8_embedding(model, ["table"], modules_to_not_convert=["language_model.table"])
+
+        self.assertIsInstance(model["layers"]["table"], FP8Embedding)  # matched by suffix
+        self.assertIs(type(model["language_model"]["table"]), torch.nn.Embedding)  # skip-listed
+        self.assertIs(type(model.other), torch.nn.Embedding)  # no pattern match
+
+
+class FP8DeepGEMMMultiDeviceTest(unittest.TestCase):
+    """`_disable_deepgemm_on_multi_device` must flag FP8 modules based on the devices they actually
+    occupy — DeepGEMM's kernels are bound to a single CUDA context and corrupt across devices, but a
+    model that fits on one device must keep DeepGEMM even when other GPUs are visible (no overshoot).
+    """
+
+    @staticmethod
+    def _fp8_module(device):
+        from transformers.integrations import FP8Linear
+
+        return FP8Linear(256, 256, block_size=(128, 128)).to(device)
+
+    @require_torch_multi_gpu
+    def test_multi_device_disables_deepgemm(self):
+        from transformers.integrations.finegrained_fp8 import _disable_deepgemm_on_multi_device
+
+        model = torch.nn.Module()
+        model.a = self._fp8_module("cuda:0")
+        model.b = self._fp8_module("cuda:1")
+        _disable_deepgemm_on_multi_device(model)
+        self.assertTrue(model.a._deepgemm_disabled)
+        self.assertTrue(model.b._deepgemm_disabled)
+
+    @require_torch_gpu
+    def test_single_device_keeps_deepgemm(self):
+        from transformers.integrations.finegrained_fp8 import _disable_deepgemm_on_multi_device
+
+        model = torch.nn.Module()
+        model.a = self._fp8_module("cuda:0")
+        model.b = self._fp8_module("cuda:0")
+        _disable_deepgemm_on_multi_device(model)
+        self.assertFalse(model.a._deepgemm_disabled)
+        self.assertFalse(model.b._deepgemm_disabled)

@@ -36,23 +36,26 @@ limitations under the License.
 
 <h4 align="center">
     <p>
-        <a href="https://github.com/huggingface/transformers/blob/main/README.md">English</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_zh-hans.md">简体中文</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_zh-hant.md">繁體中文</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ko.md">한국어</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_es.md">Español</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ja.md">日本語</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_hd.md">हिन्दी</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ru.md">Русский</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_pt-br.md">Português</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_te.md">తెలుగు</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_fr.md">Français</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_de.md">Deutsch</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_it.md">Italiano</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_vi.md">Tiếng Việt</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ar.md">العربية</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ur.md">اردو</a> |
+        <a href="../README.md">English</a> |
+        <a href="README_zh-hans.md">简体中文</a> |
+        <a href="README_zh-hant.md">繁體中文</a> |
+        <a href="README_ko.md">한국어</a> |
+        <a href="README_es.md">Español</a> |
+        <a href="README_ja.md">日本語</a> |
+        <a href="README_hd.md">हिन्दी</a> |
+        <a href="README_ru.md">Русский</a> |
+        <a href="README_pt-br.md">Português</a> |
+        <a href="README_te.md">తెలుగు</a> |
+        <a href="README_fr.md">Français</a> |
+        <a href="README_de.md">Deutsch</a> |
+        <a href="README_it.md">Italiano</a> |
+        <a href="README_vi.md">Tiếng Việt</a> |
+        <a href="README_ar.md">العربية</a> |
+        <a href="README_ur.md">اردو</a> |
         <b>বাংলা</b> |
+        <a href="README_fa.md">فارسی</a> |
+        <a href="README_ro.md">Română</a> |
+        <a href="README_tr.md">Türkçe</a>
     </p>
 </h4>
 
@@ -78,7 +81,7 @@ Transformers মডেলের ডেফিনিশন এক জায়গা�
 
 ## ইনস্টলেশন
 
-Transformers Python 3.9+ সহ কাজ করে, এবং সমর্থিত ফ্রেমওয়ার্কগুলো হলো [PyTorch](https://pytorch.org/get-started/locally/) 2.1+, [TensorFlow](https://www.tensorflow.org/install/pip) 2.6+, এবং [Flax](https://flax.readthedocs.io/en/latest/) 0.4.1+।
+Transformers Python 3.10+ সহ কাজ করে, এবং [PyTorch](https://pytorch.org/get-started/locally/) 2.4+।
 
 [venv](https://docs.python.org/3/library/venv.html) বা [uv](https://docs.astral.sh/uv/) ব্যবহার করে একটি ভার্চুয়াল এনভায়রনমেন্ট তৈরি এবং সক্রিয় করুন।
 
@@ -247,7 +250,7 @@ pipeline(
 
 Transformers শুধু প্রি-ট্রেইন্ড মডেল ব্যবহার করার টুলকিট নয়, এটি একটি কমিউনিটি, যা Hugging Face Hub-এর চারপাশে তৈরি। আমরা চাই যে ডেভেলপার, গবেষক, শিক্ষার্থী, অধ্যাপক, ইঞ্জিনিয়ার বা যে কেউ তাদের স্বপ্নের প্রজেক্ট তৈরি করতে পারে।
 
-Transformers 100,000 স্টার উদযাপন করতে আমরা কমিউনিটিকে তুলে ধরতে [awesome-transformers](./awesome-transformers.md) পেজ তৈরি করেছি, যেখানে Transformers দিয়ে তৈরি ১০০টি অসাধারণ প্রজেক্ট তালিকাভুক্ত আছে।
+Transformers 100,000 স্টার উদযাপন করতে আমরা কমিউনিটিকে তুলে ধরতে [awesome-transformers](https://github.com/huggingface/transformers/blob/main/awesome-transformers.md) পেজ তৈরি করেছি, যেখানে Transformers দিয়ে তৈরি ১০০টি অসাধারণ প্রজেক্ট তালিকাভুক্ত আছে।
 
 আপনার কোনো প্রজেক্ট আছে যা তালিকায় থাকা উচিত মনে করেন? তাহলে PR খুলে যুক্ত করুন।
 
@@ -318,7 +321,7 @@ Transformers 100,000 স্টার উদযাপন করতে আমর�
 </details>
 
 ## সাইটেশন
-আমাদের [একটি পেপার](https://www.aclweb.org/anthology/2020.emnlp-demos.6/) আছে যা আপনি 🤗 Transformers লাইব্রেরির জন্য রেফারেন্স হিসেবে ব্যবহার করতে পারেন।
+আমাদের [একটি পেপার](https://aclanthology.org/2020.emnlp-demos.6/) আছে যা আপনি 🤗 Transformers লাইব্রেরির জন্য রেফারেন্স হিসেবে ব্যবহার করতে পারেন।
 
 ```bibtex
 @inproceedings{wolf-etal-2020-transformers,
@@ -329,7 +332,7 @@ Transformers 100,000 স্টার উদযাপন করতে আমর�
     year = "2020",
     address = "Online",
     publisher = "Association for Computational Linguistics",
-    url = "https://www.aclweb.org/anthology/2020.emnlp-demos.6",
+    url = "https://aclanthology.org/2020.emnlp-demos.6/",
     pages = "38--45"
 }
 ```

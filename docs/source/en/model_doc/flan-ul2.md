@@ -13,13 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2023-03-03 and added to Hugging Face Transformers on 2023-06-20.*
+*This model was contributed to Hugging Face Transformers on 2023-06-20.*
 
 # FLAN-UL2
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -40,14 +37,15 @@ The original checkpoints can be found [here](https://github.com/google-research/
 The model is pretty heavy (~40GB in half precision) so if you just want to run the model, make sure you load your model in 8bit, and use `device_map="auto"` to make sure  you don't have any OOM issue!
 
 ```python
->>> from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, BitsAndBytesConfig
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, BitsAndBytesConfig
 
->>> model = AutoModelForSeq2SeqLM.from_pretrained("google/flan-ul2", quantization_config=BitsAndBytesConfig(load_in_8bit=True), device_map="auto")
->>> tokenizer = AutoTokenizer.from_pretrained("google/flan-ul2")
 
->>> inputs = tokenizer("A step by step recipe to make bolognese pasta:", return_tensors="pt")
->>> outputs = model.generate(**inputs)
->>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
+model = AutoModelForSeq2SeqLM.from_pretrained("google/flan-ul2", quantization_config=BitsAndBytesConfig(load_in_8bit=True), device_map="auto")
+tokenizer = AutoTokenizer.from_pretrained("google/flan-ul2")
+
+inputs = tokenizer("A step by step recipe to make bolognese pasta:", return_tensors="pt").to(model.device)
+outputs = model.generate(**inputs)
+print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
 ['In a large skillet, brown the ground beef and onion over medium heat. Add the garlic']
 ```
 

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,8 +15,9 @@
 import argparse
 import os
 import re
+from io import BytesIO
 
-import requests
+import httpx
 import torch
 from PIL import Image
 
@@ -382,7 +382,8 @@ def main():
         },
     ]
     url = "http://images.cocodataset.org/val2014/COCO_val2014_000000537955.jpg"
-    image = Image.open(requests.get(url, stream=True).raw)
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
     messages = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
     print(messages)
 

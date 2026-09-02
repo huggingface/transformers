@@ -42,6 +42,7 @@ from transformers.testing_utils import (
     require_torch_accelerator,
     require_torch_fp16,
     require_torchaudio,
+    rocm_has_sdpa_flash_backend,
     slow,
     torch_device,
 )
@@ -569,7 +570,10 @@ class MusicgenMelodyTester:
             audio_channels=self.audio_channels,
         )
         config = MusicgenMelodyConfig(
-            text_encoder_config, audio_encoder_config, decoder_config, chroma_length=self.chroma_length
+            text_encoder=text_encoder_config,
+            audio_encoder=audio_encoder_config,
+            decoder=decoder_config,
+            chroma_length=self.chroma_length,
         )
         return config
 
@@ -916,8 +920,8 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         device_type, major, _ = get_device_properties()
         if device_type == "cuda" and major < 8:
             self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
-        elif device_type == "rocm" and major < 9:
-            self.skipTest(reason="This test requires an AMD GPU with compute capability >= 9.0")
+        elif device_type == "rocm" and not rocm_has_sdpa_flash_backend(major):
+            self.skipTest(reason="This AMD GPU has no SDPA flash backend available")
         elif device_type not in ["cuda", "rocm", "xpu"]:
             self.skipTest(reason="This test requires a Nvidia or AMD GPU or an Intel XPU")
 
@@ -1170,7 +1174,7 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
         # for stochastic sampling we can generate multiple outputs
         unconditional_inputs = self.processor.get_unconditional_inputs(num_samples=2).to(torch_device)
 
-        set_seed(0)
+        set_seed(42)
 
         output_values = model.generate(
             **unconditional_inputs, do_sample=True, max_new_tokens=10, guidance_scale=1.0, temperature=1.0, top_k=250
@@ -1254,7 +1258,7 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
         input_ids = inputs.input_ids.to(torch_device)
         attention_mask = inputs.attention_mask.to(torch_device)
 
-        set_seed(0)
+        set_seed(42)
         output_values = model.generate(
             input_ids,
             attention_mask=attention_mask,

@@ -9,11 +9,11 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-05-02 and added to Hugging Face Transformers on 2025-05-05.*
+*This model was contributed to Hugging Face Transformers on 2025-05-05.*
 
 # GraniteMoeHybrid
 
@@ -23,6 +23,7 @@ The [GraniteMoeHybrid](https://www.ibm.com/new/announcements/ibm-granite-4-0-tin
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 model_path = "ibm-granite/granite-4.0-tiny-preview"
 tokenizer = AutoTokenizer.from_pretrained(model_path)
@@ -35,7 +36,7 @@ model.eval()
 prompt = "Write a code to find the maximum value in a list of numbers."
 
 # tokenize the text
-input_tokens = tokenizer(prompt, return_tensors="pt")
+input_tokens = tokenizer(prompt, return_tensors="pt").to(model.device)
 # generate output tokens
 output = model.generate(**input_tokens, max_new_tokens=100)
 # decode output tokens into text

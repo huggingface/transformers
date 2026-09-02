@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2018-01-13 and added to Hugging Face Transformers on 2022-11-14.*
+*This model was published in HF papers on 2018-01-13 and contributed to Hugging Face Transformers on 2022-11-14.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -25,7 +25,7 @@ rendered properly in your Markdown viewer.
 
 [MobileNet V2](https://huggingface.co/papers/1801.04381) improves performance on mobile devices with a more efficient architecture. It uses inverted residual blocks and linear bottlenecks to start with a smaller representation of the data, expands it for processing, and shrinks it again to reduce the number of computations. The model also removes non-linearities to maintain accuracy despite its simplified design. Like [MobileNet V1](./mobilenet_v1), it uses depthwise separable convolutions for efficiency.
 
-You can all the original MobileNet checkpoints under the [Google](https://huggingface.co/google?search_models=mobilenet) organization.
+You can find all the original MobileNet checkpoints under the [Google](https://huggingface.co/google?search_models=mobilenet) organization.
 
 > [!TIP]
 > Click on the MobileNet V2 models in the right sidebar for more examples of how to apply MobileNet to different vision tasks.
@@ -36,13 +36,12 @@ The examples below demonstrate how to classify an image with [`Pipeline`] or the
 <hfoption id="Pipeline">
 
 ```python
-import torch
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="image-classification",
     model="google/mobilenet_v2_1.4_224",
-    dtype=torch.float16,
     device=0
 )
 pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
@@ -52,21 +51,24 @@ pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resol
 <hfoption id="AutoModel">
 
 ```python
-import torch
 import requests
+import torch
 from PIL import Image
-from transformers import AutoModelForImageClassification, AutoImageProcessor
+
+from transformers import AutoImageProcessor, AutoModelForImageClassification
+
 
 image_processor = AutoImageProcessor.from_pretrained(
     "google/mobilenet_v2_1.4_224",
 )
 model = AutoModelForImageClassification.from_pretrained(
     "google/mobilenet_v2_1.4_224",
+    device_map="auto",
 )
 
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
-inputs = image_processor(image, return_tensors="pt")
+inputs = image_processor(image, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
   logits = model(**inputs).logits
@@ -110,9 +112,9 @@ print(f"The predicted class label is: {predicted_class_label}")
     - preprocess
     - post_process_semantic_segmentation
 
-## MobileNetV2ImageProcessorFast
+## MobileNetV2ImageProcessorPil
 
-[[autodoc]] MobileNetV2ImageProcessorFast
+[[autodoc]] MobileNetV2ImageProcessorPil
     - preprocess
     - post_process_semantic_segmentation
 

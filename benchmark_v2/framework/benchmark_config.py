@@ -2,10 +2,15 @@ import hashlib
 import itertools
 import json
 import logging
+import os
 from functools import lru_cache
 from typing import Any
 
+import torch
+
+from transformers.distributed import DistributedConfig
 from transformers.generation.configuration_utils import CompileConfig
+from transformers.utils import is_torch_accelerator_available
 from transformers.utils.import_utils import is_flash_attn_2_available, is_kernels_available
 
 
@@ -37,13 +42,14 @@ def is_fa2_or_kernel_available() -> bool:
     try:
         from kernels import get_kernel
 
-        get_kernel("kernels-community/flash-attn")
+        get_kernel("kernels-community/flash-attn2", version=1)
     except Exception as _:
         logger.warning(
             "flash_attention_2 is not available. kernels is installed, but the flash_attn kernel is not available."
             "Benchmarking flash_attention_2 will not be possible."
         )
         return False
+    return True
 
 
 class BenchmarkConfig:
@@ -64,6 +70,7 @@ class BenchmarkConfig:
         attn_implementation: str = "eager",
         compile_kwargs: dict[str, Any] | None = None,
         kernelize: bool = False,
+        tp_plan: str | dict[str, str] | None = None,
         name: str | None = None,
         skip_validity_check: bool = False,
     ) -> None:
@@ -78,6 +85,7 @@ class BenchmarkConfig:
         self.num_tokens_to_generate = num_tokens_to_generate
         # Generation parameters
         self.attn_implementation = attn_implementation
+        self.tp_plan = tp_plan
         # Optimization parameters
         if compile_kwargs is None:
             self.compile_config = None
@@ -87,7 +95,7 @@ class BenchmarkConfig:
         self.kernelize = kernelize
         # Constant parameters
         self.dtype = "torch.bfloat16"
-        self.device = "cuda"
+        self.device = torch.accelerator.current_accelerator().type if is_torch_accelerator_available() else "cuda"
 
         self.check_validity(skip_validity_check)
         self.name = name if name is not None else self.infer_name()
@@ -95,7 +103,6 @@ class BenchmarkConfig:
     def check_validity(self, skip_validity_check: bool = False) -> None:
         if skip_validity_check:
             return
-
         # If flash_attention_2 is selected but not available, default to SDPA
         if self.attn_implementation == "flash_attention_2" and not is_fa2_or_kernel_available():
             logger.error("Flash attention is not available. Defaulting to SDPA.")
@@ -135,6 +142,21 @@ class BenchmarkConfig:
     def hash(self) -> str:
         return hashlib.sha256(json.dumps(self.to_dict()).encode()).hexdigest()
 
+    @property
+    def distributed_config(self) -> DistributedConfig | None:
+        """Translate `tp_plan` into the `DistributedConfig` that `from_pretrained` expects, or `None` if no TP."""
+        if self.tp_plan is None:
+            return None
+        # `torchrun` sets WORLD_SIZE; without it there is no process group to shard over.
+        tp_size = int(os.environ.get("WORLD_SIZE", 1))
+        if tp_size <= 1:
+            raise ValueError(
+                "Tensor parallelism was requested, but WORLD_SIZE is not set to more than 1. Launch the benchmark "
+                "with `torchrun --nproc_per_node=<num_gpus> ...` to run with tensor parallelism."
+            )
+        # `DistributedConfig.tp_plan` only takes an explicit plan; leaving it as None makes it use the model's own.
+        return DistributedConfig(tp_size=tp_size, tp_plan=self.tp_plan if isinstance(self.tp_plan, dict) else None)
+
     def infer_name(self, compact: bool = True) -> str:
         """Infer a human-readable name for the benchmark config, either compact or verbose."""
         if compact:
@@ -145,6 +167,7 @@ class BenchmarkConfig:
             compile_str = f"compiled_{self.compile_config.mode}" if self.compile_config is not None else "uncompiled"
             kernelize_str = "kernelized" if self.kernelize else "unkernelized"
             continuous_batching_str = "cb" if self.continuous_batching else "generate"
+            tp_str = "tp" if self.tp_plan is not None else "no_tp"
             sep = "-"
         else:
             iter_str = f"{self.warmup_iterations} warmup, {self.measurement_iterations} iterations"
@@ -154,9 +177,22 @@ class BenchmarkConfig:
             compile_str = "compiled" if self.compile_config is not None else "not compiled"
             kernelize_str = "kernelized" if self.kernelize else "not kernelized"
             continuous_batching_str = "continuous batching" if self.continuous_batching else "regular generate"
+            if self.tp_plan is None:
+                tp_str = "no_tp"
+            else:
+                tp_str = "tp_custom" if isinstance(self.tp_plan, dict) else "tp_auto"
             sep = ", "
         return sep.join(
-            [iter_str, gpu_monitor_str, dimensions_str, attn_code, compile_str, kernelize_str, continuous_batching_str]
+            [
+                iter_str,
+                gpu_monitor_str,
+                dimensions_str,
+                attn_code,
+                compile_str,
+                kernelize_str,
+                continuous_batching_str,
+                tp_str,
+            ]
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -172,6 +208,7 @@ class BenchmarkConfig:
             "attn_implementation": self.attn_implementation,
             "compile_kwargs": self.compile_config.to_dict() if self.compile_config is not None else None,
             "kernelize": self.kernelize,
+            "tp_plan": self.tp_plan,
         }
 
     @classmethod
@@ -187,6 +224,7 @@ class BenchmarkConfig:
             attn_implementation=data.get("attn_implementation", "eager"),
             compile_kwargs=data.get("compile_kwargs"),
             kernelize=data.get("kernelize", False),
+            tp_plan=data.get("tp_plan"),
             name=data.get("name"),
             skip_validity_check=skip_validity_check,
         )

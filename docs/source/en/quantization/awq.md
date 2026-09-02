@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -68,15 +68,16 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-Use `attn_implementation` to enable [FlashAttention2](../perf_infer_gpu_one#flashattention-2) to further accelerate inference.
+Use `attn_implementation` to enable [FlashAttention2](../attention_interface#set-an-attention-backend) to further accelerate inference.
 
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from accelerate import Accelerator
 
 model = AutoModelForCausalLM.from_pretrained(
   "TheBloke/zephyr-7B-alpha-AWQ",
   attn_implementation="flash_attention_2",
-  device_map="cuda:0"
+  device_map=Accelerator().device
 )
 ```
 
@@ -222,31 +223,6 @@ model = AutoModelForCausalLM.from_pretrained(
     "TheBloke/Mistral-7B-Instruct-v0.1-AWQ",
     quantization_config=quantization_config,
     device_map="auto",
-)
-```
-
-## CPU
-
-[Intel Extension for PyTorch (IPEX)](https://intel.github.io/intel-extension-for-pytorch/cpu/latest/) is designed to enable performance optimizations on Intel hardware. Run the command below to install the latest version of autoawq with IPEX support.
-
-```bash
-pip install intel-extension-for-pytorch # for IPEX-GPU refer to https://intel.github.io/intel-extension-for-pytorch/xpu/2.5.10+xpu/ 
-pip install git+https://github.com/casper-hansen/AutoAWQ.git
-```
-
-Set `version="ipex"` in [`AwqConfig`] to enable ExLlamaV2 kernels.
-
-```python
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, AwqConfig
-
-device = "cpu" # set to "xpu" for Intel GPU
-quantization_config = AwqConfig(version="ipex")
-
-model = AutoModelForCausalLM.from_pretrained(
-    "TheBloke/TinyLlama-1.1B-Chat-v0.3-AWQ",
-    quantization_config=quantization_config,
-    device_map=device,
 )
 ```
 

@@ -214,11 +214,8 @@ class PLBartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     pipeline_model_mapping = (
         {
             "feature-extraction": PLBartModel,
-            "summarization": PLBartForConditionalGeneration,
             "text-classification": PLBartForSequenceClassification,
             "text-generation": PLBartForCausalLM,
-            "text2text-generation": PLBartForConditionalGeneration,
-            "translation": PLBartForConditionalGeneration,
             "zero-shot": PLBartForSequenceClassification,
         }
         if is_torch_available()
@@ -227,24 +224,6 @@ class PLBartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     is_encoder_decoder = True
 
     test_missing_keys = False
-
-    # TODO: Fix the failed tests
-    def is_pipeline_test_to_skip(
-        self,
-        pipeline_test_case_name,
-        config_class,
-        model_architecture,
-        tokenizer_name,
-        image_processor_name,
-        feature_extractor_name,
-        processor_name,
-    ):
-        if pipeline_test_case_name == "TranslationPipelineTests":
-            # Get `ValueError: Translation requires a `src_lang` and a `tgt_lang` for this model`.
-            # `PLBartConfig` was never used in pipeline tests: cannot create a simple tokenizer.
-            return True
-
-        return False
 
     def setUp(self):
         self.model_tester = PLBartModelTester(self)

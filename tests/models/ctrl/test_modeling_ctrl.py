@@ -274,5 +274,6 @@ class CTRLModelLanguageGenerationTest(unittest.TestCase):
             5,
         ]  # Legal the president is a good guy and I don't want to lose my job. \n \n I have a
 
-        output_ids = model.generate(input_ids, do_sample=False)
+        # We limit the generation output to (max_length - input_length) while by default 20 new tokens will be generated.
+        output_ids = model.generate(input_ids, do_sample=False, max_length=20)
         self.assertListEqual(output_ids[0].tolist(), expected_output_ids)

@@ -9,12 +9,12 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
 
-# Utilities for Generation
+# Utilities for generation
 
 This page lists all the utility functions used by [`~generation.GenerationMixin.generate`].
 
@@ -204,13 +204,15 @@ A [`StoppingCriteria`] can be used to change when to stop generation (other than
 
 [[autodoc]] AsyncTextIteratorStreamer
 
+[[autodoc]] TextDiffusionStreamer
+
 ## Caches
 
 [[autodoc]] CacheLayerMixin
     - update
     - get_seq_length
     - get_mask_sizes
-    - get_max_cache_shape
+    - get_max_length
     - reset
     - reorder_cache
     - lazy_initialization
@@ -243,7 +245,7 @@ A [`StoppingCriteria`] can be used to change when to stop generation (other than
     - early_initialization
     - get_seq_length
     - get_mask_sizes
-    - get_max_cache_shape
+    - get_max_length
     - reset
     - reorder_cache
     - crop
@@ -257,20 +259,6 @@ A [`StoppingCriteria`] can be used to change when to stop generation (other than
 [[autodoc]] QuantizedCache
 
 [[autodoc]] EncoderDecoderCache
-
-[[autodoc]] QuantoQuantizedCache
-
-[[autodoc]] HQQQuantizedCache
-
-[[autodoc]] OffloadedCache
-
-[[autodoc]] OffloadedStaticCache
-
-[[autodoc]] HybridCache
-
-[[autodoc]] HybridChunkedCache
-
-[[autodoc]] SlidingWindowCache
 
 ## Watermark Utils
 

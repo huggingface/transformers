@@ -17,10 +17,11 @@ import unittest
 
 import numpy as np
 
+from transformers import DonutImageProcessor, DonutImageProcessorPil, set_seed
 from transformers.testing_utils import is_flaky, require_torch, require_vision
-from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
 
 
 if is_torch_available():
@@ -29,13 +30,8 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import DonutImageProcessor
 
-    if is_torchvision_available():
-        from transformers import DonutImageProcessorFast
-
-
-class DonutImageProcessingTester:
+class DonutImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -80,29 +76,12 @@ class DonutImageProcessingTester:
             "image_std": self.image_std,
         }
 
-    def expected_output_image_shape(self, images):
-        return self.num_channels, self.size["height"], self.size["width"]
-
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
-
 
 @require_torch
 @require_vision
 class DonutImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = DonutImageProcessor if is_vision_available() else None
-    fast_image_processing_class = DonutImageProcessorFast if is_torchvision_available() else None
-
     def setUp(self):
-        super().setUp()
+        self.image_processing_classes = {"torchvision": DonutImageProcessor, "pil": DonutImageProcessorPil}
         self.image_processor_tester = DonutImageProcessingTester(self)
 
     @property
@@ -110,7 +89,7 @@ class DonutImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "do_resize"))
             self.assertTrue(hasattr(image_processing, "size"))
@@ -122,7 +101,7 @@ class DonutImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "image_std"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.size, {"height": 18, "width": 20})
 
@@ -134,10 +113,8 @@ class DonutImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(image_processor.size, {"height": 84, "width": 42})
 
     def test_image_processor_preprocess_with_kwargs(self):
-        for image_processing_class in self.image_processor_list:
-            # Initialize image_processing
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
-            # create random PyTorch tensors
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
 
             height = 84
@@ -156,15 +133,14 @@ class DonutImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     @is_flaky()
     def test_call_pil(self):
-        for image_processing_class in self.image_processor_list:
-            # Initialize image_processing
+        for image_processing_class in self.image_processing_classes.values():
+            # Set seed for deterministic test - ensures reproducible image generation
+            set_seed(42)
             image_processing = image_processing_class(**self.image_processor_dict)
-            # create random PIL images
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
             for image in image_inputs:
                 self.assertIsInstance(image, Image.Image)
 
-            # Test not batched input
             encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
             self.assertEqual(
                 encoded_images.shape,
@@ -176,7 +152,6 @@ class DonutImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 ),
             )
 
-            # Test batched
             encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
             self.assertEqual(
                 encoded_images.shape,
@@ -190,15 +165,14 @@ class DonutImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     @is_flaky()
     def test_call_numpy(self):
-        for image_processing_class in self.image_processor_list:
-            # Initialize image_processing
+        for image_processing_class in self.image_processing_classes.values():
+            # Set seed for deterministic test - ensures reproducible image generation
+            set_seed(42)
             image_processing = image_processing_class(**self.image_processor_dict)
-            # create random numpy tensors
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
             for image in image_inputs:
                 self.assertIsInstance(image, np.ndarray)
 
-            # Test not batched input
             encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
             self.assertEqual(
                 encoded_images.shape,
@@ -210,7 +184,6 @@ class DonutImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 ),
             )
 
-            # Test batched
             encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
             self.assertEqual(
                 encoded_images.shape,
@@ -224,15 +197,14 @@ class DonutImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     @is_flaky()
     def test_call_pytorch(self):
-        for image_processing_class in self.image_processor_list:
-            # Initialize image_processing
+        for image_processing_class in self.image_processing_classes.values():
+            # Set seed for deterministic test - ensures reproducible image generation
+            set_seed(42)
             image_processing = image_processing_class(**self.image_processor_dict)
-            # create random PyTorch tensors
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
             for image in image_inputs:
                 self.assertIsInstance(image, torch.Tensor)
 
-            # Test not batched input
             encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
             self.assertEqual(
                 encoded_images.shape,
@@ -244,7 +216,6 @@ class DonutImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 ),
             )
 
-            # Test batched
             encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
             self.assertEqual(
                 encoded_images.shape,

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,42 +17,41 @@ Processor class for CLVP
 """
 
 from ...processing_utils import ProcessorMixin
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring
 class ClvpProcessor(ProcessorMixin):
-    r"""
-    Constructs a CLVP processor which wraps a CLVP Feature Extractor and a CLVP Tokenizer into a single processor.
-
-    [`ClvpProcessor`] offers all the functionalities of [`ClvpFeatureExtractor`] and [`ClvpTokenizer`]. See the
-    [`~ClvpProcessor.__call__`], [`~ClvpProcessor.decode`] and [`~ClvpProcessor.batch_decode`] for more information.
-
-    Args:
-        feature_extractor (`ClvpFeatureExtractor`):
-            An instance of [`ClvpFeatureExtractor`]. The feature extractor is a required input.
-        tokenizer (`ClvpTokenizer`):
-            An instance of [`ClvpTokenizer`]. The tokenizer is a required input.
-    """
-
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
 
-    def __call__(self, *args, **kwargs):
-        """
-        Forwards the `audio` and `sampling_rate` arguments to [`~ClvpFeatureExtractor.__call__`] and the `text`
-        argument to [`~ClvpTokenizer.__call__`]. Please refer to the docstring of the above two methods for more
-        information.
-        """
+    @auto_docstring
+    def __call__(self, *args, text=None, audio=None, **kwargs):
         raw_speech = kwargs.pop("raw_speech", None)
         if raw_speech is not None:
             logger.warning(
                 "Using `raw_speech` keyword argument is deprecated when calling ClvpProcessor, instead use `audio`."
             )
-        kwargs["audio"] = raw_speech
-        return super().__call__(*args, **kwargs)
+            audio = raw_speech
+
+        # Merge first so that both flat (BC) and nested modality kwargs are resolved into structured kwargs. Injecting a
+        # nested `audio_kwargs` before merging would switch `_merge_kwargs` into nested-dict mode and silently drop any
+        # flat kwargs the user passed.
+        merged_kwargs = self._merge_kwargs(
+            self.valid_processor_kwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs if hasattr(self, "tokenizer") else {},
+            **kwargs,
+        )
+
+        # The CLVP model relies on the *text* attention mask. When both text and audio are provided, prevent the
+        # feature extractor's audio attention mask from overriding the tokenizer's attention mask in the merged output.
+        if audio is not None and text is not None:
+            merged_kwargs["audio_kwargs"]["return_attention_mask"] = False
+
+        return super().__call__(*args, text=text, audio=audio, **merged_kwargs)
 
 
 __all__ = ["ClvpProcessor"]

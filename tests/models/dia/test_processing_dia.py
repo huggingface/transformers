@@ -42,7 +42,7 @@ def check_models_equal(model1, model2):
 class DiaProcessorTest(unittest.TestCase):
     def setUp(self):
         self.checkpoint = "AntonV/Dia-1.6B"
-        self.audio_tokenizer_checkpoint = "descript/dac_44khz"
+        self.audio_tokenizer_checkpoint = "hf-internal-testing/tiny-dac-44khz"
         self.tmpdirname = tempfile.mkdtemp()
 
         # Audio tokenizer is a bigger model so we will reuse this if possible
@@ -136,13 +136,13 @@ class DiaProcessorTest(unittest.TestCase):
 
         # full mask with +1 for bos
         self.assertTrue(audio_mask.sum() == (max(self.delay_pattern) + 1) * len(random_text))
-        self.assertTrue(
-            audio_tokens.shape
-            == (
+        self.assertListEqual(
+            list(audio_tokens.shape),
+            [
                 len(random_text),
                 max(self.delay_pattern) + 1,
                 len(self.delay_pattern),
-            )
+            ],
         )
 
         for channel_idx, delay in enumerate(self.delay_pattern):

@@ -13,13 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2020-04-20 and added to Hugging Face Transformers on 2020-12-09.*
+*This model was published in HF papers on 2020-04-20 and contributed to Hugging Face Transformers on 2020-12-09.*
 
 # MPNet
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -66,10 +63,6 @@ separate your segments with the separation token `tokenizer.sep_token` (or `[sep
 [[autodoc]] MPNetTokenizer
     - get_special_tokens_mask
     - save_vocabulary
-
-## MPNetTokenizerFast
-
-[[autodoc]] MPNetTokenizerFast
 
 ## MPNetModel
 

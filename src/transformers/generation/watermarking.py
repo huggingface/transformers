@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team and Google DeepMind.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,7 @@
 import collections
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Union
 
 import numpy as np
 import torch
@@ -125,7 +124,7 @@ class WatermarkDetector:
         self,
         model_config: "PreTrainedConfig",
         device: str,
-        watermarking_config: Optional[Union["WatermarkingConfig", dict]],
+        watermarking_config: Union["WatermarkingConfig", dict],
         ignore_repeated_ngrams: bool = False,
         max_cache_size: int = 128,
     ):
@@ -252,7 +251,7 @@ class BayesianDetectorConfig(PreTrainedConfig):
     Args:
         watermarking_depth (`int`, *optional*):
             The number of tournament layers.
-        base_rate (`float1`, *optional*, defaults to 0.5):
+        base_rate (`float`, *optional*, defaults to 0.5):
             Prior probability P(w) that a text is watermarked.
     """
 
@@ -386,6 +385,8 @@ class BayesianDetectorModel(PreTrainedModel):
             watermarking_depth=self.watermarking_depth
         )
         self.prior = torch.nn.Parameter(torch.tensor([self.base_rate]))
+
+        self.post_init()
 
     @torch.no_grad()
     def _init_weights(self, module):

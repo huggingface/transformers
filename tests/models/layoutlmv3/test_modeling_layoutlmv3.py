@@ -44,7 +44,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import LayoutLMv3ImageProcessor
+    from transformers import LayoutLMv3ImageProcessorPil
 
 
 class LayoutLMv3ModelTester:
@@ -307,7 +307,7 @@ class LayoutLMv3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     def setUp(self):
         self.model_tester = LayoutLMv3ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=LayoutLMv3Config, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=LayoutLMv3Config, hidden_size=32)
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
@@ -381,7 +381,7 @@ def prepare_img():
 class LayoutLMv3ModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return LayoutLMv3ImageProcessor(apply_ocr=False) if is_vision_available() else None
+        return LayoutLMv3ImageProcessorPil(apply_ocr=False) if is_vision_available() else None
 
     @slow
     def test_inference_no_head(self):

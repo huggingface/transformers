@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -22,7 +22,7 @@ Tailor the [`Pipeline`] to your task with task specific parameters such as addin
 
 <Youtube id=tiZFewofSLM/>
 
-Transformers has two pipeline classes, a generic [`Pipeline`] and many individual task-specific pipelines like [`TextGenerationPipeline`] or [`VisualQuestionAnsweringPipeline`]. Load these individual pipelines by setting the task identifier in the `task` parameter in [`Pipeline`]. You can find the task identifier for each pipeline in their API documentation.
+Transformers has two pipeline classes, a generic [`Pipeline`] and many individual task-specific pipelines like [`TextGenerationPipeline`]. Load these individual pipelines by setting the task identifier in the `task` parameter in [`Pipeline`]. You can find the task identifier for each pipeline in their API documentation.
 
 Each task is configured to use a default pretrained model and preprocessor, but this can be overridden with the `model` parameter if you want to use a different model.
 
@@ -59,17 +59,6 @@ This guide will introduce you to the [`Pipeline`], demonstrate its features, and
 Here are some examples of how to use [`Pipeline`] for different tasks and modalities.
 
 <hfoptions id="tasks">
-<hfoption id="summarization">
-
-```py
-from transformers import pipeline
-
-pipeline = pipeline(task="summarization", model="google/pegasus-billsum")
-pipeline("Section was formerly set out as section 44 of this title. As originally enacted, this section contained two further provisions that 'nothing in this act shall be construed as in any wise affecting the grant of lands made to the State of California by virtue of the act entitled 'An act authorizing a grant to the State of California of the Yosemite Valley, and of the land' embracing the Mariposa Big-Tree Grove, approved June thirtieth, eighteen hundred and sixty-four; or as affecting any bona-fide entry of land made within the limits above described under any law of the United States prior to the approval of this act.' The first quoted provision was omitted from the Code because the land, granted to the state of California pursuant to the Act cite, was receded to the United States. Resolution June 11, 1906, No. 27, accepted the recession.")
-[{'summary_text': 'Instructs the Secretary of the Interior to convey to the State of California all right, title, and interest of the United States in and to specified lands which are located within the Yosemite and Mariposa National Forests, California.'}]
-```
-
-</hfoption>
 <hfoption id="automatic speech recognition">
 
 ```py
@@ -122,7 +111,7 @@ This section introduces you to some of the more important parameters.
 
 ### Device
 
-[`Pipeline`] is compatible with many hardware types, including GPUs, CPUs, Apple Silicon, and more. Configure the hardware type with the `device` parameter. By default, [`Pipeline`] runs on a CPU which is given by `device=-1`.
+[`Pipeline`] is compatible with many hardware types, including GPUs, CPUs, Apple Silicon, and more. Configure the hardware type with the `device` parameter. By default, when `device` is left unset, [`Pipeline`] automatically places the model on the first available accelerator (CUDA GPU, Apple Silicon MPS, XPU, ...) and only falls back to a CPU when none is available. Pass `device="cpu"` to force it to run on a CPU.
 
 <hfoptions id="device">
 <hfoption id="GPU">
@@ -198,7 +187,7 @@ import datasets
 device = Accelerator().device
 
 # KeyDataset is a utility that returns the item in the dict returned by the dataset
-dataset = datasets.load_dataset("imdb", name="plain_text", split="unsupervised")
+dataset = load_dataset("stanfordnlp/imdb", name="plain_text", split="unsupervised")
 pipeline = pipeline(task="text-classification", model="distilbert/distilbert-base-uncased-finetuned-sst-2-english", device=device)
 for out in pipeline(KeyDataset(dataset, "text"), batch_size=8, truncation="only_first"):
     print(out)
@@ -228,7 +217,7 @@ Pass the `return_timestamps="word"` parameter to [`Pipeline`] to return when eac
 from transformers import pipeline
 
 pipeline = pipeline(task="automatic-speech-recognition", model="openai/whisper-large-v3")
-pipeline(audio="https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac", return_timestamp="word")
+pipeline(audio="https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac", return_timestamps="word")
 {'text': ' I have a dream that one day this nation will rise up and live out the true meaning of its creed.',
  'chunks': [{'text': ' I', 'timestamp': (0.0, 1.1)},
   {'text': ' have', 'timestamp': (1.1, 1.44)},
@@ -311,7 +300,7 @@ from datasets import load_dataset
 
 device = Accelerator().device
 
-dataset = datasets.load_dataset("imdb", name="plain_text", split="unsupervised")
+dataset = load_dataset("stanfordnlp/imdb", name="plain_text", split="unsupervised")
 pipeline = pipeline(task="text-classification", model="distilbert/distilbert-base-uncased-finetuned-sst-2-english", device=device)
 for out in pipeline(KeyDataset(dataset, "text"), batch_size=8, truncation="only_first"):
     print(out)

@@ -74,7 +74,7 @@ if is_vision_available():
     import PIL
     from PIL import Image
 
-    from transformers import ViTImageProcessor
+    from transformers import ViTImageProcessorPil
 
 
 @require_torch
@@ -1185,7 +1185,7 @@ class TrOCRModelIntegrationTest(unittest.TestCase):
             )
         else:
             expected_slice = torch.tensor(
-                [-5.6844, -5.8372, 1.1518, -6.8984, 6.8587, -2.4453, 1.2347, -1.0241, -1.9649, -3.9109],
+                [-5.6832, -5.8361, 1.1500, -6.8975, 6.8576, -2.4450, 1.2335, -1.0246, -1.9654, -3.9127],
                 device=torch_device,
             )
 
@@ -1199,7 +1199,7 @@ class ViT2GPT2ModelIntegrationTest(unittest.TestCase):
     def test_inference_coco_en(self):
         loc = "ydshieh/vit-gpt2-coco-en"
 
-        image_processor = ViTImageProcessor.from_pretrained(loc)
+        image_processor = ViTImageProcessorPil.from_pretrained(loc)
         tokenizer = AutoTokenizer.from_pretrained(loc)
         model = VisionEncoderDecoderModel.from_pretrained(loc)
         model.to(torch_device)

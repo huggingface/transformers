@@ -9,31 +9,64 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on {release_date} and added to Hugging Face Transformers on 2025-08-22.*
+*This model was contributed to Hugging Face Transformers on 2025-08-22.*
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
 
 # HunYuanDenseV1
 
-## Overview
+HunYuanDenseV1 is Tencent's dense language model series, available in sizes from 0.5B to 7B parameters. It supports chain-of-thought reasoning and long-context processing, and is designed for efficient deployment across a range of hardware configurations.
 
-To be released with the official model launch.
+The example below demonstrates how to generate text with [`Pipeline`] or the [`AutoModelForCausalLM`] class.
 
-### Model Details
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-To be released with the official model launch.
+```python
+from transformers import pipeline
 
-## Usage tips
 
-To be released with the official model launch.
+pipe = pipeline(
+    task="text-generation",
+    model="tencent/Hunyuan-0.5B-Pretrain",
+)
+pipe("The future of artificial intelligence is")
+```
+
+</hfoption>
+<hfoption id="AutoModelForCausalLM">
+
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+
+tokenizer = AutoTokenizer.from_pretrained("tencent/Hunyuan-0.5B-Pretrain")
+model = AutoModelForCausalLM.from_pretrained(
+    "tencent/Hunyuan-0.5B-Pretrain",
+    device_map="auto",
+)
+input_ids = tokenizer("The future of artificial intelligence is", return_tensors="pt").to(model.device)
+
+output = model.generate(**input_ids, max_new_tokens=50)
+print(tokenizer.decode(output[0], skip_special_tokens=True))
+```
+
+</hfoption>
+</hfoptions>
 
 ## HunYuanDenseV1Config
 
 [[autodoc]] HunYuanDenseV1Config
 
-## HunYuanModel
+## HunYuanDenseV1Model
 
 [[autodoc]] HunYuanDenseV1Model
     - forward

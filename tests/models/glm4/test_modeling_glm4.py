@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -44,6 +43,13 @@ class Glm4ModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = Glm4Model
 
+    def __init__(self, parent):
+        super().__init__(parent=parent)
+        # NOTE(3outeille): must be 0.0 for TP backward tests. In train mode, non-zero dropout causes
+        # different RNG states between the non-TP and TP model forward passes (they run sequentially),
+        # leading to different dropout masks and mismatched losses.
+        self.attention_dropout = 0.0
+
 
 @require_torch
 class Glm4ModelTest(CausalLMModelTest, unittest.TestCase):
@@ -64,7 +70,7 @@ class Glm4IntegrationTest(unittest.TestCase):
     def test_model_9b_fp16(self):
         EXPECTED_TEXTS = Expectations(
             {
-                ("xpu", 3): [
+                ("xpu", 5): [
                     "Hello I am doing a project on the history of the internet and I need to know what the first website was and what",
                     "Hi today I am going to tell you about the most common disease in the world. This disease is called diabetes",
                 ],
@@ -90,9 +96,9 @@ class Glm4IntegrationTest(unittest.TestCase):
     def test_model_9b_bf16(self):
         EXPECTED_TEXTS = Expectations(
             {
-                ("xpu", 3): [
+                ("xpu", 5): [
                     "Hello I am doing a project on the history of the internet and I need to know what the first website was and what",
-                    "Hi today I am going to tell you about the most common mistakes that people make when they are learning English.",
+                    "Hi today I am going to tell you about the most common disease in the world. This disease is called diabetes",
                 ],
                 ("cuda", 7): [],
                 ("cuda", 8): [
@@ -116,8 +122,8 @@ class Glm4IntegrationTest(unittest.TestCase):
     def test_model_9b_eager(self):
         EXPECTED_TEXTS = Expectations(
             {
-                ("xpu", 3): [
-                    "Hello I am doing a project on the history of the internet and I need to know what the first website was and who",
+                ("xpu", 5): [
+                    "Hello I am doing a project on the history of the internet and I need to know what the first website was. I",
                     "Hi today I am going to tell you about the most common disease in the world. This disease is called diabetes",
                 ],
                 ("cuda", 7): [],
@@ -147,9 +153,9 @@ class Glm4IntegrationTest(unittest.TestCase):
     def test_model_9b_sdpa(self):
         EXPECTED_TEXTS = Expectations(
             {
-                ("xpu", 3): [
+                ("xpu", 5): [
                     "Hello I am doing a project on the history of the internet and I need to know what the first website was and what",
-                    "Hi today I am going to tell you about the most common mistakes that people make when they are learning English.",
+                    "Hi today I am going to tell you about the most common disease in the world. This disease is called diabetes",
                 ],
                 ("cuda", 7): [],
                 ("cuda", 8): [

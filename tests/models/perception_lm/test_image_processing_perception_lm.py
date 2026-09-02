@@ -18,9 +18,9 @@ import numpy as np
 
 from transformers.image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
 
 
 if is_torch_available():
@@ -29,11 +29,8 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    if is_torchvision_available():
-        from transformers import PerceptionLMImageProcessorFast
 
-
-class PerceptionLMImageProcessingTester:
+class PerceptionLMImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -85,28 +82,10 @@ class PerceptionLMImageProcessingTester:
             "size": self.size,
         }
 
-    def expected_output_image_shape(self, images):
-        return self.num_channels, self.crop_size["height"], self.crop_size["width"]
-
-    # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTester.prepare_image_inputs
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
-
 
 @require_torch
 @require_vision
 class PerceptionLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    fast_image_processing_class = PerceptionLMImageProcessorFast if is_torchvision_available() else None
-    test_slow_image_processor = False
-
     def setUp(self):
         super().setUp()
         self.image_processor_tester = PerceptionLMImageProcessingTester(self)
@@ -117,7 +96,7 @@ class PerceptionLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCas
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "do_resize"))
             self.assertTrue(hasattr(image_processing, "tile_size"))
@@ -129,7 +108,7 @@ class PerceptionLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCas
             self.assertTrue(hasattr(image_processing, "vision_input_type"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.tile_size, 16)
             self.assertEqual(image_processor.max_num_tiles, 4)
@@ -143,7 +122,7 @@ class PerceptionLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCas
             self.assertEqual(image_processor.vision_input_type, "thumb+tile")
 
     def test_call_pil(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PIL images
@@ -162,7 +141,7 @@ class PerceptionLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCas
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
     def test_call_numpy(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
@@ -181,7 +160,7 @@ class PerceptionLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCas
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
     def test_call_pytorch(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PyTorch tensors
@@ -205,7 +184,7 @@ class PerceptionLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCas
         pass
 
     def test_nested_input(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
 

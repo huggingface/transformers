@@ -238,23 +238,6 @@ pip install transformers datasets evaluate sacrebleu
 >>> text = "translate English to French: Legumes share resources with nitrogen-fixing bacteria."
 ```
 
-推論用に微調整されたモデルを試す最も簡単な方法は、それを [`pipeline`] で使用することです。モデルを使用して翻訳用の`pipeline`をインスタンス化し、テキストをそれに渡します。
-
-
-```py
->>> from transformers import pipeline
-
-# Change `xx` to the language of the input and `yy` to the language of the desired output.
-# Examples: "en" for English, "fr" for French, "de" for German, "es" for Spanish, "zh" for Chinese, etc; translation_en_to_fr translates English to French
-# You can view all the lists of languages here - https://huggingface.co/languages
->>> translator = pipeline("translation_xx_to_yy", model="my_awesome_opus_books_model")
->>> translator(text)
-[{'translation_text': 'Legumes partagent des ressources avec des bactéries azotantes.'}]
-```
-
-必要に応じて、`pipeline`の結果を手動で複製することもできます。
-
-
 テキストをトークン化し、`input_ids` を PyTorch テンソルとして返します。
 
 ```py

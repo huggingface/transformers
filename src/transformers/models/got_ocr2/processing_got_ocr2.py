@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,33 +13,60 @@
 # limitations under the License.
 
 
-from typing import Optional, Union
-
 import numpy as np
 
 from ...image_processing_utils import BatchFeature
-from ...image_utils import ImageInput
+from ...image_utils import ImageInput, get_image_size, is_valid_image
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import is_vision_available, logging
+from ...utils import auto_docstring, logging
 
-
-if is_vision_available():
-    from ...image_utils import load_images
 
 logger = logging.get_logger(__name__)
 
 
 class GotOcr2TextKwargs(TextKwargs, total=False):
-    format: Optional[bool]
+    """
+    format (`bool`, *optional*, defaults to `False`):
+        Whether to request formatted output from the OCR model. When enabled, the model is instructed to return
+        structured and formatted text output rather than raw OCR results.
+    """
+
+    format: bool | None
 
 
 class GotOcr2ImagesKwargs(ImagesKwargs, total=False):
+    """
+    crop_to_patches (`bool`, *optional*, defaults to `False`):
+        Whether to crop images into patches before processing. When enabled, large images are divided into
+        smaller patches for more efficient OCR processing.
+    min_patches (`int`, *optional*, defaults to `1`):
+        Minimum number of patches to generate when cropping images. This ensures that even small images are
+        processed with at least this many patches.
+    max_patches (`int`, *optional*, defaults to `12`):
+        Maximum number of patches to generate when cropping images. Large images will be divided into at most
+        this many patches to control computational complexity.
+    box (`list`, `tuple[float, float]`, or `tuple[float, float, float, float]`, *optional*):
+        Bounding box coordinates for OCR region of interest. Can be specified as a single box `[x1, y1, x2, y2]`
+        or a list of boxes. Coordinates are normalized to the range [0, 1000] based on the image dimensions.
+        If not provided, OCR is performed on the entire image.
+    color (`str`, *optional*):
+        Color filter specification for OCR. When provided, the OCR query is prefixed with the color information
+        to focus on text of a specific color (e.g., "red", "blue").
+    num_image_tokens (`int`, *optional*, defaults to `256`):
+        Number of image tokens (patches) to use per image. This controls the resolution of the image representation
+        passed to the model. Higher values provide more detail but increase computational cost.
+    multi_page (`bool`, *optional*, defaults to `False`):
+        Whether the input consists of multi-page documents. When enabled, images can be provided as nested lists
+        where each inner list represents a page, and OCR is performed across all pages with appropriate handling
+        of page boundaries.
+    """
+
     crop_to_patches: bool
     min_patches: int
     max_patches: int
-    box: Optional[Union[list, tuple[float, float], tuple[float, float, float, float]]]
-    color: Optional[str]
+    box: list | tuple[float, float] | tuple[float, float, float, float] | None
+    color: str | None
     num_image_tokens: int
     multi_page: bool
 
@@ -63,7 +89,7 @@ class GotOcr2ProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-def preprocess_box_annotation(box: Union[list, tuple], image_size: tuple[int, int]) -> list:
+def preprocess_box_annotation(box: list | tuple, image_size: tuple[int, int]) -> list:
     """
     Convert box annotation to the format [x1, y1, x2, y2] in the range [0, 1000].
     """
@@ -79,19 +105,9 @@ def preprocess_box_annotation(box: Union[list, tuple], image_size: tuple[int, in
     return list(box)
 
 
+@auto_docstring
 class GotOcr2Processor(ProcessorMixin):
-    r"""
-    Constructs a GotOcr2 processor which wraps a [`GotOcr2ImageProcessor`] and
-    [`PretrainedTokenizerFast`] tokenizer into a single processor that inherits both the image processor and
-    tokenizer functionalities. See the [`~GotOcr2Processor.__call__`] and [`~GotOcr2Processor.decode`] for more information.
-    Args:
-        image_processor ([`GotOcr2ImageProcessor`], *optional*):
-            The image processor is a required input.
-        tokenizer ([`PreTrainedTokenizer`, `PreTrainedTokenizerFast`], *optional*):
-            The tokenizer is a required input.
-        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
-            in a chat into a tokenizable string.
-    """
+    valid_processor_kwargs = GotOcr2ProcessorKwargs
 
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
@@ -127,52 +143,14 @@ class GotOcr2Processor(ProcessorMixin):
 
         return images, text, box, color
 
+    @auto_docstring
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         **kwargs: Unpack[GotOcr2ProcessorKwargs],
     ) -> BatchFeature:
-        """
-        Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizerFast.__call__`] to encode the text if `text`
-        is not `None`, otherwise encode default OCR queries which depends on the `format`, `box`, `color`, `multi_page` and
-        `crop_to_patches` arguments. To prepare the vision inputs, this method forwards the `images` and `kwargs` arguments to
-        GotOcr2ImageProcessor's [`~GotOcr2ImageProcessor.__call__`] if `images` is not `None`.
-
-        Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-            text (`str`, `list[str]`, `list[list[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            format (`bool`, *optional*):
-                If set, will add the format token to the query, and the model will return the OCR result with formatting.
-            box (`list[float]`, `list[tuple[float, float]]`, `list[tuple[float, float, float, float]]`, *optional*):
-                The box annotation to be added to the query. If a list of floats or a tuple of floats is provided, it
-                will be interpreted as [x1, y1, x2, y2]. If a list of tuples is provided, each tuple should be in the
-                form (x1, y1, x2, y2).
-            color (`str`, *optional*):
-                The color annotation to be added to the query. The model will return the OCR result within the box with
-                the specified color.
-            multi_page (`bool`, *optional*):
-                If set, will enable multi-page inference. The model will return the OCR result across multiple pages.
-            crop_to_patches (`bool`, *optional*):
-                If set, will crop the image to patches. The model will return the OCR result upon the patch reference.
-            min_patches (`int`, *optional*):
-                The minimum number of patches to be cropped from the image. Only used when `crop_to_patches` is set to
-                `True`.
-            max_patches (`int`, *optional*):
-                The maximum number of patches to be cropped from the image. Only used when `crop_to_patches` is set to
-                `True`.
-
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
@@ -188,34 +166,33 @@ class GotOcr2Processor(ProcessorMixin):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-        format_output = output_kwargs["text_kwargs"].pop("format")
-        num_image_tokens = output_kwargs["images_kwargs"].pop("num_image_tokens")
-        box = output_kwargs["images_kwargs"].pop("box", [None])
-        color = output_kwargs["images_kwargs"].pop("color", None)
-        multi_page = output_kwargs["images_kwargs"].pop("multi_page")
+        model_inputs = super().__call__(images=images, text=text, **output_kwargs)
+        return model_inputs
 
-        crop_to_patches = output_kwargs["images_kwargs"].get("crop_to_patches")
+    def prepare_inputs_layout(self, images=None, text=None, **kwargs):
+        if images is None:
+            raise ValueError(f"You must provide valid `images` for {self.__class__.__name__}, found `None`")
+
+        images, text, *_ = super().prepare_inputs_layout(images=images, text=text, **kwargs)
+
+        # assume  kwargs are structured since we `merge_kwargs()` before `super().__call__()`
+        box = kwargs["images_kwargs"].pop("box", [None])
+        color = kwargs["images_kwargs"].pop("color", None)
+        multi_page = kwargs["images_kwargs"].get("multi_page")
+        format_output = kwargs["text_kwargs"].pop("format")
+        crop_to_patches = kwargs["images_kwargs"].get("crop_to_patches")
         images, text, box, color = self._make_list_of_inputs(images, text, box, color, multi_page)
-        if multi_page:
-            # save the number of pages per batch
-            num_pages_per_batch = [len(image_group) for image_group in images]
-            # flatten the list of images
-            images = [image for image_group in images for image in image_group]
-        else:
-            num_pages_per_batch = [1 for _ in range(len(images))]
-        # Load images as we need to know the image size
-        images = load_images(images)
-        image_sizes = [image.size for image in images]
-        image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
-        num_patches_array = image_inputs.pop("num_patches")
+
         if text is None:
             text = []
-            patch_indices = np.cumsum(num_pages_per_batch)
-            for index, (num_pages, box_single, color_single) in enumerate(zip(num_pages_per_batch, box, color)):
-                current_patch_index = patch_indices[index - 1] if index > 0 else 0
-                num_patches = sum(num_patches_array[current_patch_index : current_patch_index + num_pages])
+            if multi_page:
+                image_sizes = [get_image_size(image) for image_group in images for image in image_group]
+            else:
+                image_sizes = [get_image_size(image) for image in images]
+
+            for box_single, color_single, size in zip(box, color, image_sizes):
                 if box_single[0] is not None:
-                    box_single = preprocess_box_annotation(box_single, image_sizes[index])
+                    box_single = preprocess_box_annotation(box_single, size)
                 query = (
                     f"{f'[{color_single}] ' if color_single is not None else ''}"
                     f"{str(box_single) if box_single[0] is not None else ''} "
@@ -225,6 +202,7 @@ class GotOcr2Processor(ProcessorMixin):
                     f"{' upon the patch reference' if crop_to_patches else ''}"
                     ": "
                 )
+                # build a conversation manually, ckpt has not chat template :(
                 prompt = (
                     self.message_start_token
                     + self.system_query
@@ -232,7 +210,7 @@ class GotOcr2Processor(ProcessorMixin):
                     + self.message_start_token
                     + "user\n"
                     + self.img_start_token
-                    + self.img_pad_token * num_image_tokens * num_patches
+                    + self.image_token  # <- the token to be expanded later
                     + self.img_end_token
                     + "\n"
                     + query
@@ -242,11 +220,47 @@ class GotOcr2Processor(ProcessorMixin):
                 )
                 text.append(prompt)
 
-        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
-        self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
+        return images, text, None, None
 
-        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
+    def _process_images(self, images: ImageInput, **kwargs):
+        # kwargs not used by image processor, only when building a conversation
+        for key in ["box", "color"]:
+            kwargs.pop(key, None)
+        multi_page = kwargs.pop("multi_page")
+        num_image_tokens = kwargs.pop("num_image_tokens")
+        processed_images = self.image_processor(images, **kwargs)
+
+        if multi_page:
+            num_pages_per_batch = [len(image_group) for image_group in images]
+        else:
+            num_pages_per_batch = [1 for _ in range(len(images))]
+        patch_indices = np.cumsum(num_pages_per_batch)
+
+        image_replacements = []
+        # Important to not flatten the images here!
+        for idx in range(len(images)):
+            if is_valid_image(images[idx]) or (isinstance(images, (list, tuple)) and len(images[idx]) > 0):
+                replacement_text = self.replace_image_token(
+                    processed_images,
+                    image_idx=idx,
+                    num_pages_per_batch=num_pages_per_batch,
+                    patch_indices=patch_indices,
+                    num_image_tokens=num_image_tokens,
+                )
+                image_replacements.append(replacement_text)
+        return processed_images, image_replacements
+
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
+        num_pages = kwargs["num_pages_per_batch"][image_idx]
+        num_image_tokens = kwargs["num_image_tokens"]
+        current_patch_index = kwargs["patch_indices"][image_idx - 1] if image_idx > 0 else 0
+        num_patches = sum(image_inputs["num_patches"][current_patch_index : current_patch_index + num_pages])
+        return self.image_token * num_image_tokens * num_patches
+
+    @property
+    def unused_input_names(self) -> list[str]:
+        "Input names returned always by subprocessors but not used in model's `forward`"
+        return ["num_patches"]
 
 
 __all__ = ["GotOcr2Processor"]

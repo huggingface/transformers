@@ -9,11 +9,11 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-10-17 and added to Hugging Face Transformers on 2025-04-17.*
+*This model was published in HF papers on 2024-10-17 and contributed to Hugging Face Transformers on 2025-04-17.*
 
 # Janus
 
@@ -30,7 +30,7 @@ The abstract from the original paper is the following:
 
 The abstract from the aforementioned `Janus-Pro` paper, released afterwards, is the following:
 
-*In this work, we introduce Janus-Pro, an advanced version of the previous work Janus. Specifically, Janus-Pro incorporates (1) an optimized training strate (2) expanded training data, and (3) scaling to larger model size. With these improvements, Janus-Pro achieves significant advancements in both multimodal understanding and text-to-image instruction-following capabilities, while also enhancing the stability of text-to-image generation. We hope this work will inspire further exploration in the field. Code and models are publicly available.*
+*In this work, we introduce Janus-Pro, an advanced version of the previous work Janus. Specifically, Janus-Pro incorporates (1) an optimized training strategy (2) expanded training data, and (3) scaling to larger model size. With these improvements, Janus-Pro achieves significant advancements in both multimodal understanding and text-to-image instruction-following capabilities, while also enhancing the stability of text-to-image generation. We hope this work will inspire further exploration in the field. Code and models are publicly available.*
 
 This model was contributed by [Yaswanth Gali](https://huggingface.co/yaswanthgali) and [Hugo Silva](https://huggingface.co/hugosilva664).
 The original code can be found [here](https://github.com/deepseek-ai/Janus).
@@ -45,11 +45,9 @@ Here is the example of visual understanding with a single image.
 > Note that the model has been trained with a specific prompt format for chatting. Use `processor.apply_chat_template(my_conversation_dict)` to correctly format your prompts.
 
 ```python
-import torch
-from PIL import Image
-import requests
 
 from transformers import JanusForConditionalGeneration, JanusProcessor
+
 
 model_id = "deepseek-community/Janus-Pro-1B"
 # Prepare Input for generation.
@@ -65,9 +63,8 @@ messages = [
 
 # Set generation mode to `text` to perform text generation.
 processor = JanusProcessor.from_pretrained(model_id)
-model = JanusForConditionalGeneration.from_pretrained(model_id,     
-        dtype=torch.bfloat16,
-        device_map="auto")
+model = JanusForConditionalGeneration.from_pretrained(model_id,
+            device_map="auto")
 
 inputs = processor.apply_chat_template(
     messages,
@@ -76,7 +73,7 @@ inputs = processor.apply_chat_template(
     tokenize=True,
     return_dict=True,
     return_tensors="pt",
-).to(model.device, dtype=torch.bfloat16)
+).to(model.device)
 
 output = model.generate(**inputs, max_new_tokens=40,generation_mode='text',do_sample=True)
 text = processor.decode(output[0], skip_special_tokens=True)
@@ -88,11 +85,9 @@ print(text)
 Janus can perform inference with multiple images as input, where images can belong to the same prompt or different prompts in batched inference, where the model processes many conversations in parallel. Here is how you can do it:
 
 ```python
-import torch
-from PIL import Image
-import requests
 
 from transformers import JanusForConditionalGeneration, JanusProcessor
+
 
 model_id = "deepseek-community/Janus-Pro-1B"
 
@@ -128,7 +123,7 @@ messages = [
 # Load model and processor
 processor = JanusProcessor.from_pretrained(model_id)
 model = JanusForConditionalGeneration.from_pretrained(
-    model_id, dtype=torch.bfloat16, device_map="auto"
+    model_id, device_map="auto"
 )
 
 inputs = processor.apply_chat_template(
@@ -139,7 +134,7 @@ inputs = processor.apply_chat_template(
     padding=True,
     return_dict=True,
     return_tensors="pt"
-).to(model.device, dtype=torch.bfloat16)
+).to(model.device)
 
 # Generate response
 output = model.generate(**inputs, max_new_tokens=40, generation_mode='text', do_sample=False)
@@ -152,16 +147,15 @@ print(text)
 Janus can also generate images given a prompt.
 
 ```python
-import torch
 from transformers import JanusForConditionalGeneration, JanusProcessor
+
 
 # Set generation mode to `image` to prepare inputs for image generation..
 
 model_id = "deepseek-community/Janus-Pro-1B"
 processor = JanusProcessor.from_pretrained(model_id)
 model = JanusForConditionalGeneration.from_pretrained(model_id,
-        dtype=torch.bfloat16,
-        device_map="auto")
+            device_map="auto")
 
 messages = [
     {
@@ -173,7 +167,7 @@ messages = [
 ]
 
 prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
-inputs = processor(text=prompt,generation_mode="image",return_tensors="pt").to(model.device, dtype=torch.bfloat16)
+inputs = processor(text=prompt,generation_mode="image",return_tensors="pt").to(model.device)
 
 # Set num_return_sequence parameter to generate multiple images per prompt.
 model.generation_config.num_return_sequences = 2
@@ -184,7 +178,7 @@ outputs = model.generate(**inputs,
                          )
 # Perform post-processing on the generated token ids.
 decoded_image = model.decode_image_tokens(outputs)
-images = processor.postprocess(list(decoded_image.float()),return_tensors="PIL.Image.Image")
+images = processor.postprocess(list(decoded_image.float()),return_tensors="PIL.Image.Image").to(model.device)
 # Save the image
 for i, image in enumerate(images['pixel_values']):
     image.save(f"result{i}.png")
@@ -205,14 +199,17 @@ for i, image in enumerate(images['pixel_values']):
 ## JanusProcessor
 
 [[autodoc]] JanusProcessor
+    - __call__
 
 ## JanusImageProcessor
 
 [[autodoc]] JanusImageProcessor
+    - preprocess
 
-## JanusImageProcessorFast
+## JanusImageProcessorPil
 
-[[autodoc]] JanusImageProcessorFast
+[[autodoc]] JanusImageProcessorPil
+    - preprocess
 
 ## JanusVisionModel
 
@@ -228,6 +225,7 @@ for i, image in enumerate(images['pixel_values']):
 
 [[autodoc]] JanusModel
     - forward
+    - get_image_features
 
 ## JanusForConditionalGeneration
 

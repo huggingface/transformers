@@ -15,7 +15,12 @@ import json
 import os
 import tempfile
 
-from transformers.cli.chat import new_chat_history, parse_generate_flags, save_chat
+from transformers.cli.chat import (
+    get_service_root_url,
+    new_chat_history,
+    parse_generate_flags,
+    save_chat,
+)
 
 
 def test_help(cli):
@@ -44,3 +49,11 @@ def test_parse_generate_flags():
     parsed = parse_generate_flags(["temperature=0.5", "max_new_tokens=10"])
     assert parsed["temperature"] == 0.5
     assert parsed["max_new_tokens"] == 10
+
+
+def test_get_service_root_url():
+    assert get_service_root_url("http://localhost:8000/v1") == "http://localhost:8000"
+    assert get_service_root_url("http://localhost:8000/v1/") == "http://localhost:8000"
+    assert get_service_root_url("http://localhost:8000") == "http://localhost:8000"
+    assert get_service_root_url("http://localhost:8000/") == "http://localhost:8000"
+    assert get_service_root_url("https://example.com/proxy/v1") == "https://example.com/proxy"

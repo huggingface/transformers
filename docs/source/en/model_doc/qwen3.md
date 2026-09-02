@@ -9,25 +9,62 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-04-29 and added to Hugging Face Transformers on 2025-03-31.*
+*This model was published in HF papers on 2025-05-14 and contributed to Hugging Face Transformers on 2025-03-31.*
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="Tensor parallelism" src="https://img.shields.io/badge/Tensor%20parallelism-06b6d4?style=flat&logoColor=white">
+    </div>
+</div>
 
 # Qwen3
 
-## Overview
+[Qwen3](https://huggingface.co/papers/2505.09388) is the dense model architecture in the Qwen3 family, available in sizes from 0.6B to 32B parameters. It supports both thinking mode (multi-step reasoning) and non-thinking mode, with seamless switching between the two. Qwen3 was trained on approximately 36T tokens covering 119 languages. See also the MoE variant [Qwen3MoE](qwen3_moe).
 
-[Qwen3](https://huggingface.co/papers/2505.09388) refers to the dense model architecture Qwen3-32B which was released with its mixture of experts variant [Qwen3MoE](qwen3_moe) ([blog post](https://qwenlm.github.io/blog/qwen3/)).
+> [!TIP]
+> Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Refer to [Loading kernels](../kernel_doc/loading_kernels) to learn more.
 
-### Model Details
+The example below demonstrates how to generate text with [`Pipeline`] or the [`AutoModelForCausalLM`] class.
 
-To be released with the official model launch.
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-## Usage tips
+```python
+from transformers import pipeline
 
-To be released with the official model launch.
+
+pipe = pipeline(
+    task="text-generation",
+    model="Qwen/Qwen3-0.6B",
+)
+pipe("The key to effective reasoning is")
+```
+
+</hfoption>
+<hfoption id="AutoModelForCausalLM">
+
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+
+tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen3-0.6B",
+    device_map="auto",
+)
+input_ids = tokenizer("The key to effective reasoning is", return_tensors="pt").to(model.device)
+
+output = model.generate(**input_ids, max_new_tokens=50)
+print(tokenizer.decode(output[0], skip_special_tokens=True))
+```
+
+</hfoption>
+</hfoptions>
 
 ## Qwen3Config
 

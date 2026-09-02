@@ -1,5 +1,4 @@
-# coding=utf-8
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,103 +15,250 @@
 import argparse
 import gc
 import json
+import logging
 import os
+import re
+from pathlib import Path
+from typing import Any
 
 import torch
+from huggingface_hub import snapshot_download
 from safetensors.torch import load_file
 
 from transformers import (
     Qwen2TokenizerFast,
     VibeVoiceAcousticTokenizerConfig,
-    VibeVoiceAcousticTokenizerModel,
+    VibeVoiceAcousticTokenizerEncoderConfig,
+    VibeVoiceAcousticTokenizerFeatureExtractor,
     VibeVoiceConfig,
-    VibeVoiceFeatureExtractor,
     VibeVoiceForConditionalGeneration,
     VibeVoiceProcessor,
-    VibeVoiceSemanticTokenizerConfig,
-    VibeVoiceSemanticTokenizerModel,
 )
 
 
-def update_state_dict_for_hf_model(state_dict):
-    """
-    Update the state_dict to match the HuggingFace model structure.
-    """
-    updated_state_dict = {}
-
-    for key, value in state_dict.items():
-        new_key = key
-
-        # Handle semantic tokenizer transformations
-        if "semantic_tokenizer" in key:
-            if "downsample_layers." in key and ".0.conv." in key:
-                new_key = new_key.replace(".0.conv.", ".conv.")
-            if "mixer.conv.conv.conv." in key:
-                new_key = new_key.replace("mixer.conv.conv.conv.", "mixer.conv.")
-            elif ".conv.conv." in key:
-                new_key = new_key.replace(".conv.conv.", ".conv.")
-
-        # Handle acoustic tokenizer transformations
-        if "acoustic_tokenizer.encoder" in key:
-            if "downsample_layers." in key and ".0.conv." in key:
-                new_key = new_key.replace(".0.conv.", ".conv.")
-            if "mixer.conv.conv.conv." in key:
-                new_key = new_key.replace("mixer.conv.conv.conv.", "mixer.conv.")
-            elif ".conv.conv." in key:
-                new_key = new_key.replace(".conv.conv.", ".conv.")
-        if "acoustic_tokenizer.decoder" in key:
-            if "upsample_layers.0.0.conv.conv." in key:
-                new_key = new_key.replace("upsample_layers.0.0.conv.conv.", "upsample_layers.0.conv.")
-            elif "0.convtr.convtr." in key:
-                new_key = new_key.replace("0.convtr.convtr.", "convtr.")
-            elif "head.conv." in key:
-                new_key = new_key.replace("head.conv.", "head.")
-            elif "stages." in key and "mixer.conv.conv.conv." in key:
-                new_key = new_key.replace("mixer.conv.conv.conv.", "mixer.conv.")
-
-        # Handle main model
-        if "prediction_head." in key:
-            key = key.replace("prediction_head.", "diffusion_head.")
-            new_key = new_key.replace("prediction_head.", "diffusion_head.")
-        if "diffusion_head.t_embedder.mlp." in key:
-            if "diffusion_head.t_embedder.mlp.0." in key:
-                new_key = new_key.replace(
-                    "diffusion_head.t_embedder.mlp.0.", "diffusion_head.timestep_embedder.layer_1."
-                )
-            elif "diffusion_head.t_embedder.mlp.2." in key:
-                new_key = new_key.replace(
-                    "diffusion_head.t_embedder.mlp.2.", "diffusion_head.timestep_embedder.layer_2."
-                )
-        if "diffusion_head.final_layer.linear." in key and "adaLN_modulation" not in key:
-            new_key = new_key.replace("diffusion_head.final_layer.linear.", "diffusion_head.final_layer.linear_2.")
-        if "diffusion_head.final_layer.adaLN_modulation." in key:
-            if ".adaLN_modulation.1." in key:
-                new_key = new_key.replace(".adaLN_modulation.1.", ".linear_1.")
-        if "diffusion_head.layers." in key and ".adaLN_modulation." in key:
-            if ".adaLN_modulation.1." in key:
-                new_key = new_key.replace(".adaLN_modulation.1.", ".linear.")
-        if "model.speech_scaling_factor" in key:
-            new_key = new_key.replace("model.speech_scaling_factor", "latent_scaling_factor")
-        if "model.speech_bias_factor" in key:
-            new_key = new_key.replace("model.speech_bias_factor", "latent_bias_factor")
-
-        updated_state_dict[new_key] = value
-
-    return updated_state_dict
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 
-def convert_checkpoint(
-    checkpoint, output_dir, config_path, push_to_hub, bfloat16, processor_config=None, push_tokenizers=False
-):
+# fmt: off
+STATE_DICT_MAPPING = {
+    # Semantic tokenizer encoder
+    r"semantic_tokenizer\.encoder\.downsample_layers\.0\.0\.conv\.":    r"semantic_tokenizer_encoder.stem.conv.conv.",
+    r"semantic_tokenizer\.encoder\.stages\.0\.":                        r"semantic_tokenizer_encoder.stem.stage.",
+    r"semantic_tokenizer\.encoder\.downsample_layers\.(\d+)\.0\.conv\.": r"semantic_tokenizer_encoder.conv_layers.PLACEHOLDER.conv.conv.",
+    r"semantic_tokenizer\.encoder\.stages\.(\d+)\.":                    r"semantic_tokenizer_encoder.conv_layers.PLACEHOLDER.stage.",
+    r"semantic_tokenizer\.encoder\.head\.conv\.":                       r"semantic_tokenizer_encoder.head.",
+
+    # Acoustic tokenizer encoder
+    r"acoustic_tokenizer\.encoder\.downsample_layers\.0\.0\.conv\.":    r"audio_tower.encoder.stem.conv.conv.",
+    r"acoustic_tokenizer\.encoder\.stages\.0\.":                        r"audio_tower.encoder.stem.stage.",
+    r"acoustic_tokenizer\.encoder\.downsample_layers\.(\d+)\.0\.conv\.": r"audio_tower.encoder.conv_layers.PLACEHOLDER.conv.conv.",
+    r"acoustic_tokenizer\.encoder\.stages\.(\d+)\.":                    r"audio_tower.encoder.conv_layers.PLACEHOLDER.stage.",
+    r"acoustic_tokenizer\.encoder\.head\.conv\.":                       r"audio_tower.encoder.head.",
+
+    # Acoustic tokenizer decoder: upsample_layers.0 -> stem, upsample_layers.N -> conv_layers.N-1
+    r"acoustic_tokenizer\.decoder\.upsample_layers\.0\.0\.conv\.conv\.":           r"audio_tower.decoder.stem.conv.conv.",
+    r"acoustic_tokenizer\.decoder\.stages\.0\.":                                   r"audio_tower.decoder.stem.stage.",
+    r"acoustic_tokenizer\.decoder\.upsample_layers\.(\d+)\.0\.convtr\.convtr\.":  r"audio_tower.decoder.conv_layers.PLACEHOLDER.convtr.convtr.",
+    r"acoustic_tokenizer\.decoder\.stages\.(\d+)\.":                               r"audio_tower.decoder.conv_layers.PLACEHOLDER.stage.",
+    r"acoustic_tokenizer\.decoder\.head\.conv\.":                                  r"audio_tower.decoder.head.",
+
+    # Rename any remaining acoustic tokenizer keys (the module is `audio_tower` in the HF model)
+    r"acoustic_tokenizer\.":                                                       r"audio_tower.",
+
+    # Diffusion head renaming
+    r"prediction_head\.t_embedder\.mlp\.0\.":                                      r"diffusion_head.timestep_proj.fc1.",
+    r"prediction_head\.t_embedder\.mlp\.2\.":                                      r"diffusion_head.timestep_proj.fc2.",
+    r"prediction_head\.layers\.(\d+)\.adaLN_modulation\.1\.":                     r"diffusion_head.layers.\1.linear.",
+    r"prediction_head\.final_layer\.adaLN_modulation\.1\.":                       r"diffusion_head.final_layer.linear_1.",
+    r"prediction_head\.final_layer\.linear\.":                                     r"diffusion_head.final_layer.linear_2.",
+    r"prediction_head\.":                                                          r"diffusion_head.",
+
+    # Multimodal connectors (acoustic connector is the `multi_modal_projector` in the HF model)
+    r"acoustic_connector\.fc1\.": r"multi_modal_projector.linear_1.",
+    r"acoustic_connector\.norm\.": r"multi_modal_projector.act.",
+    r"acoustic_connector\.fc2\.": r"multi_modal_projector.linear_2.",
+    r"semantic_connector\.fc1\.": r"semantic_connector.linear_1.",
+    r"semantic_connector\.norm\.": r"semantic_connector.act.",
+    r"semantic_connector\.fc2\.": r"semantic_connector.linear_2.",
+
+    # Latent factors
+    r"^model\.speech_scaling_factor":                                              r"model.latent_scaling_factor",
+    r"^model\.speech_bias_factor":                                                 r"model.latent_bias_factor",
+
+    # Clean up nested conv layers (must be after above mappings)
+    r"mixer\.conv\.conv\.conv\.":                                                  r"mixer.conv.",
+    r"\.conv\.conv\.conv\.":                                                       r".conv.conv.",
+}
+
+CHAT_TEMPLATE = """{%- set system_prompt = system_prompt | default(" Transform the text provided by various speakers into speech output, utilizing the distinct voice of each respective speaker.\n") -%}
+{{ system_prompt -}}
+{%- set audio_bos_token = audio_bos_token | default("<|vision_start|>") %}
+{%- set audio_eos_token = audio_eos_token | default("<|vision_end|>") %}
+{%- set audio_token = audio_token | default("<|vision_pad|>") %}
+{%- set eos_token = eos_token | default("<|endoftext|>") %}
+{#- Training regime (`add_generation_prompt=False`): the last audio of the conversation is the target speech and is
+    placed after "Speech output:", followed by the audio EOS and text EOS tokens; any preceding audio is used as a
+    voice prompt. Generation regime (`add_generation_prompt=True`): all audios are voice prompts. #}
+{%- set ns = namespace(num_audio=0, num_seen=0, speakers_with_audio="") %}
+{%- for message in messages %}
+    {%- set ns.num_audio = ns.num_audio + (message['content'] | selectattr('type', 'equalto', 'audio') | list | length) %}
+{%- endfor %}
+{%- set has_target_audio = not add_generation_prompt and ns.num_audio > 0 %}
+{%- set num_voice_prompts = ns.num_audio - 1 if has_target_audio else ns.num_audio %}
+{%- for message in messages %}
+    {%- set role = message['role'] %}
+    {%- set audio_count = message['content'] | selectattr('type', 'equalto', 'audio') | list | length %}
+    {%- if audio_count > 0 and ns.num_seen < num_voice_prompts and role not in ns.speakers_with_audio %}
+        {%- set ns.speakers_with_audio = ns.speakers_with_audio + role + "," %}
+    {%- endif %}
+    {%- set ns.num_seen = ns.num_seen + audio_count %}
+{%- endfor %}
+
+{%- if ns.speakers_with_audio %}
+{{ " Voice input:\n" }}
+{%- for speaker in ns.speakers_with_audio.rstrip(',').split(',') %}
+{%- if speaker %}
+ Speaker {{ speaker }}:{{ audio_bos_token }}{{ audio_token }}{{ audio_eos_token }}{{ "\n" }}
+{%- endif %}
+{%- endfor %}
+{%- endif %}
+ Text input:{{ "\n" }}
+
+{%- for message in messages %}
+    {%- set role = message['role'] %}
+    {%- set text_items = message['content'] | selectattr('type', 'equalto', 'text') | list %}
+    {%- for item in text_items %}
+ Speaker {{ role }}: {{ item['text'] }}{{ "\n" }}
+    {%- endfor %}
+{%- endfor %}
+ Speech output:{{ "\n" }}{{ audio_bos_token }}
+{%- if not add_generation_prompt %}
+{%- if has_target_audio %}{{ audio_token }}{{ audio_eos_token }}{% endif %}{{ eos_token }}
+{%- endif %}"""
+# fmt: on
+
+
+def map_old_key_to_new(old_key: str) -> str:
+    new_key = old_key
+
+    for pattern, replacement in STATE_DICT_MAPPING.items():
+        match = re.search(pattern, new_key)
+        if match:
+            # Handle index shifts for conv_layers (downsample_layers/upsample_layers indexed from 1)
+            if "PLACEHOLDER" in replacement and match.groups():
+                layer_idx = int(match.group(1))
+                # Shift down by 1 since layer 0 becomes stem
+                new_idx = layer_idx - 1
+                replacement = replacement.replace("PLACEHOLDER", str(new_idx))
+
+            new_key = re.sub(pattern, replacement, new_key)
+
+    return new_key
+
+
+def convert_state_dict(original_state_dict: dict[str, Any]) -> dict[str, Any]:
+    new_state_dict = {}
+
+    for old_key, tensor in original_state_dict.items():
+        new_key = map_old_key_to_new(old_key)
+        new_state_dict[new_key] = tensor
+        if old_key != new_key:
+            logger.debug(f"Converted: {old_key} -> {new_key}")
+
+    return new_state_dict
+
+
+def process_tokenizer_config(config_dict: dict[str, Any], keys_to_remove: list[str]) -> dict[str, Any]:
+    if "encoder_depths" in config_dict and isinstance(config_dict["encoder_depths"], str):
+        config_dict["encoder_depths"] = list(map(int, config_dict["encoder_depths"].split("-")))
+    if "layernorm_eps" in config_dict:
+        config_dict["rms_norm_eps"] = config_dict.pop("layernorm_eps")
+    if "encoder_ratios" in config_dict:
+        config_dict["downsampling_ratios"] = list(reversed(config_dict.pop("encoder_ratios")))
+    if "encoder_n_filters" in config_dict:
+        config_dict["num_filters"] = config_dict.pop("encoder_n_filters")
+    if "encoder_depths" in config_dict:
+        config_dict["depths"] = config_dict.pop("encoder_depths")
+    if "vae_dim" in config_dict:
+        config_dict["hidden_size"] = config_dict.pop("vae_dim")
+
+    for key in keys_to_remove:
+        config_dict.pop(key, None)
+
+    return config_dict
+
+
+def load_original_checkpoint(checkpoint_path: str | Path) -> dict[str, Any]:
+    checkpoint_path = Path(checkpoint_path)
+
+    if not checkpoint_path.is_dir():
+        raise ValueError(
+            f"checkpoint_path must be a directory containing sharded safetensors files, got: {checkpoint_path}"
+        )
+
+    # Load sharded safetensors checkpoint
+    index_path = checkpoint_path / "model.safetensors.index.json"
+
+    if not index_path.exists():
+        raise FileNotFoundError(
+            f"Could not find 'model.safetensors.index.json' in {checkpoint_path}. "
+            "Expected sharded safetensors checkpoint format."
+        )
+
+    logger.info(f"Loading sharded checkpoint from {checkpoint_path}")
+    with open(index_path, "r") as f:
+        index = json.load(f)
+
+    state_dict = {}
+    # Get unique shard files
+    shard_files = sorted(set(index["weight_map"].values()))
+
+    for shard_file in shard_files:
+        shard_path = checkpoint_path / shard_file
+        logger.info(f"Loading shard: {shard_file}")
+        shard_dict = load_file(str(shard_path))
+        state_dict.update(shard_dict)
+
+    return state_dict
+
+
+def convert_checkpoint(checkpoint, output_dir, push_to_hub, bfloat16, max_shard_size="2GB"):
     if bfloat16:
         dtype = torch.bfloat16
     else:
         dtype = torch.float32
 
-    # 1) Load state dict from safetensors checkpoint
-    original_state_dict = load_file(checkpoint)
+    # 1) Download checkpoint from Hub
+    logger.info(f"Downloading checkpoint from Hub: {checkpoint}")
+    checkpoint_path = Path(
+        snapshot_download(
+            repo_id=checkpoint,
+            allow_patterns=["*.safetensors", "*.json"],
+            ignore_patterns=["*.bin", "*.msgpack", "*.h5"],
+        )
+    )
+    logger.info(f"Downloaded checkpoint to: {checkpoint_path}")
 
-    # 2) Prepare feature extractor (same for all models)
+    # Auto-detect config paths
+    config_path = checkpoint_path / "config.json"
+    if not config_path.exists():
+        raise FileNotFoundError(f"config.json not found in {checkpoint_path}")
+    config_path = str(config_path)
+    logger.info(f"Using config: {config_path}")
+
+    processor_config_file = checkpoint_path / "preprocessor_config.json"
+    processor_config = str(processor_config_file) if processor_config_file.exists() else None
+    if processor_config:
+        logger.info(f"Using preprocessor config: {processor_config}")
+
+    # 2) Load state dict from safetensors checkpoint
+    logger.info(f"Loading checkpoint from {checkpoint_path}")
+    original_state_dict = load_original_checkpoint(checkpoint_path)
+    logger.info(f"Number of parameters in original checkpoint: {len(original_state_dict)}")
+
+    # 3) Prepare feature extractor
+    logger.info("Creating feature extractor")
     audio_config = {}
     if processor_config is not None:
         with open(processor_config, "r") as f:
@@ -127,255 +273,88 @@ def convert_checkpoint(
         audio_config["target_dB_FS"] = -25
     if "eps" not in audio_config:
         audio_config["eps"] = 1e-6
+    if "pad_to_multiple_of" not in audio_config:
+        audio_config["pad_to_multiple_of"] = 3200  # audio_tower.hop_length
     if language_model_pretrained_name is None:
         if "1.5B" in checkpoint:
             language_model_pretrained_name = "Qwen/Qwen2.5-1.5B"
         else:
             language_model_pretrained_name = "Qwen/Qwen2.5-7B"
-    feature_extractor = VibeVoiceFeatureExtractor(**audio_config)
+    feature_extractor = VibeVoiceAcousticTokenizerFeatureExtractor(**audio_config)
 
-    # 3) Prepare model configuration
-    # -- Load
+    # 4) Prepare model configuration
+    logger.info(f"Loading model config from {config_path}")
     with open(config_path, "r") as f:
         model_config = json.load(f)
 
-    # clean up semantic tokenizer config
-    model_config["semantic_tokenizer_config"]["encoder_depths"] = list(
-        map(int, model_config["semantic_tokenizer_config"]["encoder_depths"].split("-"))
-    )
-    # -- reverse order of ratios here instead of in modeling
-    model_config["semantic_tokenizer_config"]["downsampling_ratios"] = list(
-        reversed(model_config["semantic_tokenizer_config"]["encoder_ratios"])
-    )
-    del model_config["semantic_tokenizer_config"]["encoder_ratios"]
-    model_config["semantic_tokenizer_config"]["n_filters"] = model_config["semantic_tokenizer_config"].pop(
-        "encoder_n_filters"
-    )
-    model_config["semantic_tokenizer_config"]["depths"] = model_config["semantic_tokenizer_config"].pop(
-        "encoder_depths"
-    )
-    model_config["semantic_tokenizer_config"]["hidden_size"] = model_config["semantic_tokenizer_config"].pop("vae_dim")
-    model_config["semantic_tokenizer_config"]["bias"] = model_config["semantic_tokenizer_config"].pop("conv_bias")
-    # -- remove unused / constant parameters that lead to unused code paths removed in HF model
-    if "mixer_layer" in model_config["semantic_tokenizer_config"]:
-        del model_config["semantic_tokenizer_config"]["mixer_layer"]
-    if "layernorm" in model_config["semantic_tokenizer_config"]:
-        del model_config["semantic_tokenizer_config"]["layernorm"]
-    if "disable_last_norm" in model_config["semantic_tokenizer_config"]:
-        del model_config["semantic_tokenizer_config"]["disable_last_norm"]
-    if "conv_norm" in model_config["semantic_tokenizer_config"]:
-        del model_config["semantic_tokenizer_config"]["conv_norm"]
-    if "corpus_normalize" in model_config["semantic_tokenizer_config"]:
-        del model_config["semantic_tokenizer_config"]["corpus_normalize"]
-    if "std_dist_type" in model_config["semantic_tokenizer_config"]:
-        # No vae component, so no sampling
-        del model_config["semantic_tokenizer_config"]["std_dist_type"]
-    if "layernorm_elementwise_affine" in model_config["semantic_tokenizer_config"]:
-        del model_config["semantic_tokenizer_config"]["layernorm_elementwise_affine"]
-    if "layernorm_eps" in model_config["semantic_tokenizer_config"]:
-        model_config["semantic_tokenizer_config"]["rms_norm_eps"] = model_config["semantic_tokenizer_config"][
-            "layernorm_eps"
-        ]
-        del model_config["semantic_tokenizer_config"]["layernorm_eps"]
-    if "pad_mode" in model_config["semantic_tokenizer_config"]:
-        # always "constant"
-        del model_config["semantic_tokenizer_config"]["pad_mode"]
-    if "fix_std" in model_config["semantic_tokenizer_config"]:
-        # Only delete for semantic model!
-        del model_config["semantic_tokenizer_config"]["fix_std"]
-    if "causal" in model_config["semantic_tokenizer_config"]:
-        # always True
-        del model_config["semantic_tokenizer_config"]["causal"]
+    # fmt: off
+    config_keys_to_remove = [
+        "decoder_depths", "decoder_n_filters", "decoder_ratios", "std_dist_type", "fix_std", "pad_mode", "conv_bias",
+        "causal", "mixer_layer", "layernorm", "disable_last_norm", "conv_norm", "corpus_normalize",
+        "layernorm_elementwise_affine",
+    ]
+    # fmt: on
 
-    # clean up acoustic tokenizer config
-    model_config["acoustic_tokenizer_config"]["encoder_depths"] = list(
-        map(int, model_config["acoustic_tokenizer_config"]["encoder_depths"].split("-"))
+    # Process tokenizer configs (pop old keys so they don't end up in the pushed config)
+    semantic_config_dict = process_tokenizer_config(
+        model_config.pop("semantic_tokenizer_config", {}).copy(), config_keys_to_remove
     )
-    if "std_dist_type" in model_config["acoustic_tokenizer_config"]:
-        # always gaussian
-        del model_config["acoustic_tokenizer_config"]["std_dist_type"]
-    # -- reverse order of ratios here instead of in modeling
-    model_config["acoustic_tokenizer_config"]["downsampling_ratios"] = list(
-        reversed(model_config["acoustic_tokenizer_config"]["encoder_ratios"])
+    acoustic_config_dict = process_tokenizer_config(
+        model_config.pop("acoustic_tokenizer_config", {}).copy(), config_keys_to_remove
     )
-    del model_config["acoustic_tokenizer_config"]["encoder_ratios"]
-    model_config["acoustic_tokenizer_config"]["n_filters"] = model_config["acoustic_tokenizer_config"].pop(
-        "encoder_n_filters"
-    )
-    model_config["acoustic_tokenizer_config"]["depths"] = model_config["acoustic_tokenizer_config"].pop(
-        "encoder_depths"
-    )
-    model_config["acoustic_tokenizer_config"]["hidden_size"] = model_config["acoustic_tokenizer_config"].pop("vae_dim")
-    model_config["acoustic_tokenizer_config"]["bias"] = model_config["acoustic_tokenizer_config"].pop("conv_bias")
-    # -- original hardcodes a scaling factor for vae_std: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L963
-    model_config["acoustic_tokenizer_config"]["vae_std"] = (
-        model_config["acoustic_tokenizer_config"].pop("fix_std") / 0.8
-    )
-    # -- remove decoder parameters as they can be derived from encoder ones
-    if "decoder_depths" in model_config["acoustic_tokenizer_config"]:
-        del model_config["acoustic_tokenizer_config"]["decoder_depths"]
-    if "decoder_n_filters" in model_config["acoustic_tokenizer_config"]:
-        del model_config["acoustic_tokenizer_config"]["decoder_n_filters"]
-    if "decoder_ratios" in model_config["acoustic_tokenizer_config"]:
-        del model_config["acoustic_tokenizer_config"]["decoder_ratios"]
-    # -- remove unused / constant parameters that lead to unused code paths removed in HF model
-    if "mixer_layer" in model_config["acoustic_tokenizer_config"]:
-        del model_config["acoustic_tokenizer_config"]["mixer_layer"]
-    if "layernorm" in model_config["acoustic_tokenizer_config"]:
-        del model_config["acoustic_tokenizer_config"]["layernorm"]
-    if "disable_last_norm" in model_config["acoustic_tokenizer_config"]:
-        del model_config["acoustic_tokenizer_config"]["disable_last_norm"]
-    if "conv_norm" in model_config["acoustic_tokenizer_config"]:
-        del model_config["acoustic_tokenizer_config"]["conv_norm"]
-    if "corpus_normalize" in model_config["acoustic_tokenizer_config"]:
-        del model_config["acoustic_tokenizer_config"]["corpus_normalize"]
-    if "layernorm_elementwise_affine" in model_config["acoustic_tokenizer_config"]:
-        del model_config["acoustic_tokenizer_config"]["layernorm_elementwise_affine"]
-    if "layernorm_eps" in model_config["acoustic_tokenizer_config"]:
-        model_config["acoustic_tokenizer_config"]["rms_norm_eps"] = model_config["acoustic_tokenizer_config"][
-            "layernorm_eps"
-        ]
-        del model_config["acoustic_tokenizer_config"]["layernorm_eps"]
-    if "pad_mode" in model_config["acoustic_tokenizer_config"]:
-        # always "constant"
-        del model_config["acoustic_tokenizer_config"]["pad_mode"]
-    if "causal" in model_config["acoustic_tokenizer_config"]:
-        # always True
-        del model_config["acoustic_tokenizer_config"]["causal"]
+    # Acoustic tokenizer has additional vae_std parameter
+    if "fix_std" in acoustic_config_dict:
+        acoustic_config_dict["vae_std"] = acoustic_config_dict.pop("fix_std") / 0.8
 
-    # clean up diffusion head config
-    model_config["diffusion_head_config"]["head_ffn_ratio"] = int(
-        model_config["diffusion_head_config"]["head_ffn_ratio"]
-    )
-    model_config["diffusion_head_config"]["num_head_layers"] = model_config["diffusion_head_config"].pop("head_layers")
-    if model_config["diffusion_head_config"]["ddpm_beta_schedule"] == "cosine":
-        model_config["diffusion_head_config"]["ddpm_beta_schedule"] = "squaredcos_cap_v2"
-    if "speech_vae_dim" in model_config["diffusion_head_config"]:
-        del model_config["diffusion_head_config"]["speech_vae_dim"]
-    if "diffusion_type" in model_config["diffusion_head_config"]:
-        del model_config["diffusion_head_config"]["diffusion_type"]
-    if "ddpm_batch_mul" in model_config["diffusion_head_config"]:
-        del model_config["diffusion_head_config"]["ddpm_batch_mul"]
-    if "latent_size" in model_config["diffusion_head_config"]:
-        # should be same as acoustic tokenizer hidden size
-        del model_config["diffusion_head_config"]["latent_size"]
-    if "hidden_size" in model_config["diffusion_head_config"]:
-        # should be same as text model hidden size
-        del model_config["diffusion_head_config"]["hidden_size"]
-    # -- flatten diffusion head config
-    for k, v in model_config["diffusion_head_config"].items():
-        model_config[k] = v
-    del model_config["diffusion_head_config"]
+    # Process diffusion head config
+    # Build the diffusion head sub-config
+    diffusion_config = model_config.pop("diffusion_head_config")
+    model_config["diffusion_head_config"] = {
+        "hidden_size": diffusion_config["hidden_size"],
+        "latent_size": acoustic_config_dict["hidden_size"],
+        "num_hidden_layers": diffusion_config["head_layers"],
+        "intermediate_size": int(diffusion_config["head_ffn_ratio"] * diffusion_config["hidden_size"]),
+        "rms_norm_eps": diffusion_config["rms_norm_eps"],
+    }
 
-    # clean up language model config
+    # Process language model config
     model_config["text_config"] = model_config.pop("decoder_config")
     model_config["text_config"]["dtype"] = model_config["text_config"].pop("torch_dtype")
 
-    # clean up main model config
-    if "acoustic_vae_dim" in model_config:
-        del model_config["acoustic_vae_dim"]
-    if "semantic_vae_dim" in model_config:
-        del model_config["semantic_vae_dim"]
-    if "tie_word_embeddings" in model_config:
-        del model_config["tie_word_embeddings"]
-    model_config["dtype"] = model_config.pop("torch_dtype")
+    # Clean up main model config
+    model_config["dtype"] = model_config.pop("torch_dtype", None)
+    for key in ["acoustic_vae_dim", "semantic_vae_dim", "tie_word_embeddings"]:
+        model_config.pop(key, None)
 
-    # 4) Update state dict to match HF model structure
-    updated_state_dict = update_state_dict_for_hf_model(original_state_dict)
+    # 5) Update state dict to match HF model structure
+    logger.info("Converting state dict")
+    updated_state_dict = convert_state_dict(original_state_dict)
 
-    # 5) Create and save semantic tokenizer
-    print("\n=== Creating semantic tokenizer ===")
-    semantic_config = VibeVoiceSemanticTokenizerConfig(**model_config["semantic_tokenizer_config"])
-    semantic_model = VibeVoiceSemanticTokenizerModel(semantic_config).to(dtype)
-    # -- filter for semantic tokenizer weights
-    prefix = "model.semantic_tokenizer"
-    semantic_state_dict = {
-        k[len(prefix) + 1 :]: v  # +1 to remove the dot after the prefix
-        for k, v in updated_state_dict.items()
-        if k.startswith(prefix)
-    }
-    # -- load into HF model
-    missing, unexpected = semantic_model.load_state_dict(semantic_state_dict, strict=False)
-    if len(unexpected) != 0:
-        raise ValueError(f"Unexpected keys: {unexpected}")
-    if len(missing) != 0:
-        raise ValueError(f"missing keys found: {missing}")
-    if push_to_hub is not None and push_tokenizers:
-        hub_repo = push_to_hub.split("/")[0] + "/VibeVoice-SemanticTokenizer"
-        print(f"------ Pushing to hub as {hub_repo} ------")
-        feature_extractor.push_to_hub(hub_repo)
-        semantic_model.push_to_hub(hub_repo)
+    # 6) Create semantic tokenizer config
+    logger.info("Creating semantic tokenizer config")
+    semantic_encoder_config = VibeVoiceAcousticTokenizerEncoderConfig(**semantic_config_dict)
 
-    # 6) Create and save acoustic tokenizer
-    print("\n=== Creating acoustic tokenizer ===")
-    acoustic_config = VibeVoiceAcousticTokenizerConfig(**model_config["acoustic_tokenizer_config"])
-    acoustic_model = VibeVoiceAcousticTokenizerModel(acoustic_config).to(dtype)
-    # -- filter for acoustic tokenizer weights
-    prefix = "model.acoustic_tokenizer"
-    acoustic_state_dict = {
-        k[len(prefix) + 1 :]: v  # +1 to remove the dot after the prefix
-        for k, v in updated_state_dict.items()
-        if k.startswith(prefix)
-    }
-    # -- load into HF model
-    missing, unexpected = acoustic_model.load_state_dict(acoustic_state_dict, strict=False)
-    if len(unexpected) != 0:
-        raise ValueError(f"Unexpected keys: {unexpected}")
-    if len(missing) != 0:
-        raise ValueError(f"missing keys found: {missing}")
-    if push_to_hub is not None and push_tokenizers:
-        hub_repo = push_to_hub.split("/")[0] + "/VibeVoice-AcousticTokenizer"
-        print(f"------ Pushing to hub as {hub_repo} ------")
-        feature_extractor.push_to_hub(hub_repo)
-        acoustic_model.push_to_hub(hub_repo)
+    # 7) Create acoustic tokenizer config
+    logger.info("Creating acoustic tokenizer config")
+    acoustic_config = VibeVoiceAcousticTokenizerConfig(**acoustic_config_dict)
 
-    # 7) Create VibeVoice processor
-    # -- load processor config
-    print("\n=== Creating VibeVoice processor ===")
-
-    # Define a chat template adapted for VibeVoice's speech use case
-    chat_template = """{%- set system_prompt = system_prompt | default(" Transform the text provided by various speakers into speech output, utilizing the distinct voice of each respective speaker.\n") -%}
-{{ system_prompt -}}
-{%- set speech_start_token = speech_start_token | default("<|vision_start|>") %}
-{%- set speech_end_token = speech_end_token | default("<|vision_end|>") %}
-{%- set speech_diffusion_token = speech_diffusion_token | default("<|vision_pad|>") %}
-{%- set ns = namespace(speakers_with_audio="") %}
-{%- for message in messages %}
-    {%- set role = message['role'] %}
-    {%- set content = message['content'] %}
-    {%- set has_audio = content | selectattr('type', 'equalto', 'audio') | list | length > 0 %}
-    {%- if has_audio and role not in ns.speakers_with_audio %}
-        {%- set ns.speakers_with_audio = ns.speakers_with_audio + role + "," %}
-    {%- endif %}
-{%- endfor %}
-
-{%- if ns.speakers_with_audio %}
-{{ " Voice input:\n" }}
-{%- for speaker in ns.speakers_with_audio.rstrip(',').split(',') %}
-{%- if speaker %}
- Speaker {{ speaker }}:{{ speech_start_token }}{{ speech_diffusion_token }}{{ speech_end_token }}{{ "\n" }}
-{%- endif %}
-{%- endfor %}
-{%- endif %}
- Text input:{{ "\n" }}
-
-{%- for message in messages %}
-    {%- set role = message['role'] %}
-    {%- set text_items = message['content'] | selectattr('type', 'equalto', 'text') | list %}
-    {%- for item in text_items %}
- Speaker {{ role }}: {{ item['text'] }}{{ "\n" }}
-    {%- endfor %}
-{%- endfor %}
- Speech output:{{ "\n" }}{{ speech_start_token }}"""
+    # 8) Create VibeVoice processor
+    logger.info("Creating VibeVoice processor")
 
     # Explicitly use Qwen2TokenizerFast to ensure proper class name in config
-    tokenizer = Qwen2TokenizerFast.from_pretrained(language_model_pretrained_name)
+    tokenizer = Qwen2TokenizerFast.from_pretrained(
+        language_model_pretrained_name,
+        padding=True,
+        padding_side="left",
+        return_tensors="pt",
+    )
     processor = VibeVoiceProcessor(
         feature_extractor=feature_extractor,
         tokenizer=tokenizer,
-        chat_template=chat_template,
+        chat_template=CHAT_TEMPLATE,
     )
     processor.save_pretrained(output_dir)
+    logger.info(f"Saved processor to {output_dir}")
 
     # Ensure tokenizer_config.json has the correct tokenizer_class
     tokenizer_config_path = os.path.join(output_dir, "tokenizer_config.json")
@@ -388,28 +367,25 @@ def convert_checkpoint(
             json.dump(tokenizer_config, f, indent=2)
 
     if push_to_hub is not None:
-        print(f"------ Pushing processor to hub as {push_to_hub} ------")
+        logger.info(f"Pushing processor to Hub: {push_to_hub}")
         processor.push_to_hub(push_to_hub)
 
-    # 8) Create and save full VibeVoice model
-    print("\n=== Creating full model ===")
-    model_config["acoustic_tokenizer_config"] = acoustic_config.to_dict()
-    model_config["semantic_tokenizer_config"] = semantic_config.to_dict()
+    # 9) Create and save full VibeVoice model
+    logger.info("Creating full model")
+    model_config["audio_config"] = acoustic_config.to_dict()
+    model_config["semantic_model_config"] = semantic_encoder_config.to_dict()
     vibevoice_config = VibeVoiceConfig(**model_config)
     vibevoice_model = VibeVoiceForConditionalGeneration(vibevoice_config).to(dtype)
+    logger.info(f"Number of parameters in model: {len(vibevoice_model.state_dict())}")
     # -- print dtypes of key components for verification
-    print("Acoustic connector dtype : ", vibevoice_model.acoustic_connector.fc1.weight.dtype)
-    print("Semantic connector dtype : ", vibevoice_model.semantic_connector.fc1.weight.dtype)
-    print("Language model dtype : ", vibevoice_model.language_model.embed_tokens.weight.dtype)
-    print(
-        "Acoustic tokenizer dtype : ",
-        vibevoice_model.acoustic_tokenizer.encoder.downsample_layers[0].conv.weight.dtype,
+    logger.info(f"Acoustic connector dtype: {next(vibevoice_model.model.multi_modal_projector.parameters()).dtype}")
+    logger.info(f"Semantic connector dtype: {next(vibevoice_model.model.semantic_connector.parameters()).dtype}")
+    logger.info(f"Language model dtype: {next(vibevoice_model.model.language_model.parameters()).dtype}")
+    logger.info(f"Acoustic tokenizer dtype: {next(vibevoice_model.model.audio_tower.parameters()).dtype}")
+    logger.info(
+        f"Semantic tokenizer dtype: {next(vibevoice_model.model.semantic_tokenizer_encoder.parameters()).dtype}"
     )
-    print(
-        "Semantic tokenizer dtype : ",
-        vibevoice_model.semantic_tokenizer.encoder.downsample_layers[0].conv.weight.dtype,
-    )
-    print("Diffusion head dtype : ", vibevoice_model.diffusion_head.noisy_images_proj.weight.dtype)
+    logger.info(f"Diffusion head dtype: {next(vibevoice_model.model.diffusion_head.parameters()).dtype}")
 
     # -- load into HF model
     if model_config["text_config"].get("tie_word_embeddings", False):
@@ -418,132 +394,91 @@ def convert_checkpoint(
         updated_state_dict["lm_head.weight"] = updated_state_dict["model.language_model.embed_tokens.weight"]
     # 7B does not tie weights: https://huggingface.co/vibevoice/VibeVoice-7B/blob/main/config.json#L113
 
-    missing, unexpected = vibevoice_model.load_state_dict(updated_state_dict, strict=False)
-    if len(unexpected) != 0:
-        raise ValueError(f"Unexpected keys: {unexpected}")
-    if len(missing) != 0:
-        raise ValueError(f"missing keys found: {missing}")
-    print("Full model checkpoint loaded successfully.")
-
-    # Calculate speech token IDs from tokenizer for generation config
-    speech_start_id = tokenizer.convert_tokens_to_ids("<|vision_start|>")
-    speech_end_id = tokenizer.convert_tokens_to_ids("<|vision_end|>")
-    speech_diffusion_id = tokenizer.convert_tokens_to_ids("<|vision_pad|>")
+    logger.info("Loading weights into model")
+    load_result = vibevoice_model.load_state_dict(updated_state_dict, strict=False)
+    if load_result.unexpected_keys:
+        raise ValueError(f"{len(load_result.unexpected_keys)} unexpected keys: {load_result.unexpected_keys}")
+    if load_result.missing_keys:
+        raise ValueError(f"{len(load_result.missing_keys)} missing keys: {load_result.missing_keys}")
+    logger.info("Full model checkpoint loaded successfully")
 
     # Set default generation config
-    vibevoice_model.generation_config._from_model_config = False
-    vibevoice_model.generation_config.speech_start_id = speech_start_id
-    vibevoice_model.generation_config.speech_end_id = speech_end_id
-    vibevoice_model.generation_config.speech_diffusion_id = speech_diffusion_id
-    vibevoice_model.generation_config.bos_token_id = tokenizer.bos_token_id
-    vibevoice_model.generation_config.eos_token_id = tokenizer.eos_token_id
-    vibevoice_model.generation_config.pad_token_id = tokenizer.pad_token_id
-    vibevoice_model.generation_config.cfg_scale = 1.3
-    vibevoice_model.n_diffusion_steps = 10
+    if "7B" in checkpoint:
+        vibevoice_model.generation_config.max_new_tokens = 20250
+    else:
+        vibevoice_model.generation_config.max_new_tokens = 40500
     vibevoice_model.generation_config.do_sample = False
+    vibevoice_model.generation_config.guidance_scale = 1.3
+    vibevoice_model.generation_config.num_diffusion_steps = 10
     vibevoice_model.generation_config.noise_scheduler_class = "DPMSolverMultistepScheduler"
     vibevoice_model.generation_config.noise_scheduler_config = {
-        "num_train_timesteps": 1000,
         "beta_schedule": "squaredcos_cap_v2",
         "prediction_type": "v_prediction",
     }
-    vibevoice_model.generation_config.n_diffusion_steps = 10
-    if "7B" in checkpoint:
-        vibevoice_model.generation_config.max_new_tokens = 20250
-        vibevoice_model.generation_config.max_length = 20250
-    else:
-        vibevoice_model.generation_config.max_new_tokens = 40500
-        vibevoice_model.generation_config.max_length = 40500
+    vibevoice_model.generation_config._from_model_config = False
 
-    vibevoice_model.save_pretrained(output_dir)
-    # -- push to hub
+    logger.info(f"Saving model to {output_dir}")
+    vibevoice_model.save_pretrained(output_dir, max_shard_size=max_shard_size)
+
     if push_to_hub is not None:
-        print(f"------ Pushing full VibeVoice model to hub as {push_to_hub} ------")
-        vibevoice_model.push_to_hub(push_to_hub)
+        logger.info(f"Pushing model to Hub: {push_to_hub}")
+        vibevoice_model.push_to_hub(push_to_hub, max_shard_size=max_shard_size)
+        processor.push_to_hub(push_to_hub)
 
-    # 9) Check model
+    # 10) Check model
+    logger.info("Verifying conversion by reloading model")
     gc.collect()
-    print("Reloading the model to check if it's saved correctly.")
     VibeVoiceProcessor.from_pretrained(output_dir)
-    VibeVoiceForConditionalGeneration.from_pretrained(output_dir, dtype=torch.bfloat16, device_map="auto")
-    print("Model reloaded successfully.")
+    VibeVoiceForConditionalGeneration.from_pretrained(output_dir, dtype=dtype, device_map="auto")
+    logger.info("Model reloaded successfully!")
+    logger.info("Conversion complete!")
 
 
 """
-Conversion script to convert original VibeVoice model into three HF checkpoints for:
-- VibeVoiceForConditionalGeneration
-- VibeVoiceAcousticTokenizerModel
-- VibeVoiceSemanticTokenizerModel
-
-# 1.5 Model: https://huggingface.co/microsoft/VibeVoice-1.5B
+Conversion script to convert original VibeVoice model into a checkpoint for `VibeVoiceForConditionalGeneration`
 
 ```bash
-# -- download checkpoint and configs
-# -- download script here: https://gist.github.com/ebezzam/507dfd544e0a0f12402966503cbc73e6#file-download_vibevoice_checkpoint-py
-python src/transformers/models/vibevoice/download_vibevoice_checkpoint.py
-wget https://huggingface.co/microsoft/VibeVoice-1.5B/resolve/main/config.json -P /raid/eric/vibevoice
-wget https://huggingface.co/microsoft/VibeVoice-1.5B/resolve/main/preprocessor_config.json -P /raid/eric/vibevoice
-
-# -- run conversion
+# 1.5B
 python src/transformers/models/vibevoice/convert_vibevoice_to_hf.py \
-    --checkpoint /raid/eric/vibevoice/VibeVoice-1.5B-combined.safetensors \
-    --output_dir /raid/eric/vibevoice/hf_vibevoice \
-    --config_path /raid/eric/vibevoice/config.json \
-    --processor_config /raid/eric/vibevoice/preprocessor_config.json \
-    --push_to_hub bezzam/VibeVoice-1.5B --push_tokenizers
-```
-Models will be pushed to:
-- bezzam/VibeVoice-1.5B
-- bezzam/VibeVoice-AcousticTokenizer
-- bezzam/VibeVoice-SemanticTokenizer
+    --checkpoint microsoft/VibeVoice-1.5B \
+    --output_dir ./hf_vibevoice \
+    --push_to_hub vibevoice/VibeVoice-1.5B-hf
 
-
-# 7B Model: https://huggingface.co/aoi-ot/VibeVoice-Large
-
-```bash
-# -- download checkpoint and configs
-# -- download script here: https://gist.github.com/ebezzam/507dfd544e0a0f12402966503cbc73e6#file-download_vibevoice_7b_checkpoint-py
-python src/transformers/models/vibevoice/download_vibevoice_7b_checkpoint.py
-wget https://huggingface.co/aoi-ot/VibeVoice-Large/resolve/main/config.json -P /raid/eric/vibevoice_7b
-wget https://huggingface.co/aoi-ot/VibeVoice-Large/resolve/main/preprocessor_config.json -P /raid/eric/vibevoice_7b
-
-# -- run conversion
+# 7B
 python src/transformers/models/vibevoice/convert_vibevoice_to_hf.py \
-    --checkpoint /raid/eric/vibevoice_7b/VibeVoice-7B-combined.safetensors \
-    --output_dir /raid/eric/vibevoice/hf_vibevoice_7b \
-    --config_path /raid/eric/vibevoice_7b/config.json \
-    --processor_config /raid/eric/vibevoice_7b/preprocessor_config.json \
-    --push_to_hub bezzam/VibeVoice-7B
+    --checkpoint aoi-ot/VibeVoice-Large \
+    --output_dir  /raid/eric/vibevoice/hf_vibevoice \
+    --push_to_hub vibevoice/VibeVoice-7B-hf
 ```
-Models will be pushed to:
-- bezzam/VibeVoice-7B
 
 """
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--checkpoint", required=True, default=None, type=str, help="Original VibeVoice model checkpoint."
+        "--checkpoint",
+        required=True,
+        type=str,
+        help="Hugging Face Hub model ID (e.g., 'microsoft/VibeVoice-1.5B' or 'aoi-ot/VibeVoice-Large').",
     )
     parser.add_argument("--output_dir", required=True, help="Output directory for HuggingFace model")
-    parser.add_argument("--config_path", default=None, type=str, help="Path to config.json of model to convert")
-    parser.add_argument(
-        "--processor_config", default=None, type=str, help="Path to preprocessor_config.json of model to convert"
-    )
     parser.add_argument(
         "--push_to_hub", default=None, type=str, help="Where to upload the converted model on the 🤗 hub."
     )
     parser.add_argument(
         "--float32", action="store_true", help="Whether to use float32 precision. Default is bfloat16."
     )
-    parser.add_argument("--push_tokenizers", action="store_true", help="Whether to push the tokenizers to the hub.")
+    parser.add_argument(
+        "--max_shard_size",
+        type=str,
+        default="2GB",
+        help="Maximum shard size for safetensors files in GB.",
+    )
 
     args = parser.parse_args()
     convert_checkpoint(
         args.checkpoint,
         args.output_dir,
-        args.config_path,
         args.push_to_hub,
         bfloat16=not args.float32,
-        processor_config=args.processor_config,
-        push_tokenizers=args.push_tokenizers,
+        max_shard_size=args.max_shard_size,
     )

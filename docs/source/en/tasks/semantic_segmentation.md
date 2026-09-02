@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -31,7 +31,7 @@ Before you begin, make sure you have all the necessary libraries installed:
 
 ```py
 # uncomment to install the necessary libraries
-!pip install -q datasets transformers evaluate accelerate
+!pip install -q datasets transformers evaluate accelerate trackio
 ```
 
 We encourage you to log in to your Hugging Face account so you can upload and share your model with the community. When prompted, enter your token to log in:
@@ -436,6 +436,8 @@ At this point, only three steps remain:
 ...     save_steps=20,
 ...     eval_steps=20,
 ...     logging_steps=1,
+...     report_to="trackio",
+...     run_name="scene-parse-150",
 ...     eval_accumulation_steps=5,
 ...     remove_unused_columns=False,
 ...     push_to_hub=True,

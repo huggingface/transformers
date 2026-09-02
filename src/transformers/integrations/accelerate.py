@@ -17,15 +17,19 @@ and simplicity/ease of use.
 """
 
 import copy
+import functools
 import inspect
 import os
 import re
 from collections import OrderedDict, defaultdict
+from collections.abc import Callable
+from contextlib import contextmanager, nullcontext
 from typing import TYPE_CHECKING
 
 from safetensors import safe_open
 from safetensors.torch import save_file
 
+from ..distributed.fsdp import is_fsdp_enabled
 from ..utils import (
     is_accelerate_available,
     is_torch_available,
@@ -34,7 +38,6 @@ from ..utils import (
 )
 from ..utils.quantization_config import QuantizationMethod
 from .deepspeed import is_deepspeed_zero3_enabled
-from .fsdp import is_fsdp_enabled
 
 
 if is_torch_available():
@@ -43,8 +46,8 @@ if is_torch_available():
 
 if is_accelerate_available():
     from accelerate import dispatch_model
-    from accelerate.utils import get_max_memory
-    from accelerate.utils.modeling import clean_device_map, get_max_layer_size, get_module_size_with_ties
+    from accelerate.utils import get_max_memory as accelerate_max_memory
+    from accelerate.utils.modeling import clean_device_map, get_max_layer_size
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
@@ -52,6 +55,42 @@ if TYPE_CHECKING:
 
 
 logger = logging.get_logger(__name__)
+
+
+def get_module_size_with_ties(
+    tied_params,
+    module_size,
+    module_sizes,
+    modules_to_treat,
+) -> tuple[int, list[str], list[nn.Module]]:
+    """
+    Calculate the total size of a module, including its tied parameters.
+
+    Args:
+        tied_params (`List[str]`): The list of tied parameters.
+        module_size (`int`): The size of the module without tied parameters.
+        module_sizes (`Dict[str, int]`): A dictionary mapping each layer name to its size.
+        modules_to_treat (`List[Tuple[str, nn.Module]]`): The list of named modules to treat.
+
+    Returns:
+        `Tuple[int, List[str], List[nn.Module]]`: The total size of the module, the names of the tied modules, and the
+        tied modules.
+    """
+    if len(tied_params) < 1:
+        return module_size, [], []
+    tied_module_names = []
+    tied_modules = []
+
+    module_size_with_ties = module_size
+    for tied_param in tied_params:
+        tied_module_index = [i for i, (n, _) in enumerate(modules_to_treat) if tied_param.startswith(n + ".")][0]
+        tied_module_name = modules_to_treat[tied_module_index][0]
+        if tied_module_name not in tied_module_names:
+            tied_module_names.append(tied_module_name)
+            tied_modules.append(modules_to_treat[tied_module_index][1])
+            module_size_with_ties += module_sizes[tied_module_name]
+
+    return module_size_with_ties, tied_module_names, tied_modules
 
 
 def check_and_set_device_map(device_map: "torch.device | int | str | dict | None") -> dict | str | None:
@@ -110,7 +149,7 @@ def compute_module_sizes(
 ) -> tuple[dict[str, int], dict[str, int]]:
     """
     Compute the size of each submodule of a given model (in bytes).
-    Returns a tuple of 2 dicts, the fist one containing a mapping of all the modules and the corresponding size
+    Returns a tuple of 2 dicts, the first one containing a mapping of all the modules and the corresponding size
     in bytes, and the 2nd one containing a mapping from all leaf modules (modules containing parameters, the end of
     the model graph) and the corresponding sizes.
     If `only_modules` is set to False, the first mapping will not only contain the size of all modules, but also
@@ -160,10 +199,48 @@ def compute_module_total_buffer_size(model: nn.Module, hf_quantizer: "HfQuantize
     return module_sizes.get("", 0)
 
 
+def get_max_memory(max_memory: dict[int | str, int | str] | None = None):
+    """
+    Get the maximum memory available if nothing is passed, converts string to int otherwise.
+    Note: we need to overwrite this as accelerate does not take into account torch allocated but unused device memory...
+    """
+    # Get the max memory (it only uses free gpu memory, not torch allocated but free memory...)
+    final_max_memory = accelerate_max_memory(max_memory)
+
+    # Adjust for allocated but free memory
+    for device_name in final_max_memory:
+        if isinstance(device_name, int):  # it's a GPU device
+            try:
+                # Only cuda and xpu use caching memory allocator
+                if is_torch_xpu_available():
+                    unused_memory = torch.xpu.memory_reserved(device_name) - torch.xpu.memory_allocated(device_name)
+                elif torch.cuda.is_available():
+                    unused_memory = torch.cuda.memory_reserved(device_name) - torch.cuda.memory_allocated(device_name)
+                else:
+                    unused_memory = 0
+            except Exception:
+                unused_memory = 0
+            # Add the pre-allocated but unused device memory
+            final_max_memory[device_name] += unused_memory
+        # Still respect the `max_memory` passed by the user if any
+        if max_memory is not None and device_name in max_memory:
+            final_max_memory[device_name] = min(max_memory[device_name], final_max_memory[device_name])
+
+    # If the user does not provide `max_memory`, accelerate sets the WHOLE cpu available memory as available.
+    # This is unwanted, as we don't want to set extremely tight bound and pressure for cpu if we are memory-constrained,
+    # especially if the model uses WeightConverter (because there will be some uncontrollable cpu memory spikes during
+    # the conversions before we resave the weights). In those cases, it's better to offload to disk a bit more
+    # if we were in-between, as otherwise we blow-up cpu memory
+    if max_memory is None and "cpu" in final_max_memory:
+        final_max_memory["cpu"] *= 0.90
+
+    return final_max_memory
+
+
 def get_balanced_memory(
     model: "PreTrainedModel",
     max_memory: dict[int | str, int | str] | None = None,
-    no_split_module_classes: list[str] | None = None,
+    no_split_module_classes: set[str] | None = None,
     hf_quantizer: "HfQuantizer | None" = None,
     low_zero: bool = False,
 ):
@@ -183,8 +260,8 @@ def get_balanced_memory(
         max_memory (`Dict`, *optional*):
             A dictionary device identifier to maximum memory. Will default to the maximum memory available if unset.
             Example: `max_memory={0: "1GB"}`.
-        no_split_module_classes (`List[str]`, *optional*):
-            A list of layer class names that should never be split across device (for instance any layer that has a
+        no_split_module_classes (`set[str]`, *optional*):
+            A set of layer class names that should never be split across device (for instance any layer that has a
             residual connection).
         hf_quantizer (`HfQuantizer`, *optional*):
             A quantizer for the model.
@@ -223,28 +300,21 @@ def get_balanced_memory(
     # We can't just set the memory to model_size // num_devices as it will end being too small: each GPU will get
     # slightly less layers and some layers will end up offload at the end. So this function computes a buffer size to
     # add which is the biggest of:
-    # - the size of no split block (if applicable)
+    # - the size of the biggest no split block (if applicable)
     # - the mean of the layer sizes
     if no_split_module_classes is None:
         no_split_module_classes = []
-    elif not isinstance(no_split_module_classes, (list, tuple)):
+    elif not isinstance(no_split_module_classes, (list, tuple, set)):
         no_split_module_classes = [no_split_module_classes]
 
-    # Identify the size of the no_split_block modules
+    # Identify the size of the biggest no_split_block modules. Note that a single _no_split_module class, i.e. XXXDecoderLayer,
+    # may have different sizes depending on the layer idx, even if it's the same class (e.g. if we have either mlp or moe inside
+    # the DecoderLayer depending on the layer idx). For this reason, we have to find ALL layers matching the _no_split_module class
+    # and take the max, not just the first layer matching the class (as it may be smaller than future layers)
     buffer = 0
     if len(no_split_module_classes) > 0:
-        no_split_children = {}
-        for name, size in module_sizes.items():
-            if name == "":
-                continue
-            submodule = model.get_submodule(name)
-            class_name = submodule.__class__.__name__
-            if class_name in no_split_module_classes and class_name not in no_split_children:
-                no_split_children[class_name] = size
-
-            if set(no_split_children.keys()) == set(no_split_module_classes):
-                break
-        buffer = max(no_split_children.values()) if len(no_split_children) > 0 else 0
+        all_no_split_modules = {k for k, v in model.named_modules() if v.__class__.__name__ in no_split_module_classes}
+        buffer = max(module_sizes[k] for k in all_no_split_modules)
 
     mean_leaves = int(sum(leave_modules_sizes.values()) / max(len(leave_modules_sizes), 1))
     buffer = int(1.25 * max(buffer, mean_leaves))
@@ -275,7 +345,8 @@ def _get_device_map(
     Otherwise, we check for any device inconsistencies in the device_map.
     """
     if isinstance(device_map, str):
-        no_split_modules = model._get_no_split_modules(device_map)
+        no_split_modules = model._no_split_modules
+        no_placement_params = getattr(model, "_no_placement_params", None)
 
         if device_map != "sequential":
             inferred_max_memory = get_balanced_memory(
@@ -288,41 +359,41 @@ def _get_device_map(
         else:
             inferred_max_memory = get_max_memory(max_memory)
 
-        # If the user does not provide `max_memory`, accelerate sets the WHOLE cpu available memory as available.
-        # This is unwanted, as we don't want to set extremely tight bound and pressure for cpu if we are memory-constrained,
-        # especially if the model uses WeightConverter (because there will be some uncontrollable cpu memory spikes during
-        # the conversions before we resave the weights). In those cases, it's better to offload to disk a bit more
-        # if we were in-between, as otherwise we blow-up cpu memory
-        if max_memory is None:
-            inferred_max_memory["cpu"] *= 0.90
-
         if hf_quantizer is not None:
             inferred_max_memory = hf_quantizer.adjust_max_memory(inferred_max_memory)
-
-        # `inferred_max_memory` contains non-reserved memory. There may be *unused* reserved memory in the GPU,
-        # which we can use to allocate parameters.
-        for device_name in inferred_max_memory:
-            if isinstance(device_name, int):  # it's a GPU device
-                if is_torch_xpu_available():
-                    unused_memory = torch.xpu.memory_reserved(device_name) - torch.xpu.memory_allocated(device_name)
-                else:
-                    unused_memory = torch.cuda.memory_reserved(device_name) - torch.cuda.memory_allocated(device_name)
-                inferred_max_memory[device_name] += unused_memory
-            # respect the `max_memory` passed by the user
-            if max_memory is not None and device_name in max_memory:
-                inferred_max_memory[device_name] = min(inferred_max_memory[device_name], max_memory[device_name])
 
         device_map = infer_auto_device_map(
             model,
             max_memory=inferred_max_memory,
             no_split_module_classes=no_split_modules,
             hf_quantizer=hf_quantizer,
+            no_placement_params=no_placement_params,
         )
 
         if hf_quantizer is not None:
             hf_quantizer.validate_environment(device_map=device_map)
 
     return device_map
+
+
+@contextmanager
+def skip_device_map_check():
+    """
+    Context manager to skip the `check_device_map` util in case we use `no_placement_params` which deliberately skips
+    some parameters from the device_map.
+    """
+    import accelerate.big_modeling
+
+    def empty_func(*args, **kwargs):
+        pass
+
+    try:
+        original_func = accelerate.big_modeling.check_device_map
+        accelerate.big_modeling.check_device_map = empty_func
+        yield
+    finally:
+        # Set back the original
+        accelerate.big_modeling.check_device_map = original_func
 
 
 def accelerate_dispatch(model, hf_quantizer, device_map, offload_folder, offload_index, offload_buffers):
@@ -350,13 +421,20 @@ def accelerate_dispatch(model, hf_quantizer, device_map, offload_folder, offload
         device_map_kwargs["offload_buffers"] = True
 
     if not is_fsdp_enabled() and not is_deepspeed_zero3_enabled():
-        dispatch_model(model, **device_map_kwargs)
+        context_manager = (
+            skip_device_map_check() if getattr(model, "_no_placement_params", None) is not None else nullcontext()
+        )
+        with context_manager:
+            dispatch_model(model, **device_map_kwargs)
 
 
-def expand_device_map(device_map, param_names):
+def expand_device_map(device_map: dict | None, param_names: list[str]):
     """
     Expand a device map to return the correspondence parameter name to device.
     """
+    if device_map is None:
+        return dict.fromkeys(param_names, "cpu")
+
     # Here, we first sort by number of submodules, then length of the full string, to make sure to match correctly
     device_map_regex = re.compile(
         "|".join(rf"({k})" for k in sorted(device_map.keys(), key=lambda x: (x.count("."), len(x)), reverse=True))
@@ -369,13 +447,21 @@ def expand_device_map(device_map, param_names):
     return new_device_map
 
 
+def get_device(device_map: dict | None, param_name: str, valid_torch_device: bool = False) -> torch.device | str | int:
+    """Return the device on which `param_name` should be according to the `device_map`. If `valid_torch_device` is `True`,
+    then if the device is `"disk"`, `"cpu"` will be returned instead."""
+    device = expand_device_map(device_map, [param_name])[param_name]
+    if valid_torch_device and device == "disk":
+        return "cpu"
+    return device
+
+
 def accelerate_disk_offload(
     model: "PreTrainedModel",
     disk_offload_folder: str | None,
     checkpoint_files: list[str] | None,
     device_map: dict,
     sharded_metadata: dict | None,
-    dtype: torch.dtype | None,
     weight_mapping=None,
 ):
     """
@@ -393,13 +479,11 @@ def accelerate_disk_offload(
     renamings = []
     if weight_mapping is not None:
         renamings = [entry for entry in weight_mapping if isinstance(entry, WeightRenaming)]
-
     # In this case, the offload index is simply the existing safetensors (except if using custom weight loading
     # Operation, e.g. the MoE models, where we need to resave the weights that were changed at loading time)
     if is_offloaded_safetensors:
         meta_state_dict = model.state_dict()
         param_device_map = expand_device_map(device_map, meta_state_dict.keys())
-        str_dtype = str(dtype).replace("torch.", "") if dtype is not None else "float32"
         if sharded_metadata is None:
             weight_map = dict.fromkeys(safe_open(checkpoint_files[0], framework="pt").keys(), checkpoint_files[0])
         else:
@@ -408,7 +492,10 @@ def accelerate_disk_offload(
 
         # Update the weight names according to the `weight_mapping`
         weight_renaming_map = {
-            rename_source_key(k, renamings, [], model.base_model_prefix, meta_state_dict)[0]: k for k in weight_map
+            rename_source_key(
+                k, renamings, [], base_model_prefix=model.base_model_prefix, meta_state_dict=meta_state_dict
+            )[0]: k
+            for k in weight_map
         }
 
         # Prepare the index using existing safetensors files
@@ -416,12 +503,19 @@ def accelerate_disk_offload(
             target_name: {
                 "safetensors_file": weight_map[source_name],
                 "weight_name": source_name,
-                "dtype": str_dtype,
+                "dtype": str(meta_state_dict[target_name].dtype).removeprefix("torch."),
             }
             for target_name, source_name in weight_renaming_map.items()
             # Need to check if it's in the mapping in case of unexpected keys that would result in KeyError (we skip them)
             if target_name in param_device_map and param_device_map[target_name] == "disk"
         }
+
+        # Tie weights which are both disk offloaded
+        all_tied_weights_keys = getattr(model, "all_tied_weights_keys", {})
+        for target_param_name, source_param_name in all_tied_weights_keys.items():
+            if source_param_name in disk_offload_index and target_param_name not in disk_offload_index:
+                disk_offload_index[target_param_name] = disk_offload_index[source_param_name]
+
     # In this case we will resave every offloaded weight
     else:
         disk_offload_index = {}
@@ -478,7 +572,7 @@ def load_offloaded_parameter(model: "PreTrainedModel", param_name: str) -> torch
 def _init_infer_auto_device_map(
     model: nn.Module,
     max_memory: dict[int | str, int | str] | None = None,
-    no_split_module_classes: list[str] | None = None,
+    no_split_module_classes: set[str] | None = None,
     tied_parameters: list[list[str]] | None = None,
     hf_quantizer: "HfQuantizer | None" = None,
 ) -> tuple[
@@ -497,7 +591,7 @@ def _init_infer_auto_device_map(
     max_memory = get_max_memory(max_memory)
     if no_split_module_classes is None:
         no_split_module_classes = []
-    elif not isinstance(no_split_module_classes, (list, tuple)):
+    elif not isinstance(no_split_module_classes, (list, tuple, set)):
         no_split_module_classes = [no_split_module_classes]
 
     devices = list(max_memory.keys())
@@ -548,12 +642,13 @@ def _init_infer_auto_device_map(
 def infer_auto_device_map(
     model: nn.Module,
     max_memory: dict[int | str, int | str] | None = None,
-    no_split_module_classes: list[str] | None = None,
+    no_split_module_classes: set[str] | None = None,
     verbose: bool = False,
     clean_result: bool = True,
     offload_buffers: bool = False,
     tied_parameters: list[list[str]] | None = None,
     hf_quantizer: "HfQuantizer | None" = None,
+    no_placement_params: set[str] | None = None,
 ):
     """
     Compute a device map for a given model giving priority to GPUs, then offload on CPU and finally offload to disk,
@@ -578,8 +673,8 @@ def infer_auto_device_map(
         max_memory (`Dict`, *optional*):
             A dictionary device identifier to maximum memory. Will default to the maximum memory available if unset.
             Example: `max_memory={0: "1GB"}`.
-        no_split_module_classes (`List[str]`, *optional*):
-            A list of layer class names that should never be split across device (for instance any layer that has a
+        no_split_module_classes (`set[str]`, *optional*):
+            A set of layer class names that should never be split across device (for instance any layer that has a
             residual connection).
         verbose (`bool`, *optional*, defaults to `False`):
             Whether or not to provide debugging statements as the function builds the device_map.
@@ -702,7 +797,7 @@ def infer_auto_device_map(
 
             continue
 
-        # The current module itself fits, so we try to split the tied modules.
+        # The current module without tied submodules fits, so we try to split further
         if len(tied_params) > 0 and device_memory_used[device] + module_size <= current_max_size:
             # can we split one of the tied modules to make it smaller or do we need to go on the next device?
             if verbose:
@@ -741,41 +836,69 @@ def infer_auto_device_map(
             if split_happened:
                 continue
 
-            # If the tied module is not split, we go to the next device
-            if verbose:
-                print("None of the tied module can be split, going to the next device.")
-
-        # The current module itself doesn't fit, so we have to split it or go to the next device.
-        if device_memory_used[device] + module_size >= current_max_size:
-            # Split or not split?
-            modules_children = (
-                []
-                if isinstance(module, nn.Parameter) or isinstance(module, torch.Tensor)
-                else list(module.named_children())
+        # Fallback: we try to split modules and treat children separately as last resort
+        # Split or not split?
+        modules_children = (
+            []
+            if isinstance(module, nn.Parameter) or isinstance(module, torch.Tensor)
+            else list(module.named_children())
+        )
+        if verbose:
+            print(
+                f"Not enough space on {devices[current_device]} to put {name} (space available "
+                f"{current_max_size - device_memory_used[device]}, module size {module_size})."
             )
-            if verbose:
-                print(
-                    f"Not enough space on {devices[current_device]} to put {name} (space available "
-                    f"{current_max_size - device_memory_used[device]}, module size {module_size})."
-                )
-            if len(modules_children) == 0 or module.__class__.__name__ in no_split_module_classes:
-                # -> no split, we go to the next device
+        if len(modules_children) == 0 or module.__class__.__name__ in no_split_module_classes:
+            # If we have a `no_placement_params` provided and we are one of the `no_split_module_classes`, try to escape completely
+            # the `no_placement_params` and place only the other parameters on accelerator. We first check if it would fit on the next device
+            # before doing it though, in case we have huge accelerators that could still fit the huge param without escaping
+            next_device = devices[current_device + 1]
+            next_max_size = max_memory[next_device] if next_device != "disk" else float("inf")
+            fits_on_next_device = device_memory_used[next_device] + module_size_with_ties <= next_max_size
+            # If it does not fit on the next fresh gpu, it would lead to offloading any following modules to cpu/disk without
+            # this workaround of `no_placement_params`
+            if (
+                no_placement_params is not None
+                and module.__class__.__name__ in no_split_module_classes
+                and any(name in no_placement_params for name, _ in module.named_parameters())
+                # Those 2 check that the next device is still a gpu, and that we cannot fit on it even when it's still empty
+                and next_device in gpus
+                and not fits_on_next_device
+            ):
+                if verbose:
+                    print(
+                        "This module cannot be split, but contains a `no_placement_params`. Trying to place all other params inside."
+                    )
+                modules_children = [
+                    (f"{name}.{child_name}", child)
+                    for child_name, child in module.named_parameters()
+                    if child_name not in no_placement_params
+                ]
+                modules_children += [
+                    (f"{name}.{child_name}", child)
+                    for child_name, child in module.named_buffers()
+                    if child_name not in no_placement_params
+                ]
+                modules_to_treat = modules_children + modules_to_treat
+                continue
+            # -> no split, we go to the next device
+            else:
                 if verbose:
                     print("This module cannot be split, going to the next device.")
 
-            else:
-                # -> split, we replace the module studied by its children + parameters
-                if verbose:
-                    print(f"Splitting {name}.")
-                modules_children = list(module.named_parameters(recurse=False)) + modules_children
-                modules_to_treat = [(f"{name}.{n}", v) for n, v in modules_children] + modules_to_treat
-                # Update the max layer size.
-                max_layer_size, max_layer_names = get_max_layer_size(
-                    [(n, m) for n, m in modules_to_treat if isinstance(m, torch.nn.Module)],
-                    module_sizes,
-                    no_split_module_classes,
-                )
-                continue
+        else:
+            # -> split, we replace the module studied by its children + parameters
+            if verbose:
+                print(f"Splitting {name}.")
+            modules_children = list(module.named_parameters(recurse=False)) + modules_children
+            modules_to_treat = [(f"{name}.{n}", v) for n, v in modules_children] + modules_to_treat
+            # Update the max layer size.
+            max_layer_size, max_layer_names = get_max_layer_size(
+                [(n, m) for n, m in modules_to_treat if isinstance(m, torch.nn.Module)],
+                module_sizes,
+                no_split_module_classes,
+            )
+            continue
 
         if device_memory_used[device] == 0:
             device_minimum_assignment_memory[device] = module_size_with_ties + current_memory_reserved
@@ -787,7 +910,7 @@ def infer_auto_device_map(
 
     device_memory_used = {device: mem for device, mem in device_memory_used.items() if mem > 0}
 
-    if clean_result:
+    if clean_result and no_placement_params is None:
         device_map = clean_device_map(device_map)
 
     non_gpu_buffer_size = device_buffer_sizes.get("cpu", 0) + device_buffer_sizes.get("disk", 0)
@@ -857,3 +980,44 @@ def check_tied_parameters_on_same_device(tied_params, device_map):
                 f"Tied parameters are on different devices: {tie_param_devices}. "
                 "Please modify your custom device map or set `device_map='auto'`. "
             )
+
+
+def force_accelerate_hooks(child_module_names: str | list[str]) -> Callable:
+    """
+    Decorator to forcefully fire the accelerate hooks of `child_module_names`, before entering the forward of the parent itself.
+    Indeed, the hooks of a child are only fired through the `forward` child's method, so if the child weights are used directly,
+    as is the case inside `causal_conv1d_fn` and `causal_conv1d_update` for example, they will not be fired. This may cause device
+    issues, especially in the case of offloading, that this decorator will correct.
+    """
+
+    if isinstance(child_module_names, str):
+        child_module_names = [child_module_names]
+
+    def decorator(forward_func: Callable) -> Callable:
+        @functools.wraps(forward_func)
+        def wrapped(self, *args, **kwargs):
+            hooked_modules = []
+            for child_module_name in child_module_names:
+                hooked_module = getattr(self, child_module_name)
+                hook = getattr(hooked_module, "_hf_hook", None)
+                hooked_modules.append((hooked_module, hook))
+                if hook is not None:
+                    # Note that here we only call the hook with the module, not `*args` not `**kwargs`, as we assume the `forward`
+                    # on which this decorator is applied is responsible to move the args and kwargs with its own hook if any. This makes
+                    # sense as the module decorated with this should have all internal modules on the same device
+                    hook.pre_forward(hooked_module)
+
+            output = forward_func(self, *args, **kwargs)
+
+            for hooked_module, hook in reversed(hooked_modules):
+                if hook is not None:
+                    # Note that here we only call the hook with the module, not `output`, as we assume the `forward` on which
+                    # this decorator is applied is responsible to move the output with its own hook if any. This makes sense
+                    # as the module decorated with this should have all internal modules on the same device
+                    hook.post_forward(hooked_module, ())
+
+            return output
+
+        return wrapped
+
+    return decorator

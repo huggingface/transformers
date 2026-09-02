@@ -32,7 +32,9 @@ def _get_weights(model_name):
     )
 
 
-def _read_h5_weights(group, current_key="", weights={}):
+def _read_h5_weights(group, current_key="", weights=None):
+    if weights is None:
+        weights = {}
     for key in group:
         full_key = f"{current_key}.{key}" if current_key else key
         if isinstance(group[key], h5py.Dataset):

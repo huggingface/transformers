@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,13 +26,13 @@ Use from the root of the repo with:
 python utils/check_copies.py
 ```
 
-for a check that will error in case of inconsistencies (used by `make repo-consistency`) or
+for a check that will error in case of inconsistencies (used by `make check-repo`) or
 
 ```bash
 python utils/check_copies.py --fix_and_overwrite
 ```
 
-for a check that will fix all inconsistencies automatically (used by `make fix-copies`).
+for a check that will fix all inconsistencies automatically (used by `make fix-repo`).
 """
 
 import argparse
@@ -45,6 +44,15 @@ from collections import OrderedDict
 
 from transformers.utils import direct_transformers_import, logging
 
+
+CHECKER_CONFIG = {
+    "name": "copies",
+    "label": "Copied code consistency",
+    # Actual scope: all of src/transformers/**/*.py and tests/models/**/*.py via glob.glob().
+    "cache_globs": ["src/transformers/**/*.py", "tests/models/**/*.py"],
+    "check_args": [],
+    "fix_args": ["--fix_and_overwrite"],
+}
 
 logger = logging.get_logger(__name__)
 
@@ -860,7 +868,7 @@ def check_copies(overwrite: bool = False, file: str | None = None):
         raise Exception(
             "Found the following copy inconsistencies:\n"
             + diff
-            + "\nRun `make fix-copies` or `python utils/check_copies.py --fix_and_overwrite` to fix them."
+            + "\nRun `make fix-repo` or `python utils/check_copies.py --fix_and_overwrite` to fix them."
         )
 
 

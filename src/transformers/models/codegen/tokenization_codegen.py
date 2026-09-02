@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The Salesforce authors, The Open AI Team Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,7 @@
 """Tokenization classes for CodeGen."""
 
 import re
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING, Union
 
 import numpy as np
 from tokenizers import Tokenizer, decoders, pre_tokenizers, processors
@@ -93,8 +92,8 @@ class CodeGenTokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        vocab: Optional[Union[str, dict[str, int]]] = None,
-        merges: Optional[Union[str, list[str]]] = None,
+        vocab: str | dict[str, int] | None = None,
+        merges: str | list[str] | None = None,
         unk_token: str = "<|endoftext|>",
         bos_token: str = "<|endoftext|>",
         eos_token: str = "<|endoftext|>",
@@ -143,8 +142,8 @@ class CodeGenTokenizer(TokenizersBackend):
         self,
         token_ids: Union[int, list[int], np.ndarray, "torch.Tensor"],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: Optional[bool] = None,
-        truncate_before_pattern: Optional[list[str]] = None,
+        clean_up_tokenization_spaces: bool | None = None,
+        truncate_before_pattern: list[str] | None = None,
         **kwargs,
     ) -> str:
         """

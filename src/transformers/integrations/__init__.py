@@ -13,14 +13,13 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ..utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_torch_greater_or_equal
+from ..utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
 
 
 _import_structure = {
     "aqlm": ["replace_with_aqlm_linear"],
     "awq": [
         "post_init_awq_exllama_modules",
-        "post_init_awq_ipex_modules",
         "replace_quantization_scales",
         "replace_with_awq_linear",
     ],
@@ -36,6 +35,7 @@ _import_structure = {
         "replace_with_bnb_linear",
         "validate_bnb_backend_availability",
     ],
+    "compressed_tensors": ["CompressedTensorsFP8Linear", "replace_with_compressed_tensors_fp8_linear"],
     "deepspeed": [
         "HfDeepSpeedConfig",
         "HfTrainerDeepSpeedConfig",
@@ -50,8 +50,14 @@ _import_structure = {
     ],
     "eetq": ["replace_with_eetq_linear"],
     "fbgemm_fp8": ["FbgemmFp8Linear", "FbgemmFp8Llama4TextExperts", "replace_with_fbgemm_fp8_linear"],
-    "finegrained_fp8": ["FP8Linear", "replace_with_fp8_linear"],
+    "finegrained_fp8": ["FP8Embedding", "FP8Linear", "replace_with_fp8_embedding", "replace_with_fp8_linear"],
     "fsdp": ["is_fsdp_enabled", "is_fsdp_managed_module"],
+    "gemma_quant": [
+        "QuantizedEmbedding",
+        "QuantizedLinear",
+        "apply_srq",
+        "replace_with_quant_layers",
+    ],
     "ggml": [
         "GGUF_CONFIG_DEFAULTS_MAPPING",
         "GGUF_CONFIG_MAPPING",
@@ -69,10 +75,13 @@ _import_structure = {
     "hqq": ["prepare_for_hqq_linear"],
     "hub_kernels": [
         "LayerRepository",
+        "kernelize",
+        "lazy_load_kernel",
         "register_kernel_mapping",
         "replace_kernel_forward_from_hub",
         "use_kernel_forward_from_hub",
         "use_kernel_func_from_hub",
+        "use_kernel_func_from_hub_with_fallback",
         "use_kernelized_func",
     ],
     "integration_utils": [
@@ -84,6 +93,7 @@ _import_structure = {
         "DagsHubCallback",
         "DVCLiveCallback",
         "FlyteCallback",
+        "KubeflowCallback",
         "MLflowCallback",
         "NeptuneCallback",
         "NeptuneMissingConfiguration",
@@ -102,6 +112,7 @@ _import_structure = {
         "is_dvclive_available",
         "is_flyte_deck_standard_available",
         "is_flytekit_available",
+        "is_kubeflow_available",
         "is_mlflow_available",
         "is_neptune_available",
         "is_optuna_available",
@@ -116,17 +127,32 @@ _import_structure = {
         "run_hp_search_ray",
         "run_hp_search_wandb",
     ],
+    "liger": ["apply_liger_kernel"],
+    "metal_quantization": [
+        "MetalLinear",
+        "replace_with_metal_linear",
+    ],
+    "moe": [
+        "batched_mm_experts_forward",
+        "grouped_mm_experts_forward",
+        "use_experts_implementation",
+    ],
     "mxfp4": [
         "Mxfp4GptOssExperts",
         "convert_moe_packed_tensors",
-        "dequantize",
-        "load_and_swizzle_mxfp4",
         "quantize_to_mxfp4",
         "replace_with_mxfp4_linear",
         "swizzle_mxfp4",
     ],
+    "neftune": [
+        "activate_neftune",
+        "deactivate_neftune",
+        "neftune_post_forward_hook",
+    ],
+    "nvfp4": ["NVFP4Linear", "NVFP4Quantize", "replace_with_nvfp4_linear"],
     "peft": ["PeftAdapterMixin"],
     "quanto": ["replace_with_quanto_layers"],
+    "sinq": ["SinqDeserialize", "SinqQuantize"],
     "spqr": ["replace_with_spqr_linear"],
     "vptq": ["replace_with_vptq_linear"],
 }
@@ -142,32 +168,18 @@ else:
         "convert_and_export_with_cache",
     ]
 
-try:
-    if not is_torch_greater_or_equal("2.3"):
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["tensor_parallel"] = [
-        "shard_and_distribute_module",
-        "ALL_PARALLEL_STYLES",
-        "translate_to_torch_parallel_style",
-    ]
-try:
-    if not is_torch_greater_or_equal("2.5"):
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["flex_attention"] = [
-        "make_flex_block_causal_mask",
-    ]
+_import_structure["tensor_parallel"] = [
+    "ALL_PARALLEL_STYLES",
+    "shard_and_distribute_module",
+]
+_import_structure["flex_attention"] = [
+    "make_flex_block_causal_mask",
+]
 
 if TYPE_CHECKING:
     from .aqlm import replace_with_aqlm_linear
     from .awq import (
         post_init_awq_exllama_modules,
-        post_init_awq_ipex_modules,
         replace_quantization_scales,
         replace_with_awq_linear,
     )
@@ -183,6 +195,7 @@ if TYPE_CHECKING:
         replace_with_bnb_linear,
         validate_bnb_backend_availability,
     )
+    from .compressed_tensors import CompressedTensorsFP8Linear, replace_with_compressed_tensors_fp8_linear
     from .deepspeed import (
         HfDeepSpeedConfig,
         HfTrainerDeepSpeedConfig,
@@ -197,8 +210,14 @@ if TYPE_CHECKING:
     )
     from .eetq import replace_with_eetq_linear
     from .fbgemm_fp8 import FbgemmFp8Linear, FbgemmFp8Llama4TextExperts, replace_with_fbgemm_fp8_linear
-    from .finegrained_fp8 import FP8Linear, replace_with_fp8_linear
+    from .finegrained_fp8 import FP8Embedding, FP8Linear, replace_with_fp8_embedding, replace_with_fp8_linear
     from .fsdp import is_fsdp_enabled, is_fsdp_managed_module
+    from .gemma_quant import (
+        QuantizedEmbedding,
+        QuantizedLinear,
+        apply_srq,
+        replace_with_quant_layers,
+    )
     from .ggml import (
         GGUF_CONFIG_DEFAULTS_MAPPING,
         GGUF_CONFIG_MAPPING,
@@ -211,10 +230,13 @@ if TYPE_CHECKING:
     from .hqq import prepare_for_hqq_linear
     from .hub_kernels import (
         LayerRepository,
+        kernelize,
+        lazy_load_kernel,
         register_kernel_mapping,
         replace_kernel_forward_from_hub,
         use_kernel_forward_from_hub,
         use_kernel_func_from_hub,
+        use_kernel_func_from_hub_with_fallback,
         use_kernelized_func,
     )
     from .integration_utils import (
@@ -226,6 +248,7 @@ if TYPE_CHECKING:
         DagsHubCallback,
         DVCLiveCallback,
         FlyteCallback,
+        KubeflowCallback,
         MLflowCallback,
         NeptuneCallback,
         NeptuneMissingConfiguration,
@@ -244,6 +267,7 @@ if TYPE_CHECKING:
         is_dvclive_available,
         is_flyte_deck_standard_available,
         is_flytekit_available,
+        is_kubeflow_available,
         is_mlflow_available,
         is_neptune_available,
         is_optuna_available,
@@ -258,16 +282,27 @@ if TYPE_CHECKING:
         run_hp_search_ray,
         run_hp_search_wandb,
     )
+    from .liger import apply_liger_kernel
+    from .metal_quantization import (
+        MetalLinear,
+        replace_with_metal_linear,
+    )
+    from .moe import (
+        batched_mm_experts_forward,
+        grouped_mm_experts_forward,
+        use_experts_implementation,
+    )
     from .mxfp4 import (
         Mxfp4GptOssExperts,
-        dequantize,
-        load_and_swizzle_mxfp4,
         quantize_to_mxfp4,
         replace_with_mxfp4_linear,
         swizzle_mxfp4,
     )
+    from .neftune import activate_neftune, deactivate_neftune, neftune_post_forward_hook
+    from .nvfp4 import NVFP4Linear, NVFP4Quantize, replace_with_nvfp4_linear
     from .peft import PeftAdapterMixin
     from .quanto import replace_with_quanto_layers
+    from .sinq import SinqDeserialize, SinqQuantize
     from .spqr import replace_with_spqr_linear
     from .vptq import replace_with_vptq_linear
 
@@ -279,25 +314,8 @@ if TYPE_CHECKING:
     else:
         from .executorch import TorchExportableModuleWithStaticCache, convert_and_export_with_cache
 
-    try:
-        if not is_torch_greater_or_equal("2.3"):
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .tensor_parallel import (
-            ALL_PARALLEL_STYLES,
-            shard_and_distribute_module,
-            translate_to_torch_parallel_style,
-        )
-
-    try:
-        if not is_torch_greater_or_equal("2.5"):
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .flex_attention import make_flex_block_causal_mask
+    from .flex_attention import make_flex_block_causal_mask
+    from .tensor_parallel import ALL_PARALLEL_STYLES, shard_and_distribute_module
 else:
     import sys
 

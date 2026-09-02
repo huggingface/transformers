@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,13 +15,12 @@
 Processor class for Qwen2Audio.
 """
 
-from typing import Union
-
 import numpy as np
 
-from ...feature_extraction_utils import BatchFeature
+from ...audio_utils import AudioInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import auto_docstring
 
 
 class Qwen2AudioProcessorKwargs(ProcessingKwargs, total=False):
@@ -30,32 +28,16 @@ class Qwen2AudioProcessorKwargs(ProcessingKwargs, total=False):
         "text_kwargs": {
             "padding": False,
         },
-        "audio_kwargs": {},
+        "audio_kwargs": {
+            "return_attention_mask": True,
+            "padding": "max_length",
+        },
     }
 
 
+@auto_docstring
 class Qwen2AudioProcessor(ProcessorMixin):
-    r"""
-    Constructs a Qwen2Audio processor which wraps a Qwen2Audio feature extractor and a Qwen2Audio tokenizer into a single processor.
-
-    [`Qwen2AudioProcessor`] offers all the functionalities of [`WhisperFeatureExtractor`] and [`Qwen2TokenizerFast`]. See the
-    [`~Qwen2AudioProcessor.__call__`] and [`~Qwen2AudioProcessor.decode`] for more information.
-
-    Args:
-        feature_extractor ([`WhisperFeatureExtractor`], *optional*):
-            The feature extractor is a required input.
-        tokenizer ([`Qwen2TokenizerFast`], *optional*):
-            The tokenizer is a required input.
-        chat_template (`Optional[str]`, *optional*):
-                The Jinja template to use for formatting the conversation. If not provided, the default chat template
-                is used.
-        audio_token (`str`, *optional*, defaults to `"<|AUDIO|>"`):
-            The token to use for audio tokens.
-        audio_bos_token (`str`, *optional*, defaults to `"<|audio_bos|>"`):
-            The token to use for audio bos tokens.
-        audio_eos_token (`str`, *optional*, defaults to `"<|audio_eos|>"`):
-            The token to use for audio eos tokens.
-    """
+    valid_processor_kwargs = Qwen2AudioProcessorKwargs
 
     def __init__(
         self,
@@ -66,6 +48,14 @@ class Qwen2AudioProcessor(ProcessorMixin):
         audio_bos_token="<|audio_bos|>",
         audio_eos_token="<|audio_eos|>",
     ):
+        r"""
+        audio_token (`str`, *optional*, defaults to `"<|AUDIO|>"`):
+            The token to use for audio tokens.
+        audio_bos_token (`str`, *optional*, defaults to `"<|audio_bos|>"`):
+            The token to use for audio bos tokens.
+        audio_eos_token (`str`, *optional*, defaults to `"<|audio_eos|>"`):
+            The token to use for audio eos tokens.
+        """
         if chat_template is None:
             chat_template = self.default_chat_template
         self.audio_token = tokenizer.audio_token if hasattr(tokenizer, "audio_token") else audio_token
@@ -74,40 +64,13 @@ class Qwen2AudioProcessor(ProcessorMixin):
         self.audio_eos_token = tokenizer.audio_eos_token if hasattr(tokenizer, "audio_eos_token") else audio_eos_token
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
 
-    def __call__(
+    def validate_inputs(
         self,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        audio: Union[np.ndarray, list[np.ndarray]] = None,
-        **kwargs: Unpack[Qwen2AudioProcessorKwargs],
-    ) -> BatchFeature:
-        """
-        Main method to prepare for the model one or several sequences(s) and audio(s). This method forwards the `text`
-        and `kwargs` arguments to Qwen2TokenizerFast's [`~Qwen2TokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the audio(s), this method forwards the `audios` and `kwargs` arguments to
-        WhisperFeatureExtractor's [`~WhisperFeatureExtractor.__call__`] if `audios` is not `None`. Please refer to the docstring
-        of the above two methods for more information.
-
-        Args:
-            text (`str`, `list[str]`, `list[list[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            audio (`np.ndarray`, `list[np.ndarray]`):
-                The audio or batch of audios to be prepared. Each audio can be a NumPy array.
-        """
-        if text is None:
-            raise ValueError("You need to specify `text` input to process.")
-        elif isinstance(text, str):
-            text = [text]
-        elif not isinstance(text, list) and not isinstance(text[0], str):
-            raise ValueError("Invalid input text. Please provide a string, or a list of strings")
-
-        output_kwargs = self._merge_kwargs(
-            Qwen2AudioProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
-
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        audio: AudioInput | None = None,
+        **kwargs: Unpack[ProcessingKwargs],
+    ):
+        super().validate_inputs(text=text, audio=audio)
         if audio is not None:
             # ensure we have as much audios as audio tokens
             num_audio_tokens = sum(sample.count(self.audio_token) for sample in text)
@@ -117,58 +80,36 @@ class Qwen2AudioProcessor(ProcessorMixin):
                     f"Found {num_audio_tokens} {self.audio_token} token{'s' if num_audio_tokens > 1 else ''} in provided text but received {num_audios} audio{'s' if num_audios > 1 else ''}"
                 )
 
-            # Some kwargs should not be changed so we can expand text with audio tokens below
-            output_kwargs["audio_kwargs"]["return_attention_mask"] = True
-            output_kwargs["audio_kwargs"]["padding"] = "max_length"
-            audio_inputs = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])
+    def _process_audio(self, audio: AudioInput, **kwargs):
+        audio = self.feature_extractor.fetch_audio(audio)
 
-            # rename attention_mask to prevent conflicts later on
-            audio_inputs["feature_attention_mask"] = audio_inputs.pop("attention_mask")
+        # Some kwargs should not be changed so we can expand text with audio tokens below
+        kwargs["return_attention_mask"] = True
+        kwargs["padding"] = "max_length"
+        audio_inputs = self.feature_extractor(audio, **kwargs)
 
-            expanded_text = []
-            audio_lengths = audio_inputs["feature_attention_mask"].sum(-1).tolist()
+        # rename attention_mask to prevent conflicts later on
+        audio_inputs["feature_attention_mask"] = audio_inputs.pop("attention_mask")
 
-            for sample in text:
-                replace_str = []
-                while self.audio_token in sample:
-                    audio_length = audio_lengths.pop(0)
-                    input_length = (audio_length - 1) // 2 + 1
-                    num_audio_tokens = (input_length - 2) // 2 + 1
+        # Qwen2ASR doesn't have its own feature extractor
+        # Save the number of tokens based on crops/padding in analogy with some vision processors
+        audio_lengths = audio_inputs["feature_attention_mask"].sum(-1).tolist()
+        audio_inputs["num_audio_tokens"] = [(((l - 1) // 2 + 1) - 2) // 2 + 1 for l in audio_lengths]
 
-                    expanded_audio_token = self.audio_token * num_audio_tokens
+        audio_replacements = []
+        for idx in range(len(audio)):
+            replacement_text = self.replace_audio_token(audio_inputs, audio_idx=idx)
+            audio_replacements.append(replacement_text)
 
-                    audio_token_start_idx = sample.find(self.audio_token)
-                    audio_token_end_idx = audio_token_start_idx + len(self.audio_token)
+        return audio_inputs, audio_replacements
 
-                    has_bos = (
-                        sample[audio_token_start_idx - len(self.audio_bos_token) : audio_token_start_idx]
-                        == self.audio_bos_token
-                    )
-                    has_eos = (
-                        sample[audio_token_end_idx : audio_token_end_idx + len(self.audio_eos_token)]
-                        == self.audio_eos_token
-                    )
+    def replace_audio_token(self, audio_inputs: dict, audio_idx: int, **kwargs) -> str:
+        num_audio_tokens = audio_inputs["num_audio_tokens"][audio_idx]
+        return self.audio_token * num_audio_tokens
 
-                    # Check if this audio token is surrounded by bos/eos tokens
-                    if not has_bos and not has_eos:
-                        expanded_audio_token = self.audio_bos_token + expanded_audio_token + self.audio_eos_token
-
-                    replace_str.append(expanded_audio_token)
-                    sample = sample.replace(self.audio_token, "<placeholder>", 1)
-
-                while "<placeholder>" in sample:
-                    sample = sample.replace("<placeholder>", replace_str.pop(0), 1)
-                expanded_text.append(sample)
-            text = expanded_text
-
-        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
-        self._check_special_mm_tokens(text, inputs, modalities=["audio"])
-
-        if audio is not None:
-            inputs.update(audio_inputs)
-
-        return BatchFeature(data={**inputs}, tensor_type=return_tensors)
+    @property
+    def unused_input_names(self) -> list[str]:
+        return ["num_audio_tokens"]
 
     @property
     def model_input_names(self):

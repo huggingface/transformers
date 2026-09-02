@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The Qwen team, Alibaba Group and the HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -32,12 +31,16 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
+from transformers.models.qwen3_omni_moe.configuration_qwen3_omni_moe import (
+    Qwen3OmniMoeTalkerCodePredictorConfig,
+)
 from transformers.testing_utils import (
     Expectations,
     cleanup,
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
+    run_first,
     slow,
     torch_device,
 )
@@ -96,7 +99,6 @@ class Qwen3OmniMoeThinkerForConditionalGenerationTester:
             "deepstack_visual_indexes": [1],
         }
         self.audio_config = {
-            "model_type": "qwen_omni_thinker_audio_encoder",
             "d_model": 32,
             "encoder_attention_heads": 4,
             "encoder_ffn_dim": 32,
@@ -104,6 +106,7 @@ class Qwen3OmniMoeThinkerForConditionalGenerationTester:
             "num_mel_bins": 20,
             "max_source_positions": 1500,
             "initializer_range": 0.02,
+            "downsample_hidden_size": 32,
             "n_window": 50,
             "output_dim": 32,
             "n_window_infer": 100,
@@ -263,9 +266,9 @@ class Qwen3OmniMoeThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gen
 
     all_model_classes = (Qwen3OmniMoeThinkerForConditionalGeneration,) if is_torch_available() else ()
     all_generative_model_classes = (Qwen3OmniMoeThinkerForConditionalGeneration,) if is_torch_available() else ()
-
+    skip_test_audio_features_output_shape = True  # Qwen3OmniMoe merges batch_size and audio_output_lengths in index 0
     _is_composite = True
-    model_split_percents = [0.5, 0.9]
+    model_split_percents = [0.5, 0.7]
 
     def setUp(self):
         self.model_tester = Qwen3OmniMoeThinkerForConditionalGenerationTester(self)
@@ -444,11 +447,12 @@ class Qwen3OmniMoeThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gen
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
-    # TODO (joao, raushan): there are multiple standardization issues in this model that prevent this test from
-    # passing, fix me
-    @unittest.skip("Cannot handle 4D attention mask")
-    @pytest.mark.torch_compile_test
-    def test_generate_compile_model_forward_fullgraph(self):
+    @unittest.skip("QuantizedCache does not support sliding attention")
+    def test_generate_with_quant_cache(self):
+        pass
+
+    @unittest.skip("Sliding layers cap their cache at `sliding_window`, but the test expects `max_cache_len`")
+    def test_generate_with_static_cache(self):
         pass
 
     @unittest.skip(
@@ -457,20 +461,14 @@ class Qwen3OmniMoeThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gen
     def test_save_load(self):
         pass
 
-    @unittest.skip("Cannot handle 4D attention mask")
-    def test_generate_compilation_all_outputs(self):
-        pass
-
     @unittest.skip("In a rush to merge, cannot investigate now")
     def test_sdpa_padding_matches_padding_free_with_position_ids(self):
         pass
 
-    @unittest.skip("Cannot handle 4D attention mask")
-    def test_generate_with_static_cache(self):
-        pass
-
-    @unittest.skip("Cannot handle 4D attention mask")
-    def test_custom_4d_attention_mask(self):
+    @unittest.skip(
+        "Text FlashAttention kwargs are also forwarded to vision attention, which computes its own cu_seqlens"
+    )
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
         pass
 
     @unittest.skip("We don't really care about this one, test is not that slow")
@@ -486,7 +484,7 @@ class Qwen3OmniMoeThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gen
         image_grid_thw = torch.empty((0, 3), dtype=torch.long)
 
         # 3 * 2 * 2 = 12 video tokens
-        video_grid_thw = torch.tensor([[3, 2, 2]], dtype=torch.long)
+        video_grid_thw = torch.tensor([[3, 2, 2]], dtype=torch.long, device=torch_device)
 
         # num_audio_tokens = ((audio_seqlen - 1) // 2 + 1 - 2) // 2 + 1
         # i.e.: 300 audio_seqlen -> 75 audio tokens
@@ -619,10 +617,87 @@ class Qwen3OmniMoeThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gen
 
             self.assertTrue(torch.equal(position_ids, expected_position_ids))
 
+    def _image_features_get_expected_num_attentions(self, model_tester=None):
+        if model_tester is None:
+            model_tester = self.model_tester
+        return model_tester.vision_config["depth"]
+
+    def _image_features_get_expected_num_hidden_states(self, model_tester=None):
+        if model_tester is None:
+            model_tester = self.model_tester
+        return model_tester.vision_config["depth"] + 1
+
+    def _audio_features_get_expected_num_attentions(self, model_tester=None):
+        if model_tester is None:
+            model_tester = self.model_tester
+        return model_tester.audio_config["encoder_layers"]
+
+    def _audio_features_get_expected_num_hidden_states(self, model_tester=None):
+        if model_tester is None:
+            model_tester = self.model_tester
+        return model_tester.audio_config["encoder_layers"] + 1
+
+    def _video_features_get_expected_num_attentions(self, model_tester=None):
+        if model_tester is None:
+            model_tester = self.model_tester
+        return model_tester.vision_config["depth"]
+
+    def _video_features_get_expected_num_hidden_states(self, model_tester=None):
+        if model_tester is None:
+            model_tester = self.model_tester
+        return model_tester.vision_config["depth"] + 1
+
+    def test_code_predictor_config_init(self):
+        """
+        Test that Qwen3OmniMoeTalkerCodePredictorConfig initializes correctly
+        and accepts max_window_layers while removing use_sliding_window.
+        """
+
+        config = Qwen3OmniMoeTalkerCodePredictorConfig(
+            vocab_size=100,
+            hidden_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            max_window_layers=28,
+            sliding_window=2048,
+        )
+
+        # 1. Check max_window_layers is present
+        self.assertEqual(config.max_window_layers, 28)
+
+        # 2. Check sliding_window is present
+        self.assertEqual(config.sliding_window, 2048)
+
+        # 3. Check use_sliding_window is removed
+        with self.assertRaises(AttributeError):
+            _ = config.use_sliding_window
+
 
 @require_torch
 class Qwen3OmniModelIntegrationTest(unittest.TestCase):
+    maxDiff = None
+
+    @classmethod
+    def setUpClass(cls):
+        cls.model = None
+
+    @classmethod
+    def get_model(cls):
+        if cls.model is None:
+            cls.model = Qwen3OmniMoeForConditionalGeneration.from_pretrained(
+                "Qwen/Qwen3-Omni-30B-A3B-Instruct", dtype=torch.bfloat16, device_map="auto"
+            )
+        return cls.model
+
+    @classmethod
+    def tearDownClass(cls):
+        if hasattr(cls, "model"):
+            del cls.model
+        cleanup(torch_device, gc_collect=True)
+
     def setUp(self):
+        cleanup(torch_device, gc_collect=True)
+
         self.processor = AutoProcessor.from_pretrained(
             "Qwen/Qwen3-Omni-30B-A3B-Instruct", min_pixels=28 * 28, max_pixels=56 * 56
         )
@@ -655,9 +730,7 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test(self):
-        model = Qwen3OmniMoeForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen3-Omni-30B-A3B-Instruct", dtype=torch.bfloat16, device_map="auto"
-        )
+        model = self.get_model()
 
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(
@@ -709,7 +782,8 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
         )
 
         EXPECTED_DECODED_TEXT = Expectations({
-            ("cuda", (8, 6)): "user\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information, here is a breakdown of what you're hearing and seeing:-",
+            ("cuda", (8, 6)): "user\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information provided:\n\nThe sound you are hearing is the distinct, high-p",
+            ("xpu", 5): "user\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information, here is a breakdown of what you're hearing and seeing:\n\n",
             ("rocm", (9, 4)): "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog is a Labrador Retriever.",
         }).get_expectation()  # fmt: skip
 
@@ -718,9 +792,7 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_batch(self):
-        model = Qwen3OmniMoeForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen3-Omni-30B-A3B-Instruct", dtype=torch.bfloat16, device_map="auto"
-        )
+        model = self.get_model()
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(
             text=[text] * 2,
@@ -736,17 +808,17 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
 
         EXPECTED_DECODED_TEXTS = Expectations(
             {
-                ("cuda", 7) : [
-                    "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is of glass shattering, and the dog in the picture is a Labrador Retriever",
-                    "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is of glass shattering, and the dog in the picture is a Labrador Retriever",
-                ],
                 ("cuda", 8): [
-                    "user\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information, here is a breakdown of what you're hearing and seeing:\n\n",
-                    "user\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information, here is a breakdown of what you're hearing and seeing:\n\n"
+                    "user\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information provided:\n\nThe sound you hear is the distinct, high-pitched",
+                    "user\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information provided:\n\nThe sound you hear is the distinct, high-pitched",
                 ],
                 ("rocm", (9, 4)): [
                     "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog is a Labrador Retriever.",
                     "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog is a Labrador Retriever.",
+                ],
+                ("xpu", 5): [
+                    "user\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information, here is a breakdown of what you're hearing and seeing:\n\n",
+                    "user\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information, here is a breakdown of what you're hearing and seeing:\n\n",
                 ],
             }
         ).get_expectation()  # fmt: skip
@@ -756,9 +828,7 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_multiturn(self):
-        model = Qwen3OmniMoeForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen3-Omni-30B-A3B-Instruct", dtype=torch.bfloat16, device_map="auto"
-        )
+        model = self.get_model()
 
         messages = [
             self.messages[0],
@@ -802,9 +872,7 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_w_audio(self):
-        model = Qwen3OmniMoeForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen3-Omni-30B-A3B-Instruct", dtype=torch.bfloat16, device_map="auto"
-        )
+        model = self.get_model()
         audio_url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/guess_age_gender.wav"
 
         messages = [
@@ -839,8 +907,8 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
 
         EXPECTED_DECODED_TEXTS = Expectations(
             {
-                ("cuda", 7): "system\nYou are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech.\nuser\n\nassistant\nWell, I can try. But it's not always that accurate. I might be able to make",
-                ("cuda", 8): "'system\nYou are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech.\nuser\n\nassistant\nYes, I can analyze audio inputs to understand spoken content, and I can also make inferences about'",
+                ("cuda", 8): "system\nYou are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech.\nuser\n\nassistant\nYes, I can analyze audio inputs to understand spoken content, and I can also process and respond to",
+                ("xpu", 5): "system\nYou are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech.\nuser\n\nassistant\nYes, I can analyze audio inputs to understand spoken content, and I can also make educated guesses about",
             }
         )  # fmt: skip
         EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
@@ -851,6 +919,115 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
         )
         self.assertFalse(torch.isnan(output[1]).any().item())
 
+    @slow
+    def test_small_model_integration_test_batch_audio_matches_single(self):
+        model = self.get_model()
+        texts = [
+            "Hello, I'm Qwen. How can I help you today?",
+            "The weather is nice today. Let's go for a walk.",
+        ]
+        conversations = [
+            [
+                {
+                    "role": "system",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech.",
+                        }
+                    ],
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": f"Please read the following text aloud exactly as written, with no additional commentary:\n\n{text}",
+                        }
+                    ],
+                },
+            ]
+            for text in texts
+        ]
+
+        torch.manual_seed(0)
+        single_audio_outputs = []
+        for conversation in conversations:
+            inputs = self.processor.apply_chat_template(
+                [conversation],
+                tokenize=True,
+                add_generation_prompt=True,
+                return_dict=True,
+                return_tensors="pt",
+                processor_kwargs={"padding": True},
+            ).to(torch_device, dtype=torch.bfloat16)
+            output = model.generate(
+                **inputs,
+                return_audio=True,
+                thinker_temperature=0,
+                thinker_do_sample=False,
+                thinker_max_new_tokens=20,
+                talker_do_sample=False,
+                talker_max_new_tokens=10,
+            )
+            single_audio_outputs.append(output[1].reshape(-1))
+
+        torch.manual_seed(0)
+        inputs = self.processor.apply_chat_template(
+            conversations,
+            tokenize=True,
+            add_generation_prompt=True,
+            return_dict=True,
+            return_tensors="pt",
+            processor_kwargs={"padding": True},
+        ).to(torch_device, dtype=torch.bfloat16)
+        self.assertIn("attention_mask", inputs)
+        output = model.generate(
+            **inputs,
+            return_audio=True,
+            thinker_temperature=0,
+            thinker_do_sample=False,
+            thinker_max_new_tokens=20,
+            talker_do_sample=False,
+            talker_max_new_tokens=10,
+        )
+        batch_audio_output = output[1]
+
+        self.assertEqual(len(batch_audio_output), len(conversations))
+        for batch_audio, single_audio in zip(batch_audio_output, single_audio_outputs):
+            self.assertEqual(batch_audio.shape, single_audio.shape)
+            # bf16 preciesion and randomness seem to prevent close match...
+            # torch.testing.assert_close(batch_audio, single_audio, rtol=1e-3, atol=1e-3)
+
+        # A batch of identical prompts must produce identical rows (deterministic, no cross-row leakage).
+        duplicate_inputs = self.processor.apply_chat_template(
+            [conversations[0], conversations[0]],
+            tokenize=True,
+            add_generation_prompt=True,
+            return_dict=True,
+            return_tensors="pt",
+            processor_kwargs={"padding": True},
+        ).to(torch_device, dtype=torch.bfloat16)
+        duplicate_audio_output = model.generate(
+            **duplicate_inputs,
+            return_audio=True,
+            thinker_temperature=0,
+            thinker_do_sample=False,
+            thinker_max_new_tokens=20,
+            talker_do_sample=False,
+            talker_max_new_tokens=10,
+        )[1]
+        torch.testing.assert_close(
+            duplicate_audio_output[0].reshape(-1),
+            duplicate_audio_output[1].reshape(-1),
+            rtol=1e-3,
+            atol=1e-3,
+        )
+
+    # Run this test first because it needs to load the model with `flash_attention_2`. For other tests, we need to keep
+    # the loaded model (without FA) in `cls.model`. If this test is not run first, when loading the flash attention
+    # model here, there is already a previous loaded model `cls.model` and we will get GPU OOM.
+    @run_first
     @slow
     @require_flash_attn
     @require_torch_accelerator

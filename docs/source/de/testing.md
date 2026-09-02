@@ -41,7 +41,7 @@ Es gibt 2 Testsuiten im Repository:
      `main`. Es wird nur ausgeführt, wenn ein Commit auf `main` den Code in einem der folgenden Ordner aktualisiert hat: `src`,
      `tests`, `.github` (um zu verhindern, dass er auf hinzugefügten Modellkarten, Notebooks usw. läuft)
 
-   - [self-hosted runner](https://github.com/huggingface/transformers/tree/main/.github/workflows/self-scheduled.yml): führt normale und langsame Tests auf GPU in
+   - [self-hosted runner](https://github.com/huggingface/transformers/tree/main/.github/workflows/self-scheduled-caller.yml): führt normale und langsame Tests auf GPU in
      `tests` und `examples`:
 
 ```bash
@@ -527,7 +527,7 @@ einen normalen Prozess erzeugt, der dann mehrere Worker erzeugt und die IO-Pipes
 
 Hier sind einige Tests, die dies verwenden:
 
-- [test_trainer_distributed.py](https://github.com/huggingface/transformers/tree/main/tests/trainer/test_trainer_distributed.py)
+- [test_trainer_distributed.py](https://github.com/huggingface/transformers/tree/main/tests/trainer/distributed/test_trainer_distributed.py)
 - [test_deepspeed.py](https://github.com/huggingface/transformers/tree/main/tests/deepspeed/test_deepspeed.py)
 
 Um direkt mit der Ausführung zu beginnen, suchen Sie in diesen Tests nach dem Aufruf `execute_subprocess_async`.

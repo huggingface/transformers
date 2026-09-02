@@ -259,7 +259,7 @@ class SwitchTransformersModelTester:
             output_router_logits=True,
             output_hidden_states=True,
         )
-        self.parent.assertEqual(len(outputs), 13)
+        self.parent.assertEqual(len(outputs), 15)
         self.parent.assertEqual(outputs["logits"].size(), (self.batch_size, self.decoder_seq_length, self.vocab_size))
         self.parent.assertEqual(outputs["loss"].size(), ())
 
@@ -481,9 +481,6 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
     pipeline_model_mapping = (
         {
             "feature-extraction": SwitchTransformersModel,
-            "summarization": SwitchTransformersForConditionalGeneration,
-            "text2text-generation": SwitchTransformersForConditionalGeneration,
-            "translation": SwitchTransformersForConditionalGeneration,
         }
         if is_torch_available()
         else {}
@@ -495,7 +492,6 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
     model_split_percents = [0.5, 0.8, 0.9]
     # `SwitchTransformers` is a MOE in which not all experts will get gradients because they are not all used in a single forward pass
     test_all_params_have_gradient = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = SwitchTransformersModelTester(self)
@@ -621,7 +617,7 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
     @slow
     def test_model_from_pretrained(self):
         model_name = "google/switch-base-8"
-        model = SwitchTransformersModel.from_pretrained(model_name)
+        model = SwitchTransformersModel.from_pretrained(model_name, use_safetensors=False)
         self.assertIsNotNone(model)
 
     @unittest.skip(
@@ -739,8 +735,6 @@ class SwitchTransformersEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase
     all_model_classes = (SwitchTransformersEncoderModel,) if is_torch_available() else ()
 
     test_resize_embeddings = False
-    test_model_parallel = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = SwitchTransformersEncoderOnlyModelTester(self)
@@ -821,8 +815,9 @@ class SwitchTransformerRouterTest(unittest.TestCase):
         num_experts=2,
         hidden_size=8,
         d_ff=16,
-        router_jitter_noise=0,
+        router_jitter_noise=0.0,
         expert_capacity=4,
+        num_heads=4,
     )
 
     def test_equivalency_balancy_loss(self):
@@ -948,7 +943,9 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
         and `transformers` implementation of Switch-C transformers. We only check the logits
         of the first batch.
         """
-        model = SwitchTransformersModel.from_pretrained("google/switch-base-8", dtype=torch.bfloat16).to(torch_device)
+        model = SwitchTransformersModel.from_pretrained(
+            "google/switch-base-8", use_safetensors=False, dtype=torch.bfloat16
+        ).to(torch_device)
         input_ids = torch.ones((32, 64), dtype=torch.long).to(torch_device)
         decoder_input_ids = torch.ones((32, 64), dtype=torch.long).to(torch_device)
 
@@ -964,10 +961,10 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
                     -0.349609, -0.0250244, -0.104004, -0.15918, -0.133789
                 ],
                 ("cuda", 8): [
-                    -0.2051, -0.1914, 0.5352, -0.2988, 0.1108, 0.0200, 0.6094, -0.1025,
-                    -0.0549, 0.2988, -0.0018, 0.1758, 0.1348, -0.1689, -0.1035, 0.0266,
-                    0.0383, 0.0493, -0.2119, 0.1328, 0.3906, -0.2041, -0.1240, -0.1836,
-                    0.0454, -0.3477, -0.0256, -0.1050, -0.1572, -0.1338
+                    -0.2070, -0.1963, 0.5352, -0.3047, 0.1064, 0.0188, 0.6016, -0.1006,
+                    -0.0520, 0.2969, 0.0055, 0.1738, 0.1387, -0.1709, -0.1001, 0.0248,
+                    0.0378, 0.0525, -0.2119, 0.1328, 0.3926, -0.2012, -0.1240, -0.1826,
+                    0.0405, -0.3477, -0.0229, -0.1025, -0.1572, -0.1309
                 ],
             }
         )

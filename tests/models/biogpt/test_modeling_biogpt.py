@@ -273,7 +273,7 @@ class BioGptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
     def setUp(self):
         self.model_tester = BioGptModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BioGptConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=BioGptConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -335,9 +335,8 @@ class BioGptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
         num_paddings = inputs_non_padded.shape[-1] - inputs["attention_mask"][-1].long().sum().item()
         inputs_padded = tokenizer(sentences[1], return_tensors="pt").input_ids.to(torch_device)
-        output_padded = model.generate(
-            input_ids=inputs_padded, max_length=model.generation_config.max_length - num_paddings
-        )
+        # 20 is the default max_length in the generation config
+        output_padded = model.generate(input_ids=inputs_padded, max_length=20 - num_paddings)
 
         batch_out_sentence = tokenizer.batch_decode(outputs, skip_special_tokens=True)
         non_padded_sentence = tokenizer.decode(output_non_padded[0], skip_special_tokens=True)
@@ -384,6 +383,25 @@ class BioGptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+
+    def test_biogpt_sequence_classification_left_padding(self):
+        # Regression: under left padding the head must pool the last real token.
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 3
+        config.pad_token_id = 0
+        model = BioGptForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+        real = input_dict["input_ids"][:1].clamp(min=1)
+        pad = torch.zeros((1, 3), dtype=real.dtype, device=torch_device)
+        input_ids = torch.cat([pad, real], dim=1)
+        attention_mask = input_ids.ne(config.pad_token_id).to(torch_device)
+        with torch.no_grad():
+            pooled_logits = model(input_ids, attention_mask=attention_mask).logits
+            hidden_states = model.biogpt(input_ids, attention_mask=attention_mask).last_hidden_state
+            per_position_logits = model.score(hidden_states)
+        last_real_index = input_ids.shape[1] - 1
+        torch.testing.assert_close(pooled_logits[0], per_position_logits[0, last_real_index])
 
 
 @require_torch

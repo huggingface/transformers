@@ -19,9 +19,8 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_conditional_detr import *
-    from .feature_extraction_conditional_detr import *
     from .image_processing_conditional_detr import *
-    from .image_processing_conditional_detr_fast import *
+    from .image_processing_pil_conditional_detr import *
     from .modeling_conditional_detr import *
 else:
     import sys

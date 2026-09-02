@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization class for SeamlessM4T."""
-
-from typing import Optional, Union
 
 from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE
@@ -111,8 +108,8 @@ class SeamlessM4TTokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        vocab: Optional[Union[str, dict[str, int]]] = None,
-        merges: Optional[Union[str, list[str]]] = None,
+        vocab: str | dict[str, int] | None = None,
+        merges: str | list[str] | None = None,
         bos_token="<s>",
         eos_token="</s>",
         sep_token="</s>",
@@ -238,7 +235,7 @@ class SeamlessM4TTokenizer(TokenizersBackend):
         self.set_tgt_lang_special_tokens(self._tgt_lang)
 
     def _build_translation_inputs(
-        self, raw_inputs, return_tensors: str, src_lang: Optional[str], tgt_lang: Optional[str], **extra_kwargs
+        self, raw_inputs, return_tensors: str, src_lang: str | None, tgt_lang: str | None, **extra_kwargs
     ):
         """Used by translation pipeline, to prepare inputs for the generate function"""
         if src_lang is None or tgt_lang is None:
@@ -255,12 +252,12 @@ class SeamlessM4TTokenizer(TokenizersBackend):
         self,
         src_texts: list[str],
         src_lang: str = "eng",
-        tgt_texts: Optional[list[str]] = None,
+        tgt_texts: list[str] | None = None,
         tgt_lang: str = "fra",
-        max_length: Optional[int] = None,
-        max_target_length: Optional[int] = None,
+        max_length: int | None = None,
+        max_target_length: int | None = None,
         padding: str = "longest",
-        return_tensors: Optional[str] = None,
+        return_tensors: str | None = None,
         truncation: bool = True,
         **kwargs,
     ) -> BatchEncoding:
@@ -357,16 +354,14 @@ class SeamlessM4TTokenizer(TokenizersBackend):
 
     def __call__(
         self,
-        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
-        text_pair: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
-        text_target: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
-        text_pair_target: Optional[
-            Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]
-        ] = None,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        pad_to_multiple_of: Optional[int] = None,
-        src_lang: Optional[str] = None,
-        tgt_lang: Optional[str] = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        text_pair: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        text_target: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        text_pair_target: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        padding: bool | str | PaddingStrategy = False,
+        pad_to_multiple_of: int | None = None,
+        src_lang: str | None = None,
+        tgt_lang: str | None = None,
         **kwargs,
     ):
         """

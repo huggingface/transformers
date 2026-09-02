@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -18,8 +18,8 @@ rendered properly in your Markdown viewer.
 
 A backbone is a model used for feature extraction for higher level computer vision tasks such as object detection and image classification. Transformers provides an [`AutoBackbone`] class for initializing a Transformers backbone from pretrained model weights, and two utility classes:
 
-* [`~utils.BackboneMixin`] enables initializing a backbone from Transformers or [timm](https://hf.co/docs/timm/index) and includes functions for returning the output features and indices.
-* [`~utils.BackboneConfigMixin`] sets the output features and indices of the backbone configuration.
+* [`~backbone_utils.BackboneMixin`] enables initializing a backbone from Transformers or [timm](https://hf.co/docs/timm/index) and includes functions for returning the output features and indices.
+* [`~backbone_utils.BackboneConfigMixin`] sets the output features and indices of the backbone configuration.
 
 [timm](https://hf.co/docs/timm/index) models are loaded with the [`TimmBackbone`] and [`TimmBackboneConfig`] classes.
 
@@ -45,11 +45,11 @@ Backbones are supported for the following models:
 
 ## BackboneMixin
 
-[[autodoc]] utils.BackboneMixin
+[[autodoc]] backbone_utils.BackboneMixin
 
 ## BackboneConfigMixin
 
-[[autodoc]] utils.BackboneConfigMixin
+[[autodoc]] backbone_utils.BackboneConfigMixin
 
 ## TimmBackbone
 

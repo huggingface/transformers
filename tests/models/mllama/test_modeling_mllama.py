@@ -35,7 +35,6 @@ from transformers.testing_utils import (
     cleanup,
     require_bitsandbytes,
     require_optimum_quanto,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -62,7 +61,6 @@ class MllamaText2TextModelTester:
         seq_length=7,
         is_training=True,
         text_config={
-            "model_type": "mllama",
             "vocab_size": 99,
             "hidden_size": 32,
             "num_hidden_layers": 2,
@@ -144,7 +142,6 @@ class MllamaVisionText2TextModelTester:
         seq_length=7,
         is_training=True,
         text_config={
-            "model_type": "mllama",
             "vocab_size": 99,
             "hidden_size": 32,
             "num_hidden_layers": 2,
@@ -468,7 +465,6 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     @require_torch_accelerator
     @require_bitsandbytes
-    @require_read_token
     def test_11b_model_integration_generate(self):
         # Prepare inputs
         processor = AutoProcessor.from_pretrained(self.base_model_checkpoint)
@@ -520,7 +516,6 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     @require_torch_accelerator
     @require_bitsandbytes
-    @require_read_token
     def test_11b_model_integration_generate_text_only(self):
         # Prepare inputs
         processor = AutoProcessor.from_pretrained(self.base_model_checkpoint)
@@ -566,7 +561,6 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     @require_torch_accelerator
     @require_bitsandbytes
-    @require_read_token
     def test_11b_model_integration_forward(self):
         # Prepare inputs
         processor = AutoProcessor.from_pretrained(self.base_model_checkpoint)
@@ -607,7 +601,6 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     @require_torch_accelerator
     @require_bitsandbytes
-    @require_read_token
     def test_11b_model_integration_batched_generate(self):
         processor = AutoProcessor.from_pretrained(self.base_model_checkpoint)
 
@@ -673,7 +666,6 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     @require_torch_accelerator
     @require_bitsandbytes
-    @require_read_token
     def test_11b_model_integration_multi_image_generate(self):
         processor = AutoProcessor.from_pretrained(self.instruct_model_checkpoint)
 

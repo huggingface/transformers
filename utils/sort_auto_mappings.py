@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,7 +22,7 @@ python utils/sort_auto_mappings.py
 
 to auto-fix all the auto mappings (used in `make style`).
 
-To only check if the mappings are properly sorted (as used in `make quality`), do:
+To only check if the mappings are properly sorted (as used in `make check-repo`), do:
 
 ```bash
 python utils/sort_auto_mappings.py --check_only
@@ -35,13 +34,20 @@ import os
 import re
 
 
+CHECKER_CONFIG = {
+    "name": "sort_auto_mappings",
+    "label": "Sort auto mappings",
+    "cache_globs": ["src/transformers/models/auto/*.py"],
+    "check_args": ["--check_only"],
+    "fix_args": [],
+}
+
 # Path are set with the intent you should run this script from the root of the repo.
 PATH_TO_AUTO_MODULE = "src/transformers/models/auto"
 
 
-# re pattern that matches mapping introductions:
-#    SUPER_MODEL_MAPPING_NAMES = OrderedDict or SUPER_MODEL_MAPPING = OrderedDict
-_re_intro_mapping = re.compile(r"[A-Z_]+_MAPPING(\s+|_[A-Z_]+\s+)=\s+OrderedDict")
+# re pattern that matches XXX_MAPPING_NAMES or SPECIAL_MODEL_TYPE_TO_MODULE_NAMES
+_re_intro_mapping = re.compile(r"[A-Z_]+(_MAPPING|_MODEL_TYPE_TO_MODULE)(\s+|_[A-Z_]+\s+)=\s+OrderedDict(?!\(\*)")
 # re pattern that matches identifiers in mappings
 _re_identifier = re.compile(r'\s*\(\s*"(\S[^"]+)"')
 

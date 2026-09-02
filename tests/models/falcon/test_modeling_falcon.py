@@ -67,6 +67,10 @@ class FalconModelTest(CausalLMModelTest, unittest.TestCase):
     ):
         return True
 
+    @unittest.skip(reason="To support alibi, we are forced to create a mask in all cases")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
 
 @require_torch
 class FalconLanguageGenerationTest(unittest.TestCase):

@@ -16,7 +16,6 @@
 import unittest
 
 import pytest
-from packaging import version
 
 from transformers import Olmo2Config, is_torch_available
 from transformers.generation.configuration_utils import GenerationConfig
@@ -41,6 +40,7 @@ if is_torch_available():
 
     from transformers import (
         Olmo2ForCausalLM,
+        Olmo2ForSequenceClassification,
         Olmo2Model,
     )
 
@@ -163,11 +163,13 @@ class Olmo2ModelTester:
 
 @require_torch
 class Olmo2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (Olmo2Model, Olmo2ForCausalLM) if is_torch_available() else ()
+    all_model_classes = (Olmo2Model, Olmo2ForCausalLM, Olmo2ForSequenceClassification) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": Olmo2Model,
             "text-generation": Olmo2ForCausalLM,
+            "text-classification": Olmo2ForSequenceClassification,
+            "zero-shot": Olmo2ForSequenceClassification,
         }
         if is_torch_available()
         else {}
@@ -179,7 +181,7 @@ class Olmo2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
     def setUp(self):
         self.model_tester = Olmo2ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Olmo2Config, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=Olmo2Config, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -201,11 +203,12 @@ class Olmo2IntegrationTest(unittest.TestCase):
     def test_model_1b_logits_bfloat16(self):
         input_ids = [[1, 306, 4658, 278, 6593, 310, 2834, 338]]
         model = Olmo2ForCausalLM.from_pretrained("allenai/OLMo-2-0425-1B").to(torch_device, torch.bfloat16)
-        out = model(torch.tensor(input_ids, device=torch_device)).logits.float()
+        with torch.no_grad():
+            out = model(torch.tensor(input_ids, device=torch_device)).logits.float()
         # Expected mean on dim = -1
         expectations = Expectations(
             {
-                ("cuda", 8): [[-5.6700, -6.5557, -3.1545, -2.7418, -5.5887, -4.5179, -4.9077, -4.6530]],
+                ("cuda", 8): [[-5.6700, -6.5557, -3.2169, -2.7544, -5.5327, -4.4429, -4.9299, -4.6706]],
             }
         )
         EXPECTED_MEAN = torch.tensor(expectations.get_expectation(), device=torch_device)
@@ -223,7 +226,8 @@ class Olmo2IntegrationTest(unittest.TestCase):
     def test_model_7b_logits(self):
         input_ids = [[1, 306, 4658, 278, 6593, 310, 2834, 338]]
         model = Olmo2ForCausalLM.from_pretrained("shanearora/OLMo2-7B-1124-hf").to(torch_device, dtype=torch.bfloat16)
-        out = model(torch.tensor(input_ids, device=torch_device)).logits.float()
+        with torch.no_grad():
+            out = model(torch.tensor(input_ids, device=torch_device)).logits.float()
         # Expected mean on dim = -1
         expectations = Expectations(
             {
@@ -284,9 +288,6 @@ class Olmo2IntegrationTest(unittest.TestCase):
 
     @pytest.mark.torch_export_test
     def test_export_static_cache(self):
-        if version.parse(torch.__version__) < version.parse("2.4.0"):
-            self.skipTest(reason="This test requires torch >= 2.4 to run.")
-
         from transformers.integrations.executorch import (
             TorchExportableModuleWithStaticCache,
             convert_and_export_with_cache,

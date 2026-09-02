@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.from typing import List, Union
 
+import copy
 from typing import Any, TypedDict, overload
 
 from ..audio_utils import AudioInput
@@ -49,6 +50,7 @@ class TextToAudioPipeline(Pipeline):
 
     Unless the model you're using explicitly sets generation parameters in `generation_config.json`, the default values
     from `generation.configuration_utils.py._get_default_generation_params()` will be used.
+    - max_new_tokens: 256
 
     Example:
 
@@ -101,9 +103,14 @@ class TextToAudioPipeline(Pipeline):
     _load_tokenizer = True
 
     # Make sure the docstring is updated when the default generation config is changed
-    _default_generation_config = GenerationConfig()
+    _default_generation_config = GenerationConfig(max_new_tokens=256)
 
-    def __init__(self, *args, vocoder=None, sampling_rate=None, **kwargs):
+    def __init__(self, *args, vocoder=None, sampling_rate=None, noise_scheduler=None, **kwargs):
+        # Some models (e.g., VibeVoice) require noise_scheduler during initialization because `_prepare_generation_config` is called in super().__init__
+        if noise_scheduler is not None:
+            kwargs["noise_scheduler"] = noise_scheduler
+        self.noise_scheduler = noise_scheduler
+
         super().__init__(*args, **kwargs)
 
         self.vocoder = None
@@ -128,7 +135,7 @@ class TextToAudioPipeline(Pipeline):
             config = self.model.config
             gen_config = self.model.__dict__.get("generation_config", None)
             if gen_config is not None:
-                config.update(gen_config.to_dict())
+                config.update({k: v for k, v in gen_config.to_dict().items() if v is not None})
 
             for sampling_rate_name in ["sample_rate", "sampling_rate"]:
                 sampling_rate = getattr(config, sampling_rate_name, None)
@@ -149,8 +156,12 @@ class TextToAudioPipeline(Pipeline):
 
         if self.model.config.model_type == "bark":
             # bark Tokenizer is called with BarkProcessor which uses those kwargs
+            # Check if generation_config has semantic_config (BarkGenerationConfig) or use default
+            max_length = 256
+            if hasattr(self.generation_config, "semantic_config"):
+                max_length = getattr(self.generation_config.semantic_config, "max_input_semantic_length", 256)
             new_kwargs = {
-                "max_length": self.generation_config.semantic_config.get("max_input_semantic_length", 256),
+                "max_length": max_length,
                 "add_special_tokens": False,
                 "return_attention_mask": True,
                 "return_token_type_ids": False,
@@ -162,22 +173,29 @@ class TextToAudioPipeline(Pipeline):
 
         preprocessor = self.processor if self.processor is not None else self.tokenizer
         if isinstance(text, Chat):
+            # Processor kwargs are passed separately from Jinja2 template kwargs.
+            processor_kwargs = kwargs.pop("processor_kwargs", None) or {}
+            chat_template_kwargs = {
+                "tokenize": True,
+                "return_dict": True,
+                "add_generation_prompt": True,
+                "processor_kwargs": processor_kwargs,
+                **kwargs,
+            }
             output = preprocessor.apply_chat_template(
                 text.messages,
-                tokenize=True,
-                return_dict=True,
-                sampling_rate=self.sampling_rate,
-                **kwargs,
+                **chat_template_kwargs,
             )
         else:
             # Add speaker ID if needed and user didn't insert at start of text
             if self.model.config.model_type == "csm":
                 text = [f"[0]{t}" if not t.startswith("[") else t for t in text]
+                kwargs.setdefault("add_special_tokens", True)
             if self.model.config.model_type == "dia":
                 text = [f"[S1] {t}" if not t.startswith("[") else t for t in text]
             output = preprocessor(text, **kwargs, return_tensors="pt")
-        model_dtype = next(self.model.parameters()).dtype
-        output = output.to(model_dtype)
+        output = output.to(dtype=self.model.dtype)
+
         return output
 
     def _forward(self, model_inputs, **kwargs):
@@ -191,20 +209,37 @@ class TextToAudioPipeline(Pipeline):
             generate_kwargs = self._ensure_tensor_on_device(generate_kwargs, device=self.device)
 
             # User-defined `generation_config` passed to the pipeline call take precedence
-            if "generation_config" not in generate_kwargs:
-                generate_kwargs["generation_config"] = self.generation_config
-
-            # generate_kwargs get priority over forward_params
-            forward_params.update(generate_kwargs)
+            if "generation_config" in generate_kwargs:
+                generation_config = generate_kwargs.pop("generation_config")
+            else:
+                generation_config = copy.deepcopy(self.generation_config)
 
             # ensure dict output to facilitate postprocessing
-            forward_params.update({"return_dict_in_generate": True})
+            generation_config.return_dict_in_generate = True
+
+            # priotiize max_new_tokens to avoid max_length warning
+            if generation_config.max_new_tokens is not None:
+                generation_config.max_length = None
+
+            # Merge generate_kwargs into generation_config where possible to avoid the
+            # deprecation warning about passing generation_config alongside generation params
+            model_specific_kwargs = {}
+            for k, v in generate_kwargs.items():
+                if hasattr(generation_config, k):
+                    setattr(generation_config, k, v)
+                else:
+                    model_specific_kwargs[k] = v
+            forward_params["generation_config"] = generation_config
+            forward_params.update(model_specific_kwargs)
 
             if self.model.config.model_type in ["csm"]:
                 # NOTE (ebezzam): CSM does not have the audio tokenizer in the processor therefore `output_audio=True`
                 # needed for decoding to audio
                 if "output_audio" not in forward_params:
                     forward_params["output_audio"] = True
+
+            if self.noise_scheduler is not None and "noise_scheduler" not in forward_params:
+                forward_params["noise_scheduler"] = self.noise_scheduler
 
             output = self.model.generate(**model_inputs, **forward_params)
         else:
@@ -266,6 +301,7 @@ class TextToAudioPipeline(Pipeline):
         preprocess_params=None,
         forward_params=None,
         generate_kwargs=None,
+        processor_kwargs=None,
     ):
         if getattr(self, "assistant_model", None) is not None:
             generate_kwargs["assistant_model"] = self.assistant_model
@@ -280,6 +316,8 @@ class TextToAudioPipeline(Pipeline):
 
         if preprocess_params is None:
             preprocess_params = {}
+        if processor_kwargs is not None:
+            preprocess_params["processor_kwargs"] = processor_kwargs
         postprocess_params = {}
 
         return preprocess_params, params, postprocess_params

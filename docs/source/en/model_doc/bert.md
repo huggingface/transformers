@@ -13,11 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2018-10-11 and added to Hugging Face Transformers on 2020-11-16.*
+*This model was published in HF papers on 2018-10-11 and contributed to Hugging Face Transformers on 2020-11-16.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
 </div>
@@ -30,20 +29,21 @@ You can find all the original BERT checkpoints under the [BERT](https://huggingf
 
 > [!TIP]
 > Click on the BERT models in the right sidebar for more examples of how to apply BERT to different language tasks.
+>
+> Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Refer to [Loading kernels](../kernel_doc/loading_kernels) to learn more.
 
 The example below demonstrates how to predict the `[MASK]` token with [`Pipeline`], [`AutoModel`], and from the command line.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="fill-mask",
     model="google-bert/bert-base-uncased",
-    dtype=torch.float16,
     device=0
 )
 pipeline("Plants create [MASK] through a process known as photosynthesis.")
@@ -52,16 +52,17 @@ pipeline("Plants create [MASK] through a process known as photosynthesis.")
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 import torch
+
 from transformers import AutoModelForMaskedLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained(
     "google-bert/bert-base-uncased",
 )
 model = AutoModelForMaskedLM.from_pretrained(
     "google-bert/bert-base-uncased",
-    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -76,13 +77,6 @@ predicted_token_id = predictions[0, masked_index].argmax(dim=-1)
 predicted_token = tokenizer.decode(predicted_token_id)
 
 print(f"The predicted token is: {predicted_token}")
-```
-
-</hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "Plants create [MASK] through a process known as photosynthesis." | transformers run --task fill-mask --model google-bert/bert-base-uncased --device 0
 ```
 
 </hfoption>
@@ -106,10 +100,6 @@ echo -e "Plants create [MASK] through a process known as photosynthesis." | tran
 ## BertTokenizerLegacy
 
 [[autodoc]] BertTokenizerLegacy
-
-## BertTokenizerFast
-
-[[autodoc]] BertTokenizerFast
 
 ## BertModel
 

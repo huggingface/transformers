@@ -17,7 +17,6 @@ import gc
 import json
 import math
 import os
-from typing import Optional
 
 import regex as re
 import torch
@@ -90,7 +89,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 CONTEXT_LENGTH = 131072
 
 
-def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None):
+def convert_old_keys_to_new_keys(state_dict_keys: dict | None = None):
     """
     This function should be applied only once, on the concatenated keys to efficiently rename using
     the key mappings.
@@ -477,7 +476,7 @@ class MllamaConverter(TikTokenConverter):
         special_tokens: list[str],
         pattern: str,
         model_max_length: int,
-        chat_template: Optional[str] = None,
+        chat_template: str | None = None,
         **kwargs,
     ):
         super().__init__(vocab_file, pattern=pattern)

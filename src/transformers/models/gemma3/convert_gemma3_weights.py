@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Google Inc. HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -25,7 +24,7 @@ python src/transformers/models/gemma3/convert_gemma3_weights.py \
 """
 
 from collections.abc import Iterator, Sequence
-from typing import Any, Optional
+from typing import Any
 
 import accelerate
 import numpy as np
@@ -42,11 +41,12 @@ from transformers import (
     Gemma3Processor,
     Gemma3TextConfig,
     Gemma3TextModel,
-    GemmaTokenizerFast,
+    GemmaTokenizer,
     GenerationConfig,
     SiglipVisionConfig,
 )
 from transformers.image_utils import PILImageResampling
+from transformers.tokenization_utils_sentencepiece import SentencePieceExtractor
 
 
 # ==== Internal Constants and Classes ====
@@ -323,7 +323,7 @@ _VISION_DTYPE = flags.DEFINE_enum(
 )
 
 
-def get_chat_template() -> Optional[str]:
+def get_chat_template() -> str | None:
     if not _INCLUDE_CHAT_TEMPLATE.value:
         return None
 
@@ -539,7 +539,7 @@ def convert_transformer_weights(
 
 def convert(
     checkpoint_path: str, config: Gemma3Config, variant: str
-) -> tuple[dict[str, torch.Tensor], Optional[Sequence[np.ndarray]]]:
+) -> tuple[dict[str, torch.Tensor], Sequence[np.ndarray] | None]:
     """Loads Orbax checkpoint from `input_path` and converts it to HF tree."""
     checkpointer = obc.PyTreeCheckpointer()
     ckpt = checkpointer.restore(checkpoint_path)
@@ -643,8 +643,11 @@ def main(*args):
     del model
     del state_tree
 
-    tokenizer = GemmaTokenizerFast(
-        _TOKENIZER_PATH.value,
+    sentencepiece_extractor = SentencePieceExtractor(_TOKENIZER_PATH.value)
+    vocab, _, merges = sentencepiece_extractor.extract()
+    tokenizer = GemmaTokenizer(
+        vocab=vocab,
+        merges=merges,
         add_bos_token=True,
         add_eos_token=variant == _VARIANT_EMBEDDINGGEMMA,
         padding_side="right" if variant == _VARIANT_EMBEDDINGGEMMA else "left",
@@ -692,7 +695,7 @@ def main(*args):
     if variant == _VARIANT_EMBEDDINGGEMMA:
         from sentence_transformers import SentenceTransformer, models
 
-        # TODO: Support Retrieval tasks where we use `"title: {title} | text: {passage}"` interally and construct this
+        # TODO: Support Retrieval tasks where we use `"title: {title} | text: {passage}"` internally and construct this
         # from split-records cached data, but externally these come through as a single string with components
         # separated by a newline. This should be used for `passage` for SentenceTransformers and the relevant MTEB
         # Retrieval tasks.

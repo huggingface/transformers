@@ -60,7 +60,7 @@ class HiggsConfigTest(unittest.TestCase):
 @require_torch_gpu
 @require_flute_hadamard
 @require_accelerate
-# @require_read_token
+#
 class HiggsTest(unittest.TestCase):
     model_name = "unsloth/Llama-3.2-1B"
 

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,36 +15,25 @@
 Processor class for EVOLLA.
 """
 
-from typing import Optional, Union
-
 from ...feature_extraction_utils import BatchFeature
-from ...processing_utils import (
-    ProcessorMixin,
-)
+from ...processing_utils import ProcessorMixin
+from ...utils import auto_docstring
 
 
 PROTEIN_VALID_KEYS = ["aa_seq", "foldseek", "msa"]
 
 
+@auto_docstring
 class EvollaProcessor(ProcessorMixin):
-    r"""
-    Constructs a EVOLLA processor which wraps a LLama tokenizer and SaProt tokenizer (EsmTokenizer) into a single processor.
-
-    [`EvollaProcessor`] offers all the functionalities of [`EsmTokenizer`] and [`LlamaTokenizerFast`]. See the
-    docstring of [`~EvollaProcessor.__call__`] and [`~EvollaProcessor.decode`] for more information.
-
-    Args:
+    def __init__(self, protein_tokenizer, tokenizer=None, protein_max_length=1024, text_max_length=512, **kwargs):
+        r"""
         protein_tokenizer (`EsmTokenizer`):
             An instance of [`EsmTokenizer`]. The protein tokenizer is a required input.
-        tokenizer (`LlamaTokenizerFast`, *optional*):
-            An instance of [`LlamaTokenizerFast`]. The tokenizer is a required input.
         protein_max_length (`int`, *optional*, defaults to 1024):
             The maximum length of the sequence to be generated.
         text_max_length (`int`, *optional*, defaults to 512):
             The maximum length of the text to be generated.
-    """
-
-    def __init__(self, protein_tokenizer, tokenizer=None, protein_max_length=1024, text_max_length=512, **kwargs):
+        """
         if protein_tokenizer is None:
             raise ValueError("You need to specify an `protein_tokenizer`.")
         if tokenizer is None:
@@ -94,30 +82,28 @@ class EvollaProcessor(ProcessorMixin):
         )
         return prompt_inputs
 
+    @auto_docstring
     def __call__(
         self,
-        proteins: Optional[Union[list[dict], dict]] = None,
-        messages_list: Optional[Union[list[list[dict]], list[dict]]] = None,
-        protein_max_length: Optional[int] = None,
-        text_max_length: Optional[int] = None,
+        proteins: list[dict] | dict | None = None,
+        messages_list: list[list[dict]] | list[dict] | None = None,
+        protein_max_length: int | None = None,
+        text_max_length: int | None = None,
         **kwargs,
     ):
-        r"""This method takes batched or non-batched proteins and messages_list and converts them into format that can be used by
-        the model.
-
-        Args:
-            proteins (`Union[List[dict], dict]`):
-                A list of dictionaries or a single dictionary containing the following keys:
-                    - `"aa_seq"` (`str`) -- The amino acid sequence of the protein.
-                    - `"foldseek"` (`str`) -- The foldseek string of the protein.
-            messages_list (`Union[List[List[dict]], List[dict]]`):
-                A list of lists of dictionaries or a list of dictionaries containing the following keys:
-                    - `"role"` (`str`) -- The role of the message.
-                    - `"content"` (`str`) -- The content of the message.
-            protein_max_length (`int`, *optional*, defaults to 1024):
-                The maximum length of the sequence to be generated.
-            text_max_length (`int`, *optional*, defaults to 512):
-                The maximum length of the text.
+        r"""
+        proteins (`Union[List[dict], dict]`):
+            A list of dictionaries or a single dictionary containing the following keys:
+                - `"aa_seq"` (`str`) -- The amino acid sequence of the protein.
+                - `"foldseek"` (`str`) -- The foldseek string of the protein.
+        messages_list (`Union[List[List[dict]], List[dict]]`):
+            A list of lists of dictionaries or a list of dictionaries containing the following keys:
+                - `"role"` (`str`) -- The role of the message.
+                - `"content"` (`str`) -- The content of the message.
+        protein_max_length (`int`, *optional*, defaults to 1024):
+            The maximum length of the sequence to be generated.
+        text_max_length (`int`, *optional*, defaults to 512):
+            The maximum length of the text.
 
         Return:
             a dict with following keys:
@@ -132,13 +118,41 @@ class EvollaProcessor(ProcessorMixin):
 
         protein_max_length = protein_max_length if protein_max_length is not None else self.protein_max_length
         text_max_length = text_max_length if text_max_length is not None else self.text_max_length
+        proteins, messages_list = self.prepare_inputs_layout(proteins, messages_list)
+        self.validate_inputs(proteins, messages_list)
 
+        sa_tokens = self.process_proteins(proteins, protein_max_length)
+        text_tokens = self.process_text(messages_list, text_max_length)
+
+        return BatchFeature(
+            data={
+                "protein_input_ids": sa_tokens["input_ids"],
+                "protein_attention_mask": sa_tokens["attention_mask"],
+                "input_ids": text_tokens["input_ids"],
+                "attention_mask": text_tokens["attention_mask"],
+            }
+        )
+
+    def prepare_inputs_layout(
+        self,
+        proteins: list[dict] | dict | None = None,
+        messages_list: list[list[dict]] | list[dict] | None = None,
+        **kwargs,
+    ):
         # proteins should be List[dict]
         if isinstance(proteins, dict):
             proteins = [proteins]
         # messages_list should be List[List[dict]]
         if isinstance(messages_list, (list, tuple)) and not isinstance(messages_list[0], (list, tuple)):
             messages_list = [messages_list]
+        return proteins, messages_list
+
+    def validate_inputs(
+        self,
+        proteins: list[dict] | dict | None = None,
+        messages_list: list[list[dict]] | list[dict] | None = None,
+        **kwargs,
+    ):
         # Check if batched proteins are in the correct format
         if isinstance(proteins, (list, tuple)) and not all(isinstance(p, dict) for p in proteins):
             raise ValueError("The proteins should be a list of dictionaries, but not all elements are dictionaries.")
@@ -170,24 +184,6 @@ class EvollaProcessor(ProcessorMixin):
             raise ValueError(
                 f"The messages_list should be a list of lists of dictionaries, but it's {type(messages_list)}."
             )
-        sa_tokens = self.process_proteins(proteins, protein_max_length)
-
-        text_tokens = self.process_text(messages_list, text_max_length)
-
-        return BatchFeature(
-            data={
-                "protein_input_ids": sa_tokens["input_ids"],
-                "protein_attention_mask": sa_tokens["attention_mask"],
-                "input_ids": text_tokens["input_ids"],
-                "attention_mask": text_tokens["attention_mask"],
-            }
-        )
-
-    def batch_decode(self, *args, **kwargs):
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        return self.tokenizer.decode(*args, **kwargs)
 
     def protein_batch_decode(self, *args, **kwargs):
         return self.protein_tokenizer.batch_decode(*args, **kwargs)

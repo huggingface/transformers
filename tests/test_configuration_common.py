@@ -52,30 +52,6 @@ class ConfigTester:
         for prop in common_properties:
             self.parent.assertTrue(hasattr(config, prop), msg=f"`{prop}` does not exist")
 
-        # Test that config has the common properties as setter
-        for idx, name in enumerate(common_properties):
-            try:
-                setattr(config, name, idx)
-                self.parent.assertEqual(
-                    getattr(config, name), idx, msg=f"`{name} value {idx} expected, but was {getattr(config, name)}"
-                )
-            except NotImplementedError:
-                # Some models might not be able to implement setters for common_properties
-                # In that case, a NotImplementedError is raised
-                pass
-
-        # Test if config class can be called with Config(prop_name=..)
-        for idx, name in enumerate(common_properties):
-            try:
-                config = self.config_class(**{name: idx})
-                self.parent.assertEqual(
-                    getattr(config, name), idx, msg=f"`{name} value {idx} expected, but was {getattr(config, name)}"
-                )
-            except NotImplementedError:
-                # Some models might not be able to implement setters for common_properties
-                # In that case, a NotImplementedError is raised
-                pass
-
     def create_and_test_config_to_json_string(self):
         config = self.config_class(**self.inputs_dict)
         obj = json.loads(config.to_json_string())
@@ -135,12 +111,11 @@ class ConfigTester:
                     # Instead of loading from the general config file, create the sub-config directly from its dict
                     # This avoids issues when multiple sub-configs share the same type
                     if sub_class.__name__ == "AutoConfig":
-                        sub_class = sub_class.for_model(**general_config_dict[sub_config_key]).__class__
-                    
-                    # Create sub-config directly from its dictionary representation
-                    sub_config_from_dict = general_config_dict[sub_config_key].copy()
-                    sub_config_from_dict.pop("transformers_version", None)
-                    sub_config_loaded = sub_class(**sub_config_from_dict)
+                        sub_config_dict = copy.deepcopy(general_config_dict[sub_config_key])
+                        sub_class = sub_class.for_model(**sub_config_dict).__class__
+                        sub_config_loaded = sub_class.from_pretrained(tmpdirname)
+                    else:
+                        sub_config_loaded = sub_class.from_pretrained(tmpdirname)
 
                     # Verify that the created sub-config matches what's in the general config
                     sub_config_loaded_dict = sub_config_loaded.to_dict()

@@ -16,19 +16,11 @@
 import unittest
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torchvision_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
-
-
-if is_vision_available():
-    from transformers import BlipImageProcessor
-
-    if is_torchvision_available():
-        from transformers import BlipImageProcessorFast
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
 
 
-class BlipImageProcessingTester:
+class BlipImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -71,27 +63,10 @@ class BlipImageProcessingTester:
             "do_pad": self.do_pad,
         }
 
-    def expected_output_image_shape(self, images):
-        return self.num_channels, self.size["height"], self.size["width"]
-
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
-
 
 @require_torch
 @require_vision
 class BlipImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = BlipImageProcessor if is_vision_available() else None
-    fast_image_processing_class = BlipImageProcessorFast if is_torchvision_available() else None
-
     def setUp(self):
         super().setUp()
         self.image_processor_tester = BlipImageProcessingTester(self)
@@ -101,7 +76,7 @@ class BlipImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processor, "do_resize"))
             self.assertTrue(hasattr(image_processor, "size"))
@@ -114,9 +89,6 @@ class BlipImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 @require_torch
 @require_vision
 class BlipImageProcessingTestFourChannels(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = BlipImageProcessor if is_vision_available() else None
-    fast_image_processing_class = BlipImageProcessorFast if is_torchvision_available() else None
-
     def setUp(self):
         super().setUp()
         self.image_processor_tester = BlipImageProcessingTester(self)
@@ -126,7 +98,7 @@ class BlipImageProcessingTestFourChannels(ImageProcessingTestMixin, unittest.Tes
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processor, "do_resize"))
             self.assertTrue(hasattr(image_processor, "size"))

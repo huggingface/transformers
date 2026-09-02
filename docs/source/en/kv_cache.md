@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -49,9 +49,9 @@ inputs = tokenizer("I like rock music because", return_tensors="pt").to(model.de
 model.generate(**inputs, do_sample=False, max_new_tokens=20, use_cache=False)
 ```
 
-Cache classes can also be initialized first before calling and passing it to the models [past_key_values](https://hf.co/docs/transformers/internal/generation_utils#transformers.generation.GenerateDecoderOnlyOutput.past_key_values) parameter. This can be useful for more fine-grained control, or more advanced usage such as context caching.
+Cache classes can also be initialized first before calling and passing it to the models [`~generation.GenerateDecoderOnlyOutput#past_key_values`] parameter. This can be useful for more fine-grained control, or more advanced usage such as context caching.
 
-In most cases, it's easier to define the cache strategy in the [cache_implementation](https://hf.co/docs/transformers/main_classes/text_generation#transformers.GenerationConfig.cache_implementation) parameter.
+In most cases, it's easier to define the cache strategy in the [`~GenerationConfig#cache_implementation`] parameter.
 
 ```py
 import torch
@@ -67,7 +67,7 @@ out = model.generate(**inputs, do_sample=False, max_new_tokens=20, past_key_valu
 
 ## Fixed-size cache
 
-The default [`DynamicCache`] prevents you from taking advantage of most just-in-time (JIT) optimizations because the cache size isn't fixed. JIT optimizations enable you to maximize latency at the expense of memory usage. All of the following cache types are compatible with JIT optimizations like [torch.compile](./llm_optims#static-kv-cache-and-torchcompile) to accelerate generation.
+The default [`DynamicCache`] prevents you from taking advantage of most just-in-time (JIT) optimizations because the cache size isn't fixed. JIT optimizations enable you to minimize latency at the expense of memory usage. All of the following cache types are compatible with JIT optimizations like [torch.compile](./perf_torch_compile) to accelerate generation.
 
 A fixed-size cache ([`StaticCache`]) pre-allocates a specific maximum cache size for the kv pairs. You can generate up to the maximum cache size without needing to modify it. However, having a fixed (usually large) size for the key/value states means that while generating, a lot of tokens will actually be masked as they should not take part in the attention. So this trick allows to easily `compile` the decoding stage, but it incurs a waste of tokens in the attention computation. As all things, it's then a trade-off which should be very good if you generate with several sequence of more or less the same lengths, but may be sub-optimal if you have for example 1 very large sequence, and then only short sequences (as the fix cache size would be large, a lot would be wasted for the short sequences). Make sure you understand the impact if you use it!
 
@@ -86,6 +86,28 @@ inputs = tokenizer("Hello, my name is", return_tensors="pt").to(model.device)
 out = model.generate(**inputs, do_sample=False, max_new_tokens=20, cache_implementation="static")
 tokenizer.batch_decode(out, skip_special_tokens=True)[0]
 "Hello, my name is [Your Name], and I am a [Your Profession] with [Number of Years] of"
+```
+
+## Keep generation tensors on CPU
+
+Compiler backends like Neuron and TPU trace your model into a fixed computation graph. The generation loop maintains tensors (output sequence, `attention_mask`, `position_ids`) that grow by one token each step. The compiler retraces the graph whenever these tensors change shape on the accelerator, which slows generation.
+
+[`~GenerationMixin.generate`] moves only the tensors that `forward` consumes onto the model device, right before each `forward` call. The output is moved back to match the device of the input. Pass your inputs on CPU to keep the loop's growing tensor bookkeeping off the accelerator. The compiled graph stays stable, and because the output follows the input device, the generated output stays on CPU.
+
+```py
+import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM
+
+tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
+model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B", device_map="auto")
+
+# leave the inputs on CPU instead of calling .to(model.device).
+inputs = tokenizer("The French Bread Law states", return_tensors="pt")
+
+# generate runs forward on the model device but returns the output on the input_ids device.
+output = model.generate(**inputs, do_sample=False, max_new_tokens=20)
+print(output.device)
+cpu
 ```
 
 ## Cache offloading
@@ -214,7 +236,7 @@ A cache can also work in iterative generation settings where there is back-and-f
 
 For iterative generation with a cache, start by initializing an empty cache class and then you can feed in your new prompts. Keep track of dialogue history with a [chat template](./chat_templating).
 
-The following example demonstrates [Llama-2-7b-chat-hf](https://huggingface.co/meta-llama/Llama-2-7b-chat-hf). If you're using a different chat-style model, [`~PreTrainedTokenizer.apply_chat_template`] may process messages differently. It might cut out important tokens depending on how the Jinja template is written.
+The following example demonstrates [Llama-2-7b-chat-hf](https://huggingface.co/meta-llama/Llama-2-7b-chat-hf). If you're using a different chat-style model, [`~PreTrainedTokenizer.apply_chat_template`] may process messages differently. It might cut out important tokens depending on how the Jinja template is written. For multimodal chat models, see the [iterative chatting with cache](./tasks/image_text_to_text.md#iterative-chatting-with-cache) guide for how to process images or audio.
 
 For example, some models use special `<think> ... </think>` tokens during reasoning. These could get lost during re-encoding, causing indexing issues. You might need to manually remove or adjust extra tokens from the completions to keep things stable.
 
@@ -239,6 +261,45 @@ for prompt in user_prompts:
     completion = tokenizer.decode(outputs[0, input_length: ], skip_special_tokens=True)
     messages.append({"role": "assistant", "content": completion})
 ```
+
+## Crop a cache
+
+Use [`~Cache.crop`] to roll back tokens from a cache, such as when a candidate continuation is rejected during iterative generation. Pass the number of tokens to remove as a negative integer.
+
+```py
+# Remove the last three tokens from the cache.
+past_key_values.crop(-3)
+```
+
+Sliding-window and linear-attention layers discard past states as they go, so there's nothing to roll back to by default. Call [`~Cache.activate_past_recording`] before the forward pass to make them hold onto those states. Without it, `crop` raises a `RuntimeError` once a sliding-window layer fills its window, and immediately for linear-attention layers.
+
+```py
+# Enable this before the forward pass if you need to roll back tokens.
+past_key_values.activate_past_recording()
+```
+
+`crop(0)` does not clear the cache. It removes no tokens from the cached sequence and is a no-op for full-attention layers. For sliding-window and linear-attention layers, it can discard cached information that the next model call will not use. This reduces memory use without rolling back tokens.
+
+```
+                    cached positions
+                    ┌───┬───┬───┬───┬───┬───┐
+before crop(-3)     │ 0 │ 1 │ 2 │ 3 │ 4 │ 5 │
+                    └───┴───┴───┴───┴───┴───┘
+                                ╰─────┬─────╯
+                                 rolled back
+
+after crop(-3)
+                    ┌───┬───┬───┐
+full attention      │ 0 │ 1 │ 2 │    keeps the whole prefix
+                    └───┴───┴───┘
+                            ┌───┐
+sliding_window=2            │ 2 │    keeps sliding_window - 1
+                            └───┘
+```
+
+Both layers now report a sequence length of 3, and generation resumes from position 3.
+
+Passing `0` removes no tokens from the sequence. It's a no-op for full-attention layers, but for sliding-window and linear-attention layers it still discards recorded states the next forward pass won't read, which frees memory without rolling anything back.
 
 ## Prefill a cache (prefix caching)
 

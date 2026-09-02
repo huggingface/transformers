@@ -30,14 +30,25 @@ if is_vision_available():
 @require_vision
 class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = PixtralProcessor
+    tiny_model_id = "hf-internal-testing/tiny-processor-pixtral"
     model_id = "mistral-community/pixtral-12b"
-    url_0 = url_to_local_path(
-        "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
-    )
-    image_0 = np.random.randint(255, size=(3, 876, 1300), dtype=np.uint8)
-    url_1 = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    image_1 = np.random.randint(255, size=(3, 480, 640), dtype=np.uint8)
-    image_2 = np.random.randint(255, size=(3, 1024, 1024), dtype=np.uint8)
+
+    @classmethod
+    def _setup_test_attributes(cls, processor):
+        cls.url_0 = url_to_local_path(
+            "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+        )
+        cls.image_0 = np.random.randint(255, size=(3, 876, 1300), dtype=np.uint8)
+        cls.url_1 = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        cls.image_1 = np.random.randint(255, size=(3, 480, 640), dtype=np.uint8)
+        cls.image_2 = np.random.randint(255, size=(3, 1024, 1024), dtype=np.uint8)
+        cls.image_token = processor.image_token
+
+    @classmethod
+    def _setup_from_pretrained(cls, model_id, **kwargs):
+        processor = super()._setup_from_pretrained(model_id, **kwargs)
+        processor.tokenizer.pad_token_id = 0  # loaded tokenizer has no PAD defined
+        return processor
 
     @parameterized.expand([(1, "pt"), (2, "pt")])
     @unittest.skip("Not tested before, to investigate")
@@ -68,8 +79,13 @@ class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_tokens = (inputs["input_ids"] == image_token_index).sum().item()
         self.assertEqual(expected_image_tokens, image_tokens)
 
+    def test_from_pretrained_subfolder_tokenizer(self):
+        processor = PixtralProcessor.from_pretrained("hf-internal-testing/tiny-flux2", subfolder="tokenizer")
+        self.assertIsInstance(processor, PixtralProcessor)
+        self.assertIsNotNone(processor.tokenizer)
+
     def test_processor_with_single_image(self):
-        processor = self.processor_class.from_pretrained(self.tmpdirname)
+        processor = self.processor_class.from_pretrained(self.full_tmpdirname)
         prompt_string = "USER: [IMG]\nWhat's the content of the image? ASSISTANT:"
 
         # Make small for checking image token expansion
@@ -133,7 +149,7 @@ class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # fmt: on
 
     def test_processor_with_multiple_images_single_list(self):
-        processor = self.processor_class.from_pretrained(self.tmpdirname)
+        processor = self.processor_class.from_pretrained(self.full_tmpdirname)
         prompt_string = "USER: [IMG][IMG]\nWhat's the difference between these two images? ASSISTANT:"
 
         # Make small for checking image token expansion
@@ -186,7 +202,7 @@ class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # fmt: on
 
     def test_processor_with_multiple_images_multiple_lists(self):
-        processor = self.processor_class.from_pretrained(self.tmpdirname)
+        processor = self.processor_class.from_pretrained(self.full_tmpdirname)
         prompt_string = [
             "USER: [IMG][IMG]\nWhat's the difference between these two images? ASSISTANT:",
             "USER: [IMG]\nWhat's the content of the image? ASSISTANT:",

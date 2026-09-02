@@ -125,7 +125,6 @@ BridgeTower は、ビジュアル エンコーダー、テキスト エンコー
 - BridgeTower のこの実装では、[`RobertaTokenizer`] を使用してテキスト埋め込みを生成し、OpenAI の CLIP/ViT モデルを使用して視覚的埋め込みを計算します。
 - 事前トレーニングされた [bridgeTower-base](https://huggingface.co/BridgeTower/bridgetower-base) および [bridgetower マスクされた言語モデリングと画像テキスト マッチング](https://huggingface.co/BridgeTower/bridgetower--base-itm-mlm) のチェックポイント がリリースされました。
 - 画像検索およびその他の下流タスクにおける BridgeTower のパフォーマンスについては、[表 5](https://huggingface.co/papers/2206.08657) を参照してください。
-- このモデルの PyTorch バージョンは、torch 1.10 以降でのみ使用できます。
 
 ## BridgeTowerConfig
 

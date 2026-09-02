@@ -4,7 +4,6 @@ import io
 import json
 import os
 import re
-from typing import Optional
 
 import torch
 from tokenizers import AddedToken, processors
@@ -91,7 +90,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 # fmt: on
 
 
-def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None):
+def convert_old_keys_to_new_keys(state_dict_keys: dict | None = None):
     """
     This function should be applied only once, on the concatenated keys to efficiently rename using
     the key mappings.
@@ -623,7 +622,7 @@ class Llama4Converter(TikTokenConverter):
         special_tokens: list[str],
         pattern: str,
         model_max_length: int = 0,
-        chat_template: Optional[str] = None,
+        chat_template: str | None = None,
         **kwargs,
     ):
         super().__init__(vocab_file, pattern=pattern)

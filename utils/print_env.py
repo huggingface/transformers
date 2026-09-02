@@ -17,14 +17,11 @@
 
 # this script dumps information about the environment
 
-import os
 import sys
 
 import transformers
 from transformers import is_torch_hpu_available, is_torch_xpu_available
 
-
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 print("Python version:", sys.version)
 print("transformers version:", transformers.__version__)

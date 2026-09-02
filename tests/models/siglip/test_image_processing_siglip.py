@@ -16,19 +16,11 @@
 import unittest
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torchvision_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
-
-
-if is_vision_available():
-    from transformers import SiglipImageProcessor
-
-    if is_torchvision_available():
-        from transformers import SiglipImageProcessorFast
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
 
 
-class SiglipImageProcessingTester:
+class SiglipImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -71,28 +63,11 @@ class SiglipImageProcessingTester:
             "image_std": self.image_std,
         }
 
-    def expected_output_image_shape(self, images):
-        return self.num_channels, self.size["height"], self.size["width"]
-
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
-
 
 @require_torch
 @require_vision
 # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest with CLIP->Siglip
 class SiglipImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = SiglipImageProcessor if is_vision_available() else None
-    fast_image_processing_class = SiglipImageProcessorFast if is_torchvision_available() else None
-
     def setUp(self):
         super().setUp()
         self.image_processor_tester = SiglipImageProcessingTester(self)
@@ -103,7 +78,7 @@ class SiglipImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     # Ignore copy
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "do_resize"))
             self.assertTrue(hasattr(image_processing, "size"))
@@ -116,11 +91,11 @@ class SiglipImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     # Ignore copy
     def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.size, {"height": 18, "width": 18})
 
-            image_processor = self.image_processing_class.from_dict(
+            image_processor = image_processing_class.from_dict(
                 self.image_processor_dict, size={"height": 84, "width": 84}
             )
             self.assertEqual(image_processor.size, {"height": 84, "width": 84})

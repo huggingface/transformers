@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
+import tempfile
 import unittest
 
 import numpy as np
@@ -58,7 +59,7 @@ class Qwen2VLVideoProcessingTester:
         max_pixels=100 * 100,
         merge_size=2,
     ):
-        size = size if size is not None else {"shortest_edge": 20}
+        size = size if size is not None else {"shortest_edge": 400, "longest_edge": 10000}
         self.parent = parent
         self.batch_size = batch_size
         self.num_frames = num_frames
@@ -147,18 +148,31 @@ class Qwen2VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
         self.assertTrue(hasattr(video_processing, "image_std"))
         self.assertTrue(hasattr(video_processing, "do_convert_rgb"))
 
-    # OVERRIDDEN BECAUSE QWEN2_VL HAS SPECIAL OUTPUT SHAPES
     def test_video_processor_from_dict_with_kwargs(self):
+        video_processor = self.fast_video_processing_class.from_dict(self.video_processor_dict)
+        self.assertEqual(video_processor.size, {"shortest_edge": 400, "longest_edge": 10000})
+
+        video_processor = self.fast_video_processing_class.from_dict(
+            self.video_processor_dict, size={"shortest_edge": 100, "longest_edge": 200}
+        )
+        # min_pixels and max_pixels take precedence over size, like in the image processor.
+        self.assertEqual(video_processor.size, {"shortest_edge": 400, "longest_edge": 10000})
+
+        processor_dict = self.video_processor_dict.copy()
+        processor_dict.pop("min_pixels")
+        processor_dict.pop("max_pixels")
+        video_processor = self.fast_video_processing_class.from_dict(
+            processor_dict, size={"shortest_edge": 100, "longest_edge": 200}
+        )
+        self.assertEqual(video_processor.size, {"shortest_edge": 100, "longest_edge": 200})
+
+    def test_video_processor_to_json_string(self):
         for video_processing_class in self.video_processor_list:
             video_processor = video_processing_class(**self.video_processor_dict)
-            self.assertEqual(video_processor.min_pixels, self.video_processor_tester.min_pixels)
-            self.assertEqual(video_processor.max_pixels, self.video_processor_tester.max_pixels)
-
-            video_processor = video_processing_class.from_dict(
-                self.video_processor_dict, min_pixels=256 * 256, max_pixels=640 * 640
-            )
-            self.assertEqual(video_processor.min_pixels, 256 * 256)
-            self.assertEqual(video_processor.max_pixels, 640 * 640)
+            obj = json.loads(video_processor.to_json_string())
+            for key, value in self.video_processor_dict.items():
+                if key not in ["min_pixels", "max_pixels"]:
+                    self.assertEqual(obj[key], value)
 
     def test_call_pil(self):
         for video_processing_class in self.video_processor_list:
@@ -362,3 +376,108 @@ class Qwen2VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
 
             video_grid_thw = video_processed["video_grid_thw"]
             self.assertEqual(video_grid_thw.tolist(), [[2, 2, 2]])
+
+    def test_bc_min_max_pixels(self):
+        for video_processing_class in self.video_processor_list:
+            video_processing = video_processing_class(**self.video_processor_dict)
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                video_processing.save_pretrained(tmpdirname)
+                video_processing_loaded = video_processing_class.from_pretrained(
+                    tmpdirname, max_pixels=56 * 56, min_pixels=28 * 28
+                )
+
+            video_inputs = self.video_processor_tester.prepare_video_inputs(
+                equal_resolution=True,
+                return_tensors="torch",
+            )
+            processed = video_processing_loaded(video_inputs, return_tensors="pt")
+            expected_output_video_shape = [320, 1176]
+            self.assertListEqual(list(processed.pixel_values_videos.shape), expected_output_video_shape)
+
+    def _process_frames(self, video_processing_class, num_frames, size, frame_size=256, **processor_kwargs):
+        video_processor_dict = self.video_processor_dict.copy()
+        video_processor_dict.pop("min_pixels", None)
+        video_processor_dict.pop("max_pixels", None)
+        video_processor_dict["size"] = size
+        video_processor_dict["do_sample_frames"] = False
+        video_processor_dict.update(processor_kwargs)
+        video_processing = video_processing_class(**video_processor_dict)
+        video = [np.random.randint(0, 256, (frame_size, frame_size, 3), dtype=np.uint8) for _ in range(num_frames)]
+        return video_processing(video, return_tensors="pt")[self.input_name]
+
+    def _expected_capped_seq_len(self, num_frames, frame_size, size, total_seq_len):
+        factor = 28
+        total_pixels = int(total_seq_len * factor * factor * 0.9)
+        max_pixels = max(min(size["longest_edge"], total_pixels * 2 // num_frames), int(size["shortest_edge"] * 1.05))
+        expected_height, expected_width = smart_resize(
+            frame_size,
+            frame_size,
+            factor=factor,
+            min_pixels=size["shortest_edge"],
+            max_pixels=max_pixels,
+        )
+        return (num_frames // 2) * (expected_height // 14) * (expected_width // 14)
+
+    def test_cap_pixels_per_frame_bounds_dense_videos(self):
+        # With the total budget binding, each frame is held to the budget's even share instead of
+        # the per-frame `longest_edge` cap. The budget is shrunk via `max_video_tokens` so the
+        # test does not need hundreds of frames to make the bound bind.
+        size = {"longest_edge": 768 * 28 * 28 * 100, "shortest_edge": 400}
+        for video_processing_class in self.video_processor_list:
+            uncapped = self._process_frames(video_processing_class, 8, size)
+            capped = self._process_frames(
+                video_processing_class, 8, size, cap_pixels_per_frame=True, max_video_tokens=128
+            )
+            self.assertEqual(capped.shape[0], self._expected_capped_seq_len(8, 256, size, total_seq_len=128))
+            self.assertLess(capped.shape[0], uncapped.shape[0])
+
+    def test_cap_pixels_per_frame_floors_at_min_pixels(self):
+        # When the budget's share drops below `1.05 * shortest_edge`, frames keep a usable
+        # resolution instead of collapsing further.
+        size = {"longest_edge": 768 * 28 * 28 * 100, "shortest_edge": 40000}
+        for video_processing_class in self.video_processor_list:
+            capped = self._process_frames(
+                video_processing_class, 8, size, cap_pixels_per_frame=True, max_video_tokens=128
+            )
+            self.assertEqual(capped.shape[0], self._expected_capped_seq_len(8, 256, size, total_seq_len=128))
+
+    def test_cap_pixels_per_frame_noop_when_not_binding(self):
+        # At the real budget a short clip never hits the total bound: capped and uncapped agree.
+        size = {"longest_edge": 768 * 28 * 28 * 100, "shortest_edge": 400}
+        for video_processing_class in self.video_processor_list:
+            uncapped = self._process_frames(video_processing_class, 8, size)
+            capped = self._process_frames(video_processing_class, 8, size, cap_pixels_per_frame=True)
+            self.assertEqual(list(capped.shape), list(uncapped.shape))
+
+    def test_cap_pixels_per_frame_call_time_override(self):
+        size = {"longest_edge": 768 * 28 * 28 * 100, "shortest_edge": 400}
+        for video_processing_class in self.video_processor_list:
+            video_processor_dict = self.video_processor_dict.copy()
+            video_processor_dict.pop("min_pixels", None)
+            video_processor_dict.pop("max_pixels", None)
+            video_processor_dict["size"] = size
+            video_processor_dict["do_sample_frames"] = False
+            video_processor_dict["max_video_tokens"] = 128
+            video_processing = video_processing_class(**video_processor_dict)
+            video = [np.random.randint(0, 256, (256, 256, 3), dtype=np.uint8) for _ in range(8)]
+
+            default_out = video_processing(video, return_tensors="pt")[self.input_name]
+            capped_out = video_processing(video, return_tensors="pt", cap_pixels_per_frame=True)[self.input_name]
+
+            self.assertEqual(capped_out.shape[0], self._expected_capped_seq_len(8, 256, size, total_seq_len=128))
+            self.assertLess(capped_out.shape[0], default_out.shape[0])
+
+    def test_cap_pixels_per_frame_unset_warns_and_false_is_silent(self):
+        from transformers.utils import logging as transformers_logging
+
+        logger = transformers_logging.get_logger("transformers.models.qwen2_vl.video_processing_qwen2_vl")
+        size = {"longest_edge": 768 * 28 * 28, "shortest_edge": 400}
+        for video_processing_class in self.video_processor_list:
+            logger.warning_once.cache_clear()
+            with self.assertLogs(logger.name, level="WARNING") as logs:
+                self._process_frames(video_processing_class, 2, size)
+            self.assertTrue(any("cap_pixels_per_frame" in line for line in logs.output))
+
+            logger.warning_once.cache_clear()
+            with self.assertNoLogs(logger.name, level="WARNING"):
+                self._process_frames(video_processing_class, 2, size, cap_pixels_per_frame=False)

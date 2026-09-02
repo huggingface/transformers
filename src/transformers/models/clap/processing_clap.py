@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,26 +16,14 @@ Audio/Text processor class for CLAP
 """
 
 from ...processing_utils import ProcessorMixin
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring
 class ClapProcessor(ProcessorMixin):
-    r"""
-    Constructs a CLAP processor which wraps a CLAP feature extractor and a RoBerta tokenizer into a single processor.
-
-    [`ClapProcessor`] offers all the functionalities of [`ClapFeatureExtractor`] and [`RobertaTokenizerFast`]. See the
-    [`~ClapProcessor.__call__`] and [`~ClapProcessor.decode`] for more information.
-
-    Args:
-        feature_extractor ([`ClapFeatureExtractor`]):
-            The audio processor is a required input.
-        tokenizer ([`RobertaTokenizerFast`]):
-            The tokenizer is a required input.
-    """
-
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
 

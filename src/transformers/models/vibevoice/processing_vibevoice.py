@@ -1,5 +1,4 @@
-# coding=utf-8
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,13 +13,13 @@
 # limitations under the License.
 
 import os
-from typing import Optional, Union
 
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import is_soundfile_available, is_torch_available, logging
+from ...utils import auto_docstring, is_soundfile_available, is_torch_available, logging
+from ...utils.import_utils import requires, requires_backends
 
 
 logger = logging.get_logger(__name__)
@@ -33,174 +32,133 @@ if is_soundfile_available():
     import soundfile as sf
 
 
+# trf-ignore: TRF019, `sampling_rate` is recommended by the feature extractor
 class VibeVoiceProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
-        "text_kwargs": {
-            "padding": True,
-            "padding_side": "left",
-            "add_special_tokens": False,
-            "return_attention_mask": True,
-        },
         "audio_kwargs": {
             "sampling_rate": 24000,
-            "padding": True,
-            "return_attention_mask": True,
-            "pad_to_multiple_of": 3200,  # acoustic_tokenizer.hop_length
         },
-        "common_kwargs": {"return_tensors": "pt"},
     }
 
 
+@requires(backends=("torch",))
+@auto_docstring
 class VibeVoiceProcessor(ProcessorMixin):
-    r"""
-    Constructs a VibeVoice processor which wraps [`VibeVoiceFeatureExtractor`] and
-    [`Qwen2TokenizerFast`] into a single processor that inherits both the audio feature extraction and
-    tokenizer functionalities.
+    valid_processor_kwargs = VibeVoiceProcessorKwargs
 
-    See the [`~VibeVoiceProcessor.__call__`] for more information.
-
-    Args:
-        feature_extractor (`VibeVoiceFeatureExtractor`):
-            The feature extractor for speech processing.
-        tokenizer (`Qwen2TokenizerFast`):
-            The tokenizer for text processing.
-        chat_template (`str`, *optional*):
-            A Jinja template which will be used to convert lists of messages in a chat into a tokenizable string.
-    """
-
-    feature_extractor_class = "VibeVoiceFeatureExtractor"
-    tokenizer_class = "Qwen2TokenizerFast"
-
-    def __init__(self, feature_extractor, tokenizer, chat_template=None):
+    def __init__(
+        self,
+        feature_extractor,
+        tokenizer,
+        chat_template=None,
+        audio_bos_token="<|vision_start|>",
+        audio_eos_token="<|vision_end|>",
+        audio_token="<|vision_pad|>",
+    ):
+        r"""
+        audio_bos_token (`str`, *optional*, defaults to `"<|vision_start|>"`):
+            The token used to indicate the beginning of audio generation.
+        audio_eos_token (`str`, *optional*, defaults to `"<|vision_end|>"`):
+            The token used to indicate the end of audio generation.
+        audio_token (`str`, *optional*, defaults to `"<|vision_pad|>"`):
+            The token used to indicate to continue generating audio.
+        """
+        self.audio_bos_token = audio_bos_token
+        self.audio_bos_token_id = (
+            tokenizer.audio_bos_token_id
+            if getattr(tokenizer, "audio_bos_token_id", None)
+            else tokenizer.convert_tokens_to_ids(audio_bos_token)
+        )
+        self.audio_eos_token = audio_eos_token
+        self.audio_eos_token_id = (
+            tokenizer.audio_eos_token_id
+            if getattr(tokenizer, "audio_eos_token_id", None)
+            else tokenizer.convert_tokens_to_ids(audio_eos_token)
+        )
+        self.audio_token = audio_token
+        self.audio_token_id = (
+            tokenizer.audio_token_id
+            if getattr(tokenizer, "audio_token_id", None)
+            else tokenizer.convert_tokens_to_ids(audio_token)
+        )
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
 
-        if not hasattr(tokenizer, "speech_start_token"):
-            self.speech_start_token = "<|vision_start|>"
-            self.speech_start_id = tokenizer.convert_tokens_to_ids(self.speech_start_token)
-        else:
-            self.speech_start_token = tokenizer.speech_start_token
-            self.speech_start_id = tokenizer.speech_start_id
+    def _process_audio(self, audio: AudioInput, **kwargs):
+        processed_audio = self.feature_extractor(audio, **kwargs)
+        pad_to_multiple_of = kwargs.get("pad_to_multiple_of") or self.feature_extractor.pad_to_multiple_of
+        self._num_audio_tokens = (
+            torch.ceil(processed_audio["padding_mask"].sum(dim=-1) / pad_to_multiple_of).int().tolist()
+        )
+        audio_replacements = [self.replace_audio_token(processed_audio, idx) for idx in range(len(audio))]
+        return processed_audio, audio_replacements
 
-        if not hasattr(tokenizer, "speech_end_token"):
-            self.speech_end_token = "<|vision_end|>"
-            self.speech_end_id = tokenizer.convert_tokens_to_ids(self.speech_end_token)
-        else:
-            self.speech_end_token = tokenizer.speech_end_token
-            self.speech_end_id = tokenizer.speech_end_id
+    def replace_audio_token(self, audio_inputs: dict, audio_idx: int) -> str:
+        return self.audio_token * self._num_audio_tokens[audio_idx]
 
-        if not hasattr(tokenizer, "speech_diffusion_token"):
-            self.speech_diffusion_token = "<|vision_pad|>"
-            self.speech_diffusion_id = tokenizer.convert_tokens_to_ids(self.speech_diffusion_token)
-        else:
-            self.speech_diffusion_token = tokenizer.speech_diffusion_token
-            self.speech_diffusion_id = tokenizer.speech_diffusion_id
-
+    @auto_docstring
     def __call__(
         self,
-        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]],
-        audio: Optional[AudioInput] = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput],
+        audio: AudioInput | None = None,
+        output_labels: bool | None = False,
         **kwargs: Unpack[VibeVoiceProcessorKwargs],
     ) -> BatchFeature:
         """
         Main method to process text inputs with optional voice samples.
 
         This method processes text inputs (typically prepared by apply_chat_template) and optional voice samples for
-        voice cloning. It expands speech diffusion tokens based on the actual audio length.
+        voice cloning. It expands audio diffusion tokens based on the actual audio length.
 
         Args:
             text (`str`, `List[str]`):
-                The input text(s) to process, typically prepared by apply_chat_template with speech token placeholders.
+                The input text(s) to process, typically prepared by apply_chat_template with audio token placeholders.
             audio (`List[Union[str, np.ndarray]]`, *optional*):
-                Audio samples for speaker voice cloning. Should match the number of speech token placeholders in text.
+                Audio samples for speaker voice cloning. Should match the number of audio token placeholders in text.
+            output_labels (bool, *optional*, default=False):
+                Whether to return labels for training.
             **kwargs:
                 Additional keyword arguments passed to the tokenizer and feature extractor.
 
         Returns:
-            `BatchFeature`: A BatchFeature with the following fields:
-                - **input_ids** -- Token ID sequences ready for the model
-                - **attention_mask** -- Attention masks for the sequences
-                - **input_features** -- Processed audio tensors (if audio provided)
-                - **input_features_mask** -- Masks for valid speech tokens (if audio provided)
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+            - **input_ids** -- List of token ids to be fed to the model.
+            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
+              `return_attention_mask=True`).
+            - **input_values** -- List of audio values to be fed to the model. Returned when `audio` is not `None`.
+            - **padding_mask** -- List of indices specifying which audio frames should be attended to by the model.
+              Returned when `audio` is not `None`.
+            - **labels** -- Labels for language model training. Padding and audio diffusion tokens are masked with
+              -100 (audio diffusion token embeddings are replaced by audio features, so their token identity is not a
+              meaningful target). Audio bos/eos and text eos tokens are kept as targets so the LM learns when to start
+              and stop generating audio. Returned when `output_labels=True`.
+            - **acoustic_loss_mask** -- Boolean mask for positions where diffusion loss is computed. True at audio
+              diffusion token positions. Returned when `output_labels=True`.
         """
-        output_kwargs = self._merge_kwargs(
-            VibeVoiceProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
-
-        text_kwargs = output_kwargs["text_kwargs"]
-        audio_kwargs = output_kwargs["audio_kwargs"]
-        return_tensors = text_kwargs.get("return_tensors", None)
-        if return_tensors != "pt":
+        if "return_tensors" in kwargs and kwargs["return_tensors"] != "pt":
             raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
 
-        if isinstance(text, str):
-            text = [text]
-        elif not isinstance(text, (list, tuple)):
-            raise ValueError("text input must be a string or list of strings")
-        n_audio_in_text = [sample.count(self.speech_diffusion_token) for sample in text]
+        data = super().__call__(text=text, audio=audio, **kwargs)
+        if output_labels:
+            labels = data["input_ids"].clone()
+            # NOTE: mask padding through the attention mask, as the padding and EOS token share the same ID
+            if "attention_mask" in data:
+                labels[data["attention_mask"] == 0] = -100
+            # Mask audio diffusion tokens: their embeddings are replaced by audio features, so their token identity
+            # is not a meaningful target. Audio bos/eos tokens are kept so the LM learns when to start/stop audio.
+            labels[labels == self.audio_token_id] = -100
+            data["labels"] = labels
+            # For diffusion loss
+            acoustic_loss_mask = torch.zeros_like(data["input_ids"], dtype=torch.bool)
+            if audio is not None:
+                acoustic_loss_mask[data["input_ids"] == self.audio_token_id] = True
+            data["acoustic_loss_mask"] = acoustic_loss_mask
 
-        n_audio = 0
-        if audio is not None:
-            audio = make_list_of_audio(audio)
-            n_audio = len(audio)
-
-        if sum(n_audio_in_text) > 0 and n_audio != sum(n_audio_in_text):
-            if audio is None:
-                raise ValueError("No audio were provided, but there are audio tokens in the prompt")
-            else:
-                raise ValueError(
-                    f"The number of audio tokens in each text ({n_audio_in_text}) should be the same as the "
-                    f"number of provided audios ({n_audio})."
-                )
-
-        data = {}
-        if audio is not None:
-            audio = make_list_of_audio(audio)
-            data = self.feature_extractor(audio, **audio_kwargs)
-
-            # Create mask for audio tokenizer based on compression ratio
-            padding_masks = data["input_features_mask"]
-            speech_tok_compress_ratio = int(audio_kwargs["pad_to_multiple_of"])
-            num_audio_tokens_list = torch.ceil(padding_masks.sum(dim=-1) / speech_tok_compress_ratio).int().tolist()
-            input_features_mask = torch.zeros((len(padding_masks), max(num_audio_tokens_list)), dtype=torch.bool)
-            for i, seq_len in enumerate(num_audio_tokens_list):
-                input_features_mask[i, :seq_len] = True
-            data["input_features_mask"] = input_features_mask
-
-            # expand the text to repeat the audio token for the corresponding number of frames
-            num_audio_tokens_list_copy = num_audio_tokens_list.copy()
-            expanded_text = []
-            for sample in text:
-                replace_str = []
-                while self.speech_diffusion_token in sample:
-                    num_speech_tokens = num_audio_tokens_list_copy.pop(0)
-                    expanded_speech_token = self.speech_diffusion_token * num_speech_tokens
-
-                    replace_str.append(expanded_speech_token)
-                    sample = sample.replace(self.speech_diffusion_token, "<placeholder>", 1)
-
-                while "<placeholder>" in sample:
-                    sample = sample.replace("<placeholder>", replace_str.pop(0), 1)
-                expanded_text.append(sample)
-
-            text = expanded_text
-
-        encoding = self.tokenizer(text, **text_kwargs)
-        data.update(encoding)
-
-        return BatchFeature(data=data, tensor_type=return_tensors)
-
-    @property
-    def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names
-        feature_extractor_input_names = self.feature_extractor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + feature_extractor_input_names))
+        return data
 
     def save_audio(
         self,
         audio: AudioInput,
-        output_path: Optional[str] = None,
+        output_path: str | None = None,
     ) -> list[str]:
         """
         Save audio data to WAV file(s).
@@ -213,10 +171,8 @@ class VibeVoiceProcessor(ProcessorMixin):
         Returns:
             List[str]: Paths to the saved audio files.
         """
-        sampling_rate = self.feature_extractor.sampling_rate
 
-        if not is_soundfile_available():
-            raise ImportError("Please install `soundfile` to save audio files.")
+        requires_backends(self, ["soundfile"])
 
         audio = make_list_of_audio(audio)
         for idx, item in enumerate(audio):
@@ -225,7 +181,7 @@ class VibeVoiceProcessor(ProcessorMixin):
         if len(audio) == 1:
             if output_path is None:
                 output_path = "vibevoice_output.wav"
-            sf.write(output_path, audio[0], sampling_rate)
+            sf.write(output_path, audio[0], self.feature_extractor.sampling_rate)
             return [output_path]
         else:
             if output_path is None:
@@ -234,7 +190,7 @@ class VibeVoiceProcessor(ProcessorMixin):
             saved_paths = []
             for i, audio_array in enumerate(audio):
                 file_path = os.path.join(output_path, f"audio_{i}.wav")
-                sf.write(file_path, audio_array, sampling_rate)
+                sf.write(file_path, audio_array, self.feature_extractor.sampling_rate)
                 saved_paths.append(file_path)
         return saved_paths
 
