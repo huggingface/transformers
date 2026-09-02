@@ -466,7 +466,7 @@ class FSMTModelIntegrationTests(unittest.TestCase):
     @slow
     def test_inference_no_head(self):
         tokenizer = self.default_tokenizer
-        model = FSMTModel.from_pretrained(self.default_mname).to(torch_device)
+        model = FSMTModel.from_pretrained(self.default_mname, use_safetensors=False).to(torch_device)
 
         src_text = "My friend computer will translate this for me"
         input_ids = tokenizer([src_text], return_tensors="pt")["input_ids"]
