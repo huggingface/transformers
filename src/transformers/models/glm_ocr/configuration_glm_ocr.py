@@ -68,6 +68,11 @@ class GlmOcrVisionConfig(PreTrainedConfig):
     initializer_range: float = 0.02
     rope_parameters: dict | None = None
 
+    def __post_init__(self, **kwargs):
+        if self.rope_parameters is None:
+            self.rope_parameters = {"rope_type": "axial", "rope_theta": self.default_theta}
+        super().__post_init__(**kwargs)
+
 
 @auto_docstring(checkpoint="zai-org/GLM-OCR")
 @strict
