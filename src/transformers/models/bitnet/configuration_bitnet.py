@@ -26,7 +26,7 @@ class BitNetConfig(PreTrainedConfig):
     Args:
         use_sub_norms (`bool`, *optional*, defaults to `True`):
             Whether or not to use sub-norms (RMSNorm) in the MLP and Attention blocks. Set to `False` for Weight-Quant-Only checkpoints.
-            
+
     ```python
     >>> from transformers import BitNetModel, BitNetConfig
 

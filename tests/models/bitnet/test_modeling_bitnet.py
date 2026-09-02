@@ -173,6 +173,7 @@ class BitNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         self.assertIsInstance(model.layers[0].mlp.ffn_sub_norm, torch.nn.Identity)
         self.assertIsInstance(model.layers[0].self_attn.attn_sub_norm, torch.nn.Identity)
 
+
 @require_torch
 class BitNetIntegrationTest(unittest.TestCase):
     @slow
