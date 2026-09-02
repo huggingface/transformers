@@ -172,6 +172,7 @@ class NeuCodecFeatureExtractor(SequenceFeatureExtractor):
         # "valid_len" trimming or symmetric hop-sized padding: https://github.com/neuphonic/neucodec/blob/ed3e6cd1bdc374ce14a21355e5eee66a777149ce/neucodec/model.py#L128
         # Padded per-sample (not via the batch-collated `padded_audio`): the CMVN normalization below is computed
         # over the whole padded signal, so batch-padding a short sample to the batch's longest would skew it.
+        # TODO (ebezzam): can batch processing be done without regression from expected outputs?
         mel_features = []
         for i in range(batch_size):
             single_padded_audio = self.acoustic_encoder_padder.pad(

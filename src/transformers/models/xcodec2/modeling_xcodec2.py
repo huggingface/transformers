@@ -762,8 +762,7 @@ class Xcodec2ISTFTHead(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         stft_pred = self.linear(hidden_states)
-        # Keep the frequency axis last: `torch.polar`'s meta kernel always reports a contiguous
-        # output, so a transposed input makes torch.compile fail an output stride assert
+        # Keep the frequency axis last for `torch.polar` compatibility with torch.compile
         magnitude, phase = stft_pred.chunk(2, dim=-1)
         # Cast to float32: complex exponential and irfft are not supported for fp16 (ComplexHalf)
         magnitude = magnitude.float()
