@@ -19,10 +19,9 @@ import tempfile
 import unittest
 
 from huggingface_hub.errors import StrictDataclassClassValidationError
-from parameterized import parameterized
 
 from transformers import is_torch_available
-from transformers.testing_utils import is_fsdp_test, require_torch, require_torch_greater_or_equal, torch_device
+from transformers.testing_utils import require_torch, torch_device
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...test_modeling_common import floats_tensor
@@ -348,6 +347,7 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
                 do_sample=False,
             )
         torch.testing.assert_close(actual, expected[:, input_ids.shape[1] :])
+
 
 class Qwen4ExpVisionText2TextModelTester(VLMModelTester):
     base_model_class = Qwen4ExpModel
