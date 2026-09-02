@@ -145,6 +145,7 @@ class EomtDinov3LayerScale(DINOv3ViTLayerScale):
     pass
 
 
+# FIXME: this is simple axial rope, too much hassle to refactor - maybe some contrib stumbles upon it :)
 class EomtDinov3RotaryEmbedding(DINOv3ViTRopePositionEmbedding):
     inv_freq: Tensor
 

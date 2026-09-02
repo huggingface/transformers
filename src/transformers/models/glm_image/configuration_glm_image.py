@@ -75,10 +75,9 @@ class GlmImageVisionConfig(PreTrainedConfig):
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-06
 
-    def __post_init__(self, **kwargs):
-        if self.rope_parameters is None:
-            self.rope_parameters = {"rope_type": "axial", "rope_theta": self.default_theta}
-        super().__post_init__(**kwargs)
+    def standardize_rope_params(self):
+        if self.rope_parameters.get("rope_type") in ["default", None]:
+            self.rope_parameters["rope_type"] = "axial"
 
 
 @auto_docstring(checkpoint="zai-org/GLM-Image")

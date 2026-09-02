@@ -286,10 +286,9 @@ class Qwen4ExpVisionConfig(PreTrainedConfig):
     rope_parameters: dict | None = None
     base_model_fsdp_plan = None
 
-    def __post_init__(self, **kwargs):
-        if self.rope_parameters is None:
-            self.rope_parameters = {"rope_type": "axial", "rope_theta": self.default_theta}
-        super().__post_init__(**kwargs)
+    def standardize_rope_params(self):
+        if self.rope_parameters.get("rope_type") in ["default", None]:
+            self.rope_parameters["rope_type"] = "axial"
 
 
 @auto_docstring(checkpoint="Qwen/Qwen4-Exp")

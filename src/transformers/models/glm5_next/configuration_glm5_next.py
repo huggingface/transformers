@@ -263,10 +263,9 @@ class Glm5NextVisionConfig(PreTrainedConfig):
     projection_intermediate_size: int = 10240
     swiglu_limit: float = 10.0
 
-    def __post_init__(self, **kwargs):
-        if self.rope_parameters is None:
-            self.rope_parameters = {"rope_type": "axial", "rope_theta": self.default_theta}
-        super().__post_init__(**kwargs)
+    def standardize_rope_params(self):
+        if self.rope_parameters.get("rope_type") in ["default", None]:
+            self.rope_parameters["rope_type"] = "axial"
 
 
 @auto_docstring(checkpoint="zai-org/GLM-5.3-Flash")

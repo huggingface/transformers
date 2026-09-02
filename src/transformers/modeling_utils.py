@@ -2426,10 +2426,13 @@ class PreTrainedModel(
         # This matches all the usual RotaryEmbeddings modules
         elif "RotaryEmbedding" in module.__class__.__name__ and hasattr(module, "original_inv_freq"):
             rope_fn = (
-                ROPE_INIT_FUNCTIONS[module.rope_type]
+                module.compute_axial_rope_parameters
+                if module.rope_type == "axial"
+                else ROPE_INIT_FUNCTIONS[module.rope_type]
                 if module.rope_type != "default"
                 else module.compute_default_rope_parameters
             )
+
             buffer_value, _ = rope_fn(module.config)
             init.copy_(module.inv_freq, buffer_value)
             init.copy_(module.original_inv_freq, buffer_value)

@@ -93,10 +93,9 @@ class Qwen2_5_VLVisionConfig(PreTrainedConfig):
     initializer_range: float = 0.02
     rope_parameters: dict | None = None
 
-    def __post_init__(self, **kwargs):
-        if self.rope_parameters is None:
-            self.rope_parameters = {"rope_type": "axial", "rope_theta": self.default_theta}
-        super().__post_init__(**kwargs)
+    def standardize_rope_params(self):
+        if self.rope_parameters.get("rope_type") in ["default", None]:
+            self.rope_parameters["rope_type"] = "axial"
 
 
 class Qwen2_5_VLTextConfig(Qwen2VLTextConfig):
@@ -130,9 +129,8 @@ class Qwen2_5_VisionPatchEmbed(PatchEmbed):
 
 
 class Qwen2_5_VLVisionRotaryEmbedding(Qwen2VLVisionRotaryEmbedding):
-    # override: this model uses standard config names (`hidden_size`)
-    # as opposed to qwen2-vl which uses `embed_dim`
-    def compute_default_rope_parameters(
+    # override: this model uses standard config names (`hidden_size`) opposed to `embed_dim`
+    def compute_axial_rope_parameters(
         config: Qwen2_5_VLVisionConfig, device=None, **kwargs
     ) -> tuple[torch.Tensor, float]:
         """

@@ -1456,10 +1456,10 @@ class Qwen2_5OmniVisionRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
     def __init__(self, config: Qwen2_5OmniVisionEncoderConfig, device=None):
         super().__init__(config, device=device)
 
-    def compute_default_rope_parameters(
+    def compute_axial_rope_parameters(
         config: Qwen2_5OmniVisionEncoderConfig, device=None, **kwargs
     ) -> tuple[torch.Tensor, float]:
-        return super().compute_default_rope_parameters(config, device=device, *kwargs)
+        return super().compute_axial_rope_parameters(config, device=device, *kwargs)
 
 
 class Qwen2_5OmniVisionAttention(nn.Module):

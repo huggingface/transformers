@@ -160,7 +160,7 @@ class CohereCompassProcessor(Qwen3VLProcessor):
         self.vision_end_token = "<|VISION_END|>"
 
 
-# Same as Qwen3VL with layer-types
+# Same mrope interleaving pattern as Qwen3VL but this model has layer-types
 class CohereCompassRotaryEmbedding(Gemma3RotaryEmbedding):
     def __init__(self, config: CohereCompassTextConfig, device=None):
         nn.Module.__init__()

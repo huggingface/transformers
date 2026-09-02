@@ -781,18 +781,16 @@ class Gemma4VisionRotaryEmbedding(Sam3ViTRotaryEmbedding):
     def __init__(self, config: Gemma4VisionConfig, device=None):
         super().__init__(config, device)
 
-    def compute_default_rope_parameters(
-        config: Gemma4VisionConfig, device=None, **kwargs
-    ) -> tuple[torch.Tensor, float]:
-        return super().compute_default_rope_parameters(config, device, **kwargs)
+    def compute_axial_rope_parameters(config: Gemma4VisionConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
+        return super().compute_axial_rope_parameters(config, device, **kwargs)
 
     def forward(self, x, position_ids):
         inv_freq_expanded = self.inv_freq[None, ...].float()
-        position_ids = position_ids[..., None].float()
+        position_ids_expanded = position_ids[..., None].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = position_ids @ inv_freq_expanded
+            freqs = position_ids_expanded @ inv_freq_expanded
             cos = freqs.cos() * self.attention_scaling
             sin = freqs.sin() * self.attention_scaling
 
