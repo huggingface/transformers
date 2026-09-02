@@ -45,10 +45,10 @@ from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..masking_utils import create_masks_for_generate
 from ..tokenization_python import ExtensionsTrie
 from ..utils import (
-    is_tracing,
     ModelOutput,
     TransformersKwargs,
     is_accelerate_available,
+    is_tracing,
     logging,
 )
 from ..utils.generic import is_flash_attention_requested
