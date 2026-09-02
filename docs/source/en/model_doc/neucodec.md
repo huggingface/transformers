@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was published in HF papers on 2025-09-11 and contributed to Hugging Face Transformers on 2026-09-01.*
+*This model was published in HF papers on 2025-09-11 and contributed to Hugging Face Transformers on 2026-09-02.*
 
 # NeuCodec
 
@@ -27,7 +27,7 @@ The NeuCodec model was proposed in [Finite Scalar Quantization Enables Redundant
 
 NeuCodec is a neural audio codec extending on XCodec2. It takes advantage of the following features:
 
-- FSQ quantisation resulting in a **single codebook**, making it ideal for downstream modeling with Speech Language Models.
+- Finite Scalar Quantization (FSQ) quantisation resulting in a **single codebook**, making it ideal for downstream modeling with Speech Language Models.
 - Trained with CC data such that there are **no Non-Commercial data restrictions**.
 - At 50 tokens/sec and 16 bits per token, the overall bit-rate is **0.8kbps**.
 - The codec takes in 16kHz input and outputs **24kHz** using an **upsampling decoder**.

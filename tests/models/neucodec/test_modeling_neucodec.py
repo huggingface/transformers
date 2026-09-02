@@ -152,7 +152,8 @@ class NeuCodecModelTest(ModelTesterMixin, unittest.TestCase):
     additional_model_inputs = ["input_features", "input_features_mask"]
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
-        # model does not support returning hidden states
+        # `forward` takes no `output_attentions` / `output_hidden_states` (see the skips below), so drop them
+        # from the inputs the common tests inject
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
         if "output_attentions" in inputs_dict:
             inputs_dict.pop("output_attentions")
@@ -194,15 +195,20 @@ class NeuCodecModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip("NeuCodecModel does not have the usual `attention` logic")
+    # The three tests below need `output_attentions` / `output_hidden_states`, which a codec does not expose:
+    # `forward`, `encode` and `decode` take no such argument and `NeuCodecOutput` only carries `audio_values`,
+    # `audio_codes`, `latents` and `audio_codes_mask`. The inner Wav2Vec2-Bert semantic encoder and the decoder
+    # transformer do run real attention (so the sdpa/eager tests below still apply), but their intermediate
+    # states are not part of the codec's public output. Same as Dac/Encodec/Mimi/Xcodec2.
+    @unittest.skip(reason="NeuCodecOutput exposes neither `hidden_states` nor `attentions` to retain grads on")
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    @unittest.skip(reason="NeuCodecModel does not have the usual `attention` logic")
+    @unittest.skip(reason="NeuCodecModel takes no `output_attentions`; NeuCodecOutput has no `attentions`")
     def test_attention_outputs(self):
         pass
 
-    @unittest.skip(reason="NeuCodecModel does not have the usual `hidden_states` logic")
+    @unittest.skip(reason="NeuCodecModel takes no `output_hidden_states`; NeuCodecOutput has no `hidden_states`")
     def test_hidden_states_output(self):
         pass
 

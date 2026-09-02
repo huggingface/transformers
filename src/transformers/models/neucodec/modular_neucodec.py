@@ -124,6 +124,7 @@ class NeuCodecModel(Xcodec2Model):
         # (24kHz) domain. The mask arithmetic in `encode()` operates on `input_values` in the encoder's (16kHz)
         # domain, so it must use the un-rescaled hop length instead.
         self.hop_length = config.encoder_hop_length
+        self.sample_rate_conversion_factor = config.output_sampling_rate / config.input_sampling_rate
 
     @auto_docstring
     @can_return_tuple
@@ -176,6 +177,7 @@ class NeuCodecModel(Xcodec2Model):
         audio_codes_mask = None
         if padding_mask is not None:
             audio_length = padding_mask.sum(dim=-1, keepdim=True)
+            audio_length = audio_length * self.sample_rate_conversion_factor
             token_length = audio_length // self.hop_length
             idx = torch.arange(audio_codes.shape[-1], device=padding_mask.device).view(1, -1)
             audio_codes_mask = (idx < token_length).to(padding_mask.dtype)
@@ -212,13 +214,12 @@ class NeuCodecModel(Xcodec2Model):
         else:
             latents = latents.transpose(1, 2)
 
-        attention_mask = None
-        if audio_codes_mask is not None:
-            attention_mask = create_bidirectional_mask(
-                config=self.config,
-                inputs_embeds=latents,
-                attention_mask=audio_codes_mask,
-            )
+        # Difference to xcodec2 is the additional mask
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=latents,
+            attention_mask=audio_codes_mask,
+        )
 
         recon_audio = self.acoustic_decoder(latents, attention_mask=attention_mask, **kwargs)
         return NeuCodecDecoderOutput(audio_values=recon_audio)
@@ -267,7 +268,7 @@ class NeuCodecModel(Xcodec2Model):
         ```"""
         # NeuCodec's decoder outputs audio at `output_sampling_rate`, which differs from the `input_sampling_rate` of
         input_length = input_values.shape[-1]
-        output_length = int(input_length * self.config.output_sampling_rate / self.config.input_sampling_rate)
+        output_length = int(input_length * self.sample_rate_conversion_factor)
 
         encoder_outputs = self.encode(
             input_values,

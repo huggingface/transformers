@@ -18,7 +18,7 @@ import tempfile
 
 import torch
 import torch.nn as nn
-from huggingface_hub import create_branch, upload_folder
+from huggingface_hub import create_branch, hf_hub_download, upload_folder
 
 from transformers import (
     AutoConfig,
@@ -33,6 +33,11 @@ from transformers import (
 
 logging.set_verbosity_info()
 logger = logging.get_logger("transformers.models.neucodec")
+
+# The original checkpoint lives in a gated repo, so it has to be downloaded through an authenticated
+# `hf_hub_download` (run `hf auth login` first) rather than a plain HTTP request.
+ORIGINAL_REPO_ID = "neuphonic/neucodec"
+ORIGINAL_CHECKPOINT_FILENAME = "pytorch_model.bin"
 
 # Original key names: https://github.com/neuphonic/neucodec/blob/main/neucodec/model.py
 # NeuCodec forked its module naming directly from xcodec2 (https://huggingface.co/HKUSTAudio/xcodec2), so the
@@ -161,10 +166,8 @@ def convert_state_dict(state_dict, hf_model):
 
     state_dict = new_state_dict
 
-    # Filter out non-persistent buffers (recomputed in _init_weights), unused semantic encoder layers (original
-    # has 24 layers, we only use 16), and stale plain `.weight` entries left over for weight-normalized conv
-    # layers whose checkpoint also contains the `weight_g`/`weight_v` reparametrization (the `.weight` there is a
-    # redundant cached value, not a real parameter to load).
+    # Like Xcodec2 LFilter out non-persistent buffers (recomputed in _init_weights) and
+    # unused semantic encoder layers (original has 24 layers, we only use 16)
     num_semantic_layers = hf_model.config.semantic_model_config.num_hidden_layers
     state_dict = {
         k: v
@@ -173,9 +176,6 @@ def convert_state_dict(state_dict, hf_model):
             k.endswith("upsample.filter")
             or k.endswith("downsample.filter")
             or k.endswith(".window")
-            or k.endswith(".levels")
-            or k.endswith(".basis")
-            or k.endswith(".codebook")
             or _is_unused_semantic_layer(k, num_semantic_layers)
             or (k.endswith(".weight") and f"{k}_g" in state_dict)
         )
@@ -240,7 +240,7 @@ def remove_weight_norm(model):
 
 @torch.no_grad()
 def convert_checkpoint(
-    checkpoint_path,
+    checkpoint_path=None,
     pytorch_dump_folder_path=None,
     repo_id=None,
     repo_subfolder=None,
@@ -262,6 +262,8 @@ def convert_checkpoint(
     torch_device = "cuda"
     model = NeuCodecModel(config).to(torch_device).eval()
 
+    if checkpoint_path is None:
+        checkpoint_path = hf_hub_download(repo_id=ORIGINAL_REPO_ID, filename=ORIGINAL_CHECKPOINT_FILENAME)
     original_checkpoint = torch.load(checkpoint_path, map_location="cpu")
     # Unlike xcodec2, NeuCodec's `pytorch_model.bin` does not bundle semantic-encoder weights: at load time the
     # reference implementation always fetches a frozen `facebook/w2v-bert-2.0` from the Hub instead
@@ -316,26 +318,31 @@ instead of 16kHz (hop_length=320). See https://huggingface.co/neuphonic/neucodec
 
 Conversion example usage:
 ```
-# download model weights
-wget https://huggingface.co/neuphonic/neucodec/resolve/main/pytorch_model.bin -P /raid/eric/neucodec_original
+# `neuphonic/neucodec` is gated, so log in first (the original weights are downloaded automatically unless
+# `--checkpoint_path` points at a local copy)
+hf auth login
 
 # run conversion, first pushing to a test branch to sanity-check the result before touching `main`
 python src/transformers/models/neucodec/convert_neucodec_checkpoint.py \
-    --checkpoint_path /raid/eric/neucodec_original/pytorch_model.bin \
     --push_to_hub neuphonic/neucodec \
     --revision test-hf-conversion
 
 # once verified, push to the repo root on `main` (config.json / model.safetensors sit alongside the existing
 # pytorch_model.bin / meta.yaml without conflict, see `--repo_subfolder` for isolating them in a subfolder instead)
 python src/transformers/models/neucodec/convert_neucodec_checkpoint.py \
-    --checkpoint_path /raid/eric/neucodec_original/pytorch_model.bin \
     --push_to_hub neuphonic/neucodec
 ```
 
 """
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--checkpoint_path", required=True, default=None, type=str, help="Path to original checkpoint")
+    parser.add_argument(
+        "--checkpoint_path",
+        default=None,
+        type=str,
+        help=f"Path to a local copy of the original checkpoint. If unset, `{ORIGINAL_CHECKPOINT_FILENAME}` is "
+        f"downloaded from `{ORIGINAL_REPO_ID}` (a gated repo, so run `hf auth login` first).",
+    )
     parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
     parser.add_argument(
         "--push_to_hub", default=None, type=str, help="Where to upload the converted model on the 🤗 hub."
