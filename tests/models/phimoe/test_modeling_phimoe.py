@@ -21,9 +21,7 @@ from parameterized import parameterized
 
 from transformers import StaticCache, is_torch_available
 from transformers.testing_utils import (
-    backend_device_count,
     cleanup,
-    get_accelerator_total_memory_gib,
     require_torch,
     slow,
     torch_device,
@@ -137,14 +135,21 @@ class PhimoeIntegrationTest(unittest.TestCase):
             # preserved, but passed as `max_memory` instead of by capping what psutil reports:
             # `patch_psutil_cpu_memory` takes `min(mem.total, limit)`, so a 240 GiB "cap" was inert
             # on this runner, and a CPU-side budget cannot create accelerator headroom anyway.
-            num_accelerators = backend_device_count(torch_device) if torch_device is not None else 0
-            total_accelerator_memory = get_accelerator_total_memory_gib()
-            max_memory = None
-            if num_accelerators > 0 and total_accelerator_memory > 0:
-                per_accelerator = 0.8 * total_accelerator_memory / num_accelerators
-                budget = f"{per_accelerator:.2f}GiB"
-                max_memory = dict.fromkeys(range(num_accelerators), budget)
-                max_memory["cpu"] = f"{60 * num_accelerators}GiB"
+            # Read each device directly rather than via
+            # `get_accelerator_total_memory_gib()`: that helper returns 0.0 whenever
+            # `torch_device` is not exactly "cuda"/"xpu", and a budget guarded on
+            # `> 0` then falls through to `max_memory=None` — which is no budget at
+            # all. Measured on this runner: that revision verified `not_fixed` with
+            # 20.24 GiB allocated on GPU 0, i.e. above the cap it thought it had set,
+            # failing on the same `Concatenate` for `layers.15.mlp.experts.gate_up_proj`.
+            # A fallback that silently disables the fix is how the original bug
+            # survived `cap_psutil_cpu_memory` in the first place.
+            if not torch.cuda.is_available() or torch.cuda.device_count() == 0:
+                raise unittest.SkipTest("phimoe integration test needs an accelerator")
+            n = torch.cuda.device_count()
+            per_device = int(min(torch.cuda.get_device_properties(i).total_memory for i in range(n)) * 0.85 / 1024**3)
+            max_memory = dict.fromkeys(range(n), f"{per_device}GiB")
+            max_memory["cpu"] = "60GiB"
             cls.model = PhimoeForCausalLM.from_pretrained(
                 "microsoft/Phi-3.5-MoE-instruct",
                 experts_implementation="eager",
