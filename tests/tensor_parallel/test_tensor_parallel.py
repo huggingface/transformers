@@ -27,9 +27,9 @@ from transformers.distributed.tensor_parallel import (
     ColwiseParallel,
     PackedColwiseParallel,
     PackedRowwiseParallel,
-    ReplicateKVHeadsParallel,
     RowwiseParallel,
-    get_kv_replication_factor,
+    ShardUnitsParallel,
+    get_shard_replication_factor,
 )
 from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test
 
@@ -229,49 +229,49 @@ class TestTensorParallelLayer(TestCasePlus):
         self.assertIn("lm_head", str(context.exception))
         self.assertIn("divisible", str(context.exception))
 
-    def test_get_kv_replication_factor(self):
-        self.assertEqual(get_kv_replication_factor(2, 4), 2)
-        self.assertEqual(get_kv_replication_factor(1, 4), 4)
-        self.assertEqual(get_kv_replication_factor(8, 4), 1)
-        self.assertEqual(get_kv_replication_factor(2, 1), 1)
+    def test_get_shard_replication_factor(self):
+        self.assertEqual(get_shard_replication_factor(2, 4), 2)
+        self.assertEqual(get_shard_replication_factor(1, 4), 4)
+        self.assertEqual(get_shard_replication_factor(8, 4), 1)
+        self.assertEqual(get_shard_replication_factor(2, 1), 1)
         with self.assertRaises(ValueError):
-            get_kv_replication_factor(3, 4)
+            get_shard_replication_factor(3, 4)
 
     def test_replicate_kv_heads_local_shape(self):
         # 2 KV heads of size 8, sharded over 4 ranks -> each head is replicated twice
         world_size, num_key_value_heads, head_dim = 4, 2, 8
         module = torch.nn.Linear(32, num_key_value_heads * head_dim, bias=False)
-        module._hf_num_key_value_heads = num_key_value_heads
+        module._tp_shard_units = num_key_value_heads
         mesh = self.MockDeviceMesh(world_size=world_size, rank=0)
 
         with patch.object(tensor_parallel.DTensor, "from_local", side_effect=lambda tensor, *a, **kw: tensor):
-            ReplicateKVHeadsParallel().shard_param(module, "weight", mesh)
+            ShardUnitsParallel().shard_param(module, "weight", mesh)
 
         self.assertEqual(tuple(module.weight.shape), (head_dim, 32))
-        self.assertEqual(module._hf_kv_replication, world_size // num_key_value_heads)
+        self.assertEqual(module._tp_shard_replication, world_size // num_key_value_heads)
 
     def test_replicate_kv_heads_falls_back_to_colwise(self):
         # 4 KV heads over 2 ranks: no replication needed, plain colwise sharding
         world_size, num_key_value_heads, head_dim = 2, 4, 8
         module = torch.nn.Linear(32, num_key_value_heads * head_dim, bias=False)
-        module._hf_num_key_value_heads = num_key_value_heads
+        module._tp_shard_units = num_key_value_heads
         mesh = self.MockDeviceMesh(world_size=world_size, rank=0)
 
-        placements = self._get_parameter_placements(module, ReplicateKVHeadsParallel(), mesh=mesh)
+        placements = self._get_parameter_placements(module, ShardUnitsParallel(), mesh=mesh)
 
         self.assertEqual(placements["weight"], Shard(0))
-        self.assertFalse(hasattr(module, "_hf_kv_replication"))
+        self.assertFalse(hasattr(module, "_tp_shard_replication"))
 
     def test_replicate_kv_heads_all_reduces_gradients_within_the_replication_group(self):
         module = torch.nn.Linear(4, 8, bias=False)
-        module._hf_kv_replication = 2
+        module._tp_shard_replication = 2
         module.weight.grad = torch.ones_like(module.weight)
         mesh = self.MockDeviceMesh(world_size=4, rank=0)
         group = object()
         all_reduced = []
 
-        with patch.object(ReplicateKVHeadsParallel, "_get_replication_group", return_value=group):
-            ReplicateKVHeadsParallel().install_forward(module, mesh)
+        with patch.object(ShardUnitsParallel, "_get_replication_group", return_value=group):
+            ShardUnitsParallel().install_forward(module, mesh)
 
         self.assertEqual(len(module._backward_hooks), 1)
         with patch.object(
@@ -284,21 +284,21 @@ class TestTensorParallelLayer(TestCasePlus):
         module = torch.nn.Linear(4, 8, bias=False)
         mesh = self.MockDeviceMesh(world_size=4, rank=0)
 
-        ReplicateKVHeadsParallel().install_forward(module, mesh)
+        ShardUnitsParallel().install_forward(module, mesh)
 
         self.assertEqual(len(module._backward_hooks), 0)
 
     def test_kv_replication_groups_follow_the_tp_dimension(self):
         mesh_1d = SimpleNamespace(mesh=torch.arange(4), ndim=1, mesh_dim_names=("tp",))
-        self.assertEqual(ReplicateKVHeadsParallel._tp_rows(mesh_1d), ((0, 1, 2, 3),))
+        self.assertEqual(ShardUnitsParallel._tp_rows(mesh_1d), ((0, 1, 2, 3),))
 
         # (dp=2, tp=4): KV heads are replicated within a TP group, so each DP rank gets its own groups
         mesh_2d = SimpleNamespace(mesh=torch.arange(8).reshape(2, 4), ndim=2, mesh_dim_names=("dp", "tp"))
-        self.assertEqual(ReplicateKVHeadsParallel._tp_rows(mesh_2d), ((0, 1, 2, 3), (4, 5, 6, 7)))
+        self.assertEqual(ShardUnitsParallel._tp_rows(mesh_2d), ((0, 1, 2, 3), (4, 5, 6, 7)))
 
         # `tp` is not necessarily the last mesh dimension
         mesh_tp_first = SimpleNamespace(mesh=torch.arange(8).reshape(4, 2), ndim=2, mesh_dim_names=("tp", "dp"))
-        self.assertEqual(ReplicateKVHeadsParallel._tp_rows(mesh_tp_first), ((0, 2, 4, 6), (1, 3, 5, 7)))
+        self.assertEqual(ShardUnitsParallel._tp_rows(mesh_tp_first), ((0, 2, 4, 6), (1, 3, 5, 7)))
 
     def test_kv_replication_reads_the_replicated_head_from_the_checkpoint(self):
         world_size, num_key_value_heads, head_dim = 4, 2, 8
@@ -335,13 +335,13 @@ class TestTensorParallelLayer(TestCasePlus):
             "layers.*.self_attn.v_proj": "colwise",
         }
 
-        updated_plan = tensor_parallel._maybe_enable_kv_head_replication(model, tp_plan, tp_size=4)
+        updated_plan = tensor_parallel._declare_attention_shard_units(model, tp_plan, tp_size=4)
 
-        self.assertEqual(updated_plan["layers.*.self_attn.k_proj"], "colwise_replicate_kv")
-        self.assertEqual(updated_plan["layers.*.self_attn.v_proj"], "colwise_replicate_kv")
+        self.assertEqual(updated_plan["layers.*.self_attn.k_proj"], "colwise_units")
+        self.assertEqual(updated_plan["layers.*.self_attn.v_proj"], "colwise_units")
         self.assertEqual(model.layers[0].self_attn.num_key_value_groups, 1)
         self.assertEqual(model.vision.attn.num_key_value_groups, 8)
-        self.assertEqual(model.layers[0].self_attn.k_proj._hf_num_key_value_heads, 2)
+        self.assertEqual(model.layers[0].self_attn.k_proj._tp_shard_units, 2)
 
     def test_kv_replication_updates_the_plan_that_is_actually_applied(self):
         class Model(DistributedMixin, torch.nn.Module):
@@ -351,9 +351,9 @@ class TestTensorParallelLayer(TestCasePlus):
         model.config = SimpleNamespace(distributed_config=SimpleNamespace(enable_expert_parallel=True))
         model._tp_plan = {}
         model._ep_plan = {"layers.*.self_attn.k_proj": "colwise"}
-        replicated_plan = {"layers.*.self_attn.k_proj": "colwise_replicate_kv"}
+        replicated_plan = {"layers.*.self_attn.k_proj": "colwise_units"}
 
-        with patch.object(tensor_parallel, "_maybe_enable_kv_head_replication", return_value=replicated_plan):
+        with patch.object(tensor_parallel, "_declare_attention_shard_units", return_value=replicated_plan):
             tensor_parallel.apply_tensor_parallelism(model, self.MockDeviceMesh(world_size=4, rank=0))
 
         # Under expert parallelism `model.tp_plan` reads `_ep_plan`, so that is the plan that must be updated

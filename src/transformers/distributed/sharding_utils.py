@@ -128,7 +128,7 @@ class DtensorShardOperation:
                 if n_rep > 1:
                     # The parameter declares this dimension `n_rep` times larger than the checkpoint one, so its
                     # shards are replicas and `n_rep` consecutive ranks read the same slice. Used by
-                    # `colwise_replicate_kv`, where 2 KV heads on 4 ranks are declared as `[h0, h0, h1, h1]`.
+                    # `colwise_units`, where 2 KV heads on 4 ranks are declared as `[h0, h0, h1, h1]`.
                     if self.device_mesh.ndim > 1:
                         # Which slice a rank reads is derived from its rank within the sharded dimension, which is
                         # only well defined on a 1D mesh. `apply_tensor_parallelism` is always given

@@ -241,41 +241,42 @@ class ColwiseParallel(TensorParallelLayer):
         return output.to_local() if self.use_local_output else output
 
 
-def get_kv_replication_factor(num_key_value_heads: int | None, tp_size: int) -> int:
+def get_shard_replication_factor(num_units: int | None, tp_size: int) -> int:
     """
-    Number of times each KV head has to be replicated so that every TP rank owns a whole KV head.
+    Number of times each unit has to be replicated so that every TP rank owns a whole unit.
 
-    Returns 1 when there are at least as many KV heads as ranks (the usual case, where KV heads are simply
-    sharded). Otherwise each of the `num_key_value_heads` heads is duplicated `tp_size // num_key_value_heads`
-    times, which requires `num_key_value_heads` to divide `tp_size`.
+    Some parameters can only be split at a coarser granularity than a single element -- `num_units` is how many
+    such indivisible units the sharded dimension holds. Returns 1 when there are at least as many units as ranks
+    (the usual case, where units are simply sharded). Otherwise each unit is duplicated `tp_size // num_units`
+    times, which requires `num_units` to divide `tp_size`.
     """
-    if not num_key_value_heads or tp_size <= 1 or num_key_value_heads >= tp_size:
+    if not num_units or tp_size <= 1 or num_units >= tp_size:
         return 1
-    if tp_size % num_key_value_heads != 0:
+    if tp_size % num_units != 0:
         raise ValueError(
-            f"Cannot use tensor parallelism with tp_size={tp_size} for a model with "
-            f"num_key_value_heads={num_key_value_heads}: when there are fewer KV heads than ranks, "
-            f"`num_key_value_heads` must divide `tp_size` so that KV heads can be replicated."
+            f"Cannot use tensor parallelism with tp_size={tp_size} for a parameter that can only be split into "
+            f"{num_units} units: when there are fewer units than ranks, their number must divide `tp_size` so "
+            f"that they can be replicated."
         )
-    return tp_size // num_key_value_heads
+    return tp_size // num_units
 
 
-class ReplicateKVHeadsParallel(ColwiseParallel):
+class ShardUnitsParallel(ColwiseParallel):
     """
-    Colwise sharding for `k_proj`/`v_proj` which replicates KV heads when the model has fewer KV heads than
-    there are tensor parallel ranks (`num_key_value_heads < tp_size`).
+    Colwise sharding for parameters that can only be split at the granularity of `module._tp_shard_units`
+    indivisible units, replicating them when there are fewer units than tensor parallel ranks.
 
-    Plain colwise sharding splits the KV projection evenly across ranks, which is only correct when
-    `num_key_value_heads % tp_size == 0`. This prevents running GQA/MQA models with very few KV heads on many
-    memory-constrained GPUs. Following vLLM's KV head replication scheme, each KV head is instead duplicated
-    `tp_size // num_key_value_heads` times so that every rank holds one complete KV head. Query heads are still
-    sharded normally, so the only cost is a duplicated KV cache.
+    Plain colwise sharding splits the dimension evenly across ranks, which silently cuts a unit in half as soon
+    as `num_units % tp_size != 0`. The typical case is `k_proj`/`v_proj`, whose unit is one KV head: attention
+    reshapes the projection output to `head_dim`, so a partial head is not usable, and GQA/MQA models with very
+    few KV heads therefore cannot be run on many memory-constrained GPUs. Following vLLM's KV head replication
+    scheme, each unit is instead duplicated `tp_size // num_units` times so that every rank holds a whole one.
 
-    In DTensor terms the parameter is described as a plain `Shard` of the *expanded* projection, whose sharded
-    dimension is `n_rep` times larger than the checkpoint one. Rank `r` therefore owns KV head `r // n_rep`, and
-    the loader detects the size mismatch to read the right slice from the checkpoint.
+    In DTensor terms the parameter is described as a plain `Shard` of the *expanded* dimension, which is `n_rep`
+    times larger than the checkpoint one. Rank `r` therefore owns unit `r // n_rep`, and the loader detects the
+    size mismatch to read the right slice from the checkpoint.
 
-    Because DTensor sees those `n_rep` copies as independent shards, the gradient of a replicated head would only
+    Because DTensor sees those `n_rep` copies as independent shards, the gradient of a replicated unit would only
     hold the contribution of its own rank. They are summed back with an explicit all-reduce inside each
     replication group, which also keeps the copies identical so that saving can drop the duplicates.
     """
@@ -324,22 +325,27 @@ class ReplicateKVHeadsParallel(ColwiseParallel):
         meta = module._parameters.get(param)
         if meta is None:
             return
-        n_rep = get_kv_replication_factor(getattr(module, "_hf_num_key_value_heads", None), mesh.size())
+        num_units = getattr(module, "_tp_shard_units", None)
+        n_rep = get_shard_replication_factor(num_units, mesh.size())
         if n_rep == 1:
             return super().shard_param(module, param, mesh)
 
         shard_dim = meta.ndim - 2
+        if meta.shape[shard_dim] % num_units != 0:
+            raise ValueError(
+                f"Cannot shard `{param}` of shape {tuple(meta.shape)} into {num_units} units along dim {shard_dim}."
+            )
         local_shape = list(meta.shape)
-        local_shape[shard_dim] //= module._hf_num_key_value_heads
+        local_shape[shard_dim] //= num_units
         local_meta = torch.empty(local_shape, dtype=meta.dtype, device=meta.device)
-        module._hf_kv_replication = n_rep
+        module._tp_shard_replication = n_rep
         module._parameters[param] = torch.nn.Parameter(
             DTensor.from_local(local_meta, mesh, [Shard(shard_dim)], run_check=False),
             requires_grad=meta.requires_grad,
         )
 
     def install_forward(self, module, mesh):
-        n_rep = getattr(module, "_hf_kv_replication", 1)
+        n_rep = getattr(module, "_tp_shard_replication", 1)
         if n_rep > 1:
             group = self._get_replication_group(mesh, n_rep)
 
@@ -875,7 +881,7 @@ class ParallelInterface(GeneralInterface):
             "colwise_gather_output": ColwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
             "colwise_rep": ColwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
             "colwise": ColwiseParallel(input_layouts=Replicate(), output_layouts=Shard(-1)),
-            "colwise_replicate_kv": ReplicateKVHeadsParallel(input_layouts=Replicate(), output_layouts=Shard(-1)),
+            "colwise_units": ShardUnitsParallel(input_layouts=Replicate(), output_layouts=Shard(-1)),
             "rowwise": RowwiseParallel(input_layouts=Shard(-1), output_layouts=Replicate()),
             "rowwise_split_input": RowwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
             "rowwise_rep": RowwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
@@ -909,10 +915,13 @@ def _validate_tp_plan_styles(tp_plan: dict[str, str] | None) -> None:
         )
 
 
-def _maybe_enable_kv_head_replication(model, tp_plan: dict[str, str], tp_size: int) -> dict[str, str]:
+def _declare_attention_shard_units(model, tp_plan: dict[str, str], tp_size: int) -> dict[str, str]:
     """
-    Switch the `k_proj`/`v_proj` entries of `tp_plan` to KV head replication when the model has fewer KV heads
-    than TP ranks, so that GQA/MQA models can be sharded over more GPUs than they have KV heads.
+    Declare one KV head as the sharding unit of `k_proj`/`v_proj` when the model has fewer KV heads than TP
+    ranks, so that GQA/MQA models can be sharded over more GPUs than they have KV heads.
+
+    This is the only attention-aware step: `head_dim` cannot be recovered from the weight shape, so it has to be
+    resolved here. Everything downstream is handled generically by `ShardUnitsParallel`.
     """
     if tp_size <= 1:
         return tp_plan
@@ -921,35 +930,26 @@ def _maybe_enable_kv_head_replication(model, tp_plan: dict[str, str], tp_size: i
     for module_name, module in model.named_modules():
         if not all(hasattr(module, attribute) for attribute in ("q_proj", "k_proj", "v_proj", "head_dim")):
             continue
-        k_proj_plan = _get_parameter_tp_plan(f"{module_name}.k_proj", tp_plan, is_weight=False)
-        v_proj_plan = _get_parameter_tp_plan(f"{module_name}.v_proj", tp_plan, is_weight=False)
-        if k_proj_plan != "colwise" or v_proj_plan != "colwise":
-            continue
-
         head_dim = module.head_dim
-        if module.k_proj.out_features != module.v_proj.out_features or module.k_proj.out_features % head_dim != 0:
-            raise ValueError(
-                f"Cannot replicate KV heads for `{module_name}`: its key/value projection shapes are incompatible."
-            )
         num_key_value_heads = module.k_proj.out_features // head_dim
-        n_rep = get_kv_replication_factor(num_key_value_heads, tp_size)
-        if n_rep == 1:
+        if get_shard_replication_factor(num_key_value_heads, tp_size) == 1:
+            continue
+        if any(
+            _get_parameter_tp_plan(f"{module_name}.{name}", tp_plan, is_weight=False) != "colwise"
+            for name in ("k_proj", "v_proj")
+        ):
             continue
 
-        configured_num_key_value_heads = getattr(model.config.get_text_config(), "num_key_value_heads", None)
-        if configured_num_key_value_heads != num_key_value_heads:
+        if (
+            module.v_proj.out_features != module.k_proj.out_features
+            or (module.q_proj.out_features // head_dim) % tp_size
+        ):
             raise ValueError(
-                f"Cannot replicate KV heads for `{module_name}`: its {num_key_value_heads} KV heads differ from the "
-                f"text configuration ({configured_num_key_value_heads}). Per-layer KV head replication is not supported."
+                f"Cannot replicate KV heads for `{module_name}`: its key/value projections must have the same "
+                f"shape and its number of query heads must be divisible by tp_size={tp_size}."
             )
-
-        if module.q_proj.out_features % head_dim != 0 or (module.q_proj.out_features // head_dim) % tp_size != 0:
-            raise ValueError(
-                f"Cannot replicate KV heads for `{module_name}`: its number of query heads must be divisible by "
-                f"tp_size={tp_size}."
-            )
-        module.k_proj._hf_num_key_value_heads = num_key_value_heads
-        module.v_proj._hf_num_key_value_heads = num_key_value_heads
+        module.k_proj._tp_shard_units = num_key_value_heads
+        module.v_proj._tp_shard_units = num_key_value_heads
         # Each rank owns a complete KV head, while Q heads remain normally sharded.
         module.num_key_value_groups = module.q_proj.out_features // head_dim // tp_size
         replicated_modules.append(module_name)
@@ -958,7 +958,7 @@ def _maybe_enable_kv_head_replication(model, tp_plan: dict[str, str], tp_size: i
         return tp_plan
 
     tp_plan = {
-        key: ("colwise_replicate_kv" if style == "colwise" and key.endswith(("k_proj", "v_proj")) else style)
+        key: ("colwise_units" if style == "colwise" and key.endswith(("k_proj", "v_proj")) else style)
         for key, style in tp_plan.items()
     }
     if not dist.is_initialized() or dist.get_rank() == 0:
@@ -977,7 +977,7 @@ def apply_tensor_parallelism(model, tp_mesh):
     tp_plan = model.tp_plan
     _validate_tp_plan_styles(tp_plan)
     if tp_plan:
-        tp_plan.update(_maybe_enable_kv_head_replication(model, tp_plan, tp_mesh.size()))
+        tp_plan.update(_declare_attention_shard_units(model, tp_plan, tp_mesh.size()))
 
     for name, module in model.named_modules():
         # Create DTensor placeholders so the loader knows which shard belongs to this rank.
@@ -1013,19 +1013,19 @@ def gather_state_dict_for_save(
 
     Every rank must call this function so ``DTensor.full_tensor()`` collectives complete.
 
-    ``num_key_value_heads`` is needed to drop the duplicates of parameters sharded with
-    ``colwise_replicate_kv``, whose gathered tensor holds every KV head ``tp_size // num_key_value_heads`` times.
+    ``num_key_value_heads`` is needed to drop the duplicates of parameters sharded with ``colwise_units``, whose
+    gathered tensor holds every KV head ``tp_size // num_key_value_heads`` times.
     """
-    n_rep = get_kv_replication_factor(num_key_value_heads, tp_size)
+    n_rep = get_shard_replication_factor(num_key_value_heads, tp_size)
     gathered = {}
     for key, tensor in state_dict.items():
         if isinstance(tensor, torch.Tensor):
             if isinstance(tensor, DTensor):
-                is_replicated_kv = n_rep > 1 and _get_parameter_tp_plan(key, tp_plan or {}) == "colwise_replicate_kv"
+                is_replicated = n_rep > 1 and _get_parameter_tp_plan(key, tp_plan or {}) == "colwise_units"
                 shard_dim = next((p.dim for p in tensor.placements if isinstance(p, Shard)), None)
                 tensor = tensor.full_tensor()
-                if is_replicated_kv and shard_dim is not None:
-                    # Every group of `n_rep` consecutive ranks holds the same KV head, only keep one of them
+                if is_replicated and shard_dim is not None:
+                    # Every group of `n_rep` consecutive ranks holds the same unit, only keep one of them
                     chunks = tensor.tensor_split(tp_size, dim=shard_dim)
                     tensor = torch.cat(chunks[::n_rep], dim=shard_dim)
             gathered[key] = tensor.detach().cpu().contiguous()

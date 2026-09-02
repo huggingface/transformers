@@ -19,7 +19,7 @@ from parameterized import parameterized
 
 from transformers import TorchAoConfig, set_seed
 from transformers.distributed.configuration_utils import DistributedConfig
-from transformers.distributed.tensor_parallel import _get_parameter_tp_plan, get_kv_replication_factor
+from transformers.distributed.tensor_parallel import _get_parameter_tp_plan, get_shard_replication_factor
 from transformers.testing_utils import (
     is_tensor_parallel_test,
     is_torch_available,
@@ -187,10 +187,10 @@ def _verify_tp_sharding(rank, model_tp, model_ref):
                         assert param.size(dim) == expected_size, (
                             f"Packed weight {name} sharding incorrect: expected {expected_size}, got {param.size(dim)}"
                         )
-                    elif param_plan == "colwise_replicate_kv":
+                    elif param_plan == "colwise_units":
                         # Replicated KV heads are described as a `Shard` of the expanded projection, so the DTensor
                         # reports a global size `n_rep` times larger than the checkpoint one.
-                        n_rep = get_kv_replication_factor(
+                        n_rep = get_shard_replication_factor(
                             model_tp.config.get_text_config().num_key_value_heads, world_size
                         )
                         expected_size = param_full.size(dim) * n_rep
@@ -307,7 +307,7 @@ def _test_tp_kv_replication_impl(rank, model_path, model_class, atol, rtol):
     replicated = [
         name
         for name, module in model_tp.named_modules()
-        if getattr(module, "_hf_kv_replication", 1) > 1  # set by `ReplicateKVHeadsParallel.shard_param`
+        if getattr(module, "_tp_shard_replication", 1) > 1  # set by `ShardUnitsParallel.shard_param`
     ]
     assert replicated, "Expected `k_proj`/`v_proj` to be sharded with KV head replication"
     del model_tp
@@ -629,7 +629,7 @@ class TensorParallelTesterMixin(ABC):
 
     @is_tensor_parallel_test
     def test_tp_kv_head_replication(self):
-        """With fewer KV heads than ranks, KV heads are replicated instead of sharded (`colwise_replicate_kv`)."""
+        """With fewer KV heads than ranks, KV heads are replicated instead of sharded (`colwise_units`)."""
         self._skip_if_not_supported()
 
         config = self._get_tp_config()
