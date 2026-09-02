@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import queue
+import threading
 from contextlib import contextmanager
 from dataclasses import dataclass
 from math import ceil, log2
@@ -217,3 +218,8 @@ def mem_pool_ctx(mem_pool):
     """A context manager to use a CUDA mem pool."""
     with torch.cuda.use_mem_pool(mem_pool):
         yield
+
+
+class ThreadLocalCounter(threading.local):
+    def __init__(self) -> None:
+        self.value = 0

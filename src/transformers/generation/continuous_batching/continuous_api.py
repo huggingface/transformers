@@ -44,7 +44,7 @@ from .model_runner import ModelRunner
 from .offloading_manager import OffloadingManager
 from .requests import GenerationOutput, RequestState, RequestStatus, logger
 from .scheduler import SCHEDULER_MAPPING, FIFOScheduler, Scheduler
-from .utils import WorkloadHints, drain_queue
+from .utils import ThreadLocalCounter, WorkloadHints, drain_queue
 
 
 """
@@ -156,6 +156,7 @@ class BackgroundThreadStatus:
         self._local_status = self.DONT_STOP
         self._tp_status = self.DONT_STOP
         self._pauses_requested = 0
+        self._local_pauses_requested = ThreadLocalCounter()
         self._paused = False
 
     def clear(self) -> None:
@@ -166,6 +167,7 @@ class BackgroundThreadStatus:
             self._local_status = self.DONT_STOP
             self.fatal_error = None
             self._pauses_requested = 0
+            self._local_pauses_requested.value = 0
             self._paused = False
             self._condition.notify_all()
 
@@ -231,39 +233,54 @@ class BackgroundThreadStatus:
     # ------------------------------------------------ PAUSE METHODS ------------------------------------------------ #
 
     def _pause_predicate(self) -> bool:
+        """What a thread waiting for a pause blocks on: the loop paused, or it is never going to."""
         loop_is_done = self._local_status == self.STOPPED or self.fatal_error is not None
         return self._paused or loop_is_done
 
-    def request_pause(self) -> None:
+    def _drop_pause_request(self) -> None:
+        """Drop a pause request and notifies threads waiting on the condition. Should be called with the condition held.
+        """
+        self._pauses_requested -= 1
+        self._local_pauses_requested.value -= 1
+        if self._pauses_requested == 0:  # the pause ends when all threads have released it, not just the local one
+            self._paused = False
+        self._condition.notify_all()
+
+    def acquire_pause(self) -> None:
         """Called by a thread sharing the model to ask the generation loop to pause. The request is picked up by the
-        loop at its next TP all-reduce, see `is_pause_requested`. Any number of threads may ask at the same time."""
+        loop at its next TP all-reduce, see `is_pause_requested`. Any number of threads may ask at the same time. The
+        thread then waits until the loop is paused, and raises if the loop is gone before waiting is over."""
+        # Request the pause
         with self._condition:
             self._pauses_requested += 1
-
-    def wait_for_pause(self) -> None:
-        """Called by a thread that asked for a pause, to wait until the generation loop is parked. Raises if the loop
-        is gone instead of waiting for a pause that will never come."""
+            self._local_pauses_requested.value += 1
+        # Wait for the pause
         with self._condition:
-            self._condition.wait_for(self._pause_predicate)
-            # Now that the predicate is True, two possibilities: the loop parked or it is gone. Latter is fatal.
+            # We wait in a try block so we can handle a an error that happens while waiting
+            try:
+                self._condition.wait_for(self._pause_predicate)
+            # If an error happens while waiting, we drop the pause request and re-raise the error
+            except BaseException:
+                self._drop_pause_request()
+                raise
+            # If the wait_for ended, two possibilities: the loop paused or it is gone. Latter is fatal.
             if not self._paused:
-                self._pauses_requested -= 1
-                self._local_status = max(self.HARD_STOP, self._local_status)  # might already be STOPPED
-                self._condition.notify_all()
+                self._drop_pause_request()
                 raise RuntimeError("The generation loop stopped before it could pause.") from self.fatal_error
 
     def release_pause(self) -> None:
         """Called by a thread that asked for a pause once it is done with the model. The last one out closes the pause
         window, letting the generation loop resume."""
         with self._condition:
-            self._pauses_requested -= 1
-            if self._pauses_requested == 0:
-                self._paused = False
-            self._condition.notify_all()
+            self._drop_pause_request()
 
-    def is_pause_requested(self) -> bool:
-        """Whether any thread asked for a pause and has not released it yet. Read by the generation loop to feed the
-        per-iteration all-reduce, so that all the ranks park at the same iteration."""
+    def is_pause_requested(self, local: bool = False) -> bool:
+        """Whether a thread asked for a pause and has not released it yet. If the local flag is True, only check the
+        calling thread's counter."""
+        # Local-only check, needs no lock by definition
+        if local:
+            return self._local_pauses_requested.value > 0
+        # Global check, needs to be locked
         with self._condition:
             return self._pauses_requested > 0
 
@@ -808,6 +825,20 @@ class ContinuousBatchingManager:
             logger.warning(msg)
             return None
 
+        # Stopping and pausing are conflicting operations: the only allowed case is a thread that is not itself in a
+        # pause (that would deadlock) and stops in a fully blocking way (so teardown waits for the loop to exit)
+        if self.background_thread_status.is_pause_requested():
+            if self.background_thread_status.is_pause_requested(local=True):
+                raise RuntimeError(
+                    "Cannot stop the manager from inside a pause: the generation loop is paused and cannot exit, so "
+                    "this would wait forever. Leave the `pause` context before calling `stop`."
+                )
+            if not (block and timeout is None):
+                raise RuntimeError(
+                    "Another thread is pausing generation: only a fully blocking stop (`block=True`, `timeout=None`) "
+                    "can be used here, so that the teardown waits for the generation loop to actually exit."
+                )
+
         # Signal the background thread to stop
         stop_trigger_time = perf_counter()
         stop_status = BackgroundThreadStatus.HARD_STOP if hard_stop else BackgroundThreadStatus.FLUSH_AND_STOP
@@ -878,8 +909,7 @@ class ContinuousBatchingManager:
         if not self.is_running():
             raise RuntimeError("Cannot pause generation while no generation loop is running.")
 
-        self.background_thread_status.request_pause()
-        self.background_thread_status.wait_for_pause()
+        self.background_thread_status.acquire_pause()
         try:
             yield
         finally:
