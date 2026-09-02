@@ -170,6 +170,12 @@ print(processor.decode(generated_ids, skip_special_tokens=True)[0])
 
 [[autodoc]] FunAsrNanoAudioConfig
 
+## FunAsrNanoEncoderConfig
+
+`FunAsrNanoEncoderConfig` is a backward-compatible alias of `FunAsrNanoAudioConfig`.
+
+[[autodoc]] FunAsrNanoEncoderConfig
+
 ## FunAsrNanoAdaptorConfig
 
 [[autodoc]] FunAsrNanoAdaptorConfig

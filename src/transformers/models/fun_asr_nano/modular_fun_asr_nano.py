@@ -207,7 +207,7 @@ class FunAsrNanoModelOutputWithPast(AudioFlamingo3ModelOutputWithPast):
 
 @auto_docstring
 class FunAsrNanoPreTrainedModel(AudioFlamingo3PreTrainedModel):
-    _no_split_modules = ["FunAsrNanoEncoderStem", "FunAsrNanoEncoderLayer", "FunAsrNanoAdaptorLayer"]
+    _no_split_modules = ["FunAsrNanoEncoderLayer", "FunAsrNanoAdaptorLayer"]
 
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
