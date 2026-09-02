@@ -35,7 +35,7 @@ from .configuration_pixtral import PixtralVisionConfig
 logger = logging.get_logger(__name__)
 
 
-# Copied from transformers.models.gemma4.modeling_gemma4.Gemma4VisionRotaryEmbedding with Gemma4->Pixtral
+# Adapted from transformers.models.gemma4.modeling_gemma4.Gemma4VisionRotaryEmbedding with interleaved freqs
 class PixtralVisionRotaryEmbedding(nn.Module):
     """
     Simple axial 2D rope with same freqs used for H and W grids. The freqs are

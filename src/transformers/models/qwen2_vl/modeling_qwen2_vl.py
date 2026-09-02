@@ -236,9 +236,9 @@ class Qwen2VLVisionRotaryEmbedding(nn.Module):
         self.config = config
 
         self.rope_type = self.config.rope_parameters["rope_type"]
-        rope_init_fn: Callable = self.compute_default_rope_parameters
-        if self.rope_type != "default":
-            raise ValueError(f"{self.__class__.__name__} supports only default rope, but requested {self.rope_type}")
+        rope_init_fn: Callable = self.compute_axial_rope_parameters
+        if self.rope_type != "axial":
+            raise ValueError(f"{self.__class__.__name__} supports only axial rope, but requested {self.rope_type}")
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
@@ -246,7 +246,7 @@ class Qwen2VLVisionRotaryEmbedding(nn.Module):
 
     @staticmethod
     @deprecate_kwarg("device", version="5.18")
-    def compute_default_rope_parameters(
+    def compute_axial_rope_parameters(
         config: Qwen2VLVisionConfig, device=None, **kwargs
     ) -> tuple[torch.Tensor, float]:
         """
