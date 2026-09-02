@@ -23,6 +23,7 @@ from transformers import StaticCache, is_torch_available
 from transformers.testing_utils import (
     backend_device_count,
     cleanup,
+    get_accelerator_total_memory_gib,
     require_torch,
     slow,
     torch_device,
@@ -121,39 +122,38 @@ class PhimoeIntegrationTest(unittest.TestCase):
     def get_model(cls):
         if cls.model is None:
             cls.offload_dir = tempfile.TemporaryDirectory()
+            # This checkpoint is ~78 GiB in bf16, which very nearly fills the accelerators of a CI
+            # runner, so `device_map="auto"` must be given an explicit budget that leaves headroom on
+            # every device. `get_balanced_memory` only reserves its 10% margin when a *single*
+            # accelerator is visible (`max_memory[key] *= 0.9` sits inside `if num_devices == 1`);
+            # with several it hands every device its full capacity, the whole model lands on the
+            # accelerators with nothing spilled, and loading then OOMs while merging the experts'
+            # `w1`/`w3` into `gate_up_proj` — that `torch.cat` needs a ~1.7 GiB temporary per layer.
+            # Inference has no room for activations either. That is also why only the multi-gpu
+            # variant fails: single-gpu does get the 0.9 margin and spills to CPU.
+            #
+            # So budget 80% of each accelerator and let the surplus go to CPU (and to
+            # `offload_folder` beyond that). #48290's 60 GiB x num_accelerators CPU budget is
+            # preserved, but passed as `max_memory` instead of by capping what psutil reports:
+            # `patch_psutil_cpu_memory` takes `min(mem.total, limit)`, so a 240 GiB "cap" was inert
+            # on this runner, and a CPU-side budget cannot create accelerator headroom anyway.
+            num_accelerators = backend_device_count(torch_device) if torch_device is not None else 0
+            total_accelerator_memory = get_accelerator_total_memory_gib()
+            max_memory = None
+            if num_accelerators > 0 and total_accelerator_memory > 0:
+                per_accelerator = 0.8 * total_accelerator_memory / num_accelerators
+                budget = f"{per_accelerator:.2f}GiB"
+                max_memory = dict.fromkeys(range(num_accelerators), budget)
+                max_memory["cpu"] = f"{60 * num_accelerators}GiB"
             cls.model = PhimoeForCausalLM.from_pretrained(
                 "microsoft/Phi-3.5-MoE-instruct",
                 experts_implementation="eager",
                 dtype="auto",
                 device_map="auto",
-                max_memory=cls._max_memory(),
+                max_memory=max_memory,
                 offload_folder=cls.offload_dir.name,
             )
         return cls.model
-
-    @classmethod
-    def _max_memory(cls):
-        """Per-device budget for `device_map="auto"`, leaving conversion headroom.
-
-        `auto` otherwise plans against each device's *full* capacity, so the
-        placement itself consumes the room the loader still needs: merging the
-        per-expert `w1`/`w3` weights into the fused `gate_up_proj` allocates a
-        temporary buffer on the device the parameter is being placed on, and it
-        OOMs inside `from_pretrained`. Reserving a slice of each accelerator is
-        what `max_memory` is for; the previous `cap_psutil_cpu_memory` cap only
-        steers how much goes to CPU/disk and cannot reserve device room (and it
-        scaled *up* with accelerator count, so it was loosest on the multi-GPU
-        configuration where this failed).
-        """
-        if torch_device is None or not torch.cuda.is_available():
-            return None
-        reserve = 0.85  # leave ~15% of each card for the conversion buffer
-        budget = {
-            i: f"{int(torch.cuda.get_device_properties(i).total_memory * reserve / 1024**3)}GiB"
-            for i in range(max(1, backend_device_count(torch_device)))
-        }
-        budget["cpu"] = "60GiB"
-        return budget
 
     @classmethod
     def tearDownClass(cls):
