@@ -136,25 +136,9 @@ class PhimoeIntegrationTest(unittest.TestCase):
             # preserved, but passed as `max_memory` instead of by capping what psutil reports:
             # `patch_psutil_cpu_memory` takes `min(mem.total, limit)`, so a 240 GiB "cap" was inert
             # on this runner, and a CPU-side budget cannot create accelerator headroom anyway.
-            # Reserve device headroom for the conversion's temporary buffer, and
-            # ask the allocator not to fragment the reservation away.
-            #
-            # Measured on this runner across three revisions: an 85% budget was
-            # honoured (18.67 GiB allocated against an 18 GiB cap) and the test
-            # still OOMed with only 168.69 MiB free of 22.30 GiB — the rest
-            # "reserved by PyTorch but unallocated". The failing request is
-            # 1.56 GiB, so at 85% the headroom and the fragmentation are the same
-            # size and the result flips run to run (one `fixed`, two `not_fixed`
-            # on near-identical patches). 70% gives ~6.7 GiB against that
-            # 1.56 GiB, which is margin rather than a coin toss.
-            #
-            # `expandable_segments` attacks the fragmentation directly (the OOM
-            # message itself recommends it) but only takes effect if the
-            # allocator has not already been configured, so it is best-effort:
-            # the budget is what this fix rests on.
-            with contextlib.suppress(Exception):
-                # Older torch has no such setter, and a configured allocator
-                # rejects it; either way the budget below is the real fix.
+            # `device_map="auto"` plans against each device's full capacity, leaving
+            # nothing for the ~1.6 GiB temporary the expert gate/up merge allocates.
+            with contextlib.suppress(Exception):  # absent on older torch
                 torch.cuda.memory._set_allocator_settings("expandable_segments:True")
             if not torch.cuda.is_available() or torch.cuda.device_count() == 0:
                 raise unittest.SkipTest("phimoe integration test needs an accelerator")
