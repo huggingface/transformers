@@ -18,6 +18,7 @@ import sys
 import tempfile
 import unittest
 from contextlib import redirect_stdout
+from datetime import date
 from pathlib import Path
 from unittest.mock import patch
 
@@ -250,7 +251,7 @@ class NoisyCommentsTest(unittest.TestCase):
 
             with (
                 patch.object(check_noisy_comments, "ROOT", repo_root),
-                patch.object(sys, "argv", ["check_noisy_comments.py", str(path)]),
+                patch.object(sys, "argv", ["check_noisy_comments.py", str(path), "--no-cache"]),
                 redirect_stdout(stdout),
             ):
                 exit_code = check_noisy_comments.main()
@@ -277,7 +278,7 @@ class NoisyCommentsTest(unittest.TestCase):
 
             with (
                 patch.object(check_noisy_comments, "ROOT", repo_root),
-                patch.object(sys, "argv", ["check_noisy_comments.py", "--path", "checked"]),
+                patch.object(sys, "argv", ["check_noisy_comments.py", "--path", "checked", "--no-cache"]),
                 redirect_stdout(stdout),
             ):
                 exit_code = check_noisy_comments.main()
@@ -285,6 +286,71 @@ class NoisyCommentsTest(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             self.assertIn("checked/sample.py", stdout.getvalue())
             self.assertNotIn("ignored/sample.py", stdout.getvalue())
+
+    def test_collect_findings_uses_persistent_cache(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            cache_path = repo_root / "utils" / ".noisy_comments_cache.json"
+            cache_path.parent.mkdir()
+            path = self._write_file(
+                repo_root, 'def foo():\n    # Use the "simple path" when possible.\n    return 1\n'
+            )
+
+            with (
+                patch.object(check_noisy_comments, "ROOT", repo_root),
+                patch.object(check_noisy_comments, "CACHE_PATH", cache_path),
+                patch.object(check_noisy_comments, "_file_line_commit_dates", return_value={}),
+            ):
+                first = check_noisy_comments.collect_findings(targets=[str(path)], use_cache=True)
+                with patch.object(check_noisy_comments, "check_file", side_effect=AssertionError("cache miss")):
+                    second = check_noisy_comments.collect_findings(targets=[str(path)], use_cache=True)
+
+            self.assertEqual([finding.code for finding in first], ["NC004"])
+            self.assertEqual([finding.code for finding in second], ["NC004"])
+            self.assertTrue(cache_path.exists())
+
+    def test_collect_findings_shows_progress(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            path = self._write_file(
+                repo_root, 'def foo():\n    # Use the "simple path" when possible.\n    return 1\n'
+            )
+            stdout = io.StringIO()
+
+            with (
+                patch.object(check_noisy_comments, "ROOT", repo_root),
+                patch.object(check_noisy_comments, "_file_line_commit_dates", return_value={}),
+                redirect_stdout(stdout),
+            ):
+                check_noisy_comments.collect_findings(targets=[str(path)], use_cache=False, progress=True)
+
+            self.assertIn("\rScanning [", stdout.getvalue())
+            self.assertIn("Scanned [", stdout.getvalue())
+            self.assertIn("] 1/1", stdout.getvalue())
+            self.assertEqual(stdout.getvalue().count("\n"), 1)
+
+    def test_pr_scope_filters_to_changed_python_files(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            changed_file = repo_root / "changed.py"
+            changed_file.write_text(
+                'def foo():\n    # Use the "simple path" when possible.\n    return 1\n', encoding="utf-8"
+            )
+            unchanged_file = repo_root / "unchanged.py"
+            unchanged_file.write_text(
+                'def foo():\n    # Use the "second path" when possible.\n    return 1\n', encoding="utf-8"
+            )
+
+            with (
+                patch.object(check_noisy_comments, "ROOT", repo_root),
+                patch.object(check_noisy_comments, "_changed_python_files_in_patch", return_value={changed_file}),
+                patch.object(check_noisy_comments, "_file_line_commit_dates", return_value={}),
+            ):
+                findings = check_noisy_comments.collect_findings(
+                    targets=[str(repo_root)], use_cache=False, diff_only=True
+                )
+
+            self.assertEqual([finding.path for finding in findings], [changed_file])
 
     def test_cli_orders_biggest_offenders_first(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -299,7 +365,7 @@ class NoisyCommentsTest(unittest.TestCase):
 
             with (
                 patch.object(check_noisy_comments, "ROOT", repo_root),
-                patch.object(sys, "argv", ["check_noisy_comments.py", "--path", str(repo_root)]),
+                patch.object(sys, "argv", ["check_noisy_comments.py", "--path", str(repo_root), "--no-cache"]),
                 redirect_stdout(stdout),
             ):
                 exit_code = check_noisy_comments.main()
@@ -330,7 +396,9 @@ class NoisyCommentsTest(unittest.TestCase):
 
             with (
                 patch.object(check_noisy_comments, "ROOT", repo_root),
-                patch.object(sys, "argv", ["check_noisy_comments.py", "--path", str(path), "--rule", "NC004"]),
+                patch.object(
+                    sys, "argv", ["check_noisy_comments.py", "--path", str(path), "--rule", "NC004", "--no-cache"]
+                ),
                 redirect_stdout(stdout),
             ):
                 exit_code = check_noisy_comments.main()
@@ -338,6 +406,48 @@ class NoisyCommentsTest(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             self.assertIn("NC004", stdout.getvalue())
             self.assertNotIn("NC001", stdout.getvalue())
+
+    def test_cutoff_filter_ignores_old_findings(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            path = self._write_file(
+                repo_root, 'def foo():\n    # Use the "simple path" when possible.\n    return 1\n'
+            )
+            finding = check_noisy_comments.Finding(
+                path=path,
+                line=2,
+                end_line=2,
+                code="NC004",
+                message="",
+                text="",
+                score=1,
+            )
+
+            with patch.object(check_noisy_comments, "_file_line_commit_dates", return_value={2: date(2024, 12, 31)}):
+                findings = check_noisy_comments._filter_findings_by_cutoff([finding], date(2025, 1, 1))
+
+            self.assertEqual(findings, [])
+
+    def test_cutoff_filter_keeps_findings_on_cutoff_date(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            path = self._write_file(
+                repo_root, 'def foo():\n    # Use the "simple path" when possible.\n    return 1\n'
+            )
+            finding = check_noisy_comments.Finding(
+                path=path,
+                line=2,
+                end_line=2,
+                code="NC004",
+                message="",
+                text="",
+                score=1,
+            )
+
+            with patch.object(check_noisy_comments, "_file_line_commit_dates", return_value={2: date(2025, 1, 1)}):
+                findings = check_noisy_comments._filter_findings_by_cutoff([finding], date(2025, 1, 1))
+
+            self.assertEqual(findings, [finding])
 
     def test_cli_can_fail_on_findings(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -348,7 +458,7 @@ class NoisyCommentsTest(unittest.TestCase):
 
             with (
                 patch.object(check_noisy_comments, "ROOT", repo_root),
-                patch.object(sys, "argv", ["check_noisy_comments.py", str(path), "--fail-on-findings"]),
+                patch.object(sys, "argv", ["check_noisy_comments.py", str(path), "--fail-on-findings", "--no-cache"]),
                 redirect_stdout(io.StringIO()),
             ):
                 exit_code = check_noisy_comments.main()
