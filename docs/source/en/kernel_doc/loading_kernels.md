@@ -20,13 +20,10 @@ A kernel works as a drop-in replacement for standard PyTorch operations. It swap
 
 This guide shows how to load kernels to accelerate inference.
 
-Install a compatible version of the kernels package. Transformers currently requires `kernels>=0.16.0,<0.17.0`.
-
-> [!NOTE]
-> Use the latest compatible `kernels` release for the best performance and bug fixes.
+Install Transformers with the supported version of the [kernels](https://github.com/huggingface/kernels) package.
 
 ```bash
-pip install -U "kernels>=0.16.0,<0.17.0"
+pip install -U "transformers[kernels]"
 ```
 
 Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to load the most performant kernels available on the Hub for your device. This replaces supported PyTorch operations with the kernel implementation.
@@ -213,13 +210,36 @@ kernel_config = KernelConfig(
 )
 ```
 
-When using Hub kernels, a `KernelConfig` inherits the default Transformers kernel mapping by default
-(`inherit_mapping=True`). Entries in `kernel_mapping` override the default mapping for the corresponding layers or
-functions. Set `inherit_mapping=False` to use only the entries in `kernel_mapping`. This is useful when benchmarking a
+### Kernel metadata
+
+Add a metadata dict to control which kernel build is loaded.
+
+| Option | Description | Default |
+|---|---|---|
+| `version` | Major version of the kernel repository. `2` loads the latest build on the repository's `v2` branch. | `1` |
+| `revision` | Exact tag, branch, or commit to load instead of a version. | --- |
+| `trust_remote_code` | Allows a repository outside the trusted `kernels-community` organization. Loading a kernel runs code from that repository on your machine. | `False` |
+
+```py
+from transformers import KernelConfig
+
+kernel_config = KernelConfig(
+    kernel_mapping={
+        "RMSNorm": ("kernels-community/liger-kernels:LigerRMSNorm", {"version": 3}),
+    }
+)
+```
+
+Older branches of a kernel repository may not have builds for your PyTorch and CUDA versions. If a kernel fails to load, try a newer `version` before concluding your hardware is unsupported.
+
+### Inherited mappings
+
+A `KernelConfig` inherits the default Transformers kernel mapping for Hub kernels, and entries in `kernel_mapping`
+override the default for the corresponding layers and functions. Set `inherit_mapping=False` to use only the entries in `kernel_mapping`. Everything you leave out falls back to standard PyTorch. This is useful when benchmarking a
 specific kernel or testing a custom implementation without applying the other defaults.
 
-For example, the following configuration maps the `rotary_pos_emb` function to a RoPE kernel and leaves all other
-kernel mappings disabled. The function name must be registered by the model.
+The configuration below maps the `rotary_pos_emb` function to a RoPE kernel and leaves every other operation on
+PyTorch. The function name must be registered by the model.
 
 ```py
 from transformers import AutoModelForCausalLM, KernelConfig
@@ -292,7 +312,7 @@ model = AutoModelForCausalLM.from_pretrained(
 
 ## Disable kernels globally
 
-Set the environment variable to disable Hub kernels globally.
+Set the `USE_HUB_KERNELS` environment variable to disable Hub kernels everywhere without changing your code.
 
 ```bash
 export USE_HUB_KERNELS=0  # or OFF or NO
@@ -304,10 +324,10 @@ Kernel integration depends on hardware, drivers, and package versions working to
 
 ### Installation issues
 
-Import errors can indicate that the kernels library is not installed or that its version is incompatible.
+Import errors mean the kernels package is missing or its version falls outside the range Transformers supports. Reinstall through the extra to get a compatible version.
 
 ```bash
-pip install -U "kernels>=0.16.0,<0.17.0"
+pip install -U "transformers[kernels]"
 ```
 
 ### Kernel loading failures
