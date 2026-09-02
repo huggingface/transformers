@@ -169,14 +169,14 @@ class FunAsrNanoFSMN(nn.Module):
         self.conv = nn.Conv1d(
             config.d_model,
             config.d_model,
-            config.kernel_size,
+            config.fsmn_kernel_size,
             stride=1,
             padding=0,
             groups=config.d_model,
             bias=False,
         )
-        left_padding = (config.kernel_size - 1) // 2
-        right_padding = config.kernel_size - 1 - left_padding
+        left_padding = (config.fsmn_kernel_size - 1) // 2
+        right_padding = config.fsmn_kernel_size - 1 - left_padding
         self.pad = nn.ConstantPad1d((left_padding, right_padding), 0.0)
         self.dropout = config.attention_dropout
 
@@ -361,7 +361,7 @@ class FunAsrNanoEncoder(FunAsrNanoPreTrainedModel):
     def __init__(self, config: FunAsrNanoEncoderConfig):
         super().__init__(config)
         self.stem = FunAsrNanoEncoderStem(config)
-        self.layers = nn.ModuleList([FunAsrNanoEncoderLayer(config) for _ in range(config.encoder_layers - 1)])
+        self.layers = nn.ModuleList([FunAsrNanoEncoderLayer(config) for _ in range(config.num_hidden_layers - 1)])
         self.layer_norm = nn.LayerNorm(config.d_model)
         self.timestamp_prediction_layers = nn.ModuleList(
             [FunAsrNanoEncoderLayer(config) for _ in range(config.num_timestamp_prediction_blocks)]
@@ -472,7 +472,7 @@ class FunAsrNanoMultiModalProjector(nn.Module):
 
     def __init__(self, config: FunAsrNanoConfig):
         super().__init__()
-        self.linear_1 = nn.Linear(config.encoder_config.d_model, config.projector_hidden_size)
+        self.linear_1 = nn.Linear(config.audio_config.d_model, config.projector_hidden_size)
         self.act = ACT2FN[config.projector_hidden_act]
         self.linear_2 = nn.Linear(config.projector_hidden_size, config.adaptor_config.d_model)
 
@@ -489,10 +489,10 @@ class FunAsrNanoAdaptor(nn.Module):
     def __init__(self, config: FunAsrNanoConfig):
         super().__init__()
         adaptor_config = config.adaptor_config
-        adaptor_config._attn_implementation = config.encoder_config._attn_implementation
+        adaptor_config._attn_implementation = config.audio_config._attn_implementation
         self.config = adaptor_config
         self.blocks = nn.ModuleList(
-            [FunAsrNanoAdaptorLayer(adaptor_config) for _ in range(adaptor_config.encoder_layers)]
+            [FunAsrNanoAdaptorLayer(adaptor_config) for _ in range(adaptor_config.num_hidden_layers)]
         )
 
     def forward(self, hidden_states: torch.Tensor, input_features_mask: torch.Tensor) -> torch.Tensor:

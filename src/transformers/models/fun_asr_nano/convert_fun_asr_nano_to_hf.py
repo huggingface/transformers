@@ -218,19 +218,19 @@ def build_config_from_yaml(config_yaml_path: str, qwen3_config_path: str) -> Fun
 
     # Audio encoder config (standalone encoder model -> standalone config, Parakeet-style).
     enc_conf = cfg.get("audio_encoder_conf", {})
-    encoder_config = FunAsrNanoEncoderConfig(
+    audio_config = FunAsrNanoEncoderConfig(
         num_mel_bins=80,
         num_stacked_frames=7,
         hidden_size=enc_conf.get("output_size", 512),
-        encoder_attention_heads=enc_conf.get("attention_heads", 4),
-        encoder_ffn_dim=enc_conf.get("linear_units", 2048),
-        encoder_layers=enc_conf.get("num_blocks", 50),
+        num_attention_heads=enc_conf.get("attention_heads", 4),
+        intermediate_size=enc_conf.get("linear_units", 2048),
+        num_hidden_layers=enc_conf.get("num_blocks", 50),
         num_timestamp_prediction_blocks=enc_conf.get("tp_blocks", 20),
-        dropout=enc_conf.get("dropout_rate", 0.1),
+        hidden_dropout=enc_conf.get("dropout_rate", 0.1),
         attention_dropout=enc_conf.get("attention_dropout_rate", 0.1),
         activation_dropout=enc_conf.get("dropout_rate", 0.1),
-        activation_function="relu",
-        kernel_size=enc_conf.get("kernel_size", 11),
+        hidden_act="relu",
+        fsmn_kernel_size=enc_conf.get("kernel_size", 11),
     )
 
     # Text (LLM) config
@@ -239,7 +239,7 @@ def build_config_from_yaml(config_yaml_path: str, qwen3_config_path: str) -> Fun
     text_config = Qwen3Config(**qwen3_cfg)
 
     config = FunAsrNanoConfig(
-        encoder_config=encoder_config,
+        audio_config=audio_config,
         text_config=text_config,
     )
 

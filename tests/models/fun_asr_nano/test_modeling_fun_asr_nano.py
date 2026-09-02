@@ -34,7 +34,7 @@ class FunAsrNanoModelTester(ALMModelTester):
     conditional_generation_class = FunAsrNanoForConditionalGeneration
     text_config_class = Qwen3Config
     audio_config_class = FunAsrNanoEncoderConfig
-    audio_config_key = "encoder_config"
+    audio_config_key = "audio_config"
     audio_mask_key = "input_features_mask"
 
     def __init__(self, parent, **kwargs):
@@ -56,13 +56,13 @@ class FunAsrNanoModelTester(ALMModelTester):
         kwargs.setdefault("max_position_embeddings", 128)
 
         # Small encoder config.
-        kwargs.setdefault("d_model", 32)
-        kwargs.setdefault("encoder_attention_heads", 4)
-        kwargs.setdefault("encoder_ffn_dim", 64)
-        kwargs.setdefault("encoder_layers", 2)
+        kwargs.setdefault("hidden_size", 32)
+        kwargs.setdefault("num_attention_heads", 4)
+        kwargs.setdefault("intermediate_size", 64)
+        kwargs.setdefault("num_hidden_layers", 2)
         kwargs.setdefault("num_timestamp_prediction_blocks", 1)
-        kwargs.setdefault("kernel_size", 5)
-        kwargs.setdefault("dropout", 0.0)
+        kwargs.setdefault("fsmn_kernel_size", 5)
+        kwargs.setdefault("hidden_dropout", 0.0)
         kwargs.setdefault("attention_dropout", 0.0)
         kwargs.setdefault("activation_dropout", 0.0)
 
@@ -99,11 +99,18 @@ class FunAsrNanoForConditionalGenerationModelTest(ALMModelTest, unittest.TestCas
     model_split_percents = [0.5, 0.83, 0.9]
 
     def _audio_features_get_expected_num_attentions(self, model_tester=None):
-        # The SAN-M stack is heterogeneous: one stem block, `encoder_layers - 1` regular blocks and
+        # The SAN-M stack is heterogeneous: one stem block, `num_hidden_layers - 1` regular blocks and
         # `num_timestamp_prediction_blocks` timestamp blocks, each with one attention module. The default helper
         # assumes a single homogeneous `num_hidden_layers` stack, which describes the text tower instead.
         tester = model_tester or self.model_tester
-        return tester.encoder_layers + tester.num_timestamp_prediction_blocks
+        return tester.num_hidden_layers + tester.num_timestamp_prediction_blocks
+
+    def test_legacy_encoder_config_alias_loads_as_audio_config(self):
+        config = FunAsrNanoConfig(encoder_config=FunAsrNanoEncoderConfig(hidden_size=32))
+
+        self.assertEqual(config.audio_config.hidden_size, 32)
+        self.assertIn("audio_config", config.to_dict())
+        self.assertNotIn("encoder_config", config.to_dict())
 
     @unittest.skip(
         reason="This test does not apply to Fun-ASR-Nano since inputs_embeds corresponding to audio tokens "

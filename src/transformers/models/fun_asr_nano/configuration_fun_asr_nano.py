@@ -26,30 +26,34 @@ class FunAsrNanoEncoderConfig(PreTrainedConfig):
         Number of consecutive mel frames stacked by low-frame-rate feature extraction.
     num_timestamp_prediction_blocks (`int`, *optional*, defaults to 20):
         Number of timestamp prediction encoder blocks.
-    kernel_size (`int`, *optional*, defaults to 11):
+    fsmn_kernel_size (`int`, *optional*, defaults to 11):
         Kernel size for the feedforward sequential memory network (FSMN) convolution.
     """
 
     model_type = "fun_asr_nano_encoder"
     attribute_map = {
         "d_model": "hidden_size",
-        "num_attention_heads": "encoder_attention_heads",
-        "intermediate_size": "encoder_ffn_dim",
+        "encoder_attention_heads": "num_attention_heads",
+        "encoder_ffn_dim": "intermediate_size",
+        "encoder_layers": "num_hidden_layers",
+        "activation_function": "hidden_act",
+        "dropout": "hidden_dropout",
+        "kernel_size": "fsmn_kernel_size",
     }
 
     num_mel_bins: int = 80
     hidden_size: int = 512
-    encoder_attention_heads: int = 4
-    encoder_ffn_dim: int = 2048
-    encoder_layers: int = 50
-    dropout: float = 0.1
+    num_attention_heads: int = 4
+    intermediate_size: int = 2048
+    num_hidden_layers: int = 50
+    hidden_dropout: float = 0.1
     attention_dropout: float = 0.1
     activation_dropout: float = 0.1
-    activation_function: str = "relu"
+    hidden_act: str = "relu"
     max_position_embeddings: int = 2049
     num_stacked_frames: int = 7
     num_timestamp_prediction_blocks: int = 20
-    kernel_size: int = 11
+    fsmn_kernel_size: int = 11
 
     @property
     def input_size(self) -> int:
@@ -61,42 +65,42 @@ class FunAsrNanoEncoderConfig(PreTrainedConfig):
 class FunAsrNanoAdaptorConfig(PreTrainedConfig):
     attribute_map = {
         "d_model": "hidden_size",
-        "num_attention_heads": "encoder_attention_heads",
-        "num_hidden_layers": "encoder_layers",
+        "encoder_attention_heads": "num_attention_heads",
+        "encoder_ffn_dim": "intermediate_size",
+        "encoder_layers": "num_hidden_layers",
+        "activation_function": "hidden_act",
+        "dropout": "hidden_dropout",
     }
 
     hidden_size: int = 1024
-    encoder_attention_heads: int = 8
-    encoder_ffn_dim: int = 256
-    encoder_layers: int = 2
-    dropout: float = 0.0
+    num_attention_heads: int = 8
+    intermediate_size: int = 256
+    num_hidden_layers: int = 2
+    hidden_dropout: float = 0.0
     attention_dropout: float = 0.0
     activation_dropout: float = 0.0
-    activation_function: str = "relu"
+    hidden_act: str = "relu"
 
 
 @auto_docstring(checkpoint="FunAudioLLM/Fun-ASR-Nano-2512-hf")
 @strict
 class FunAsrNanoConfig(PreTrainedConfig):
     r"""
-    encoder_config (`dict` or `PreTrainedConfig`, *optional*):
+    audio_config (`dict` or `PreTrainedConfig`, *optional*):
         Configuration for the audio encoder.
     adaptor_config (`dict` or `FunAsrNanoAdaptorConfig`, *optional*):
         Configuration for the bidirectional audio adaptor.
     """
 
     model_type = "fun_asr_nano"
-    attribute_map = {
-        "audio_config": "encoder_config",
-    }
     sub_configs = {
         "adaptor_config": FunAsrNanoAdaptorConfig,
-        "encoder_config": AutoConfig,
+        "audio_config": AutoConfig,
         "text_config": AutoConfig,
     }
 
     adaptor_config: dict | PreTrainedConfig | None = None
-    encoder_config: dict | PreTrainedConfig | None = None
+    audio_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
     audio_token_id: int = 151646
     projector_hidden_act: str = "relu"
@@ -105,15 +109,15 @@ class FunAsrNanoConfig(PreTrainedConfig):
     tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
-        audio_config = kwargs.pop("audio_config", None)
-        if self.encoder_config is None and audio_config is not None:
-            self.encoder_config = audio_config
+        encoder_config = kwargs.pop("encoder_config", None)
+        if self.audio_config is None and encoder_config is not None:
+            self.audio_config = encoder_config
 
-        if isinstance(self.encoder_config, dict):
-            self.encoder_config["model_type"] = self.encoder_config.get("model_type", "fun_asr_nano_encoder")
-            self.encoder_config = CONFIG_MAPPING[self.encoder_config["model_type"]](**self.encoder_config)
-        elif self.encoder_config is None:
-            self.encoder_config = CONFIG_MAPPING["fun_asr_nano_encoder"]()
+        if isinstance(self.audio_config, dict):
+            self.audio_config["model_type"] = self.audio_config.get("model_type", "fun_asr_nano_encoder")
+            self.audio_config = CONFIG_MAPPING[self.audio_config["model_type"]](**self.audio_config)
+        elif self.audio_config is None:
+            self.audio_config = CONFIG_MAPPING["fun_asr_nano_encoder"]()
 
         if isinstance(self.text_config, dict):
             self.text_config["model_type"] = self.text_config.get("model_type", "qwen3")
@@ -126,7 +130,7 @@ class FunAsrNanoConfig(PreTrainedConfig):
         elif self.adaptor_config is None:
             self.adaptor_config = FunAsrNanoAdaptorConfig(
                 hidden_size=self.text_config.hidden_size,
-                encoder_ffn_dim=self.text_config.hidden_size // 4,
+                intermediate_size=self.text_config.hidden_size // 4,
             )
 
         super().__post_init__(**kwargs)
@@ -138,9 +142,9 @@ class FunAsrNanoConfig(PreTrainedConfig):
                 f"`adaptor_config.hidden_size` ({self.adaptor_config.hidden_size}) must match "
                 f"`text_config.hidden_size` ({self.text_config.hidden_size})."
             )
-        if self.adaptor_config.encoder_ffn_dim != self.text_config.hidden_size // 4:
+        if self.adaptor_config.intermediate_size != self.text_config.hidden_size // 4:
             raise ValueError(
-                f"`adaptor_config.encoder_ffn_dim` ({self.adaptor_config.encoder_ffn_dim}) must equal "
+                f"`adaptor_config.intermediate_size` ({self.adaptor_config.intermediate_size}) must equal "
                 f"`text_config.hidden_size // 4` ({self.text_config.hidden_size // 4})."
             )
 
