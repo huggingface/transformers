@@ -206,6 +206,8 @@ class Qwen3TTSTokenizerSingleCodebookDecoderConfig(PreTrainedConfig):
 @strict
 class Qwen3TTSTokenizerSingleCodebookEncoderConfig(PreTrainedConfig):
     r"""
+    hidden_size (`int`, *optional*, defaults to 1024):
+        Dimensionality of the encoder layers. Whisper-family checkpoints store this as `d_model`.
     max_source_positions (`int`, *optional*, defaults to 1500):
         The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
     num_layers_before_quantizer (`int`, *optional*, defaults to 1):
@@ -213,20 +215,20 @@ class Qwen3TTSTokenizerSingleCodebookEncoderConfig(PreTrainedConfig):
     """
 
     model_type = "qwen3_tts_tokenizer_single_codebook_encoder"
+    base_config_key = "encoder_config"
     attribute_map = {
+        "d_model": "hidden_size",
         "num_hidden_layers": "encoder_layers",
-        "hidden_size": "d_model",
         "num_attention_heads": "encoder_attention_heads",
         "intermediate_size": "encoder_ffn_dim",
     }
 
     num_mel_bins: int = 128
-
     encoder_layers: int = 1
     encoder_attention_heads: int = 16
     encoder_ffn_dim: int = 4096
     encoder_layerdrop: float | int = 0.0
-    d_model: int = 1024
+    hidden_size: int = 1024
     dropout: float | int = 0.0
     attention_dropout: float | int = 0.0
     activation_function: str = "gelu"
@@ -234,7 +236,6 @@ class Qwen3TTSTokenizerSingleCodebookEncoderConfig(PreTrainedConfig):
     scale_embedding: bool = False
     initializer_range: float = 0.02
     max_source_positions: int = 1500
-    base_config_key = "encoder_config"
     num_layers_before_quantizer: int = 1
 
 

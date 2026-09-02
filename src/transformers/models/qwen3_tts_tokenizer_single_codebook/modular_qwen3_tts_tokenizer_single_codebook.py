@@ -48,7 +48,6 @@ from ..qwen2_5_omni.modeling_qwen2_5_omni import (
     Qwen2_5OmniToken2WavModel,
     apply_rotary_pos_emb,
 )
-from ..qwen2_audio.configuration_qwen2_audio import Qwen2AudioEncoderConfig
 from ..qwen2_audio.modeling_qwen2_audio import Qwen2AudioAttention, Qwen2AudioEncoder, Qwen2AudioEncoderLayer
 from ..voxtral_realtime.modeling_voxtral_realtime import VoxtralRealtimeCausalConv1d
 from ..xcodec.modeling_xcodec import XcodecEuclideanCodebook, XcodecVectorQuantization
@@ -132,8 +131,10 @@ class Qwen3TTSTokenizerSingleCodebookDecoderConfig(Qwen2_5OmniToken2WavConfig):
 
 @auto_docstring
 @strict
-class Qwen3TTSTokenizerSingleCodebookEncoderConfig(Qwen2AudioEncoderConfig):
+class Qwen3TTSTokenizerSingleCodebookEncoderConfig(PreTrainedConfig):
     r"""
+    hidden_size (`int`, *optional*, defaults to 1024):
+        Dimensionality of the encoder layers. Whisper-family checkpoints store this as `d_model`.
     max_source_positions (`int`, *optional*, defaults to 1500):
         The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
     num_layers_before_quantizer (`int`, *optional*, defaults to 1):
@@ -142,11 +143,26 @@ class Qwen3TTSTokenizerSingleCodebookEncoderConfig(Qwen2AudioEncoderConfig):
 
     model_type = "qwen3_tts_tokenizer_single_codebook_encoder"
     base_config_key = "encoder_config"
+    attribute_map = {
+        "d_model": "hidden_size",
+        "num_hidden_layers": "encoder_layers",
+        "num_attention_heads": "encoder_attention_heads",
+        "intermediate_size": "encoder_ffn_dim",
+    }
 
+    num_mel_bins: int = 128
     encoder_layers: int = 1
     encoder_attention_heads: int = 16
     encoder_ffn_dim: int = 4096
-    d_model: int = 1024
+    encoder_layerdrop: float | int = 0.0
+    hidden_size: int = 1024
+    dropout: float | int = 0.0
+    attention_dropout: float | int = 0.0
+    activation_function: str = "gelu"
+    activation_dropout: float | int = 0.0
+    scale_embedding: bool = False
+    initializer_range: float = 0.02
+    max_source_positions: int = 1500
     num_layers_before_quantizer: int = 1
 
 

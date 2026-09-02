@@ -479,8 +479,8 @@ default_enabled = true
 # openai -> openai-gpt.md and kosmos2 -> kosmos-2.md cannot be derived from the directory name, so the
 # cutoff cannot grandfather them. qwen3_asr mirrors Whisper's encoder config, where d_model is public API.
 # openai -> openai-gpt.md and kosmos2 -> kosmos-2.md cannot be derived from the directory name, so the
-# cutoff cannot grandfather them. qwen3_asr and qwen3_tts_tokenizer_single_codebook mirror Whisper's encoder config, where d_model is public API.
-allowlist_models = ["kosmos2", "openai", "qwen3_asr", "qwen3_tts_tokenizer_single_codebook"]
+# cutoff cannot grandfather them. qwen3_asr mirrors Whisper's encoder config, where d_model is public API.
+allowlist_models = ["kosmos2", "openai", "qwen3_asr"]
 cutoff_date = "2026-06-20"
 
 [rules.TRF023.explanation]
