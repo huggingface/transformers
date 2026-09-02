@@ -16,8 +16,8 @@
 from dataclasses import dataclass
 
 import torch
-from torch import nn
 from huggingface_hub.dataclasses import strict
+from torch import nn
 
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_bidirectional_mask
