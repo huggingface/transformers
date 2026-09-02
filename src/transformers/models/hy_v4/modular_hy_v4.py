@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """PyTorch HYV4 model."""
+
 import math
 from collections.abc import Callable
 
@@ -224,7 +225,9 @@ class HYV4Indexer(DeepseekV32Indexer):
         q_pass, q_rot = torch.split(q, [self.head_dim - self.qk_rope_head_dim, self.qk_rope_head_dim], dim=-1)
 
         # Norm is kept in fp32
-        k = self.k_norm(self.wk(hidden_states).to(self.k_norm.weight.dtype)).to(hidden_states.dtype).unsqueeze(2)  # [B, S, 1, D]
+        k = (
+            self.k_norm(self.wk(hidden_states).to(self.k_norm.weight.dtype)).to(hidden_states.dtype).unsqueeze(2)
+        )  # [B, S, 1, D]
         k_pass, k_rot = torch.split(k, [self.head_dim - self.qk_rope_head_dim, self.qk_rope_head_dim], dim=-1)
 
         q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
@@ -239,7 +242,11 @@ class HYV4Indexer(DeepseekV32Indexer):
 
         # Weight per head and sum across heads: [B, S, 1, H] @ [B, S, H, T] → [B, S, T]
         # Apply softmax scale later
-        weights = self.weights_proj(hidden_states.to(self.weights_proj.weight.dtype)).float() * (self.n_heads**-0.5) * self.softmax_scale
+        weights = (
+            self.weights_proj(hidden_states.to(self.weights_proj.weight.dtype)).float()
+            * (self.n_heads**-0.5)
+            * self.softmax_scale
+        )
         index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
 
         # Causality needs to be taken into account when computing scores so padding tokens don't affect computation
@@ -448,18 +455,14 @@ class HYV4DecoderLayer(DeepseekV4DecoderLayer):
             prev_topk_indices=prev_topk_indices,
             **kwargs,
         )
-        hidden_states = (
-            post.float().unsqueeze(-1) * hidden_states.float().unsqueeze(-2) + residual.float()
-        ).to(dtype)
+        hidden_states = (post.float().unsqueeze(-1) * hidden_states.float().unsqueeze(-2) + residual.float()).to(dtype)
 
         residual = hidden_states
         post, hidden_states = self.ffn_hc(hidden_states)
         # Feed forward
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        hidden_states = (
-            post.float().unsqueeze(-1) * hidden_states.float().unsqueeze(-2) + residual.float()
-        ).to(dtype)
+        hidden_states = (post.float().unsqueeze(-1) * hidden_states.float().unsqueeze(-2) + residual.float()).to(dtype)
 
         return hidden_states, topk_indices
 
@@ -581,7 +584,6 @@ class HYV4Model(Glm4MoeLiteModel):
 
 
 class HYV4ForCausalLM(Glm4MoeLiteForCausalLM):
-
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
