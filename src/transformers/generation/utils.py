@@ -366,6 +366,9 @@ def _undo_generation_steps(num_steps: int, input_ids: torch.LongTensor, *recorde
     entry per generated token, so slicing it simply drops the last `num_steps` entries. The cache entries
     those steps wrote are dropped by `DeferredStopCheck.finish`.
     """
+    # `[:-0]` is `[:0]`, which would empty everything rather than leave it alone
+    if num_steps == 0:
+        return (input_ids, *recorded)
     return (input_ids[..., :-num_steps], *(record[:-num_steps] if record else record for record in recorded))
 
 

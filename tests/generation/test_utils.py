@@ -5695,7 +5695,11 @@ class DeferredStopCheckIntegrationTest(unittest.TestCase):
         return outputs, torch.cat(streamer.tokens)
 
     def _generate_deferred_and_immediate(self, inputs, model=None, **kwargs):
-        deferred = self._generate(inputs, model=model, **kwargs)
+        # Both halves are forced rather than left to `is_supported`, so this holds on any accelerator:
+        # `is_supported` limits where the deferral is *enabled*, but the logic under test is not
+        # device-specific and is worth checking wherever the suite runs.
+        with patch.object(DeferredStopCheck, "is_supported", staticmethod(lambda *args, **kwargs: True)):
+            deferred = self._generate(inputs, model=model, **kwargs)
         with patch.object(DeferredStopCheck, "is_supported", staticmethod(lambda *args, **kwargs: False)):
             immediate = self._generate(inputs, model=model, **kwargs)
         return deferred, immediate
