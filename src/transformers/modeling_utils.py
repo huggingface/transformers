@@ -39,13 +39,13 @@ from safetensors import safe_open
 from safetensors.torch import load as _safe_load_bytes
 from safetensors.torch import save_file as safe_save_file
 from torch import Tensor, nn
-from torch.autograd.graph import save_on_cpu
 from torch.distributions import constraints
 from torch.utils.checkpoint import checkpoint
 
 from transformers.distributed.utils import is_dtensor
 
 from . import initialization as init
+from .activation_offload import ActivationOffloadManager
 from .configuration_utils import PreTrainedConfig
 from .conversion_mapping import get_model_conversion_mapping
 from .core_model_loading import (
@@ -3202,7 +3202,10 @@ class PreTrainedModel(
                 Hold the activations saved for the recompute in pinned host memory rather than on the accelerator.
                 This frees `layers x sequence x hidden` bytes of device memory, which is what dominates at long
                 sequence lengths, and costs a device-to-host copy in the forward and a host-to-device copy in the
-                backward. Both copies run on the compute stream, so the step gets slower.
+                backward. Both copies run on their own streams, and the reload of the tensor the backward asks for
+                next starts while the current layer is still recomputing, so the transfers overlap compute rather
+                than serializing against it. The most recently saved activation stays on the accelerator, because
+                the backward asks for it first.
             gradient_checkpointing_kwargs (dict, *optional*):
                 Additional keyword arguments passed along to the `torch.utils.checkpoint.checkpoint` function.
         """
@@ -3213,12 +3216,13 @@ class PreTrainedModel(
             gradient_checkpointing_kwargs = {"use_reentrant": False}
 
         if offload:
-            device_type = torch.accelerator.current_accelerator().type
+            manager = self._enable_activation_offload()
 
             def checkpoint_func(function, *args, **kwargs):
-                with save_on_cpu(pin_memory=True, device_type=device_type):
+                with manager.hooks_ctx():
                     return checkpoint(function, *args, **kwargs)
         else:
+            self._disable_activation_offload()
             checkpoint_func = checkpoint
 
         gradient_checkpointing_func = functools.partial(checkpoint_func, **gradient_checkpointing_kwargs)
@@ -3287,6 +3291,30 @@ class PreTrainedModel(
                 " `gradient_checkpointing` to modules of the model that uses checkpointing."
             )
 
+    def _enable_activation_offload(self) -> ActivationOffloadManager:
+        """Attach one activation-offload manager to this model and return it.
+
+        The manager's slot order spans every checkpointed layer, so there is one per model rather than one per
+        layer. A forward that is never followed by a backward leaves slots nothing will ask for; the forward
+        pre-hook registered here clears them at the start of the next forward.
+        """
+        self._disable_activation_offload()
+        manager = ActivationOffloadManager(torch.accelerator.current_accelerator().type)
+
+        def reset_offload_slots(module, args):
+            manager.reset_pending()
+
+        self._activation_offload_manager = manager
+        self._activation_offload_pre_hook = self.register_forward_pre_hook(reset_offload_slots)
+        return manager
+
+    def _disable_activation_offload(self) -> None:
+        handle = getattr(self, "_activation_offload_pre_hook", None)
+        if handle is not None:
+            handle.remove()
+        self._activation_offload_pre_hook = None
+        self._activation_offload_manager = None
+
     def gradient_checkpointing_disable(self):
         """
         Deactivates gradient checkpointing for the current model.
@@ -3303,6 +3331,8 @@ class PreTrainedModel(
                     "Please update to the new format on your modeling file. To use the new format, you need to completely remove the definition of the method `_set_gradient_checkpointing` in your model."
                 )
                 self.apply(partial(self._set_gradient_checkpointing, value=False))
+
+        self._disable_activation_offload()
 
         if getattr(self, "_hf_peft_config_loaded", False):
             self.disable_input_require_grads()

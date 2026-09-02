@@ -3944,12 +3944,14 @@ class GradientCheckpointingOffloadTest(unittest.TestCase):
         for expected_grad, param in zip(expected, model.parameters()):
             torch.testing.assert_close(param.grad, expected_grad)
 
-    def test_frees_exactly_the_saved_activations(self):
+    def test_frees_exactly_the_saved_activations_outside_the_resident_window(self):
         num_hidden_layers, hidden_size, seq_len = 8, 256, 2048
-        # Each checkpointed layer saves one `seq_len x hidden_size` input for its recompute.
-        saved_bytes = num_hidden_layers * seq_len * hidden_size * 4  # fp32
+        # Each checkpointed layer saves one `seq_len x hidden_size` input for its recompute. The most recently
+        # saved one stays on the accelerator, because the backward asks for it before a copy of it could finish.
+        boundary_bytes = seq_len * hidden_size * 4  # fp32
 
         resident = []
+        offloaded_boundaries = None
         for offload in (False, True):
             model = self._model(num_hidden_layers, hidden_size)
             model.gradient_checkpointing_enable(offload=offload)
@@ -3958,12 +3960,58 @@ class GradientCheckpointingOffloadTest(unittest.TestCase):
             model.zero_grad(set_to_none=True)
             backend_synchronize(torch_device)
             backend_empty_cache(torch_device)
+            if offload:
+                model._activation_offload_manager.stats.reset()
 
             # Sampled after the forward, where every layer's saved input is still live.
             base = backend_memory_allocated(torch_device)
             output = model(input_ids=input_ids)
             backend_synchronize(torch_device)
             resident.append(backend_memory_allocated(torch_device) - base)
+            if offload:
+                offloaded_boundaries = model._activation_offload_manager.stats.offloaded_tensors
             del output, model
 
-        self.assertEqual(resident[0] - resident[1], saved_bytes)
+        # Read the window off the manager rather than assuming it: an implementation that offloaded nothing
+        # would otherwise satisfy an expectation written as a constant.
+        self.assertEqual(offloaded_boundaries, num_hidden_layers - 1)
+        self.assertEqual(resident[0] - resident[1], offloaded_boundaries * boundary_bytes)
+
+    def test_every_offloaded_activation_comes_back(self):
+        model = self._model()
+        model.gradient_checkpointing_enable(offload=True)
+        # Each boundary here is 2 MiB, over the manager's minimum: below it a saved tensor is left on the
+        # accelerator, and the counters this asserts on would report the path was not taken.
+        self._backward(model, torch.randint(0, 128, (1, 2048), device=torch_device))
+
+        stats = model._activation_offload_manager.stats
+        self.assertEqual(stats.restored_tensors, stats.offloaded_tensors)
+        self.assertEqual(stats.offloaded_tensors, 7)  # eight layers, the last boundary stays resident
+
+    def test_the_copies_do_not_run_on_the_compute_stream(self):
+        model = self._model()
+        model.gradient_checkpointing_enable(offload=True)
+        self._backward(model, torch.randint(0, 128, (1, 2048), device=torch_device))
+
+        manager = model._activation_offload_manager
+        compute_stream = manager.device_module.current_stream(torch_device)
+        self.assertNotEqual(manager._offload_stream, compute_stream)
+        self.assertNotEqual(manager._reload_stream, compute_stream)
+
+    def test_a_forward_without_a_backward_does_not_disturb_the_next_step(self):
+        input_ids = torch.randint(0, 128, (1, 512), device=torch_device)
+
+        model = self._model()
+        model.gradient_checkpointing_enable()
+        self._backward(model, input_ids)
+        expected = [p.grad.clone() for p in model.parameters()]
+
+        model.zero_grad(set_to_none=True)
+        model.gradient_checkpointing_enable(offload=True)
+        # This forward saves activations nothing will ever unpack. Left in place they would put the manager's
+        # reverse order out of step with what the next backward asks for.
+        model(input_ids=input_ids)
+        self._backward(model, input_ids)
+
+        for expected_grad, param in zip(expected, model.parameters()):
+            torch.testing.assert_close(param.grad, expected_grad)
