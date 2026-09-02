@@ -79,6 +79,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("bridgetower", "BridgeTowerModel"),
         ("bros", "BrosModel"),
         ("camembert", "CamembertModel"),
+        ("canary", "CanaryModel"),
         ("canine", "CanineModel"),
         ("chameleon", "ChameleonModel"),
         ("chinese_clip", "ChineseCLIPModel"),
@@ -369,6 +370,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("nemotron_asr_streaming", "NemotronAsrStreamingForRNNT"),
         ("nemotron_asr_streaming_encoder", "NemotronAsrStreamingEncoder"),
         ("nemotron_h", "NemotronHModel"),
+        ("neomme", "NeoMMEModel"),
+        ("neucodec", "NeuCodecModel"),
         ("nllb-moe", "NllbMoeModel"),
         ("nomic_bert", "NomicBertModel"),
         ("nystromformer", "NystromformerModel"),
@@ -1222,6 +1225,7 @@ MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
         ("mpnet", "MPNetForMaskedLM"),
         ("mra", "MraForMaskedLM"),
         ("mvp", "MvpForConditionalGeneration"),
+        ("neomme", "NeoMMEForMaskedLM"),
         ("nomic_bert", "NomicBertForMaskedLM"),
         ("nystromformer", "NystromformerForMaskedLM"),
         ("perceiver", "PerceiverForMaskedLM"),
@@ -1353,6 +1357,7 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = OrderedDict(
     [
+        ("canary", "CanaryForConditionalGeneration"),
         ("cohere_asr", "CohereAsrForConditionalGeneration"),
         ("dia", "DiaForConditionalGeneration"),
         ("granite_speech", "GraniteSpeechForConditionalGeneration"),
@@ -2022,6 +2027,7 @@ MODEL_FOR_AUDIO_TOKENIZATION_NAMES = OrderedDict(
     [
         ("dac", "DacModel"),
         ("higgs_audio_v2_tokenizer", "HiggsAudioV2TokenizerModel"),
+        ("neucodec", "NeuCodecModel"),
         ("vibevoice_acoustic_tokenizer", "VibeVoiceAcousticTokenizerModel"),
         ("xcodec2", "Xcodec2Model"),
     ]

@@ -74,10 +74,6 @@ class AXK2ModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = AXK2ModelTester
     model_split_percents = [0.5, 0.7, 0.8]
 
-    @unittest.skip("Can be fixed by #47438, currently does not properly considers cases where topk > prefill")
-    def test_left_padding_compatibility(self):
-        pass
-
     @unittest.skip("Fundamentally incompatible with indexer as there is no boundary between sequences")
     def test_eager_padding_matches_padding_free_with_position_ids(self):
         pass
