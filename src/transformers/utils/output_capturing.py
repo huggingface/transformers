@@ -109,8 +109,27 @@ def install_output_capuring_hook(
         if collected_outputs is None or key not in collected_outputs.keys():
             return
 
-        if capture_initial_hidden_state and key == "hidden_states" and len(collected_outputs[key]) == 0:
+        # Optionally capture only some layer's hidden_states
+        hidden_states_layers = collected_outputs.get("_hidden_states_layers")
+
+        # Historically, the first hidden_states output is actually the input of layer 0 (or inputs_embeds), so the hidden_states outputs
+        # have length `num_hidden_layers + 1`. When we request a list of explicit layers to capture, do not add this into the result, so
+        # that the indexing of the output is the same as the actual requested layers
+        if (
+            capture_initial_hidden_state
+            and key == "hidden_states"
+            and len(collected_outputs[key]) == 0
+            and hidden_states_layers is None
+        ):
             collected_outputs[key].append(args[0])
+
+        # If we are capturing only some layer's hidden_states, skip capture if not part of the requested indices
+        if key == "hidden_states" and hidden_states_layers is not None:
+            current_layer_idx = len(collected_outputs[key])
+            if current_layer_idx not in hidden_states_layers:
+                collected_outputs[key].append(None)
+                return
+
         if not isinstance(output, tuple):
             collected_outputs[key].append(output)
         elif output[index] is not None:
@@ -221,10 +240,9 @@ def capture_outputs(func=None, *, tie_last_hidden_states=True):
 
     Args:
         tie_last_hidden_states (`bool`, *optional*, defaults to `True`):
-            Whether to overwrite `out.hidden_states[-1]` with the `out.last_hidden_state`.
-            This is true for all language models and should be toggled off only if
-            `out.hidden_states[-1]` has to be the hidden state before last layer norm, which
-            is needed for some vision models (e.g. CLIP, SigLIP)
+            Whether to overwrite `out.hidden_states[-1]` with the `out.last_hidden_state`. This is true for all language models
+            and should be toggled off only if `out.hidden_states[-1]` has to be the hidden state before last layer norm, which
+            is needed for some vision models (e.g. CLIP, SigLIP).
     """
 
     def wrapped_fn(func):
@@ -251,6 +269,12 @@ def capture_outputs(func=None, *, tie_last_hidden_states=True):
                 )
 
             collected_outputs = {k.replace("output_", ""): [] for k, v in recordable_keys.items() if v}
+            # We accept a list of layer indices as `output_hidden_states`, to capture only specific layer outputs - in this case
+            # we need to add the layers to the `collected_outputs`'s dict to tell the hook which ones we need
+            if "output_hidden_states" in recordable_keys and isinstance(
+                recordable_keys["output_hidden_states"], (list, tuple, set)
+            ):
+                collected_outputs["_hidden_states_layers"] = set(recordable_keys["output_hidden_states"])
             # Make sure hooks are installed if we need to collect outputs
             if len(collected_outputs) > 0:
                 maybe_install_capturing_hooks(self)
@@ -264,10 +288,14 @@ def capture_outputs(func=None, *, tie_last_hidden_states=True):
             finally:
                 _active_collector.reset(output_token)
 
+            hidden_states_layers = collected_outputs.pop("_hidden_states_layers", None)
             # Inject collected outputs into model output (return everything as tuples for BC)
             for key in collected_outputs:
                 if key == "hidden_states":
-                    if not tie_last_hidden_states:
+                    # If we specifically don't tie, or did not capture the last layer, do nothing
+                    if not tie_last_hidden_states or (
+                        hidden_states_layers is not None and collected_outputs[key][-1] is None
+                    ):
                         pass
                     elif hasattr(outputs, "vision_hidden_states"):
                         collected_outputs[key] = collected_outputs[key][:-1]

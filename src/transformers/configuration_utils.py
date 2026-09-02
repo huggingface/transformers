@@ -1428,6 +1428,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         if hasattr(text_config, "first_k_dense_replace"):
             text_config.first_k_dense_replace = 0
 
+        # MTP uses independent per-layer overrides
+        text_config.per_layer_config = getattr(text_config, "mtp_per_layer_config", None)
+
         return text_config
 
 
