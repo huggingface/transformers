@@ -4,144 +4,117 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_qwen3_tts_tokenizer_single_codebook.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+# Copyright 2026 The Qwen team, Alibaba Group and the HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...utils import logging
+from ...utils import auto_docstring
 
 
-logger = logging.get_logger(__name__)
-
-# Configuration classes for Qwen3TTSTokenizerSingleCodebook
-
-
+@auto_docstring
 @strict
 class Qwen3TTSTokenizerSingleCodebookDiTConfig(PreTrainedConfig):
     r"""
-    Configuration class for the Qwen3-TTS SingleCodebook DiT decoder.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 1024):
-            Dimension of the DiT model.
-        num_hidden_layers (`int`, *optional*, defaults to 22):
-            Number of transformer blocks.
-        num_attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads.
-        ff_mult (`int`, *optional*, defaults to 2):
-            Feedforward layer multiplier.
-        emb_dim (`int`, *optional*, defaults to 512):
-            Codec embedding dimension.
-        head_dim (`int`, *optional*, defaults to 64):
-            Attention head dimension.
-        repeats (`int`, *optional*, defaults to 2):
-            Number of times codec embeddings are repeated.
-        num_embeds (`int`, *optional*, defaults to 8193):
-            Number of unique codec embeddings.
-        mel_dim (`int`, *optional*, defaults to 80):
-            Mel-spectrogram dimension.
-        dropout (`float`, *optional*, defaults to 0.1):
-            Dropout probability.
-        block_size (`int`, *optional*, defaults to 24):
-            Block size for block-diagonal attention mask.
-        look_ahead_layers (`list[int]`, *optional*, defaults to `[10]`):
-            Layer indices that use look-ahead attention.
-        look_backward_layers (`list[int]`, *optional*, defaults to `[0, 20]`):
-            Layer indices that use look-backward attention.
-        enc_emb_dim (`int`, *optional*, defaults to 192):
-            Speaker embedding dimension.
-        enc_dim (`int`, *optional*, defaults to 128):
-            Encoder output dimension.
-        enc_channels (`list[int]`, *optional*, defaults to `[256, 256, 256, 256, 768]`):
-            Encoder channel sizes.
-        enc_kernel_sizes (`list[int]`, *optional*, defaults to `[5, 3, 3, 3, 1]`):
-            Encoder kernel sizes.
-        enc_dilations (`list[int]`, *optional*, defaults to `[1, 2, 3, 4, 1]`):
-            Encoder dilations.
-        enc_attention_channels (`int`, *optional*, defaults to 64):
-            Encoder attention channels.
-        enc_res2net_scale (`int`, *optional*, defaults to 2):
-            Encoder Res2Net scale.
-        enc_se_channels (`int`, *optional*, defaults to 64):
-            Encoder SE channels.
-        rope_parameters (`RopeParameters`, *optional*):
-            RoPE configuration.
-        max_position_embeddings (`int`, *optional*, defaults to 32768):
-            Maximum sequence length.
+    ff_mult (`int`, *optional*, defaults to 2):
+        The multiplier for the feedforward layer in each transformer block.
+    emb_dim (`int`, *optional*, defaults to 512):
+        The dimension of the embedding layer.
+    block_size (`int`, *optional*, defaults to 64):
+        Number of tokens (frames) in each processing block.
+    look_ahead_layers (`list[int]`, *optional*, defaults to `[10]`):
+        Number of transformer layers that are permitted to attend to future blocks
+    look_backward_layers (`list[int]`, *optional*, defaults to `[0, 20]`):
+        Number of transformer layers that attend to past blocks beyond the current block boundary
+    repeats (`int`, *optional*, defaults to 2):
+        The number of times the codec embeddings are repeated.
+    num_embeds (`int`, *optional*, defaults to 8193):
+        The number of unique embeddings in the codec.
+    mel_dim (`int`, *optional*, defaults to 80):
+        The dimension of the mel-spectrogram.
+    enc_emb_dim (`int`, *optional*, defaults to 192):
+        The dimension of the pre-trained speaker embedding.
+    enc_dim (`int`, *optional*, defaults to 128):
+        The dimension of the encoder output.
+    enc_channels (`list[int]`, *optional*, defaults to `[256, 256, 256, 256, 768]`):
+        A list of output channels for each TDNN/SERes2Net layer in the encoder.
+    enc_kernel_sizes (`list[int]`, *optional*, defaults to `[5, 3, 3, 3, 1]`):
+        A list of kernel sizes for each layer in the encoder.
+    enc_dilations (`list[int]`, *optional*, defaults to `[1, 2, 3, 4, 1]`):
+        A list of dilations for each layer in the encoder.
+    enc_attention_channels (`int`, *optional*, defaults to 64):
+        The number of attention channels in the SqueezeExcitationBlock.
+    enc_res2net_scale (`int`, *optional*, defaults to 2):
+        The scale of the Res2Net block in the encoder.
+    enc_se_channels (`int`, *optional*, defaults to 64):
+        The number of output channels after squeeze in the SqueezeExcitationBlock.
     """
 
     model_type = "qwen3_tts_tokenizer_single_codebook_decoder_dit"
+
+    hidden_size: int = 1024
+    num_hidden_layers: int = 22
+    num_attention_heads: int = 16
+    ff_mult: int = 2
+    emb_dim: int = 512
+    head_dim: int = 64
+    rope_parameters: RopeParameters | dict | None = None
+    max_position_embeddings: int = 32768
+    block_size: int = 24
+    look_ahead_layers: list[int] | tuple[int, ...] = (10,)
+    look_backward_layers: list[int] | tuple[int, ...] = (0, 20)
+    repeats: int = 2
+    num_embeds: int = 8193
+    mel_dim: int = 80
+    dropout: float | int = 0.1
+    enc_emb_dim: int = 192
+    enc_dim: int = 128
+    enc_channels: list[int] | tuple[int, ...] = (256, 256, 256, 256, 768)
+    enc_kernel_sizes: list[int] | tuple[int, ...] = (5, 3, 3, 3, 1)
+    enc_dilations: list[int] | tuple[int, ...] = (1, 2, 3, 4, 1)
+    enc_attention_channels: int = 64
+    enc_res2net_scale: int = 2
+    enc_se_channels: int = 64
     base_config_key = "dit_config"
 
-    def __init__(
-        self,
-        hidden_size: int | None = 1024,
-        num_hidden_layers: int | None = 22,
-        num_attention_heads: int | None = 16,
-        ff_mult: int | None = 2,
-        emb_dim: int | None = 512,
-        head_dim: int | None = 64,
-        repeats: int | None = 2,
-        num_embeds: int | None = 8193,
-        mel_dim: int | None = 80,
-        dropout: float | None = 0.1,
-        block_size: int | None = 24,
-        look_ahead_layers: list[int] | None = None,
-        look_backward_layers: list[int] | None = None,
-        enc_emb_dim: int | None = 192,
-        enc_dim: int | None = 128,
-        enc_channels: list[int] | None = None,
-        enc_kernel_sizes: list[int] | None = None,
-        enc_dilations: list[int] | None = None,
-        enc_attention_channels: int | None = 64,
-        enc_res2net_scale: int | None = 2,
-        enc_se_channels: int | None = 64,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        max_position_embeddings: int | None = 32768,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.ff_mult = ff_mult
-        self.emb_dim = emb_dim
-        self.head_dim = head_dim
-        self.repeats = repeats
-        self.num_embeds = num_embeds
-        self.mel_dim = mel_dim
-        self.dropout = dropout
-        self.block_size = block_size
-        self.look_ahead_layers = look_ahead_layers if look_ahead_layers is not None else [10]
-        self.look_backward_layers = look_backward_layers if look_backward_layers is not None else [0, 20]
-        self.enc_emb_dim = enc_emb_dim
-        self.enc_dim = enc_dim
-        self.enc_channels = enc_channels if enc_channels is not None else [256, 256, 256, 256, 768]
-        self.enc_kernel_sizes = enc_kernel_sizes if enc_kernel_sizes is not None else [5, 3, 3, 3, 1]
-        self.enc_dilations = enc_dilations if enc_dilations is not None else [1, 2, 3, 4, 1]
-        self.enc_attention_channels = enc_attention_channels
-        self.enc_res2net_scale = enc_res2net_scale
-        self.enc_se_channels = enc_se_channels
-        self.rope_parameters = (
-            rope_parameters if rope_parameters is not None else {"rope_type": "default", "rope_theta": 500000.0}
-        )
-        self.max_position_embeddings = max_position_embeddings
 
-
+@auto_docstring
 @strict
 class Qwen3TTSTokenizerSingleCodebookDecoderBigVGANConfig(PreTrainedConfig):
     r"""
-    Configuration class for the Qwen3-TTS SingleCodebook BigVGAN vocoder.
-
-    Args:
-        conv_pre_kernel_size (`int`, *optional*, defaults to 5):
-            Kernel size for the input projection convolution.
-        conv_pre_stride (`int`, *optional*, defaults to 1):
-            Stride for the input projection convolution.
-        conv_pre_padding (`int`, *optional*, defaults to 2):
-            Padding for the input projection convolution.
-        resblock_causal_types (`list[str]`, *optional*):
-            Causal convolution type for each upsampling layer's residual blocks.
+    mel_dim (`int`, *optional*, defaults to 80):
+        The dimension of the mel-spectrogram.
+    upsample_initial_channel (`int`, *optional*, defaults to 1536):
+        The number of channels in the initial upsampling layer.
+    resblock_kernel_sizes (`list[int]`, *optional*, defaults to `[3, 7, 11]`):
+        A list of kernel sizes for each residual block.
+    resblock_dilation_sizes (`list[list[int]]`, *optional*, defaults to `[[1, 3, 5], [1, 3, 5], [1, 3, 5]]`):
+        A list of dilation sizes for each residual block.
+    upsample_rates (`list[int]`, *optional*, defaults to `[5, 3, 2, 2, 2, 2]`):
+        A list of upsampling rates for each upsampling layer.
+    upsample_kernel_sizes (`list[int]`, *optional*, defaults to `[11, 7, 4, 4, 4, 4]`):
+        A list of kernel sizes for each upsampling layer.
+    conv_pre_kernel_size (`int`, *optional*, defaults to 5):
+        Kernel size of the vocoder input convolution.
+    conv_pre_stride (`int`, *optional*, defaults to 1):
+        Stride of the vocoder input convolution.
+    conv_pre_padding (`int`, *optional*, defaults to 2):
+        Padding of the vocoder input convolution.
+    resblock_causal_modes (`list[str]`, *optional*):
+        Per-upsample residual-block mode. `"full_causal"` uses causal convolutions throughout.
+        `"hybrid"` uses causal `convs1` and symmetric `convs2`.
     """
 
     model_type = "qwen3_tts_tokenizer_single_codebook_decoder_bigvgan"
@@ -157,193 +130,189 @@ class Qwen3TTSTokenizerSingleCodebookDecoderBigVGANConfig(PreTrainedConfig):
     conv_pre_kernel_size: int = 5
     conv_pre_stride: int = 1
     conv_pre_padding: int = 2
-    resblock_causal_types: list[str] | tuple[str, ...] = ("2", "2", "1", "1", "1", "1")
+    resblock_causal_modes: list[str] | tuple[str, ...] = (
+        "full_causal",
+        "full_causal",
+        "hybrid",
+        "hybrid",
+        "hybrid",
+        "hybrid",
+    )
 
 
+@auto_docstring
 @strict
 class Qwen3TTSTokenizerSingleCodebookDecoderConfig(PreTrainedConfig):
     r"""
-    Configuration class for the Qwen3-TTS SingleCodebook decoder (DiT + BigVGAN).
+    dit_config ([`DiT_Args`], *optional*):
+        Configuration class for the Diffusion Transformer (DiT) module responsible for generating mel-spectrograms.
+    bigvgan_config ([`BigVGAN_Args`], *optional*):
+        Configuration class for the BigVGAN module responsible for converting mel-spectrograms to waveforms.
 
-    Args:
-        dit_config (`dict`, *optional*):
-            Configuration for the DiT sub-model.
-        bigvgan_config (`dict`, *optional*):
-            Configuration for the BigVGAN sub-model.
+    Example:
+
+    ```python
+    >>> from transformers import Qwen3TTSTokenizerSingleCodebookDecoderModel, DiT_Args, BigVGAN_Args
+
+    >>> # Initialize DiT configuration
+    >>> dit_config = DiT_Args(
+    ...     dim=1024,
+    ...     depth=22,
+    ...     heads=16,
+    ...     ff_mult=2
+    ... )
+
+    >>> # Initialize BigVGAN configuration
+    >>> bigvgan_config = BigVGAN_Args(
+    ...     mel_dim=80,
+    ...     upsample_rates=[5,3,2,2,2,2]
+    ... )
+
+    >>> # Initialize main configuration
+    >>> config = Qwen3TTSTokenizerSingleCodebookDecoderConfig(dit_config, bigvgan_config)
+
+    >>> # Initialize model with config
+    >>> model = Qwen3TTSTokenizerSingleCodebookDecoder(config)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```
     """
 
+    model_type = "qwen3_tts_tokenizer_single_codebook_decoder"
     sub_configs = {
         "dit_config": Qwen3TTSTokenizerSingleCodebookDiTConfig,
         "bigvgan_config": Qwen3TTSTokenizerSingleCodebookDecoderBigVGANConfig,
     }
 
-    def __init__(
-        self,
-        dit_config: dict | None = None,
-        bigvgan_config: dict | None = None,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
+    dit_config: dict | PreTrainedConfig | None = None
+    bigvgan_config: dict | PreTrainedConfig | None = None
 
-        if dit_config is None:
-            dit_config = {}
-            logger.info("dit_config is None. Initializing DiT with default values.")
-        if bigvgan_config is None:
-            bigvgan_config = {}
-            logger.info("bigvgan_config is None. Initializing BigVGAN with default values.")
+    def __post_init__(self, **kwargs):
+        if self.dit_config is None:
+            self.dit_config = Qwen3TTSTokenizerSingleCodebookDiTConfig()
+        elif isinstance(self.dit_config, dict):
+            self.dit_config = Qwen3TTSTokenizerSingleCodebookDiTConfig(**self.dit_config)
 
-        self.dit_config = (
-            Qwen3TTSTokenizerSingleCodebookDiTConfig(**dit_config) if isinstance(dit_config, dict) else dit_config
-        )
-        self.bigvgan_config = (
-            Qwen3TTSTokenizerSingleCodebookDecoderBigVGANConfig(**bigvgan_config)
-            if isinstance(bigvgan_config, dict)
-            else bigvgan_config
-        )
+        if self.bigvgan_config is None:
+            self.bigvgan_config = Qwen3TTSTokenizerSingleCodebookDecoderBigVGANConfig()
+        elif isinstance(self.bigvgan_config, dict):
+            self.bigvgan_config = Qwen3TTSTokenizerSingleCodebookDecoderBigVGANConfig(**self.bigvgan_config)
+
+        super().__post_init__(**kwargs)
 
 
+@auto_docstring
 @strict
 class Qwen3TTSTokenizerSingleCodebookEncoderConfig(PreTrainedConfig):
     r"""
-    Configuration class for the Qwen3-TTS SingleCodebook Whisper-based VQ encoder.
-
-    Args:
-        n_mels (`int`, *optional*, defaults to 128):
-            Number of mel filterbanks.
-        n_ctx (`int`, *optional*, defaults to 1500):
-            Maximum context length.
-        n_state (`int`, *optional*, defaults to 1024):
-            Hidden state dimension.
-        n_head (`int`, *optional*, defaults to 16):
-            Number of attention heads.
-        n_layer (`int`, *optional*, defaults to 24):
-            Number of transformer layers.
-        n_window (`int`, *optional*, defaults to 128):
-            Window size for windowed attention.
-        output_dim (`int`, *optional*, defaults to 512):
-            VQ output dimension.
-        grad_checkpointing (`bool`, *optional*, defaults to `False`):
-            Whether to use gradient checkpointing.
-        enable_mp (`bool`, *optional*, defaults to `False`):
-            Whether to enable mixed precision.
-        audio_sequence_parallel (`bool`, *optional*, defaults to `False`):
-            Whether to use sequence parallelism for audio.
-        audio_vq_type (`str`, *optional*, defaults to `"GRVQ"`):
-            Type of vector quantization.
-        audio_vq_layers (`int`, *optional*, defaults to 1):
-            Number of VQ layers.
-        audio_vq_codebook_size (`int`, *optional*, defaults to 512):
-            Codebook size.
-        audio_vq_codebook_dim (`int`, *optional*, defaults to 512):
-            Codebook vector dimension.
-        audio_vq_pe (`str`, *optional*, defaults to `"rope"`):
-            Position encoding type for VQ.
-        audio_vq_ds_rate (`int`, *optional*, defaults to 2):
-            Downsampling rate inside the VQ module.
+    max_source_positions (`int`, *optional*, defaults to 1500):
+        The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
+    num_layers_before_quantizer (`int`, *optional*, defaults to 1):
+        Number of encoder layers run before the sibling quantizer.
     """
 
     model_type = "qwen3_tts_tokenizer_single_codebook_encoder"
+    attribute_map = {
+        "num_hidden_layers": "encoder_layers",
+        "hidden_size": "d_model",
+        "num_attention_heads": "encoder_attention_heads",
+        "intermediate_size": "encoder_ffn_dim",
+    }
+
+    num_mel_bins: int = 128
+
+    encoder_layers: int = 1
+    encoder_attention_heads: int = 16
+    encoder_ffn_dim: int = 4096
+    encoder_layerdrop: float | int = 0.0
+    d_model: int = 1024
+    dropout: float | int = 0.0
+    attention_dropout: float | int = 0.0
+    activation_function: str = "gelu"
+    activation_dropout: float | int = 0.0
+    scale_embedding: bool = False
+    initializer_range: float = 0.02
+    max_source_positions: int = 1500
     base_config_key = "encoder_config"
-
-    def __init__(
-        self,
-        n_mels: int | None = 128,
-        n_ctx: int | None = 1500,
-        n_state: int | None = 1024,
-        n_head: int | None = 16,
-        n_layer: int | None = 24,
-        n_window: int | None = 128,
-        output_dim: int | None = 512,
-        grad_checkpointing: bool | None = False,
-        enable_mp: bool | None = False,
-        audio_sequence_parallel: bool | None = False,
-        audio_vq_type: str | None = "GRVQ",
-        audio_vq_layers: int | None = 1,
-        audio_vq_codebook_size: int | None = 512,
-        audio_vq_codebook_dim: int | None = 512,
-        audio_vq_pe: str | None = "rope",
-        audio_vq_ds_rate: int | None = 2,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.n_mels = n_mels
-        self.n_ctx = n_ctx
-        self.n_state = n_state
-        self.n_head = n_head
-        self.n_layer = n_layer
-        self.n_window = n_window
-        self.output_dim = output_dim
-        self.grad_checkpointing = grad_checkpointing
-        self.enable_mp = enable_mp
-        self.audio_sequence_parallel = audio_sequence_parallel
-        self.audio_vq_type = audio_vq_type
-        self.audio_vq_layers = audio_vq_layers
-        self.audio_vq_codebook_size = audio_vq_codebook_size
-        self.audio_vq_codebook_dim = audio_vq_codebook_dim
-        self.audio_vq_pe = audio_vq_pe
-        self.audio_vq_ds_rate = audio_vq_ds_rate
+    num_layers_before_quantizer: int = 1
 
 
+@auto_docstring
+@strict
+class Qwen3TTSTokenizerSingleCodebookQuantizerConfig(PreTrainedConfig):
+    r"""
+    hidden_size (`int`, *optional*, defaults to 1024):
+        Encoder hidden size entering the quantizer.
+    codebook_size (`int`, *optional*, defaults to 512):
+        Number of vectors in the single codebook.
+    codebook_dim (`int`, *optional*, defaults to 512):
+        Dimension of each codebook vector.
+    downsample_rate (`int`, *optional*, defaults to 2):
+        Stride of the convolution applied before quantization.
+    """
+
+    model_type = "qwen3_tts_tokenizer_single_codebook_quantizer"
+    base_config_key = "quantizer_config"
+
+    hidden_size: int = 1024
+    codebook_size: int = 512
+    codebook_dim: int = 512
+    downsample_rate: int = 2
+
+
+@auto_docstring
 @strict
 class Qwen3TTSTokenizerSingleCodebookConfig(PreTrainedConfig):
     r"""
-    Configuration class for the Qwen3-TTS SingleCodebook tokenizer (Whisper VQ encoder + DiT/BigVGAN decoder).
-
-    Args:
-        encoder_config (`dict`, *optional*):
-            Configuration for the Whisper-based VQ encoder.
-        decoder_config (`dict`, *optional*):
-            Configuration for the DiT+BigVGAN decoder.
-        input_sample_rate (`int`, *optional*, defaults to 24000):
-            Sample rate of the input audio.
-        output_sample_rate (`int`, *optional*, defaults to 24000):
-            Sample rate of the decoded output audio.
-        decode_upsample_rate (`int`, *optional*, defaults to 200):
-            Upsampling rate applied during decoding.
-        encode_downsample_rate (`int`, *optional*, defaults to 200):
-            Downsampling rate applied during encoding.
+    encoder_config (`dict`, *optional*):
+        Configuration of the Whisper-family encoder.
+    quantizer_config (`dict`, *optional*):
+        Configuration of the sibling vector quantizer.
+    decoder_config (`dict`, *optional*):
+        Configuration of the DiT and BigVGAN decoder.
+    input_sample_rate (`int`, *optional*, defaults to 24000):
+        Sample rate of the input audio.
+    output_sample_rate (`int`, *optional*, defaults to 24000):
+        Sample rate of the decoded waveform.
+    encode_downsample_rate (`int`, *optional*, defaults to 200):
+        Frames of input audio represented by one code.
+    decode_upsample_rate (`int`, *optional*, defaults to 200):
+        Samples of output audio produced from one code.
     """
 
     model_type = "qwen3_tts_tokenizer_single_codebook"
     sub_configs = {
         "encoder_config": Qwen3TTSTokenizerSingleCodebookEncoderConfig,
+        "quantizer_config": Qwen3TTSTokenizerSingleCodebookQuantizerConfig,
         "decoder_config": Qwen3TTSTokenizerSingleCodebookDecoderConfig,
     }
 
-    def __init__(
-        self,
-        encoder_config: dict | None = None,
-        decoder_config: dict | None = None,
-        input_sample_rate: int | None = 24000,
-        output_sample_rate: int | None = 24000,
-        decode_upsample_rate: int | None = 200,
-        encode_downsample_rate: int | None = 200,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
+    encoder_config: dict | PreTrainedConfig | None = None
+    quantizer_config: dict | PreTrainedConfig | None = None
+    decoder_config: dict | PreTrainedConfig | None = None
+    input_sample_rate: int = 24000
+    output_sample_rate: int = 24000
+    encode_downsample_rate: int = 200
+    decode_upsample_rate: int = 200
 
-        if encoder_config is None:
-            encoder_config = {}
-            logger.info("encoder_config is None. Initializing SingleCodebook encoder with default values.")
-        if decoder_config is None:
-            decoder_config = {}
-            logger.info("decoder_config is None. Initializing SingleCodebook decoder with default values.")
+    def __post_init__(self, **kwargs):
+        if self.encoder_config is None:
+            self.encoder_config = Qwen3TTSTokenizerSingleCodebookEncoderConfig()
+        elif isinstance(self.encoder_config, dict):
+            self.encoder_config = Qwen3TTSTokenizerSingleCodebookEncoderConfig(**self.encoder_config)
 
-        self.encoder_config = (
-            Qwen3TTSTokenizerSingleCodebookEncoderConfig(**encoder_config)
-            if isinstance(encoder_config, dict)
-            else encoder_config
-        )
-        self.decoder_config = (
-            Qwen3TTSTokenizerSingleCodebookDecoderConfig(**decoder_config)
-            if isinstance(decoder_config, dict)
-            else decoder_config
-        )
+        if self.quantizer_config is None:
+            self.quantizer_config = Qwen3TTSTokenizerSingleCodebookQuantizerConfig()
+        elif isinstance(self.quantizer_config, dict):
+            self.quantizer_config = Qwen3TTSTokenizerSingleCodebookQuantizerConfig(**self.quantizer_config)
 
-        self.input_sample_rate = input_sample_rate
-        self.output_sample_rate = output_sample_rate
-        self.decode_upsample_rate = decode_upsample_rate
-        self.encode_downsample_rate = encode_downsample_rate
+        if self.decoder_config is None:
+            self.decoder_config = Qwen3TTSTokenizerSingleCodebookDecoderConfig()
+        elif isinstance(self.decoder_config, dict):
+            self.decoder_config = Qwen3TTSTokenizerSingleCodebookDecoderConfig(**self.decoder_config)
+
+        super().__post_init__(**kwargs)
 
 
 __all__ = [
@@ -352,4 +321,5 @@ __all__ = [
     "Qwen3TTSTokenizerSingleCodebookDecoderConfig",
     "Qwen3TTSTokenizerSingleCodebookDiTConfig",
     "Qwen3TTSTokenizerSingleCodebookEncoderConfig",
+    "Qwen3TTSTokenizerSingleCodebookQuantizerConfig",
 ]
