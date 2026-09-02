@@ -27,7 +27,7 @@ from transformers import AutoModelForCausalLM, KernelConfig
 
 kernel_config = KernelConfig(
     kernel_mapping={
-        "RMSNorm": "kernels-community/rmsnorm",
+        "RMSNorm": "kernels-community/liger-kernels:LigerRMSNorm",
     }
 )
 model = AutoModelForCausalLM.from_pretrained(
