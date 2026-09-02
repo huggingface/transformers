@@ -42,7 +42,7 @@ class Qwen3TTSTokenizerSingleCodebookModelTester:
 
         self.encoder_config = {
             "num_mel_bins": 16,
-            "d_model": 16,
+            "hidden_size": 16,
             "encoder_layers": 1,
             "encoder_attention_heads": 2,
             "encoder_ffn_dim": 32,

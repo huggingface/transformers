@@ -63,8 +63,8 @@ class Qwen3TTSTokenizerSingleCodebookPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Qwen3TTSTokenizerSingleCodebookEncoderOutput(ModelOutput):
     r"""
     audio_codes (`torch.LongTensor` of shape `(batch_size, codes_length)`):
@@ -77,8 +77,8 @@ class Qwen3TTSTokenizerSingleCodebookEncoderOutput(ModelOutput):
     audio_codes_mask: torch.Tensor | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Qwen3TTSTokenizerSingleCodebookDecoderOutput(ModelOutput):
     r"""
     audio_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
@@ -322,6 +322,7 @@ class Qwen3TTSTokenizerSingleCodebookEncoder(Qwen3TTSTokenizerSingleCodebookPreT
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         input_features,
@@ -440,6 +441,7 @@ class Qwen3TTSTokenizerSingleCodebookQuantizer(Qwen3TTSTokenizerSingleCodebookPr
         audio_codes_mask = None
         if attention_mask is not None:
             code_lengths = attention_mask.long().sum(-1)
+            # CODEPATH: 25 Hz tokenizer uses downsample_rate=2; rate 1 would skip this integer divide
             if self.config.downsample_rate > 1:
                 code_lengths = code_lengths // self.config.downsample_rate
             seq_len = audio_codes.size(1)
@@ -1597,8 +1599,12 @@ class Qwen3TTSTokenizerSingleCodebookDecoderDiTModel(Qwen3TTSTokenizerSingleCode
             [
                 Qwen3TTSTokenizerSingleCodebookDiTDecoderLayer(
                     config,
-                    look_ahead_block=1 if i in config.look_ahead_layers else 0,
-                    look_backward_block=1 if i in config.look_backward_layers else 0,
+                    look_ahead_block=1
+                    if i in config.look_ahead_layers
+                    else 0,  # CODEPATH: Omni Token2Wav DiT look-ahead layers
+                    look_backward_block=1
+                    if i in config.look_backward_layers
+                    else 0,  # CODEPATH: Omni Token2Wav DiT look-backward layers
                 )
                 for i in range(config.num_hidden_layers)
             ]
@@ -1759,6 +1765,7 @@ class Qwen3TTSTokenizerSingleCodebookDecoder(Qwen3TTSTokenizerSingleCodebookPreT
         )
         self.post_init()
 
+    @auto_docstring
     def forward(
         self,
         code,
@@ -1769,7 +1776,14 @@ class Qwen3TTSTokenizerSingleCodebookDecoder(Qwen3TTSTokenizerSingleCodebookPreT
         sway_coefficient=-1.0,
         **kwargs,
     ):
-        """Generates a waveform from input code and conditioning parameters."""
+        r"""
+        code (`torch.LongTensor`):
+            Discrete speech codes.
+        conditioning (`torch.FloatTensor`):
+            Speaker conditioning vector for the DiT sampler.
+        reference_mel (`torch.FloatTensor`):
+            Reference mel spectrogram for the DiT sampler.
+        """
         mel_spectrogram = self.dit.sample(
             conditioning,
             reference_mel,
