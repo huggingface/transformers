@@ -121,23 +121,9 @@ class PhimoeIntegrationTest(unittest.TestCase):
     def get_model(cls):
         if cls.model is None:
             cls.offload_dir = tempfile.TemporaryDirectory()
-            # This checkpoint is ~78 GiB in bf16, which very nearly fills the accelerators of a CI
-            # runner, so `device_map="auto"` must be given an explicit budget that leaves headroom on
-            # every device. `get_balanced_memory` only reserves its 10% margin when a *single*
-            # accelerator is visible (`max_memory[key] *= 0.9` sits inside `if num_devices == 1`);
-            # with several it hands every device its full capacity, the whole model lands on the
-            # accelerators with nothing spilled, and loading then OOMs while merging the experts'
-            # `w1`/`w3` into `gate_up_proj` — that `torch.cat` needs a ~1.7 GiB temporary per layer.
-            # Inference has no room for activations either. That is also why only the multi-gpu
-            # variant fails: single-gpu does get the 0.9 margin and spills to CPU.
-            #
-            # So budget 80% of each accelerator and let the surplus go to CPU (and to
-            # `offload_folder` beyond that). #48290's 60 GiB x num_accelerators CPU budget is
-            # preserved, but passed as `max_memory` instead of by capping what psutil reports:
-            # `patch_psutil_cpu_memory` takes `min(mem.total, limit)`, so a 240 GiB "cap" was inert
-            # on this runner, and a CPU-side budget cannot create accelerator headroom anyway.
-            # `device_map="auto"` plans against each device's full capacity, leaving
-            # nothing for the ~1.6 GiB temporary the expert gate/up merge allocates.
+            # `device_map="auto"` budgets each device to its full capacity when more
+            # than one is visible, leaving nothing for the ~1.6 GiB temporary the
+            # expert gate/up merge allocates while loading.
             with contextlib.suppress(Exception):  # absent on older torch
                 torch.cuda.memory._set_allocator_settings("expandable_segments:True")
             if not torch.cuda.is_available() or torch.cuda.device_count() == 0:
