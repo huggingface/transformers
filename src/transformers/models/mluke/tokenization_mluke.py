@@ -241,12 +241,12 @@ class MLukeTokenizer(TokenizersBackend):
 
         # we add 2 special tokens for downstream tasks
         entity_token_1 = (
-            AddedToken(entity_token_1, lstrip=False, rstrip=False, normalized=False, special=True)
+            AddedToken(entity_token_1, lstrip=False, rstrip=False)
             if isinstance(entity_token_1, str)
             else entity_token_1
         )
         entity_token_2 = (
-            AddedToken(entity_token_2, lstrip=False, rstrip=False, normalized=False, special=True)
+            AddedToken(entity_token_2, lstrip=False, rstrip=False)
             if isinstance(entity_token_2, str)
             else entity_token_2
         )

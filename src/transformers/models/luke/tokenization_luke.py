@@ -325,12 +325,12 @@ class LukeTokenizer(TokenizersBackend):
 
         # Add entity tokens to extra_special_tokens
         entity_token_1 = (
-            AddedToken(entity_token_1, lstrip=False, rstrip=False, normalized=False, special=True)
+            AddedToken(entity_token_1, lstrip=False, rstrip=False)
             if isinstance(entity_token_1, str)
             else entity_token_1
         )
         entity_token_2 = (
-            AddedToken(entity_token_2, lstrip=False, rstrip=False, normalized=False, special=True)
+            AddedToken(entity_token_2, lstrip=False, rstrip=False)
             if isinstance(entity_token_2, str)
             else entity_token_2
         )
