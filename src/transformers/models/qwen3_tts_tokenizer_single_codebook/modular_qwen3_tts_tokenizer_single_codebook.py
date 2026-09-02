@@ -35,7 +35,11 @@ from ..qwen2_5_omni.configuration_qwen2_5_omni import (
 )
 from ..qwen2_5_omni.modeling_qwen2_5_omni import (
     DiTAttention,
+    DiTCodecEmbedding,
     DiTDecoderLayer,
+    DiTInputEmbedding,
+    DiTTimestepEmbedding,
+    Qwen2_5_OmniAdaLayerNormZero_Final,
     Qwen2_5OmniAMPBlock,
     Qwen2_5OmniAntiAliasedActivation1d,
     Qwen2_5OmniSnakeBeta,
@@ -138,17 +142,11 @@ class Qwen3TTSTokenizerSingleCodebookEncoderConfig(Qwen2AudioEncoderConfig):
 
     model_type = "qwen3_tts_tokenizer_single_codebook_encoder"
     base_config_key = "encoder_config"
-    attribute_map = {
-        "num_hidden_layers": "encoder_layers",
-        "d_model": "hidden_size",
-        "num_attention_heads": "encoder_attention_heads",
-        "intermediate_size": "encoder_ffn_dim",
-    }
 
     encoder_layers: int = 1
     encoder_attention_heads: int = 16
     encoder_ffn_dim: int = 4096
-    hidden_size: int = 1024
+    d_model: int = 1024
     num_layers_before_quantizer: int = 1
 
 
@@ -519,6 +517,10 @@ class Qwen3TTSTokenizerSingleCodebookDiTAttention(DiTAttention):
         return attention_output
 
 
+class Qwen3TTSTokenizerSingleCodebookAdaLayerNormZeroFinal(Qwen2_5_OmniAdaLayerNormZero_Final):
+    pass
+
+
 class Qwen3TTSTokenizerSingleCodebookDiTDecoderLayer(DiTDecoderLayer):
     def __init__(self, config: Qwen3TTSTokenizerSingleCodebookDiTConfig, look_ahead_block=0, look_backward_block=0):
         super().__init__(config, look_ahead_block=look_ahead_block, look_backward_block=look_backward_block)
@@ -531,22 +533,30 @@ class Qwen3TTSTokenizerSingleCodebookDecoderDiTModel(Qwen2_5OmniToken2WavDiTMode
     _no_split_modules = ["Qwen3TTSTokenizerSingleCodebookDiTDecoderLayer"]
 
     def __init__(self, config: Qwen3TTSTokenizerSingleCodebookDiTConfig):
-        super().__init__(config)
+        PreTrainedModel.__init__(self, config)
+        self.mel_dim = config.mel_dim
+        self.repeats = config.repeats
+        self.time_embed = DiTTimestepEmbedding(config.hidden_size)
+        self.text_embed = DiTCodecEmbedding(config.num_embeds, config.emb_dim, config.repeats)
+        self.input_embed = DiTInputEmbedding(config)
         self.rotary_embed = Qwen3TTSTokenizerSingleCodebookDiTRotaryEmbedding(config)
-        self.transformer_blocks = nn.ModuleList(
-            [
+        self.hidden_size = config.hidden_size
+        self.layers = config.num_hidden_layers
+        self.block_size = config.block_size
+        self.num_attention_heads = config.num_attention_heads
+        self.transformer_blocks = nn.ModuleList()
+        for i in range(config.num_hidden_layers):
+            # CODEPATH: Omni Token2Wav DiT look-ahead and look-backward layer sets
+            self.transformer_blocks.append(
                 Qwen3TTSTokenizerSingleCodebookDiTDecoderLayer(
                     config,
-                    look_ahead_block=1
-                    if i in config.look_ahead_layers
-                    else 0,  # CODEPATH: Omni Token2Wav DiT look-ahead layers
-                    look_backward_block=1
-                    if i in config.look_backward_layers
-                    else 0,  # CODEPATH: Omni Token2Wav DiT look-backward layers
+                    look_ahead_block=int(i in config.look_ahead_layers),
+                    look_backward_block=int(i in config.look_backward_layers),
                 )
-                for i in range(config.num_hidden_layers)
-            ]
-        )
+            )
+        self.norm_out = Qwen3TTSTokenizerSingleCodebookAdaLayerNormZeroFinal(config.hidden_size)
+        self.proj_out = nn.Linear(config.hidden_size, config.mel_dim)
+        self.post_init()
 
     @torch.no_grad()
     def sample(
