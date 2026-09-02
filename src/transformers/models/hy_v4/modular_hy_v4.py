@@ -50,22 +50,22 @@ from ..gpt_oss.modeling_gpt_oss import eager_attention_forward
 @strict
 class HYV4Config(PreTrainedConfig):
     r"""
-    HYV4 is a mixture-of-experts causal language model using Multi-head Latent Attention (MLA),
-    DeepSeek-style sparse attention (DSA), gated MLA, learnable attention sinks, and independent
-    Hyper-Connections (iHC).
-
+    n_group (`int`, *optional*, defaults to 1):
+        Number of expert groups for routing. HYV4 selects experts globally, so this is 1 (one group holding every expert).
+    topk_group (`int`, *optional*, defaults to 1):
+        Number of expert groups kept during routing. With `n_group=1` this reuses `Glm4MoeLiteTopkRouter` as a plain global top-k.
     mlp_layer_types (`list[str]`, *optional*):
         Per-layer MLP type, either `"dense"` or `"sparse"`. Defaults to one dense layer followed by
         sparse MoE layers.
-    indexer_types (`list[str]`, *optional*):
-        Per-layer DSA indexer type, either `"full"` or `"shared"`. A shared layer reuses the
-        most recent full indexer in the same forward request.
     index_topk (`int`, *optional*, defaults to 2048):
         Maximum number of key positions selected by each DSA query.
     index_head_dim (`int`, *optional*, defaults to 128):
         Hidden dimension of each DSA indexer head.
     index_n_heads (`int`, *optional*, defaults to 16):
         Number of DSA indexer heads.
+    indexer_types (`list[str]`, *optional*):
+        Per-layer DSA indexer type, either `"full"` or `"shared"`. A shared layer reuses the
+        most recent full indexer in the same forward request.
     enable_lm_head_fp32 (`bool`, *optional*, defaults to `True`):
         Whether the language-model head is evaluated in float32.
     enable_ihc (`bool`, *optional*, defaults to `True`):
@@ -86,10 +86,6 @@ class HYV4Config(PreTrainedConfig):
         Initial value of each learned attention-sink logit.
     swiglu_limit (`float`, *optional*, defaults to 10.0):
         Magnitude of the routed-expert SwiGLU clamp. Values at or below zero disable the clamp.
-    n_group (`int`, *optional*, defaults to 1):
-        Number of expert groups for routing. HYV4 selects experts globally, so this is 1 (one group holding every expert).
-    topk_group (`int`, *optional*, defaults to 1):
-        Number of expert groups kept during routing. With `n_group=1` this reuses `Glm4MoeLiteTopkRouter` as a plain global top-k.
     """
 
     model_type = "hy_v4"
