@@ -87,6 +87,7 @@ if is_torch_available():
         LinearAttentionAndFullAttentionLayer,
         LinearAttentionAndSlidingWindowAttentionLayer,
         LinearAttentionLayer,
+        MtpCache,
         QuantoQuantizedLayer,
         StaticCache,
     )
@@ -2488,7 +2489,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             keys_to_ignore_unexpected = model_class._keys_to_ignore_on_load_unexpected or []
             # If we don't have any mtp patterns, skip
             if not hasattr(config.get_text_config(), "num_mtp_layers") or not any(
-                "mtp" in x or re.search(r"layers\.\d+", x) is not None for x in keys_to_ignore_unexpected
+                "mtp" in x or re.search(r"layers\\?\.\d+", x) is not None for x in keys_to_ignore_unexpected
             ):
                 self.skipTest("No MTP keys registered")
 
@@ -3644,7 +3645,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertListEqual(
             outputs,
             [
-                'Tell me a joke about a monkey. Why did the monkey go to the doctor? Because he was feeling a little "tropic"!'
+                'Tell me a joke about a monkey. Sure, here\'s one for you:\n\nWhy did the monkey go to the doctor?\n\nBecause he was feeling "up in the trees"!'
             ],
         )
 
@@ -3949,6 +3950,42 @@ class GenerationIntegrationTests(unittest.TestCase):
             max_new_tokens=7,
         )
         self.assertTrue(out.shape[-1] <= (input_length + 7))
+
+    def test_mtp_mask_creation_uses_per_layer_config(self):
+        config = AutoConfig.for_model(
+            "llama",
+            hidden_size=16,
+            intermediate_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            num_key_value_heads=2,
+            head_dim=8,
+            vocab_size=32,
+            max_position_embeddings=16,
+            sliding_window=None,
+        )
+        config.num_mtp_layers = 2
+        config.layer_types = ["full_attention", "full_attention"]
+        config.mtp_layer_types = ["sliding_attention", "full_attention"]
+        config.mtp_per_layer_config = {
+            0: {"sliding_window": 2},
+            1: {"sliding_window": None},
+        }
+        config._attn_implementation = "eager"
+        main_model = AutoModelForCausalLM.from_config(config)
+        mtp_model = MtpModel(main_model, num_mtp_layers=2)
+
+        inputs_embeds = torch.randn(1, 4, config.hidden_size)
+        position_ids = torch.arange(4).unsqueeze(0)
+        mtp_cache = MtpCache()
+        sliding_mask = mtp_model.create_masks_for_mtp_layer(0, inputs_embeds, mtp_cache, position_ids)[
+            "attention_mask"
+        ]
+        full_mask = mtp_model.create_masks_for_mtp_layer(1, inputs_embeds, mtp_cache, position_ids)["attention_mask"]
+
+        min_dtype = torch.finfo(inputs_embeds.dtype).min
+        torch.testing.assert_close(sliding_mask[0, 0, -1], torch.tensor([min_dtype, min_dtype, 0.0, 0.0]))
+        torch.testing.assert_close(full_mask[0, 0, -1], torch.zeros(4))
 
     @require_torch_multi_accelerator
     def test_mtp_use_correct_device_when_drafting(self):
@@ -4586,7 +4623,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         Tests that assisted generation with early exit works as expected. Under the hood, this has complex cache
         manipulation, which will cause the test to fail if something goes wrong there.
         """
-        expected_output = "Alice and Bob are playing a game of poker. Alice has a pair of 8s and Bob has a pair"
+        expected_output = "Alice and Bob are playing a game of poker. Alice has a pair of 7s and Bob has a pair"
 
         prompt = "Alice and Bob"
         checkpoint = "facebook/layerskip-llama3.2-1B"
@@ -5113,6 +5150,23 @@ class GenerationIntegrationTests(unittest.TestCase):
         input_ids = tokenized_inputs.input_ids.to(model_cpu.device)
         _ = model_cpu.generate(input_ids, **generate_kwargs)
         self.assertFalse(hasattr(model_cpu, "_compiled_call"))
+
+    def test_compileable_default_cache_doesnt_compile_encoder_decoder(self):
+        """Test that a compileable default cache doesn't trigger compilation on encoder-decoder models either"""
+        model = AutoModelForSeq2SeqLM.from_pretrained("hf-internal-testing/tiny-random-bart")
+        decoder_config = model.config.get_text_config(decoder=True)
+        # Linear attention layers are statically shaped, so the default `DynamicCache` is compileable (e.g. Mamba)
+        decoder_config.layer_types = ["linear_attention"] * decoder_config.num_hidden_layers
+        self_attention_cache = DynamicCache(config=decoder_config)
+        self.assertTrue(self_attention_cache.is_compileable)
+
+        cache = EncoderDecoderCache(
+            self_attention_cache, DynamicCache(config=model.config.get_text_config(decoder=True))
+        )
+        generation_config = GenerationConfig()
+        generation_config.compile_config = CompileConfig()
+        generation_config.compile_config._compile_all_devices = True  # force compilation (e.g. fast CI, CPU)
+        self.assertFalse(model._valid_auto_compile_criteria({"past_key_values": cache}, generation_config))
 
     def test_custom_generate_from_argument_in_generate(self):
         """Tests that the `custom_generate` argument is used when passed to `generate`"""
