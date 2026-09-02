@@ -52,7 +52,7 @@ from ..glm_moe_dsa.modeling_glm_moe_dsa import GlmMoeDsaAttention, GlmMoeDsaRota
 from ..gpt_oss.modeling_gpt_oss import eager_attention_forward
 
 
-@auto_docstring(custom_intro="tencent/Hy4-preview")
+@auto_docstring(checkpoint="tencent/Hy4-preview")
 @strict
 class HYV4Config(PreTrainedConfig):
     r"""

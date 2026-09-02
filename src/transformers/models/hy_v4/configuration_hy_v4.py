@@ -24,7 +24,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
-@auto_docstring(custom_intro="tencent/Hy4-preview")
+@auto_docstring(checkpoint="tencent/Hy4-preview")
 @strict
 class HYV4Config(PreTrainedConfig):
     r"""
