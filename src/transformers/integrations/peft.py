@@ -275,10 +275,14 @@ class PeftAdapterMixin:
 
         has_tp_adapters = False
         for module in self.modules():
+            # Legacy, pre-DTensor TP integration: PEFT stamps a `_tp_info` marker on each TP-sharded LoRA module.
             tp_info = getattr(module, "_tp_info", None)
             if tp_info is not None:
                 has_tp_adapters = True
                 break
+        # DTensor TP integration: the base model itself carries the TP plan, so any adapter injected into it will be
+        # TP-sharded too; no per-module PEFT marker is needed to detect this.
+        has_tp_adapters = has_tp_adapters or bool(getattr(self, "_tp_plan", None))
 
         if has_tp_adapters and not is_peft_greater_or_equal("0.20.1", accept_dev=True):
             raise ValueError(
