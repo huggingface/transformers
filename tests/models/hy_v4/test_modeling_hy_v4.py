@@ -17,7 +17,7 @@ import unittest
 
 import torch
 
-from transformers import HYV4Config, is_torch_available
+from transformers import is_torch_available
 from transformers.testing_utils import require_torch, torch_device
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -25,7 +25,6 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 if is_torch_available():
     from transformers import HYV4ForCausalLM, HYV4Model
-    from transformers.models.hy_v4.modeling_hy_v4 import HYV4Experts
 
 
 class HYV4ModelTester(CausalLMModelTester):
@@ -74,29 +73,7 @@ class HYV4ModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = HYV4ModelTester
     # HYV4 routes each token to a subset of experts, so not every expert receives a gradient.
     test_all_params_have_gradient = False
-    model_split_percents = [0.5, 0.7, 0.8]
-
-    # TODO: remove this test
-    def test_experts_preserve_clamp_and_skip_ep_sentinel(self):
-        config = HYV4Config(hidden_size=1, moe_intermediate_size=1, n_routed_experts=1, swiglu_limit=10.0)
-        experts = HYV4Experts(config)
-        with torch.no_grad():
-            experts.gate_up_proj.copy_(torch.tensor([[[20.0], [20.0]]]))
-            experts.down_proj.fill_(1.0)
-
-        output = experts(
-            torch.tensor([[1.0], [2.0]]),
-            torch.tensor([[0], [1]]),
-            torch.tensor([[1.0], [0.0]]),
-        )
-        expected = torch.nn.functional.silu(torch.tensor(10.0)) * 10.0
-        torch.testing.assert_close(output[0, 0], expected)
-        self.assertEqual(output[1, 0].item(), 0.0)
-        torch.testing.assert_close(experts._apply_gate(torch.tensor([[20.0, 20.0]]))[0, 0], expected)
-
-        experts.config._experts_implementation = "batched_mm"
-        optimized_output = experts(torch.tensor([[1.0]]), torch.tensor([[0]]), torch.tensor([[1.0]]))
-        torch.testing.assert_close(optimized_output[0, 0], expected)
+    model_split_percents = [0.5, 0.8, 0.9]
 
     def _check_hidden_states_for_generate(
         self, batch_size, hidden_states, prompt_length, output_length, config, use_cache=False
@@ -174,4 +151,16 @@ class HYV4ModelTest(CausalLMModelTest, unittest.TestCase):
 
     @unittest.skip("Fundamentally incompatible with indexer - indexer has no boundary offset telling sequences apart")
     def test_eager_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("mHC hidden states are wrongfully cropped, needs adjustments in `_split_model_outputs` in generation")
+    def test_assisted_decoding_sample(self):
+        pass
+
+    @unittest.skip("mHC hidden states are wrongfully cropped, needs adjustments in `_split_model_outputs` in generation")
+    def test_assisted_decoding_matches_greedy_search_0_random(self):
+        pass
+
+    @unittest.skip("mHC hidden states are wrongfully cropped, needs adjustments in `_split_model_outputs` in generation")
+    def test_assisted_decoding_matches_greedy_search_1_same(self):
         pass

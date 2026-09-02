@@ -765,13 +765,12 @@ class HYV4PreTrainedModel(PreTrainedModel):
         "fn",
         "scale",
         "base",
-        "hc_head_fn",
-        "hc_head_scale",
-        "hc_head_base",
+        "hc_fn",
+        "hc_scale",
+        "hc_base",
         "weights_proj",
         "k_norm",
         "sinks",
-        "lm_head",
     ]
     _keys_to_ignore_on_load_unexpected = [r"model\.mtp_layers\..*"]
 
@@ -893,6 +892,20 @@ class HYV4ForCausalLM(HYV4PreTrainedModel, GenerationMixin):
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     _fsdp_plan = {"lm_head": "keep_full_weight"}
+    # Same as base but with the additional lm head
+    _keep_in_fp32_modules_strict = [
+        "e_score_correction_bias",
+        "fn",
+        "scale",
+        "base",
+        "hc_fn",
+        "hc_scale",
+        "hc_base",
+        "weights_proj",
+        "k_norm",
+        "sinks",
+        "lm_head",
+    ]
 
     def __init__(self, config):
         super().__init__(config)
@@ -948,7 +961,7 @@ class HYV4ForCausalLM(HYV4PreTrainedModel, GenerationMixin):
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         # Key difference of the lm_head being kept in float
-        logits = self.lm_head(hidden_states[:, slice_indices, :].float())
+        logits = self.lm_head(hidden_states[:, slice_indices, :].to(self.lm_head.weight))
 
         loss = None
         if labels is not None:

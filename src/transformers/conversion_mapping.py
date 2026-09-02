@@ -143,19 +143,22 @@ _MODEL_TO_CONVERSION_PATTERN = {
 
 def _build_checkpoint_conversion_mapping():
     mapping = {
-        # HYV4 checkpoints store Hyper-Connection weights under a `hc_pre.` sub-prefix; drop it.
         "hy_v4": [
-            WeightRenaming(source_patterns=r"\.hc_pre\.hc_", target_patterns=r".hc_"),
-            WeightRenaming(source_patterns=r"\.learnable_sink_param$", target_patterns=r".sinks"),
-            WeightRenaming(source_patterns=r"\.linear_gate", target_patterns=r".gate_proj"),
-            WeightRenaming(source_patterns=r"\.hc_attn_layer", target_patterns=r".attn_hc"),
-            WeightRenaming(source_patterns=r"\.hc_mlp_layer", target_patterns=r".ffn_hc"),
-            WeightRenaming(source_patterns=r"\.hc_fn", target_patterns=r".fn"),
-            WeightRenaming(source_patterns=r"\.hc_base", target_patterns=r".base"),
-            WeightRenaming(source_patterns=r"\.hc_scale", target_patterns=r".scale"),
-            WeightRenaming(source_patterns=r"\.hc_head_fn", target_patterns=r".hc_fn"),
-            WeightRenaming(source_patterns=r"\.hc_head_base", target_patterns=r".hc_base"),
-            WeightRenaming(source_patterns=r"\.hc_head_scale", target_patterns=r".hc_scale"),
+            # General HC prefix which is dropped
+            WeightRenaming(r"\.hc_pre\.hc_", ".hc_"),
+            # Attn gating + sinks
+            WeightRenaming(r"\.learnable_sink_param$", ".sinks"),
+            WeightRenaming(r"\.linear_gate", ".gate_proj"),
+            # Follow DSv4 HC standards
+            WeightRenaming(r"\.hc_attn_layer\.hc_fn", ".attn_hc.fn"),
+            WeightRenaming(r"\.hc_attn_layer\.hc_base", ".attn_hc.base"),
+            WeightRenaming(r"\.hc_attn_layer\.hc_scale", ".attn_hc.scale"),
+            WeightRenaming(r"\.hc_mlp_layer\.hc_fn", ".ffn_hc.fn"),
+            WeightRenaming(r"\.hc_mlp_layer\.hc_base", ".ffn_hc.base"),
+            WeightRenaming(r"\.hc_mlp_layer\.hc_scale", ".ffn_hc.scale"),
+            WeightRenaming(r"\.hc_head_fn", ".hc_fn"),
+            WeightRenaming(r"\.hc_head_base", ".hc_base"),
+            WeightRenaming(r"\.hc_head_scale", ".hc_scale"),
         ],
         # Cosmos3 Edge's composite checkpoint stores its dense reasoner text tower as conventional attention + MLP
         # blocks. The visual/projector tensors already use their native module names and intentionally need no mapping.
