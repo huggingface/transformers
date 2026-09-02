@@ -208,6 +208,8 @@ class EsmFold2ModelTest(unittest.TestCase):
         self.assertEqual(adaln.cond_norm.weight.dtype, torch.float32)
         tri_mul = reloaded.msa_encoder.layers[0].tri_mul_in
         self.assertEqual(tri_mul.norm_start.weight.dtype, torch.float32)  # prefix-named norm stays pinned
+        self.assertEqual(reloaded.distogram_head.weight.dtype, torch.float32)
+        self.assertEqual(reloaded.distogram_head.bias.dtype, torch.float32)
         with torch.no_grad():
             out = reloaded.infer_protein(self.seq, num_loops=1, num_diffusion_samples=1, num_sampling_steps=2)
         self.assertTrue(torch.isfinite(out["sample_atom_coords"].float()).all())
