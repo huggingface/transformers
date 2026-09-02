@@ -250,19 +250,19 @@ class BackgroundThreadStatus:
         """Called by a thread sharing the model to ask the generation loop to pause. The request is picked up by the
         loop at its next TP all-reduce, see `is_pause_requested`. Any number of threads may ask at the same time. The
         thread then waits until the loop is paused, and raises if the loop is gone before waiting is over."""
-        # Request the pause
         with self._condition:
+            # Request the pause
             self._pauses_requested += 1
             self._local_pauses_requested.value += 1
-        # Wait for the pause
-        with self._condition:
-            # We wait in a try block so we can handle a an error that happens while waiting
+
+            # Wait for the pause, in a try block so we can handle a an error that happens while waiting
             try:
                 self._condition.wait_for(self._pause_predicate)
             # If an error happens while waiting, we drop the pause request and re-raise the error
             except BaseException:
                 self._drop_pause_request()
                 raise
+
             # If the wait_for ended, two possibilities: the loop paused or it is gone. Latter is fatal.
             if not self._paused:
                 self._drop_pause_request()
