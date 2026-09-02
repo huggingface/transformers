@@ -148,6 +148,10 @@ PRIVATE_MODELS = [
     "VoxtralRealtimeTextModel",
     "VoxtralRealtimeTextForCausalLM",
     "VoxtralRealtimeTextPreTrainedModel",
+    "Qwen3TTSTokenizerMultiCodebookCode2WavPreTrainedModel",
+    "Qwen3TTSTokenizerMultiCodebookDecoderBlock",
+    "Qwen3TTSTokenizerMultiCodebookDecoderTransformerModel",
+    "Qwen3TTSTokenizerMultiCodebookEncoderModel",
 ]
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
@@ -252,6 +256,19 @@ IGNORE_NON_TESTED = (
         "Qwen3OmniMoeThinkerTextModel",
         "Qwen3OmniMoeForConditionalGeneration",  # Bigger model tested through Qwen3OmniMoeForConditionalGenerationIntegrationTest.
         "Qwen3OmniMoeTalkerCodePredictorModelForConditionalGeneration",  # Building part of bigger (tested) model. Tested implicitly through Qwen3OmniMoeForConditionalGenerationIntegrationTest.
+        "Qwen3TTSBasePreTrainedModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen3TTSForConditionalGeneration.
+        "Qwen3TTSTalkerModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen3TTSForConditionalGeneration.
+        "Qwen3TTSTalkerTextPreTrainedModel",  # Building part of bigger (tested) model.
+        "Qwen3TTSTalkerCodePredictorModel",  # Building part of bigger (tested) model.
+        "Qwen3TTSTalkerCodePredictorModelForConditionalGeneration",  # Building part of bigger (tested) model.
+        "Qwen3TTSTalkerForConditionalGeneration",  # Building part of bigger (tested) model.
+        "Qwen3TTSForConditionalGeneration",  # Not a regular model. Tested through integration tests.
+        "Qwen3TTSTokenizerSingleCodebookDecoderBigVGANModel",  # Building part of bigger (tested) model.
+        "Qwen3TTSTokenizerSingleCodebookDecoderDiTModel",  # Building part of bigger (tested) model.
+        "Qwen3TTSTokenizerV1Model",  # Building part of bigger (tested) model.
+        "Qwen3TTSTokenizerV2DecoderBlock",  # Building part of bigger (tested) model.
+        "Qwen3TTSTokenizerV2TransformerModel",  # Building part of bigger (tested) model.
+        "Qwen3TTSTokenizerV2Model",  # Building part of bigger (tested) model.
         "MllamaTextModel",  # Building part of bigger (tested) model. # TODO: add tests
         "MllamaVisionModel",  # Building part of bigger (tested) model. # TODO: add tests
         "Llama4TextModel",  # Building part of bigger (tested) model. # TODO: add tests
@@ -547,6 +564,17 @@ IGNORE_NON_AUTO_CONFIGURED = (
         "Qwen3OmniMoeTalkerForConditionalGeneration",  # Building part of a bigger model
         "Qwen3OmniMoeTalkerModel",  # Building part of a bigger model
         "Qwen3OmniMoeThinkerTextModel",  # Building part of a bigger model
+        "Qwen3TTSForConditionalGeneration",  # Building part of a bigger model (no auto class for TTS)
+        "Qwen3TTSTalkerForConditionalGeneration",  # Building part of a bigger model
+        "Qwen3TTSTalkerModel",  # Building part of a bigger model
+        "Qwen3TTSTalkerCodePredictorModel",  # Building part of a bigger model
+        "Qwen3TTSTalkerCodePredictorModelForConditionalGeneration",  # Building part of a bigger model
+        "Qwen3TTSTokenizerV1DecoderBigVGANModel",  # Building part of a bigger model
+        "Qwen3TTSTokenizerV1DecoderDiTModel",  # Building part of a bigger model
+        "Qwen3TTSTokenizerV1Model",  # Building part of a bigger model
+        "Qwen3TTSTokenizerV2DecoderBlock",  # Building part of a bigger model
+        "Qwen3TTSTokenizerV2TransformerModel",  # Building part of a bigger model
+        "Qwen3TTSTokenizerV2Model",  # Building part of a bigger model
         "HunYuanVLTextModel",  # Building part of bigger (tested) model.
         "Ernie4_5_VLMoeTextModel",  # Building part of a bigger model
         "PeAudioFrameLevelModel",
@@ -1261,6 +1289,18 @@ UNDOCUMENTED_OBJECTS = [
     "Ernie4_5_VL_MoeVisionTransformerPretrainedModel",  # BC Alias
     # FIXME(SunMarc)
     "GemmaQuantizationConfig",  # No docs, going for release
+    "Qwen3TTSDiTConfig",  # Internal building block of Qwen3TTS, documented on the main model page.
+    "Qwen3TTSSpeakerEncoderConfig",  # Internal building block of Qwen3TTS, documented on the main model page.
+    "Qwen3TTSTalkerCodePredictorModel",  # Internal building block of Qwen3TTS.
+    "Qwen3TTSTalkerCodePredictorModelForConditionalGeneration",  # Internal building block of Qwen3TTS.
+    "Qwen3TTSTalkerModel",  # Internal building block of Qwen3TTS.
+    "Qwen3TTSTokenizerV1DecoderBigVGANConfig",  # Internal building block of Qwen3TTS.
+    "Qwen3TTSTokenizerV1DecoderBigVGANModel",  # Internal building block of Qwen3TTS.
+    "Qwen3TTSTokenizerV1DecoderConfig",  # Internal building block of Qwen3TTS.
+    "Qwen3TTSTokenizerV1DecoderDiTModel",  # Internal building block of Qwen3TTS.
+    "Qwen3TTSTokenizerV1EncoderConfig",  # Internal building block of Qwen3TTS.
+    "Qwen3TTSTokenizerV2DecoderBlock",  # Internal building block of Qwen3TTS.
+    "Qwen3TTSTokenizerV2TransformerModel",  # Internal building block of Qwen3TTS.
 ]
 
 # This list should be empty. Objects in it should get their own doc page.
