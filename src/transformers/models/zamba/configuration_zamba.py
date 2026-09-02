@@ -47,6 +47,9 @@ class ZambaConfig(PreTrainedConfig):
         Flag indicating whether or not to use the fast mamba kernels. These are available only if `mamba-ssm` and
         `causal-conv1d` are installed, and the mamba modules are running on a CUDA device. Raises ValueError if
         `True` and kernels are not available
+    use_associative_scan (`bool`, *optional*, defaults to `True`):
+        Whether to use `torch._higher_order_ops.associative_scan` during `torch.compile` tracing instead of the
+        sequential fallback.
     mamba_dt_rank (`Union[int,str]`, *optional*, defaults to `"auto"`):
         Rank of the mamba discretization projection matrix. `"auto"` means that it will default to `math.ceil(self.hidden_size / 16)`
     layers_block_type (`str`, *optional*):
@@ -81,6 +84,7 @@ class ZambaConfig(PreTrainedConfig):
     attn_layer_period: int = 6
     attn_layer_offset: int = 4
     use_mamba_kernels: bool = True
+    use_associative_scan: bool = True
     mamba_d_state: int = 16
     mamba_d_conv: int = 4
     mamba_expand: int = 2
