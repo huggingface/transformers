@@ -133,6 +133,7 @@ class Qwen3TTSTokenizerSingleCodebookModelTest(ModelTesterMixin, unittest.TestCa
             "test_eager_matches_sdpa_inference",
             "test_attention_outputs",
             "test_hidden_states_output",
+            "test_can_capture_specific_layers_hidden_states",
             "test_retain_grad_hidden_states_attentions",
             "test_model_forward_default_config_values",
             "test_feed_forward_chunking",
