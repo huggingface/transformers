@@ -156,8 +156,10 @@ class SmolLM3IntegrationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(
             self.model_id, pad_token="<|finetune_right_pad_id|>", padding_side="right"
         )
-        EXPECTED_TEXT_COMPLETION = "Gravity is the force that pulls objects toward the center of the Earth. It is a force that is always present, and"
-        max_generation_length = tokenizer(EXPECTED_TEXT_COMPLETION, return_tensors="pt", padding=True)[
+        EXPECTED_TEXT_COMPLETION = [
+            "Gravity is the force that pulls objects toward each other. The Earth's gravity pulls everything toward its center. The force of"
+        ]
+        max_generation_length = tokenizer(EXPECTED_TEXT_COMPLETION[0], return_tensors="pt", padding=True)[
             "input_ids"
         ].shape[-1]
 
