@@ -289,11 +289,6 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         minimal working size, i.e. `sliding_window - 1` if they reached the sliding window length. This means that `crop(0)` will not
         necessarily always be a no-op, as it may still remove useless states (i.e. states that are not needed for the next `forward`).
         """
-        # Nothing was ever written here (e.g. a `crop(0)` issued before this layer's first forward), so there is
-        # nothing to trim and no `keys` to measure
-        if not self.is_initialized:
-            return
-
         # If we are beyond the sliding window, we need to be more careful
         if self.get_seq_length() >= self.sliding_window:
             if not self.record_past:
@@ -901,7 +896,8 @@ class LinearAttentionCacheLayerMixin(ABC):
     # All shapes are static by essence in a LinearAttention layer, so it is compilable
     is_compileable = True
     # `crop` runs here, but it only puts back the conv states: the recurrent ones are updated in place and
-    # absorb whatever is rolled back, so the layer cannot actually be returned to a previous state
+    # absorb whatever is rolled back, so the layer cannot be returned to a previous state. Models that use the
+    # conv part alone could be, but whether the recurrent states are used is not known before the first forward
     is_croppable = False
     # Linear attention layers track their own conv/recurrent states; they don't use the key/value early-init path.
     supports_early_init = False

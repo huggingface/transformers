@@ -360,9 +360,10 @@ GenerateOutput = GenerateNonBeamOutput | GenerateBeamOutput
 def _undo_generation_steps(num_steps: int, input_ids: torch.LongTensor, *recorded: "tuple | None") -> tuple:
     """Undo the last `num_steps` decoding steps, so that they leave no trace in what `generate` returns.
 
-    Drops the tokens and whatever was recorded alongside them: `scores`, `raw_logits`, attentions, hidden
-    states. The cache entries they wrote are dropped by `DeferredStopCheck.finish`, which crops whether or not
-    there is anything to undo.
+    Drops the tokens and whatever was recorded alongside them. `input_ids` is a tensor, so it is sliced along
+    the sequence dimension; everything in `recorded` (`scores`, `raw_logits`, attentions, hidden states) is a
+    tuple holding one entry per generated token, so slicing it drops the last `num_steps` entries. The cache
+    entries those steps wrote are dropped by `DeferredStopCheck.finish`.
     """
     return (input_ids[:, :-num_steps], *(record[:-num_steps] if record else record for record in recorded))
 
@@ -436,16 +437,17 @@ class DeferredStopCheck(StopCheck):
 
         Deferring costs one extra forward pass, so it is only safe where that pass leaves no trace.
         """
-        if device.type not in ("cuda", "mps"):
+        # Only mps for now, we should enable it for cuda when we have gains
+        if device.type != "mps":
             return False
-        # Not as an assistant: the extra step appends `pad_token_id`, and the candidate generator's stopping
-        # criteria index a vocab-sized tensor with it, which is out of bounds when padding sits above the vocab.
-        # Nothing is lost either way, as those criteria read the token back on the host every step regardless.
+        # Blocked for the assistant, as it only generates ~20 steps: one more step is ~5% more work. It also
+        # checks the probability of the last token on every step with `.item()`, so it syncs there anyway.
         if is_assistant:
             return False
         # No cache under any of the cache names. Either there is genuinely none to roll back, or the model
-        # builds its own in `prepare_inputs_for_generation` (mamba, rwkv, minimax, ...) and it is not visible
-        # yet - in which case we cannot tell whether it could be rolled back, so we do not risk it.
+        # builds its own in `prepare_inputs_for_generation` (models for which `_supports_default_dynamic_cache`
+        # is False) and it is not visible - in which case we cannot tell whether it could be rolled back, so we
+        # do not risk it.
         if cache is None:
             return not use_cache
         return cache.is_croppable
@@ -457,7 +459,7 @@ class DeferredStopCheck(StopCheck):
             tokens_cpu.copy_(tokens, non_blocking=True)
         copy_done.record()
 
-        self.slots.rotate(-1)
+        self.slots.rotate()
         should_stop_before, tokens_cpu_before, copy_done_before = self.slots[0]
         copy_done_before.synchronize()
         if not self.is_first_step:
@@ -2980,19 +2982,6 @@ class GenerationMixin(ContinuousMixin):
         this_peer_finished = False
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
 
-        # Deciding when to stop costs a host/device sync per step, and so does handing a streamer its tokens.
-        # Where it is safe to, defer both by a step instead.
-        cache = next((model_kwargs[name] for name in ALL_CACHE_NAMES if name in model_kwargs), None)
-        if DeferredStopCheck.is_supported(
-            input_ids.device,
-            cache,
-            use_cache=model_kwargs.get("use_cache", False),
-            is_assistant=generation_config.is_assistant,
-        ):
-            stop_check = DeferredStopCheck(input_ids, stopping_criteria.max_length, cache, streamer)
-        else:
-            stop_check = StopCheck(streamer)
-
         # `pad_token_id` is created on `inputs_tensor.device` in `_prepare_special_tokens`. For multimodal models
         # (e.g. BLIP-2, LLaVA) sharded across devices via `device_map="auto"`, `inputs_tensor` (e.g. `pixel_values`
         # on the vision encoder) and `input_ids` (on the language model) can live on different devices, so we need to
@@ -3013,6 +3002,21 @@ class GenerationMixin(ContinuousMixin):
             model_kwargs,
             is_first_iteration=not generation_config.is_assistant,
         )
+
+        # Deciding when to stop costs a host/device sync per step, and so does handing a streamer its tokens.
+        # Where it is safe to, defer both by a step instead. Set up only now that the prompt has been through:
+        # recording the past holds on to whatever a cache would otherwise shrink away, and over a long prefill
+        # that would defeat the point of a sliding window. From here on each step adds a single token.
+        cache = next((model_kwargs[name] for name in ALL_CACHE_NAMES if name in model_kwargs), None)
+        if DeferredStopCheck.is_supported(
+            input_ids.device,
+            cache,
+            use_cache=model_kwargs.get("use_cache", False),
+            is_assistant=generation_config.is_assistant,
+        ):
+            stop_check = DeferredStopCheck(input_ids, stopping_criteria.max_length, cache, streamer)
+        else:
+            stop_check = StopCheck(streamer)
 
         with self._optimize_model_for_decode():
             while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):

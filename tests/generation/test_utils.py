@@ -5696,7 +5696,7 @@ class DeferredStopCheckIntegrationTest(unittest.TestCase):
 
     def _generate_deferred_and_immediate(self, inputs, model=None, **kwargs):
         deferred = self._generate(inputs, model=model, **kwargs)
-        with patch.object(DeferredStopCheck, "is_supported", staticmethod(lambda *args: False)):
+        with patch.object(DeferredStopCheck, "is_supported", staticmethod(lambda *args, **kwargs: False)):
             immediate = self._generate(inputs, model=model, **kwargs)
         return deferred, immediate
 
