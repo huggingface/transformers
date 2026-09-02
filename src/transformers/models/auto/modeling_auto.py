@@ -1376,6 +1376,7 @@ MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = OrderedDict(
         ("speecht5", "SpeechT5ForSpeechToText"),
         ("vibevoice", "VibeVoiceForConditionalGeneration"),
         ("vibevoice_asr", "VibeVoiceAsrForConditionalGeneration"),
+        ("vibevoice_realtime", "VibeVoiceRealTimeForConditionalGeneration"),
         ("voxtral", "VoxtralForConditionalGeneration"),
         ("voxtral_realtime", "VoxtralRealtimeForConditionalGeneration"),
         ("whisper", "WhisperForConditionalGeneration"),
@@ -1873,6 +1874,7 @@ MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING_NAMES = OrderedDict(
         ("seamless_m4t", "SeamlessM4TForTextToSpeech"),
         ("seamless_m4t_v2", "SeamlessM4Tv2ForTextToSpeech"),
         ("vibevoice", "VibeVoiceForConditionalGeneration"),
+        ("vibevoice_realtime", "VibeVoiceRealTimeForConditionalGeneration"),
         ("vits", "VitsModel"),
     ]
 )

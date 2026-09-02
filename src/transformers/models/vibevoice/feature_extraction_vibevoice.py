@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Union
 
 import numpy as np
 
@@ -66,12 +64,12 @@ class VibeVoiceFeatureExtractor(SequenceFeatureExtractor):
     def __call__(
         self,
         audio: AudioInput,
-        sampling_rate: Optional[int] = None,
-        padding: Optional[Union[bool, str, PaddingStrategy]] = True,
-        pad_to_multiple_of: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_attention_mask: Optional[bool] = True,
-        max_length: Optional[int] = None,
+        sampling_rate: int | None = None,
+        padding: bool | str | PaddingStrategy | None = True,
+        pad_to_multiple_of: int | None = None,
+        return_tensors: str | TensorType | None = None,
+        return_attention_mask: bool | None = True,
+        max_length: int | None = None,
     ) -> BatchFeature:
         """
         Main method to prepare audio for the VibeVoice model.

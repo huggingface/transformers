@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_vibevoice_realtime.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 The Microsoft Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,16 +20,17 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, can_return_tuple
+from ...utils import auto_docstring, can_return_tuple, torch_compilable_check
 from ..auto import AutoModel
 from .configuration_vibevoice_realtime import VibeVoiceRealTimeAcousticDecoderConfig, VibeVoiceRealTimeConfig
 from .generation_vibevoice_realtime import VibeVoiceRealTimeGenerationMixin
@@ -38,8 +38,8 @@ from .generation_vibevoice_realtime import VibeVoiceRealTimeGenerationMixin
 
 @dataclass
 class VibeVoiceRealTimeCausalLMOutputWithPast(BaseModelOutputWithPast):
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
 
 
 class VibeVoiceRealTimeBinaryClassifier(nn.Module):
@@ -52,6 +52,81 @@ class VibeVoiceRealTimeBinaryClassifier(nn.Module):
         hidden_states = torch.relu(self.fc1(hidden_states))
         hidden_states = self.fc2(hidden_states)
         return hidden_states
+
+
+class VibeVoiceRealTimeDiffusionHeadSinusoidalEmbedding(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.freq = nn.Buffer(self.compute_default_freq(config), persistent=False)
+
+    @staticmethod
+    def compute_default_freq(config):
+        dim = config.frequency_embedding_size // 2
+        return torch.exp(-math.log(config.diffusion_max_period) * torch.arange(dim, dtype=torch.float32) / dim)
+
+    def forward(self, timesteps):
+        freq = timesteps[:, None].float() * self.freq[None].to(timesteps.device)
+        embedding = torch.cat([torch.cos(freq), torch.sin(freq)], dim=-1)
+        return embedding
+
+
+@auto_docstring
+class VibeVoiceRealTimePreTrainedModel(PreTrainedModel):
+    config: VibeVoiceRealTimeConfig
+    base_model_prefix = "model"
+    input_modalities = "text"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["VibeVoiceRealTimeDiffusionHead"]
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+    _supports_cache_class = True
+    _supports_attention_backend = True
+    _can_compile_fullgraph = True
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if hasattr(module, "latent_scaling_factor"):
+            init.constant_(module.latent_scaling_factor, 1.0)
+        if hasattr(module, "latent_bias_factor"):
+            init.constant_(module.latent_bias_factor, 0.0)
+        if isinstance(module, VibeVoiceRealTimeDiffusionHeadSinusoidalEmbedding):
+            init.copy_(module.freq, module.compute_default_freq(module.config))
+        if isinstance(module, nn.Embedding):
+            nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+
+
+@auto_docstring(
+    custom_intro="""
+    Acoustic tokenizer which only decodes audio from latent representations.
+    """
+)
+class VibeVoiceRealTimeAcousticDecoder(VibeVoiceRealTimePreTrainedModel):
+    config: VibeVoiceRealTimeAcousticDecoderConfig
+    base_model_prefix = "vibevoice_realtime_acoustic_decoder"
+    main_input_name = "latents"
+    _no_split_modules = ["VibeVoiceRealTimeDecoder"]
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.decoder = AutoModel.from_config(config.decoder_config)
+        self.post_init()
+
+    @can_return_tuple
+    @auto_docstring
+    def decode(self, latents, padding_cache=None, use_cache=False):
+        r"""
+        latents (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`):
+            Input latent representation to be decoded back into audio.
+        padding_cache (`VibeVoiceRealTimeConv1dPaddingCache`, *optional*):
+            Cache object for streaming mode to maintain convolution states across layers.
+        use_cache (`bool`, *optional*):
+            Whether to use caching for convolution states.
+        """
+        latents = latents.permute(0, 2, 1)
+        return self.decoder(latents, padding_cache=padding_cache, use_cache=use_cache)
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -75,415 +150,19 @@ class VibeVoiceRealTimeRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class VibeVoiceRealTimeConv1dCache:
-    """Cache class for maintaining convolution states across layers to support streaming."""
-
-    def __init__(
-        self,
-        num_layers: int,
-        per_layer_padding: list[int],
-        per_layer_in_channels: list[int],
-    ):
-        # ensure correct number of layers for each arg
-        from_args_num_layers = {len(per_layer_padding), len(per_layer_in_channels)}
-        if len(from_args_num_layers) != 1 or from_args_num_layers.pop() != num_layers:
-            raise ValueError(
-                f"Expected `num_layers` ({num_layers}) values in `per_layer_padding` and `per_layer_in_channels`"
-            )
-        self.per_layer_padding = per_layer_padding
-        self.per_layer_in_channels = per_layer_in_channels
-        self.per_layer_is_init = [True] * num_layers
-
-        self.padding_cache = [None] * num_layers
-
-    def update(self, hidden_states: torch.Tensor, layer_idx: int, is_transpose: bool = False):
-        """
-        Updates the padding cache with the new padding states for the layer `layer_idx` and returns the current cache.
-
-        Parameters:
-            hidden_states (`torch.Tensor`):
-                The hidden states to be partially cached.
-            layer_idx (`int`):
-                The index of the layer to cache the states for.
-            is_transpose (`bool`):
-                Whether the layer is a ConvTranspose1d layer.
-        Returns:
-            `torch.Tensor` or `None`, the current padding cache.
-        """
-        batch_size, dtype, device = hidden_states.shape[0], hidden_states.dtype, hidden_states.device
-        padding = self.per_layer_padding[layer_idx]
-        in_channels = self.per_layer_in_channels[layer_idx]
-
-        current_cache = self.padding_cache[layer_idx]
-        if current_cache is None:
-            if is_transpose:
-                # https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice_realtime/modular_vibevoice_realtime_tokenizer.py#L471
-                current_cache = torch.zeros(batch_size, in_channels, 0, device=device, dtype=dtype)
-            else:
-                current_cache = torch.zeros(batch_size, in_channels, padding, device=device, dtype=dtype)
-
-        # Update the cache with padded input, to ensure enough context:
-        # https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice_realtime/modular_vibevoice_realtime_tokenizer.py#L345
-        input_with_context = torch.cat([current_cache, hidden_states], dim=-1)
-        if padding > 0:
-            if input_with_context.shape[-1] >= padding:
-                new_cache = input_with_context[:, :, -padding:]
-            else:
-                new_cache = input_with_context
-            self.padding_cache[layer_idx] = new_cache
-
-        return current_cache
-
-
-class VibeVoiceRealTimeFeedForward(nn.Module):
-    def __init__(self, config, hidden_size):
+class VibeVoiceRealTimeDiffusionHeadMLP(nn.Module):
+    def __init__(self, config):
         super().__init__()
-        self.linear1 = nn.Linear(hidden_size, config.ffn_expansion * hidden_size, bias=config.bias)
-        self.activation = ACT2FN[config.hidden_act]
-        self.linear2 = nn.Linear(config.ffn_expansion * hidden_size, hidden_size, bias=config.bias)
+        self.config = config
+        self.activation_fn = ACT2FN[config.hidden_act]
+        self.fc1 = nn.Linear(config.frequency_embedding_size, config.hidden_size, bias=False)
+        self.fc2 = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
 
-    def forward(self, hidden_states):
-        return self.linear2(self.activation(self.linear1(hidden_states)))
-
-
-class VibeVoiceRealTimeCausalConv1d(nn.Module):
-    """Conv1d with built-in causal padding and optional streaming support through a cache."""
-
-    def __init__(
-        self,
-        in_channels: int,
-        out_channels: int,
-        kernel_size: int,
-        stride: int = 1,
-        dilation: int = 1,
-        groups: int = 1,
-        bias: bool = True,
-        layer_idx: Optional[int] = None,
-    ):
-        super().__init__()
-        self.conv = nn.Conv1d(
-            in_channels, out_channels, kernel_size, stride, dilation=dilation, groups=groups, bias=bias
-        )
-        # Padding for causality: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice_realtime/modular_vibevoice_realtime_tokenizer.py#L263C28-L263C72
-        self.causal_padding = (kernel_size - 1) * dilation - (stride - 1)
-        if self.causal_padding < 0:
-            raise ValueError(
-                f"Invalid causal padding {self.causal_padding} for kernel_size={kernel_size}, "
-                f"dilation={dilation}, stride={stride}."
-            )
-        self.layer_idx = layer_idx
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        padding_cache: Optional[VibeVoiceRealTimeConv1dCache] = None,
-    ) -> torch.Tensor:
-        """
-        Forward pass with optional streaming support via cache.
-        Original code: https://github.com/vibevoice_realtime-community/VibeVoiceRealTime/blob/63a21e2b45e908be63765bf312a9ecfb3a588315/vibevoice_realtime/modular/modular_vibevoice_realtime_tokenizer.py#L296
-        """
-
-        if padding_cache is not None:
-            layer_padding = padding_cache.update(hidden_states, self.layer_idx)
-        else:
-            # non-streaming mode: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice_realtime/modular_vibevoice_realtime_tokenizer.py#L365
-            layer_padding = torch.zeros(
-                hidden_states.shape[0],
-                hidden_states.shape[1],
-                self.causal_padding,
-                device=hidden_states.device,
-                dtype=hidden_states.dtype,
-            )
-        hidden_states = torch.cat([layer_padding, hidden_states], dim=-1)
-
-        return self.conv(hidden_states)
-
-
-class VibeVoiceRealTimeConvNext1dLayer(nn.Module):
-    """ConvNeXt-like block adapted for 1D convolutions."""
-
-    def __init__(self, config, hidden_size, dilation=1, stride=1, layer_idx=None):
-        super().__init__()
-
-        self.norm = VibeVoiceRealTimeRMSNorm(hidden_size, eps=config.rms_norm_eps)
-        self.ffn_norm = VibeVoiceRealTimeRMSNorm(hidden_size, eps=config.rms_norm_eps)
-        self.ffn = VibeVoiceRealTimeFeedForward(config, hidden_size)
-        self.gamma = nn.Parameter(config.layer_scale_init_value * torch.ones(hidden_size), requires_grad=True)
-        self.ffn_gamma = nn.Parameter(config.layer_scale_init_value * torch.ones(hidden_size), requires_grad=True)
-        self.mixer = VibeVoiceRealTimeCausalConv1d(
-            in_channels=hidden_size,
-            out_channels=hidden_size,
-            kernel_size=config.kernel_size,
-            groups=hidden_size,
-            bias=config.bias,
-            dilation=dilation,
-            stride=stride,
-            layer_idx=layer_idx,
-        )
-
-    def forward(self, hidden_states, padding_cache=None):
-        # mixer
-        residual = hidden_states
-        hidden_states = self.norm(hidden_states.transpose(1, 2)).transpose(1, 2)
-        hidden_states = self.mixer(hidden_states, padding_cache=padding_cache)
-        hidden_states = hidden_states * self.gamma.unsqueeze(-1)
-        hidden_states = residual + hidden_states
-
-        # ffn
-        residual = hidden_states
-        hidden_states = self.ffn_norm(hidden_states.transpose(1, 2))
-        hidden_states = self.ffn(hidden_states).transpose(1, 2)
-        hidden_states = hidden_states * self.ffn_gamma.unsqueeze(-1)
-        return residual + hidden_states
-
-
-@auto_docstring
-class VibeVoiceRealTimePreTrainedModel(PreTrainedModel):
-    config: VibeVoiceRealTimeConfig
-    base_model_prefix = "model"
-    main_input_name = "input_ids"
-    _no_split_modules = None
-    input_modalities = "text"
-    supports_gradient_checkpointing = True
-    _skip_keys_device_placement = "past_key_values"
-    _supports_cache_class = True
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
-    _supports_quantized_cache = True
-    _supports_static_cache = True
-    _supports_attention_backend = True
-
-    def _init_weights(self, module):
-        if isinstance(module, (nn.Linear, nn.Conv1d, nn.ConvTranspose1d)):
-            nn.init.normal_(module.weight, std=self.config.weight_init_value)
-            if module.bias is not None:
-                nn.init.zeros_(module.bias)
-        elif isinstance(module, VibeVoiceRealTimeRMSNorm):
-            nn.init.ones_(module.weight)
-        elif isinstance(module, VibeVoiceRealTimeConvNext1dLayer):
-            nn.init.constant_(module.gamma, self.config.layer_scale_init_value)
-            nn.init.constant_(module.ffn_gamma, self.config.layer_scale_init_value)
-        if hasattr(module, "latent_scaling_factor"):
-            nn.init.constant_(module.latent_scaling_factor, 1.0)
-        if hasattr(module, "latent_bias_factor"):
-            nn.init.constant_(module.latent_bias_factor, 0.0)
-        if isinstance(module, nn.Embedding):
-            nn.init.normal_(module.weight, mean=0.0, std=self.config.weight_init_value)
-
-
-@dataclass
-@auto_docstring
-class VibeVoiceRealTimeDecoderOutput(ModelOutput):
-    """
-    audio (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-        Projected latents (continuous representations for acoustic tokens) at the output of the encoder.
-    padding_cache (`VibeVoiceRealTimeConv1dCache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        A [`VibeVoiceRealTimeConv1dCache`] instance containing cached convolution states for each layer that
-        can be passed to subsequent forward calls.
-    """
-
-    audio: Optional[torch.FloatTensor] = None
-    padding_cache: Optional["VibeVoiceRealTimeConv1dCache"] = None
-
-
-class VibeVoiceRealTimeCausalConvTranspose1d(nn.Module):
-    """Causal ConvTranspose1d with optional streaming support via VibeVoiceRealTimeConv1dCache."""
-
-    def __init__(
-        self,
-        in_channels: int,
-        out_channels: int,
-        kernel_size: int,
-        stride: int = 1,
-        bias: bool = True,
-        layer_idx: Optional[int] = None,
-    ):
-        super().__init__()
-        self.convtr = nn.ConvTranspose1d(in_channels, out_channels, kernel_size, stride, bias=bias)
-
-        self.stride = stride
-        self.layer_idx = layer_idx
-        # Different padding for transposed convolution: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L423
-        self.padding_total = kernel_size - stride
-        self.causal_padding = kernel_size - 1
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        padding_cache: Optional["VibeVoiceRealTimeConv1dCache"] = None,
-    ) -> torch.Tensor:
-        time_dim = hidden_states.shape[-1]
-
-        if padding_cache is not None:
-            layer_padding = padding_cache.update(hidden_states, self.layer_idx, is_transpose=True)
-            hidden_states = torch.cat([layer_padding, hidden_states], dim=-1)
-        hidden_states = self.convtr(hidden_states)
-
-        # Remove extra padding at the right side
-        if self.padding_total > 0:
-            hidden_states = hidden_states[..., : -self.padding_total]
-
-        if padding_cache is not None and layer_padding.shape[2] != 0:
-            # For first chunk (layer_padding.shape[2] == 0) return full output
-            # for subsequent chunks return only new output
-            expected_new_output = time_dim * self.stride
-            if hidden_states.shape[2] >= expected_new_output:
-                hidden_states = hidden_states[:, :, -expected_new_output:]
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
         return hidden_states
-
-
-class VibeVoiceRealTimeDecoder(nn.Module):
-    """Decoder component for the VibeVoice tokenizer that converts latent representations back to audio."""
-
-    def __init__(self, config):
-        super().__init__()
-
-        layer_idx = 0
-        self.upsample_layers = nn.ModuleList()
-        self.upsample_layers.append(
-            VibeVoiceRealTimeCausalConv1d(
-                in_channels=config.hidden_size,
-                out_channels=int(config.n_filters * 2 ** (len(config.decoder_depths) - 1)),
-                kernel_size=config.kernel_size,
-                bias=config.bias,
-                layer_idx=layer_idx,
-            )
-        )
-        layer_idx += 1
-        for stage_idx in range(len(config.upsampling_ratios)):
-            input_channels = int(config.n_filters * (2 ** (len(config.decoder_depths) - 1 - stage_idx)))
-            output_channels = int(config.n_filters * (2 ** (len(config.decoder_depths) - 1 - stage_idx - 1)))
-            upsample_layer = VibeVoiceRealTimeCausalConvTranspose1d(
-                input_channels,
-                output_channels,
-                kernel_size=int(config.upsampling_ratios[stage_idx] * 2),
-                stride=config.upsampling_ratios[stage_idx],
-                bias=config.bias,
-                layer_idx=layer_idx,
-            )
-            self.upsample_layers.append(upsample_layer)
-            layer_idx += 1
-
-        self.stages = nn.ModuleList()
-        for stage_idx in range(len(config.decoder_depths)):
-            input_channels = config.n_filters * (2 ** (len(config.decoder_depths) - 1 - stage_idx))
-            stage = nn.ModuleList(
-                [
-                    VibeVoiceRealTimeConvNext1dLayer(
-                        config, hidden_size=input_channels, layer_idx=layer_idx + depth_idx
-                    )
-                    for depth_idx in range(config.decoder_depths[stage_idx])
-                ]
-            )
-            self.stages.append(stage)
-            layer_idx += config.decoder_depths[stage_idx]
-
-        self.head = VibeVoiceRealTimeCausalConv1d(
-            in_channels=input_channels,
-            out_channels=config.channels,
-            kernel_size=config.kernel_size,
-            bias=config.bias,
-            layer_idx=layer_idx,
-        )
-
-        # store parameters for cache creation
-        self.num_layers = layer_idx + 1
-        self.per_layer_padding = []
-        self.per_layer_in_channels = []
-        for upsample_layer in self.upsample_layers:
-            self.per_layer_padding.append(upsample_layer.causal_padding)
-            if hasattr(upsample_layer, "convtr"):
-                self.per_layer_in_channels.append(upsample_layer.convtr.in_channels)
-            else:
-                self.per_layer_in_channels.append(upsample_layer.conv.in_channels)
-        for stage in self.stages:
-            for block in stage:
-                self.per_layer_padding.append(block.mixer.causal_padding)
-                self.per_layer_in_channels.append(block.mixer.conv.in_channels)
-        self.per_layer_padding.append(self.head.causal_padding)
-        self.per_layer_in_channels.append(self.head.conv.in_channels)
-
-    def forward(self, hidden_states, padding_cache=None):
-        for layer_idx, upsample_layer in enumerate(self.upsample_layers):
-            hidden_states = upsample_layer(hidden_states, padding_cache=padding_cache)
-            for block in self.stages[layer_idx]:
-                hidden_states = block(hidden_states, padding_cache=padding_cache)
-        hidden_states = self.head(hidden_states, padding_cache=padding_cache)
-        return hidden_states
-
-
-@auto_docstring(
-    custom_intro="""
-    Acoustic tokenizer which only decodes audio from latent representations.
-    """
-)
-class VibeVoiceRealTimeAcousticDecoder(VibeVoiceRealTimePreTrainedModel):
-    """VibeVoice speech tokenizer model combining encoder and decoder for acoustic tokens"""
-
-    config: VibeVoiceRealTimeAcousticDecoderConfig
-    base_model_prefix = "vibevoice_realtime_acoustic_decoder"
-    main_input_name = "latents"
-    _no_split_modules = ["VibeVoiceRealTimeDecoder"]
-
-    def __init__(self, config):
-        super().__init__(config)
-        self.decoder = VibeVoiceRealTimeDecoder(config)
-        self.post_init()
-
-    @can_return_tuple
-    @auto_docstring
-    def decode(self, latents, padding_cache=None, use_cache=False):
-        r"""
-        latents (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`):
-            Input latent representations to be decoded back into audio waveforms.
-        padding_cache (`VibeVoiceRealTimeConv1dCache`, *optional*):
-            Cache object for streaming mode to maintain convolution states across layers.
-        use_cache (`bool`, *optional*):
-            Whether to use caching for convolution states.
-        """
-
-        if use_cache and padding_cache is None:
-            padding_cache = VibeVoiceRealTimeConv1dCache(
-                num_layers=self.decoder.num_layers,
-                per_layer_padding=self.decoder.per_layer_padding,
-                per_layer_in_channels=self.decoder.per_layer_in_channels,
-            )
-
-        latents = latents.permute(0, 2, 1)
-        audio = self.decoder(latents, padding_cache=padding_cache)
-        return VibeVoiceRealTimeDecoderOutput(audio=audio, padding_cache=padding_cache)
-
-
-class VibeVoiceRealTimeDiffusionHeadTimestepEmbedder(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.layer_1 = nn.Linear(config.frequency_embedding_size, config.hidden_size, bias=False)
-        self.act = ACT2FN[config.hidden_act]
-        self.layer_2 = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
-        self.frequency_embedding_size = config.frequency_embedding_size
-
-    # Original: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice_realtime/modular_vibevoice_realtime_diffusion_head.py#L66
-    @staticmethod
-    def timestep_embedding(timesteps, dim, max_period=10000):
-        # NOTE (ebezzam) imitate `LlamaRotaryEmbedding` device handling: https://github.com/huggingface/transformers/blob/5b6c209bc5a19b80c866279ee0c8e124ff7e4e49/src/transformers/models/llama/modeling_llama.py#L128
-        device_type = (
-            timesteps.device.type
-            if isinstance(timesteps.device.type, str) and timesteps.device.type != "mps"
-            else "cpu"
-        )
-        with torch.autocast(device_type=device_type, enabled=False):
-            freqs = torch.exp(
-                -math.log(max_period) * torch.arange(start=0, end=dim // 2, dtype=torch.float32) / (dim // 2)
-            ).to(timesteps.device)
-            args = timesteps[:, None].float() * freqs[None]
-            embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
-        if dim % 2:
-            embedding = torch.cat([embedding, torch.zeros_like(embedding[:, :1])], dim=-1)
-        return embedding.to(timesteps.dtype)
-
-    def forward(self, timesteps):
-        t_freq = self.timestep_embedding(timesteps, dim=self.frequency_embedding_size)
-        return self.layer_2(self.act(self.layer_1(t_freq)))
 
 
 class VibeVoiceRealTimeMLP(nn.Module):
@@ -502,38 +181,35 @@ class VibeVoiceRealTimeMLP(nn.Module):
         return down_proj
 
 
-# NOTE (ebezzam) Qwen 2.5 Omni has most similar, but hardcoded fnn ratio: https://github.com/huggingface/transformers/blob/82451cbb30fde5ede89308ea2328f89c61d5a831/src/transformers/models/qwen2_5_omni/modeling_qwen2_5_omni.py#L2927
 class VibeVoiceRealTimeDiffusionHeadAdaLayerNorm(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.ffn_ratio = config.head_ffn_ratio
-        ffn_dim = config.hidden_size * config.head_ffn_ratio
+        self.num_chunks = 3
         self.ffn = VibeVoiceRealTimeMLP(config)
         self.norm = VibeVoiceRealTimeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.act_fn = ACT2FN[config.hidden_act]
-        self.linear = nn.Linear(config.hidden_size, ffn_dim, bias=False)
+        self.linear = nn.Linear(config.hidden_size, config.hidden_size * self.num_chunks, bias=False)
 
     def forward(self, hidden_states, condition):
-        shift_ffn, scale_ffn, gate_ffn = self.linear(self.act_fn(condition)).chunk(self.ffn_ratio, dim=-1)
+        shift_ffn, scale_ffn, gate_ffn = self.linear(self.act_fn(condition)).chunk(self.num_chunks, dim=-1)
         modulated_hidden_states = self.norm(hidden_states) * (1 + scale_ffn) + shift_ffn
         hidden_states = hidden_states + gate_ffn * self.ffn(modulated_hidden_states)
         return hidden_states
 
 
 class VibeVoiceRealTimeDiffusionHeadFinalLayer(nn.Module):
-    def __init__(self, config, output_size, ffn_ratio=2):
+    def __init__(self, config, output_size):
         super().__init__()
-        # Inline RMS normalization since there is no weight scaling (unlike `VibeVoiceRealTimeRMSNorm`)
-        self.norm_eps = config.rms_norm_eps
-        self.ffn_ratio = ffn_ratio
-        self.linear_1 = nn.Linear(config.hidden_size, ffn_ratio * config.hidden_size, bias=False)
+        self.num_chunks = 2
+        self.rms_norm_eps = config.rms_norm_eps
+        self.linear_1 = nn.Linear(config.hidden_size, self.num_chunks * config.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
         self.linear_2 = nn.Linear(config.hidden_size, output_size, bias=False)
 
     def forward(self, hidden_states, condition):
-        shift, scale = self.linear_1(self.act_fn(condition)).chunk(self.ffn_ratio, dim=-1)
-        hidden_states = hidden_states * torch.rsqrt(hidden_states.pow(2).mean(-1, keepdim=True) + self.norm_eps)
-        hidden_states = hidden_states * (1 + scale) + shift
+        shift, scale = self.linear_1(self.act_fn(condition)).chunk(self.num_chunks, dim=-1)
+        normed = F.rms_norm(hidden_states, (hidden_states.shape[-1],), eps=self.rms_norm_eps)
+        hidden_states = normed * (1 + scale) + shift
         hidden_states = self.linear_2(hidden_states)
         return hidden_states
 
@@ -541,49 +217,42 @@ class VibeVoiceRealTimeDiffusionHeadFinalLayer(nn.Module):
 class VibeVoiceRealTimeDiffusionHead(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.noisy_images_proj = nn.Linear(config.acoustic_hidden_size, config.hidden_size, bias=False)
+        self.noisy_images_proj = nn.Linear(config.latent_size, config.hidden_size, bias=False)
         self.cond_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
-        self.timestep_embedder = VibeVoiceRealTimeDiffusionHeadTimestepEmbedder(config)
+        self.timestep_embedding = VibeVoiceRealTimeDiffusionHeadSinusoidalEmbedding(config)
+        self.timestep_proj = VibeVoiceRealTimeDiffusionHeadMLP(config)
         self.layers = nn.ModuleList(
-            [VibeVoiceRealTimeDiffusionHeadAdaLayerNorm(config) for _ in range(config.num_head_layers)]
+            [VibeVoiceRealTimeDiffusionHeadAdaLayerNorm(config) for _ in range(config.num_hidden_layers)]
         )
-        self.final_layer = VibeVoiceRealTimeDiffusionHeadFinalLayer(config, output_size=config.acoustic_hidden_size)
+        self.final_layer = VibeVoiceRealTimeDiffusionHeadFinalLayer(config, output_size=config.latent_size)
 
     def forward(self, noisy_images, timesteps, condition):
         """
-        Forward pass of the prediction head.
-
-        Args:
-            noisy_images (`torch.Tensor`): Noisy images/latents to denoise
-            timesteps (`torch.Tensor`): Timesteps for diffusion
-            condition (`torch.Tensor`): Conditioning information
-
-        Returns:
-            `torch.Tensor`: The predicted noise/velocity
+        Forward pass of the prediction head. Returns the predicted noise/velocity.
         """
         hidden_states = self.noisy_images_proj(noisy_images)
-        embedded_timesteps = self.timestep_embedder(timesteps)
+        embedded_timesteps = self.timestep_embedding(timesteps).to(timesteps.dtype)
+        embedded_timesteps = self.timestep_proj(embedded_timesteps)
         condition = self.cond_proj(condition)
         condition = condition + embedded_timesteps
         for layer in self.layers:
             hidden_states = layer(hidden_states, condition)
-
         hidden_states = self.final_layer(hidden_states, condition)
         return hidden_states
 
 
-class VibeVoiceRealTimeMultiModelProjector(nn.Module):
+class VibeVoiceRealTimeMultiModalProjector(nn.Module):
     def __init__(self, input_dim, output_dim):
         super().__init__()
-        self.fc1 = nn.Linear(input_dim, output_dim)
-        self.norm = VibeVoiceRealTimeRMSNorm(output_dim, eps=1e-6)
-        self.fc2 = nn.Linear(output_dim, output_dim)
+        self.linear_1 = nn.Linear(input_dim, output_dim)
+        self.act = VibeVoiceRealTimeRMSNorm(output_dim, eps=1e-6)
+        self.linear_2 = nn.Linear(output_dim, output_dim)
 
-    def forward(self, features):
-        x = self.fc1(features)
-        x = self.norm(x)
-        x = self.fc2(x)
-        return x
+    def forward(self, audio_features):
+        hidden_states = self.linear_1(audio_features)
+        hidden_states = self.act(hidden_states)
+        hidden_states = self.linear_2(hidden_states)
+        return hidden_states
 
 
 @auto_docstring(
@@ -594,12 +263,14 @@ class VibeVoiceRealTimeMultiModelProjector(nn.Module):
 class VibeVoiceRealTimeModel(VibeVoiceRealTimePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
+        self.audio_tower = AutoModel.from_config(config.audio_config)
         self.language_model = AutoModel.from_config(config.text_config)
-        self.acoustic_tokenizer = AutoModel.from_config(config.acoustic_tokenizer_config)
-        self.acoustic_connector = VibeVoiceRealTimeMultiModelProjector(
-            config.acoustic_hidden_size, config.text_config.hidden_size
+        self.multi_modal_projector = VibeVoiceRealTimeMultiModalProjector(
+            config.audio_config.hidden_size, config.text_config.hidden_size
         )
-        self.diffusion_head = VibeVoiceRealTimeDiffusionHead(config)
+        self.diffusion_head = VibeVoiceRealTimeDiffusionHead(config.diffusion_head_config)
+        self.latent_scaling_factor = nn.Parameter(torch.tensor(1.0))
+        self.latent_bias_factor = nn.Parameter(torch.tensor(0.0))
 
         self.language_model.norm = nn.Identity()
         self.tts_language_model = AutoModel.from_config(config.tts_text_config)
@@ -607,19 +278,43 @@ class VibeVoiceRealTimeModel(VibeVoiceRealTimePreTrainedModel):
         self.tts_input_types = nn.Embedding(num_embeddings=2, embedding_dim=config.text_config.hidden_size)
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
+    def get_placeholder_mask(
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, audio_features: torch.FloatTensor
+    ):
+        """
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
+        """
+        if input_ids is None:
+            special_audio_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.full((), self.config.audio_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_audio_mask = special_audio_mask.all(-1)
+        else:
+            special_audio_mask = input_ids == self.config.audio_token_id
 
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
+        n_audio_tokens = special_audio_mask.sum()
+        n_audio_features = audio_features.shape[0]
+        special_audio_mask = special_audio_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        torch_compilable_check(
+            inputs_embeds[special_audio_mask].numel() == audio_features.numel(),
+            f"Audio features and audio tokens do not match, tokens: {n_audio_tokens}, features: {n_audio_features}",
+        )
+        return special_audio_mask
 
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        tts_text_masks: Optional[torch.BoolTensor] = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        tts_text_masks: torch.BoolTensor | None = None,
         **kwargs,
-    ) -> Union[tuple, BaseModelOutputWithPast]:
+    ) -> tuple | BaseModelOutputWithPast:
+        r"""
+        padding_mask (`torch.Tensor` of shape `(batch_size, padded_audio_length)`):
+            Padding mask to remove padded parts of audio.
+        """
         if inputs_embeds is None:
             # TODO can input embeds be computed by self.language model if only input_ids is provided?
             # raise ValueError("Input embeds should be computed by with `self.forward_lm`")
@@ -636,9 +331,9 @@ class VibeVoiceRealTimeModel(VibeVoiceRealTimePreTrainedModel):
     def forward_lm(
         self,
         input_ids: torch.LongTensor = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
+        inputs_embeds: torch.FloatTensor | None = None,
         **kwargs,
-    ) -> Union[tuple, BaseModelOutputWithPast]:
+    ) -> tuple | BaseModelOutputWithPast:
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
         return self.language_model(inputs_embeds=inputs_embeds, **kwargs)
@@ -653,8 +348,6 @@ class VibeVoiceRealTimeForConditionalGeneration(VibeVoiceRealTimePreTrainedModel
     def __init__(self, config):
         super().__init__(config)
         self.model = VibeVoiceRealTimeModel(config)
-        self.latent_scaling_factor = nn.Parameter(torch.tensor(1.0))
-        self.latent_bias_factor = nn.Parameter(torch.tensor(0.0))
         self.tts_eos_classifier = VibeVoiceRealTimeBinaryClassifier(config.text_config.hidden_size)
         self.post_init()
 
@@ -665,14 +358,6 @@ class VibeVoiceRealTimeForConditionalGeneration(VibeVoiceRealTimePreTrainedModel
     @property
     def tts_language_model(self):
         return self.model.tts_language_model
-
-    @property
-    def acoustic_tokenizer(self):
-        return self.model.acoustic_tokenizer
-
-    @property
-    def acoustic_connector(self):
-        return self.model.acoustic_connector
 
     @property
     def diffusion_head(self):
@@ -686,11 +371,11 @@ class VibeVoiceRealTimeForConditionalGeneration(VibeVoiceRealTimePreTrainedModel
     def forward(
         self,
         input_ids: torch.LongTensor = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.FloatTensor] = None,
-        tts_text_masks: Optional[torch.BoolTensor] = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.FloatTensor | None = None,
+        tts_text_masks: torch.BoolTensor | None = None,
         **kwargs,
-    ) -> Union[tuple, VibeVoiceRealTimeCausalLMOutputWithPast]:
+    ) -> tuple | VibeVoiceRealTimeCausalLMOutputWithPast:
         """
         tts_text_masks (`torch.LongTensor`, *optional*):
             Mask marking inputs as text(1) or speech(0).

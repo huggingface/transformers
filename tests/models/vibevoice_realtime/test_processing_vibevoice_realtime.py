@@ -15,7 +15,6 @@
 
 import unittest
 
-
 from transformers import VibeVoiceRealTimeProcessor
 from transformers.testing_utils import require_torch
 from transformers.utils import is_torch_available

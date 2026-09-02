@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,10 @@
 import argparse
 import gc
 import json
+import logging
 import os
+import re
+from typing import Any
 
 import torch
 from safetensors.torch import load_file
@@ -29,67 +31,85 @@ from transformers import (
 )
 
 
-def update_state_dict_for_hf_model(state_dict):
-    """
-    Update the state_dict to match the HuggingFace model structure.
-    """
-    updated_state_dict = {}
-
-    for key, value in state_dict.items():
-        new_key = key
-
-        # Handle acoustic tokenizer transformations
-        if "acoustic_tokenizer.decoder" in key:
-            if "upsample_layers.0.0.conv.conv." in key:
-                new_key = new_key.replace("upsample_layers.0.0.conv.conv.", "upsample_layers.0.conv.")
-            elif "0.convtr.convtr." in key:
-                new_key = new_key.replace("0.convtr.convtr.", "convtr.")
-            elif "head.conv." in key:
-                new_key = new_key.replace("head.conv.", "head.")
-            elif "stages." in key and "mixer.conv.conv.conv." in key:
-                new_key = new_key.replace("mixer.conv.conv.conv.", "mixer.conv.")
-
-        # Handle main model
-        if "prediction_head." in key:
-            key = key.replace("prediction_head.", "diffusion_head.")
-            new_key = new_key.replace("prediction_head.", "diffusion_head.")
-        if "diffusion_head.t_embedder.mlp." in key:
-            if "diffusion_head.t_embedder.mlp.0." in key:
-                new_key = new_key.replace(
-                    "diffusion_head.t_embedder.mlp.0.", "diffusion_head.timestep_embedder.layer_1."
-                )
-            elif "diffusion_head.t_embedder.mlp.2." in key:
-                new_key = new_key.replace(
-                    "diffusion_head.t_embedder.mlp.2.", "diffusion_head.timestep_embedder.layer_2."
-                )
-        if "diffusion_head.final_layer.linear." in key and "adaLN_modulation" not in key:
-            new_key = new_key.replace("diffusion_head.final_layer.linear.", "diffusion_head.final_layer.linear_2.")
-        if "diffusion_head.final_layer.adaLN_modulation." in key:
-            if ".adaLN_modulation.1." in key:
-                new_key = new_key.replace(".adaLN_modulation.1.", ".linear_1.")
-        if "diffusion_head.layers." in key and ".adaLN_modulation." in key:
-            if ".adaLN_modulation.1." in key:
-                new_key = new_key.replace(".adaLN_modulation.1.", ".linear.")
-        if "model.speech_scaling_factor" in key:
-            new_key = new_key.replace("model.speech_scaling_factor", "latent_scaling_factor")
-        if "model.speech_bias_factor" in key:
-            new_key = new_key.replace("model.speech_bias_factor", "latent_bias_factor")
-
-        updated_state_dict[new_key] = value
-
-    return updated_state_dict
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 
-def convert_checkpoint(
-    checkpoint, output_dir, config_path, push_to_hub, bfloat16, processor_config=None
-):
+# fmt: off
+STATE_DICT_MAPPING = {
+    # Acoustic decoder: upsample_layers.0 -> stem, upsample_layers.N -> conv_layers.N-1
+    r"acoustic_tokenizer\.decoder\.upsample_layers\.0\.0\.conv\.conv\.":          r"audio_tower.decoder.stem.conv.conv.",
+    r"acoustic_tokenizer\.decoder\.stages\.0\.":                                    r"audio_tower.decoder.stem.stage.",
+    r"acoustic_tokenizer\.decoder\.upsample_layers\.(\d+)\.0\.convtr\.convtr\.": r"audio_tower.decoder.conv_layers.PLACEHOLDER.convtr.convtr.",
+    r"acoustic_tokenizer\.decoder\.stages\.(\d+)\.":                               r"audio_tower.decoder.conv_layers.PLACEHOLDER.stage.",
+    r"acoustic_tokenizer\.decoder\.head\.conv\.":                                   r"audio_tower.decoder.head.",
+
+    # Rename any remaining acoustic tokenizer keys (the module is `audio_tower` in the HF model)
+    r"acoustic_tokenizer\.":                                                          r"audio_tower.",
+
+    # Diffusion head renaming
+    r"prediction_head\.t_embedder\.mlp\.0\.":                                       r"diffusion_head.timestep_proj.fc1.",
+    r"prediction_head\.t_embedder\.mlp\.2\.":                                       r"diffusion_head.timestep_proj.fc2.",
+    r"prediction_head\.layers\.(\d+)\.adaLN_modulation\.1\.":                      r"diffusion_head.layers.\1.linear.",
+    r"prediction_head\.final_layer\.adaLN_modulation\.1\.":                         r"diffusion_head.final_layer.linear_1.",
+    r"prediction_head\.final_layer\.linear\.":                                       r"diffusion_head.final_layer.linear_2.",
+    r"prediction_head\.":                                                             r"diffusion_head.",
+
+    # Multimodal connector (the acoustic connector is the `multi_modal_projector` in the HF model)
+    r"acoustic_connector\.fc1\.":  r"multi_modal_projector.linear_1.",
+    r"acoustic_connector\.norm\.": r"multi_modal_projector.act.",
+    r"acoustic_connector\.fc2\.":  r"multi_modal_projector.linear_2.",
+
+    # Latent factors
+    r"^model\.speech_scaling_factor": r"model.latent_scaling_factor",
+    r"^model\.speech_bias_factor":    r"model.latent_bias_factor",
+
+    # Clean up nested conv layers (must be after above mappings)
+    r"mixer\.conv\.conv\.conv\.": r"mixer.conv.",
+}
+# fmt: on
+
+
+def map_old_key_to_new(old_key: str) -> str:
+    new_key = old_key
+
+    for pattern, replacement in STATE_DICT_MAPPING.items():
+        match = re.search(pattern, new_key)
+        if match:
+            # Handle index shifts for conv_layers (upsample_layers/stages indexed from 1)
+            if "PLACEHOLDER" in replacement and match.groups():
+                layer_idx = int(match.group(1))
+                # Shift down by 1 since layer 0 becomes stem
+                new_idx = layer_idx - 1
+                replacement = replacement.replace("PLACEHOLDER", str(new_idx))
+
+            new_key = re.sub(pattern, replacement, new_key)
+
+    return new_key
+
+
+def convert_state_dict(original_state_dict: dict[str, Any]) -> dict[str, Any]:
+    new_state_dict = {}
+
+    for old_key, tensor in original_state_dict.items():
+        new_key = map_old_key_to_new(old_key)
+        new_state_dict[new_key] = tensor
+        if old_key != new_key:
+            logger.debug(f"Converted: {old_key} -> {new_key}")
+
+    return new_state_dict
+
+
+def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat16, processor_config=None):
     if bfloat16:
         dtype = torch.bfloat16
     else:
         dtype = torch.float32
 
     # 1) Load state dict from safetensors checkpoint
+    logger.info(f"Loading checkpoint from {checkpoint}")
     original_state_dict = load_file(checkpoint)
+    logger.info(f"Number of parameters in original checkpoint: {len(original_state_dict)}")
 
     # 2) Prepare feature extractor (same for all models)
     audio_config = {}
@@ -114,84 +134,62 @@ def convert_checkpoint(
     with open(config_path, "r") as f:
         model_config = json.load(f)
 
-    # clean up acoustic tokenizer config
-    model_config["acoustic_tokenizer_config"]["hidden_size"] = model_config["acoustic_tokenizer_config"].pop("vae_dim")
-    model_config["acoustic_tokenizer_config"]["bias"] = model_config["acoustic_tokenizer_config"].pop("conv_bias")
-    # -- since decoder only, remove encoder/decoder naming
-    model_config["acoustic_tokenizer_config"]["encoder_depths"] = list(
-        map(int, model_config["acoustic_tokenizer_config"]["encoder_depths"].split("-"))
-    )
-    model_config["acoustic_tokenizer_config"]["decoder_depths"] = model_config["acoustic_tokenizer_config"].pop("encoder_depths")[::-1]
-    model_config["acoustic_tokenizer_config"]["n_filters"] = model_config["acoustic_tokenizer_config"].pop( "decoder_n_filters")
-    del model_config["acoustic_tokenizer_config"]["encoder_n_filters"]
-    model_config["acoustic_tokenizer_config"]["upsampling_ratios"] = model_config["acoustic_tokenizer_config"].pop("decoder_ratios")
-    del model_config["acoustic_tokenizer_config"]["encoder_ratios"]
-    # -- remove all sampling/vae related parameters since decoder only
-    if "std_dist_type" in model_config["acoustic_tokenizer_config"]:
-        del model_config["acoustic_tokenizer_config"]["std_dist_type"]
-    if "fix_std" in model_config["acoustic_tokenizer_config"]:
-        del model_config["acoustic_tokenizer_config"]["fix_std"]
-    # -- remove unused / constant parameters that lead to unused code paths removed in HF model
-    if "mixer_layer" in model_config["acoustic_tokenizer_config"]:
-        del model_config["acoustic_tokenizer_config"]["mixer_layer"]
-    if "layernorm" in model_config["acoustic_tokenizer_config"]:
-        del model_config["acoustic_tokenizer_config"]["layernorm"]
-    if "disable_last_norm" in model_config["acoustic_tokenizer_config"]:
-        del model_config["acoustic_tokenizer_config"]["disable_last_norm"]
-    if "conv_norm" in model_config["acoustic_tokenizer_config"]:
-        del model_config["acoustic_tokenizer_config"]["conv_norm"]
-    if "corpus_normalize" in model_config["acoustic_tokenizer_config"]:
-        del model_config["acoustic_tokenizer_config"]["corpus_normalize"]
-    if "layernorm_elementwise_affine" in model_config["acoustic_tokenizer_config"]:
-        del model_config["acoustic_tokenizer_config"]["layernorm_elementwise_affine"]
-    if "layernorm_eps" in model_config["acoustic_tokenizer_config"]:
-        model_config["acoustic_tokenizer_config"]["rms_norm_eps"] = model_config["acoustic_tokenizer_config"][
-            "layernorm_eps"
-        ]
-        del model_config["acoustic_tokenizer_config"]["layernorm_eps"]
-    if "pad_mode" in model_config["acoustic_tokenizer_config"]:
-        del model_config["acoustic_tokenizer_config"]["pad_mode"]
-    if "causal" in model_config["acoustic_tokenizer_config"]:
-        del model_config["acoustic_tokenizer_config"]["causal"]
-    model_config["acoustic_tokenizer_config"]["model_type"] = "vibevoice_realtime_acoustic_decoder"
+    # clean up acoustic decoder config (the real-time model only decodes audio)
+    audio_config = model_config.pop("acoustic_tokenizer_config")
+    audio_config["model_type"] = "vibevoice_realtime_acoustic_decoder"
+    audio_config["hidden_size"] = audio_config.pop("vae_dim")
+    audio_config["num_filters"] = audio_config.pop("decoder_n_filters")
+    audio_config["upsampling_ratios"] = audio_config.pop("decoder_ratios")
+    audio_config["initializer_range"] = audio_config.pop("weight_init_value")
+    if "layernorm_eps" in audio_config:
+        audio_config["rms_norm_eps"] = audio_config.pop("layernorm_eps")
+    # -- depths are stored in encoder order in the original config
+    encoder_depths = audio_config.pop("encoder_depths")
+    if isinstance(encoder_depths, str):
+        encoder_depths = list(map(int, encoder_depths.split("-")))
+    audio_config["depths"] = encoder_depths[::-1]
+    # -- remove encoder and sampling/vae parameters (decoder only), as well as constant parameters that lead to
+    #    unused code paths removed in the HF model
+    # fmt: off
+    for key in [
+        "encoder_n_filters", "encoder_ratios", "decoder_depths", "std_dist_type", "fix_std", "conv_bias", "causal",
+        "mixer_layer", "layernorm", "layernorm_elementwise_affine", "disable_last_norm", "conv_norm",
+        "corpus_normalize", "pad_mode",
+    ]:
+        audio_config.pop(key, None)
+    # fmt: on
+    model_config["audio_config"] = audio_config
 
-    # clean up diffusion head config
-    model_config["diffusion_head_config"]["head_ffn_ratio"] = int(
-        model_config["diffusion_head_config"]["head_ffn_ratio"]
-    )
-    model_config["diffusion_head_config"]["num_head_layers"] = model_config["diffusion_head_config"].pop("head_layers")
-    if model_config["diffusion_head_config"]["ddpm_beta_schedule"] == "cosine":
-        model_config["diffusion_head_config"]["ddpm_beta_schedule"] = "squaredcos_cap_v2"
-    if "speech_vae_dim" in model_config["diffusion_head_config"]:
-        del model_config["diffusion_head_config"]["speech_vae_dim"]
-    if "diffusion_type" in model_config["diffusion_head_config"]:
-        del model_config["diffusion_head_config"]["diffusion_type"]
-    if "ddpm_batch_mul" in model_config["diffusion_head_config"]:
-        del model_config["diffusion_head_config"]["ddpm_batch_mul"]
-    # -- flatten diffusion head config
-    for k, v in model_config["diffusion_head_config"].items():
-        model_config[k] = v
-    del model_config["diffusion_head_config"]
+    # build the diffusion head config (scheduler parameters are set in the generation config below)
+    diffusion_config = model_config.pop("diffusion_head_config")
+    model_config["diffusion_head_config"] = {
+        "hidden_size": diffusion_config["hidden_size"],
+        "latent_size": audio_config["hidden_size"],
+        "num_hidden_layers": diffusion_config["head_layers"],
+        "intermediate_size": int(diffusion_config["head_ffn_ratio"] * diffusion_config["hidden_size"]),
+        "rms_norm_eps": diffusion_config["rms_norm_eps"],
+    }
 
     # clean up and configuration language model config -> 2 language models (one for text, one for tts)
     model_config["text_config"] = model_config.pop("decoder_config")
     model_config["text_config"]["dtype"] = model_config["text_config"].pop("torch_dtype")
-    model_config["text_config"]["num_hidden_layers"] = model_config["text_config"]["num_hidden_layers"] - model_config["tts_backbone_num_hidden_layers"] 
+    model_config["text_config"]["num_hidden_layers"] = (
+        model_config["text_config"]["num_hidden_layers"] - model_config["tts_backbone_num_hidden_layers"]
+    )
     model_config["tts_text_config"] = model_config["text_config"].copy()
     model_config["tts_text_config"]["num_hidden_layers"] = model_config.pop("tts_backbone_num_hidden_layers")
 
     # clean up main model config
-    if "acoustic_vae_dim" in model_config:
-        del model_config["acoustic_vae_dim"]
-    if "hidden_size" in model_config:
-        del model_config["hidden_size"]
+    for key in ["acoustic_vae_dim", "model_type"]:
+        model_config.pop(key, None)
     model_config["dtype"] = model_config.pop("torch_dtype")
 
     # 4) Update state dict to match HF model structure
-    updated_state_dict = update_state_dict_for_hf_model(original_state_dict)
+    logger.info("Converting state dict")
+    updated_state_dict = convert_state_dict(original_state_dict)
 
-    # 7) Create VibeVoiceRealTime processor
-    print("\n=== Creating VibeVoiceRealTime processor ===")
+    # 5) Create VibeVoiceRealTime processor
+    logger.info("Creating VibeVoiceRealTime processor")
 
     # Explicitly use Qwen2TokenizerFast to ensure proper class name in config
     tokenizer = Qwen2TokenizerFast.from_pretrained(language_model_pretrained_name)
@@ -213,30 +211,30 @@ def convert_checkpoint(
             json.dump(tokenizer_config, f, indent=2)
 
     if push_to_hub is not None:
-        print(f"------ Pushing processor to hub as {push_to_hub} ------")
+        logger.info(f"Pushing processor to Hub: {push_to_hub}")
         processor.push_to_hub(push_to_hub)
 
-    # 8) Create and save full VibeVoice model
-    print("\n=== Creating full model ===")
+    # 6) Create and save full VibeVoice model
+    logger.info("Creating full model")
     vibevoice_config = VibeVoiceRealTimeConfig(**model_config)
     vibevoice_model = VibeVoiceRealTimeForConditionalGeneration(vibevoice_config).to(dtype)
+    logger.info(f"Number of parameters in model: {len(vibevoice_model.state_dict())}")
 
     # -- print dtypes of key components for verification
-    print("Acoustic connector dtype : ", vibevoice_model.acoustic_connector.fc1.weight.dtype)
-    print("Language model dtype : ", vibevoice_model.language_model.embed_tokens.weight.dtype)
-    print(
-        "Acoustic tokenizer dtype : ",
-        vibevoice_model.acoustic_tokenizer.decoder.upsample_layers[0].conv.weight.dtype,
-    )
-    print("Diffusion head dtype : ", vibevoice_model.diffusion_head.noisy_images_proj.weight.dtype)
+    logger.info(f"Acoustic connector dtype: {next(vibevoice_model.model.multi_modal_projector.parameters()).dtype}")
+    logger.info(f"Language model dtype: {next(vibevoice_model.model.language_model.parameters()).dtype}")
+    logger.info(f"TTS language model dtype: {next(vibevoice_model.model.tts_language_model.parameters()).dtype}")
+    logger.info(f"Acoustic decoder dtype: {next(vibevoice_model.model.audio_tower.parameters()).dtype}")
+    logger.info(f"Diffusion head dtype: {next(vibevoice_model.model.diffusion_head.parameters()).dtype}")
 
     # -- load into HF model
-    missing, unexpected = vibevoice_model.load_state_dict(updated_state_dict, strict=False)
-    if len(unexpected) != 0:
-        raise ValueError(f"Unexpected keys: {unexpected}")
-    if len(missing) != 0:
-        raise ValueError(f"missing keys found: {missing}")
-    print("Full model checkpoint loaded successfully.")
+    logger.info("Loading weights into model")
+    load_result = vibevoice_model.load_state_dict(updated_state_dict, strict=False)
+    if load_result.unexpected_keys:
+        raise ValueError(f"{len(load_result.unexpected_keys)} unexpected keys: {load_result.unexpected_keys}")
+    if load_result.missing_keys:
+        raise ValueError(f"{len(load_result.missing_keys)} missing keys: {load_result.missing_keys}")
+    logger.info("Full model checkpoint loaded successfully")
 
     # Set default generation config
     vibevoice_model.generation_config._from_model_config = False
@@ -259,18 +257,21 @@ def convert_checkpoint(
     vibevoice_model.generation_config.text_window_size = 5
     vibevoice_model.generation_config.speech_window_size = 6
 
+    logger.info(f"Saving model to {output_dir}")
     vibevoice_model.save_pretrained(output_dir)
+
     # -- push to hub
     if push_to_hub is not None:
-        print(f"------ Pushing full VibeVoice model to hub as {push_to_hub} ------")
+        logger.info(f"Pushing model to Hub: {push_to_hub}")
         vibevoice_model.push_to_hub(push_to_hub)
 
-    # 9) Check model
+    # 7) Check model
+    logger.info("Verifying conversion by reloading model")
     gc.collect()
-    print("Reloading the model to check if it's saved correctly.")
     VibeVoiceRealTimeProcessor.from_pretrained(output_dir)
-    VibeVoiceRealTimeForConditionalGeneration.from_pretrained(output_dir, dtype=torch.bfloat16, device_map="auto")
-    print("Model reloaded successfully.")
+    VibeVoiceRealTimeForConditionalGeneration.from_pretrained(output_dir, dtype=dtype, device_map="auto")
+    logger.info("Model reloaded successfully!")
+    logger.info("Conversion complete!")
 
 
 """
@@ -289,9 +290,9 @@ python src/transformers/models/vibevoice_realtime/convert_vibevoice_realtime_to_
     --output_dir /raid/eric/vibevoice/hf_vibevoice_0.5b \
     --config_path /raid/eric/vibevoice_0.5b/config.json \
     --processor_config /raid/eric/vibevoice_0.5b/preprocessor_config.json \
-    --push_to_hub bezzam/VibeVoice-0.5B
+    --push_to_hub bezzam/VibeVoice-Realtime-0.5B-hf
 
-# -- converted voice embeddings should be added to the hub (not done automatically this script)
+# -- converted voice embeddings should be added to the hub (not done automatically by this script)
 by running this script: https://gist.github.com/ebezzam/507dfd544e0a0f12402966503cbc73e6#file-convert_realtime_presets-py
 """
 if __name__ == "__main__":

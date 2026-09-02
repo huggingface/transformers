@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024, The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,26 +13,19 @@
 # limitations under the License.
 
 import copy
-import json
 import unittest
-from pathlib import Path
 
 import pytest
 from parameterized import parameterized
 
 from transformers import (
-    AutoProcessor,
     VibeVoiceRealTimeConfig,
     VibeVoiceRealTimeForConditionalGeneration,
     is_torch_available,
 )
 from transformers.testing_utils import (
-    cleanup,
-    require_diffusers,
-    slow,
     torch_device,
 )
-from transformers.trainer_utils import set_seed
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -83,7 +75,6 @@ class VibeVoiceRealTimeModelTester:
         seq_length=3,
         is_training=True,
         use_cache=True,
-        num_head_layers=2,
         text_config={
             "model_type": "qwen2",
             "intermediate_size": 36,
@@ -114,13 +105,20 @@ class VibeVoiceRealTimeModelTester:
             "pad_token_id": 0,
             "bos_token_id": None,
         },
-        acoustic_tokenizer_config={
+        audio_config={
             "model_type": "vibevoice_realtime_acoustic_decoder",
             "hidden_size": 16,
             "kernel_size": 3,
-            "n_filters": 4,
+            "num_filters": 4,
             "upsampling_ratios": [2],
-            "decoder_depths": [1, 1],
+            "depths": [1, 1],
+        },
+        diffusion_head_config={
+            "num_hidden_layers": 2,
+            "frequency_embedding_size": 8,
+            "intermediate_size": 16,
+            "hidden_size": 32,  # Should match text_config hidden_size
+            "latent_size": 16,  # Should match audio_config hidden_size
         },
     ):
         self.parent = parent
@@ -130,8 +128,8 @@ class VibeVoiceRealTimeModelTester:
         self.use_cache = use_cache
         self.text_config = text_config
         self.tts_text_config = tts_text_config
-        self.acoustic_tokenizer_config = acoustic_tokenizer_config
-        self.num_head_layers = num_head_layers
+        self.audio_config = audio_config
+        self.diffusion_head_config = diffusion_head_config
 
         # Extract common attributes for testing
         self.vocab_size = text_config["vocab_size"]
@@ -144,8 +142,8 @@ class VibeVoiceRealTimeModelTester:
         return VibeVoiceRealTimeConfig(
             text_config=self.text_config,
             tts_text_config=self.tts_text_config,
-            acoustic_tokenizer_config=self.acoustic_tokenizer_config,
-            num_head_layers=self.num_head_layers,
+            audio_config=self.audio_config,
+            diffusion_head_config=self.diffusion_head_config,
             use_cache=self.use_cache,
             pad_token_id=self.text_config["pad_token_id"],
         )
