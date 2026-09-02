@@ -149,7 +149,6 @@ class Qwen3TTSTokenizerSingleCodebookEncoderConfig(Qwen2AudioEncoderConfig):
     encoder_attention_heads: int = 16
     encoder_ffn_dim: int = 4096
     hidden_size: int = 1024
-    d_model = AttributeError()
     num_layers_before_quantizer: int = 1
 
 
