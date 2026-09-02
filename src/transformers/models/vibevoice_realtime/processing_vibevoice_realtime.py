@@ -45,7 +45,7 @@ class VibeVoiceRealTimeProcessorKwargs(ProcessingKwargs, total=False):
 
 class VibeVoiceRealTimeProcessor(ProcessorMixin):
     r"""
-    Constructs a VibeVoice processor which wraps [`VibeVoiceFeatureExtractor`] and
+    Constructs a VibeVoice processor which wraps 
     [`Qwen2TokenizerFast`] into a single processor that inherits both the audio feature extraction and
     tokenizer functionalities.
 
