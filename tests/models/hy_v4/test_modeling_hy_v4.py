@@ -153,14 +153,20 @@ class HYV4ModelTest(CausalLMModelTest, unittest.TestCase):
     def test_eager_padding_matches_padding_free_with_position_ids(self):
         pass
 
-    @unittest.skip("mHC hidden states are wrongfully cropped, needs adjustments in `_split_model_outputs` in generation")
+    @unittest.skip(
+        "mHC hidden states are wrongfully cropped, needs adjustments in `_split_model_outputs` in generation"
+    )
     def test_assisted_decoding_sample(self):
         pass
 
-    @unittest.skip("mHC hidden states are wrongfully cropped, needs adjustments in `_split_model_outputs` in generation")
+    @unittest.skip(
+        "mHC hidden states are wrongfully cropped, needs adjustments in `_split_model_outputs` in generation"
+    )
     def test_assisted_decoding_matches_greedy_search_0_random(self):
         pass
 
-    @unittest.skip("mHC hidden states are wrongfully cropped, needs adjustments in `_split_model_outputs` in generation")
+    @unittest.skip(
+        "mHC hidden states are wrongfully cropped, needs adjustments in `_split_model_outputs` in generation"
+    )
     def test_assisted_decoding_matches_greedy_search_1_same(self):
         pass
