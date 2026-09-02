@@ -101,10 +101,6 @@ print(f"The predicted token is: {predicted_token}")
 
 [[autodoc]] BertTokenizerLegacy
 
-## BertTokenizerFast
-
-[[autodoc]] BertTokenizerFast
-
 ## BertModel
 
 [[autodoc]] BertModel

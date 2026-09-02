@@ -20,6 +20,7 @@ from torch import nn
 
 from transformers import AutoModel
 
+from ...backbone_utils import filter_output_hidden_states
 from ...cache_utils import Cache
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -106,6 +107,7 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
+    @filter_output_hidden_states
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -115,18 +117,14 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
     ) -> ColPaliForRetrievalOutput:
         if pixel_values is not None:
             pixel_values = pixel_values.to(dtype=self.dtype)
-        output_hidden_states = kwargs.pop("output_hidden_states", None)
-        if output_hidden_states is None:
-            output_hidden_states = self.config.output_hidden_states
 
         vlm_output = self.vlm(
             input_ids=input_ids,
             attention_mask=attention_mask,
             pixel_values=pixel_values,
-            output_hidden_states=True,
             **kwargs,
         )
-        vlm_hidden_states = vlm_output.hidden_states if output_hidden_states else None
+        vlm_hidden_states = vlm_output.hidden_states
         vlm_image_hidden_states = vlm_output.image_hidden_states if pixel_values is not None else None
 
         last_hidden_states = vlm_output[0]  # (batch_size, sequence_length, hidden_size)
