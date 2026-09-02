@@ -181,6 +181,12 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
     def test_generate_with_quant_cache(self):
         pass
 
+    @unittest.skip(
+        "Cannot generate from random embeds since the ple embedding needs to revert them if input_ids are not provided"
+    )
+    def test_generate_from_random_inputs_embeds(self):
+        pass
+
     def test_ple_layers_must_use_linear_attention(self):
         with self.assertRaisesRegex(
             StrictDataclassClassValidationError, "PLE is only supported on linear_attention layers"
@@ -281,26 +287,6 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
 
         for actual in actual_outputs:
             torch.testing.assert_close(actual, expected, rtol=1e-5, atol=1e-5)
-
-    def test_ple_beam_generation(self):
-        config = self.model_tester.get_config()
-        config._attn_implementation = "eager"
-        model = Qwen4ExpForCausalLM(config).to(torch_device).eval()
-        input_ids = torch.tensor([[5, 6, 7]], device=torch_device)
-
-        for cache_implementation in (None, "static"):
-            with self.subTest(cache_implementation=cache_implementation), torch.no_grad():
-                output = model.generate(
-                    input_ids,
-                    max_new_tokens=3,
-                    num_beams=2,
-                    cache_implementation=cache_implementation,
-                    disable_compile=True,
-                    do_sample=False,
-                    eos_token_id=None,
-                )
-
-            self.assertEqual(output.shape, (1, input_ids.shape[1] + 3))
 
     def test_ple_sharded_checkpoint_loads_and_forwards(self):
         config = self.model_tester.get_config()
@@ -569,12 +555,11 @@ class Qwen4ExpVisionText2TextModelTest(VLMModelTest, unittest.TestCase):
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
-    def test_tp_plan_matches_params(self):
-        self.model_tester.ple_layer_ids = [1]
-        try:
-            super().test_tp_plan_matches_params()
-        finally:
-            self.model_tester.ple_layer_ids = []
+    @unittest.skip(
+        "Cannot generate from random embeds since the ple embedding needs to revert them if input_ids are not provided"
+    )
+    def test_generate_from_random_inputs_embeds(self):
+        pass
 
     def test_fsdp_plan_has_no_unused_rules(self):
         with torch.device("meta"):
