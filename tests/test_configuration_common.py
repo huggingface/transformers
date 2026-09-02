@@ -108,8 +108,6 @@ class ConfigTester:
             sub_configs = general_config_loaded.sub_configs
             for sub_config_key, sub_class in sub_configs.items():
                 if general_config_dict[sub_config_key] is not None:
-                    # Instead of loading from the general config file, create the sub-config directly from its dict
-                    # This avoids issues when multiple sub-configs share the same type
                     if sub_class.__name__ == "AutoConfig":
                         sub_config_dict = copy.deepcopy(general_config_dict[sub_config_key])
                         sub_class = sub_class.for_model(**sub_config_dict).__class__
