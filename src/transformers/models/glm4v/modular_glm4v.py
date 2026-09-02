@@ -1023,7 +1023,9 @@ class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
 
         return Glm4vCausalLMOutputWithPast(
             loss=loss,
