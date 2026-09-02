@@ -17,6 +17,7 @@ import unittest
 
 import jinja2
 import numpy as np
+from parameterized import parameterized
 
 from transformers import CsmProcessor
 from transformers.testing_utils import require_torch
@@ -58,11 +59,23 @@ class CsmProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor_dict = self.prepare_processor_dict()
         self.assertTrue(processor_loaded.chat_template == processor_dict.get("chat_template", None))
 
-    def test_subprocessor_defaults_3_audio(self):
+    @parameterized.expand(
+        [
+            ("text",),
+            ("images",),
+            ("videos",),
+            ("audio",),
+        ]
+    )
+    def test_subprocessor_defaults(self, modality):
         # override - drop unused kwargs for `subprocessor`
-        parameterized_config = MODALITY_TEST_SPECS["audio"]
+
+        parameterized_config = MODALITY_TEST_SPECS[modality]
         attributes = self.processor_class.get_attributes()
-        component_key = self.get_subprocessor_name("audio", attributes)
+        component_key = self.get_subprocessor_name(modality, attributes)
+
+        if component_key not in attributes:
+            self.skipTest(f"{component_key} attribute not present in {self.processor_class}")
 
         subprocessor = self.get_component(component_key)
 
@@ -72,15 +85,21 @@ class CsmProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             components[attribute] = self.get_component(attribute)
 
         processor = self.processor_class(**components, **self.prepare_processor_dict())
-        modality_input = self._prepare_modality_input("audio")
+        modality_input = self._prepare_modality_input(modality)
 
         # merge processor defaults when calling a subprocessor
         kwargs = parameterized_config["call_time_kwargs"]
-        kwargs["return_tensors"] = "pt"
+        merged_kwargs = processor._merge_kwargs(
+            processor.valid_processor_kwargs,
+            tokenizer_init_kwargs=processor.tokenizer.init_kwargs if hasattr(processor, "tokenizer") else {},
+            **kwargs,
+        )
+        kwargs = merged_kwargs[f"{modality}_kwargs"]
+        kwargs.pop("encoded_length_kwargs", None)
 
         input_subproc = subprocessor(modality_input, **kwargs)
         try:
-            input_processor = processor(audio=modality_input, **kwargs)
+            input_processor = processor(**{modality: modality_input, **kwargs})
         except Exception:
             input_processor = {}
 

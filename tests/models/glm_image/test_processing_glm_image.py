@@ -59,7 +59,7 @@ class GlmImageProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertSetEqual(set(inputs.keys()), set(processor.model_input_names))
 
-    # tiny model has too little tokens and collapses everything to UNK which is not defined
+    @unittest.skip("tiny model has too little tokens and collapses everything to UNK which is not defined")
     def test_replacement_offsets(self):
         pass
 

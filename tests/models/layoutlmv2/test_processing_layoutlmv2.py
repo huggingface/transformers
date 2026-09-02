@@ -142,8 +142,9 @@ class LayoutLMv2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertEqual(len(train_data["image"]), len(train_data["input_ids"]))
 
+    @unittest.skip("Processor doesn't accept typed kwargs!")
     def test_flat_kwarg_applied_when_modality_dict_lacks_it(self):
-        self.skipTest("Processor doesn't accept typed kwargs!")
+        pass
 
 
 # different use cases tests

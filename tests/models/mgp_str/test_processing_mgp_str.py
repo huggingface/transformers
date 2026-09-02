@@ -105,5 +105,6 @@ class MgpstrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertListEqual(list(results.keys()), ["generated_text", "scores", "char_preds", "bpe_preds", "wp_preds"])
 
+    @unittest.skip("Processor doesn't accept typed kwargs!")
     def test_flat_kwarg_applied_when_modality_dict_lacks_it(self):
-        self.skipTest("Processor doesn't accept typed kwargs!")
+        pass

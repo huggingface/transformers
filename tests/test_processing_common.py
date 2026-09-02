@@ -27,7 +27,7 @@ from huggingface_hub import hf_hub_download
 from parameterized import parameterized
 
 from transformers import ProcessorMixin
-from transformers.processing_utils import MODALITY_TO_AUTOPROCESSOR_MAPPING, Unpack
+from transformers.processing_utils import MODALITY_TO_AUTOPROCESSOR_MAPPING
 from transformers.testing_utils import (
     check_json_file_has_correct_format,
     require_librosa,
@@ -871,15 +871,8 @@ class ProcessorTesterMixin:
     # they need to be applied only if an image_processor exists.
 
     def maybe_skip_typed_test_for_modality(self, modality: str, attributes: list):
-        # NOTE: we have only ~5 processors that are old and dont follow TypedDict format
-        is_kwargs_typed_dict = False
-        call_signature = inspect.signature(self.processor_class.__call__)
-        for param in call_signature.parameters.values():
-            if param.kind == param.VAR_KEYWORD and param.annotation != param.empty:
-                is_kwargs_typed_dict = (
-                    hasattr(param.annotation, "__origin__") and param.annotation.__origin__ == Unpack
-                )
-        if not is_kwargs_typed_dict:
+        # we have only a few processors that are old and dont follow TypedDict format
+        if any(name in self.processor_class.__name__.lower() for name in ["instructblipvideo", "mgp_str", "sam3"]):
             self.skipTest(f"{self.processor_class} doesn't have typed kwargs.")
 
         if "tokenizer" not in attributes:
@@ -1274,7 +1267,8 @@ class ProcessorTesterMixin:
             tokenize=True,
             return_dict=True,
             return_tensors=return_tensors,
-            processor_kwargs={"num_frames": 2, "fps": None},  # no more than 2 frames, otherwise too slow
+            # No more than 2 frames and explicitly disable other ways to sample
+            processor_kwargs={"num_frames": 2, "fps": None},
         )
         input_name = getattr(self, input_name)
         self.assertTrue(input_name in out_dict)
@@ -1688,7 +1682,10 @@ class ProcessorTesterMixin:
         # if we are comparing unk to unk token, the differences are lost
         processor = self.get_processor(use_tiny_ckpt=False)
 
-        if not self.does_processor_return_mm_offsets(processor.__class__, "replace_image_token"):
+        if not (
+            self.does_processor_return_mm_offsets(processor.__class__, "replace_image_token")
+            or self.does_processor_return_mm_offsets(processor.__class__, "replace_video_token")
+        ):
             self.skipTest("Processor doesn't support `_get_num_multimodal_tokens` yet")
 
         # Prepare inputs dynamically based on processor attributes
