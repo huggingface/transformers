@@ -238,8 +238,7 @@ class BackgroundThreadStatus:
         return self._paused or loop_is_done
 
     def _drop_pause_request(self) -> None:
-        """Drop a pause request and notifies threads waiting on the condition. Should be called with the condition held.
-        """
+        """Drop a pause request and notifies threads waiting on the condition. Should be called with the condition held."""
         self._pauses_requested -= 1
         self._local_pauses_requested.value -= 1
         if self._pauses_requested == 0:  # the pause ends when all threads have released it, not just the local one
@@ -255,7 +254,7 @@ class BackgroundThreadStatus:
             self._pauses_requested += 1
             self._local_pauses_requested.value += 1
 
-            # Wait for the pause, in a try block so we can handle a an error that happens while waiting
+            # Wait for the pause, in a try block so we can handle an error that happens while waiting
             try:
                 self._condition.wait_for(self._pause_predicate)
             # If an error happens while waiting, we drop the pause request and re-raise the error
@@ -826,7 +825,7 @@ class ContinuousBatchingManager:
             return None
 
         # Stopping and pausing are conflicting operations: a thread inside a pause cannot stop the manager, because that
-        # would deadlock (pause waits for the stop to finsih, stop hangs because the loop is paused)
+        # would deadlock (pause waits for the stop to complete, stop hangs because the loop is paused)
         if self.background_thread_status.is_pause_requested(local=True):
             raise RuntimeError(
                 "Cannot stop the manager from inside a pause: the generation loop is paused and cannot exit, so "
