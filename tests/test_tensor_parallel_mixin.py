@@ -300,20 +300,11 @@ def _test_tp_backward_impl(rank, model_path, model_class, atol, rtol):
 
 
 def _test_tp_kv_replication_impl(rank, model_path, model_class, atol, rtol):
-    """Forward + backward for a model with fewer KV heads than ranks, where KV heads are replicated."""
-    model_tp = model_class.from_pretrained(
-        model_path, distributed_config=DistributedConfig(tp_size=dist.get_world_size())
-    )
-    replicated = [
-        name
-        for name, module in model_tp.named_modules()
-        if getattr(module, "_tp_shard_replication", 1) > 1  # set by `ShardUnitsParallel.shard_param`
-    ]
-    assert replicated, "Expected `k_proj`/`v_proj` to be sharded with KV head replication"
-    del model_tp
+    """Forward for a model with fewer KV heads than ranks, where KV heads are replicated.
 
+    `_verify_tp_sharding` checks that `k_proj`/`v_proj` really went through the `colwise_units` path.
+    """
     _test_tp_forward_impl(rank, model_path, model_class, atol, rtol)
-    _test_tp_backward_impl(rank, model_path, model_class, atol, rtol)
 
 
 def _test_tp_generation_impl(_rank, model_path, model_class, atol, rtol, max_new_tokens):

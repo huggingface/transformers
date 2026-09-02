@@ -271,50 +271,11 @@ class ShardUnitsParallel(ColwiseParallel):
 
     In DTensor terms the parameter is described as a plain `Shard` of the *expanded* dimension, which is `n_rep`
     times larger than the checkpoint one. Rank `r` therefore owns unit `r // n_rep`, and the loader detects the
-    size mismatch to read the right slice from the checkpoint. DTensor sees those copies as independent shards,
-    so their gradients are summed back with an explicit all-reduce inside each replication group, which also
-    keeps the copies identical so that saving can drop the duplicates.
+    size mismatch to read the right slice from the checkpoint.
+
+    This is inference-only: DTensor sees the copies as independent shards, so it would neither sum their
+    gradients nor keep them identical across an optimizer step.
     """
-
-    # Cached process groups, so that the collective `dist.new_group` calls happen once per mesh instead of once
-    # per attention layer.
-    _replication_groups: dict[tuple, object] = {}
-
-    @staticmethod
-    def _tp_rows(mesh) -> tuple[tuple[int, ...], ...]:
-        """Global ranks of every TP group in `mesh`, one tuple per group.
-
-        Units are only replicated along the TP dimension, so a 2D ``(dp, tp)`` mesh has one row per DP rank. The
-        result doubles as a cache key: ``DeviceMesh`` objects are rebuilt on the fly (``mesh["tp"]`` returns a new
-        object every time), so their identity cannot be used.
-        """
-        mesh_tensor = mesh.mesh
-        if mesh.ndim == 1:
-            return (tuple(mesh_tensor.flatten().tolist()),)
-        tp_dim = list(mesh.mesh_dim_names).index("tp")
-        rows = mesh_tensor.movedim(tp_dim, -1).reshape(-1, mesh_tensor.shape[tp_dim])
-        return tuple(tuple(row) for row in rows.tolist())
-
-    @classmethod
-    def _get_replication_group(cls, mesh, n_rep: int):
-        """Process group holding the `n_rep` ranks that own the same (replicated) unit.
-
-        ``dist.new_group`` is collective, so every rank walks through all the groups of every TP row in the same
-        order and keeps the one it belongs to.
-        """
-        tp_rows = cls._tp_rows(mesh)
-        key = (tp_rows, n_rep)
-        if key not in cls._replication_groups:
-            global_rank = dist.get_rank()
-            group = None
-            for tp_row in tp_rows:
-                for start in range(0, len(tp_row), n_rep):
-                    ranks = tp_row[start : start + n_rep]
-                    candidate = dist.new_group(ranks=list(ranks))
-                    if global_rank in ranks:
-                        group = candidate
-            cls._replication_groups[key] = group
-        return cls._replication_groups[key]
 
     def shard_param(self, module, param, mesh):
         meta = module._parameters.get(param)
@@ -329,27 +290,10 @@ class ShardUnitsParallel(ColwiseParallel):
         local_shape = list(meta.shape)
         local_shape[shard_dim] //= num_units
         local_meta = torch.empty(local_shape, dtype=meta.dtype, device=meta.device)
-        module._tp_shard_replication = n_rep
         module._parameters[param] = torch.nn.Parameter(
             DTensor.from_local(local_meta, mesh, [Shard(shard_dim)], run_check=False),
             requires_grad=meta.requires_grad,
         )
-
-    def install_forward(self, module, mesh):
-        n_rep = getattr(module, "_tp_shard_replication", 1)
-        if n_rep > 1:
-            group = self._get_replication_group(mesh, n_rep)
-
-            # A module hook rather than `param.register_hook`: params are replaced during weight loading, which
-            # happens after TP is applied, and would drop a param-level hook.
-            def _all_reduce_replicated_grads(mod, grad_input, grad_output):
-                for param in mod.parameters(recurse=False):
-                    if param.grad is not None:
-                        grad = param.grad
-                        dist.all_reduce(grad.to_local() if isinstance(grad, DTensor) else grad, group=group)
-
-            module.register_full_backward_hook(_all_reduce_replicated_grads)
-        return super().install_forward(module, mesh)
 
 
 class RowwiseParallel(TensorParallelLayer):
@@ -952,7 +896,7 @@ def _declare_attention_shard_units(model, tp_plan: dict[str, str], tp_size: int)
     if not dist.is_initialized() or dist.get_rank() == 0:
         logger.warning_once(
             f"Replicating KV heads for {', '.join(replicated_modules)} because there are fewer KV heads than tensor "
-            f"parallel ranks ({tp_size}); this duplicates the KV cache."
+            f"parallel ranks ({tp_size}); this duplicates the KV cache and is only supported for inference."
         )
     return tp_plan
 

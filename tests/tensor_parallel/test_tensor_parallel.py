@@ -248,7 +248,6 @@ class TestTensorParallelLayer(TestCasePlus):
             ShardUnitsParallel().shard_param(module, "weight", mesh)
 
         self.assertEqual(tuple(module.weight.shape), (head_dim, 32))
-        self.assertEqual(module._tp_shard_replication, world_size // num_key_value_heads)
 
     def test_replicate_kv_heads_falls_back_to_colwise(self):
         # 4 KV heads over 2 ranks: no replication needed, plain colwise sharding
@@ -260,45 +259,6 @@ class TestTensorParallelLayer(TestCasePlus):
         placements = self._get_parameter_placements(module, ShardUnitsParallel(), mesh=mesh)
 
         self.assertEqual(placements["weight"], Shard(0))
-        self.assertFalse(hasattr(module, "_tp_shard_replication"))
-
-    def test_replicate_kv_heads_all_reduces_gradients_within_the_replication_group(self):
-        module = torch.nn.Linear(4, 8, bias=False)
-        module._tp_shard_replication = 2
-        module.weight.grad = torch.ones_like(module.weight)
-        mesh = self.MockDeviceMesh(world_size=4, rank=0)
-        group = object()
-        all_reduced = []
-
-        with patch.object(ShardUnitsParallel, "_get_replication_group", return_value=group):
-            ShardUnitsParallel().install_forward(module, mesh)
-
-        self.assertEqual(len(module._backward_hooks), 1)
-        with patch.object(
-            tensor_parallel.dist, "all_reduce", side_effect=lambda tensor, group=None: all_reduced.append(group)
-        ):
-            next(iter(module._backward_hooks.values()))(module, None, None)
-        self.assertEqual(all_reduced, [group])
-
-    def test_replicate_kv_heads_does_not_sync_gradients_without_replication(self):
-        module = torch.nn.Linear(4, 8, bias=False)
-        mesh = self.MockDeviceMesh(world_size=4, rank=0)
-
-        ShardUnitsParallel().install_forward(module, mesh)
-
-        self.assertEqual(len(module._backward_hooks), 0)
-
-    def test_kv_replication_groups_follow_the_tp_dimension(self):
-        mesh_1d = SimpleNamespace(mesh=torch.arange(4), ndim=1, mesh_dim_names=("tp",))
-        self.assertEqual(ShardUnitsParallel._tp_rows(mesh_1d), ((0, 1, 2, 3),))
-
-        # (dp=2, tp=4): KV heads are replicated within a TP group, so each DP rank gets its own groups
-        mesh_2d = SimpleNamespace(mesh=torch.arange(8).reshape(2, 4), ndim=2, mesh_dim_names=("dp", "tp"))
-        self.assertEqual(ShardUnitsParallel._tp_rows(mesh_2d), ((0, 1, 2, 3), (4, 5, 6, 7)))
-
-        # `tp` is not necessarily the last mesh dimension
-        mesh_tp_first = SimpleNamespace(mesh=torch.arange(8).reshape(4, 2), ndim=2, mesh_dim_names=("tp", "dp"))
-        self.assertEqual(ShardUnitsParallel._tp_rows(mesh_tp_first), ((0, 2, 4, 6), (1, 3, 5, 7)))
 
     def test_kv_replication_reads_the_replicated_head_from_the_checkpoint(self):
         world_size, num_key_value_heads, head_dim = 4, 2, 8
