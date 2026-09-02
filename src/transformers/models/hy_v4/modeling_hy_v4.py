@@ -648,7 +648,7 @@ class HYV4HyperConnection(nn.Module):
         """Independent HC implementation with forced fp32 application"""
         # Key difference is to force fp32 in any case
         device_type = hidden_streams.device.type if hidden_streams.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):
+        with maybe_autocast(device_type=device_type, enabled=False):
             flat = hidden_streams.flatten(2).float()
             # Norm as residual
             mixes = F.linear(flat, self.fn.float()) * self.input_norm(flat)
@@ -681,7 +681,7 @@ class HYV4HyperHead(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # Key difference is to force fp32 in any case
         device_type = x.device.type if x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):
+        with maybe_autocast(device_type=device_type, enabled=False):
             flat = x.flatten(2).float()
             # Norm as residual
             mixes = F.linear(flat, self.hc_fn.float()) * self.input_norm(flat)

@@ -30,6 +30,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
+from ...utils.generic import maybe_autocast
 from ..deepseek_v4.modeling_deepseek_v4 import (
     DeepseekV4DecoderLayer,
     DeepseekV4HyperConnection,
@@ -78,8 +79,6 @@ class HYV4Config(PreTrainedConfig):
         Scale applied to the iHC post-gating branch.
     hc_eps (`float`, *optional*, defaults to 1e-6):
         Numerical epsilon added to iHC sigmoid gates.
-    learnable_sink (`bool`, *optional*, defaults to `True`):
-        Whether to add a learned per-head attention sink.
     learnable_sink_init (`float`, *optional*, defaults to 0.0):
         Initial value of each learned attention-sink logit.
     swiglu_limit (`float`, *optional*, defaults to 10.0):
@@ -160,7 +159,6 @@ class HYV4Config(PreTrainedConfig):
     hc_mult: int = 4
     hc_magnitude: float = 2.0
     hc_eps: float = 1e-6
-    learnable_sink: bool = True
     learnable_sink_init: float = 0.0
     swiglu_limit: float = 10.0
     rope_parameters: RopeParameters | dict | None = None
@@ -389,7 +387,7 @@ class HYV4HyperConnection(DeepseekV4HyperConnection):
         """Independent HC implementation with forced fp32 application"""
         # Key difference is to force fp32 in any case
         device_type = hidden_streams.device.type if hidden_streams.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):
+        with maybe_autocast(device_type=device_type, enabled=False):
             flat = hidden_streams.flatten(2).float()
             # Norm as residual
             mixes = F.linear(flat, self.fn.float()) * self.input_norm(flat)
@@ -411,7 +409,7 @@ class HYV4HyperHead(DeepseekV4HyperHead):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # Key difference is to force fp32 in any case
         device_type = x.device.type if x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):
+        with maybe_autocast(device_type=device_type, enabled=False):
             flat = x.flatten(2).float()
             # Norm as residual
             mixes = F.linear(flat, self.hc_fn.float()) * self.input_norm(flat)
