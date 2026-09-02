@@ -141,7 +141,7 @@ class FunAsrNanoFeatureExtractor(SequenceFeatureExtractor):
         # `unfold` yields `(num_output_frames, feature_size, num_frames_lfr)`, so the stacked frames are moved
         # back in front of the feature dimension before flattening each window.
         windows = padded.unfold(0, num_frames_lfr, stride_lfr).transpose(1, 2)
-        return windows.reshape(num_output_frames, num_frames_lfr * features.shape[1])
+        return windows.reshape(num_output_frames, -1)
 
     def __call__(
         self,

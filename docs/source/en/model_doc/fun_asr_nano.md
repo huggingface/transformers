@@ -41,12 +41,11 @@ Fun-ASR-Nano consists of three components:
 ### Single inference
 
 ```python
-import torch
 from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
 
 model_id = "FunAudioLLM/Fun-ASR-Nano-2512-hf"
 processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModelForSpeechSeq2Seq.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
+model = AutoModelForSpeechSeq2Seq.from_pretrained(model_id, device_map="auto")
 
 audio_url = "https://huggingface.co/FunAudioLLM/Fun-ASR-Nano-2512/resolve/main/example/en.mp3"
 inputs = processor.apply_transcription_request(audio=audio_url).to(model.device)
@@ -59,12 +58,11 @@ print(processor.decode(generated_ids, skip_special_tokens=True)[0])
 ### Batch inference
 
 ```python
-import torch
 from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
 
 model_id = "FunAudioLLM/Fun-ASR-Nano-2512-hf"
 processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModelForSpeechSeq2Seq.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
+model = AutoModelForSpeechSeq2Seq.from_pretrained(model_id, device_map="auto")
 
 audio_urls = [
     "https://huggingface.co/FunAudioLLM/Fun-ASR-Nano-2512/resolve/main/example/zh.mp3",
@@ -84,17 +82,15 @@ Pass contextual information with `prompt` and hotwords with `keywords`; the chec
 transcription instruction. `language` accepts Chinese, English, and Japanese as full names or ISO codes.
 
 ```python
-import torch
 from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
 
 model_id = "FunAudioLLM/Fun-ASR-Nano-2512-hf"
 processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModelForSpeechSeq2Seq.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
+model = AutoModelForSpeechSeq2Seq.from_pretrained(model_id, device_map="auto")
 
 audio_url = "https://huggingface.co/FunAudioLLM/Fun-ASR-Nano-2512/resolve/main/example/en.mp3"
 inputs = processor.apply_transcription_request(
     audio=audio_url,
-    language="en",
     prompt="A tribal story involving a chieftain and a boy.",
     keywords=["tribal chieftain", "fifty pieces of gold"],
 ).to(model.device)
@@ -107,12 +103,11 @@ print(processor.decode(generated_ids, skip_special_tokens=True)[0])
 ### Training
 
 ```python
-import torch
 from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
 
 model_id = "FunAudioLLM/Fun-ASR-Nano-2512-hf"
 processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModelForSpeechSeq2Seq.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
+model = AutoModelForSpeechSeq2Seq.from_pretrained(model_id, device_map="auto")
 model.train()
 
 audio_url = "https://huggingface.co/FunAudioLLM/Fun-ASR-Nano-2512/resolve/main/example/en.mp3"
@@ -152,7 +147,7 @@ from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, CompileConfig
 
 model_id = "FunAudioLLM/Fun-ASR-Nano-2512-hf"
 processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModelForSpeechSeq2Seq.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
+model = AutoModelForSpeechSeq2Seq.from_pretrained(model_id, device_map="auto")
 
 audio_url = "https://huggingface.co/FunAudioLLM/Fun-ASR-Nano-2512/resolve/main/example/en.mp3"
 inputs = processor.apply_transcription_request(audio=audio_url).to(model.device)
