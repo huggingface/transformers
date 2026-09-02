@@ -96,19 +96,22 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
         return config, inputs
 
     def _get_conv_state_shape(self, batch_size: int, config):
-        intermediate_size = (
+        intermediate_size_conv0 = (
             2 * config.linear_num_key_heads * config.linear_key_head_dim
             + config.linear_num_value_heads * config.linear_value_head_dim
         )
-        return (batch_size, intermediate_size, config.linear_conv_kernel_dim)
+        shape_conv0 = (batch_size, intermediate_size_conv0, config.linear_conv_kernel_dim)
+
+        short_conv_state_len = (config.ple_conv_kernel_size - 1) * config.ngram_size
+        intermediate_size_conv1 = config.hidden_size * config.hc_count
+        shape_conv1 = (batch_size, intermediate_size_conv1, short_conv_state_len)
+
+        shape_conv2 = (batch_size, config.ngram_size - 1)
+
+        return [shape_conv0, shape_conv1, shape_conv2]
 
     def _get_recurrent_state_shape(self, batch_size: int, config):
-        return (
-            batch_size,
-            config.linear_num_value_heads,
-            config.linear_key_head_dim,
-            config.linear_value_head_dim,
-        )
+        return (batch_size, config.linear_num_value_heads, config.linear_key_head_dim, config.linear_value_head_dim)
 
     def _check_hidden_states_for_generate(
         self, batch_size, hidden_states, prompt_length, output_length, config, use_cache=False
@@ -486,26 +489,22 @@ class Qwen4ExpVisionText2TextModelTest(VLMModelTest, unittest.TestCase):
         return config, inputs
 
     def _get_conv_state_shape(self, batch_size: int, config):
-        intermediate_size = (
+        intermediate_size_conv0 = (
             2 * config.linear_num_key_heads * config.linear_key_head_dim
             + config.linear_num_value_heads * config.linear_value_head_dim
         )
-        main_conv_shape = (batch_size, intermediate_size, config.linear_conv_kernel_dim)
+        shape_conv0 = (batch_size, intermediate_size_conv0, config.linear_conv_kernel_dim)
 
-        ple_conv_kernel_size = (config.ple_conv_kernel_size - 1) * config.ngram_size
-        ple_conv_shape = (batch_size, config.hidden_size, ple_conv_kernel_size)
+        short_conv_state_len = (config.ple_conv_kernel_size - 1) * config.ngram_size
+        intermediate_size_conv1 = config.hidden_size * config.hc_count
+        shape_conv1 = (batch_size, intermediate_size_conv1, short_conv_state_len)
 
-        ple_ids_cache_shape = (batch_size, config.ngram_size - 1)
+        shape_conv2 = (batch_size, config.ngram_size - 1)
 
-        return [main_conv_shape, ple_conv_shape, ple_ids_cache_shape]
+        return [shape_conv0, shape_conv1, shape_conv2]
 
     def _get_recurrent_state_shape(self, batch_size: int, config):
-        return (
-            batch_size,
-            config.linear_num_value_heads,
-            config.linear_key_head_dim,
-            config.linear_value_head_dim,
-        )
+        return (batch_size, config.linear_num_value_heads, config.linear_key_head_dim, config.linear_value_head_dim)
 
     def _check_hidden_states_for_generate(
         self, batch_size, hidden_states, prompt_length, output_length, config, use_cache=False
