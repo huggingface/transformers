@@ -157,6 +157,37 @@ args = TrainingArguments(
 )
 ```
 
+## Batch rebalance sampling
+
+On variable-length datasets, imbalance within a micro-batch and across devices causes devices to waste time on padding and to idle at gradient synchronization steps.
+
+Set `train_sampling_strategy="batch_rebalance"` in [`TrainingArguments`] to reduce both effects. For each optimizer step, the sampler:
+
+1. Sorts the batch's samples by length.
+2. Shards the sorted batch across devices so that the padded-token cost of each micro-batch is balanced. Micro-batches with long samples get fewer samples, and micro-batches with short samples get more.
+
+This reduces padding within each micro-batch, and each device finishes a micro-batch at roughly the same time, which reduces idle time at synchronization and keeps peak memory lower than `"group_by_length"`. This strategy is only supported for data-parallel training for now (tensor parallelism is not yet supported).
+
+```py
+from transformers import Trainer, TrainingArguments
+
+trainer = Trainer(
+    model=model,
+    args=TrainingArguments(
+        output_dir="out",
+        train_sampling_strategy="batch_rebalance",  # balance padding cost across devices
+        per_device_train_batch_size=8,              # average samples per micro-batch
+        length_column_name="length",                # optional: dataset column with precomputed lengths
+    ),
+    train_dataset=train_dataset,
+)
+trainer.train()
+```
+
+`per_device_train_batch_size` is an average here rather than an exact per-step count: some micro-batches have fewer samples and some have more, but the total number of samples trained per step stays the same as with a normal distributed sampling strategy.
+
+The sampler needs the length of every sample to sort and balance batches. By default, the [`Trainer`] scans the full dataset once at the start of training to compute these lengths. To skip this scan, precompute the lengths into a dataset column (during preprocessing, for example) and pass its name as `length_column_name` (`"length"` by default).
+
 ## NEFTune
 
 [NEFTune](https://hf.co/papers/2310.05914) adds random noise to token embeddings during the forward pass. The noise acts as regularization and can improve performance for instruction fine-tuning.

@@ -446,6 +446,10 @@ class BridgeTowerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def test_inputs_embeds_matches_input_ids(self):
         pass
 
+    @unittest.skip(reason="hidden states are concatenated as 3 tuples of text/image/cross")
+    def test_can_capture_specific_layers_hidden_states(self):
+        pass
+
 
 # We will verify our results on an image of cute cats
 def prepare_img():
