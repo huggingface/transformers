@@ -73,6 +73,10 @@ class Step3p7VisionConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
         self.intermediate_size = int(self.hidden_size * self.mlp_ratio)
 
+    def standardize_rope_params(self):
+        if self.rope_parameters.get("rope_type") in ["default", None]:
+            self.rope_parameters["rope_type"] = "axial"
+
 
 @auto_docstring(checkpoint="stepfun-ai/Step-3.7-Flash")
 @strict

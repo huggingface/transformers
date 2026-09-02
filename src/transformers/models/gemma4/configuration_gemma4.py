@@ -288,11 +288,9 @@ class Gemma4VisionConfig(PreTrainedConfig):
     standardize: bool = False
     initializer_range: float = 0.02
 
-    def __post_init__(self, **kwargs):
-        if self.rope_parameters is None:
-            self.rope_parameters = {"rope_type": "default", "rope_theta": 100.0}
-
-        super().__post_init__(**kwargs)
+    def standardize_rope_params(self):
+        if self.rope_parameters.get("rope_type") in ["default", None]:
+            self.rope_parameters["rope_type"] = "axial"
 
 
 @auto_docstring(checkpoint="google/gemma-4-e2b-it")

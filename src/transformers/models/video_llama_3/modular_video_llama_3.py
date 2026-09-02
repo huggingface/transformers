@@ -82,6 +82,10 @@ class VideoLlama3VisionConfig(SiglipVisionConfig):
     initializer_range: float = 0.02
     rope_parameters: dict | None = None
 
+    def standardize_rope_params(self):
+        if self.rope_parameters.get("rope_type") in ["default", None]:
+            self.rope_parameters["rope_type"] = "axial"
+
 
 @auto_docstring(checkpoint="lkhl/VideoLLaMA3-2B-Image-HF")
 @strict
