@@ -120,10 +120,6 @@ print(f"The predicted token is: {predicted_token}")
     - get_special_tokens_mask
     - save_vocabulary
 
-## CamembertTokenizerFast
-
-[[autodoc]] CamembertTokenizerFast
-
 ## CamembertModel
 
 [[autodoc]] CamembertModel

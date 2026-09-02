@@ -13,6 +13,7 @@
 # limitations under the License.
 import functools
 import importlib
+import inspect
 import os
 import re
 import sys
@@ -32,6 +33,8 @@ from ..utils.import_utils import (
     is_kernels_available,
     is_rocm_platform,
     is_torch_available,
+    is_torchdynamo_exporting,
+    resolve_internal_import,
 )
 from .flash_attention import flash_attention_forward
 
@@ -57,6 +60,20 @@ _MISSING_KERNELS_MESSAGE = (
 
 _TRANSFORMERS_USE_HUB_KERNELS = os.environ.get("USE_HUB_KERNELS", "YES").upper()
 _kernels_enabled = _TRANSFORMERS_USE_HUB_KERNELS in ENV_VARS_TRUE_VALUES
+
+
+# Maps from func name to the internal module path
+_KERNELS_INTERNAL_PATH_MAPPINGS = {
+    "chunk_kda": "ops.kda",
+    "fused_recurrent_kda": "ops.kda",
+    "chunk_gated_delta_rule": "ops.gated_delta_rule",
+    "fused_recurrent_gated_delta_rule": "ops.gated_delta_rule",
+    "mamba_split_conv1d_scan_combined": "ops.triton.ssd_combined",
+    "selective_state_update": "ops.triton.selective_state_update",
+    "mamba_chunk_scan_combined": "ops.triton.ssd_combined",
+    "mamba_inner_fn": "ops.selective_scan_interface",
+    "selective_scan_fn": "ops.selective_scan_interface",
+}
 
 
 if is_kernels_available():
@@ -154,12 +171,12 @@ if is_kernels_available():
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="causal_conv1d_fn",
-                        version=1,
+                        version=2,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="causal_conv1d_fn",
-                        version=1,
+                        version=2,
                     ),
                 },
             },
@@ -168,12 +185,120 @@ if is_kernels_available():
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="causal_conv1d_update",
-                        version=1,
+                        version=2,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="causal_conv1d_update",
+                        version=2,
+                    ),
+                },
+            },
+            "chunk_gated_delta_rule": {
+                "cuda": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="chunk_gated_delta_rule",
                         version=1,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="chunk_gated_delta_rule",
+                        version=1,
+                    ),
+                },
+            },
+            "fused_recurrent_gated_delta_rule": {
+                "cuda": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="recurrent_gated_delta_rule",
+                        version=1,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="recurrent_gated_delta_rule",
+                        version=1,
+                    ),
+                },
+            },
+            "mamba_chunk_scan_combined": {
+                "cuda": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="mamba_chunk_scan_combined",
+                        version=2,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="mamba_chunk_scan_combined",
+                        version=2,
+                    ),
+                },
+            },
+            "mamba_split_conv1d_scan_combined": {
+                "cuda": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="mamba_split_conv1d_scan_combined",
+                        version=2,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="mamba_split_conv1d_scan_combined",
+                        version=2,
+                    ),
+                },
+            },
+            "mamba_inner_fn": {
+                "cuda": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="mamba_inner_fn",
+                        version=2,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="mamba_inner_fn",
+                        version=2,
+                    ),
+                },
+            },
+            "selective_scan_fn": {
+                "cuda": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="selective_scan_fn",
+                        version=2,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="selective_scan_fn",
+                        version=2,
+                    ),
+                },
+            },
+            "selective_state_update": {
+                "cuda": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="selective_state_update",
+                        version=2,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="selective_state_update",
+                        version=2,
+                    ),
+                },
+            },
+            "EsmFold2TriangleMultiplication": {
+                "cuda": {
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="biohub/esmfold2-trimul",
+                        layer_name="ESMFold2TriangleMultiplication",
+                        revision="9bcafd5b29a6c81645ae299d5364f5b9e503aca8",
+                        trust_remote_code=True,
                     ),
                 },
             },
@@ -267,6 +392,20 @@ if is_kernels_available():
                     ),
                 },
             },
+            "RMSNormGated": {
+                "cuda": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="FusedRMSNormGated",
+                        version=1,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="FusedRMSNormGated",
+                        version=1,
+                    ),
+                },
+            },
             "MegaBlocksMoeMLP": {
                 "cuda": {
                     Mode.TRAINING: LayerRepository(
@@ -355,6 +494,34 @@ if is_kernels_available():
                     )
                 }
             },
+            "chunk_kda": {
+                "cuda": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="chunk_kimi_delta_attention",
+                        version=1,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="chunk_kimi_delta_attention",
+                        version=1,
+                    ),
+                },
+            },
+            "fused_recurrent_kda": {
+                "cuda": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="recurrent_kimi_delta_attention",
+                        version=1,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="recurrent_kimi_delta_attention",
+                        version=1,
+                    ),
+                },
+            },
             "rotary_pos_emb": {
                 "xpu": {
                     Mode.INFERENCE: LayerRepository(
@@ -396,7 +563,7 @@ if is_kernels_available():
 else:
     _kernels_enabled = False
 
-    # Stub to make decorators int transformers work when `kernels`
+    # Stub to make decorators in transformers work when `kernels`
     # is not installed.
     def use_kernel_forward_from_hub(*args, **kwargs):
         def decorator(cls):
@@ -451,13 +618,21 @@ else:
 
 
 _HUB_KERNEL_MAPPING: dict[str, dict[str, str]] = {
-    "causal-conv1d": {"repo_id": "kernels-community/causal-conv1d", "version": 1},
-    "mamba-ssm": {"repo_id": "kernels-community/mamba-ssm", "version": 1},
-    "falcon_mamba-ssm": {"repo_id": "kernels-community/mamba-ssm", "version": 1},
     "finegrained-fp8": {"repo_id": "kernels-community/finegrained-fp8", "version": 4},
     "deep-gemm": {"repo_id": "kernels-community/deep-gemm", "version": 2},
     "sonic-moe": {"repo_id": "kernels-community/sonic-moe", "revision": "ep-support"},
+    "nvfp4": {"repo_id": "kernels-community/nvfp4-gemm", "version": 1},
 }
+
+# Flash attention version -> major version of its hub kernel repo. Flash attention flavors that are not
+# listed here, and all other attention kernels, use `_DEFAULT_ATTN_KERNEL_VERSION`.
+_FLASH_ATTN_KERNEL_VERSION_MAPPING: dict[int, int] = {
+    # v3 is the first version shipping the Torch stable ABI (CUDA/ROCm) and Torch 2.13 builds (incl. XPU)
+    2: 3,
+    # FA4 is still in beta -> only v0 has been released
+    4: 0,
+}
+_DEFAULT_ATTN_KERNEL_VERSION = 1
 
 _KERNEL_MODULE_MAPPING: dict[str, ModuleType | None] = {}
 
@@ -468,6 +643,14 @@ def is_kernel(attn_implementation: str | None) -> bool:
         attn_implementation is not None
         and re.search(r"^[^/:]+/[^/:]+(?:@[^/:]+)?(?::[^/:]+)?$", attn_implementation) is not None
     )
+
+
+def get_attn_kernel_version(repo_id: str) -> int:
+    """Return the major version of the hub kernel repo `repo_id` to load, e.g. `3` for `kernels-community/flash-attn2`."""
+    for flash_attn_version, kernel_version in _FLASH_ATTN_KERNEL_VERSION_MAPPING.items():
+        if is_flash_attention_requested(requested_attention_implementation=repo_id, version=flash_attn_version):
+            return kernel_version
+    return _DEFAULT_ATTN_KERNEL_VERSION
 
 
 def load_and_register_attn_kernel(
@@ -511,9 +694,7 @@ def load_and_register_attn_kernel(
     rev = rev.strip() if rev else None
     version = None
     if rev is None:
-        # FA4 is still in beta -> redirect to v0 else default to v1
-        is_fa4 = is_flash_attention_requested(requested_attention_implementation=repo_id, version=4)
-        version = 0 if is_fa4 else 1
+        version = get_attn_kernel_version(repo_id)
 
     # Load the kernel from hub
     try:
@@ -636,6 +817,52 @@ def get_kernel(
     return get_kernel_hub(
         kernel_name, revision=revision, version=version, user_agent=user_agent, trust_remote_code=allow_all_kernels
     )
+
+
+def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, internal_path: str | None = None):
+    """
+    The same as `use_kernel_forward_from_hub` but with the optional fallback to an original package if it exists, e.g.,
+    FLA for Gated Delta Rule, mamba-ssm for mamba2, etc.
+
+    This combines all options with kernels, enabling kernels on top of the original package if requested as well.
+    The order of priority is
+        1. Hf kernels (if requested)
+        2. Original package
+        3. Torch only path
+    """
+    kernel_wrapper_decorator = use_kernel_forward_from_hub(func_name)
+
+    # Allow internal path prefix if given to resolve non __init__ imports
+    internal_path = _KERNELS_INTERNAL_PATH_MAPPINGS.get(func_name, internal_path)  # defaults
+    full_path = func_name if internal_path is None else f"{internal_path}.{func_name}"
+
+    def decorator(torch_function: Callable) -> Callable:
+        implementation = None
+        try:
+            module = importlib.import_module(package)
+            implementation = resolve_internal_import(module, full_path)
+        except Exception:
+            implementation = torch_function
+        finally:
+            implementation = torch_function if implementation is None else implementation
+
+        # Make it "frozen" like to let dynamo not try to look into any ordering
+        applicable_params = tuple(inspect.signature(implementation).parameters)
+        # A boolean to track if the implementation is new, i.e. not the original torch function
+        is_new_implementation = implementation is not torch_function
+
+        @functools.wraps(torch_function)
+        def wrapped(*args, **kwargs):
+            # Some original packages are incompatible with torch.export, so we always use the torch path when exporting
+            if is_new_implementation and is_torchdynamo_exporting():
+                return torch_function(*args, **kwargs)
+
+            kwargs = {k: v for k, v in kwargs.items() if k in applicable_params}
+            return implementation(*args, **kwargs)
+
+        return kernel_wrapper_decorator(wrapped)
+
+    return decorator
 
 
 # Whether to allow hub kernels coming from untrusted repos, i.e. repos outside `kernels-community`

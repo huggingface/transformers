@@ -77,6 +77,7 @@ FSDP_DISTRIBUTED_TEST_MODEL_TYPES = {
     "mixtral",
     "qwen3",
     "qwen3_moe",
+    "qwen4_exp_text",
 }
 
 
@@ -214,7 +215,7 @@ def _run_training_steps(model, optimizer, batches, *, track_grad_norms=True):
         loss.backward()
         if track_grad_norms:
             grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=float("inf"))
-            grad_norms.append(grad_norm)
+            grad_norms.append(grad_norm.item())
         optimizer.step()
         losses.append(loss.detach().item())
     return losses, grad_norms

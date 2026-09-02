@@ -31,6 +31,11 @@ class CompressedTensorsTest(unittest.TestCase):
 
     prompt = "The capital of France is Paris, the capital of Germany is Berlin"
 
+    @property
+    def optimized(self):
+        """The optimized inference path is opt-in; without it the regular compressed-tensors route is used."""
+        return CompressedTensorsConfig(use_optimized_inference=True)
+
     def tearDown(self):
         gc.collect()
         backend_empty_cache(torch_device)
@@ -65,7 +70,7 @@ class CompressedTensorsTest(unittest.TestCase):
     @require_torch_accelerator
     @require_cuda_capability_at_least(8, 9)
     def test_tinyllama_fp8(self):
-        self._test_quantized_model(self.tinyllama_fp8, 20.0)
+        self._test_quantized_model(self.tinyllama_fp8, 20.0, quantization_config=self.optimized)
 
     def test_tinyllama_w8a16(self):
         self._test_quantized_model(self.tinyllama_w8a16, 20.0, expect_quantized=False)
@@ -87,9 +92,17 @@ class CompressedTensorsTest(unittest.TestCase):
         output_ids = model.generate(**inputs, max_new_tokens=8, do_sample=False)
         self.assertGreater(output_ids.shape[1], inputs["input_ids"].shape[1])
 
-    def _test_quantized_model(self, model_name: str, expected_perplexity: float, expect_quantized: bool = True):
-        # load model
-        quantized_model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto")
+    def _test_quantized_model(
+        self,
+        model_name: str,
+        expected_perplexity: float,
+        expect_quantized: bool = True,
+        quantization_config=None,
+    ):
+        # load model. NB: `quantization_config=None` cannot be passed through, it is not the same as
+        # not passing it at all -- `from_pretrained` then tries to merge it with the checkpoint's own
+        kwargs = {} if quantization_config is None else {"quantization_config": quantization_config}
+        quantized_model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", **kwargs)
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         device = quantized_model.device
 
@@ -122,10 +135,12 @@ class CompressedTensorsTest(unittest.TestCase):
     @require_torch_accelerator
     @require_cuda_capability_at_least(8, 9)
     def test_tinyllama_fp8_uses_fp8_kernel(self):
-        """Verify FP8 model uses CompressedTensorsFP8Linear on GPU/XPU."""
+        """With `use_optimized_inference=True`, an FP8 model uses CompressedTensorsFP8Linear on GPU/XPU."""
         from transformers.integrations.compressed_tensors import CompressedTensorsFP8Linear
 
-        model = AutoModelForCausalLM.from_pretrained(self.tinyllama_fp8, device_map="auto")
+        model = AutoModelForCausalLM.from_pretrained(
+            self.tinyllama_fp8, device_map="auto", quantization_config=self.optimized
+        )
 
         fp8_count = sum(1 for m in model.modules() if isinstance(m, CompressedTensorsFP8Linear))
         self.assertGreater(fp8_count, 0, "FP8 model should use CompressedTensorsFP8Linear on GPU/XPU")
@@ -141,7 +156,7 @@ class CompressedTensorsTest(unittest.TestCase):
                 break
 
     def test_tinyllama_fp8_dequantize(self):
-        """With `dequantize=True` the FP8 kernel path is disabled and weights are dequantized."""
+        """With `dequantize=True` the weights are dequantized at load time."""
         from transformers.integrations.compressed_tensors import CompressedTensorsFP8Linear
 
         quantization_config = CompressedTensorsConfig(dequantize=True)
@@ -151,6 +166,7 @@ class CompressedTensorsTest(unittest.TestCase):
 
         fp8_count = sum(1 for m in model.modules() if isinstance(m, CompressedTensorsFP8Linear))
         self.assertEqual(fp8_count, 0, "dequantize=True should NOT use CompressedTensorsFP8Linear")
+        self.assertEqual(model.model.layers[0].self_attn.q_proj.weight.dtype, model.dtype)
 
         # Model should still generate sensible outputs after dequantization.
         tokenizer = AutoTokenizer.from_pretrained(self.tinyllama_fp8)
@@ -163,7 +179,9 @@ class CompressedTensorsTest(unittest.TestCase):
     @require_cuda_capability_at_least(8, 9)
     def test_tinyllama_fp8_save_reload(self):
         """An FP8 model should still work after saving and reloading."""
-        model = AutoModelForCausalLM.from_pretrained(self.tinyllama_fp8, device_map="auto")
+        model = AutoModelForCausalLM.from_pretrained(
+            self.tinyllama_fp8, device_map="auto", quantization_config=self.optimized
+        )
         tokenizer = AutoTokenizer.from_pretrained(self.tinyllama_fp8)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -182,7 +200,9 @@ class CompressedTensorsTest(unittest.TestCase):
                 weight = f.get_tensor("model.layers.0.self_attn.q_proj.weight")
             self.assertEqual(scale.shape, (weight.shape[0], 1))
 
-            reloaded = AutoModelForCausalLM.from_pretrained(tmp_dir, device_map="auto")
+            reloaded = AutoModelForCausalLM.from_pretrained(
+                tmp_dir, device_map="auto", quantization_config=self.optimized
+            )
             inputs = tokenizer(self.prompt, return_tensors="pt").to(reloaded.device)
             with torch.no_grad():
                 outputs = reloaded(**inputs, labels=inputs["input_ids"])
@@ -195,7 +215,9 @@ class CompressedTensorsTest(unittest.TestCase):
         at load time and collapsed back to a single element on save."""
         from transformers.integrations.compressed_tensors import CompressedTensorsFP8Linear
 
-        model = AutoModelForCausalLM.from_pretrained(self.tinyllama_fp8_static, device_map="auto")
+        model = AutoModelForCausalLM.from_pretrained(
+            self.tinyllama_fp8_static, device_map="auto", quantization_config=self.optimized
+        )
         module = next(m for m in model.modules() if isinstance(m, CompressedTensorsFP8Linear))
         self.assertEqual(module.weight_scale.shape, (1, module.out_features))
 
@@ -211,12 +233,34 @@ class CompressedTensorsTest(unittest.TestCase):
                 scale = f.get_tensor("model.layers.0.self_attn.q_proj.weight_scale")
             self.assertEqual(scale.numel(), 1)
 
-            reloaded = AutoModelForCausalLM.from_pretrained(tmp_dir, device_map="auto")
+            reloaded = AutoModelForCausalLM.from_pretrained(
+                tmp_dir, device_map="auto", quantization_config=self.optimized
+            )
             tokenizer = AutoTokenizer.from_pretrained(self.tinyllama_fp8_static)
             inputs = tokenizer(self.prompt, return_tensors="pt").to(reloaded.device)
             with torch.no_grad():
                 outputs = reloaded(**inputs, labels=inputs["input_ids"])
             self.assertLessEqual(torch.exp(outputs.loss), 20.0)
+
+    def test_use_optimized_inference_is_opt_in(self):
+        """Without `use_optimized_inference=True`, an FP8 checkpoint takes the regular compressed-tensors
+        route: no kernels, and with `dequantize=False` the weights are left compressed until the
+        first forward pass decompresses them."""
+        from transformers.integrations.compressed_tensors import CompressedTensorsFP8Linear
+
+        model = AutoModelForCausalLM.from_pretrained(self.tinyllama_fp8, device_map=torch_device)
+        module = model.model.layers[0].self_attn.q_proj
+
+        self.assertNotIsInstance(module, CompressedTensorsFP8Linear)
+        self.assertEqual(module.weight.dtype, torch.float8_e4m3fn, "weights must not be decompressed at load time")
+
+        tokenizer = AutoTokenizer.from_pretrained(self.tinyllama_fp8)
+        inputs = tokenizer(self.prompt, return_tensors="pt").to(model.device)
+        with torch.no_grad():
+            outputs = model(**inputs, labels=inputs["input_ids"])
+        # compressed-tensors decompressed the model on that first forward pass
+        self.assertEqual(module.weight.dtype, model.dtype)
+        self.assertLessEqual(torch.exp(outputs.loss), 20.0)
 
     def test_non_fp8_model_unaffected(self):
         """Verify non-FP8 models (e.g. INT8) do not use the FP8 kernel path."""

@@ -65,7 +65,7 @@ class GPTNeoSelfAttention(nn.Module):
         if attention_type == "local":
             bias = torch.bitwise_xor(bias, torch.tril(bias, -config.window_size))
 
-        self.register_buffer("bias", bias, persistent=False)
+        self.bias = nn.Buffer(bias, persistent=False)
 
         self.attn_dropout = nn.Dropout(float(config.attention_dropout))
         self.resid_dropout = nn.Dropout(float(config.resid_dropout))

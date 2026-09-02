@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -269,7 +269,7 @@ conversations = [
                 },
                 {
                     "type": "text",
-                    "text": "Who's speaking in the speach and what city's weather is being discussed?",
+                    "text": "Who's speaking in the speech and what city's weather is being discussed?",
                 },
             ],
         }
@@ -304,7 +304,7 @@ for decoded_output in decoded_outputs:
 ### Transcription Mode
 
 Use the model to transcribe audio (state-of-the-art performance in English, Spanish, French, Portuguese, Hindi, German, Dutch, Italian)!
-It also support automatic language detection.
+It also supports automatic language detection.
 
 ```python
 from transformers import AutoProcessor, VoxtralForConditionalGeneration
@@ -315,7 +315,7 @@ repo_id = "mistralai/Voxtral-Mini-3B-2507"
 processor = AutoProcessor.from_pretrained(repo_id)
 model = VoxtralForConditionalGeneration.from_pretrained(repo_id, device_map="auto")
 
-# set the language is already know for better accuracy
+# set the language if already known for better accuracy
 inputs = processor.apply_transcription_request(language="en", audio="https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3", model_id=repo_id)
 
 # # but you can also let the model detect the language automatically

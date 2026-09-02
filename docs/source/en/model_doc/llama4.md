@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -36,7 +36,7 @@ Maverick and Scout are both trained on up to 40 trillion tokens on data encompas
 (with specific fine-tuning support for 12 languages including Arabic, Spanish, German, and Hindi).
 
 For deployment, Llama 4 Scout is designed for accessibility, fitting on a single server-grade GPU via
-on-the-fly 4-bit or 8-bitint4 quantization, while Maverick is available in BF16 and FP8 formats.
+on-the-fly 4-bit or 8-bit int4 quantization, while Maverick is available in BF16 and FP8 formats.
 These models are released under the custom Llama 4 Community License Agreement, available on the model repositories.
 
 You can find all the original Llama checkpoints under the [meta-llama](https://huggingface.co/meta-llama) organization.
@@ -88,18 +88,17 @@ from transformers import AutoTokenizer, Llama4ForConditionalGeneration
 model_id = "meta-llama/Llama-4-Scout-17B-16E-Instruct"
 
 tokenizer = AutoTokenizer.from_pretrained(model_id)
+model = Llama4ForConditionalGeneration.from_pretrained(
+    model_id,
+    device_map="auto",
+)
 
 messages = [
     {"role": "user", "content": "Who are you?"},
 ]
 inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt", return_dict=True).to(model.device)
 
-model = Llama4ForConditionalGeneration.from_pretrained(
-    model_id,
-    device_map="auto",
-)
-
-outputs = model.generate(**inputs.to(model.device), max_new_tokens=100)
+outputs = model.generate(**inputs, max_new_tokens=100)
 outputs = tokenizer.batch_decode(outputs[:, inputs["input_ids"].shape[-1]:])
 print(outputs[0])
 ```
@@ -227,19 +226,19 @@ model = Llama4ForConditionalGeneration.from_pretrained(
 messages = [
     {"role": "user", "content": f"Look at the following texts: [{very_long_text}]\n\n\n\nWhat are the books, and who wrote them? Make me a nice list."},
 ]
-input_ids = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt").to(model.device)
+inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt", return_dict=True).to(model.device)
 
-torch_device_module = getattr(torch, device, torch.cuda)
+torch_device_module = getattr(torch, model.device.type, torch.cuda)
 torch_device_module.synchronize()
 start = time.time()
 out = model.generate(
-    input_ids.to(model.device),
+    **inputs,
     prefill_chunk_size=2048*8,
     max_new_tokens=300,
     cache_implementation="hybrid",
 )
 print(time.time()-start)
-print(tokenizer.batch_decode(out[:, input_ids.shape[-1]:]))
+print(tokenizer.batch_decode(out[:, inputs["input_ids"].shape[-1]:]))
 print(f"{torch_device_module.max_memory_allocated(model.device) / 1024**3:.2f} GiB")
 ```
 

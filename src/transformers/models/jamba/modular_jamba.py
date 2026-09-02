@@ -24,7 +24,6 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...integrations import lazy_load_kernel
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
@@ -32,10 +31,16 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults
-from ...utils.import_utils import resolve_internal_import
 from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ..falcon_mamba.modeling_falcon_mamba import FalconMambaMixer
 from ..llama.modeling_llama import LlamaAttention, LlamaRMSNorm, eager_attention_forward
-from ..mamba.modeling_mamba import MambaMixer, causal_conv1d_fn, causal_conv1d_update
+from ..mamba.modeling_mamba import (
+    apply_mask_to_padding_states,
+    causal_conv1d_fn,
+    causal_conv1d_update,
+    mamba_selective_scan,
+    mamba_selective_state_update,
+)
 from ..mistral.modeling_mistral import MistralMLP
 from ..mixtral.modeling_mixtral import MixtralExperts, MixtralForCausalLM
 from .configuration_jamba import JambaConfig
@@ -93,7 +98,7 @@ class JambaAttention(LlamaAttention):
         return attn_output, attn_weights
 
 
-class JambaMambaMixer(MambaMixer):
+class JambaMambaMixer(FalconMambaMixer):
     """
     Compute ∆, A, B, C, and D the state space parameters and compute the `contextualized_states`.
     A, D are input independent (see Mamba paper [1] Section 3.5.2 "Interpretation of A" for why A isn't selective)
@@ -144,186 +149,127 @@ class JambaMambaMixer(MambaMixer):
         self.b_layernorm = JambaRMSNorm(self.ssm_state_size, eps=config.rms_norm_eps)
         self.c_layernorm = JambaRMSNorm(self.ssm_state_size, eps=config.rms_norm_eps)
 
-        global causal_conv1d, causal_conv1d_update, causal_conv1d_fn
-        causal_conv1d = lazy_load_kernel("causal-conv1d")
-        causal_conv1d_update = getattr(causal_conv1d, "causal_conv1d_update", causal_conv1d_update)
-        causal_conv1d_fn = getattr(causal_conv1d, "causal_conv1d_fn", causal_conv1d_fn)
+        self.use_mambapy = config.use_mambapy
+        self.use_associative_scan = config.use_associative_scan
 
-        global mamba_ssm, selective_state_update, selective_scan_fn
-        mamba_ssm = lazy_load_kernel("mamba-ssm")
-        selective_state_update = resolve_internal_import(
-            mamba_ssm, chained_path="ops.triton.selective_state_update.selective_state_update"
-        )
-        selective_scan_fn = getattr(mamba_ssm, "selective_scan_fn", None)
-
-        global is_fast_path_available
-        is_fast_path_available = (
-            all((selective_state_update, selective_scan_fn))
-            and hasattr(causal_conv1d, "causal_conv1d_update")
-            and hasattr(causal_conv1d, "causal_conv1d_fn")
-        )
-
-        if not is_fast_path_available:
-            logger.warning_once(
-                "The fast path is not available because on of `(selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)`"
-                " is None. To install follow https://github.com/state-spaces/mamba/#installation and https://github.com/Dao-AILab/causal-conv1d."
-            )
-
-        self.layer_type = config.layer_types[layer_idx]
-
-    def warn_slow_implementation(self):
+    def init_jamba_weights(self):
         raise NotImplementedError("Not needed for jamba")
 
-    def init_jamba_mamba_weights(self):
-        raise NotImplementedError("Not needed for jamba")
-
-    def cuda_kernels_forward(
+    def forward(
         self,
         hidden_states: torch.Tensor,
         cache_params: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
         **kwargs,
     ):
-        # Note: we cannot use `mamba_inner_fn` as in mamba even if in training and without cache params because we have the
-        # inner layernorms which isn't supported by this fused kernel
-        batch_size, seq_len, _ = hidden_states.shape
-        use_precomputed_states = (
-            cache_params is not None and cache_params.has_previous_state(self.layer_idx) and seq_len == 1
-        )
+        seq_len = hidden_states.shape[1]
+        dtype = hidden_states.dtype
+        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
 
         # 1. Gated MLP's linear projection
+        hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
         projected_states = self.in_proj(hidden_states).transpose(1, 2)
-        hidden_states, gate = projected_states.chunk(2, dim=1)
 
-        # Apply the conv
-        hidden_states = self._convolution(hidden_states, cache_params, attention_mask, **kwargs)
+        # Key difference to falcon mamba: mamba inner fn applies its dt norm at a different time
+        # leading to incompatible implementations
+        A = -torch.exp(self.A_log.float())
 
-        if attention_mask is not None:
-            hidden_states = hidden_states * attention_mask.unsqueeze(1)
+        hidden_states_B_C, gate = projected_states.chunk(2, dim=1)
 
-        # 3. State Space Model sequence transformation
-        # 3.a. input varying initialization of time_step, B and C
-        ssm_parameters = self.x_proj(hidden_states.transpose(1, 2))
+        if use_precomputed_states:
+            conv_state = cache_params.layers[self.layer_idx].conv_states[0]
+            recurrent_state = cache_params.layers[self.layer_idx].recurrent_states[0]
+
+        # 2. Convolution sequence transformation
+        if use_precomputed_states and seq_len == 1 and not cache_params.layers[self.layer_idx].record_past:
+            hidden_states_B_C = causal_conv1d_update(
+                hidden_states_B_C,
+                conv_state,
+                self.conv1d.weight.squeeze(1),
+                self.conv1d.bias,
+                activation=self.activation,
+            )
+        else:
+            if cache_params is not None:
+                hidden_states_B_C = cache_params.update_conv_state(
+                    hidden_states_B_C,
+                    self.layer_idx,
+                    conv_kernel_size=self.conv_kernel_size,
+                )
+
+            hidden_states_B_C = causal_conv1d_fn(
+                hidden_states_B_C,
+                self.conv1d.weight.squeeze(1),
+                self.conv1d.bias,
+                activation=self.activation,
+                **kwargs,
+            )
+
+            if cache_params is not None:
+                hidden_states_B_C = hidden_states_B_C[:, :, -seq_len:]
+
+        # 3. SSM transformation
+        hidden_states_B_C = apply_mask_to_padding_states(hidden_states_B_C.transpose(1, 2), attention_mask)
         time_step, B, C = torch.split(
-            ssm_parameters, [self.time_step_rank, self.ssm_state_size, self.ssm_state_size], dim=-1
+            self.x_proj(hidden_states_B_C),
+            [self.time_step_rank, self.ssm_state_size, self.ssm_state_size],
+            dim=-1,
         )
 
+        # Key difference to (falcon) mamba: Additional norms on B, C, and dt
         time_step = self.dt_layernorm(time_step)
         B = self.b_layernorm(B)
         C = self.c_layernorm(C)
 
-        # Here we need to apply dt_proj without the bias, as the bias is added in the selective scan kernel.
-        # This is a hack to apply dt_proj while still using the forward pass of `torch.nn.Linear`, which is needed
-        # in order to make quantization work. Quantization code replaces `torch.nn.Linear` layers with quantized
-        # linear layers, and requires to call the forward pass directly.
-        # Quantized model can't work with the original code:
-        # ```discrete_time_step = self.dt_proj.weight @ time_step.transpose(1, 2)```
-        time_proj_bias = self.dt_proj.bias.data
-        with torch.no_grad():
-            self.dt_proj.bias.data = torch.zeros_like(self.dt_proj.bias.data)
-        discrete_time_step = self.dt_proj(time_step).transpose(1, 2)
-        with torch.no_grad():
-            self.dt_proj.bias.data = time_proj_bias
+        # In case the model has been quantized, we need a hack to properly call the `nn.Linear` module
+        # at the price of a small overhead.
+        if hasattr(self.config, "_is_quantized"):
+            time_step = (self.dt_proj(time_step) - self.dt_proj.bias).transpose(1, 2)
+        else:
+            time_step = self.dt_proj.weight @ time_step.transpose(1, 2)
+        time_proj_bias = self.dt_proj.bias.float() if self.dt_proj.bias is not None else None
 
-        A = -torch.exp(self.A_log.float())
-        # 3.c perform the recurrence y ← SSM(A, B, C)(x)
-        time_proj_bias = time_proj_bias.float() if time_proj_bias is not None else None
-        if use_precomputed_states:
-            scan_outputs = selective_state_update(
-                cache_params.layers[self.layer_idx].recurrent_states[0],
-                hidden_states[..., 0],
-                discrete_time_step[..., 0],
+        # Recurrent form
+        if use_precomputed_states and seq_len == 1:
+            scan_output = mamba_selective_state_update(
+                recurrent_state,
+                hidden_states_B_C.transpose(1, 2)[..., 0],
+                time_step[..., 0],
                 A,
                 B[:, 0],
                 C[:, 0],
                 self.D,
-                gate[..., 0],
-                time_proj_bias,
+                z=gate[..., 0],
+                dt_bias=time_proj_bias,
                 dt_softplus=True,
             ).unsqueeze(-1)
+
+        # Full sequence form
         else:
-            scan_outputs, ssm_state = selective_scan_fn(
-                hidden_states,
-                discrete_time_step,
+            output_final_state = cache_params is not None
+            scan_result = mamba_selective_scan(
+                hidden_states_B_C.transpose(1, 2),
+                time_step,
                 A,
                 B.transpose(1, 2),
                 C.transpose(1, 2),
-                self.D.float(),
-                gate,
-                time_proj_bias,
+                D=self.D.float(),
+                z=gate,
+                delta_bias=time_proj_bias,
                 delta_softplus=True,
-                return_last_state=True,
-            )
-            if ssm_state is not None and cache_params is not None:
-                cache_params.update_recurrent_state(ssm_state, self.layer_idx)
-
-        # 4. Final linear projection
-        contextualized_states = self.out_proj(scan_outputs.transpose(1, 2))
-
-        return contextualized_states
-
-    def slow_forward(
-        self,
-        hidden_states: torch.Tensor,
-        cache_params: Cache | None = None,
-        attention_mask: torch.LongTensor | None = None,
-        **kwargs,
-    ):
-        batch_size, seq_len, _ = hidden_states.shape
-        dtype = hidden_states.dtype
-        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
-        # 1. Gated MLP's linear projection
-        projected_states = self.in_proj(hidden_states).transpose(1, 2)
-        hidden_states, gate = projected_states.chunk(2, dim=1)
-
-        # Apply the convolution
-        hidden_states = self._convolution(hidden_states, cache_params, attention_mask, **kwargs)
-
-        if attention_mask is not None:
-            hidden_states = hidden_states * attention_mask.unsqueeze(1)
-
-        if use_precomputed_states:
-            # In training mode, we don't want to perform in-place operations on ssm_state so we can compute the backwards pass
-            ssm_state = cache_params.layers[self.layer_idx].recurrent_states[0].clone()
-        else:
-            ssm_state = torch.zeros(
-                (batch_size, self.intermediate_size, self.ssm_state_size), device=hidden_states.device, dtype=dtype
+                return_last_state=output_final_state,
+                use_mambapy=self.use_mambapy,
+                use_associative_scan=self.use_associative_scan,
             )
 
-        # 3. State Space Model sequence transformation
-        # 3.a. Selection:  [batch, seq_len, self.time_step_rank + self.ssm_state_size * 2]
-        ssm_parameters = self.x_proj(hidden_states.transpose(1, 2))
-        time_step, B, C = torch.split(
-            ssm_parameters, [self.time_step_rank, self.ssm_state_size, self.ssm_state_size], dim=-1
-        )
-
-        time_step = self.dt_layernorm(time_step)
-        B = self.b_layernorm(B)
-        C = self.c_layernorm(C)
-
-        discrete_time_step = self.dt_proj(time_step)
-        discrete_time_step = nn.functional.softplus(discrete_time_step).transpose(1, 2)
-
-        # 3.b. Discretization: B and C to [batch, seq_len, intermediate_size, ssm_state_size] (SRAM)
-        A = -torch.exp(self.A_log.float())
-        discrete_A = torch.exp(A[None, :, None, :] * discrete_time_step[:, :, :, None])
-        discrete_B = discrete_time_step[:, :, :, None] * B[:, None, :, :].float()
-        deltaB_u = discrete_B * hidden_states[:, :, :, None].float()
-        # 3.c perform the recurrence y ← SSM(A, B, C)(x)
-        scan_outputs = []
-        for i in range(seq_len):
-            ssm_state = discrete_A[:, :, i, :] * ssm_state + deltaB_u[:, :, i, :]
-            scan_output = torch.matmul(ssm_state.to(dtype), C[:, i, :].unsqueeze(-1))
-            scan_outputs.append(scan_output[:, :, 0])
-        scan_output = torch.stack(scan_outputs, dim=-1)
-        scan_output = scan_output + (hidden_states * self.D[None, :, None])
-        scan_output = scan_output * self.act(gate)
-
-        if cache_params is not None:
-            cache_params.update_recurrent_state(ssm_state, self.layer_idx)
+            if output_final_state:
+                scan_output, final_state = scan_result
+                cache_params.update_recurrent_state(final_state, self.layer_idx)
+            else:
+                scan_output = scan_result
 
         # 4. Final linear projection
-        contextualized_states = self.out_proj(scan_output.transpose(1, 2))
+        contextualized_states = self.out_proj(scan_output.transpose(1, 2).to(dtype))
         return contextualized_states
 
 

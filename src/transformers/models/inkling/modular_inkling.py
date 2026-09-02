@@ -26,7 +26,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
+from ...integrations import use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
@@ -51,14 +51,60 @@ from ..gemma3.modeling_gemma3 import (
 from ..higgs_audio_v2.modeling_higgs_audio_v2 import HiggsAudioV2Embeddings
 from ..llama.modeling_llama import LlamaRMSNorm, repeat_kv
 from ..mixtral.modeling_mixtral import MixtralExperts
-from ..qwen3_next.modeling_qwen3_next import apply_mask_to_padding_states
+from ..qwen3_next.modeling_qwen3_next import apply_mask_to_padding_states, causal_conv1d_fn, causal_conv1d_update
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="thinkingmachines/Inkling")
 @strict
 class InklingTextConfig(PreTrainedConfig):
+    r"""
+    unpadded_vocab_size (`int`, *optional*, defaults to `None`):
+        Number of rows the checkpoint's unembedding matrix actually holds when the head is not padded to
+        `vocab_size`. Logits beyond it are dropped. If `None`, the head is not padded.
+    swa_num_attention_heads (`int`, *optional*, defaults to 64):
+        Number of attention heads in the sliding-window layers.
+    swa_num_key_value_heads (`int`, *optional*, defaults to 16):
+        Number of key/value heads in the sliding-window layers.
+    swa_head_dim (`int`, *optional*, defaults to 128):
+        Dimension of query and key heads in the sliding-window layers.
+    sliding_window_size (`int`, *optional*, defaults to 512):
+        Size of the sliding attention window used by layers whose `layer_types` entry is `"hybrid_sliding"`.
+    d_rel (`int`, *optional*, defaults to 16):
+        Per-head dimension of the relative states that are mixed into the relative position bias.
+    rel_extent (`int`, *optional*, defaults to 1024):
+        Backward distance, in tokens, over which the relative position bias is applied. The bias is zero beyond it.
+    log_scaling_n_floor (`int`, *optional*, defaults to `None`):
+        Position from which logits start being scaled up logarithmically in the full-attention layers. If `None`,
+        the scaling is disabled.
+    log_scaling_alpha (`float`, *optional*, defaults to 0.1):
+        Strength of the logarithmic logit scaling controlled by `log_scaling_n_floor`.
+    local_layer_ids (`list[int]`, *optional*, defaults to `None`):
+        Indices of the layers using sliding window attention. Used to derive `layer_types` when it is not provided.
+        If `None`, every layer whose index is not a multiple of 6 uses sliding window attention.
+    mlp_layer_types (`list[str]`, *optional*, defaults to `None`):
+        MLP type pattern for each layer (`"dense"` or `"sparse"`). If `None`, every layer is sparse.
+    shared_expert_sink (`bool`, *optional*, defaults to `True`):
+        Whether the router scores the shared experts alongside the routed ones, so that they act as a sink in the
+        softmax over expert weights.
+    logits_mup_width_multiplier (`float`, *optional*, defaults to 24.0):
+        muP width multiplier the final hidden states are divided by before the language modeling head.
+    rms_norm_eps_moe_gate (`float`, *optional*, defaults to 1e-6):
+        Epsilon of the RMS normalization applied inside the mixture-of-experts router.
+    num_mtp_layers (`int`, *optional*, defaults to `None`):
+        Number of multi-token-prediction layers. If `None`, multi-token prediction is disabled.
+    chain_hidden_post_norm (`bool`, *optional*, defaults to `False`):
+        Whether the hidden states chained between multi-token-prediction layers are normalized after each layer.
+    mtp_hidden_states_first (`bool`, *optional*, defaults to `True`):
+        Whether the hidden states come before the token embeddings when the two are concatenated as the input of a
+        multi-token-prediction layer.
+    mtp_local_layer_ids (`list[int]`, *optional*, defaults to `None`):
+        Indices of the multi-token-prediction layers using sliding window attention. If `None`, every
+        multi-token-prediction layer uses full attention.
+    """
+
     model_type = "inkling_text"
     base_config_key = "text_config"
     base_model_tp_plan = {
@@ -182,8 +228,18 @@ class InklingTextConfig(PreTrainedConfig):
         return None
 
 
+@auto_docstring(checkpoint="thinkingmachines/Inkling")
 @strict
 class InklingAudioConfig(PreTrainedConfig):
+    r"""
+    n_mel_bins (`int`, *optional*, defaults to 80):
+        Number of mel-frequency bins per audio frame.
+    mel_vocab_size (`int`, *optional*, defaults to 256):
+        Number of discrete bins each mel value is quantized into before being embedded.
+    text_hidden_size (`int`, *optional*, defaults to 6144):
+        Dimensionality the audio embeddings are projected to, matching the text backbone.
+    """
+
     model_type = "inkling_audio"
     base_config_key = "audio_config"
     attribute_map = {
@@ -199,8 +255,14 @@ class InklingAudioConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
 
+@auto_docstring(checkpoint="thinkingmachines/Inkling")
 @strict
 class InklingVisionConfig(PreTrainedConfig):
+    r"""
+    text_hidden_size (`int`, *optional*, defaults to 6144):
+        Dimensionality the vision features are projected to by the last encoder layer, matching the text backbone.
+    """
+
     model_type = "inkling_vision"
     base_config_key = "vision_config"
     attribute_map = {"num_hidden_layers": "n_layers"}
@@ -216,9 +278,18 @@ class InklingVisionConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
 
+@auto_docstring(
+    checkpoint="thinkingmachines/Inkling",
+    custom_intro="Top-level multimodal config (`InklingMMConfig` in the SGLang source).",
+)
 @strict
 class InklingConfig(PreTrainedConfig):
-    """Top-level multimodal config (`InklingMMConfig` in the SGLang source)."""
+    r"""
+    image_bos_token_id (`int`, *optional*, defaults to 200005):
+        The beginning-of-image token index used to mark the start of image spans.
+    audio_bos_token_id (`int`, *optional*, defaults to 200020):
+        The beginning-of-audio token index used to mark the start of audio spans.
+    """
 
     model_type = "inkling_mm_model"
     sub_configs = {
@@ -531,49 +602,6 @@ class InklingMoE(nn.Module):
         hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*input_shape)
         hidden_states = hidden_states + self.shared_experts(residuals, gammas=shared_gammas)
         return hidden_states
-
-
-@use_kernel_forward_from_hub("causal_conv1d_update")
-def causal_conv1d_update(
-    hidden_states: torch.Tensor,
-    conv_state: torch.Tensor,
-    weight: nn.Parameter,
-    bias: nn.Parameter | None = None,
-    activation: str | None = None,
-):
-    _, hidden_size, seq_len = hidden_states.shape
-    state_len = conv_state.shape[-1]
-
-    hidden_states_new = torch.cat([conv_state, hidden_states], dim=-1).to(weight.dtype)
-    conv_state.copy_(hidden_states_new[:, :, -state_len:])
-    out = F.conv1d(hidden_states_new, weight.unsqueeze(1), bias, padding=0, groups=hidden_size)
-    out = out[:, :, -seq_len:]
-    if activation is not None:
-        out = ACT2FN[activation](out)
-    return out.to(hidden_states.dtype)
-
-
-@use_kernel_forward_from_hub("causal_conv1d_fn")
-def causal_conv1d_fn(
-    hidden_states: torch.Tensor,
-    weight: nn.Parameter,
-    bias: nn.Parameter | None = None,
-    activation: str | None = None,
-    **kwargs,
-):
-    _, hidden_size, seq_len = hidden_states.shape
-    padding = weight.shape[-1] - 1
-
-    out = F.conv1d(
-        hidden_states.to(weight.dtype),
-        weight=weight.unsqueeze(1),
-        bias=bias,
-        padding=padding,
-        groups=hidden_size,
-    )[:, :, :seq_len]
-    if activation is not None:
-        out = ACT2FN[activation](out)
-    return out.to(hidden_states.dtype)
 
 
 @use_kernelized_func([causal_conv1d_update, causal_conv1d_fn])
@@ -889,13 +917,19 @@ class InklingForCausalLM(Gemma3ForCausalLM):
 class InklingAudioModelEmbeddings(HiggsAudioV2Embeddings): ...
 
 
+@auto_docstring
 class InklingAudioModel(InklingPreTrainedModel):
     def __init__(self, config: InklingAudioConfig):
         super().__init__(config)
         self.embed_audio_tokens = InklingAudioModelEmbeddings(config)
         self.norm = InklingRMSNorm(config.text_hidden_size, eps=1e-6)
 
-    def forward(self, audio_input_ids: torch.Tensor, **kwargs) -> torch.Tensor:
+    @auto_docstring
+    def forward(self, audio_input_ids: torch.Tensor, **kwargs) -> BaseModelOutputWithPooling:
+        r"""
+        audio_input_ids (`torch.Tensor` of shape `(num_audios, max_num_frames, n_mel_bins)`):
+            Mel-spectrogram frames of the input audios.
+        """
         hidden_states = self.embed_audio_tokens(audio_input_ids)
         hidden_states = self.norm(hidden_states)
         return BaseModelOutputWithPooling(
@@ -1020,6 +1054,7 @@ def plan_out_scales(
     return scales[idxs]
 
 
+@auto_docstring
 class InklingVisionModel(InklingPreTrainedModel):
     def __init__(self, config: InklingVisionConfig):
         super().__init__(config)
@@ -1037,8 +1072,8 @@ class InklingVisionModel(InklingPreTrainedModel):
                 (end_scale[0] // start_scale[0]) * (end_scale[1] // start_scale[1]) * (end_scale[2] // start_scale[2])
             )
             output_dim = config.text_hidden_size if i == config.num_hidden_layers - 1 else end_scale[3]
-            hw_fold = end_scale[1] // start_scale[1]
-            t_fold = end_scale[0] // start_scale[0]
+            hw_fold = int(end_scale[1] // start_scale[1])
+            t_fold = int(end_scale[0] // start_scale[0])
             self.encoder_layers.append(
                 InklingVisionEncoderLayer(
                     input_dim=start_scale[3] * shuffle_mult,
@@ -1052,7 +1087,8 @@ class InklingVisionModel(InklingPreTrainedModel):
         self.final_norm = InklingRMSNorm(config.text_hidden_size)
         self.post_init()
 
-    def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> torch.Tensor:
+    @auto_docstring
+    def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutputWithPooling:
         num_patches = pixel_values.shape[0]
         hidden_states = pixel_values
         for layer in self.encoder_layers:

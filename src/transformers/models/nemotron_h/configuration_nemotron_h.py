@@ -141,7 +141,7 @@ class NemotronHConfig(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         # Backward compatibility; configs expect different names for these fields when init
-        # but they have to be re-names when creating/saving the config.
+        # but they have to be renamed when creating/saving the config.
         self.n_groups = kwargs.pop("mamba_n_groups") if "mamba_n_groups" in kwargs else self.n_groups
         self.conv_kernel = kwargs.pop("mamba_d_conv") if "mamba_d_conv" in kwargs else self.conv_kernel
         self.expand = kwargs.pop("mamba_expand") if "mamba_expand" in kwargs else self.expand

@@ -109,8 +109,6 @@ class EsmRotaryEmbedding(nn.Module):
     Implementation based on [ModernBERT's RotaryEmbedding](https://github.com/huggingface/transformers/blob/aad13b87ed59f2afcfaebc985f403301887a35fc/src/transformers/models/modernbert/modeling_modernbert.py#L94).
     """
 
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: EsmConfig, device=None):
         super().__init__()
@@ -119,7 +117,7 @@ class EsmRotaryEmbedding(nn.Module):
         self.rope_type = {}
 
         curr_inv_freq, curr_attention_scaling = self.compute_default_rope_parameters(self.config)
-        self.register_buffer("inv_freq", curr_inv_freq)
+        self.inv_freq = nn.Buffer(curr_inv_freq)
         setattr(self, "attention_scaling", curr_attention_scaling)
 
     @staticmethod
@@ -213,9 +211,7 @@ class EsmEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False)
 
         self.padding_idx = config.pad_token_id
         if self.position_embedding_type == "absolute":

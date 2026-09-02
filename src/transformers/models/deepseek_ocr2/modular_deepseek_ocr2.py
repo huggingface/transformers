@@ -242,8 +242,8 @@ class DeepseekOcr2ImageProcessor(GotOcr2ImageProcessor):
         if crop_to_patches:
             grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
 
-            for shape, stacked_images in grouped_images.items():
-                h, w = shape[-2:]
+            for key, stacked_images in grouped_images.items():
+                h, w = stacked_images.shape[-2:]
                 if max(h, w) > tile_size:
                     stacked_patches, n_patches = self.crop_image_to_patches(
                         stacked_images,
@@ -256,11 +256,11 @@ class DeepseekOcr2ImageProcessor(GotOcr2ImageProcessor):
                     flat_patches = self.rescale_and_normalize(
                         flat_patches, do_rescale, rescale_factor, do_normalize, image_mean, image_std
                     )
-                    local_patches_grouped[shape] = flat_patches.reshape(stacked_patches.shape)
-                    num_local_patches[shape] = [n_patches] * stacked_images.shape[0]
+                    local_patches_grouped[key] = flat_patches.reshape(stacked_patches.shape)
+                    num_local_patches[key] = [n_patches] * stacked_images.shape[0]
                 else:
-                    local_patches_grouped[shape] = [None] * stacked_images.shape[0]
-                    num_local_patches[shape] = [0] * stacked_images.shape[0]
+                    local_patches_grouped[key] = [None] * stacked_images.shape[0]
+                    num_local_patches[key] = [0] * stacked_images.shape[0]
 
             num_local_patches = reorder_images(num_local_patches, grouped_images_index)
             ordered_local = reorder_images(local_patches_grouped, grouped_images_index)
@@ -275,8 +275,8 @@ class DeepseekOcr2ImageProcessor(GotOcr2ImageProcessor):
 
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         processed_global_grouped = {}
-        for shape, stacked in grouped_images.items():
-            h, w = shape[-2:]
+        for key, stacked in grouped_images.items():
+            h, w = stacked.shape[-2:]
             scale = global_target_size / max(h, w)
             new_h = round(h * scale)
             new_w = round(w * scale)
@@ -285,7 +285,7 @@ class DeepseekOcr2ImageProcessor(GotOcr2ImageProcessor):
             stacked = self.rescale_and_normalize(
                 stacked, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
-            processed_global_grouped[shape] = stacked
+            processed_global_grouped[key] = stacked
         all_pixel_values_global = reorder_images(processed_global_grouped, grouped_images_index)
 
         data = {
@@ -297,12 +297,11 @@ class DeepseekOcr2ImageProcessor(GotOcr2ImageProcessor):
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
-    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None) -> int:
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:
         """
         Returns the number of image patches for a given image size (1 global + local patches).
         """
-        if images_kwargs is None:
-            images_kwargs = {}
+        images_kwargs = images_kwargs or {}
         min_patches = images_kwargs.get("min_patches", self.min_patches)
         max_patches = images_kwargs.get("max_patches", self.max_patches)
         tile_size = images_kwargs.get("tile_size", self.tile_size)

@@ -347,7 +347,7 @@ class InternVLVisionLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-    ) -> tuple[torch.Tensor] | tuple[torch.Tensor, torch.Tensor]:
+    ) -> torch.Tensor:
         attention_output, _ = self.attention(
             self.layernorm_before(hidden_states),  # in InternVLVision, layernorm is applied before self-attention
         )
@@ -548,7 +548,7 @@ class InternVLModel(InternVLPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, channels, height, width)`)
             The tensors corresponding to the input images.
         vision_feature_layer (`int` or `list[int]`):
             Layer index or list of layer indices to extract features from.

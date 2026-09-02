@@ -391,8 +391,8 @@ class PPDocLayoutV2PositionRelationEmbedding(nn.Module):
         self.pos_proj = nn.Conv2d(
             in_channels=self.embed_dim * 4, out_channels=config.num_attention_heads, kernel_size=1
         )
-        inv_freq, self.attention_scaling = self.compute_default_rope_parameters(config, device=device)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        inv_freq, self.attention_scaling = self.compute_default_rope_parameters(config, device)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
 
     @staticmethod
     @deprecate_kwarg("device", version="5.18")
@@ -636,7 +636,7 @@ class PPDocLayoutV2PreTrainedModel(RTDetrPreTrainedModel):
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
         if isinstance(module, PPDocLayoutV2PositionRelationEmbedding):
             inv_freq, _ = module.compute_default_rope_parameters(module.config)
-            module.register_buffer("inv_freq", inv_freq, persistent=False)
+            init.copy_(module.inv_freq, inv_freq)
 
 
 @auto_docstring(

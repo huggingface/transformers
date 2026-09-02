@@ -17,6 +17,7 @@ All six real-model template fixtures from the legacy test suite are re-expressed
 here in the new region-spec shape and asserted against the same expected
 output dicts. Any divergence indicates a regression in the new executor."""
 
+import copy
 import random
 import tempfile
 import unittest
@@ -24,6 +25,7 @@ import unittest
 from transformers import AutoTokenizer
 from transformers.testing_utils import require_torch
 from transformers.utils.chat_parsing import ResponseParser, parse_response
+from transformers.utils.chat_parsing.response_parser import _coerce, _schema_types
 
 
 cohere_template = {
@@ -167,6 +169,37 @@ gemma4_template = {
         "content": {
             "close": ["<turn|>", "<|tool_response>", "<eos>"],
             "content": "text",
+        },
+    },
+}
+
+
+# Inkling (TMLv0) frames every block as <|message_model|>[author-name]<|content_KIND|>body<|end_message|>;
+# the generation prompt pre-writes the first <|message_model|>, so each open treats the header as optional.
+inkling_template = {
+    "defaults": {"role": "assistant"},
+    "start_anchor": "<|message_model|>",
+    "fields": {
+        "thinking": {
+            "open_pattern": r"(?:<\|message_model\|>)?[^<]*<\|content_thinking\|>",
+            "close": "<|end_message|>",
+            "repeats": True,
+            "join": "",
+            "content_args": {"strip": False},
+        },
+        "content": {
+            "open_pattern": r"(?:<\|message_model\|>)?[^<]*<\|content_text\|>",
+            "close": "<|end_message|>",
+            "repeats": True,
+            "join": "",
+            "content_args": {"strip": False},
+        },
+        "tool_calls": {
+            "open_pattern": r"(?:<\|message_model\|>)?[^<]*<\|content_invoke_tool_json\|>",
+            "close": "<|end_message|>",
+            "repeats": True,
+            "content": "json",
+            "transform": {"type": "function", "function": {"name": "{content.name}", "arguments": "{content.args}"}},
         },
     },
 }
@@ -576,6 +609,133 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
             },
         )
 
+    def test_inkling_multi_block_message(self):
+        model_out = (
+            "<|content_thinking|>Consider the weather.<|end_message|>"
+            "<|message_model|><|content_thinking|> Tokyo, probably.<|end_message|>"
+            "<|message_model|><|content_text|>Checking the weather now.<|end_message|>"
+            "<|message_model|>get_weather<|content_invoke_tool_json|>"
+            '{"name":"get_weather","args":{"city":"Tokyo","units":"C"}}<|end_message|>'
+            "<|content_model_end_sampling|>"
+        )
+        prefix = "<|message_system|><|content_text|>Thinking effort level: 0.9<|end_message|><|message_model|>"
+        self.assertEqual(
+            parse_response(model_out, inkling_template, prefix=prefix),
+            {
+                "role": "assistant",
+                "thinking": "Consider the weather. Tokyo, probably.",
+                "content": "Checking the weather now.",
+                "tool_calls": [
+                    {
+                        "type": "function",
+                        "function": {"name": "get_weather", "arguments": {"city": "Tokyo", "units": "C"}},
+                    }
+                ],
+            },
+        )
+
+    def test_transform_dotted_paths(self):
+        template_spec = {
+            "defaults": {"role": "assistant"},
+            "start_anchor": "<|assistant|>",
+            "fields": {
+                "tool_calls": {
+                    "open": "<tool>",
+                    "close": "</tool>",
+                    "repeats": True,
+                    "content": "json",
+                    "transform": {
+                        "type": "function",
+                        "function": {"name": "{content.name}", "arguments": "{content.args}"},
+                    },
+                },
+            },
+        }
+        model_out = '<tool>{"name": "get_weather", "args": {"city": {"id": 7}}}</tool>'
+        self.assertEqual(
+            parse_response(model_out, template_spec, prefix="")["tool_calls"],
+            [{"type": "function", "function": {"name": "get_weather", "arguments": {"city": {"id": 7}}}}],
+        )
+
+    def test_transform_dotted_paths_with_transform_each(self):
+        template_spec = {
+            "defaults": {"role": "assistant"},
+            "start_anchor": "<|assistant|>",
+            "fields": {
+                "tool_calls": {
+                    "open": "<actions>",
+                    "close": "</actions>",
+                    "content": "json",
+                    "transform_each": True,
+                    "transform": {"type": "function", "function": {"name": "{fn.name}", "arguments": "{fn.args}"}},
+                },
+            },
+        }
+        model_out = '<actions>[{"fn": {"name": "a", "args": {"x": 1}}}, {"fn": {"name": "b", "args": {}}}]</actions>'
+        self.assertEqual(
+            parse_response(model_out, template_spec, prefix="")["tool_calls"],
+            [
+                {"type": "function", "function": {"name": "a", "arguments": {"x": 1}}},
+                {"type": "function", "function": {"name": "b", "arguments": {}}},
+            ],
+        )
+
+    def test_transform_dotted_path_errors(self):
+        def spec_with(transform):
+            return {
+                "start_anchor": "<|assistant|>",
+                "fields": {"x": {"open": "<x>", "close": "</x>", "content": "json", "transform": transform}},
+            }
+
+        with self.assertRaisesRegex(ValueError, "missing key 'args'"):
+            parse_response('<x>{"name": "n"}</x>', spec_with({"a": "{content.args}"}), prefix="")
+        with self.assertRaisesRegex(ValueError, "cannot index into str"):
+            parse_response('<x>{"name": "n"}</x>', spec_with({"a": "{content.name.x}"}), prefix="")
+        with self.assertRaises(KeyError):
+            parse_response("<x>{}</x>", spec_with({"a": "{missing}"}), prefix="")
+
+    def test_transform_dotted_mixed_string_rejected(self):
+        template_spec = {
+            "start_anchor": "<|assistant|>",
+            "fields": {"x": {"open": "<x>", "close": "</x>", "transform": {"v": "pre {content.args}"}}},
+        }
+        with self.assertRaisesRegex(ValueError, "mixes"):
+            parse_response("", template_spec, prefix="")
+
+    def test_join_concatenates_repeated_matches(self):
+        template_spec = {
+            "defaults": {"role": "assistant"},
+            "start_anchor": "<|assistant|>",
+            "fields": {
+                "thinking": {"open": "<think>", "close": "</think>", "repeats": True, "join": " "},
+                "content": {"repeats": True, "join": " "},
+            },
+        }
+        self.assertEqual(
+            parse_response("<think>first</think>middle<think>second</think>done", template_spec, prefix=""),
+            {"role": "assistant", "thinking": "first second", "content": "middle done"},
+        )
+        self.assertEqual(
+            parse_response("<think>only</think>", template_spec, prefix=""),
+            {"role": "assistant", "thinking": "only"},
+        )
+
+    def test_join_validation(self):
+        no_repeats = {"start_anchor": "a", "fields": {"x": {"open": "<x>", "close": "</x>", "join": ""}}}
+        with self.assertRaisesRegex(ValueError, "requires 'repeats'"):
+            parse_response("", no_repeats, prefix="")
+        bad_type = {"start_anchor": "a", "fields": {"x": {"open": "<x>", "close": "</x>", "repeats": True, "join": 7}}}
+        with self.assertRaisesRegex(ValueError, "must be a string"):
+            parse_response("", bad_type, prefix="")
+
+    def test_join_requires_string_matches(self):
+        template_spec = {
+            "start_anchor": "a",
+            "fields": {"x": {"open": "<x>", "close": "</x>", "repeats": True, "join": "", "content": "json"}},
+        }
+        with self.assertRaisesRegex(ValueError, "parse to a string"):
+            parse_response("<x>{}</x>", template_spec, prefix="")
+
     def test_optional_false_raises_when_missing(self):
         template_spec = {
             "defaults": {"role": "assistant"},
@@ -838,6 +998,19 @@ _STREAMING_FIXTURES = [
         "gemma4",
         gemma4_template,
         '<|channel>thought\nhi<channel|><|tool_call>call:foo{a:1,b:<|"|>bar<|"|>}<tool_call|>',
+    ),
+    (
+        # Exercises `join` fields (two thinking blocks) and dotted transform paths.
+        "inkling",
+        inkling_template,
+        (
+            "<|content_thinking|>Consider the weather.<|end_message|>"
+            "<|message_model|><|content_thinking|> Tokyo, probably.<|end_message|>"
+            "<|message_model|><|content_text|>Checking now.<|end_message|>"
+            "<|message_model|>get_weather<|content_invoke_tool_json|>"
+            '{"name":"get_weather","args":{"city":"Tokyo"}}<|end_message|>'
+            "<|content_model_end_sampling|>"
+        ),
     ),
 ]
 
@@ -1282,6 +1455,325 @@ class PrefixAndTruncationTest(unittest.TestCase):
         stream.feed("body</think>")
         result, _ = stream.finalize()
         self.assertEqual(result, {"role": "assistant", "thinking": "body"})
+
+
+# xml-inline without a value_parser: parameter bodies stay raw strings until tools= coerces them.
+_XML_STRING_ARGS_TEMPLATE = {
+    "defaults": {"role": "assistant"},
+    "start_anchor": "<|im_start|>assistant\n",
+    "fields": {
+        "tool_calls": {
+            "open_pattern": r"<tool_call>\s*<function=(?P<name>\w+)>",
+            "close": "</tool_call>",
+            "repeats": True,
+            "content": "xml-inline",
+            "content_args": {
+                "tag_pattern": r"<parameter=(?P<key>\w+)>\s*(?P<value>.*?)\s*</parameter>",
+            },
+            "transform": {"type": "function", "function": {"name": "{name}", "arguments": "{content}"}},
+        },
+    },
+}
+
+# kv-lines without a value_parser: values likewise stay raw strings for tools= to cast.
+_KV_LINES_TOOLS_TEMPLATE = {
+    "defaults": {"role": "assistant"},
+    "start_anchor": "<|im_start|>assistant\n",
+    "fields": {
+        "tool_calls": {
+            "open_pattern": r"<tool_call>\s*<function=(?P<name>\w+)>\n",
+            "close": "</tool_call>",
+            "repeats": True,
+            "content": "kv-lines",
+            "transform": {"type": "function", "function": {"name": "{name}", "arguments": "{content}"}},
+        },
+    },
+}
+
+_SET_ALARM_CALL = (
+    "<tool_call>\n<function=set_alarm>\n"
+    "<parameter=hour>\n7\n</parameter>\n"
+    "<parameter=enabled>\ntrue\n</parameter>\n"
+    "<parameter=label>\nwake up\n</parameter>\n"
+    "</function>\n</tool_call>"
+)
+
+
+def _set_alarm_tools(**properties):
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": "set_alarm",
+                "parameters": {"type": "object", "properties": properties},
+            },
+        }
+    ]
+
+
+_SET_ALARM_TOOLS = _set_alarm_tools(
+    hour={"type": "integer"},
+    enabled={"type": "boolean"},
+    label={"type": "string"},
+)
+
+
+def _first_tool_args(message):
+    return message["tool_calls"][0]["function"]["arguments"]
+
+
+def _parser_with_tools(tools):
+    return ResponseParser(_XML_STRING_ARGS_TEMPLATE, prefix="", tools=tools)
+
+
+class ToolArgCoercionTest(unittest.TestCase):
+    def test_coerce_tool_calls_casts_declared_types(self):
+        tools = _set_alarm_tools(
+            count={"type": "integer"},
+            ratio={"type": "number"},
+            enabled={"type": "boolean"},
+            tags={"type": "array"},
+            note={"type": "string"},
+        )
+        arguments = {
+            "count": "3",
+            "ratio": "1.5",
+            "enabled": "true",
+            "tags": '["a", "b"]',
+            "note": "hello",
+            "already_typed": 7,
+            "extra": "unscheduled",
+        }
+        call = {"type": "function", "function": {"name": "set_alarm", "arguments": arguments}}
+        self.assertIs(_parser_with_tools(tools)._coerce_tool_calls(call), call)
+        self.assertEqual(
+            call["function"]["arguments"],
+            {
+                "count": 3,
+                "ratio": 1.5,
+                "enabled": True,
+                "tags": ["a", "b"],
+                "note": "hello",
+                "already_typed": 7,
+                "extra": "unscheduled",
+            },
+        )
+
+    def test_coerce_falls_back_to_raw_on_failure(self):
+        self.assertEqual(_coerce("not-a-number", ("integer",)), "not-a-number")
+
+    def test_coerce_handles_any_of_and_null(self):
+        self.assertEqual(_coerce("5", ("integer", "null")), 5)
+        self.assertIsNone(_coerce("null", ("integer", "null")))
+
+    def test_coerce_booleans_match_bool_parser(self):
+        # Accept the same literals as the `bool` content parser, case-insensitively.
+        for raw, expected in [("true", True), ("True", True), ("1", True), ("false", False), ("0", False)]:
+            self.assertEqual(_coerce(raw, ("boolean",)), expected)
+        # Non-boolean text stays a string rather than silently becoming False.
+        self.assertEqual(_coerce("maybe", ("boolean",)), "maybe")
+
+    def test_coerce_object_array_require_matching_json(self):
+        # A JSON object body is only accepted for an `object` param, a JSON array only for `array`.
+        self.assertEqual(_coerce("[1, 2]", ("object",)), "[1, 2]")
+        self.assertEqual(_coerce('{"a": 1}', ("array",)), '{"a": 1}')
+        self.assertEqual(_coerce('{"a": 1}', ("object",)), {"a": 1})
+        # NaN / inf are not valid JSON numbers, so a `number` param keeps the raw text.
+        self.assertEqual(_coerce("NaN", ("number",)), "NaN")
+
+    def test_coerce_tool_calls_handles_single_and_list(self):
+        parser = _parser_with_tools(_SET_ALARM_TOOLS)
+        call = {"type": "function", "function": {"name": "set_alarm", "arguments": {"hour": "7"}}}
+        self.assertIs(parser._coerce_tool_calls(call), call)
+        self.assertEqual(call["function"]["arguments"], {"hour": 7})
+        # A list of calls (as produced by `transform_each`) is coerced element-wise.
+        calls = [{"type": "function", "function": {"name": "set_alarm", "arguments": {"hour": "9"}}}]
+        self.assertEqual(parser._coerce_tool_calls(calls)[0]["function"]["arguments"], {"hour": 9})
+        # Non-tool-call values pass through untouched.
+        self.assertEqual(parser._coerce_tool_calls("hello"), "hello")
+
+    def test_schema_types_handles_get_json_schema_dialect(self):
+        self.assertEqual(_schema_types({"type": "integer"}), ("integer",))
+        self.assertEqual(_schema_types({"type": ["integer", "string"]}), ("integer", "string"))
+        self.assertEqual(_schema_types({"anyOf": [{"type": "boolean"}, {"type": "string"}]}), ("boolean", "string"))
+        self.assertEqual(_schema_types({"type": "integer", "nullable": True}), ("integer", "null"))
+        # Undescribed parameters resolve to no candidate types, making coercion a no-op.
+        self.assertEqual(_schema_types({"description": "no type"}), ())
+
+    def test_parse_response_tools_coerces_xml_inline_string_args(self):
+        # Without a value_parser, xml-inline argument bodies stay strings; tools= casts them.
+        without = parse_response(_SET_ALARM_CALL, _XML_STRING_ARGS_TEMPLATE, prefix="")
+        with_tools = parse_response(_SET_ALARM_CALL, _XML_STRING_ARGS_TEMPLATE, prefix="", tools=_SET_ALARM_TOOLS)
+        self.assertEqual(_first_tool_args(without), {"hour": "7", "enabled": "true", "label": "wake up"})
+        self.assertEqual(_first_tool_args(with_tools), {"hour": 7, "enabled": True, "label": "wake up"})
+
+    def test_streaming_tools_coerces_on_region_close(self):
+        # Coercion must land on the region_close event during feed(), not only after finalize().
+        stream = ResponseParser(_XML_STRING_ARGS_TEMPLATE, prefix="", tools=_SET_ALARM_TOOLS)
+        closes = [
+            event["value"]
+            for chunk in _chunk_fixed(_SET_ALARM_CALL, 8)
+            for event in stream.feed(chunk)
+            if event["type"] == "region_close" and event["field"] == "tool_calls"
+        ]
+        self.assertEqual(len(closes), 1)
+        self.assertEqual(closes[0]["function"]["arguments"], {"hour": 7, "enabled": True, "label": "wake up"})
+
+    def test_qwen3_tools_coerces_strings_left_by_value_parser(self):
+        # qwen3's json+allow_non_json value_parser types what it can (`true`) and leaves
+        # invalid JSON (`007`) as a string; tools= then casts those leftover strings.
+        model_out = (
+            "<tool_call>\n<function=set_alarm>\n"
+            "<parameter=hour>\n007\n</parameter>\n"
+            "<parameter=enabled>\ntrue\n</parameter>\n"
+            "<parameter=label>\nwake up\n</parameter>\n"
+            "</function>\n</tool_call>"
+        )
+        without = parse_response(model_out, qwen3_template, prefix="")
+        with_tools = parse_response(model_out, qwen3_template, prefix="", tools=_SET_ALARM_TOOLS)
+        self.assertEqual(_first_tool_args(without), {"hour": "007", "enabled": True, "label": "wake up"})
+        self.assertEqual(_first_tool_args(with_tools), {"hour": 7, "enabled": True, "label": "wake up"})
+
+    def test_coercion_never_reworks_already_typed_values(self):
+        # Coercion only casts strings: values the value_parser already typed are final
+        model_out = "<tool_call>\n<function=set_alarm>\n<parameter=label>\n1.50\n</parameter>\n</tool_call>"
+        # qwen3's lax value_parser has already read 1.50 as the float 1.5, so the string-typed label stays a float ...
+        self.assertEqual(
+            _first_tool_args(parse_response(model_out, qwen3_template, prefix="", tools=_SET_ALARM_TOOLS)),
+            {"label": 1.5},
+        )
+        # ... while without a value_parser the raw text reaches the schema cast intact
+        self.assertEqual(
+            _first_tool_args(parse_response(model_out, _XML_STRING_ARGS_TEMPLATE, prefix="", tools=_SET_ALARM_TOOLS)),
+            {"label": "1.50"},
+        )
+
+    def test_kv_lines_string_args_are_coerced(self):
+        model_out = "<tool_call>\n<function=set_alarm>\nhour: 7\nenabled: true\n</tool_call>"
+        without = parse_response(model_out, _KV_LINES_TOOLS_TEMPLATE, prefix="")
+        with_tools = parse_response(model_out, _KV_LINES_TOOLS_TEMPLATE, prefix="", tools=_SET_ALARM_TOOLS)
+        self.assertEqual(_first_tool_args(without), {"hour": "7", "enabled": "true"})
+        self.assertEqual(_first_tool_args(with_tools), {"hour": 7, "enabled": True})
+
+    def test_non_tool_call_regions_are_untouched(self):
+        # A field that captures a `name` but does not parse into a tool call must be left
+        # alone, even when the capture happens to match a tool: its keys are not arguments.
+        template = {
+            "defaults": {"role": "assistant"},
+            "start_anchor": "<|im_start|>assistant\n",
+            "fields": {
+                "citation": {
+                    "open_pattern": r"<cite source=(?P<name>\w+)>",
+                    "close": "</cite>",
+                    "content": "xml-inline",
+                    "content_args": {
+                        "tag_pattern": r"<(?P<key>\w+)>\s*(?P<value>.*?)\s*</\1>",
+                        "value_parser": {"name": "json", "args": {"allow_non_json": True}},
+                    },
+                    "transform": {"source": "{name}", "fields": "{content}"},
+                },
+            },
+        }
+        model_out = "<cite source=set_alarm><label>1.50</label><hour>7</hour></cite>"
+        expected = {"source": "set_alarm", "fields": {"label": 1.5, "hour": 7}}
+        self.assertEqual(parse_response(model_out, template, prefix="")["citation"], expected)
+        self.assertEqual(
+            parse_response(model_out, template, prefix="", tools=_SET_ALARM_TOOLS)["citation"],
+            expected,
+        )
+
+    def test_merge_duplicates_arguments_are_cast_element_wise(self):
+        # merge_duplicates collects repeated tags into a list, which is cast element-wise
+        template = copy.deepcopy(_XML_STRING_ARGS_TEMPLATE)
+        template["fields"]["tool_calls"]["content_args"]["merge_duplicates"] = True
+        model_out = (
+            "<tool_call>\n<function=set_alarm>\n"
+            "<parameter=hour>\n7\n</parameter>\n"
+            "<parameter=hour>\n9\n</parameter>\n"
+            "</function>\n</tool_call>"
+        )
+        self.assertEqual(_first_tool_args(parse_response(model_out, template, prefix="")), {"hour": ["7", "9"]})
+        self.assertEqual(
+            _first_tool_args(parse_response(model_out, template, prefix="", tools=_SET_ALARM_TOOLS)),
+            {"hour": [7, 9]},
+        )
+        # Elements that don't cast, and non-string elements, are left as they are.
+        parser = _parser_with_tools(_SET_ALARM_TOOLS)
+        call = {"type": "function", "function": {"name": "set_alarm", "arguments": {"hour": ["7", "x", 9]}}}
+        parser._coerce_tool_calls(call)
+        self.assertEqual(call["function"]["arguments"], {"hour": [7, "x", 9]})
+
+    def test_coerce_tool_calls_ignores_unusable_function_name(self):
+        # A transform can hand us a name parsed from model output, so a non-string name
+        # must be ignored rather than raising on the schema lookup.
+        parser = _parser_with_tools(_SET_ALARM_TOOLS)
+        call = {"type": "function", "function": {"name": ["set_alarm"], "arguments": {"hour": "7"}}}
+        self.assertEqual(parser._coerce_tool_calls(call), call)
+        self.assertEqual(call["function"]["arguments"], {"hour": "7"})
+
+    def test_union_with_container_still_keeps_scalar_text(self):
+        model_out = "<tool_call>\n<function=set_alarm>\n<parameter=label>\n1.50\n</parameter>\n</tool_call>"
+        union = _set_alarm_tools(label={"anyOf": [{"type": "string"}, {"type": "object"}]})
+        # `string` never casts, so the union keeps scalar-looking text as text ...
+        self.assertEqual(
+            _first_tool_args(parse_response(model_out, _XML_STRING_ARGS_TEMPLATE, prefix="", tools=union)),
+            {"label": "1.50"},
+        )
+        # ... while the `object` branch still decodes a body that really is an object.
+        object_body = '<tool_call>\n<function=set_alarm>\n<parameter=label>\n{"a": 1}\n</parameter>\n</tool_call>'
+        self.assertEqual(
+            _first_tool_args(parse_response(object_body, _XML_STRING_ARGS_TEMPLATE, prefix="", tools=union)),
+            {"label": {"a": 1}},
+        )
+
+    def test_callable_tools_are_converted_to_schemas(self):
+        # Functions are converted with `get_json_schema`; `label` is Optional, so "null" casts to None
+        def set_alarm(hour: int, enabled: bool, label: str | None = None):
+            """
+            Set an alarm.
+
+            Args:
+                hour: The hour the alarm should ring at.
+                enabled: Whether the alarm starts out enabled.
+                label: An optional label for the alarm.
+            """
+
+        model_out = (
+            "<tool_call>\n<function=set_alarm>\n"
+            "<parameter=hour>\n7\n</parameter>\n"
+            "<parameter=enabled>\ntrue\n</parameter>\n"
+            "<parameter=label>\nnull\n</parameter>\n"
+            "</function>\n</tool_call>"
+        )
+        parsed = parse_response(model_out, _XML_STRING_ARGS_TEMPLATE, prefix="", tools=[set_alarm])
+        self.assertEqual(_first_tool_args(parsed), {"hour": 7, "enabled": True, "label": None})
+
+    def test_get_response_parser_forwards_tools(self):
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        tokenizer.response_template = _XML_STRING_ARGS_TEMPLATE
+        stream = tokenizer.get_response_parser(prefix="", tools=_SET_ALARM_TOOLS)
+        stream.feed(_SET_ALARM_CALL)
+        message, _ = stream.finalize()
+        self.assertEqual(_first_tool_args(message), {"hour": 7, "enabled": True, "label": "wake up"})
+
+    def test_tokenizer_parse_response_forwards_tools(self):
+        # The public tokenizer entry point threads tools= through to coercion.
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        tokenizer.response_template = _XML_STRING_ARGS_TEMPLATE
+        parsed = tokenizer.parse_response(_SET_ALARM_CALL, prefix="", tools=_SET_ALARM_TOOLS)
+        self.assertEqual(_first_tool_args(parsed), {"hour": 7, "enabled": True, "label": "wake up"})
+
+    def test_tools_is_a_noop_for_typed_json_tool_calls(self):
+        # JSON tool-call bodies already carry their types, so passing tools= must not change them.
+        model_out = (
+            "<|START_THINKING|>x<|END_THINKING|>"
+            '<|START_ACTION|>[{"tool_call_id": "0", "tool_name": "set_alarm", '
+            '"parameters": {"hour": 7, "enabled": true}}]<|END_ACTION|><|END_OF_TURN_TOKEN|>'
+        )
+        without = parse_response(model_out, cohere_template, prefix="")
+        with_tools = parse_response(model_out, cohere_template, prefix="", tools=_SET_ALARM_TOOLS)
+        self.assertEqual(without, with_tools)
+        self.assertEqual(_first_tool_args(with_tools), {"hour": 7, "enabled": True})
 
 
 if __name__ == "__main__":

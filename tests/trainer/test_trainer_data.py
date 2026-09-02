@@ -39,10 +39,12 @@ from transformers.testing_utils import (
     backend_device_count,
     require_accelerate,
     require_torch,
+    require_torch_greater_or_equal,
     torch_device,
 )
 from transformers.tokenization_utils_base import BatchEncoding
 from transformers.trainer_pt_utils import (
+    BatchRebalanceSampler,
     DistributedLengthGroupedSampler,
     DistributedSamplerWithLoop,
     EvalLoopContainer,
@@ -66,6 +68,7 @@ from .trainer_test_utils import (
     RegressionPreTrainedModel,
     RegressionTrainingArguments,
     SampleIterableDataset,
+    SequenceClassificationDataset,
     TrainerIntegrationCommon,
     TstLayer,
     get_regression_trainer,
@@ -242,6 +245,34 @@ class TrainerDataloaderTest(TestCasePlus):
         self.assertEqual(first_dataloader, first_dataloader_repeated)
         self.assertEqual(second_dataloader, second_dataloader_repeated)
 
+    def _build_iterable_trainer(self, **args_kwargs):
+        train_dataset = SampleIterableDataset()
+        config = GPT2Config(vocab_size=100, n_positions=128, n_embd=32, n_layer=3, n_head=4)
+        tiny_gpt2 = GPT2LMHeadModel(config)
+        args = TrainingArguments(self.get_auto_remove_tmp_dir(), max_steps=2, **args_kwargs)
+        trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
+        # Avoid the accelerator wrapping the dataloader so we can inspect the raw DataLoader kwargs.
+        trainer.accelerator.prepare = lambda x: x
+        return trainer
+
+    def test_prefetch_factor_applies_to_iterable_dataset(self):
+        # `dataloader_prefetch_factor` used to be ignored for IterableDataset (see issue #43431 / PR #34925).
+        trainer = self._build_iterable_trainer(dataloader_num_workers=2, dataloader_prefetch_factor=4)
+        dataloader = trainer.get_train_dataloader()
+        self.assertEqual(dataloader.prefetch_factor, 4)
+
+    def test_multiprocessing_context_is_forwarded(self):
+        trainer = self._build_iterable_trainer(dataloader_num_workers=2, dataloader_multiprocessing_context="spawn")
+        dataloader = trainer.get_train_dataloader()
+        # DataLoader turns the string into a multiprocessing context object.
+        self.assertEqual(dataloader.multiprocessing_context._name, "spawn")
+
+    @require_torch_greater_or_equal("2.6")
+    def test_in_order_is_forwarded(self):
+        trainer = self._build_iterable_trainer(dataloader_num_workers=2, dataloader_in_order=False)
+        dataloader = trainer.get_train_dataloader()
+        self.assertFalse(dataloader.in_order)
+
 
 # ---------------------------------------------------------------------------
 # Label smoothing tests
@@ -369,6 +400,16 @@ class TrainerSamplerTest(unittest.TestCase):
         self.assertEqual(len(data[indices[0]]["input_ids"]), 105)
         # The indices should be a permutation of range(6)
         self.assertEqual(sorted(indices), list(range(6)))
+
+    def test_eval_sampler_deterministic_with_group_by_length(self):
+        eval_dataset = SequenceClassificationDataset()
+        args = TrainingArguments(train_sampling_strategy="group_by_length")
+        trainer = Trainer(model=RegressionModel(), args=args, eval_dataset=eval_dataset)
+        order_1 = list(trainer._get_eval_sampler(eval_dataset))
+        torch.rand(100)  # get random items from global generator to simulate random number operation between two evals
+        order_2 = list(trainer._get_eval_sampler(eval_dataset))
+        self.assertEqual(sorted(order_1), list(range(len(eval_dataset))))
+        self.assertEqual(order_1, order_2)
 
     def test_distributed_length_grouped(self):
         # Get some inputs of random lengths
@@ -532,6 +573,276 @@ class TrainerSamplerTest(unittest.TestCase):
 
             self.check_shard_sampler(dataset, 4, drop_last=True, num_processes=3)
             self.check_shard_sampler(dataset, 4, drop_last=False, num_processes=3)
+
+    def test_batch_rebalance_basic(self):
+        """Core invariants: full coverage with no overlap between ranks, exact per-global-batch
+        sample counts, correct micro-batch count, and determinism for a fixed seed."""
+        lengths = [
+            100,
+            500,
+            200,
+            800,
+            300,
+            1000,
+            50,
+            600,
+            150,
+            400,
+            250,
+            700,
+            120,
+            900,
+            350,
+            2000,
+            450,
+            550,
+            80,
+            300,
+            650,
+            750,
+            180,
+            1200,
+        ]
+        dp_size = 2
+        grad_accum = 2
+        effective_batch_size = 4  # one micro-batch-size sample per (rank, slot) group
+
+        samplers = [
+            BatchRebalanceSampler(
+                lengths=lengths,
+                effective_batch_size=effective_batch_size,
+                dp_size=dp_size,
+                grad_accum=grad_accum,
+                rank=r,
+            )
+            for r in range(dp_size)
+        ]
+        all_batches = [list(s) for s in samplers]
+
+        # Micro-batch count per rank and per-global-batch totals across ranks.
+        num_global = len(all_batches[0]) // grad_accum
+        self.assertEqual(len(all_batches[0]), num_global * grad_accum)
+        all_indices = set()
+        for gb in range(num_global):
+            combined = set()
+            for slot in range(grad_accum):
+                for r in range(dp_size):
+                    batch = all_batches[r][gb * grad_accum + slot]
+                    self.assertEqual(len(combined & set(batch)), 0, f"Overlap in gb={gb}, slot={slot}")
+                    combined.update(batch)
+            self.assertEqual(len(combined), effective_batch_size, f"gb={gb}")
+            all_indices.update(combined)
+        self.assertEqual(all_indices, set(range(len(lengths))))
+
+        # Same seed reproduces the same iteration.
+        again = [
+            list(
+                BatchRebalanceSampler(
+                    lengths=lengths,
+                    effective_batch_size=effective_batch_size,
+                    dp_size=dp_size,
+                    grad_accum=grad_accum,
+                    rank=r,
+                )
+            )
+            for r in range(dp_size)
+        ]
+        self.assertEqual(all_batches, again)
+
+    def test_batch_rebalance_converges_for_large_effective_batch_size(self):
+        """
+        Regression test for the rebalance iteration budget.
+
+        With a large `effective_batch_size` and a small `dp_size * grad_accum` (K), the old
+        fixed cap `K * 30` was smaller than the number of single-sample moves needed to
+        converge, so the loop could hit the ceiling with a non-optimal spread. The budget is
+        now `max(K * 30, effective_batch_size)`, which is O(n) and matches the worst-case
+        move count. This test builds a heavily skewed batch (a few very long sequences plus
+        many short ones) under exactly that regime (large n=246, small K=2) and asserts that:
+
+          1. Every sample is still covered across all ranks combined (no data loss), and
+          2. The rebalanced partition reaches the brute-force-optimal cost spread over all
+             contiguous K=2 partitions — i.e. the algorithm actually ran to convergence
+             instead of being truncated at the old `K * 30` cap (which stops at ~63 moves
+             and never reaches the optimum at counts[0] == 6).
+        """
+        lengths = [100] * 240 + [8000, 6000, 5000, 4000, 3000, 2000]  # 246 samples
+        dp_size = 2
+        grad_accum = 1
+        effective_batch_size = 246  # K = 2, so the old cap K * 30 = 60 < 246 = n
+
+        # (1) Full coverage across ALL ranks combined — no samples dropped. Each rank only
+        # yields its own group, so the union over ranks must equal the whole batch.
+        all_indices = set()
+        for rank in range(dp_size):
+            sampler = BatchRebalanceSampler(
+                lengths=lengths,
+                effective_batch_size=effective_batch_size,
+                dp_size=dp_size,
+                grad_accum=grad_accum,
+                rank=rank,
+            )
+            for batch in sampler:
+                all_indices.update(batch)
+        self.assertEqual(all_indices, set(range(len(lengths))))
+
+        # (2) Convergence: the produced spread must equal the brute-force optimum over all
+        # contiguous K=2 partitions. Under the old `K * 30` (=60) cap the loop truncated
+        # around counts[0] == 63 (spread ~4.5e6); the optimum is counts[0] == 6 (spread
+        # ~4.06e5), which only the larger budget reaches.
+        sampler = BatchRebalanceSampler(
+            lengths=lengths,
+            effective_batch_size=effective_batch_size,
+            dp_size=dp_size,
+            grad_accum=grad_accum,
+            rank=0,
+        )
+        indices = list(range(effective_batch_size))
+        batch_lengths = [lengths[i] for i in indices]
+        sorted_pairs = sorted(zip(indices, batch_lengths), key=lambda x: x[1], reverse=True)
+
+        rebalanced_groups = sampler._assign(indices, batch_lengths)
+        # `rank_mbs` is nested as [rank][slot] -> list of sample indices; rebuild each
+        # micro-batch's cost from its indices -> lengths.
+        rebalanced_costs = []
+        for rank_slots in rebalanced_groups:
+            for slot_indices in rank_slots:
+                bs = len(slot_indices)
+                max_len = max((lengths[i] for i in slot_indices), default=0)
+                rebalanced_costs.append(sampler._cost(bs, max_len))
+        rebalanced_spread = max(rebalanced_costs) - min(rebalanced_costs)
+
+        n = effective_batch_size
+        optimal_spread = float("inf")
+        for c in range(1, n):
+            g0 = sorted_pairs[:c]
+            g1 = sorted_pairs[c:]
+            spread = abs(sampler._group_cost(g0) - sampler._group_cost(g1))
+            if spread < optimal_spread:
+                optimal_spread = spread
+
+        self.assertAlmostEqual(rebalanced_spread, optimal_spread, places=6)
+
+    def test_batch_rebalance_drop_last(self):
+        """Tail handling. With drop_last=True the trailing partial batch is dropped (default).
+        With drop_last=False it is yielded: a remainder smaller than K (= dp_size * grad_accum)
+        is padded up to K (not the full effective_batch_size, so duplication stays bounded), and
+        a dataset smaller than K is wrapped around repeatedly until K indices are available."""
+        # drop_last=True: trailing samples beyond the last full batch are dropped.
+        s = BatchRebalanceSampler(
+            lengths=list(range(100, 118)),  # 18 samples, eff_bs=16 -> remainder 2
+            effective_batch_size=16,
+            dp_size=1,
+            grad_accum=1,
+            shuffle=False,
+            rank=0,
+            drop_last=True,
+        )
+        covered = {i for batch in s for i in batch}
+        self.assertEqual(covered, set(range(16)))
+        self.assertEqual(s.num_global_batches, 1)
+
+        # drop_last=False, remainder >= K: the tail is yielded as-is, nothing dropped.
+        s = BatchRebalanceSampler(
+            lengths=list(range(100, 118)),
+            effective_batch_size=16,
+            dp_size=1,
+            grad_accum=1,
+            shuffle=False,
+            rank=0,
+            drop_last=False,
+        )
+        covered = {i for batch in s for i in batch}
+        self.assertEqual(covered, set(range(18)))
+        self.assertEqual(s.num_global_batches, 2)
+
+        # drop_last=False, remainder < K: padded up to K, not to effective_batch_size.
+        # 20 samples, eff_bs=16, dp=4, ga=2 -> K=8, remainder=4 -> tail padded 4->8.
+        dp_size, grad_accum = 4, 2
+        K = dp_size * grad_accum
+        total_yielded = 0
+        covered = set()
+        for rank in range(dp_size):
+            s = BatchRebalanceSampler(
+                lengths=list(range(100, 120)),
+                effective_batch_size=16,
+                dp_size=dp_size,
+                grad_accum=grad_accum,
+                shuffle=False,
+                rank=rank,
+                drop_last=False,
+            )
+            for batch in s:
+                covered.update(batch)
+                total_yielded += len(batch)
+        self.assertTrue(set(range(20)) <= covered)
+        # full batch (16) + padded tail (K=8) = 24, NOT 16 + eff_bs (16) = 32.
+        self.assertEqual(total_yielded, 16 + K)
+
+        # drop_last=False, dataset smaller than K: padding wraps the order around.
+        total_yielded = 0
+        micro_batch_sizes = []
+        covered = set()
+        for rank in range(dp_size):
+            s = BatchRebalanceSampler(
+                lengths=[100],
+                effective_batch_size=8,
+                dp_size=dp_size,
+                grad_accum=grad_accum,  # K = 8 > len(dataset) = 1
+                shuffle=False,
+                rank=rank,
+                drop_last=False,
+            )
+            for batch in s:
+                micro_batch_sizes.append(len(batch))
+                covered.update(batch)
+                total_yielded += len(batch)
+        self.assertEqual(total_yielded, K)
+        self.assertEqual(len(micro_batch_sizes), dp_size * grad_accum)
+        self.assertTrue(all(sz >= 1 for sz in micro_batch_sizes))
+        self.assertEqual(covered, {0})
+
+    def test_batch_rebalance_trainer_effective_batch_size_formula(self):
+        """Regression for the effective_batch_size calculation in Trainer._get_train_sampler.
+
+        The correct formula is `train_batch_size * grad_accum * world_size`, where
+        `train_batch_size = per_device_train_batch_size * n_gpu` is the per-process batch (it
+        already excludes world_size). This must cover both distributed cases:
+          * DDP: world_size > 1, n_gpu == 1  -> train_batch_size == per_device
+          * DP : world_size == 1, n_gpu > 1  -> train_batch_size == per_device * n_gpu
+
+        Using `per_device_train_batch_size * grad_accum * world_size` (the previous fix) is
+        correct for DDP but drops the n_gpu factor in the DP case. We simulate both setups by
+        overriding args."""
+        from unittest.mock import MagicMock
+
+        def build(per_device_train_batch_size, n_gpu, world_size, grad_accum=2):
+            n = 32
+            fake_trainer = MagicMock()
+            fake_trainer.args.train_sampling_strategy = "batch_rebalance"
+            fake_trainer.args.world_size = world_size
+            fake_trainer.args.process_index = 0
+            fake_trainer.args.per_device_train_batch_size = per_device_train_batch_size
+            # `train_batch_size` is a property = per_device_train_batch_size * max(1, n_gpu).
+            fake_trainer.args.train_batch_size = per_device_train_batch_size * max(1, n_gpu)
+            fake_trainer.args.gradient_accumulation_steps = grad_accum
+            fake_trainer.args.length_column_name = "length"
+            fake_trainer.args.dataloader_drop_last = True
+            fake_trainer.processing_class = None
+            fake_trainer.train_dataset = [{"input_ids": list(range((i % 5) + 1))} for i in range(n)]
+            return fake_trainer
+
+        # DDP: 2 processes, 1 GPU each. per_device=4 -> train_batch_size=4.
+        # expected = train_batch_size(4) * grad_accum(2) * world_size(2) = 16.
+        sampler = Trainer._get_train_sampler(build(per_device_train_batch_size=4, n_gpu=1, world_size=2))
+        self.assertIsInstance(sampler, BatchRebalanceSampler)
+        self.assertEqual(sampler.effective_batch_size, 16)
+
+        # DP: 1 process, 4 GPUs. per_device=4 -> train_batch_size = 4*4 = 16.
+        # expected = train_batch_size(16) * grad_accum(2) * world_size(1) = 32. The previous
+        # formula used per_device directly and returned 8, dropping the n_gpu factor.
+        sampler = Trainer._get_train_sampler(build(per_device_train_batch_size=4, n_gpu=4, world_size=1))
+        self.assertEqual(sampler.effective_batch_size, 32)
 
 
 # ---------------------------------------------------------------------------

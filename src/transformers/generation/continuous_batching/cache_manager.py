@@ -69,7 +69,7 @@ class BlockManager:
         Still, the block can be freed if no un-initialized blocks are left. In that case, we remove its hash from the
         hash table.
     If the block is not shareable, we just use the block manager as a FIFO structure where blocks are either free or in
-    use. Sharability is determined by the type of cache allocator: blocks created for full attention layers are
+    use. Shareability is determined by the type of cache allocator: blocks created for full attention layers are
     shareable, while blocks created for sliding window attention layers are not.
     There is no structure to keep track of the blocks in use: if a block is neither un-initialized nor initialized,
     it is in use.
@@ -504,9 +504,10 @@ class SlidingAttentionCacheAllocator(CacheAllocator):
         block_table = self.block_table.get(request_id)
         if block_table is None:
             raise ValueError(f"No block table found for request {request_id}")
-        # Apply sliding window
-        start_index = 0 if past_length < self.sliding_window else past_length % self.sliding_window
+        # Apply sliding window: read the `cache_length` most recent tokens, which start at logical position
+        # `past_length - cache_length` and thus at that position's slot in the rolling buffer
         cache_length = min(past_length, self.sliding_window - 1)
+        start_index = (past_length - cache_length) % self.sliding_window
         # Compute the physical indices
         physical_indices = []
         for i in range(start_index, start_index + cache_length):
@@ -525,10 +526,11 @@ class SlidingAttentionCacheAllocator(CacheAllocator):
         block_table = self.block_table.get(request_id)
         if block_table is None:
             raise ValueError(f"No block table found for request {request_id}")
-        # Apply sliding window
-        start_index = past_length % self.sliding_window
+        # Apply sliding window: only the last `sliding_window` query tokens are written, the earlier ones go to the trash
+        # slot. The first kept token is at logical position `past_length + padding_length`, hence the start index
         cache_length = min(query_length, self.sliding_window)
         padding_length = query_length - cache_length
+        start_index = (past_length + padding_length) % self.sliding_window
         # Compute the physical indices
         physical_indices = []
         for i in range(start_index, start_index + cache_length):

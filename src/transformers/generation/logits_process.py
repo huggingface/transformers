@@ -2605,7 +2605,7 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
             Device to use.
         skip_first_ngram_calls (`bool`, *optional*, defaults to `False`):
             Whether to skip first ngram calls.
-        debug_mode (`bool`, optional, *optional*, defaults to `False`):
+        debug_mode (`bool`, *optional*, defaults to `False`):
             Logits are modified to uniform one got before watermarking modification is applied. This is to test the
             implementation.
 

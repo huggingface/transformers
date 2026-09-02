@@ -1507,8 +1507,8 @@ class LongformerModel(LongformerPreTrainedModel):
             config=self.config,
             inputs_embeds=embedding_output,
             attention_mask=torch.clamp(attention_mask, min=0, max=1),  # we have a mask of 0, 1, 2 (see bug below)
-            # Force mask creation
-            and_mask_function=lambda *args: torch.tensor(True, dtype=torch.bool),
+            # Always materialize the mask so it can be sliced back to 2D below.
+            allow_is_bidirectional_skip=False,
         )
         # Cuts off back to 2D
         extended_attention_mask = extended_attention_mask[:, 0, 0, :]

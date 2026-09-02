@@ -389,7 +389,7 @@ class OneFormerLoss(nn.Module):
         self.eos_coef = eos_coef
         empty_weight = torch.ones(self.num_classes + 1)
         empty_weight[-1] = self.eos_coef
-        self.register_buffer("empty_weight", empty_weight)
+        self.empty_weight = nn.Buffer(empty_weight)
 
         # pointwise mask loss parameters
         self.num_points = num_points
@@ -2887,7 +2887,7 @@ class OneFormerModel(OneFormerPreTrainedModel):
         >>> from io import BytesIO
         >>> from transformers import OneFormerProcessor, OneFormerModel
 
-        >>> # download texting image
+        >>> # download test image
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> with httpx.stream("GET", url) as response:
         ...     image = Image.open(BytesIO(response.read()))

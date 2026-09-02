@@ -18,8 +18,6 @@
 # limitations under the License.
 """PyTorch Bamba model."""
 
-from typing import TypedDict
-
 import torch
 from torch import nn
 
@@ -30,7 +28,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, logging
-from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
+from ...utils.generic import TransformersKwargs, merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import capture_outputs
 from ..jamba.modeling_jamba import JambaAttentionDecoderLayer
 from ..llama.modeling_llama import (
@@ -49,30 +47,6 @@ from .configuration_bamba import BambaConfig
 
 
 logger = logging.get_logger(__name__)
-
-
-class BambaFlashAttentionKwargs(TypedDict, total=False):
-    """
-    Keyword arguments for advanced Flash Attention, causal-conv1d, and mamba_ssm kernel usage.
-    Use cases include padding-free training and fewer `torch.compile` graph breaks.
-
-    cu_seq_lens_q (`torch.LongTensor`):
-        Gets cumulative sequence length for query state.
-    cu_seq_lens_k (`torch.LongTensor`):
-        Gets cumulative sequence length for key state.
-    max_length_q (`int`):
-        Maximum sequence length for query state.
-    max_length_k (`int`):
-        Maximum sequence length for key state.
-    seq_idx (`torch.IntTensor`):
-        Index of each packed sequence.
-    """
-
-    cu_seq_lens_q: torch.LongTensor
-    cu_seq_lens_k: torch.LongTensor
-    max_length_q: int
-    max_length_k: int
-    seq_idx: torch.IntTensor
 
 
 class BambaRotaryEmbedding(LlamaRotaryEmbedding):
@@ -233,7 +207,7 @@ class BambaDecoderLayer(JambaAttentionDecoderLayer):
         past_key_values: Cache | None = None,
         use_cache: bool | None = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        **kwargs: Unpack[BambaFlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
         residual = hidden_states
 
@@ -325,7 +299,7 @@ class BambaModel(BambaPreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        **kwargs: Unpack[BambaFlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")

@@ -21,7 +21,7 @@
 
 import numpy as np
 
-from ...audio_utils import AudioInput, make_list_of_audio_chat_template
+from ...audio_utils import AudioInput, make_audio_chat_template_content, make_list_of_audio_chat_template
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
@@ -245,9 +245,7 @@ class GlmAsrProcessor(ProcessorMixin):
                 {
                     "role": "user",
                     "content": [
-                        {"type": "audio", "path": audio_item}
-                        if isinstance(audio_item, str)
-                        else {"type": "audio", "audio": audio_item},
+                        make_audio_chat_template_content(audio_item),
                         {"type": "text", "text": prompt_text},
                     ],
                 }

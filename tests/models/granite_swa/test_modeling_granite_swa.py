@@ -15,6 +15,8 @@
 
 import unittest
 
+import pytest
+
 from transformers import is_torch_available
 from transformers.testing_utils import (
     Expectations,
@@ -46,6 +48,11 @@ class GraniteSWAModelTester(CausalLMModelTester):
 class GraniteSWAModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = GraniteSWAModelTester
 
+    @pytest.mark.generate
+    @unittest.skip("GraniteSWA does not support QuantizedCache as it uses sliding_attention layers")
+    def test_generate_with_quant_cache(self):
+        pass
+
 
 @slow
 @require_torch_accelerator
@@ -69,6 +76,7 @@ class GraniteSWAIntegrationTest(unittest.TestCase):
                 ("cuda", 8): torch.tensor([[-0.2207, -0.6680, -0.2119, 0.6523, -2.4531]]),
                 ("cuda", (8, 6)): torch.tensor([[-0.2061, -0.6602, -0.2090,  0.6484, -2.4375]]),
                 ("cuda", 9): torch.tensor([[-0.2178, -0.6719, -0.1885, 0.6484, -2.4375]]),
+                ("xpu", None): torch.tensor([[-0.2090, -0.6562, -0.2021, 0.6562, -2.4531]]),
             }
         )
         EXPECTED_SLICES = Expectations(
@@ -76,6 +84,7 @@ class GraniteSWAIntegrationTest(unittest.TestCase):
                 ("cuda", 8): torch.tensor([2.2969, 5.6250, 1.2656, 2.2812, 3.1250, 0.3457, 4.2500, 1.4531, 3.4219, 3.4219, 2.6719, 5.7812, 3.7500, 4.9062, 2.3750]),
                 ("cuda", (8, 6)): torch.tensor([2.3125, 5.6562, 1.2656, 2.2812, 3.1250, 0.3574, 4.2500, 1.4453, 3.4219, 3.4531, 2.6875, 5.8125, 3.7812, 4.9062, 2.4062]),
                 ("cuda", 9): torch.tensor([2.3125, 5.6562, 1.3047, 2.2969, 3.1562, 0.3711, 4.2812, 1.4688, 3.4531, 3.4531, 2.7188, 5.8125, 3.7812, 4.9062, 2.3906]),
+                ("xpu", None): torch.tensor([2.3125, 5.6875, 1.3203, 2.3281, 3.1562, 0.3926, 4.2812, 1.4766, 3.4688, 3.4531, 2.7188, 5.8125, 3.7812, 4.9062, 2.4062]),
             }
         )
         # fmt: on
@@ -103,6 +112,10 @@ class GraniteSWAIntegrationTest(unittest.TestCase):
                     "France.\nThe capital of France is the most"
                 ),
                 ("cuda", 9): (
+                    "The capital of France is Paris.\nThe capital of France is located in the north of the "
+                    "country.\nThe capital of France is"
+                ),
+                ("xpu", None): (
                     "The capital of France is Paris.\nThe capital of France is located in the north of the "
                     "country.\nThe capital of France is"
                 ),

@@ -90,6 +90,7 @@ from .utils import (
     is_cython_available,
     is_decord_available,
     is_detectron2_available,
+    is_diffusers_available,
     is_essentia_available,
     is_executorch_available,
     is_faiss_available,
@@ -588,7 +589,7 @@ def require_triton(min_version: str = TRITON_MIN_VERSION):
 
 def require_gguf(test_case, min_version: str = GGUF_MIN_VERSION):
     """
-    Decorator marking a test that requires ggguf. These tests are skipped when gguf isn't installed.
+    Decorator marking a test that requires gguf. These tests are skipped when gguf isn't installed.
     """
     return unittest.skipUnless(is_gguf_available(min_version), f"test requires gguf version >= {min_version}")(
         test_case
@@ -816,6 +817,21 @@ def require_torchvision(test_case):
     return unittest.skipUnless(is_torchvision_available(), "test requires Torchvision")(test_case)
 
 
+def require_torchvision_video_decoding(test_case):
+    """
+    Decorator marking a test that requires the torchvision video decoding API.
+
+    These tests are skipped when torchvision isn't installed, or when it is too recent to still ship the video
+    decoding API (removed in `torchvision==0.26`).
+
+    """
+    from .video_utils import is_torchvision_video_decoding_available
+
+    return unittest.skipUnless(
+        is_torchvision_video_decoding_available(), "test requires Torchvision with video decoding support"
+    )(test_case)
+
+
 def require_torchcodec(test_case):
     """
     Decorator marking a test that requires Torchcodec.
@@ -856,7 +872,7 @@ def require_seqio(test_case):
 
 def require_scipy(test_case):
     """
-    Decorator marking a test that requires Scipy. These tests are skipped when SentencePiece isn't installed.
+    Decorator marking a test that requires Scipy. These tests are skipped when Scipy isn't installed.
     """
     return unittest.skipUnless(is_scipy_available(), "test requires Scipy")(test_case)
 
@@ -1184,17 +1200,136 @@ def require_rocm(test_case):
     return unittest.skipUnless(torch_device == "cuda" and IS_ROCM_SYSTEM, "test requires a ROCm (AMD) GPU")(test_case)
 
 
-def require_large_cpu_ram(test_case, memory: float = 80):
-    """Decorator marking a test that requires a CPU RAM with more than `memory` GiB of memory."""
+def get_cgroup_memory_limit_bytes() -> int | None:
+    """
+    Memory limit enforced on the current cgroup, or `None` when there is no limit / no cgroup to read.
+
+    This is what the OOM killer actually enforces inside a container. `psutil.virtual_memory().total` reads the
+    *host* `/proc/meminfo`, so in a K8S pod it reports the whole node (~750 GiB) and says nothing about how much this
+    process may use before it is SIGKILLed.
+    """
+    candidates = (
+        ("/sys/fs/cgroup/memory.max", "max"),  # cgroup v2
+        ("/sys/fs/cgroup/memory/memory.limit_in_bytes", None),  # cgroup v1
+    )
+    for path, unlimited_marker in candidates:
+        try:
+            with open(path) as f:
+                raw = f.read().strip()
+        except OSError:
+            continue
+        if raw == unlimited_marker:
+            return None
+        try:
+            limit = int(raw)
+        except ValueError:
+            continue
+        # cgroup v1 writes a huge sentinel (a page-aligned 2**63-1) rather than a marker when unlimited
+        if limit <= 0 or limit >= 2**62:
+            return None
+        return limit
+    return None
+
+
+# Set by `patch_psutil_cpu_memory` to the pre-patch `psutil.virtual_memory`, so the guards below can still read
+# the machine's real RAM after conftest has capped what the rest of the session sees.
+_UNPATCHED_VIRTUAL_MEMORY = None
+
+
+def get_physical_cpu_ram_gib() -> float | None:
+    """
+    RAM physically present on this machine, in GiB, or `None` when psutil is unavailable.
+
+    Deliberately reads *past* the `patch_psutil_cpu_memory` cap: that cap is a `device_map="auto"` planning budget
+    (`CI_CPU_MEMORY_LIMIT_GB` per accelerator), not a statement about the machine. Note this is the wrong number
+    inside a pod, where it reports the whole node -- `get_cpu_ram_total_gib` is what combines it with the cgroup
+    limit to get an answer that holds in both places.
+    """
     if not is_psutil_available():
-        return test_case
+        return None
 
     import psutil
 
-    return unittest.skipUnless(
-        psutil.virtual_memory().total / 1024**3 > memory,
-        f"test requires a machine with more than {memory} GiB of CPU RAM memory",
-    )(test_case)
+    virtual_memory = _UNPATCHED_VIRTUAL_MEMORY or psutil.virtual_memory
+    return virtual_memory().total / 1024**3
+
+
+def get_ci_cpu_memory_budget_gib() -> float | None:
+    """
+    CPU RAM budget this CI runner is entitled to, in GiB, or `None` outside CI.
+
+    `CI_CPU_MEMORY_LIMIT_GB` is a *per-accelerator* budget: a single-accelerator A10 runner gets 60 GiB, and a
+    runner with more accelerators gets proportionally more, because `device_map="auto"` can legitimately use more
+    CPU RAM for intermediate storage when more devices are present. So the budget is the variable times the
+    accelerator count -- reading the variable raw would report 60 GiB on a 2-accelerator runner that has 180.
+
+    This is the single source of truth for that arithmetic, shared with the `patch_psutil_cpu_memory` call in
+    `conftest.py`.
+    """
+    limit_per_device = os.environ.get("CI_CPU_MEMORY_LIMIT_GB")
+    if limit_per_device is None:
+        return None
+    try:
+        limit_per_device = float(limit_per_device)
+    except ValueError:
+        return None
+
+    num_accelerators = max(1, backend_device_count(torch_device)) if torch_device is not None else 1
+    return limit_per_device * num_accelerators
+
+
+def get_cpu_ram_total_gib() -> float:
+    """
+    CPU RAM this process may actually use, in GiB.
+
+    Prefers what can be *measured* -- the cgroup limit the OOM killer enforces, and the machine's physical RAM --
+    taking the smaller of the two, since each is wrong on its own: there is no cgroup limit outside a container,
+    and physical RAM reports the whole node inside a pod.
+
+    Falls back to the CI budget (`get_ci_cpu_memory_budget_gib`) only when neither can answer, because that budget
+    is an allocation policy rather than a measurement: it is deliberately `CI_CPU_MEMORY_LIMIT_GB` per accelerator,
+    so on a 2-accelerator runner it reads 120 GiB where the runner really has 180. Using it as a term in the `min`
+    would make every guard on such a runner over-skip.
+
+    Returns `inf` when nothing can answer at all -- no cgroup, no psutil, no CI budget. That is an ordinary local
+    setup rather than a broken one, so callers run their test instead of silently dropping coverage; a guard is
+    only useful where the limit is actually knowable.
+    """
+    measured = []
+
+    cgroup_limit = get_cgroup_memory_limit_bytes()
+    if cgroup_limit is not None:
+        measured.append(cgroup_limit / 1024**3)
+
+    physical_ram = get_physical_cpu_ram_gib()
+    if physical_ram is not None:
+        measured.append(physical_ram)
+
+    if measured:
+        return min(measured)
+
+    ci_budget = get_ci_cpu_memory_budget_gib()
+    return ci_budget if ci_budget is not None else float("inf")
+
+
+def require_large_cpu_ram(test_case=None, *, memory: float = 80):
+    """
+    Decorator marking a test that requires a CPU RAM with more than `memory` GiB of memory.
+
+    Usable bare (`@require_large_cpu_ram`) or with a budget (`@require_large_cpu_ram(memory=48)`). The default 80
+    is not an estimate of any particular model: it was picked as "more than the 60 GiB of our GPU runners", so a
+    bare use means "do not run this on a CI GPU runner". Pass `memory=` when the test has a real footprint.
+    """
+
+    def memory_decorator(tc):
+        # `get_cpu_ram_total_gib` returns `inf` when it cannot measure anything (psutil missing and no cgroup), so
+        # an undetermined budget runs the test instead of silently dropping coverage.
+        return unittest.skipUnless(
+            get_cpu_ram_total_gib() > memory,
+            f"test requires a machine with more than {memory} GiB of CPU RAM memory",
+        )(tc)
+
+    return memory_decorator if test_case is None else memory_decorator(test_case)
 
 
 def require_torch_large_gpu(test_case, memory: float = 20):
@@ -1219,6 +1354,41 @@ def require_torch_large_accelerator(test_case=None, *, memory: float = 20):
         return unittest.skipUnless(
             torch_accel.get_device_properties(0).total_memory / 1024**3 > memory,
             f"test requires a GPU or XPU with more than {memory} GiB of memory",
+        )(tc)
+
+    return memory_decorator if test_case is None else memory_decorator(test_case)
+
+
+def get_accelerator_total_memory_gib() -> float:
+    """
+    Total memory of *all* visible accelerators, in GiB.
+
+    Use this rather than the memory of a single device for tests that spread one model over every visible device
+    (`device_map="auto"`, tensor parallelism, ...). Returns 0 on CPU, and on the backends that do not expose
+    `get_device_properties(...).total_memory` -- so callers treat "we cannot tell" the same as "it does not fit",
+    which is the safe direction: guessing too high OOM-kills the whole test process.
+    """
+    # Same restriction as `require_torch_large_accelerator`: only cuda and xpu report `total_memory`. ROCm is
+    # covered by the cuda branch -- a HIP build of torch reports `torch_device == "cuda"`, see `IS_ROCM_SYSTEM`.
+    if not is_torch_available() or torch_device not in ("cuda", "xpu"):
+        return 0.0
+
+    torch_accel = getattr(torch, torch_device)
+    total = sum(torch_accel.get_device_properties(i).total_memory for i in range(torch_accel.device_count()))
+    return total / 1024**3
+
+
+def require_torch_accelerator_memory(test_case=None, *, memory: float):
+    """
+    Decorator marking a test that needs at least `memory` GiB of accelerator memory *in total*, summed over every
+    visible accelerator. Prefer this over `require_torch_large_accelerator` (which only looks at device 0) for tests
+    that shard a single model across all visible devices.
+    """
+
+    def memory_decorator(tc):
+        return unittest.skipUnless(
+            get_accelerator_total_memory_gib() >= memory,
+            f"test requires {memory} GiB of accelerator memory in total",
         )(tc)
 
     return memory_decorator if test_case is None else memory_decorator(test_case)
@@ -1279,6 +1449,46 @@ def require_deterministic_for_xpu(test_case):
             return test_case(*args, **kwargs)
 
     return wrapper
+
+
+def require_deterministic_for_accelerator(test_case=None, *, devices=None):
+    """Decorator that enables deterministic algorithms for the duration of a test.
+
+    Uses ``get_device_properties()`` to detect the device type — no per-backend
+    ``is_torch_*_available()`` conditions needed. On CPU the test runs unchanged.
+
+    Args:
+        devices: Optional list of device type strings (e.g. ``["cuda", "xpu"]``). If given,
+            deterministic mode is only enabled when the active device matches one of them.
+            If ``None`` (default), deterministic mode is enabled for all non-CPU accelerators.
+
+    Can be used with or without arguments::
+
+        @require_deterministic_for_accelerator
+        def test_foo(self): ...
+
+        @require_deterministic_for_accelerator(devices=["cuda"])
+        def test_bar(self): ...
+    """
+
+    def decorator(tc):
+        @wraps(tc)
+        def wrapper(*args, **kwargs):
+            device_type = get_device_properties()[0]
+            should_enable = device_type != "cpu" and (devices is None or device_type in devices)
+            if should_enable:
+                original_state = torch.are_deterministic_algorithms_enabled()
+                try:
+                    torch.use_deterministic_algorithms(True)
+                    return tc(*args, **kwargs)
+                finally:
+                    torch.use_deterministic_algorithms(original_state)
+            else:
+                return tc(*args, **kwargs)
+
+        return wrapper
+
+    return decorator if test_case is None else decorator(test_case)
 
 
 def require_torch_tf32(test_case):
@@ -1351,6 +1561,13 @@ def require_wandb(test_case):
 
     """
     return unittest.skipUnless(is_wandb_available(), "test requires wandb")(test_case)
+
+
+def require_diffusers(test_case):
+    """
+    Decorator marking a test that requires diffusers
+    """
+    return unittest.skipUnless(is_diffusers_available(), "test requires diffusers")(test_case)
 
 
 def require_clearml(test_case):
@@ -3350,8 +3567,8 @@ def get_device_properties() -> DeviceProperties:
             gen = (arch & gen_mask) >> 32
             return ("xpu", gen, None)
     if IS_NPU_SYSTEM:
-        # TODO: after torch 2.5.1, use `if hasattr(torch, "npu") and torch.npu.is_available()` here for consistency with CUDA/XPU blocks
-        return ("npu", None, None)
+        if torch.npu.is_available():
+            return ("npu", None, None)
     return (torch_device, None, None)
 
 
@@ -3371,6 +3588,40 @@ def unpack_device_properties(
     else:
         major, minor = major_minor
     return device_type, major, minor
+
+
+@functools.lru_cache(maxsize=1)
+def supports_sdpa_flash_backend() -> bool | None:
+    """Whether torch's SDPA flash backend can actually dispatch on this device.
+
+    Ask torch instead of guessing from the ROCm architecture number: CDNA
+    (flash-capable) reports major 9 while RDNA parts report 10/11/12, so a
+    "major >= 9" gate admits RDNA hardware that has no flash kernel. Returns
+    None when torch's capability API is unavailable.
+    """
+    import torch
+
+    if not torch.cuda.is_available():
+        return False
+    try:
+        from torch.backends.cuda import SDPAParams, can_use_flash_attention
+    except ImportError:
+        return None
+    try:
+        q = torch.empty(1, 1, 1, 16, device="cuda", dtype=torch.float16)
+        return bool(can_use_flash_attention(SDPAParams(q, q, q, None, 0.0, False, False), False))
+    except Exception:
+        return None
+
+
+def rocm_has_sdpa_flash_backend(major: int) -> bool:
+    """Whether this ROCm device can dispatch the SDPA flash backend, falling back
+    to the historical "major >= 9" heuristic when torch's query is unavailable.
+    """
+    supported = supports_sdpa_flash_backend()
+    if supported is None:
+        return major >= 9
+    return supported
 
 
 class Expectations(UserDict[PackedDeviceProperties, Any]):
@@ -3475,6 +3726,60 @@ def patch_torch_compile_force_graph():
             return orig_method(*args, **kwargs)
 
         torch.compile = patched
+
+
+def patch_psutil_cpu_memory(limit_bytes: int):
+    """
+    Patch `psutil.virtual_memory` to cap the reported CPU memory to `limit_bytes`.
+
+    In K8S instance-sharing CI, each runner sees the full machine's CPU RAM (~750 GB) even though it only
+    owns a fraction. This causes `device_map="auto"` to overfill GPU+CPU with nothing offloaded to disk,
+    leading to GPU OOM at runtime. Calling this function caps `total`, `available`, `used`, and `percent`
+    so the entire test session sees a realistic per-runner memory budget.
+    """
+    global _UNPATCHED_VIRTUAL_MEMORY
+
+    import psutil
+
+    # Keep the honest reader reachable: the cap described in the docstring is a `device_map="auto"` planning budget,
+    # but a guard that asks "will this OOM-kill the container?" needs the machine's real RAM.
+    # See `get_physical_cpu_ram_gib`.
+    # If already patched, always use the stored original so a second call doesn't chain patches on top of each other.
+    if _UNPATCHED_VIRTUAL_MEMORY is not None:
+        _original_virtual_memory = _UNPATCHED_VIRTUAL_MEMORY
+    else:
+        _original_virtual_memory = psutil.virtual_memory
+        _UNPATCHED_VIRTUAL_MEMORY = _original_virtual_memory
+
+    def _capped_virtual_memory():
+        mem = _original_virtual_memory()
+        total = min(mem.total, limit_bytes)
+        available = min(mem.available, limit_bytes)
+        used = min(mem.used, total)
+        percent = 100 * used / total if total > 0 else 0.0
+        return mem._replace(total=total, available=available, used=used, percent=percent)
+
+    psutil.virtual_memory = _capped_virtual_memory
+
+
+@contextlib.contextmanager
+def cap_psutil_cpu_memory(limit_bytes: int):
+    """
+    Context manager that temporarily caps `psutil.virtual_memory` to `limit_bytes`, then restores the
+    previous value on exit.
+
+    Use this inside individual tests that need a tighter CPU memory budget than the session-wide cap set
+    by conftest (e.g. to force `device_map="auto"` to use disk offload during `from_pretrained`), without
+    affecting the rest of the test session.
+    """
+    import psutil
+
+    prev = psutil.virtual_memory
+    patch_psutil_cpu_memory(limit_bytes)
+    try:
+        yield
+    finally:
+        psutil.virtual_memory = prev
 
 
 def _get_test_info():
@@ -4515,3 +4820,40 @@ def force_serialization_as_bin_files():
         yield
     finally:
         PreTrainedModel.save_pretrained = original_save
+
+
+@contextmanager
+def preserve_module_forwards(model: "PreTrainedModel"):
+    """
+    A context to keep track of __dict__["forward"] for each module. Upon entering, the context creates a dict where keys
+    are module and values module.__dict__["forward"]; on exit those entries are restored (if there was no "forward" key
+    in __dict__, we only pop the "forward" key).
+    This cancels the effect of a call to "kernelize" because it re-routes module.forward by adding a "forward" key to
+    the modules' __dict__ object. Exists mainly because `kernels` does not provide an `unkernelize` function.
+    """
+    original_fw = {}
+    _fw_not_set = object()  # has a unique id
+
+    # Before entering: create the dictionnary of original __dict__["forward"]
+    for _, module in model.named_modules():
+        # This is a dictionnary w/ keys -> module that can be kernelized
+        _kernel_funcs = getattr(module, "_kernel_funcs", {})
+        kernelizable_modules = list(_kernel_funcs.values())
+        # If the module is simply a wrapper around a kernel function, it has the attribute "kernel_layer_name"
+        if hasattr(type(module), "kernel_layer_name"):
+            kernelizable_modules.append(module)
+        # Go through kernelizable modules and keep track of the original forward
+        for k_module in kernelizable_modules:
+            original_fw[k_module] = k_module.__dict__.get("forward", _fw_not_set)
+
+    # Enter context manager
+    try:
+        yield
+
+    # On exit: restore the original __dict__["forward"] if they were set, otherwise pop them
+    finally:
+        for module, original_forward in original_fw.items():
+            if original_forward is _fw_not_set:
+                module.__dict__.pop("forward", None)
+            else:
+                module.__dict__["forward"] = original_forward

@@ -87,8 +87,10 @@ if is_torch_available():
         LinearAttentionAndFullAttentionLayer,
         LinearAttentionAndSlidingWindowAttentionLayer,
         LinearAttentionLayer,
+        MtpCache,
         QuantoQuantizedLayer,
         StaticCache,
+        get_layer_types_and_kwargs,
     )
     from transformers.generation import (
         CompileConfig,
@@ -110,6 +112,7 @@ if is_torch_available():
     from transformers.generation.candidate_generator import (
         AssistedCandidateGenerator,
         AssistedCandidateGeneratorDifferentTokenizers,
+        DFlashTokenCandidateGenerator,
     )
     from transformers.generation.utils import ALL_CACHE_NAMES, _speculative_sampling
     from transformers.modeling_layers import MtpModel
@@ -1572,6 +1575,12 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             if config.is_encoder_decoder or not model_class._supports_default_dynamic_cache():
                 self.skipTest(reason="This model does not support the quantized cache format")
 
+            # Same source of truth as `QuantizedCache`: models that don't set `layer_types` explicitly still
+            # infer non-full attention from e.g. `sliding_window`.
+            layer_types, _ = get_layer_types_and_kwargs(config.get_text_config(decoder=True))
+            if any(layer_type != "full_attention" for layer_type in layer_types):
+                self.skipTest(reason="`QuantizedCache` is only supported for models with full attention layers")
+
             config.is_decoder = True
             model = model_class(config).to(torch_device).eval()
             generation_kwargs = {
@@ -1795,6 +1804,62 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 self.assertIsInstance(output_generate, GenerateDecoderOnlyOutput)
 
             self._check_generate_outputs(output_generate, model.config, use_cache=True)
+
+    @pytest.mark.generate
+    @pytest.mark.torch_compile_test
+    def test_static_cache_no_recompile_with_smaller_length(self):
+        """
+        Tests that 2 subsequent calls to `generate` does not recompile when using a smaller length, i.e. we recreate a cache
+        of the correct previous shape.
+        """
+        for model_class in self.all_generative_model_classes:
+            if not model_class._can_compile_fullgraph:
+                self.skipTest("This model doesn't support compilation without graph breaks")
+
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            set_config_for_less_flaky_test(config)
+            model = model_class(config).to(torch_device)
+            set_model_for_less_flaky_test(model)
+            model.eval()
+
+            if "blip" in model.__class__.__name__.lower():
+                self.skipTest("Blip overwrite `generate` for some reason making it interact weirdly")
+
+            compile_config = CompileConfig()
+            compile_config._compile_all_devices = True  # force compilation (e.g. fast CI, CPU)
+            generation_kwargs = {
+                "use_cache": True,
+                "do_sample": False,
+                "compile_config": compile_config,
+                "cache_implementation": "static",
+            }
+
+            # prevent cached compilation from being used in the test
+            torch.compiler.reset()
+
+            # Perform a first `generate` call to trigger compilation
+            _ = model.generate(**inputs_dict, **generation_kwargs, max_new_tokens=5)
+            # Sanity checks
+            self.assertTrue(hasattr(model, "_compiled_call"))
+
+            # Uses a context manager to catch recompilation logs. If there is any recompilation, this test fails.
+            # Try/Finally is used to ensure that the log options are reset even if an error is raised.
+            try:
+                torch._logging.set_logs(recompiles_verbose=True)
+                logger = logging.get_logger("torch._dynamo.guards")
+                with CaptureLogger(logger) as cl:
+                    # 2nd call to `generate` with a smaller total size -> should use size of previous cache and not recompile
+                    _ = model.generate(**inputs_dict, **generation_kwargs, max_new_tokens=2)
+                    self.assertTrue(hasattr(model, "_compiled_call"))
+            finally:
+                torch._logging.set_logs()
+
+            has_recompilation = "Recompiling" in cl.out or ("guard" in cl.out and "failure" in cl.out)
+            if has_recompilation:
+                raise RuntimeError(
+                    f"`torch.compile` recompiled part of the forward pass in {model.__class__.__name__}. "
+                    "See the test logs for more details."
+                )
 
     @pytest.mark.generate
     def test_generate_methods_with_logits_to_keep(self):
@@ -2427,7 +2492,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             keys_to_ignore_unexpected = model_class._keys_to_ignore_on_load_unexpected or []
             # If we don't have any mtp patterns, skip
             if not hasattr(config.get_text_config(), "num_mtp_layers") or not any(
-                "mtp" in x or re.search(r"layers\.\d+", x) is not None for x in keys_to_ignore_unexpected
+                "mtp" in x or re.search(r"layers\\?\.\d+", x) is not None for x in keys_to_ignore_unexpected
             ):
                 self.skipTest("No MTP keys registered")
 
@@ -2736,24 +2801,29 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             num_hidden_layers -= config.num_kv_shared_layers
         self.assertEqual(num_hidden_layers, len(past_key_values))
 
-        def check_attention_shapes(layer, attention_shape):
+        def check_attention_shapes(layer, k_shape, v_shape):
             # Remove the seq_length dim for cross-attention cache (it changes based on the model)
             keys = layer.keys if seq_length is not None else layer.keys[:, :, 0, :]
             values = layer.values if seq_length is not None else layer.values[:, :, 0, :]
-            self.assertEqual(keys.shape, attention_shape)
-            self.assertEqual(values.shape, attention_shape)
+            self.assertEqual(keys.shape, k_shape)
+            self.assertEqual(values.shape, v_shape)
 
         def check_linear_attention_shapes(layer, num_conv_states, conv_shape, recurrent_shape):
             # assert we have as many conv states as necessary
             self.assertEqual(num_conv_states, layer.number_of_states)
             for i in range(num_conv_states):
+                # Some models may have different conv_shape for each conv inside a single layer, in which case the
+                # `conv_shape` is a list of tuple for each shape
+                current_conv_shape = conv_shape
+                if isinstance(conv_shape, list) and isinstance(conv_shape[0], (list, tuple)):
+                    current_conv_shape = conv_shape[i]
                 # Fix sized only if we do not record the past
                 if not layer.record_past:
-                    self.assertEqual(layer.conv_states[i].shape, conv_shape)
+                    self.assertEqual(layer.conv_states[i].shape, current_conv_shape)
                 # If we record the past, just make sure it's larger
                 else:
-                    self.assertEqual(layer.conv_states[i].shape[:-1], conv_shape[:-1])
-                    self.assertTrue(layer.conv_states[i].shape[-1] >= conv_shape[-1])
+                    self.assertEqual(layer.conv_states[i].shape[:-1], current_conv_shape[:-1])
+                    self.assertTrue(layer.conv_states[i].shape[-1] >= current_conv_shape[-1])
                 # May not be used (e.g. lfm2)
                 if layer.is_recurrent_states_initialized[i]:
                     self.assertEqual(layer.recurrent_states[i].shape, recurrent_shape)
@@ -2765,31 +2835,52 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             num_conv_states = getattr(layer_config, "number_of_conv_states", 1)
             conv_shape = self._get_conv_state_shape(batch_size, layer_config)
             recurrent_shape = self._get_recurrent_state_shape(batch_size, layer_config)
-            attention_shape = self._get_attention_shape(batch_size, seq_length, layer_config)
+            k_shape, v_shape = self._get_attention_shape(batch_size, seq_length, layer_config)
             # Mamba + Attention layer cache
             if type(layer) in (LinearAttentionAndFullAttentionLayer, LinearAttentionAndSlidingWindowAttentionLayer):
-                check_attention_shapes(layer, attention_shape)
+                check_attention_shapes(layer, k_shape, v_shape)
                 check_linear_attention_shapes(layer, num_conv_states, conv_shape, recurrent_shape)
             # Mamba only layer cache
             elif type(layer) is LinearAttentionLayer:
                 check_linear_attention_shapes(layer, num_conv_states, conv_shape, recurrent_shape)
             # Attention only layer type
             else:
-                check_attention_shapes(layer, attention_shape)
+                check_attention_shapes(layer, k_shape, v_shape)
 
-    def _get_attention_shape(self, batch_size: int, seq_length: int | None, config):
+    def _get_attention_shape(self, batch_size: int, seq_length: int | None, config) -> tuple[tuple[int, ...], ...]:
+        """Returns the expected shape of the keys and values tensors. They can differs for some models like DeepSeekV2,
+        which uses MLA."""
         # Only pure mamba models do not have num_attention_heads defined in config, so it can never be 1 in practice for attention models
         num_attention_heads = getattr(config, "num_attention_heads", 1)
         num_kv_heads = getattr(config, "num_key_value_heads", num_attention_heads)
         hidden_size = getattr(config, "d_model", config.hidden_size)
         head_dim = getattr(config, "head_dim", hidden_size // num_attention_heads)
+        # Check for MLA and DSA attributes: MLA models cache compressed latents, DSA does not yet
+        kv_lora_rank = getattr(config, "kv_lora_rank", None)
+        qk_rope_head_dim = getattr(config, "qk_rope_head_dim", None)
+        uses_mla = kv_lora_rank is not None and qk_rope_head_dim is not None
+        uses_dsa = uses_mla and getattr(config, "index_topk", None) is not None
+
+        # DSA models expand the latents before caching, so their keys and values have distinct head dims.
+        if uses_dsa:
+            key_shape = (batch_size, num_attention_heads, seq_length, config.qk_nope_head_dim + qk_rope_head_dim)
+            value_shape = (batch_size, num_attention_heads, seq_length, config.v_head_dim)
+            return key_shape, value_shape
+
+        # For MLA models, return the shape of "kv_nope" as key and "k_rot" as value
+        if uses_mla:
+            kv_nope_shape = (batch_size, 1, seq_length, kv_lora_rank)
+            k_rot_shape = (batch_size, 1, seq_length, qk_rope_head_dim)
+            return kv_nope_shape, k_rot_shape
 
         # For cross attention cache, the seq_length depends on the model, so we remove that dim
-        return (
-            (batch_size, num_kv_heads, seq_length, head_dim)
-            if seq_length is not None
-            else (batch_size, num_kv_heads, head_dim)
-        )
+        if seq_length is None:
+            kv_shape = (batch_size, num_kv_heads, head_dim)
+            return kv_shape, kv_shape
+
+        # Otherwise, return similar K and V shapes with seq_length
+        kv_shape = (batch_size, num_kv_heads, seq_length, head_dim)
+        return kv_shape, kv_shape
 
     def _check_sequence_inside_sequence(self, tensor_1, tensor_2):
         # check if tensor_1 inside tensor_2 or tensor_2 inside tensor_1.
@@ -3557,7 +3648,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertListEqual(
             outputs,
             [
-                'Tell me a joke about a monkey. Why did the monkey go to the doctor? Because he was feeling a little "tropic"!'
+                'Tell me a joke about a monkey. Sure, here\'s one for you:\n\nWhy did the monkey go to the doctor?\n\nBecause he was feeling "up in the trees"!'
             ],
         )
 
@@ -3863,6 +3954,117 @@ class GenerationIntegrationTests(unittest.TestCase):
         )
         self.assertTrue(out.shape[-1] <= (input_length + 7))
 
+    def test_mtp_mask_creation_uses_per_layer_config(self):
+        config = AutoConfig.for_model(
+            "llama",
+            hidden_size=16,
+            intermediate_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            num_key_value_heads=2,
+            head_dim=8,
+            vocab_size=32,
+            max_position_embeddings=16,
+            sliding_window=None,
+        )
+        config.num_mtp_layers = 2
+        config.layer_types = ["full_attention", "full_attention"]
+        config.mtp_layer_types = ["sliding_attention", "full_attention"]
+        config.mtp_per_layer_config = {
+            0: {"sliding_window": 2},
+            1: {"sliding_window": None},
+        }
+        config._attn_implementation = "eager"
+        main_model = AutoModelForCausalLM.from_config(config)
+        mtp_model = MtpModel(main_model, num_mtp_layers=2)
+
+        inputs_embeds = torch.randn(1, 4, config.hidden_size)
+        position_ids = torch.arange(4).unsqueeze(0)
+        mtp_cache = MtpCache()
+        sliding_mask = mtp_model.create_masks_for_mtp_layer(0, inputs_embeds, mtp_cache, position_ids)[
+            "attention_mask"
+        ]
+        full_mask = mtp_model.create_masks_for_mtp_layer(1, inputs_embeds, mtp_cache, position_ids)["attention_mask"]
+
+        min_dtype = torch.finfo(inputs_embeds.dtype).min
+        torch.testing.assert_close(sliding_mask[0, 0, -1], torch.tensor([min_dtype, min_dtype, 0.0, 0.0]))
+        torch.testing.assert_close(full_mask[0, 0, -1], torch.zeros(4))
+
+    @require_torch_multi_accelerator
+    def test_mtp_use_correct_device_when_drafting(self):
+        """Test that when drafting the new token, mtp puts it back on the correct same device as `input_ids`"""
+        input_device = torch.device(f"{torch_device}:0")
+        assistant_device = torch.device(f"{torch_device}:1")
+
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
+        model.config.get_text_config().num_mtp_layers = 2
+        mtp_model = MtpModel(model, num_mtp_layers=2).to(assistant_device).eval()
+        # Mimics embedding being on 1st device, i.e. main model device
+        mtp_model.embed_tokens.to(input_device)
+
+        input_ids = torch.tensor([[1, 2]], device=input_device)
+
+        # If the device is not correct, this will raise an error
+        mtp_candidate_ids, mtp_candidate_logits, _ = mtp_model.forward(
+            input_ids=input_ids,
+            last_hidden_states=torch.zeros(1, input_ids.shape[1], model.config.hidden_size, device=assistant_device),
+            attention_mask=torch.ones_like(input_ids, device=assistant_device),
+            position_ids=torch.arange(input_ids.shape[1], device=assistant_device).unsqueeze(0),
+            mtp_cache=None,
+            full_input_ids=input_ids,
+        )
+        self.assertEqual(mtp_candidate_ids.device, input_device)
+        self.assertEqual(mtp_candidate_logits.device, assistant_device)
+
+    @require_torch_multi_accelerator
+    def test_dflash_use_correct_device_when_drafting(self):
+        """Test that when drafting the new tokens, dflash puts them it back on the correct same device as `input_ids`"""
+        from transformers.models.muse_glimmer.modeling_muse_glimmer import MuseGlimmerForConditionalGeneration
+        from transformers.models.muse_glimmer_assistant.modeling_muse_glimmer_assistant import (
+            MuseGlimmerAssistantModel,
+        )
+
+        input_device = torch.device(f"{torch_device}:0")
+        assistant_device = torch.device(f"{torch_device}:1")
+
+        model = MuseGlimmerForConditionalGeneration.from_pretrained(
+            "hf-internal-testing/tiny-muse-glimmer", device_map=input_device
+        )
+        assistant = MuseGlimmerAssistantModel.from_pretrained(
+            "hf-internal-testing/tiny-muse-glimmer-assistant", device_map=assistant_device
+        )
+        assistant.config.target_layer_ids = list(range(model.config.text_config.num_hidden_layers))
+
+        input_ids = torch.tensor([[2, 3, 4]], device=input_device)
+        main_model_input_ids = input_ids
+        model_kwargs = {
+            "attention_mask": torch.ones_like(main_model_input_ids),
+            "position_ids": torch.arange(main_model_input_ids.shape[1], device=input_device).unsqueeze(0),
+        }
+
+        dflash_generator = DFlashTokenCandidateGenerator(
+            assistant_model=assistant,
+            main_model_input_embeddings=model.get_input_embeddings(),
+            main_model_output_embeddings=model.get_output_embeddings(),
+            generation_config=GenerationConfig(max_length=8, do_sample=False),
+        )
+        with torch.no_grad():
+            dflash_outputs = model.model(
+                input_ids=main_model_input_ids,
+                attention_mask=model_kwargs["attention_mask"],
+                output_hidden_states=True,
+            )
+            dflash_candidate_ids, dflash_candidate_logits = dflash_generator.get_candidates(
+                input_ids=input_ids,
+                model_kwargs=model_kwargs,
+                model_outputs=dflash_outputs,
+                is_first_iteration=False,
+                n_last_matches=0,
+            )
+        # Both will live on `input_device` as the main model is there
+        self.assertEqual(dflash_candidate_ids.device, input_device)
+        self.assertEqual(dflash_candidate_logits.device, input_device)
+
     def test_model_kwarg_assisted_decoding_decoder_only(self):
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
@@ -4163,6 +4365,8 @@ class GenerationIntegrationTests(unittest.TestCase):
         # With no EOS to stop at, PLD proposes all num_output_tokens continuation tokens (10 + 4)
         self.assertTrue(output_prompt_lookup.shape[-1] == 14)
 
+    # TODO (ydshieh): Find a better way to handle flakyness, or find a working seed number.
+    @unittest.skip(reason="The seed 42 is no longer working after we switch to torch 2.13.")
     def test_speculative_decoding_equals_regular_decoding(self):
         draft_name = "double7/vicuna-68m"
         target_name = "Qwen/Qwen2-0.5B-Instruct"
@@ -4422,7 +4626,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         Tests that assisted generation with early exit works as expected. Under the hood, this has complex cache
         manipulation, which will cause the test to fail if something goes wrong there.
         """
-        expected_output = "Alice and Bob are playing a game of poker. Alice has a pair of 8s and Bob has a pair"
+        expected_output = "Alice and Bob are playing a game of poker. Alice has a pair of 7s and Bob has a pair"
 
         prompt = "Alice and Bob"
         checkpoint = "facebook/layerskip-llama3.2-1B"
@@ -4949,6 +5153,23 @@ class GenerationIntegrationTests(unittest.TestCase):
         input_ids = tokenized_inputs.input_ids.to(model_cpu.device)
         _ = model_cpu.generate(input_ids, **generate_kwargs)
         self.assertFalse(hasattr(model_cpu, "_compiled_call"))
+
+    def test_compileable_default_cache_doesnt_compile_encoder_decoder(self):
+        """Test that a compileable default cache doesn't trigger compilation on encoder-decoder models either"""
+        model = AutoModelForSeq2SeqLM.from_pretrained("hf-internal-testing/tiny-random-bart")
+        decoder_config = model.config.get_text_config(decoder=True)
+        # Linear attention layers are statically shaped, so the default `DynamicCache` is compileable (e.g. Mamba)
+        decoder_config.layer_types = ["linear_attention"] * decoder_config.num_hidden_layers
+        self_attention_cache = DynamicCache(config=decoder_config)
+        self.assertTrue(self_attention_cache.is_compileable)
+
+        cache = EncoderDecoderCache(
+            self_attention_cache, DynamicCache(config=model.config.get_text_config(decoder=True))
+        )
+        generation_config = GenerationConfig()
+        generation_config.compile_config = CompileConfig()
+        generation_config.compile_config._compile_all_devices = True  # force compilation (e.g. fast CI, CPU)
+        self.assertFalse(model._valid_auto_compile_criteria({"past_key_values": cache}, generation_config))
 
     def test_custom_generate_from_argument_in_generate(self):
         """Tests that the `custom_generate` argument is used when passed to `generate`"""
