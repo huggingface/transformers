@@ -360,12 +360,13 @@ GenerateOutput = GenerateNonBeamOutput | GenerateBeamOutput
 def _undo_generation_steps(num_steps: int, input_ids: torch.LongTensor, *recorded: "tuple | None") -> tuple:
     """Undo the last `num_steps` decoding steps, so that they leave no trace in what `generate` returns.
 
-    Drops the tokens and whatever was recorded alongside them. `input_ids` is a tensor, so it is sliced along
-    the sequence dimension; everything in `recorded` (`scores`, `raw_logits`, attentions, hidden states) is a
-    tuple holding one entry per generated token, so slicing it drops the last `num_steps` entries. The cache
-    entries those steps wrote are dropped by `DeferredStopCheck.finish`.
+    Drops the tokens and whatever was recorded alongside them. The two slices below look alike but are not the
+    same operation: `input_ids` is a tensor grown with `cat(..., dim=-1)`, so it is undone on that same axis,
+    while everything in `recorded` (`scores`, `raw_logits`, attentions, hidden states) is a tuple holding one
+    entry per generated token, so slicing it simply drops the last `num_steps` entries. The cache entries
+    those steps wrote are dropped by `DeferredStopCheck.finish`.
     """
-    return (input_ids[:, :-num_steps], *(record[:-num_steps] if record else record for record in recorded))
+    return (input_ids[..., :-num_steps], *(record[:-num_steps] if record else record for record in recorded))
 
 
 class StopCheck:
