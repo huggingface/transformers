@@ -4,336 +4,383 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_qwen3_tts_tokenizer_single_codebook.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+# Copyright 2026 The Qwen team, Alibaba Group and the HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import math
-import operator
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import cached_property
-from itertools import accumulate
-from typing import Optional
 
 import numpy as np
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
+from torch import nn
 from torch.nn import Parameter
-from torch.nn.utils.rnn import pad_sequence
 
-from ...modeling_outputs import ModelOutput
+from ...activations import ACT2FN
+from ...integrations import use_kernel_forward_from_hub
+from ...masking_utils import create_bidirectional_mask
+from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...utils import auto_docstring, is_torchdynamo_compiling, logging
-from ...utils.generic import maybe_autocast
-from ...utils.hub import cached_file
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, is_torchdynamo_compiling, logging
+from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import can_return_tuple, maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_qwen3_tts_tokenizer_single_codebook import (
     Qwen3TTSTokenizerSingleCodebookConfig,
     Qwen3TTSTokenizerSingleCodebookDecoderBigVGANConfig,
     Qwen3TTSTokenizerSingleCodebookDecoderConfig,
     Qwen3TTSTokenizerSingleCodebookDiTConfig,
     Qwen3TTSTokenizerSingleCodebookEncoderConfig,
+    Qwen3TTSTokenizerSingleCodebookQuantizerConfig,
 )
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring
 class Qwen3TTSTokenizerSingleCodebookPreTrainedModel(PreTrainedModel):
     config_class = Qwen3TTSTokenizerSingleCodebookConfig
     base_model_prefix = "model"
-    _no_split_modules = []
+    main_input_name = "input_features"
+    input_modalities = "audio"
     _supports_sdpa = True
 
 
-# AdaLayerNormZero
-# return with modulated x for attn input, and params for later mlp modulation
-class Qwen3TTSTokenizerSingleCodebookAdaLayerNormZero(nn.Module):
-    def __init__(self, dim):
-        super().__init__()
-
-        self.silu = nn.SiLU()
-        self.linear = nn.Linear(dim, dim * 6)
-
-        self.norm = nn.LayerNorm(dim, elementwise_affine=False, eps=1e-6)
-
-    def forward(self, hidden_states, emb=None):
-        emb = self.linear(self.silu(emb))
-        shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = torch.chunk(emb, 6, dim=1)
-
-        hidden_states = self.norm(hidden_states) * (1 + scale_msa[:, None]) + shift_msa[:, None]
-        return hidden_states, gate_msa, shift_mlp, scale_mlp, gate_mlp
-
-
-# FeedForward
-class DiTMLP(nn.Module):
-    def __init__(self, dim, mult=4, dropout=0.0):
-        super().__init__()
-        inner_dim = int(dim * mult)
-
-        self.ff = nn.ModuleList(
-            [
-                nn.Linear(dim, inner_dim),
-                nn.GELU(approximate="tanh"),
-                nn.Dropout(dropout),
-                nn.Linear(inner_dim, dim),
-            ]
-        )
-
-    def forward(self, hidden_states):
-        for layer in self.ff:
-            hidden_states = layer(hidden_states)
-        return hidden_states
-
-
-# Modified from Llama with a different rotate function, will fixed in next release
-def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+@dataclass
+@auto_docstring
+class Qwen3TTSTokenizerSingleCodebookEncoderOutput(ModelOutput):
+    r"""
+    audio_codes (`torch.LongTensor` of shape `(batch_size, codes_length)`):
+        Discrete speech codes.
+    audio_codes_mask (`torch.Tensor` of shape `(batch_size, codes_length)`, *optional*):
+        Mask over valid codes. `1` is a real frame.
     """
 
-    def rotate_half_codec(x):
-        # x = rearrange(x, "... (d r) -> ... d r", r=2)
-        x = x.reshape(*x.shape[:-1], -1, 2)
-        x1, x2 = x.unbind(dim=-1)
-        x = torch.stack((-x2, x1), dim=-1)
-        return x.reshape(*x.shape[:-2], -1)
-
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    q_embed = (q * cos) + (rotate_half_codec(q) * sin)
-    k_embed = (k * cos) + (rotate_half_codec(k) * sin)
-    return q_embed, k_embed
+    audio_codes: torch.LongTensor | None = None
+    audio_codes_mask: torch.Tensor | None = None
 
 
-class DiTAttention(nn.Module):
-    def __init__(self, config: Qwen3TTSTokenizerSingleCodebookDiTConfig):
+@dataclass
+@auto_docstring
+class Qwen3TTSTokenizerSingleCodebookDecoderOutput(ModelOutput):
+    r"""
+    audio_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+        Decoded waveform.
+    """
+
+    audio_values: torch.FloatTensor | None = None
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
+
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
+class Qwen3TTSTokenizerSingleCodebookAttention(nn.Module):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
+    def __init__(
+        self,
+        embed_dim: int,
+        num_heads: int,
+        dropout: float = 0.0,
+        is_decoder: bool = False,
+        bias: bool = True,
+        is_causal: bool = False,
+        layer_idx: int | None = None,
+        config: Qwen3TTSTokenizerSingleCodebookConfig | None = None,
+    ):
         super().__init__()
-
+        self.embed_dim = embed_dim
+        self.num_heads = num_heads
+        self.dropout = dropout
+        self.head_dim = embed_dim // num_heads
         self.config = config
-        self.dim = config.hidden_size
-        self.heads = config.num_attention_heads
-        self.inner_dim = config.head_dim * config.num_attention_heads
-        self.dropout = config.dropout
-        self.is_causal = False
 
-        self.to_q = nn.Linear(config.hidden_size, self.inner_dim)
-        self.to_k = nn.Linear(config.hidden_size, self.inner_dim)
-        self.to_v = nn.Linear(config.hidden_size, self.inner_dim)
+        if (self.head_dim * num_heads) != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
+                f" and `num_heads`: {num_heads})."
+            )
+        self.scaling = self.head_dim**-0.5
+        self.is_decoder = is_decoder
+        self.is_causal = is_causal
 
-        self.to_out = nn.ModuleList([nn.Linear(self.inner_dim, config.hidden_size), nn.Dropout(config.dropout)])
+        if layer_idx is None and is_decoder:
+            logger.warning_once(
+                f"Instantiating a decoder {self.__class__.__name__} without passing `layer_idx` is not recommended and "
+                "will to errors during the forward call, if caching is used. Please make sure to provide a `layer_idx` "
+                "when creating this class."
+            )
+        self.layer_idx = layer_idx
+
+        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=False)
+        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+
+    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
+        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
     def forward(
         self,
-        hidden_states,  # noised input x
-        position_embeddings=None,  # rotary position embedding for x
-        attention_mask=None,
-    ) -> torch.Tensor:
-        batch_size = hidden_states.shape[0]
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        output_attentions: bool = False,
+        **kwargs,
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
+        """Input shape: Batch x Time x Channel"""
 
-        # `sample` projections.
-        query = self.to_q(hidden_states)
-        key = self.to_k(hidden_states)
-        value = self.to_v(hidden_states)
+        bsz, tgt_len, _ = hidden_states.size()
 
-        # attention
-        inner_dim = key.shape[-1]
-        head_dim = inner_dim // self.heads
-        query = query.view(batch_size, -1, self.heads, head_dim).transpose(1, 2)
-        key = key.view(batch_size, -1, self.heads, head_dim).transpose(1, 2)
-        value = value.view(batch_size, -1, self.heads, head_dim).transpose(1, 2)
+        # Scaling is susceptible to floating point arithmetics' imprecisions
+        # which can lead to different results (this is dependent from model
+        # to model, e.g. whisper is one such case). We therefore keep the
+        # original order of scaling to follow the original implementation
+        # and enforce no scaling (1.0) in the attention call below.
+        query_states = self._shape(self.q_proj(hidden_states) * self.scaling, tgt_len, bsz)
+        key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
+        value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
 
-        # apply rotary position embedding
-        # Due to training process, only first head is applied with RoPE, will be fixed at next release
-        cos, sin = position_embeddings
-        query[:, :1], key[:, :1] = apply_rotary_pos_emb(query[:, :1], key[:, :1], cos, sin)
-
-        attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-        attention_weights, _ = attention_interface(
-            self,
-            query,
-            key,
-            value,
-            attention_mask=attention_mask,
-            is_causal=False,
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
         )
 
-        # mask. e.g. inference got a batch with different target durations, mask out the padding
-        attention_weights = attention_weights.reshape(batch_size, -1, self.heads * head_dim)
-        attention_weights = attention_weights.to(query.dtype)
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.dropout,
+            scaling=1.0,
+            output_attentions=output_attentions,
+            **kwargs,
+        )
 
-        # linear proj
-        attention_output = self.to_out[0](attention_weights)
-        attention_output = self.to_out[1](attention_output)
+        attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
+        attn_output = self.out_proj(attn_output)
 
-        return attention_output
+        return attn_output, attn_weights
 
 
-class Qwen3TTSTokenizerSingleCodebookDiTDecoderLayer(nn.Module):
-    def __init__(self, config: Qwen3TTSTokenizerSingleCodebookDiTConfig, look_ahead_block=0, look_backward_block=0):
+class Qwen3TTSTokenizerSingleCodebookEncoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: Qwen3TTSTokenizerSingleCodebookEncoderConfig):
         super().__init__()
-        self.attn_norm = Qwen3TTSTokenizerSingleCodebookAdaLayerNormZero(config.hidden_size)
-
-        self.attn = DiTAttention(config)
-        self.look_ahead_block = look_ahead_block
-        self.look_backward_block = look_backward_block
-        self.ff_norm = nn.LayerNorm(config.hidden_size, elementwise_affine=False, eps=1e-6)
-        self.ff = DiTMLP(dim=config.hidden_size, mult=config.ff_mult, dropout=config.dropout)
+        self.embed_dim = config.d_model
+        self.self_attn = Qwen3TTSTokenizerSingleCodebookAttention(
+            embed_dim=self.embed_dim,
+            num_heads=config.encoder_attention_heads,
+            dropout=config.attention_dropout,
+            config=config,
+        )
+        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.dropout = config.dropout
+        self.activation_fn = ACT2FN[config.activation_function]
+        self.activation_dropout = config.activation_dropout
+        self.fc1 = nn.Linear(self.embed_dim, config.encoder_ffn_dim)
+        self.fc2 = nn.Linear(config.encoder_ffn_dim, self.embed_dim)
+        self.final_layer_norm = nn.LayerNorm(self.embed_dim)
 
     def forward(
-        self, hidden_states, timestep, position_embeddings=None, block_diff=None
-    ):  # x: noised input, t: time embedding
-        # pre-norm & modulation for attention input
-        norm, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.attn_norm(hidden_states, emb=timestep)
-
-        # attention
-        attn_output = self.attn(
-            hidden_states=norm,
-            position_embeddings=position_embeddings,
-            attention_mask=(block_diff >= -float(self.look_backward_block))
-            & (block_diff <= float(self.look_ahead_block)),
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        """
+        Args:
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.FloatTensor`): attention mask of size
+                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
+        """
+        residual = hidden_states
+        hidden_states = self.self_attn_layer_norm(hidden_states)
+        hidden_states, _ = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            **kwargs,
         )
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = residual + hidden_states
 
-        # process attention output for input x
-        hidden_states = hidden_states + gate_msa.unsqueeze(1) * attn_output
+        residual = hidden_states
+        hidden_states = self.final_layer_norm(hidden_states)
+        hidden_states = self.activation_fn(self.fc1(hidden_states))
+        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        hidden_states = self.fc2(hidden_states)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = residual + hidden_states
 
-        norm = self.ff_norm(hidden_states) * (1 + scale_mlp[:, None]) + shift_mlp[:, None]
-        ff_output = self.ff(norm)
-        hidden_states = hidden_states + gate_mlp.unsqueeze(1) * ff_output
+        if hidden_states.dtype == torch.float16:
+            clamp_value = torch.finfo(hidden_states.dtype).max - 1000
+            hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
         return hidden_states
 
 
 @auto_docstring(
     custom_intro="""
-    The full Qwen2.5Omni Token2WavBigVGAN model. Which take mel spectrogram as input and predict waveform.
+    The audio model from Qwen3TTSTokenizerSingleCodebook without any head or projection on top.
     """
 )
-class Qwen3TTSTokenizerSingleCodebookDecoderBigVGANModel(Qwen3TTSTokenizerSingleCodebookPreTrainedModel):
-    config: Qwen3TTSTokenizerSingleCodebookDecoderBigVGANConfig
+class Qwen3TTSTokenizerSingleCodebookEncoder(Qwen3TTSTokenizerSingleCodebookPreTrainedModel):
+    """
+    Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
+    [`Qwen3TTSTokenizerSingleCodebookEncoderLayer`].
+
+    Args:
+        config: Qwen3TTSTokenizerSingleCodebookEncoderConfig
+    """
+
+    config: Qwen3TTSTokenizerSingleCodebookEncoderConfig
+    main_input_name = "input_features"
     input_modalities = "audio"
-    config_class = Qwen3TTSTokenizerSingleCodebookDecoderBigVGANConfig
+    _no_split_modules = ["Qwen3TTSTokenizerSingleCodebookEncoderLayer"]
+    _can_record_outputs = {
+        "hidden_states": Qwen3TTSTokenizerSingleCodebookEncoderLayer,
+        "attentions": Qwen3TTSTokenizerSingleCodebookAttention,
+    }
+    config_class = Qwen3TTSTokenizerSingleCodebookEncoderConfig
 
-    def __init__(self, config: Qwen3TTSTokenizerSingleCodebookDecoderBigVGANConfig):
+    def __init__(self, config: Qwen3TTSTokenizerSingleCodebookEncoderConfig):
         super().__init__(config)
-        self.num_residual_blocks = len(config.resblock_kernel_sizes)
-        self.num_upsample_layers = len(config.upsample_rates)
-        self.conv_pre = nn.Conv1d(
-            config.mel_dim,
-            config.upsample_initial_channel,
-            config.conv_pre_kernel_size,
-            config.conv_pre_stride,
-            padding=config.conv_pre_padding,
-        )
+        self.dropout = config.dropout
+        self.layerdrop = config.encoder_layerdrop
 
-        # Removing extra ModuleList breaks official state dict
-        ups = [
-            nn.ModuleList(
-                [
-                    nn.ConvTranspose1d(
-                        config.upsample_initial_channel // (2**layer_idx),
-                        config.upsample_initial_channel // (2 ** (layer_idx + 1)),
-                        kernel_size,
-                        stride,
-                        padding=(kernel_size - stride) // 2,
-                    )
-                ]
-            )
-            for layer_idx, (stride, kernel_size) in enumerate(zip(config.upsample_rates, config.upsample_kernel_sizes))
-        ]
-        self.ups = nn.ModuleList(ups)
-        self.resblocks = nn.ModuleList(
+        embed_dim = config.d_model
+        self.num_mel_bins = config.num_mel_bins
+        self.max_source_positions = config.max_source_positions
+        self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
+
+        self.conv1 = nn.Conv1d(self.num_mel_bins, embed_dim, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv1d(embed_dim, embed_dim, kernel_size=3, stride=2, padding=1)
+
+        self.embed_positions = nn.Embedding(self.max_source_positions, embed_dim)
+        self.embed_positions.requires_grad_(False)
+        self.layers = nn.ModuleList(
             [
-                Qwen3TTSTokenizerSingleCodebookAMPBlock(
-                    config.upsample_initial_channel // (2 ** (layer_idx + 1)),
-                    kernel_size,
-                    dilation,
-                    config.resblock_causal_types[layer_idx],
-                )
-                for layer_idx in range(self.num_upsample_layers)
-                for kernel_size, dilation in zip(config.resblock_kernel_sizes, config.resblock_dilation_sizes)
+                Qwen3TTSTokenizerSingleCodebookEncoderLayer(config)
+                for _ in range(min(config.encoder_layers, config.num_layers_before_quantizer))
             ]
         )
+        self.layer_norm = nn.LayerNorm(config.d_model)
+        self.avg_pooler = nn.Identity()
 
-        self.activation_post = Qwen3TTSTokenizerSingleCodebookAntiAliasedActivation1d(
-            activation=Qwen3TTSTokenizerSingleCodebookSnakeBeta(
-                config.upsample_initial_channel // (2**self.num_upsample_layers)
-            )
-        )
-        self.conv_post = nn.Conv1d(
-            config.upsample_initial_channel // (2**self.num_upsample_layers), 1, 7, 1, padding=3, bias=False
-        )
-
+        self.gradient_checkpointing = False
+        # Initialize weights and apply final processing
         self.post_init()
 
-    def normalize_spectrogram(self, spectrogram, max_value, min_db):
-        return torch.clamp((2 * max_value) * ((spectrogram - min_db) / (-min_db)) - max_value, -max_value, max_value)
+    def _freeze_parameters(self):
+        for param in self.parameters():
+            param.requires_grad = False
+        self._requires_grad = False
 
-    def amplitude_to_db(self, amplitude, min_db_level):
-        min_level = torch.exp(
-            torch.tensor(min_db_level / 20.0 * np.log(10), device=amplitude.device, dtype=amplitude.dtype)
-        )
-        return 20 * torch.log10(torch.clamp(amplitude, min=min_level))
+    def get_input_embeddings(self) -> nn.Module:
+        return self.conv1
 
-    def process_mel_spectrogram(self, mel_spectrogram):
-        amplitude_spectrum = torch.exp(mel_spectrogram)
-        decibel_spectrum = self.amplitude_to_db(amplitude_spectrum, -115) - 20
-        return self.normalize_spectrogram(decibel_spectrum, 1, -115)
+    def set_input_embeddings(self, value: nn.Module):
+        self.conv1 = value
 
-    def forward(self, mel_spectrogram, **kwargs):
-        processed_spectrogram = self.process_mel_spectrogram(mel_spectrogram)
-        hidden_representation = self.conv_pre(processed_spectrogram)
+    @merge_with_config_defaults
+    @capture_outputs
+    def forward(
+        self,
+        input_features,
+        attention_mask=None,
+        **kwargs: Unpack[TransformersKwargs],
+    ):
+        r"""
+        attention_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`, *optional*):
+            Mask of valid log-mel frames. Padding frames are ignored after the convolutional stem.
+        """
+        input_features = input_features.to(dtype=self.conv1.weight.dtype, device=self.conv1.weight.device)
+        inputs_embeds = nn.functional.gelu(self.conv1(input_features))
+        inputs_embeds = nn.functional.gelu(self.conv2(inputs_embeds))
+        inputs_embeds = inputs_embeds.permute(0, 2, 1)
 
-        for layer_index in range(self.num_upsample_layers):
-            hidden_representation = self.ups[layer_index][0](hidden_representation)
-            residual_output = sum(
-                self.resblocks[layer_index * self.num_residual_blocks + block_index](hidden_representation)
-                for block_index in range(self.num_residual_blocks)
+        seq_len = inputs_embeds.size(1)
+        if seq_len > self.max_source_positions:
+            raise ValueError(
+                f"Encoder sequence length {seq_len} exceeds `max_source_positions` ({self.max_source_positions})."
             )
-            residual_output = residual_output / self.num_residual_blocks
-            hidden_representation = residual_output
+        hidden_states = inputs_embeds + self.embed_positions.weight[:seq_len]
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
-        hidden_representation = self.activation_post(hidden_representation)
-        output_waveform = self.conv_post(hidden_representation)
-        return torch.clamp(output_waveform, min=-1.0, max=1.0).squeeze().cpu()
+        encoder_attention_mask = None
+        if attention_mask is not None:
+            after_cnn = self._get_feat_extract_output_lengths(attention_mask.long().sum(-1))[0]
+            feature_mask = torch.arange(seq_len, device=hidden_states.device)[None, :] < after_cnn[:, None]
+            encoder_attention_mask = create_bidirectional_mask(self.config, hidden_states, feature_mask.long())
+
+        num_layers = self.config.num_layers_before_quantizer
+        if num_layers < 1:
+            raise ValueError("`num_layers_before_quantizer` must be at least 1.")
+        for layer_idx, encoder_layer in enumerate(self.layers):
+            if layer_idx >= num_layers:
+                break
+            hidden_states = encoder_layer(hidden_states, encoder_attention_mask, **kwargs)
+
+        return BaseModelOutput(last_hidden_state=hidden_states)
+
+    # Ignore copy
+    def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
+        """
+        Computes the output length of the convolutional layers and the output length of the audio encoder
+        """
+        after_cnn = (input_lengths - 1) // 2 + 1
+        return after_cnn, after_cnn
 
 
 class Qwen3TTSTokenizerSingleCodebookEuclideanCodebook(nn.Module):
     """Codebook with Euclidean distance."""
 
-    def __init__(
-        self,
-        dim,
-        codebook_size,
-        kmeans_init=False,
-        kmeans_iters=10,
-        decay=0.99,
-        epsilon=1e-5,
-        threshold_ema_dead_code=2.0,
-    ):
+    def __init__(self, config):
         super().__init__()
-        embed = torch.zeros(codebook_size, dim)
-        self.codebook_size = codebook_size
-        self.register_buffer("inited", torch.Tensor([not kmeans_init]))
-        self.register_buffer("cluster_size", torch.zeros(codebook_size))
-        self.register_buffer("embed", embed)
-        self.register_buffer("embed_avg", embed.clone())
-        self.decay = decay
-        self.kmeans_iters = kmeans_iters
-        self.epsilon = epsilon
-        self.threshold_ema_dead_code = threshold_ema_dead_code
+        embed = torch.zeros(config.codebook_size, config.codebook_dim)
+        self.codebook_size = config.codebook_size
+        self.inited = nn.Buffer(torch.Tensor([True]))
+        self.cluster_size = nn.Buffer(torch.zeros(config.codebook_size))
+        self.embed = nn.Buffer(embed)
+        self.embed_avg = nn.Buffer(embed.clone())
 
     def quantize(self, hidden_states):
         embed = self.embed.t()
@@ -359,739 +406,45 @@ class Qwen3TTSTokenizerSingleCodebookVectorQuantization(nn.Module):
     Vector quantization implementation. Currently supports only euclidean distance.
     """
 
-    def __init__(
-        self,
-        dim,
-        codebook_size,
-        codebook_dim=None,
-        decay=0.99,
-        epsilon=1e-5,
-        kmeans_init=True,
-        kmeans_iters=50,
-        threshold_ema_dead_code=2.0,
-        commitment_weight=1.0,
-    ):
+    def __init__(self, config: Qwen3TTSTokenizerSingleCodebookQuantizerConfig):
         super().__init__()
-        _codebook_dim = codebook_dim if codebook_dim is not None else dim
-        requires_projection = _codebook_dim != dim
-        self.project_in = nn.Linear(dim, _codebook_dim) if requires_projection else nn.Identity()
-        self.project_out = nn.Linear(_codebook_dim, dim) if requires_projection else nn.Identity()
-        self.codebook = Qwen3TTSTokenizerSingleCodebookEuclideanCodebook(
-            dim=_codebook_dim,
-            codebook_size=codebook_size,
-            kmeans_init=kmeans_init,
-            kmeans_iters=kmeans_iters,
-            decay=decay,
-            epsilon=epsilon,
-            threshold_ema_dead_code=threshold_ema_dead_code,
-        )
-        self.codebook_size = codebook_size
+        requires_projection = config.codebook_dim != config.hidden_size
+        self.project_in = nn.Linear(config.hidden_size, config.codebook_dim) if requires_projection else nn.Identity()
+        self.project_out = nn.Linear(config.codebook_dim, config.hidden_size) if requires_projection else nn.Identity()
+        self.codebook = Qwen3TTSTokenizerSingleCodebookEuclideanCodebook(config)
 
-    def encode(self, x):
-        x = self.project_in(x)
-        return self.codebook.encode(x)
+    def encode(self, hidden_states):
+        hidden_states = self.project_in(hidden_states)
+        return self.codebook.encode(hidden_states)
 
     def decode(self, embed_ind):
-        quantize = self.codebook.decode(embed_ind)
-        return self.project_out(quantize)
+        return self.project_out(self.codebook.decode(embed_ind))
 
 
-class Qwen3TTSTokenizerSingleCodebookDistributedRVQ(nn.Module):
-    """Residual VQ with one codebook per quantizer."""
+class Qwen3TTSTokenizerSingleCodebookQuantizer(Qwen3TTSTokenizerSingleCodebookPreTrainedModel):
+    config_class = Qwen3TTSTokenizerSingleCodebookQuantizerConfig
 
-    def __init__(self, *, num_quantizers, quantize_dropout=False, rand_num_quant=None, **kwargs):
-        super().__init__()
-        if not isinstance(kwargs["kmeans_init"], bool):
-            raise TypeError("kmeans_init should be bool")
-
-        self.layers = nn.ModuleList(
-            [Qwen3TTSTokenizerSingleCodebookVectorQuantization(**kwargs) for _ in range(num_quantizers)]
-        )
-        if not kwargs["kmeans_init"]:
-            for layer in self.layers:
-                nn.init.kaiming_uniform_(layer.codebook.embed)
-                layer.codebook.embed_avg.copy_(layer.codebook.embed)
-
-    def encode(self, x, n_q=None):
-        residual = x
-        all_indices = []
-        n_q = n_q or len(self.layers)
-        for layer in self.layers[:n_q]:
-            indices = layer.encode(residual)
-            quantized = layer.decode(indices)
-            residual = residual - quantized
-            all_indices.append(indices)
-        return torch.stack(all_indices)
-
-    def decode(self, q_indices):
-        quantized_out = torch.tensor(0.0, device=q_indices.device)
-        for i, indices in enumerate(q_indices):
-            quantized_out = quantized_out + self.layers[i].decode(indices)
-        return quantized_out
-
-
-class Qwen3TTSTokenizerSingleCodebookDistributedGroupRVQ(nn.Module):
-    """Distributed group RVQ (inference subset of DistributedGroupResidualVectorQuantization)."""
-
-    def __init__(self, *, num_groups, num_quantizers, quantize_dropout=False, rand_num_quant=None, **kwargs):
-        super().__init__()
-        self.rvqs = nn.ModuleList(
-            [
-                Qwen3TTSTokenizerSingleCodebookDistributedRVQ(
-                    num_quantizers=num_quantizers,
-                    quantize_dropout=quantize_dropout,
-                    rand_num_quant=rand_num_quant,
-                    **kwargs,
-                )
-                for _ in range(num_groups)
-            ]
-        )
-        self.num_groups = num_groups
-
-    def encode(self, x, n_q=None):
-        x_lst = torch.chunk(x, chunks=self.num_groups, dim=1)
-        return torch.stack([mod.encode(item, n_q) for mod, item in zip(self.rvqs, x_lst)], dim=1)
-
-    def decode(self, q_indices):
-        q_indices_lst = torch.chunk(q_indices, chunks=self.num_groups, dim=1)
-        return torch.cat([mod.decode(item.squeeze(1)) for mod, item in zip(self.rvqs, q_indices_lst)], dim=1)
-
-
-# Whisper encoder classes (port of vq/whisper_encoder.py)
-
-
-class _V1Conv1d(nn.Conv1d):
-    def _conv_forward(self, x, weight, bias):
-        return super()._conv_forward(x, weight.to(x.dtype), None if bias is None else bias.to(x.dtype))
-
-
-class _V1ConvTranspose1d(nn.ConvTranspose1d):
-    def _conv_forward(self, x, weight, bias):
-        return super()._conv_forward(x, weight.to(x.dtype), None if bias is None else bias.to(x.dtype))
-
-
-class Qwen3TTSTokenizerSingleCodebookLinear(nn.Linear):
-    def forward(self, x):
-        return F.linear(x, self.weight.to(x.dtype), None if self.bias is None else self.bias.to(x.dtype))
-
-
-class Qwen3TTSTokenizerSingleCodebookMultiHeadAttention(nn.Module):
-    def __init__(self, n_state, n_head):
-        super().__init__()
-        self.n_head = n_head
-        self.query = Qwen3TTSTokenizerSingleCodebookLinear(n_state, n_state)
-        self.key = Qwen3TTSTokenizerSingleCodebookLinear(n_state, n_state, bias=False)
-        self.value = Qwen3TTSTokenizerSingleCodebookLinear(n_state, n_state)
-        self.out = Qwen3TTSTokenizerSingleCodebookLinear(n_state, n_state)
-
-    def forward(self, x, cu_seqlens=None):
-        q = self.query(x)
-        k = self.key(x)
-        v = self.value(x)
-        x = self._qkv_attention_manual(q, k, v, cu_seqlens=cu_seqlens)
-        return self.out(x)
-
-    def _qkv_attention_manual(self, q, k, v, cu_seqlens):
-        n_ctx, n_state = q.shape
-        head_dim = n_state // self.n_head
-        scale = head_dim**-0.5
-
-        q = q.view(n_ctx, self.n_head, head_dim)
-        k = k.view(n_ctx, self.n_head, head_dim)
-        v = v.view(n_ctx, self.n_head, head_dim)
-
-        seqlens = (cu_seqlens[1:] - cu_seqlens[:-1]).tolist()
-        batch_size = len(seqlens)
-        max_seqlen = max(seqlens)
-
-        q_padded = torch.zeros(batch_size, max_seqlen, self.n_head, head_dim, dtype=q.dtype, device=q.device)
-        k_padded = torch.zeros_like(q_padded)
-        v_padded = torch.zeros_like(q_padded)
-
-        for i in range(batch_size):
-            start_idx = cu_seqlens[i]
-            end_idx = cu_seqlens[i + 1]
-            seq_len = seqlens[i]
-            q_padded[i, :seq_len] = q[start_idx:end_idx]
-            k_padded[i, :seq_len] = k[start_idx:end_idx]
-            v_padded[i, :seq_len] = v[start_idx:end_idx]
-
-        q_padded = q_padded.transpose(1, 2)
-        k_padded = k_padded.transpose(1, 2)
-        v_padded = v_padded.transpose(1, 2)
-
-        attn_mask = (
-            (torch.arange(max_seqlen, device=q.device)[None, :] < torch.tensor(seqlens, device=q.device)[:, None])
-            .unsqueeze(1)
-            .unsqueeze(2)
-        )
-        attn_mask = attn_mask.masked_fill(attn_mask == 0, -torch.finfo(q.dtype).max)
-
-        attn_scores = torch.matmul(q_padded, k_padded.transpose(-2, -1)) * scale + attn_mask
-        attn_weights = F.softmax(attn_scores, dim=-1)
-        context = torch.matmul(attn_weights, v_padded)
-        context = context.transpose(1, 2).contiguous().view(batch_size, max_seqlen, n_state)
-        return torch.cat([context[i, : seqlens[i]] for i in range(batch_size)], dim=0)
-
-
-class Qwen3TTSTokenizerSingleCodebookResidualAttentionBlock(nn.Module):
-    def __init__(self, n_state, n_head, enable_mp=False, sequence_parallel=False):
-        super().__init__()
-        n_mlp = n_state * 4
-        self.attn_ln = nn.LayerNorm(n_state)
-        self.mlp_ln = nn.LayerNorm(n_state)
-        self.attn = Qwen3TTSTokenizerSingleCodebookMultiHeadAttention(n_state, n_head)
-        self.mlp = nn.Sequential(
-            Qwen3TTSTokenizerSingleCodebookLinear(n_state, n_mlp),
-            nn.GELU(),
-            Qwen3TTSTokenizerSingleCodebookLinear(n_mlp, n_state),
-        )
-
-    def forward(self, x, cu_seqlens=None):
-        x = x + self.attn(self.attn_ln(x), cu_seqlens=cu_seqlens)
-        x = x + self.mlp(self.mlp_ln(x))
-        return x
-
-
-def _v1_sinusoids(length, channels, max_timescale=10000):
-    assert channels % 2 == 0
-    log_timescale_increment = np.log(max_timescale) / (channels // 2 - 1)
-    inv_timescales = torch.exp(-log_timescale_increment * torch.arange(channels // 2))
-    scaled_time = torch.arange(length)[:, np.newaxis] * inv_timescales[np.newaxis, :]
-    return torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=1)
-
-
-class Qwen3TTSTokenizerSingleCodebookWhisperEncoder(nn.Module):
-    def __init__(
-        self,
-        n_mels,
-        n_ctx,
-        n_state,
-        n_head,
-        n_layer,
-        n_window=1500,
-        output_dim=512,
-        grad_checkpointing=False,
-        enable_mp=False,
-        audio_sequence_parallel=False,
-    ):
-        super().__init__()
-        self.conv1 = _V1Conv1d(n_mels, n_state, kernel_size=3, padding=1)
-        self.conv2 = _V1Conv1d(n_state, n_state, kernel_size=3, stride=2, padding=1)
-        self.register_buffer("positional_embedding", _v1_sinusoids(n_ctx, n_state))
-        self.n_layer = n_layer
-        self.n_mels = n_mels
-        self.blocks = nn.ModuleList(
-            [
-                Qwen3TTSTokenizerSingleCodebookResidualAttentionBlock(
-                    n_state, n_head, enable_mp=enable_mp, sequence_parallel=audio_sequence_parallel
-                )
-                for _ in range(n_layer)
-            ]
-        )
-        self.ln_post = nn.LayerNorm(n_state)
-        self.avg_pooler = nn.AvgPool1d(2, stride=2)
-        self.proj = nn.Linear(n_state, output_dim)
-        self.audio_bos_eos_token = nn.Embedding(2, output_dim)
-        self.output_dim = output_dim
-        self.n_head = n_head
-        self.n_state = n_state
-        self.n_window = n_window
-
-
-class Qwen3TTSTokenizerSingleCodebookWhisperEncoderVQ(Qwen3TTSTokenizerSingleCodebookWhisperEncoder):
-    """WhisperEncoder extended with a VQ bottleneck (inference-only port of WhisperEncoderVQ)."""
-
-    def __init__(
-        self,
-        n_mels,
-        n_ctx,
-        n_state,
-        n_head,
-        n_layer,
-        n_window=1500,
-        output_dim=512,
-        grad_checkpointing=False,
-        enable_mp=False,
-        audio_sequence_parallel=False,
-        audio_vq_layers=-1,
-        audio_vq_type="NULL",
-        audio_vq_codebook_size=4096,
-        audio_vq_pe=False,
-        audio_vq_commit_loss=0.0,
-        audio_vq_out_commit_loss=0.0,
-        audio_vq_no_quantize=False,
-        audio_vq_ff_layer=0,
-        audio_vq_threshold_ema_dead_code=0.1,
-        audio_vq_codebook_dim=None,
-        audio_vq_ds_rate=None,
-    ):
-        super().__init__(
-            n_mels,
-            n_ctx,
-            n_state,
-            n_head,
-            n_layer,
-            n_window,
-            output_dim,
-            grad_checkpointing,
-            enable_mp,
-            audio_sequence_parallel,
-        )
-        self.audio_vq_layers = audio_vq_layers
-        self.audio_vq_type = audio_vq_type
-        self.audio_vq_codebook_size = audio_vq_codebook_size
-        self.audio_vq_pe = audio_vq_pe
-        self.audio_vq_commit_loss = audio_vq_commit_loss
-        self.audio_vq_out_commit_loss = audio_vq_out_commit_loss
-        self.audio_vq_no_quantize = audio_vq_no_quantize
-        self.audio_vq_ff_layer = audio_vq_ff_layer
-
-        if audio_vq_layers > 0:
-            self.vq_feature_dim = self.n_state
-            self.audio_vq_ds_rate = 1
-        else:
-            raise NotImplementedError(f"Unsupported audio_vq_layers: {audio_vq_layers}")
-
-        if self.audio_vq_ds_rate == audio_vq_ds_rate:
-            self.audio_vq_downsample = nn.Identity()
-            self.audio_vq_upsample = nn.Identity()
-        else:
-            assert audio_vq_ds_rate % self.audio_vq_ds_rate == 0
-            stride = audio_vq_ds_rate // self.audio_vq_ds_rate
-            self.audio_vq_downsample = _V1Conv1d(
-                self.vq_feature_dim, self.vq_feature_dim, kernel_size=stride, stride=stride
-            )
-            self.audio_vq_upsample = _V1ConvTranspose1d(
-                self.vq_feature_dim, self.vq_feature_dim, kernel_size=stride, stride=stride
-            )
-            self.audio_vq_ds_rate = audio_vq_ds_rate
-
-        codebook_dim_for_vq = audio_vq_codebook_dim if audio_vq_codebook_dim is not None else self.vq_feature_dim
-        if audio_vq_type == "GRVQ":
-            self.audio_quantizer = Qwen3TTSTokenizerSingleCodebookDistributedGroupRVQ(
-                codebook_size=audio_vq_codebook_size,
-                dim=self.vq_feature_dim,
-                codebook_dim=codebook_dim_for_vq,
-                num_groups=1,
-                num_quantizers=1,
-                kmeans_init=False,
-                threshold_ema_dead_code=audio_vq_threshold_ema_dead_code,
-            )
-        else:
-            raise NotImplementedError(f"Unsupported audio_vq_type: {audio_vq_type}")
-
-        if self.audio_vq_pe:
-            self.project_after_vq_pe = nn.Linear(self.n_state, self.n_state)
-
-    def _do_quantize(self, x, pe=None, y=None):
-        x = x.unsqueeze(0)
-        x = self.audio_vq_downsample(x.transpose(1, 2))
-        x = x.transpose(1, 2)
-        indices = self.audio_quantizer.encode(x)
-        x = self.audio_quantizer.decode(indices)
-        indices = indices.squeeze(2).squeeze(1)
-        x, indices = x.squeeze(0), indices.squeeze(0)
-        if self.audio_vq_pe:
-            x = x + pe
-            x = self.project_after_vq_pe(x)
-        x = self.audio_vq_upsample(x.unsqueeze(0).transpose(1, 2))
-        x = x.transpose(1, 2).squeeze(0)
-        return x, indices, {}
-
-    def forward(
-        self, x_list, audio_mellens, audio_aftercnnlens, audio_seqlens, return_indices=False, audio_pitchs=None
-    ):
-        aftercnn_x_list = []
-        pe_for_vq_list = []
-        for each_x in x_list:
-            for each_x_split in each_x.split(self.n_window * 2, dim=1):
-                each_x_split = F.gelu(self.conv1(each_x_split))
-                each_x_split = F.gelu(self.conv2(each_x_split))
-                each_x_split = each_x_split.permute(1, 0)
-                each_positional_embedding_split = self.positional_embedding[: each_x_split.shape[0]]
-                aftercnn_x_list.append(each_x_split + each_positional_embedding_split.to(each_x_split.dtype))
-                pe_for_vq_split = self.positional_embedding[: each_x_split.shape[0] // self.audio_vq_ds_rate]
-                pe_for_vq_list.append(pe_for_vq_split.to(each_x_split.dtype))
-
-        pe_for_vq = torch.cat(pe_for_vq_list, dim=0)
-        x = torch.cat(aftercnn_x_list, dim=0)
-
-        output_list = []
-        for item in audio_aftercnnlens:
-            while item > self.n_window:
-                output_list.append(self.n_window)
-                item -= self.n_window
-            output_list.append(item)
-
-        cu_seqlens_list = list(accumulate(output_list, func=operator.add, initial=0))
-        cu_seqlens = torch.Tensor(cu_seqlens_list).to(device=x.device, dtype=torch.int32)
-
-        layer_id = 0
-        for block in self.blocks:
-            layer_id += 1
-            x = block(x, cu_seqlens=cu_seqlens)
-            if self.audio_vq_layers == layer_id:
-                x, indices, vq_stats = self._do_quantize(x, pe_for_vq)
-                if return_indices:
-                    return x, indices
-
-        if self.avg_pooler:
-            x_list_split = x.split(audio_aftercnnlens, dim=0)
-            token_x_list = []
-            for xi in x_list_split:
-                xi = xi.permute(1, 0)
-                xi = self.avg_pooler(xi)
-                xi = xi.permute(1, 0)
-                token_x_list.append(xi)
-            x = torch.cat(token_x_list, dim=0)
-
-        x = self.ln_post(x)
-        x = self.proj(x)
-
-        output = torch.zeros((x.size(0) + len(audio_seqlens) * 2, x.size(1)), device=x.device, dtype=x.dtype)
-        audio_seqlens_acc = list(accumulate(audio_seqlens, func=operator.add, initial=0))
-        start_ids = torch.tensor(audio_seqlens_acc[:-1], device=x.device, dtype=torch.int32)
-        end_ids = torch.tensor(audio_seqlens_acc[1:], device=x.device, dtype=torch.int32) - 1
-        audio_tokens_mask = torch.ones(output.size(0), device=x.device, dtype=torch.bool)
-        audio_tokens_mask[start_ids] = False
-        audio_tokens_mask[end_ids] = False
-        output[start_ids] = self.audio_bos_eos_token.weight[0].to(x.dtype)
-        output[end_ids] = self.audio_bos_eos_token.weight[1].to(x.dtype)
-        output[audio_tokens_mask] = x
-
-        if self.audio_vq_type != "NULL":
-            return output, vq_stats
-        return output
-
-
-#  Qwen3TTSTokenizerSingleCodebookXVectorExtractor (lazy external imports) ─
-
-
-class Qwen3TTSTokenizerSingleCodebookMelSpectrogramFeatures(nn.Module):
-    """Mel spectrogram extractor used by Qwen3TTSTokenizerSingleCodebookXVectorExtractor."""
-
-    def __init__(
-        self,
-        filter_length=1024,
-        hop_length=160,
-        win_length=640,
-        n_mel_channels=80,
-        mel_fmin=0,
-        mel_fmax=8000,
-        sampling_rate=16000,
-    ):
-        super().__init__()
-        self.filter_length = filter_length
-        self.hop_length = hop_length
-        self.win_length = win_length
-        self.n_mel_channels = n_mel_channels
-        self.mel_fmin = mel_fmin
-        self.mel_fmax = mel_fmax
-        self.sampling_rate = sampling_rate
-
-    def extract(self, audio):
-        from ...audio_utils import mel_filter_bank
-
-        y = audio
-        if len(y.shape) == 3:
-            y = y.squeeze(1) if y.shape[1] == 1 else y.squeeze(2)
-        mel = mel_filter_bank(
-            num_frequency_bins=1 + self.filter_length // 2,
-            num_mel_filters=self.n_mel_channels,
-            min_frequency=self.mel_fmin,
-            max_frequency=self.mel_fmax,
-            sampling_rate=self.sampling_rate,
-            norm="slaney",
-            mel_scale="slaney",
-        )
-        mel_basis = torch.from_numpy(mel).float().to(y.device)
-        hann_window = torch.hann_window(self.win_length).to(y.device)
-        pad = int((self.filter_length - self.hop_length) / 2)
-        y = F.pad(y.unsqueeze(1), (pad, pad), mode="reflect").squeeze(1)
-        spec = torch.stft(
-            y,
-            self.filter_length,
-            hop_length=self.hop_length,
-            win_length=self.win_length,
-            window=hann_window,
-            center=False,
-            pad_mode="reflect",
-            normalized=False,
-            onesided=True,
-            return_complex=True,
-        )
-        spec = torch.sqrt(torch.view_as_real(spec).pow(2).sum(-1) + 1e-9)
-        spec = torch.matmul(mel_basis, spec)
-        return torch.log(torch.clamp(spec, min=1e-5))
-
-
-class Qwen3TTSTokenizerSingleCodebookXVectorExtractor(nn.Module):
-    """Speaker x-vector extractor using an ONNX model (campplus.onnx).
-
-    External dependencies (onnxruntime, sox, torchaudio) are imported lazily
-    so that the main transformers package does not require them.
-    """
-
-    def __init__(self, audio_codec_with_xvector):
-        super().__init__()
-        import onnxruntime
-        import sox
-
-        option = onnxruntime.SessionOptions()
-        option.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
-        option.intra_op_num_threads = 1
-        self.ort_session = onnxruntime.InferenceSession(
-            audio_codec_with_xvector, sess_options=option, providers=["CPUExecutionProvider"]
-        )
-        self.tfm = sox.Transformer()
-        self.tfm.norm(db_level=-6)
-        self.mel_ext = Qwen3TTSTokenizerSingleCodebookMelSpectrogramFeatures()
-
-    def extract_code(self, audio):
-        import copy
-
-        import torchaudio.compliance.kaldi as kaldi
-
-        with torch.no_grad():
-            norm_audio = self._sox_norm(audio)
-            norm_audio_tensor = torch.from_numpy(copy.deepcopy(norm_audio)).unsqueeze(0)
-            feat = kaldi.fbank(norm_audio_tensor, num_mel_bins=80, dither=0, sample_frequency=16000)
-            feat = feat - feat.mean(dim=0, keepdim=True)
-            norm_embedding = self.ort_session.run(
-                None, {self.ort_session.get_inputs()[0].name: feat.unsqueeze(0).cpu().numpy()}
-            )[0].flatten()
-            norm_embedding = F.normalize(torch.from_numpy(norm_embedding), dim=0)
-            ref_mel = self.mel_ext.extract(audio=norm_audio_tensor)
-        return norm_embedding.numpy(), ref_mel.permute(0, 2, 1).squeeze(0).numpy()
-
-    def _sox_norm(self, audio):
-        return self.tfm.build_array(input_array=audio, sample_rate_in=16000)
-
-
-#  SingleCodebook Encoder PreTrainedModel + Encoder
-
-
-@dataclass
-@auto_docstring
-class Qwen3TTSTokenizerSingleCodebookEncoderOutput(ModelOutput):
-    r"""
-    audio_codes (`List[torch.LongTensor]`):
-        Discrete code embeddings computed using `model.encode`, each tensor has shape `(codes_length_i,)`.
-    xvectors (`List[torch.FloatTensor]`):
-        X-vector speaker embeddings, each tensor has shape `(xvector_dim,)`.
-    ref_mels (`List[torch.FloatTensor]`):
-        Reference mel spectrogram, each tensor has shape `(mel_length_i, mel_dim)`.
-    """
-
-    audio_codes: list[torch.LongTensor] = None
-    xvectors: list[torch.FloatTensor] = None
-    ref_mels: list[torch.FloatTensor] = None
-
-
-@dataclass
-@auto_docstring
-class Qwen3TTSTokenizerSingleCodebookDecoderOutput(ModelOutput):
-    r"""
-    audio_values (`List[torch.FloatTensor]`):
-        Decoded audio waveforms, each tensor has shape `(segment_length_i,)`.
-    """
-
-    audio_values: list[torch.FloatTensor] = None
-
-
-class Qwen3TTSTokenizerSingleCodebookEncoderPreTrainedModel(Qwen3TTSTokenizerSingleCodebookPreTrainedModel):
-    config_class = Qwen3TTSTokenizerSingleCodebookEncoderConfig
-    _can_compile_fullgraph = False
-
-
-def _v1_get_T_after_cnn(L_in, dilation=1):
-    for padding, kernel_size, stride in [(1, 3, 1), (1, 3, 2)]:
-        L_out = L_in + 2 * padding - dilation * (kernel_size - 1) - 1
-        L_out = 1 + L_out // stride
-        L_in = L_out
-    return L_out
-
-
-class Qwen3TTSTokenizerSingleCodebookEncoder(Qwen3TTSTokenizerSingleCodebookEncoderPreTrainedModel):
-    """Whisper-based VQ encoder that converts waveforms to discrete audio codes."""
-
-    def __init__(self, config: Qwen3TTSTokenizerSingleCodebookEncoderConfig):
+    def __init__(self, config: Qwen3TTSTokenizerSingleCodebookQuantizerConfig):
         super().__init__(config)
-        self.tokenizer = Qwen3TTSTokenizerSingleCodebookWhisperEncoderVQ(
-            n_mels=config.n_mels,
-            n_ctx=config.n_ctx,
-            n_state=config.n_state,
-            n_head=config.n_head,
-            n_layer=config.n_layer,
-            n_window=config.n_window,
-            output_dim=config.output_dim,
-            grad_checkpointing=config.grad_checkpointing,
-            enable_mp=config.enable_mp,
-            audio_sequence_parallel=config.audio_sequence_parallel,
-            audio_vq_type=config.audio_vq_type,
-            audio_vq_layers=config.audio_vq_layers,
-            audio_vq_codebook_size=config.audio_vq_codebook_size,
-            audio_vq_codebook_dim=config.audio_vq_codebook_dim,
-            audio_vq_pe=config.audio_vq_pe,
-            audio_vq_ds_rate=config.audio_vq_ds_rate,
-        )
-        self.audio_vq_ds_rate = self.tokenizer.audio_vq_ds_rate
+        stride = config.downsample_rate
+        if stride > 1:
+            self.downsample = nn.Conv1d(config.hidden_size, config.hidden_size, kernel_size=stride, stride=stride)
+        else:
+            self.downsample = nn.Identity()
+        self.vq = Qwen3TTSTokenizerSingleCodebookVectorQuantization(config)
         self.post_init()
 
-    def mel2code(self, mels):
-        audio_mellens = [mel.size(-1) for mel in mels]
-        audio_aftercnnlens = [_v1_get_T_after_cnn(T) for T in audio_mellens]
-        audio_seqlens = [T + 2 for T in audio_aftercnnlens]
-        with torch.no_grad():
-            _, indices = self.tokenizer(
-                x_list=mels,
-                audio_mellens=audio_mellens,
-                audio_aftercnnlens=audio_aftercnnlens,
-                audio_seqlens=audio_seqlens,
-                return_indices=True,
-            )
-        indice_lens = [T // self.tokenizer.audio_vq_ds_rate for T in audio_aftercnnlens]
-        indices = pad_sequence(torch.split(indices, indice_lens), batch_first=True, padding_value=0)
-        return indices, indice_lens
-
-    def quantize_features(self, input_features, feature_attention_mask):
-        input_features = input_features.to(
-            dtype=self.tokenizer.conv1.weight.dtype, device=self.tokenizer.conv1.weight.device
-        )
-        feature_attention_mask = feature_attention_mask.to(device=input_features.device)
-        mels = [
-            features[:, :feature_length]
-            for features, feature_length in zip(input_features, feature_attention_mask.sum(dim=-1).tolist())
-        ]
-        return self.mel2code(mels)
-
-
-#  SingleCodebook Top-level model
-
-
-@auto_docstring(
-    custom_intro="""
-    The Qwen3TTSTokenizerSingleCodebook model combining a Whisper-based VQ encoder and a DiT-based decoder.
-    """
-)
-class Qwen3TTSTokenizerSingleCodebookModel(Qwen3TTSTokenizerSingleCodebookPreTrainedModel):
-    def __init__(self, config: Qwen3TTSTokenizerSingleCodebookConfig):
-        super().__init__(config)
-        self.input_sample_rate = config.input_sample_rate
-        self.output_sample_rate = config.output_sample_rate
-        self.decode_upsample_rate = config.decode_upsample_rate
-        self.encode_downsample_rate = config.encode_downsample_rate
-
-        self.encoder = Qwen3TTSTokenizerSingleCodebookEncoder._from_config(self.config.encoder_config)
-        self.decoder = Qwen3TTSTokenizerSingleCodebookDecoder._from_config(self.config.decoder_config)
-        self.encoder_xvector_extractor = None
-
-        self.post_init()
-
-    def load_encoder_xvector_extractor(self, model_path):
-        self.encoder_xvector_extractor = Qwen3TTSTokenizerSingleCodebookXVectorExtractor(model_path)
-
-    def get_model_type(self):
-        return self.config.model_type
-
-    def get_input_sample_rate(self):
-        return self.input_sample_rate
-
-    def get_output_sample_rate(self):
-        return self.output_sample_rate
-
-    def get_encode_downsample_rate(self):
-        return self.encode_downsample_rate
-
-    def get_decode_upsample_rate(self):
-        return self.decode_upsample_rate
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        model = super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        try:
-            extractor_path = cached_file(pretrained_model_name_or_path, "campplus.onnx")
-            if extractor_path is not None:
-                model.load_encoder_xvector_extractor(extractor_path)
-        except Exception:
-            logger.warning_once(
-                "Could not load campplus.onnx for Qwen3TTSTokenizerSingleCodebookXVectorExtractor. "
-                "Call model.load_encoder_xvector_extractor(path) manually before calling encode()."
-            )
-        return model
-
-    def encode(
-        self,
-        input_values: torch.Tensor,
-        input_features: torch.Tensor,
-        feature_attention_mask: torch.Tensor,
-        padding_mask: torch.Tensor | None = None,
-        return_dict: bool | None = None,
-    ) -> tuple | Qwen3TTSTokenizerSingleCodebookEncoderOutput:
-        """
-        Encodes input audio waveforms into discrete codes, x-vectors, and reference mel spectrograms.
-
-        Args:
-            input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, feature_sequence_length)`):
-                Log-mel features extracted by [`Qwen3TTSTokenizerSingleCodebookFeatureExtractor`].
-            feature_attention_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
-                Mask indicating valid log-mel feature frames.
-            input_values (`torch.Tensor` of shape `(batch_size, sequence_length)`):
-                Float values of the input audio waveform, used for x-vector/reference-mel extraction.
-            padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`):
-                Binary mask where 1 = valid, 0 = padding.
-            return_dict (`bool`, *optional*):
-                Whether to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        """
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-        if padding_mask is None:
-            padding_mask = torch.ones_like(input_values, dtype=torch.bool)
-        wavs = [value[: mask.sum()] for value, mask in zip(input_values, padding_mask)]
-        codes, codes_lens = self.encoder.quantize_features(input_features, feature_attention_mask)
-        codes = [c[:length] for c, length in zip(codes, codes_lens)]
-
-        xvectors = []
-        ref_mels = []
-        for wav in wavs:
-            xvector, ref_mel = self.encoder_xvector_extractor.extract_code(wav.cpu().numpy())
-            xvector = torch.tensor(xvector).to(wav.dtype).to(wav.device)
-            ref_mel = torch.tensor(ref_mel).to(wav.dtype).to(wav.device)
-            xvectors.append(xvector)
-            ref_mels.append(ref_mel)
-
-        if not return_dict:
-            return (codes, xvectors, ref_mels)
-        return Qwen3TTSTokenizerSingleCodebookEncoderOutput(audio_codes=codes, xvectors=xvectors, ref_mels=ref_mels)
-
-    def decode(
-        self,
-        audio_codes: torch.Tensor,
-        xvectors: torch.Tensor,
-        ref_mels: torch.Tensor,
-        return_dict: bool | None = None,
-    ) -> tuple | Qwen3TTSTokenizerSingleCodebookDecoderOutput:
-        """
-        Decodes discrete codes + speaker conditioning into an audio waveform.
-
-        Args:
-            audio_codes (`torch.LongTensor` of shape `(batch_size, codes_length)`):
-                Discrete code embeddings from `model.encode`.
-            xvectors (`torch.FloatTensor` of shape `(batch_size, xvector_dim)`):
-                X-vector speaker embeddings from `model.encode`.
-            ref_mels (`torch.FloatTensor` of shape `(batch_size, mel_length, mel_dim)`):
-                Reference mel spectrogram from `model.encode`.
-            return_dict (`bool`, *optional*):
-                Whether to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        """
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-        audio_values = self.decoder(code=audio_codes, reference_mel=ref_mels, conditioning=xvectors)
-        audio_lengths = (audio_codes > 0).sum(1) * self.decode_upsample_rate
-        audio_values = [a[:length] for a, length in zip(audio_values, audio_lengths)]
-
-        if not return_dict:
-            return (audio_values,)
-        return Qwen3TTSTokenizerSingleCodebookDecoderOutput(audio_values=audio_values)
+    def encode(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor | None = None):
+        hidden_states = self.downsample(hidden_states.transpose(1, 2)).transpose(1, 2)
+        audio_codes = self.vq.encode(hidden_states)
+        audio_codes_mask = None
+        if attention_mask is not None:
+            code_lengths = attention_mask.long().sum(-1)
+            if self.config.downsample_rate > 1:
+                code_lengths = code_lengths // self.config.downsample_rate
+            seq_len = audio_codes.size(1)
+            audio_codes_mask = torch.arange(seq_len, device=audio_codes.device)[None, :] < code_lengths[:, None]
+        return audio_codes, audio_codes_mask
 
 
 class Qwen3TTSTokenizerSingleCodebookConv1dCacheLayer:
@@ -1156,7 +509,6 @@ class Qwen3TTSTokenizerSingleCodebookConv1dPaddingCache:
 
 class CausalConv1d(nn.Conv1d):
     def __init__(self, in_channels, out_channels, kernel_size, stride=1, dilation=1, bias=True):
-        # Non-streaming use: cache_key is unused (padding_cache is always None in forward).
         super().__init__(in_channels, out_channels, kernel_size, stride=stride, dilation=dilation, bias=bias)
         self.cache_key = ""
 
@@ -1276,7 +628,7 @@ class Qwen3TTSTokenizerSingleCodebookUpSample1d(nn.Module):
         self.pad_right = self.pad * self.stride + (self.kernel_size - self.stride + 1) // 2
 
         filter = kaiser_sinc_filter1d(cutoff=0.5 / ratio, half_width=0.6 / ratio, kernel_size=self.kernel_size)
-        self.register_buffer("filter", filter, persistent=False)
+        self.filter = nn.Buffer(filter, persistent=False)
 
     def forward(self, hidden_states):
         channels = hidden_states.shape[1]
@@ -1309,7 +661,7 @@ class Qwen3TTSTokenizerSingleCodebookDownSample1d(nn.Module):
         self.pad_right = kernel_size // 2
         self.stride = ratio
         filter = kaiser_sinc_filter1d(cutoff, half_width, kernel_size)
-        self.register_buffer("filter", filter, persistent=False)
+        self.filter = nn.Buffer(filter, persistent=False)
 
     def forward(self, hidden_states):
         channels = hidden_states.shape[1]
@@ -1343,16 +695,10 @@ class Qwen3TTSTokenizerSingleCodebookAntiAliasedActivation1d(nn.Module):
 
 
 class Qwen3TTSTokenizerSingleCodebookAMPBlock(torch.nn.Module):
-    """AMPBlock with CausalConv1d support for Qwen3TTS."""
-
-    def __init__(
-        self,
-        channels,
-        kernel_size=3,
-        dilation=(1, 3, 5),
-        causal_type="1",
-    ):
+    def __init__(self, channels, kernel_size=3, dilation=(1, 3, 5), causal_mode="hybrid"):
         nn.Module.__init__(self)
+        if causal_mode not in {"hybrid", "full_causal"}:
+            raise ValueError(f"Unsupported causal_mode={causal_mode}. Use 'hybrid' or 'full_causal'.")
 
         self.convs1 = nn.ModuleList(
             [
@@ -1361,28 +707,26 @@ class Qwen3TTSTokenizerSingleCodebookAMPBlock(torch.nn.Module):
                 CausalConv1d(channels, channels, kernel_size, 1, dilation=dilation[2]),
             ]
         )
-
-        if causal_type == "1":
+        if causal_mode == "hybrid":
             self.convs2 = nn.ModuleList(
                 [
                     nn.Conv1d(
                         channels, channels, kernel_size, 1, dilation=1, padding=self._get_padding(kernel_size, 1)
-                    ),
-                    nn.Conv1d(
-                        channels, channels, kernel_size, 1, dilation=1, padding=self._get_padding(kernel_size, 1)
-                    ),
-                    nn.Conv1d(
-                        channels, channels, kernel_size, 1, dilation=1, padding=self._get_padding(kernel_size, 1)
-                    ),
+                    )
+                    for _ in range(3)
                 ]
             )
+            self.pre_conv = nn.Identity()
+            self.pre_act = nn.Identity()
         else:
             self.convs2 = nn.ModuleList(
-                [
-                    CausalConv1d(channels, channels, kernel_size, 1, dilation=1),
-                    CausalConv1d(channels, channels, kernel_size, 1, dilation=1),
-                    CausalConv1d(channels, channels, kernel_size, 1, dilation=1),
-                ]
+                [CausalConv1d(channels, channels, kernel_size, 1, dilation=1) for _ in range(3)]
+            )
+            self.pre_conv = nn.Conv1d(
+                channels, channels, kernel_size, stride=1, padding=self._get_padding(kernel_size, 1)
+            )
+            self.pre_act = Qwen3TTSTokenizerSingleCodebookAntiAliasedActivation1d(
+                activation=Qwen3TTSTokenizerSingleCodebookSnakeBeta(channels)
             )
 
         self.num_layers = len(self.convs1) + len(self.convs2)
@@ -1395,22 +739,11 @@ class Qwen3TTSTokenizerSingleCodebookAMPBlock(torch.nn.Module):
             ]
         )
 
-        if causal_type == "2":
-            self.pre_conv = nn.Conv1d(
-                channels, channels, kernel_size, stride=1, padding=self._get_padding(kernel_size, 1)
-            )
-
-            self.pre_act = Qwen3TTSTokenizerSingleCodebookAntiAliasedActivation1d(
-                activation=Qwen3TTSTokenizerSingleCodebookSnakeBeta(channels)
-            )
-        else:
-            self.pre_conv = nn.Identity()
-            self.pre_act = nn.Identity()
-
     def _get_padding(self, kernel_size, dilation=1):
         return int((kernel_size * dilation - dilation) / 2)
 
     def forward(self, hidden_states):
+        hidden_states = self.pre_act(self.pre_conv(hidden_states))
         acts1, acts2 = self.activations[::2], self.activations[1::2]
         for conv1, conv2, act1, act2 in zip(self.convs1, self.convs2, acts1, acts2):
             residual = hidden_states
@@ -1423,14 +756,102 @@ class Qwen3TTSTokenizerSingleCodebookAMPBlock(torch.nn.Module):
         return hidden_states
 
 
-class Qwen3TTSTokenizerSingleCodebookDecoderPreTrainedModel(Qwen3TTSTokenizerSingleCodebookPreTrainedModel):
-    config_class = Qwen3TTSTokenizerSingleCodebookDecoderConfig
-    _can_compile_fullgraph = False
+@auto_docstring(
+    custom_intro="""
+    The full Qwen2.5Omni Token2WavBigVGAN model. Which take mel spectrogram as input and predict waveform.
+    """
+)
+class Qwen3TTSTokenizerSingleCodebookDecoderBigVGANModel(Qwen3TTSTokenizerSingleCodebookPreTrainedModel):
+    config: Qwen3TTSTokenizerSingleCodebookDecoderBigVGANConfig
+    input_modalities = "audio"
+    config_class = Qwen3TTSTokenizerSingleCodebookDecoderBigVGANConfig
+
+    def __init__(self, config: Qwen3TTSTokenizerSingleCodebookDecoderBigVGANConfig):
+        super().__init__(config)
+        self.num_residual_blocks = len(config.resblock_kernel_sizes)
+        self.num_upsample_layers = len(config.upsample_rates)
+        self.conv_pre = nn.Conv1d(
+            config.mel_dim,
+            config.upsample_initial_channel,
+            config.conv_pre_kernel_size,
+            config.conv_pre_stride,
+            padding=config.conv_pre_padding,
+        )
+
+        # Removing extra ModuleList breaks official state dict
+        ups = [
+            nn.ModuleList(
+                [
+                    nn.ConvTranspose1d(
+                        config.upsample_initial_channel // (2**layer_idx),
+                        config.upsample_initial_channel // (2 ** (layer_idx + 1)),
+                        kernel_size,
+                        stride,
+                        padding=(kernel_size - stride) // 2,
+                    )
+                ]
+            )
+            for layer_idx, (stride, kernel_size) in enumerate(zip(config.upsample_rates, config.upsample_kernel_sizes))
+        ]
+        self.ups = nn.ModuleList(ups)
+        self.resblocks = nn.ModuleList(
+            [
+                Qwen3TTSTokenizerSingleCodebookAMPBlock(
+                    config.upsample_initial_channel // (2 ** (layer_idx + 1)),
+                    kernel_size,
+                    dilation,
+                    config.resblock_causal_modes[layer_idx],
+                )
+                for layer_idx in range(self.num_upsample_layers)
+                for kernel_size, dilation in zip(config.resblock_kernel_sizes, config.resblock_dilation_sizes)
+            ]
+        )
+
+        self.activation_post = Qwen3TTSTokenizerSingleCodebookAntiAliasedActivation1d(
+            activation=Qwen3TTSTokenizerSingleCodebookSnakeBeta(
+                config.upsample_initial_channel // (2**self.num_upsample_layers)
+            )
+        )
+        self.conv_post = nn.Conv1d(
+            config.upsample_initial_channel // (2**self.num_upsample_layers), 1, 7, 1, padding=3, bias=False
+        )
+
+        self.post_init()
+
+    def normalize_spectrogram(self, spectrogram, max_value, min_db):
+        return torch.clamp((2 * max_value) * ((spectrogram - min_db) / (-min_db)) - max_value, -max_value, max_value)
+
+    def amplitude_to_db(self, amplitude, min_db_level):
+        min_level = torch.exp(
+            torch.tensor(min_db_level / 20.0 * np.log(10), device=amplitude.device, dtype=amplitude.dtype)
+        )
+        return 20 * torch.log10(torch.clamp(amplitude, min=min_level))
+
+    def process_mel_spectrogram(self, mel_spectrogram):
+        amplitude_spectrum = torch.exp(mel_spectrogram)
+        decibel_spectrum = self.amplitude_to_db(amplitude_spectrum, -115) - 20
+        return self.normalize_spectrogram(decibel_spectrum, 1, -115)
+
+    def forward(self, mel_spectrogram, **kwargs):
+        processed_spectrogram = self.process_mel_spectrogram(mel_spectrogram)
+        hidden_representation = self.conv_pre(processed_spectrogram)
+
+        for layer_index in range(self.num_upsample_layers):
+            hidden_representation = self.ups[layer_index][0](hidden_representation)
+            residual_output = sum(
+                self.resblocks[layer_index * self.num_residual_blocks + block_index](hidden_representation)
+                for block_index in range(self.num_residual_blocks)
+            )
+            residual_output = residual_output / self.num_residual_blocks
+            hidden_representation = residual_output
+
+        hidden_representation = self.activation_post(hidden_representation)
+        output_waveform = self.conv_post(hidden_representation)
+        return torch.clamp(output_waveform, min=-1.0, max=1.0).squeeze().cpu()
 
 
 class Qwen3TTSTokenizerSingleCodebookDiTRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
+    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Qwen3TTSTokenizerSingleCodebookDiTConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
@@ -1444,24 +865,19 @@ class Qwen3TTSTokenizerSingleCodebookDiTRotaryEmbedding(nn.Module):
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
+    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
-        config: Qwen3TTSTokenizerSingleCodebookDiTConfig | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
+        config: Qwen3TTSTokenizerSingleCodebookDiTConfig, device=None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
             config ([`~transformers.PreTrainedConfig`]):
                 The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
         Returns:
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
@@ -1470,12 +886,9 @@ class Qwen3TTSTokenizerSingleCodebookDiTRotaryEmbedding(nn.Module):
         dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
 
         attention_factor = 1.0  # Unused in this type of RoPE
-
         # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
-        return inv_freq, attention_factor
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        return inv_freq.to(device), attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
@@ -1491,6 +904,160 @@ class Qwen3TTSTokenizerSingleCodebookDiTRotaryEmbedding(nn.Module):
             sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+
+@use_kernel_forward_from_hub("rotary_pos_emb")
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors.
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
+
+
+class Qwen3TTSTokenizerSingleCodebookDiTAttention(nn.Module):
+    def __init__(self, config: Qwen3TTSTokenizerSingleCodebookDiTConfig):
+        super().__init__()
+
+        self.config = config
+        self.dim = config.hidden_size
+        self.heads = config.num_attention_heads
+        self.inner_dim = config.head_dim * config.num_attention_heads
+        self.dropout = config.dropout
+        self.is_causal = False
+
+        self.to_q = nn.Linear(config.hidden_size, self.inner_dim)
+        self.to_k = nn.Linear(config.hidden_size, self.inner_dim)
+        self.to_v = nn.Linear(config.hidden_size, self.inner_dim)
+
+        self.to_out = nn.ModuleList([nn.Linear(self.inner_dim, config.hidden_size), nn.Dropout(config.dropout)])
+
+    def forward(self, hidden_states, position_embeddings=None, attention_mask=None) -> torch.Tensor:
+        batch_size = hidden_states.shape[0]
+        query = self.to_q(hidden_states)
+        key = self.to_k(hidden_states)
+        value = self.to_v(hidden_states)
+
+        inner_dim = key.shape[-1]
+        head_dim = inner_dim // self.heads
+        query = query.view(batch_size, -1, self.heads, head_dim).transpose(1, 2)
+        key = key.view(batch_size, -1, self.heads, head_dim).transpose(1, 2)
+        value = value.view(batch_size, -1, self.heads, head_dim).transpose(1, 2)
+
+        cos, sin = position_embeddings
+        query[:, :1], key[:, :1] = apply_rotary_pos_emb(query[:, :1], key[:, :1], cos, sin)
+
+        attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_weights, _ = attention_interface(
+            self,
+            query,
+            key,
+            value,
+            attention_mask=attention_mask,
+            is_causal=False,
+        )
+        attention_weights = attention_weights.reshape(batch_size, -1, self.heads * head_dim)
+        attention_output = self.to_out[0](attention_weights.to(query.dtype))
+        attention_output = self.to_out[1](attention_output)
+        return attention_output
+
+
+# AdaLayerNormZero
+# return with modulated x for attn input, and params for later mlp modulation
+class Qwen3TTSTokenizerSingleCodebookAdaLayerNormZero(nn.Module):
+    def __init__(self, dim):
+        super().__init__()
+
+        self.silu = nn.SiLU()
+        self.linear = nn.Linear(dim, dim * 6)
+
+        self.norm = nn.LayerNorm(dim, elementwise_affine=False, eps=1e-6)
+
+    def forward(self, hidden_states, emb=None):
+        emb = self.linear(self.silu(emb))
+        shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = torch.chunk(emb, 6, dim=1)
+
+        hidden_states = self.norm(hidden_states) * (1 + scale_msa[:, None]) + shift_msa[:, None]
+        return hidden_states, gate_msa, shift_mlp, scale_mlp, gate_mlp
+
+
+# FeedForward
+class DiTMLP(nn.Module):
+    def __init__(self, dim, mult=4, dropout=0.0):
+        super().__init__()
+        inner_dim = int(dim * mult)
+
+        self.ff = nn.ModuleList(
+            [
+                nn.Linear(dim, inner_dim),
+                nn.GELU(approximate="tanh"),
+                nn.Dropout(dropout),
+                nn.Linear(inner_dim, dim),
+            ]
+        )
+
+    def forward(self, hidden_states):
+        for layer in self.ff:
+            hidden_states = layer(hidden_states)
+        return hidden_states
+
+
+class Qwen3TTSTokenizerSingleCodebookDiTDecoderLayer(nn.Module):
+    def __init__(self, config: Qwen3TTSTokenizerSingleCodebookDiTConfig, look_ahead_block=0, look_backward_block=0):
+        super().__init__()
+        self.attn_norm = Qwen3TTSTokenizerSingleCodebookAdaLayerNormZero(config.hidden_size)
+        self.attn = Qwen3TTSTokenizerSingleCodebookDiTAttention(config)
+        self.look_ahead_block = look_ahead_block
+        self.look_backward_block = look_backward_block
+        self.ff_norm = nn.LayerNorm(config.hidden_size, elementwise_affine=False, eps=1e-6)
+        self.ff = DiTMLP(dim=config.hidden_size, mult=config.ff_mult, dropout=config.dropout)
+
+    def forward(
+        self, hidden_states, timestep, position_embeddings=None, block_diff=None
+    ):  # x: noised input, t: time embedding
+        # pre-norm & modulation for attention input
+        norm, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.attn_norm(hidden_states, emb=timestep)
+
+        # attention
+        attn_output = self.attn(
+            hidden_states=norm,
+            position_embeddings=position_embeddings,
+            attention_mask=(block_diff >= -float(self.look_backward_block))
+            & (block_diff <= float(self.look_ahead_block)),
+        )
+
+        # process attention output for input x
+        hidden_states = hidden_states + gate_msa.unsqueeze(1) * attn_output
+
+        norm = self.ff_norm(hidden_states) * (1 + scale_mlp[:, None]) + shift_mlp[:, None]
+        ff_output = self.ff(norm)
+        hidden_states = hidden_states + gate_mlp.unsqueeze(1) * ff_output
+
+        return hidden_states
 
 
 class TimeDelayNetBlock(nn.Module):
@@ -1863,6 +1430,79 @@ class Qwen3TTSTokenizerSingleCodebookAdaLayerNormZero_Final(nn.Module):
         return hidden_states
 
 
+def deinterleave_head_dim(x: torch.Tensor) -> torch.Tensor:
+    """Reorder the head dim from interleaved RoPE layout `(x0, x1, x2, x3, ...)` to the standard half-split layout
+    `(x0, x2, ..., x1, x3, ...)` so the kernelized `apply_rotary_pos_emb` can be used.
+    """
+    return torch.cat((x[..., 0::2], x[..., 1::2]), dim=-1)
+
+
+class DiTAttention(nn.Module):
+    def __init__(self, config: Qwen3TTSTokenizerSingleCodebookDiTConfig):
+        super().__init__()
+
+        self.config = config
+        self.dim = config.hidden_size
+        self.heads = config.num_attention_heads
+        self.inner_dim = config.head_dim * config.num_attention_heads
+        self.dropout = config.dropout
+        self.is_causal = False
+
+        self.to_q = nn.Linear(config.hidden_size, self.inner_dim)
+        self.to_k = nn.Linear(config.hidden_size, self.inner_dim)
+        self.to_v = nn.Linear(config.hidden_size, self.inner_dim)
+
+        self.to_out = nn.ModuleList([nn.Linear(self.inner_dim, config.hidden_size), nn.Dropout(config.dropout)])
+
+    def forward(
+        self,
+        hidden_states,  # noised input x
+        position_embeddings=None,  # rotary position embedding for x
+        attention_mask=None,
+    ) -> torch.Tensor:
+        batch_size = hidden_states.shape[0]
+
+        # `sample` projections.
+        query = self.to_q(hidden_states)
+        key = self.to_k(hidden_states)
+        value = self.to_v(hidden_states)
+
+        # attention
+        inner_dim = key.shape[-1]
+        head_dim = inner_dim // self.heads
+        query = query.view(batch_size, -1, self.heads, head_dim).transpose(1, 2)
+        key = key.view(batch_size, -1, self.heads, head_dim).transpose(1, 2)
+        value = value.view(batch_size, -1, self.heads, head_dim).transpose(1, 2)
+
+        # apply rotary position embedding
+        # Due to training process, only first head is applied with RoPE, will be fixed at next release
+        # The checkpoint uses interleaved RoPE, so deinterleave q/k before the half-split rotation.
+        cos, sin = position_embeddings
+        query[:, :1], key[:, :1] = apply_rotary_pos_emb(
+            deinterleave_head_dim(query[:, :1]), deinterleave_head_dim(key[:, :1]), cos, sin
+        )
+
+        attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_weights, _ = attention_interface(
+            self,
+            query,
+            key,
+            value,
+            attention_mask=attention_mask,
+            is_causal=False,
+        )
+
+        # mask. e.g. inference got a batch with different target durations, mask out the padding
+        attention_weights = attention_weights.reshape(batch_size, -1, self.heads * head_dim)
+        attention_weights = attention_weights.to(query.dtype)
+
+        # linear proj
+        attention_output = self.to_out[0](attention_weights)
+        attention_output = self.to_out[1](attention_output)
+
+        return attention_output
+
+
 # time step conditioning embedding
 class SinusPositionEmbedding(nn.Module):
     def __init__(self, dim):
@@ -1947,14 +1587,12 @@ class Qwen3TTSTokenizerSingleCodebookDecoderDiTModel(Qwen3TTSTokenizerSingleCode
 
         self.text_embed = DiTCodecEmbedding(config.num_embeds, config.emb_dim, config.repeats)
         self.input_embed = DiTInputEmbedding(config)
-        # Interleaved (GPT-J style) rotary, reused from Cohere; same config-driven init as the base DiT rotary
         self.rotary_embed = Qwen3TTSTokenizerSingleCodebookDiTRotaryEmbedding(config)
 
         self.hidden_size = config.hidden_size
         self.layers = config.num_hidden_layers
         self.block_size = config.block_size
         self.num_attention_heads = config.num_attention_heads
-        # Uses the SingleCodebook DiT decoder layer alias
         self.transformer_blocks = nn.ModuleList(
             [
                 Qwen3TTSTokenizerSingleCodebookDiTDecoderLayer(
@@ -2001,11 +1639,13 @@ class Qwen3TTSTokenizerSingleCodebookDecoderDiTModel(Qwen3TTSTokenizerSingleCode
         apply_cfg=True,
         **kwargs,
     ):
-        # batch_size accounts for CFG doubling that happens inside input_embed
-        batch_size = hidden_states.shape[0] * 2
+        batch_size = hidden_states.shape[0]
         if time_step.ndim == 0:
-            time_step = time_step.repeat(batch_size)
+            time_step = time_step.repeat(batch_size * 2 if apply_cfg else batch_size)
+        elif apply_cfg and time_step.shape[0] == batch_size:
+            time_step = torch.cat([time_step, time_step], dim=0)
 
+        # Compute embeddings
         time_embedding = self.time_embed(time_step)
         text_embedding = self.text_embed(quantized_code, drop_code=False if apply_cfg else drop_code)
         text_embedding_unconditioned = self.text_embed(quantized_code, drop_code=True) if apply_cfg else None
@@ -2020,10 +1660,13 @@ class Qwen3TTSTokenizerSingleCodebookDecoderDiTModel(Qwen3TTSTokenizerSingleCode
             apply_cfg=apply_cfg,
         )
 
-        # rotary_embed takes only hidden_states (no separate position_ids)
-        position_embeddings = self.rotary_embed(hidden_states)
+        # Compute positional encodings
+        position_ids = torch.arange(hidden_states.shape[1], device=hidden_states.device)
+        position_ids = position_ids[None, :].repeat(hidden_states.shape[0], 1)
+        position_embeddings = self.rotary_embed(hidden_states, position_ids)
         blockwise_difference = self._create_block_diff(hidden_states)
 
+        # Transformer blocks
         for transformer_block in self.transformer_blocks:
             hidden_states = transformer_block(
                 hidden_states,
@@ -2034,6 +1677,7 @@ class Qwen3TTSTokenizerSingleCodebookDecoderDiTModel(Qwen3TTSTokenizerSingleCode
 
         hidden_states = self.norm_out(hidden_states, time_embedding)
         output = self.proj_out(hidden_states)
+
         return output
 
     @torch.no_grad()
@@ -2046,12 +1690,13 @@ class Qwen3TTSTokenizerSingleCodebookDecoderDiTModel(Qwen3TTSTokenizerSingleCode
         guidance_scale=0.5,
         sway_coefficient=-1.0,
     ):
-        # Single Codebook: pre-allocate large buffer then slice to needed duration
         noise_initialization = torch.randn(
-            [quantized_code.shape[0], 30000, self.mel_dim], dtype=reference_mel_spectrogram.dtype
+            [quantized_code.shape[0], 30000, self.mel_dim],
+            dtype=reference_mel_spectrogram.dtype,
+            device=quantized_code.device,
         )
         maximum_duration = quantized_code.shape[1] * self.repeats
-        initial_state = noise_initialization[:, :maximum_duration].to(quantized_code.device)
+        initial_state = noise_initialization[:, :maximum_duration]
         conditioning_vector = conditioning_vector.unsqueeze(1).repeat(1, maximum_duration, 1)
 
         def ode_function(time_step, hidden_states):
@@ -2064,6 +1709,7 @@ class Qwen3TTSTokenizerSingleCodebookDecoderDiTModel(Qwen3TTSTokenizerSingleCode
                     time_step=time_step,
                     drop_audio_conditioning=False,
                     drop_code=False,
+                    apply_cfg=False,
                 )
             model_output = self(
                 hidden_states=hidden_states,
@@ -2078,21 +1724,14 @@ class Qwen3TTSTokenizerSingleCodebookDecoderDiTModel(Qwen3TTSTokenizerSingleCode
 
         time_embedding = torch.linspace(0, 1, num_steps, device=quantized_code.device, dtype=conditioning_vector.dtype)
         if sway_coefficient is not None:
-            time_embedding += sway_coefficient * (torch.cos(torch.pi / 2 * time_embedding) - 1 + time_embedding)
+            time_embedding = time_embedding + sway_coefficient * (
+                torch.cos(torch.pi / 2 * time_embedding) - 1 + time_embedding
+            )
 
-        # Single Codebook: Euler ODE solver (parent uses RK4)
         values = initial_state.clone()
         for t0, t1 in zip(time_embedding[:-1], time_embedding[1:]):
-            dt = t1 - t0
-            vt = ode_function(t0, values)
-            values = values + vt * dt
-
+            values = values + ode_function(t0, values) * (t1 - t0)
         return values.permute(0, 2, 1)
-
-    def optimized_scale(self, positive_flat, negative_flat):
-        dot_product = torch.sum(positive_flat * negative_flat, dim=1, keepdim=True)
-        squared_norm = torch.sum(negative_flat**2, dim=1, keepdim=True) + 1e-8
-        return dot_product / squared_norm
 
 
 @auto_docstring(
@@ -2111,27 +1750,12 @@ class Qwen3TTSTokenizerSingleCodebookDecoder(Qwen3TTSTokenizerSingleCodebookPreT
     config_class = Qwen3TTSTokenizerSingleCodebookDecoderConfig
 
     def __init__(self, config: Qwen3TTSTokenizerSingleCodebookDecoderConfig):
-        # Skip parent's __init__ to use SingleCodebook attribute names (self.dit / self.bigvgan)
-        # that match the original checkpoint state dict keys
         super().__init__(config)
-        attn_impl = config._attn_implementation
-        if config._attn_implementation == "flash_attention_2":
-            logger.warning_once(
-                "Qwen3TTSTokenizerSingleCodebookDecoder must inference with fp32, but flash_attention_2 only supports "
-                "fp16 and bf16, attention implementation of Qwen3TTSTokenizerSingleCodebookDecoder will fallback to "
-                "sdpa."  # noqa: E501
-            )
-            attn_impl = "sdpa"
-        elif config._attn_implementation == "eager":
-            logger.warning_once(
-                "Qwen3TTSTokenizerSingleCodebookDecoder does not support eager attention implementation, fall back to sdpa"
-            )
-            attn_impl = "sdpa"
         self.dit = Qwen3TTSTokenizerSingleCodebookDecoderDiTModel._from_config(
-            config.dit_config, attn_implementation=attn_impl
+            config.dit_config, attn_implementation="sdpa"
         )
         self.bigvgan = Qwen3TTSTokenizerSingleCodebookDecoderBigVGANModel._from_config(
-            config.bigvgan_config, attn_implementation=attn_impl
+            config.bigvgan_config, attn_implementation="sdpa"
         )
         self.post_init()
 
@@ -2154,17 +1778,70 @@ class Qwen3TTSTokenizerSingleCodebookDecoder(Qwen3TTSTokenizerSingleCodebookPreT
             guidance_scale=guidance_scale,
             sway_coefficient=sway_coefficient,
         )
-        waveform = self.bigvgan(mel_spectrogram)
-        return waveform
+        return self.bigvgan(mel_spectrogram)
+
+
+@auto_docstring(
+    custom_intro="""
+    Qwen3-TTS single-codebook tokenizer: Whisper-family encoder, sibling quantizer, and DiT/BigVGAN decoder.
+    """
+)
+class Qwen3TTSTokenizerSingleCodebookModel(Qwen3TTSTokenizerSingleCodebookPreTrainedModel):
+    def __init__(self, config: Qwen3TTSTokenizerSingleCodebookConfig):
+        super().__init__(config)
+        self.encoder = Qwen3TTSTokenizerSingleCodebookEncoder._from_config(config.encoder_config)
+        self.quantizer = Qwen3TTSTokenizerSingleCodebookQuantizer._from_config(config.quantizer_config)
+        self.decoder = Qwen3TTSTokenizerSingleCodebookDecoder._from_config(config.decoder_config)
+        self.post_init()
+
+    @can_return_tuple
+    @auto_docstring
+    def encode(
+        self,
+        input_features: torch.FloatTensor,
+        input_features_mask: torch.Tensor | None = None,
+        **kwargs,
+    ) -> Qwen3TTSTokenizerSingleCodebookEncoderOutput:
+        encoder_outputs = self.encoder(input_features, attention_mask=input_features_mask)
+        encoder_mask = None
+        if input_features_mask is not None:
+            after_cnn = self.encoder._get_feat_extract_output_lengths(input_features_mask.long().sum(-1))[0]
+            seq_len = encoder_outputs.last_hidden_state.size(1)
+            encoder_mask = torch.arange(seq_len, device=input_features.device)[None, :] < after_cnn[:, None]
+        audio_codes, audio_codes_mask = self.quantizer.encode(
+            encoder_outputs.last_hidden_state, attention_mask=encoder_mask
+        )
+        return Qwen3TTSTokenizerSingleCodebookEncoderOutput(audio_codes=audio_codes, audio_codes_mask=audio_codes_mask)
+
+    @can_return_tuple
+    @auto_docstring
+    def decode(
+        self,
+        audio_codes: torch.LongTensor,
+        xvectors: torch.FloatTensor,
+        ref_mels: torch.FloatTensor,
+        num_steps: int = 10,
+        guidance_scale: float = 0.5,
+        sway_coefficient: float = -1.0,
+        **kwargs,
+    ) -> Qwen3TTSTokenizerSingleCodebookDecoderOutput:
+        audio_values = self.decoder(
+            code=audio_codes,
+            conditioning=xvectors,
+            reference_mel=ref_mels,
+            num_steps=num_steps,
+            guidance_scale=guidance_scale,
+            sway_coefficient=sway_coefficient,
+        )
+        return Qwen3TTSTokenizerSingleCodebookDecoderOutput(audio_values=audio_values)
 
 
 __all__ = [
     "Qwen3TTSTokenizerSingleCodebookPreTrainedModel",
-    "Qwen3TTSTokenizerSingleCodebookDecoderPreTrainedModel",
+    "Qwen3TTSTokenizerSingleCodebookEncoder",
+    "Qwen3TTSTokenizerSingleCodebookQuantizer",
     "Qwen3TTSTokenizerSingleCodebookDecoderDiTModel",
     "Qwen3TTSTokenizerSingleCodebookDecoderBigVGANModel",
     "Qwen3TTSTokenizerSingleCodebookDecoder",
-    "Qwen3TTSTokenizerSingleCodebookEncoderPreTrainedModel",
-    "Qwen3TTSTokenizerSingleCodebookEncoder",
     "Qwen3TTSTokenizerSingleCodebookModel",
 ]
