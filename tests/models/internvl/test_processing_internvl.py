@@ -12,9 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import re
 import inspect
 import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
 
+import numpy as np
 from parameterized import parameterized
 
 from transformers import InternVLProcessor
@@ -26,6 +30,36 @@ from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
 if is_torch_available():
     import torch
+
+
+class InternVLProcessorRegressionTest(unittest.TestCase):
+    def test_image_patch_offsets_normalize_tensor_like_counts_before_cumsum(self):
+        processor = InternVLProcessor.__new__(InternVLProcessor)
+        processor.tokenizer = SimpleNamespace(init_kwargs={})
+        processor.image_token = "<image>"
+        processor.video_token = "<video>"
+        processor.multimodal_pattern = re.compile(r"(?P<image><image>)|(?P<video><video>)")
+
+        class FakeNumPatches:
+            def tolist(self):
+                return [2]
+
+        fake_model_inputs = {
+            "num_patches": FakeNumPatches(),
+            "pixel_values": np.arange(2).reshape(2, 1),
+        }
+        original_cumsum = np.cumsum
+
+        def check_input(values, *args, **kwargs):
+            self.assertEqual(values, [2])
+            return original_cumsum(values, *args, **kwargs)
+
+        with patch("transformers.models.internvl.processing_internvl.ProcessorMixin.__call__", return_value=fake_model_inputs):
+            with patch("transformers.feature_extraction_utils.BatchFeature.convert_to_tensors", new=lambda self, *args, **kwargs: self):
+                with patch("transformers.models.internvl.processing_internvl.np.cumsum", side_effect=check_input) as mock_cumsum:
+                    processor(text=processor.image_token, images=[object()], return_tensors="pt")
+
+        mock_cumsum.assert_called_once()
 
 
 @require_vision
