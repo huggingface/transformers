@@ -175,4 +175,7 @@ class RobertaTokenizer(TokenizersBackend):
         )
 
 
-__all__ = ["RobertaTokenizer"]
+# RobertaTokenizerFast is an alias for RobertaTokenizer (since RobertaTokenizer is already a fast tokenizer)
+RobertaTokenizerFast = RobertaTokenizer
+
+__all__ = ["RobertaTokenizer", "RobertaTokenizerFast"]

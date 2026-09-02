@@ -79,6 +79,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("bridgetower", "BridgeTowerModel"),
         ("bros", "BrosModel"),
         ("camembert", "CamembertModel"),
+        ("canary", "CanaryModel"),
         ("canine", "CanineModel"),
         ("chameleon", "ChameleonModel"),
         ("chinese_clip", "ChineseCLIPModel"),
@@ -208,6 +209,9 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("glm4v_moe_vision", "Glm4vMoeVisionModel"),
         ("glm4v_text", "Glm4vTextModel"),
         ("glm4v_vision", "Glm4vVisionModel"),
+        ("glm5_next", "Glm5NextModel"),
+        ("glm5_next_text", "Glm5NextTextModel"),
+        ("glm5_next_vision", "Glm5NextVisionModel"),
         ("glm_image", "GlmImageModel"),
         ("glm_image_text", "GlmImageTextModel"),
         ("glm_image_vision", "GlmImageVisionModel"),
@@ -232,6 +236,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("granite", "GraniteModel"),
         ("granite4_vision", "Granite4VisionModel"),
         ("granite_speech", "GraniteSpeechModel"),
+        ("granite_speech5_ctc", "GraniteSpeech5ForCTC"),
+        ("granite_speech5_encoder", "GraniteSpeech5Encoder"),
         ("granite_speech_plus", "GraniteSpeechPlusModel"),
         ("granite_swa", "GraniteSWAModel"),
         ("granitemoe", "GraniteMoeModel"),
@@ -364,6 +370,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("nemotron_asr_streaming", "NemotronAsrStreamingForRNNT"),
         ("nemotron_asr_streaming_encoder", "NemotronAsrStreamingEncoder"),
         ("nemotron_h", "NemotronHModel"),
+        ("neomme", "NeoMMEModel"),
+        ("neucodec", "NeuCodecModel"),
         ("nllb-moe", "NllbMoeModel"),
         ("nomic_bert", "NomicBertModel"),
         ("nystromformer", "NystromformerModel"),
@@ -445,6 +453,9 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("qwen3_vl_moe_vision", "Qwen3VLMoeVisionModel"),
         ("qwen3_vl_text", "Qwen3VLTextModel"),
         ("qwen3_vl_vision", "Qwen3VLVisionModel"),
+        ("qwen4_exp", "Qwen4ExpModel"),
+        ("qwen4_exp_text", "Qwen4ExpTextModel"),
+        ("qwen4_exp_vision", "Qwen4ExpVisionModel"),
         ("radio", "RadioModel"),
         ("recurrent_gemma", "RecurrentGemmaModel"),
         ("reformer", "ReformerModel"),
@@ -528,6 +539,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("univnet", "UnivNetModel"),
         ("uvdoc", "UVDocModel"),
         ("vaultgemma", "VaultGemmaModel"),
+        ("vibevoice", "VibeVoiceForConditionalGeneration"),
         ("vibevoice_acoustic_tokenizer", "VibeVoiceAcousticTokenizerModel"),
         ("vibevoice_acoustic_tokenizer_decoder", "VibeVoiceAcousticTokenizerDecoderModel"),
         ("vibevoice_acoustic_tokenizer_encoder", "VibeVoiceAcousticTokenizerEncoderModel"),
@@ -830,6 +842,8 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("qwen3_5_text", "Qwen3_5ForCausalLM"),
         ("qwen3_moe", "Qwen3MoeForCausalLM"),
         ("qwen3_next", "Qwen3NextForCausalLM"),
+        ("qwen4_exp", "Qwen4ExpForCausalLM"),  # VLM compatibility
+        ("qwen4_exp_text", "Qwen4ExpForCausalLM"),
         ("recurrent_gemma", "RecurrentGemmaForCausalLM"),
         ("reformer", "ReformerModelWithLMHead"),
         ("rembert", "RemBertForCausalLM"),
@@ -1096,6 +1110,7 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
         ("glm46v", "Glm46VForConditionalGeneration"),
         ("glm4v", "Glm4vForConditionalGeneration"),
         ("glm4v_moe", "Glm4vMoeForConditionalGeneration"),
+        ("glm5_next", "Glm5NextForConditionalGeneration"),
         ("glm_ocr", "GlmOcrForConditionalGeneration"),
         ("glmga", "Glm46VForConditionalGeneration"),
         ("got_ocr2", "GotOcr2ForConditionalGeneration"),
@@ -1142,6 +1157,7 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
         ("qwen3_omni_moe_thinker", "Qwen3OmniMoeThinkerForConditionalGeneration"),
         ("qwen3_vl", "Qwen3VLForConditionalGeneration"),
         ("qwen3_vl_moe", "Qwen3VLMoeForConditionalGeneration"),
+        ("qwen4_exp", "Qwen4ExpForConditionalGeneration"),
         ("shieldgemma2", "Gemma3ForConditionalGeneration"),
         ("smolvlm", "SmolVLMForConditionalGeneration"),
         ("step3p7", "Step3p7ForConditionalGeneration"),
@@ -1209,6 +1225,7 @@ MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
         ("mpnet", "MPNetForMaskedLM"),
         ("mra", "MraForMaskedLM"),
         ("mvp", "MvpForConditionalGeneration"),
+        ("neomme", "NeoMMEForMaskedLM"),
         ("nomic_bert", "NomicBertForMaskedLM"),
         ("nystromformer", "NystromformerForMaskedLM"),
         ("perceiver", "PerceiverForMaskedLM"),
@@ -1340,6 +1357,7 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = OrderedDict(
     [
+        ("canary", "CanaryForConditionalGeneration"),
         ("cohere_asr", "CohereAsrForConditionalGeneration"),
         ("dia", "DiaForConditionalGeneration"),
         ("granite_speech", "GraniteSpeechForConditionalGeneration"),
@@ -1354,6 +1372,7 @@ MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = OrderedDict(
         ("speech-encoder-decoder", "SpeechEncoderDecoderModel"),
         ("speech_to_text", "Speech2TextForConditionalGeneration"),
         ("speecht5", "SpeechT5ForSpeechToText"),
+        ("vibevoice", "VibeVoiceForConditionalGeneration"),
         ("vibevoice_asr", "VibeVoiceAsrForConditionalGeneration"),
         ("voxtral", "VoxtralForConditionalGeneration"),
         ("voxtral_realtime", "VoxtralRealtimeForConditionalGeneration"),
@@ -1774,6 +1793,7 @@ MODEL_FOR_CTC_MAPPING_NAMES = OrderedDict(
     [
         # Model for Connectionist temporal classification (CTC) mapping
         ("data2vec-audio", "Data2VecAudioForCTC"),
+        ("granite_speech5_ctc", "GraniteSpeech5ForCTC"),
         ("hubert", "HubertForCTC"),
         ("lasr_ctc", "LasrForCTC"),
         ("parakeet_ctc", "ParakeetForCTC"),
@@ -1850,6 +1870,7 @@ MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING_NAMES = OrderedDict(
         ("qwen3_omni_moe", "Qwen3OmniMoeForConditionalGeneration"),
         ("seamless_m4t", "SeamlessM4TForTextToSpeech"),
         ("seamless_m4t_v2", "SeamlessM4Tv2ForTextToSpeech"),
+        ("vibevoice", "VibeVoiceForConditionalGeneration"),
         ("vits", "VitsModel"),
     ]
 )
@@ -2006,6 +2027,7 @@ MODEL_FOR_AUDIO_TOKENIZATION_NAMES = OrderedDict(
     [
         ("dac", "DacModel"),
         ("higgs_audio_v2_tokenizer", "HiggsAudioV2TokenizerModel"),
+        ("neucodec", "NeuCodecModel"),
         ("vibevoice_acoustic_tokenizer", "VibeVoiceAcousticTokenizerModel"),
         ("xcodec2", "Xcodec2Model"),
     ]

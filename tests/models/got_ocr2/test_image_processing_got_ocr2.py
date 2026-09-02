@@ -19,14 +19,14 @@ from transformers.image_utils import SizeDict
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
 
 
 if is_torch_available():
     import torch
 
 
-class GotOcr2ImageProcessingTester(unittest.TestCase):
+class GotOcr2ImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -66,20 +66,6 @@ class GotOcr2ImageProcessingTester(unittest.TestCase):
             "image_std": self.image_std,
             "do_convert_rgb": self.do_convert_rgb,
         }
-
-    def expected_output_image_shape(self, images):
-        return self.num_channels, self.size["height"], self.size["width"]
-
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
 
 
 @require_torch
