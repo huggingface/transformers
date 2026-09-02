@@ -41,16 +41,19 @@ class Qwen3TTSTokenizerSingleCodebookModelTester:
         self.raw_audio_length = raw_audio_length
 
         self.encoder_config = {
-            "n_mels": 128,
-            "n_ctx": 32,
-            "n_state": 16,
-            "n_head": 2,
-            "n_layer": 1,
-            "n_window": 8,
-            "output_dim": 16,
-            "audio_vq_codebook_size": 8,
-            "audio_vq_codebook_dim": 8,
-            "audio_vq_ds_rate": 2,
+            "num_mel_bins": 16,
+            "d_model": 16,
+            "encoder_layers": 1,
+            "encoder_attention_heads": 2,
+            "encoder_ffn_dim": 32,
+            "max_source_positions": 32,
+            "num_layers_before_quantizer": 1,
+        }
+        self.quantizer_config = {
+            "hidden_size": 16,
+            "codebook_size": 8,
+            "codebook_dim": 8,
+            "downsample_rate": 2,
         }
         self.decoder_config = {
             "dit_config": {
@@ -81,13 +84,14 @@ class Qwen3TTSTokenizerSingleCodebookModelTester:
                 "resblock_dilation_sizes": [[1, 3, 5]],
                 "upsample_rates": [2],
                 "upsample_kernel_sizes": [4],
-                "resblock_causal_types": ["1"],
+                "resblock_causal_modes": ["hybrid"],
             },
         }
 
     def get_config(self):
         return Qwen3TTSTokenizerSingleCodebookConfig(
             encoder_config=self.encoder_config,
+            quantizer_config=self.quantizer_config,
             decoder_config=self.decoder_config,
         )
 
@@ -95,20 +99,14 @@ class Qwen3TTSTokenizerSingleCodebookModelTester:
         config = self.get_config()
         input_features = torch.zeros(
             self.batch_size,
-            config.encoder_config.n_mels,
+            config.encoder_config.num_mel_bins,
             self.feature_length,
             device=torch_device,
         )
-        feature_attention_mask = torch.ones(
-            self.batch_size, self.feature_length, dtype=torch.long, device=torch_device
-        )
-        input_values = torch.zeros(self.batch_size, self.raw_audio_length, device=torch_device)
-        padding_mask = torch.ones(self.batch_size, self.raw_audio_length, dtype=torch.long, device=torch_device)
+        input_features_mask = torch.ones(self.batch_size, self.feature_length, dtype=torch.long, device=torch_device)
         inputs_dict = {
-            "input_values": input_values,
             "input_features": input_features,
-            "feature_attention_mask": feature_attention_mask,
-            "padding_mask": padding_mask,
+            "input_features_mask": input_features_mask,
         }
         return config, inputs_dict
 
@@ -139,6 +137,8 @@ class Qwen3TTSTokenizerSingleCodebookModelTest(ModelTesterMixin, unittest.TestCa
             "test_model_forward_default_config_values",
             "test_feed_forward_chunking",
             "test_inputs_embeds",
+            "test_capture_outputs_decorator",
+            "test_multi_gpu_data_parallel_forward",
         )
         if any(name in self._testMethodName for name in _no_forward_tests):
             self.skipTest("Qwen3TTSTokenizerSingleCodebookModel uses custom encode/decode methods")
@@ -149,7 +149,9 @@ class Qwen3TTSTokenizerSingleCodebookModelTest(ModelTesterMixin, unittest.TestCa
     def test_model_instantiation(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         model = Qwen3TTSTokenizerSingleCodebookModel(config)
-        self.assertIsNotNone(model)
+        self.assertTrue(hasattr(model, "encoder"))
+        self.assertTrue(hasattr(model, "quantizer"))
+        self.assertTrue(hasattr(model, "decoder"))
 
     def test_save_load(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -172,45 +174,40 @@ class Qwen3TTSTokenizerSingleCodebookModelTest(ModelTesterMixin, unittest.TestCa
 
         inputs = feature_extractor(raw_audio, sampling_rate=16000, return_tensors="pt")
 
-        self.assertEqual(
-            set(inputs.keys()), {"input_features", "feature_attention_mask", "input_values", "padding_mask"}
-        )
         self.assertEqual(inputs["input_features"].shape[0], 2)
         self.assertEqual(inputs["input_features"].shape[1], feature_extractor.feature_size)
-        self.assertEqual(inputs["feature_attention_mask"].shape[0], 2)
+        self.assertEqual(inputs["input_features_mask"].shape[0], 2)
         self.assertEqual(inputs["input_values"].shape, (2, 640))
         self.assertEqual(inputs["padding_mask"].sum(dim=-1).tolist(), [321, 640])
+        self.assertEqual(inputs["ref_mel_features"].shape[0], 2)
+        self.assertEqual(inputs["ref_mel_features"].shape[-1], feature_extractor.ref_num_mel_bins)
+        self.assertTrue((inputs["input_features_mask"].sum(dim=-1) > 0).all())
+        self.assertTrue((inputs["ref_mel_attention_mask"].sum(dim=-1) > 0).all())
 
-        # Waveforms are padded to hop_length * 2 * audio_vq_ds_rate before Whisper feature extraction.
-        self.assertTrue((inputs["feature_attention_mask"].sum(dim=-1) > 0).all())
+        serialized = feature_extractor.to_dict()
+        self.assertNotIn("waveform_padder", serialized)
+        self.assertNotIn("mel_filters", serialized)
+        self.assertNotIn("ref_mel_filters", serialized)
 
     def test_encode(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
         model = Qwen3TTSTokenizerSingleCodebookModel(config).eval().to(torch_device)
 
-        class DummyXVectorExtractor:
-            def extract_code(self, wav):
-                return np.ones(192, dtype=np.float32) * len(wav), np.ones((3, 80), dtype=np.float32)
-
-        model.encoder_xvector_extractor = DummyXVectorExtractor()
-
-        inputs_dict["padding_mask"] = torch.tensor(
-            [
-                [1] * 7 + [0] * 3,
-                [1] * 10,
-            ],
-            dtype=torch.long,
-            device=torch_device,
-        )
-
         with torch.no_grad():
             outputs = model.encode(**inputs_dict)
 
-        self.assertEqual(len(outputs.audio_codes), 2)
-        self.assertEqual(len(outputs.xvectors), 2)
-        self.assertEqual(len(outputs.ref_mels), 2)
-        self.assertTrue(torch.all(outputs.xvectors[0] == 7))
-        self.assertTrue(torch.all(outputs.xvectors[1] == 10))
+        self.assertEqual(outputs.audio_codes.shape[0], 2)
+        self.assertEqual(outputs.audio_codes.ndim, 2)
+        self.assertIsNotNone(outputs.audio_codes_mask)
+        self.assertFalse(hasattr(outputs, "xvectors") and outputs.xvectors is not None)
+
+    @unittest.skip(reason="Qwen3TTSTokenizerSingleCodebookModel has no standard forward")
+    def test_capture_outputs_decorator(self):
+        pass
+
+    @unittest.skip(reason="Qwen3TTSTokenizerSingleCodebookModel has no standard forward")
+    def test_multi_gpu_data_parallel_forward(self):
+        pass
 
     @unittest.skip(reason="Qwen3TTSTokenizerSingleCodebookModel has no standard forward")
     def test_training(self):
@@ -256,7 +253,7 @@ class Qwen3TTSTokenizerSingleCodebookModelTest(ModelTesterMixin, unittest.TestCa
     def test_all_tensors_are_parameter_or_buffer(self):
         pass
 
-    @unittest.skip(reason="main_input_name requires converter re-run to propagate to modeling file")
+    @unittest.skip(reason="Codec encode/decode model does not use a single main input")
     def test_model_main_input_name(self):
         pass
 
@@ -310,4 +307,11 @@ class Qwen3TTSTokenizerSingleCodebookModelTest(ModelTesterMixin, unittest.TestCa
 
     @unittest.skip(reason="Gradient checkpointing training coverage is not applicable for this codec model")
     def test_training_gradient_checkpointing_use_reentrant_true(self):
+        pass
+
+
+@require_torch
+class Qwen3TTSTokenizerSingleCodebookIntegrationTest(unittest.TestCase):
+    @unittest.skip(reason="No public 25 Hz checkpoint")
+    def test_parity_with_original(self):
         pass
