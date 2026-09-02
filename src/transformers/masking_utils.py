@@ -233,24 +233,6 @@ def fast_all(tensor: torch.BoolTensor) -> torch.BoolTensor:
     return tensor.sum() == tensor.numel()
 
 
-def _is_padded(padding_mask: torch.Tensor, past_key_values: Cache | None) -> bool:
-    """Whether `padding_mask` actually masks anything"""
-    if is_tracing(padding_mask):
-        return True
-
-    batch_shape = tuple(padding_mask.shape[:-1])
-    kv_length = padding_mask.shape[-1]
-    seen = getattr(past_key_values, "_is_padded", None)
-    if seen is not None and seen[1] + 1 == kv_length and seen[2] == batch_shape:
-        past_key_values._is_padded = (seen[0], kv_length, batch_shape)
-        return seen[0]
-
-    is_padded = not bool(fast_all(padding_mask))
-    if past_key_values is not None:
-        past_key_values._is_padded = (is_padded, kv_length, batch_shape)
-    return is_padded
-
-
 def _ignore_causal_mask_sdpa(
     padding_mask: torch.Tensor | None,
     q_length: int,
@@ -876,19 +858,6 @@ def _preprocess_mask_arguments(
         if batch_size != position_ids.shape[0]:
             position_ids = position_ids.expand(batch_size, -1)
         packed_sequence_mask = find_packed_sequence_indices(position_ids)
-
-    # This is in addition to `_ignore_causal_mask_sdpa`, and restricted to the same mask path. That function
-    # already concludes that a mask with no padding can be skipped, but it re-derives that on every forward:
-    # it reduces the mask on the accelerator and reads the result back on the host, which stops the CPU from
-    # running ahead of it. Here the same conclusion is reached once and carried (see `_is_padded`), so it no
-    # longer costs a synchronization per decode step.
-    if (
-        attention_mask is not None
-        and ALL_MASK_ATTENTION_FUNCTIONS[config._attn_implementation] is sdpa_mask
-        and attention_mask.shape[-1] == kv_length
-        and not _is_padded(attention_mask, past_key_values)
-    ):
-        attention_mask = None
 
     return False, attention_mask, packed_sequence_mask, q_length, kv_length, q_offset, kv_offset
 
