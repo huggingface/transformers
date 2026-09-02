@@ -62,6 +62,7 @@ if is_torch_available():
         Gemma3TextForSequenceClassification,
         Gemma3TextModel,
     )
+    from transformers.cache_utils import DynamicCache, StaticCache
     from transformers.models.gemma3.modeling_gemma3 import create_masks_for_vision_model
     from transformers.pytorch_utils import is_torch_greater_or_equal
 
@@ -388,6 +389,54 @@ class Gemma3Vision2TextModelTest(VLMModelTest, unittest.TestCase):
         # Verify that causal masking still applies correctly to text
         # Token 11 (image) looking ahead at Token 12 (text) -> MASKED
         self.assertLess(full_mask[0, 0, 11, 12].item(), -1000)
+
+    @parameterized.expand([("dynamic",), ("static",)])
+    def test_attention_mask_composition_when_decoding(self, cache_implementation: str):
+        """The sliding mask must be sized against a sliding layer, not the first full attention one.
+
+        Regression test: on real Gemma3 checkpoints layer 0 is a `sliding_attention` layer, and with a
+        hybrid cache its `kv_length` differs from the first `full_attention` layer's. Sizing the sliding
+        mask against the wrong layer yields a mask that mismatches the cache (dynamic) or indexes
+        `block_sequence_ids` out of bounds (static).
+        """
+        config = self.model_tester.get_config().text_config
+        config._attn_implementation = "eager"
+        config.sliding_window = 4
+        # Real Gemma3 layer pattern: layer 0 is sliding, so it is *not* the layer `create_causal_mask`
+        # falls back to when `layer_idx` is left unspecified.
+        config.layer_types = ["sliding_attention", "full_attention"]
+        config.num_hidden_layers = len(config.layer_types)
+        self.assertNotEqual(config.layer_types[0], "full_attention")
+
+        prefill_length, max_cache_len = 13, 32
+        if cache_implementation == "static":
+            past_key_values = StaticCache(config=config, max_cache_len=max_cache_len, max_batch_size=1)
+        else:
+            past_key_values = DynamicCache(config=config)
+
+        # Prefill every layer so the cache reports realistic per-layer kv lengths
+        key_values = torch.zeros(1, config.num_key_value_heads, prefill_length, config.head_dim)
+        for layer_idx in range(config.num_hidden_layers):
+            past_key_values.update(key_values, key_values, layer_idx, {"cache_position": torch.arange(prefill_length)})
+
+        sliding_layer_idx = config.layer_types.index("sliding_attention")
+        full_layer_idx = config.layer_types.index("full_attention")
+        sliding_kv_length, _ = past_key_values.get_mask_sizes(1, sliding_layer_idx)
+        full_kv_length, _ = past_key_values.get_mask_sizes(1, full_layer_idx)
+        self.assertNotEqual(sliding_kv_length, full_kv_length)
+
+        # A single decoded token, i.e. no image in the current query
+        mask_dict = create_masks_for_vision_model(
+            config=config,
+            inputs_embeds=torch.randn(1, 1, config.hidden_size),
+            attention_mask=torch.ones((1, prefill_length + 1), dtype=torch.bool),
+            past_key_values=past_key_values,
+            position_ids=torch.tensor([[prefill_length]]),
+            block_sequence_ids=torch.full((1, 1), -1, dtype=torch.long),
+        )
+
+        self.assertEqual(mask_dict["sliding_attention"].shape[-1], sliding_kv_length)
+        self.assertEqual(mask_dict["full_attention"].shape[-1], full_kv_length)
 
 
 @slow
