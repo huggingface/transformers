@@ -825,19 +825,13 @@ class ContinuousBatchingManager:
             logger.warning(msg)
             return None
 
-        # Stopping and pausing are conflicting operations: the only allowed case is a thread that is not itself in a
-        # pause (that would deadlock) and stops in a fully blocking way (so teardown waits for the loop to exit)
-        if self.background_thread_status.is_pause_requested():
-            if self.background_thread_status.is_pause_requested(local=True):
-                raise RuntimeError(
-                    "Cannot stop the manager from inside a pause: the generation loop is paused and cannot exit, so "
-                    "this would wait forever. Leave the `pause` context before calling `stop`."
-                )
-            if not (block and timeout is None):
-                raise RuntimeError(
-                    "Another thread is pausing generation: only a fully blocking stop (`block=True`, `timeout=None`) "
-                    "can be used here, so that the teardown waits for the generation loop to actually exit."
-                )
+        # Stopping and pausing are conflicting operations: a thread inside a pause cannot stop the manager, because that
+        # would deadlock (pause waits for the stop to finsih, stop hangs because the loop is paused)
+        if self.background_thread_status.is_pause_requested(local=True):
+            raise RuntimeError(
+                "Cannot stop the manager from inside a pause: the generation loop is paused and cannot exit, so "
+                "this would wait forever. Leave the `pause` context before calling `stop`."
+            )
 
         # Signal the background thread to stop
         stop_trigger_time = perf_counter()
