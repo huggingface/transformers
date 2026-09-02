@@ -293,10 +293,7 @@ class Qwen3TTSTokenizerSingleCodebookFeatureExtractor(SequenceFeatureExtractor):
             ]
         )
         ref_mel_attention_mask = np.stack(
-            [
-                np.pad(np.ones(mel.shape[0], dtype=np.int64), (0, max_ref_length - mel.shape[0]))
-                for mel in ref_mels
-            ]
+            [np.pad(np.ones(mel.shape[0], dtype=np.int64), (0, max_ref_length - mel.shape[0])) for mel in ref_mels]
         )
 
         encoded_inputs = BatchFeature(
