@@ -185,6 +185,8 @@ class ModelRunner:
             dummy_dim, num_logits, vocab_size = logits.shape
             logits_2d = logits.view(dummy_dim * num_logits, vocab_size)
             if self.logit_processor.requires_full_history:
+                if isinstance(self.inputs_and_outputs, ContinuousBatchingAsyncIOs):
+                    raise RuntimeError("Full-history logits processors require synchronous batching.")
                 token_histories = self.inputs_and_outputs.get_token_histories(logits.device)
                 logits_2d = self.logit_processor.apply_with_full_history(
                     token_histories, logits_2d, batch_data["logits_processor_args"]
