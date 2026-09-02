@@ -72,7 +72,9 @@ class BitNetMLP(nn.Module):
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
         self.ffn_sub_norm = (
-            BitNetRMSNorm(config.intermediate_size, eps=config.rms_norm_eps) if config.use_sub_norms else nn.Identity()
+            BitNetRMSNorm(config.intermediate_size, eps=config.rms_norm_eps)
+            if config.use_sub_norms
+            else torch.nn.Identity()
         )
 
     def forward(self, x):
@@ -177,7 +179,7 @@ class BitNetAttention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
         self.attn_sub_norm = (
-            BitNetRMSNorm(config.hidden_size, eps=config.rms_norm_eps) if config.use_sub_norms else nn.Identity()
+            BitNetRMSNorm(config.hidden_size, eps=config.rms_norm_eps) if config.use_sub_norms else torch.nn.Identity()
         )
 
     def forward(
