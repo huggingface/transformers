@@ -19,7 +19,9 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_musicgen_melody import *
+    from .feature_extraction_musicgen_melody import *
     from .modeling_musicgen_melody import *
+    from .processing_musicgen_melody import *
 else:
     import sys
 

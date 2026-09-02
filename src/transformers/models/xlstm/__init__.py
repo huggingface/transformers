@@ -13,17 +13,13 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import (
-    OptionalDependencyNotAvailable,
-    _LazyModule,
-    is_torch_available,
-)
+from ...utils import _LazyModule
 from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from configuration_xlstm import *
-    from modeling_xlstm import *
+    from .configuration_xlstm import *
+    from .modeling_xlstm import *
 else:
     import sys
 

@@ -19,6 +19,7 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .tokenization_cpm import *
+    from .tokenization_cpm_fast import *
 else:
     import sys
 

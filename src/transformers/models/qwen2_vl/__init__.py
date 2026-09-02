@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from .image_processing_qwen2_vl import *
     from .modeling_qwen2_vl import *
     from .processing_qwen2_vl import *
+    from .video_processing_qwen2_vl import *
 else:
     import sys
 

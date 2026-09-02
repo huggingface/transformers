@@ -23,7 +23,6 @@ if TYPE_CHECKING:
     from .image_processing_pil_aria import *
     from .modeling_aria import *
     from .processing_aria import *
-
 else:
     import sys
 
