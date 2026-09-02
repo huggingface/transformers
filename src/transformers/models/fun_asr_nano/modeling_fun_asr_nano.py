@@ -237,7 +237,7 @@ class FunAsrNanoPositionEmbedding(nn.Module):
         super().__init__()
         self.scale = config.d_model**0.5
         self.length = config.max_position_embeddings
-        self.channels = config.input_size
+        self.channels = config.num_mel_bins * config.num_stacked_frames
         self.max_timescale = 10000
         if self.channels % 2 != 0:
             raise ValueError("FunAsrNanoPositionEmbedding needs even input channels")
@@ -326,7 +326,7 @@ class FunAsrNanoEncoder(FunAsrNanoPreTrainedModel):
     def __init__(self, config: FunAsrNanoAudioConfig):
         super().__init__(config)
         self.position_embeddings = FunAsrNanoPositionEmbedding(config)
-        self.stem = FunAsrNanoEncoderLayer(config, input_dim=config.input_size)
+        self.stem = FunAsrNanoEncoderLayer(config, input_dim=config.num_mel_bins * config.num_stacked_frames)
         self.layers = nn.ModuleList([FunAsrNanoEncoderLayer(config) for _ in range(config.num_hidden_layers - 1)])
         self.layer_norm = nn.LayerNorm(config.d_model)
         self.timestamp_prediction_layers = nn.ModuleList(
