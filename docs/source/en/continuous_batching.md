@@ -195,7 +195,10 @@ for chunk in manager.request_id_iter(request_id="streamed"):
 
 ## ContinuousBatchingConfig
 
-[`ContinuousBatchingConfig`] controls the KV cache, scheduling, CUDA graphs, memory usage, and more. Pass it alongside [`GenerationConfig`] to customize continuous batching.
+[`ContinuousBatchingConfig`] controls the KV cache, scheduling, CUDA graphs, memory usage, and more. Pass it to `generate_batch` or [`~ContinuousMixin.init_continuous_batching`] with the `continuous_batching_config` argument, separately from [`GenerationConfig`]. The two configs describe different things. [`GenerationConfig`] is model-centered and holds sampling and stopping parameters, while [`ContinuousBatchingConfig`] is hardware-centered and holds memory and scheduling parameters.
+
+> [!WARNING]
+> Setting `continuous_batching_config` on a [`GenerationConfig`] is deprecated, emits a `FutureWarning`, and will be removed in v5.19.
 
 By default, `max_batch_tokens` is `8192`, bounded by available GPU memory and never below `256`, while `num_blocks` fills the remaining memory. Use the table below to help you pick the appropriate features.
 
@@ -358,6 +361,8 @@ The fast path relies on the `flash_attn_with_kvcache` kernel, which is available
 
 For any other combination, or when the kernel can't be imported, the manager falls back to the varlen path. It logs a warning only when you set `max_blocks_per_request` explicitly.
 
+Sliding window attention doesn't support block tables, so the cache forces `max_blocks_per_request` to `0` for any model with sliding window layers, regardless of the attention implementation. If you set a nonzero value, it's overridden and the cache logs `Sliding window attention groups detected: disabling block table support.`
+
 ### CPU offloading
 
 CPU offloading copies evicted KV cache blocks to a pre-allocated pinned CPU buffer when the GPU KV cache is full. After cache space becomes available, the manager copies the blocks back to the GPU and resumes the request without recomputing its prompt and generated tokens.
@@ -470,7 +475,7 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-Prefix caching is disabled automatically when sliding window attention is active.
+Prefix caching and the [decode fast path](#decode-fast-path) are disabled automatically when sliding window attention is active.
 
 ## Next steps
 

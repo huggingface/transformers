@@ -37,6 +37,7 @@ logger = logging.get_logger(__name__)
 MISSING_FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
     [
         ("audioflamingo3", "WhisperFeatureExtractor"),
+        ("canary", "ParakeetFeatureExtractor"),
         ("csm", "EncodecFeatureExtractor"),
         ("data2vec-audio", "Wav2Vec2FeatureExtractor"),
         ("glmasr", "WhisperFeatureExtractor"),
@@ -67,6 +68,7 @@ MISSING_FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("sew-d", "Wav2Vec2FeatureExtractor"),
         ("unispeech", "Wav2Vec2FeatureExtractor"),
         ("unispeech-sat", "Wav2Vec2FeatureExtractor"),
+        ("vibevoice", "VibeVoiceAcousticTokenizerFeatureExtractor"),
         ("vibevoice_asr", "VibeVoiceAcousticTokenizerFeatureExtractor"),
         ("voxtral", "WhisperFeatureExtractor"),
         ("wav2vec2-bert", "Wav2Vec2FeatureExtractor"),
