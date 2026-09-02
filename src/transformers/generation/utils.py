@@ -436,10 +436,13 @@ class DeferredStopCheck(StopCheck):
         cache: "Cache | None",
         use_cache: bool = True,
         is_assistant: bool = False,
+        cache_is_returned: bool = True,
     ) -> bool:
         """Whether the stop decision can safely be deferred by a step, in this decoding context.
 
-        Deferring costs one extra forward pass, so it is only safe where that pass leaves no trace.
+        Deferring costs one extra forward pass, so it is only safe where that pass leaves no trace. What it
+        writes to `input_ids`, `scores` and the rest is undone whatever the cache does; the cache is the one
+        thing a rollback may not be able to reach, and that only matters if the cache is handed back at all.
         """
         # Only mps for now, we should enable it for cuda when we have gains
         if device.type != "mps":
@@ -454,7 +457,10 @@ class DeferredStopCheck(StopCheck):
         # do not risk it.
         if cache is None:
             return not use_cache
-        return cache.is_croppable
+        if cache.is_croppable:
+            return True
+        # if we don't return the cache, we don't need to bother about activating past recording since it will be dropped
+        return not cache_is_returned
 
     def __call__(self, unfinished_sequences: torch.Tensor, tokens: torch.Tensor, length: int) -> bool:
         should_stop, tokens_cpu, copy_done = self.slots[0]
@@ -2077,6 +2083,8 @@ class GenerationMixin(ContinuousMixin):
 
         # Quick escape route 1: if the user specifies a cache, we only need to check for conflicting `generate` arguments
         user_defined_cache = model_kwargs.get(cache_name)
+        # Remembered because it outlives `generate`: the caller holds it, so it has to come back intact.
+        generation_config._user_supplied_cache = user_defined_cache is not None
         if user_defined_cache is not None:
             if generation_config.cache_implementation is not None:
                 raise ValueError(
@@ -3012,13 +3020,20 @@ class GenerationMixin(ContinuousMixin):
         # recording the past holds on to whatever a cache would otherwise shrink away, and over a long prefill
         # that would defeat the point of a sliding window. From here on each step adds a single token.
         cache = next((model_kwargs[name] for name in ALL_CACHE_NAMES if name in model_kwargs), None)
+        # The cache outlives `generate` if they asked for it back, or if it is one they passed in.
+        # one edge case not fixed here is when the user pass its own cache.
+        cache_is_returned = generation_config.return_dict_in_generate
         if DeferredStopCheck.is_supported(
             input_ids.device,
             cache,
             use_cache=model_kwargs.get("use_cache", False),
             is_assistant=generation_config.is_assistant,
+            cache_is_returned=cache_is_returned,
         ):
-            stop_check = DeferredStopCheck(input_ids, stopping_criteria.max_length, cache, streamer)
+            # The cache goes in only if it has to come back intact; otherwise the extra step may stand in it.
+            stop_check = DeferredStopCheck(
+                input_ids, stopping_criteria.max_length, cache if cache_is_returned else None, streamer
+            )
         else:
             stop_check = StopCheck(streamer)
 

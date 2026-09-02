@@ -895,10 +895,6 @@ class LinearAttentionCacheLayerMixin(ABC):
 
     # All shapes are static by essence in a LinearAttention layer, so it is compilable
     is_compileable = True
-    # `crop` runs here, but it only puts back the conv states: the recurrent ones are updated in place and
-    # absorb whatever is rolled back, so the layer cannot be returned to a previous state. Models that use the
-    # conv part alone could be, but whether the recurrent states are used is not known before the first forward
-    is_croppable = False
     # Linear attention layers track their own conv/recurrent states; they don't use the key/value early-init path.
     supports_early_init = False
 
@@ -965,6 +961,19 @@ class LinearAttentionCacheLayerMixin(ABC):
             # recurrent_states can stay empty sometimes, see e.g. lfm2 which only uses the conv_states
             if self.is_recurrent_states_initialized[i]:
                 self.recurrent_states[i] = self.recurrent_states[i].index_select(0, beam_idx.to(self.device))
+
+    @property
+    def is_croppable(self) -> bool:
+        """Whether `crop` can put this layer back as it was.
+
+        It puts the conv states back, but the recurrent ones are updated in place and absorb whatever is rolled
+        back, so a layer that keeps them cannot be returned to a previous state. A layer that only ever uses the
+        conv part can be -- see e.g. lfm2. Which one this is only shows once a forward has filled the states in,
+        so before that the answer is no.
+        """
+        if any(self.is_recurrent_states_initialized.values()):
+            return False
+        return any(self.is_conv_states_initialized.values())
 
     def activate_past_recording(self):
         """
