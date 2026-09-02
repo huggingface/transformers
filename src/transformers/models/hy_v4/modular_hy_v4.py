@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """PyTorch HYV4 model."""
+from collections.abc import Callable
 
 import torch
 import torch.nn as nn
@@ -24,12 +25,12 @@ from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import RopeParameters
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4UnweightedRMSNorm
+from ..deepseek_v32.modeling_deepseek_v32 import DeepseekV32Indexer
 from ..glm4_moe_lite.modeling_glm4_moe_lite import (
-    Glm4MoeLiteAttention,
     Glm4MoeLiteDecoderLayer,
     Glm4MoeLiteForCausalLM,
     Glm4MoeLiteMLP,
@@ -41,7 +42,7 @@ from ..glm4_moe_lite.modeling_glm4_moe_lite import (
     apply_rotary_pos_emb,
 )
 from ..glm5_next.modeling_glm5_next import Glm5NextTextExperts
-from ..glm_moe_dsa.modeling_glm_moe_dsa import GlmMoeDsaIndexer, GlmMoeDsaRotaryEmbedding
+from ..glm_moe_dsa.modeling_glm_moe_dsa import GlmMoeDsaAttention, GlmMoeDsaRotaryEmbedding
 from ..gpt_oss.modeling_gpt_oss import eager_attention_forward
 
 
@@ -207,9 +208,7 @@ class HYV4RotaryEmbedding(GlmMoeDsaRotaryEmbedding):
     pass
 
 
-class HYV4Indexer(GlmMoeDsaIndexer):
-    """GLM-MoE-DSA indexer with HYV4's split-half RoPE and FP32 key normalization."""
-
+class HYV4Indexer(DeepseekV32Indexer):
     def __init__(self, config: HYV4Config, layer_idx: int):
         super().__init__(config, layer_idx)
         self.k_norm = nn.LayerNorm(self.head_dim, eps=config.rms_norm_eps)
@@ -218,132 +217,142 @@ class HYV4Indexer(GlmMoeDsaIndexer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        query_residual: torch.Tensor,
+        q_resid: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None,
-        position_ids: torch.Tensor,
-        past_key_values: Cache | None,
-    ) -> torch.LongTensor:
-        batch_size, sequence_length, _ = hidden_states.shape
-        query_states = self.wq_b(query_residual).view(batch_size, sequence_length, self.n_heads, self.head_dim)
-        key_states = self.k_norm(self.wk(hidden_states).to(self.k_norm.weight.dtype)).to(hidden_states.dtype)
-
-        query_pass, query_rotary = torch.split(
-            query_states, [self.head_dim - self.qk_rope_head_dim, self.qk_rope_head_dim], dim=-1
-        )
-        key_pass, key_rotary = torch.split(
-            key_states, [self.head_dim - self.qk_rope_head_dim, self.qk_rope_head_dim], dim=-1
-        )
-        query_rotary = query_rotary.transpose(1, 2)
-        key_rotary = key_rotary.unsqueeze(1)
+        attention_mask: torch.Tensor,
+        position_ids: torch.Tensor,  # Kept for BC
+        past_key_values: Cache | None = None,
+    ) -> torch.Tensor:
+        batch_size, seq_len, _ = hidden_states.shape
         cos, sin = position_embeddings
-        query_rotary, key_rotary = apply_rotary_pos_emb(query_rotary, key_rotary, cos, sin)
-        query_states = torch.cat([query_pass, query_rotary.transpose(1, 2)], dim=-1)
-        key_states = torch.cat([key_pass, key_rotary.squeeze(1)], dim=-1)
+        q = self.wq_b(q_resid)  # [B, S, H*D]
+        q = q.view(batch_size, seq_len, self.n_heads, self.head_dim)  # [B, S, H, D]
+        # Flipped RoPE position (later portion instead of the first)
+        q_pass, q_rot = torch.split(q, [self.head_dim - self.qk_rope_head_dim, self.qk_rope_head_dim], dim=-1)
+
+        # Norm is kept in fp32
+        k = self.k_norm(self.wk(hidden_states).to(self.k_norm.weight.dtype)).to(hidden_states.dtype).unsqueeze(2)  # [B, S, 1, D]
+        k_pass, k_rot = torch.split(k, [self.head_dim - self.qk_rope_head_dim, self.qk_rope_head_dim], dim=-1)
+
+        q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
+        q = torch.cat([q_pass, q_rot], dim=-1)  # [B, S, H, D]
+        k = torch.cat([k_pass, k_rot], dim=-1).squeeze(2)  # [B, S, D]
 
         if past_key_values is not None:
-            key_states = past_key_values.update_indexer(key_states, self.layer_idx)
+            k = past_key_values.update_indexer(k, self.layer_idx)
 
-        head_weights = self.weights_proj(hidden_states.to(self.weights_proj.weight.dtype)).float()
-        head_weights = head_weights * (self.n_heads**-0.5) * self.softmax_scale
-        scores = torch.matmul(query_states.float(), key_states.float().unsqueeze(1).transpose(-1, -2))
+        scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1))
         scores = F.relu(scores)
-        scores = torch.matmul(head_weights.unsqueeze(-2), scores).squeeze(-2)
-        if attention_mask is not None:
-            scores = scores + attention_mask
+
+        # Weight per head and sum across heads: [B, S, 1, H] @ [B, S, H, T] → [B, S, T]
+        # Apply softmax scale later
+        weights = self.weights_proj(hidden_states.to(self.weights_proj.weight.dtype)).float() * (self.n_heads**-0.5) * self.softmax_scale
+        index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
+
+        # Causality needs to be taken into account when computing scores so padding tokens don't affect computation
+        if attention_mask.dtype == torch.bool:
+            index_scores = index_scores.masked_fill(~attention_mask, float("-inf"))
         else:
-            key_positions = torch.arange(scores.shape[-1], device=scores.device)
-            causal = key_positions[None, None, :] > position_ids[:, :, None]
-            scores = scores.masked_fill(causal, float("-inf"))
-        topk = min(self.index_topk, scores.shape[-1])
-        return scores.topk(topk, dim=-1).indices.to(torch.int32)
+            index_scores = index_scores + attention_mask
+
+        topk = min(self.index_topk, index_scores.shape[-1])
+        return index_scores.topk(topk, dim=-1).indices.to(torch.int32)  # [B, S, topk]
 
 
-class HYV4Attention(Glm4MoeLiteAttention):
+class HYV4Attention(GlmMoeDsaAttention):
     def __init__(self, config: HYV4Config, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.indexer_type = config.indexer_types[layer_idx]
-        self.indexer = HYV4Indexer(config, layer_idx) if self.indexer_type == "full" else None
         self.gate_projection_size = self.v_head_dim
-        self.linear_gate = nn.Linear(config.hidden_size, self.num_heads * self.gate_projection_size, bias=False)
+        self.gate_proj = nn.Linear(config.hidden_size, self.num_heads * self.gate_projection_size, bias=False)
         self.sinks = nn.Parameter(torch.full((self.num_heads,), config.learnable_sink_init, dtype=torch.float32))
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None,
-        position_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor,
         past_key_values: Cache | None = None,
-        prev_topk_indices: torch.LongTensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        prev_topk_indices: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None, torch.LongTensor | None]:
-        batch_size, sequence_length = hidden_states.shape[:-1]
-        query_shape = (batch_size, sequence_length, -1, self.qk_head_dim)
-        key_shape = (batch_size, sequence_length, -1, self.qk_nope_head_dim + self.v_head_dim)
-        gate_score = self.linear_gate(hidden_states).view(batch_size, sequence_length, -1, self.gate_projection_size)
+    ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
+        batch_size, seq_length = hidden_states.shape[:-1]
+        query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
 
-        if self.q_lora_rank is None:
-            query_residual = None
-            query_states = self.q_proj(hidden_states)
-        else:
-            query_residual = self.q_a_layernorm(self.q_a_proj(hidden_states))
-            query_states = self.q_b_proj(query_residual)
-        query_states = query_states.view(query_shape).transpose(1, 2)
-        query_pass, query_rotary = torch.split(query_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
+        # Key difference is the gating mechanism
+        gate_states = self.gate_proj(hidden_states).view(batch_size, seq_length, -1, self.gate_projection_size)
+
+        q_resid = self.q_a_layernorm(self.q_a_proj(hidden_states))
+        q_states = self.q_b_proj(q_resid).view(query_shape).transpose(1, 2)
+        q_pass, q_rot = torch.split(q_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
 
         compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
-        key_pass, key_rotary = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
-        key_pass = self.kv_b_proj(self.kv_a_layernorm(key_pass)).view(key_shape).transpose(1, 2)
-        key_pass, value_states = torch.split(key_pass, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
-        key_rotary = key_rotary.view(batch_size, 1, sequence_length, self.qk_rope_head_dim)
+        kv_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
+        # Both latents are viewed as single-head, 4D tensors, as expected by `expand_kv`
+        k_pass = self.kv_a_layernorm(kv_pass).view(batch_size, 1, seq_length, self.kv_lora_rank)
 
+        k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
         cos, sin = position_embeddings
-        query_rotary, key_rotary = apply_rotary_pos_emb(query_rotary, key_rotary, cos, sin)
-        key_rotary = key_rotary.expand(*key_pass.shape[:-1], -1)
-        query_states = torch.cat((query_pass, query_rotary), dim=-1)
-        key_states = torch.cat((key_pass, key_rotary), dim=-1)
+        # Non-interleave RoPE
+        q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin)
+
+        query_states = torch.cat((q_pass, q_rot), dim=-1)
+
+        key_states, value_states = self.expand_kv(k_pass, k_rot)
+
+        # Sparse-attention models cache the expanded K/V, not the compressed latents. TODO (remi-or): fix this with topk
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
+        # DSA: select this layer's top-k tokens, or reuse the previous full layer's on `"shared"` layers.
         if self.indexer is not None:
-            indexer_mask = attention_mask[:, 0, :, :] if attention_mask is not None else None
             topk_indices = self.indexer(
                 hidden_states,
-                query_residual,
+                q_resid,
                 position_embeddings,
-                indexer_mask,
-                position_ids,
-                past_key_values,
-            )
+                attention_mask[:, 0, :, :],
+                position_ids,  # Kept for BC
+                past_key_values=past_key_values,
+            )  # [B, S, topk]
         else:
             if prev_topk_indices is None:
                 raise ValueError("Shared DSA layers require top-k indices from a previous full indexer layer.")
             topk_indices = prev_topk_indices
 
-        index_mask = (
-            topk_indices.new_ones((batch_size, sequence_length, key_states.shape[2]), dtype=torch.bool)
-            .scatter(-1, topk_indices.long(), False)
-            .unsqueeze(1)
-        )
-        if attention_mask is None:
-            key_positions = torch.arange(key_states.shape[2], device=hidden_states.device)
-            index_mask = index_mask | (key_positions[None, None, None, :] > position_ids[:, None, :, None])
-            attention_mask = hidden_states.new_zeros((batch_size, 1, sequence_length, key_states.shape[2]))
-        attention_mask = attention_mask.masked_fill(index_mask, torch.finfo(hidden_states.dtype).min)
+        sparse_indices = None
+        if self.config._attn_implementation in ("eager", "sdpa"):
+            index_mask = (
+                topk_indices.new_ones((batch_size, seq_length, key_states.shape[2]), dtype=torch.bool)
+                .scatter(-1, topk_indices.long(), False)
+                .unsqueeze(1)
+            )
 
-        attention_output, attention_weights = eager_attention_forward(
+            if attention_mask.dtype == torch.bool:
+                attention_mask = attention_mask & ~index_mask
+            else:
+                attention_mask = attention_mask.masked_fill(index_mask, torch.finfo(hidden_states.dtype).min)
+        else:
+            sparse_indices = topk_indices
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+        attn_output, attn_weights = attention_interface(
             self,
             query_states,
             key_states,
             value_states,
             attention_mask,
-            scaling=self.scaling,
             dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            indices=sparse_indices,  # consumed by flash_mla_with_kvcache; ignored by eager / SDPA
+            s_aux=self.sinks,
+            **kwargs,
         )
-        attention_output = attention_output * torch.sigmoid(gate_score)
-        attention_output = attention_output.reshape(batch_size, sequence_length, -1).contiguous()
-        return self.o_proj(attention_output), attention_weights, topk_indices
+
+        attn_output = attn_output * torch.sigmoid(gate_states)
+        attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
+        return self.o_proj(attn_output), attn_weights, topk_indices
 
 
 class HYV4MLP(Glm4MoeLiteMLP):
@@ -468,8 +477,6 @@ class HYV4DecoderLayer(Glm4MoeLiteDecoderLayer, nn.Module):
 
 
 class HYV4PreTrainedModel(Glm4MoeLitePreTrainedModel):
-    config: HYV4Config
-    _no_split_modules = ["HYV4DecoderLayer"]
     _keys_to_ignore_on_load_unexpected = [r"model\.mtp_layers\..*"]
     _supports_flash_attn = False
     _supports_sdpa = False
@@ -486,6 +493,7 @@ class HYV4PreTrainedModel(Glm4MoeLitePreTrainedModel):
         "weights_proj",
         "k_norm",
         "sinks",
+        "lm_head",
     ]
 
     @torch.no_grad()
@@ -518,11 +526,6 @@ class HYV4PreTrainedModel(Glm4MoeLitePreTrainedModel):
 class HYV4Model(Glm4MoeLiteModel):
     def __init__(self, config: HYV4Config):
         super().__init__(config)
-        self.layers = nn.ModuleList(
-            [HYV4DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-        )
-        self.norm = HYV4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = HYV4RotaryEmbedding(config=config)
         self.hc_head = HYV4HyperHead(config)
 
     def forward(
@@ -537,29 +540,38 @@ class HYV4Model(Glm4MoeLiteModel):
     ) -> BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
         if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids)
+            inputs_embeds: torch.Tensor = self.embed_tokens(input_ids)
+
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
+
         if position_ids is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        causal_mask = create_causal_mask(
-            config=self.config,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
-        )
+        # It may already have been prepared by e.g. `generate`
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            mask_kwargs = {
+                "config": self.config,
+                "inputs_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "past_key_values": past_key_values,
+                "position_ids": position_ids,
+                "allow_is_causal_skip": False,  # Always force creation to account for causality in the indexer
+            }
+            causal_mask_mapping = {"deepseek_sparse_attention": create_causal_mask(**mask_kwargs)}
+
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
+
         topk_indices = None
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states, topk_indices = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask,
+                attention_mask=causal_mask_mapping["deepseek_sparse_attention"],
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
@@ -567,27 +579,19 @@ class HYV4Model(Glm4MoeLiteModel):
                 prev_topk_indices=topk_indices,
                 **kwargs,
             )
+
+        # Difference with the HC head at the end
         hidden_states = self.hc_head(hidden_states)
+
         hidden_states = self.norm(hidden_states)
-        return BaseModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=past_key_values)
+        return BaseModelOutputWithPast(
+            last_hidden_state=hidden_states,
+            past_key_values=past_key_values,
+        )
 
 
 class HYV4ForCausalLM(Glm4MoeLiteForCausalLM):
-    _keep_in_fp32_modules_strict = HYV4PreTrainedModel._keep_in_fp32_modules_strict + ["lm_head"]
 
-    @classmethod
-    def _supports_default_dynamic_cache(cls) -> bool:
-        return False
-
-    def __init__(self, config: HYV4Config):
-        super().__init__(config)
-        self.model = HYV4Model(config)
-        self.vocab_size = config.vocab_size
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        self.post_init()
-
-    @can_return_tuple
-    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -600,7 +604,7 @@ class HYV4ForCausalLM(Glm4MoeLiteForCausalLM):
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
-        outputs = self.model(
+        outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -609,14 +613,17 @@ class HYV4ForCausalLM(Glm4MoeLiteForCausalLM):
             use_cache=use_cache,
             **kwargs,
         )
+
         hidden_states = outputs.last_hidden_state
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        head_input = hidden_states[:, slice_indices, :]
-        logits = self.lm_head(head_input.to(self.lm_head.weight.dtype))
+        # Key difference of the lm_head being kept in float
+        logits = self.lm_head(hidden_states[:, slice_indices, :].float())
 
         loss = None
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
+
         return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
