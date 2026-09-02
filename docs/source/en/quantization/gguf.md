@@ -41,12 +41,12 @@ Right now, the only architecture supported is Qwen3.5. Everything else falls bac
 
 ## Attention
 
-On Metal, attention has a ggml kernel too: [ggml-attn](https://huggingface.co/marcsun13/ggml-attn), the same
+On Metal, attention has a ggml kernel too: [ggml-attn](https://huggingface.co/transformers-community/ggml-attn), the same
 flash attention llama.cpp runs, for both decode and prefill.
 
 ```py
 model = AutoModelForCausalLM.from_pretrained(
-    model_id, gguf_file=filename, attn_implementation="marcsun13/ggml-attn"
+    model_id, gguf_file=filename, attn_implementation="transformers-community/ggml-attn"
 )
 ```
 

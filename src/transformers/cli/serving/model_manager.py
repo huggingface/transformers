@@ -40,7 +40,7 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 # ggml's flash attention, the default on MPS where `kernels` can fetch it.
-GGML_ATTN = "marcsun13/ggml-attn"
+GGML_ATTN = "transformers-community/ggml-attn"
 
 
 class TimedModel:
