@@ -42,7 +42,7 @@ from ..dynamic_module_utils import (
     resolve_trust_remote_code,
 )
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
-from ..masking_utils import create_masks_for_generate
+from ..masking_utils import create_masks_for_generate, fast_all
 from ..tokenization_python import ExtensionsTrie
 from ..utils import (
     ModelOutput,
@@ -778,8 +778,7 @@ class GenerationMixin(ContinuousMixin):
         inputs_tensor: torch.Tensor,
         generation_config: GenerationConfig,
         model_kwargs: dict[str, Any],
-    ) -> torch.LongTensor | None:
-        """The mask inferred from the inputs, or `None` when there is no padding for it to describe"""
+    ) -> torch.LongTensor:
         pad_token_id = generation_config._pad_token_tensor
         eos_token_id = generation_config._eos_token_tensor
 
@@ -787,14 +786,14 @@ class GenerationMixin(ContinuousMixin):
         if "input_ids" in model_kwargs and model_kwargs["input_ids"].shape[1] > 0:
             inputs_tensor = model_kwargs["input_ids"]
 
-        # No information to infer a mask from, so whatever we built would be all ones
+        # No information for attention mask inference -> return default attention mask
         default_attention_mask = torch.ones(inputs_tensor.shape[:2], dtype=torch.long, device=inputs_tensor.device)
         if pad_token_id is None:
-            return None
+            return default_attention_mask
 
         is_input_ids = len(inputs_tensor.shape) == 2 and inputs_tensor.dtype in [torch.int, torch.long]
         if not is_input_ids:
-            return None
+            return default_attention_mask
 
         is_pad_token_in_inputs = (pad_token_id is not None) and (torch.isin(inputs_tensor, pad_token_id).any())
         is_pad_token_not_equal_to_eos_token_id = (eos_token_id is None) or ~(
@@ -803,19 +802,10 @@ class GenerationMixin(ContinuousMixin):
         can_infer_attention_mask = is_pad_token_in_inputs * is_pad_token_not_equal_to_eos_token_id
         attention_mask_from_padding = inputs_tensor.ne(pad_token_id).long()
 
-        # Reading that flag on the host is what allows returning `None` at all, but a traced graph may not
-        # branch on its data, so keep the branchless form there and always hand back a mask
-        if is_tracing(inputs_tensor):
-            return (
-                attention_mask_from_padding * can_infer_attention_mask
-                + default_attention_mask * ~can_infer_attention_mask
-            )
-
-        # Nothing is padded, so there is nothing for a mask to describe
-        if not can_infer_attention_mask:
-            return None
-
-        return attention_mask_from_padding
+        attention_mask = (
+            attention_mask_from_padding * can_infer_attention_mask + default_attention_mask * ~can_infer_attention_mask
+        )
+        return attention_mask
 
     def _prepare_encoder_decoder_kwargs_for_generation(
         self: "GenerativePreTrainedModel",
@@ -998,9 +988,13 @@ class GenerationMixin(ContinuousMixin):
         # 2D attention mask (always 2D here)
         attention_mask_key = "attention_mask" if not is_encoder_decoder else "decoder_attention_mask"
         if (attention_mask := model_kwargs.get(attention_mask_key)) is not None:
-            model_kwargs[attention_mask_key] = torch.cat(
+            extended_attention_mask = torch.cat(
                 [attention_mask, attention_mask.new_ones((attention_mask.shape[0], num_new_tokens))], dim=-1
             )
+            # The tokens just added are not padding, so the longer mask has padding only if the shorter one did.
+            # `cat` hands back a new tensor, so the answer is carried over by hand (`generate` works it out once)
+            extended_attention_mask._has_padding = getattr(attention_mask, "_has_padding", True)
+            model_kwargs[attention_mask_key] = extended_attention_mask
 
         return model_kwargs
 
@@ -2567,24 +2561,13 @@ class GenerationMixin(ContinuousMixin):
             generation_config.use_cache = True
 
         if not kwargs_has_attention_mask and not self.config.is_encoder_decoder and accepts_attention_mask:
-            attention_mask = self._prepare_attention_mask_for_generation(
+            model_kwargs["attention_mask"] = self._prepare_attention_mask_for_generation(
                 inputs_tensor, generation_config, model_kwargs
             )
-            # Left unset when there is no padding, so that nothing downstream has to look at it
-            if attention_mask is not None:
-                model_kwargs["attention_mask"] = attention_mask
         elif kwargs_has_attention_mask:
             # TODO (joao): generalize this check with other types of inputs
             if model_input_name == "input_ids" and len(model_kwargs["attention_mask"].shape) > 2:
                 raise ValueError("`attention_mask` passed to `generate` must be 2D.")
-            # Tokenizers hand back a mask whether or not anything is padded, so the same conclusion has to be
-            # reached for a mask the caller passed. Skipped while tracing, as above.
-            if (
-                not self.config.is_encoder_decoder
-                and not is_tracing(model_kwargs["attention_mask"])
-                and bool(model_kwargs["attention_mask"].all())
-            ):
-                model_kwargs.pop("attention_mask")
 
         kwargs_has_position_ids = model_kwargs.get("position_ids", None) is not None
         accepts_position_ids = "position_ids" in set(inspect.signature(self.forward).parameters.keys())
@@ -2616,6 +2599,13 @@ class GenerationMixin(ContinuousMixin):
             is_encoder_decoder=self.config.is_encoder_decoder,
             **model_kwargs,
         )
+
+        # sdpa can ignore a mask with no padding in it and rely on `is_causal` instead, but `_ignore_causal_mask_sdpa`
+        # works out whether there is any on every forward: it reduces the mask on the accelerator and reads the result
+        # back on the host, which stops the CPU from running ahead of the device. Decoding only ever appends ones, so
+        # padding can only come from the prompt: the answer is settled here, once, and carried on the mask itself.
+        if not self.config.is_encoder_decoder and (attention_mask := model_kwargs.get("attention_mask")) is not None:
+            attention_mask._has_padding = is_tracing(attention_mask) or not bool(fast_all(attention_mask))
 
         if generation_config.token_healing:
             input_ids = self.heal_tokens(input_ids, generation_mode_kwargs.get("tokenizer"))
