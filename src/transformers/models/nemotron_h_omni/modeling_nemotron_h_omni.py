@@ -213,11 +213,6 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel, GenerationMixin):
     main_input_name = "input_ids"
     _supports_flash_attn_2 = True
     _supports_flash_attn = True
-    # Ignore config-derived tensors
-    _keys_to_ignore_on_load_unexpected = [
-        r"feature_extractor\.featurizer\.(fb|window)$",
-        r"input_conditioner\.norm_(mean|std)$",
-    ]
 
     def __init__(self, config: NemotronH_Omni_Reasoning_V3_Config):
         super().__init__(config)

@@ -61,8 +61,8 @@ class RadioInputConditioner(nn.Module):
 
     def __init__(self, config: RadioConfig):
         super().__init__()
-        self.norm_mean = nn.Buffer(torch.tensor(config.norm_mean).view(-1, 1, 1), persistent=False)
-        self.norm_std = nn.Buffer(torch.tensor(config.norm_std).view(-1, 1, 1), persistent=False)
+        self.norm_mean = nn.Buffer(torch.tensor(config.norm_mean).view(-1, 1, 1), persistent=True)
+        self.norm_std = nn.Buffer(torch.tensor(config.norm_std).view(-1, 1, 1), persistent=True)
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         normalized = (pixel_values.float() - self.norm_mean.float()) / self.norm_std.float()
