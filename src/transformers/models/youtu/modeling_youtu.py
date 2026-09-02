@@ -290,20 +290,20 @@ class YoutuAttention(nn.Module):
         self.is_causal = True
 
         self.q_proj = (
-            nn.Linear(self.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
-            if self.q_lora_rank is None
-            else None
+            None
+            if self.q_lora_rank is not None
+            else nn.Linear(self.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
         )
         self.q_a_proj = (
-            None
-            if self.q_lora_rank is None
-            else nn.Linear(self.hidden_size, self.q_lora_rank, bias=config.attention_bias)
+            nn.Linear(self.hidden_size, self.q_lora_rank, bias=config.attention_bias)
+            if self.q_lora_rank is not None
+            else None
         )
-        self.q_a_layernorm = None if self.q_lora_rank is None else YoutuRMSNorm(self.q_lora_rank)
+        self.q_a_layernorm = YoutuRMSNorm(self.q_lora_rank) if self.q_lora_rank is not None else None
         self.q_b_proj = (
-            None
-            if self.q_lora_rank is None
-            else nn.Linear(self.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
+            nn.Linear(self.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
+            if self.q_lora_rank is not None
+            else None
         )
 
         self.kv_a_proj_with_mqa = nn.Linear(
