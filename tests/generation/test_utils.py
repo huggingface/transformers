@@ -2488,7 +2488,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             keys_to_ignore_unexpected = model_class._keys_to_ignore_on_load_unexpected or []
             # If we don't have any mtp patterns, skip
             if not hasattr(config.get_text_config(), "num_mtp_layers") or not any(
-                "mtp" in x or re.search(r"layers\.\d+", x) is not None for x in keys_to_ignore_unexpected
+                "mtp" in x or re.search(r"layers\\?\.\d+", x) is not None for x in keys_to_ignore_unexpected
             ):
                 self.skipTest("No MTP keys registered")
 
@@ -5113,6 +5113,23 @@ class GenerationIntegrationTests(unittest.TestCase):
         input_ids = tokenized_inputs.input_ids.to(model_cpu.device)
         _ = model_cpu.generate(input_ids, **generate_kwargs)
         self.assertFalse(hasattr(model_cpu, "_compiled_call"))
+
+    def test_compileable_default_cache_doesnt_compile_encoder_decoder(self):
+        """Test that a compileable default cache doesn't trigger compilation on encoder-decoder models either"""
+        model = AutoModelForSeq2SeqLM.from_pretrained("hf-internal-testing/tiny-random-bart")
+        decoder_config = model.config.get_text_config(decoder=True)
+        # Linear attention layers are statically shaped, so the default `DynamicCache` is compileable (e.g. Mamba)
+        decoder_config.layer_types = ["linear_attention"] * decoder_config.num_hidden_layers
+        self_attention_cache = DynamicCache(config=decoder_config)
+        self.assertTrue(self_attention_cache.is_compileable)
+
+        cache = EncoderDecoderCache(
+            self_attention_cache, DynamicCache(config=model.config.get_text_config(decoder=True))
+        )
+        generation_config = GenerationConfig()
+        generation_config.compile_config = CompileConfig()
+        generation_config.compile_config._compile_all_devices = True  # force compilation (e.g. fast CI, CPU)
+        self.assertFalse(model._valid_auto_compile_criteria({"past_key_values": cache}, generation_config))
 
     def test_custom_generate_from_argument_in_generate(self):
         """Tests that the `custom_generate` argument is used when passed to `generate`"""

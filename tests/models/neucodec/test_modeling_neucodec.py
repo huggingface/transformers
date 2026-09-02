@@ -155,10 +155,8 @@ class NeuCodecModelTest(ModelTesterMixin, unittest.TestCase):
         # `forward` takes no `output_attentions` / `output_hidden_states` (see the skips below), so drop them
         # from the inputs the common tests inject
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
-        if "output_attentions" in inputs_dict:
-            inputs_dict.pop("output_attentions")
-        if "output_hidden_states" in inputs_dict:
-            inputs_dict.pop("output_hidden_states")
+        inputs_dict.pop("output_attentions", None)
+        inputs_dict.pop("output_hidden_states", None)
         return inputs_dict
 
     def setUp(self):
