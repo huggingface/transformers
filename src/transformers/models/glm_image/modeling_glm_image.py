@@ -618,14 +618,6 @@ class GlmImageVisionModel(GlmImagePreTrainedModel):
 
         return BaseModelOutputWithPooling(last_hidden_state=hidden_states, pooler_output=hidden_states)
 
-    def rot_pos_emb(self, grid_thw):
-        warnings.warn(
-            f"`{self.__class__.__name__}.rot_pos_emb` is deprecated and will be removed in v5.11. Use `get_vision_position_ids` from `transformers.vision_utils` and apply the rotary embedding module.",
-            FutureWarning,
-            stacklevel=2,
-        )
-        return get_vision_position_ids(grid_thw, self.spatial_merge_size)
-
 
 @use_kernel_forward_from_hub("RMSNorm")
 class GlmImageRMSNorm(nn.Module):

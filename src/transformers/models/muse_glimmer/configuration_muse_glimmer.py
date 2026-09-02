@@ -52,7 +52,7 @@ class MuseGlimmerVisionConfig(PreTrainedConfig):
     hidden_size: int = 1536
     intermediate_size: int = 8960
     hidden_act: str = "gelu"
-    rope_parameters: dict | None = None  # defaults set by `RopeConfigMixin`
+    rope_parameters: dict | None = None
     base_model_tp_plan = {
         "patch_embedder.patch_embedding": "colwise_gather_output",
         "layers.*.attn.q_proj": "colwise",
