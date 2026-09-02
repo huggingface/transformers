@@ -395,9 +395,7 @@ class Qwen3TTSTokenizerSingleCodebookQuantizer(Qwen3TTSTokenizerSingleCodebookPr
 
 class CausalConv1d(VoxtralRealtimeCausalConv1d):
     def __init__(self, in_channels, out_channels, kernel_size, stride=1, dilation=1, bias=True):
-        nn.Conv1d.__init__(
-            self, in_channels, out_channels, kernel_size, stride=stride, dilation=dilation, bias=bias
-        )
+        nn.Conv1d.__init__(self, in_channels, out_channels, kernel_size, stride=stride, dilation=dilation, bias=bias)
         self.cache_key = ""
 
 
@@ -539,8 +537,12 @@ class Qwen3TTSTokenizerSingleCodebookDecoderDiTModel(Qwen2_5OmniToken2WavDiTMode
             [
                 Qwen3TTSTokenizerSingleCodebookDiTDecoderLayer(
                     config,
-                    look_ahead_block=1 if i in config.look_ahead_layers else 0,  # CODEPATH: Omni Token2Wav DiT look-ahead layers
-                    look_backward_block=1 if i in config.look_backward_layers else 0,  # CODEPATH: Omni Token2Wav DiT look-backward layers
+                    look_ahead_block=1
+                    if i in config.look_ahead_layers
+                    else 0,  # CODEPATH: Omni Token2Wav DiT look-ahead layers
+                    look_backward_block=1
+                    if i in config.look_backward_layers
+                    else 0,  # CODEPATH: Omni Token2Wav DiT look-backward layers
                 )
                 for i in range(config.num_hidden_layers)
             ]
@@ -678,9 +680,7 @@ class Qwen3TTSTokenizerSingleCodebookModel(Qwen3TTSTokenizerSingleCodebookPreTra
         audio_codes, audio_codes_mask = self.quantizer.encode(
             encoder_outputs.last_hidden_state, attention_mask=encoder_mask
         )
-        return Qwen3TTSTokenizerSingleCodebookEncoderOutput(
-            audio_codes=audio_codes, audio_codes_mask=audio_codes_mask
-        )
+        return Qwen3TTSTokenizerSingleCodebookEncoderOutput(audio_codes=audio_codes, audio_codes_mask=audio_codes_mask)
 
     @can_return_tuple
     @auto_docstring
