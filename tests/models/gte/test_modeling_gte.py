@@ -358,10 +358,10 @@ class GteModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_masked_lm(self):
-        model = AutoModelForMaskedLM.from_pretrained(
-            "Alibaba-NLP/gte-multilingual-mlm-base", revision="refs/pr/2", dtype=torch.float32
-        ).to(torch_device)
-        tokenizer = AutoTokenizer.from_pretrained("Alibaba-NLP/gte-multilingual-mlm-base", revision="refs/pr/2")
+        model = AutoModelForMaskedLM.from_pretrained("Alibaba-NLP/gte-multilingual-mlm-base", dtype=torch.float32).to(
+            torch_device
+        )
+        tokenizer = AutoTokenizer.from_pretrained("Alibaba-NLP/gte-multilingual-mlm-base")
 
         inputs = tokenizer(self.sentences, return_tensors="pt", padding=True, truncation=True).to(torch_device)
 
