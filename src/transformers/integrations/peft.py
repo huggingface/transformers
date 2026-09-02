@@ -17,8 +17,6 @@ import os
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any, Literal, Optional
 
-from safetensors import safe_open
-
 from transformers.utils.import_utils import is_peft_greater_or_equal
 
 from .._typing import PeftConfigLike
@@ -157,9 +155,8 @@ class PeftAdapterMixin:
                 `find_adapter_config_file` method.
         """
         from peft import PeftType
-        from peft.utils.save_and_load import _maybe_shard_state_dict_for_tp
 
-        from ..modeling_utils import LoadStateDictConfig, _get_resolved_checkpoint_files, load_state_dict
+        from ..modeling_utils import LoadStateDictConfig, _get_resolved_checkpoint_files
 
         if local_files_only:
             kwargs["local_files_only"] = True
@@ -276,45 +273,18 @@ class PeftAdapterMixin:
 
         device_map = getattr(self, "hf_device_map", {"": self.device})
 
-        if not is_peft_greater_or_equal("0.20.1", accept_dev=True):
-            # If the model is tensor parallel, we handle the sharding of the state dict here since the logic in `self._load_pretrained_model`
-            # is not compatible with the way PEFT adapter should be sharded.
-            has_tp_adapters = False
-            for module in self.modules():
-                tp_info = getattr(module, "_tp_info", None)
-                if tp_info is not None:
-                    has_tp_adapters = True
-                    break
+        has_tp_adapters = False
+        for module in self.modules():
+            tp_info = getattr(module, "_tp_info", None)
+            if tp_info is not None:
+                has_tp_adapters = True
+                break
 
-            if has_tp_adapters:
-                all_pointer = set()
-                if adapter_state_dict is not None:
-                    merged_state_dict = adapter_state_dict
-                elif (
-                    checkpoint_files is not None
-                    and checkpoint_files[0].endswith(".safetensors")
-                    and adapter_state_dict is None
-                ):
-                    merged_state_dict = {}
-                    for file in checkpoint_files:
-                        file_pointer = safe_open(file, framework="pt", device="cpu")
-                        all_pointer.add(file_pointer)
-                        for k in file_pointer.keys():
-                            merged_state_dict[k] = file_pointer.get_tensor(k)
-                # Checkpoints are .bin
-                elif checkpoint_files is not None:
-                    merged_state_dict = {}
-                    for ckpt_file in checkpoint_files:
-                        merged_state_dict.update(load_state_dict(ckpt_file))
-                else:
-                    raise ValueError("Neither a state dict nor checkpoint files were found.")
-
-                adapter_state_dict = merged_state_dict
-
-                if any(not isinstance(v, torch.Tensor) for v in adapter_state_dict.values()):
-                    raise ValueError("Expected all values in the adapter state dict to be tensors.")
-
-                _maybe_shard_state_dict_for_tp(self, adapter_state_dict, adapter_name)
+        if has_tp_adapters and not is_peft_greater_or_equal("0.20.1", accept_dev=True):
+            raise ValueError(
+                "Loading a tensor-parallel PEFT adapter requires peft >= 0.20.1, please upgrade your peft "
+                "installation."
+            )
 
         load_config = replace(
             load_config,
