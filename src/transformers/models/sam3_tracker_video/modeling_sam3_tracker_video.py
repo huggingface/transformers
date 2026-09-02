@@ -50,7 +50,6 @@ from .configuration_sam3_tracker_video import (
     Sam3TrackerVideoConfig,
     Sam3TrackerVideoMaskDecoderConfig,
     Sam3TrackerVideoPromptEncoderConfig,
-    Sam3TrackerVideoViTConfig,
 )
 
 
@@ -769,7 +768,7 @@ class Sam3TrackerVideoVisionRotaryEmbedding(nn.Module):
     @staticmethod
     @deprecate_kwarg("device", version="5.18")
     def compute_axial_rope_parameters(
-        config: Sam3TrackerVideoViTConfig, device=None, **kwargs
+        config: Sam3TrackerVideoConfig, device=None, **kwargs
     ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
@@ -781,7 +780,9 @@ class Sam3TrackerVideoVisionRotaryEmbedding(nn.Module):
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
         base = config.rope_parameters["rope_theta"]
-        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        dim = config.memory_attention_hidden_size // (
+            config.memory_attention_downsample_rate * config.memory_attention_num_attention_heads
+        )
         spatial_dim = dim // 2
 
         attention_factor = 1.0  # Unused in this type of RoPE
@@ -812,28 +813,6 @@ class Sam3TrackerVideoVisionRotaryEmbedding(nn.Module):
         freq_h, freq_w = freq[:, 0], freq[:, 1]
         freq_hw = torch.cat([freq_h, freq_w], dim=-1)[None, ...]
         return freq_hw.repeat_interleave(2, dim=-1)
-
-    def compute_default_rope_parameters(
-        config: Sam3TrackerVideoConfig, device=None, **kwargs
-    ) -> tuple[torch.Tensor, float]:
-        """
-        Computes the inverse frequencies according to the original RoPE implementation
-        Args:
-            config ([`~transformers.PreTrainedConfig`]):
-                The model configuration.
-        Returns:
-            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
-            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
-        """
-        base = config.rope_parameters["rope_theta"]
-        dim = config.memory_attention_hidden_size // (
-            config.memory_attention_downsample_rate * config.memory_attention_num_attention_heads
-        )
-        spatial_dim = dim // 2
-
-        attention_factor = 1.0  # Unused in this type of RoPE
-        inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
-        return inv_freq.to(device), attention_factor
 
 
 def rotate_pairwise(x):

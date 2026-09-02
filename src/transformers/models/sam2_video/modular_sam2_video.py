@@ -253,10 +253,19 @@ class Sam2VideoConfig(PreTrainedConfig):
 
     @property
     def memory_attention_rope_theta(self):
-        logger.warning(
-            "`self.memory_attention_rope_theta` is deprecated, use `self.rope_parameters['rope_theta']` instead"
+        logger.warning_once(
+            "`memory_attention_rope_theta` is deprecated and will be removed in v5.0. "
+            "Use `rope_parameters['rope_theta']` instead."
         )
-        return getattr(self, "memory_attention_rope_theta", 10_000)
+        return self.rope_parameters.get("rope_theta", 10_000)
+
+    @memory_attention_rope_theta.setter
+    def memory_attention_rope_theta(self, value):
+        logger.warning_once(
+            "`memory_attention_rope_theta` is deprecated and will be removed in v5.0. "
+            "Use `rope_parameters['rope_theta']` instead."
+        )
+        self.rope_parameters["rope_theta"] = value
 
 
 class Sam2VideoInferenceCache:
@@ -951,7 +960,7 @@ class Sam2VideoVisionRotaryEmbedding(Sam3ViTRotaryEmbedding):
     def __init__(self, config: Sam2VideoConfig, device=None):
         super().__init__(config, device=device)
 
-    def compute_default_rope_parameters(config: Sam2VideoConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
+    def compute_axial_rope_parameters(config: Sam2VideoConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:

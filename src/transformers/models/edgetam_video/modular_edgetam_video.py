@@ -295,10 +295,19 @@ class EdgeTamVideoConfig(PreTrainedConfig):
 
     @property
     def memory_attention_rope_theta(self):
-        logger.warning(
-            "`self.memory_attention_rope_theta` is deprecated, use `self.rope_parameters['rope_theta']` instead"
+        logger.warning_once(
+            "`memory_attention_rope_theta` is deprecated and will be removed in v5.0. "
+            "Use `rope_parameters['rope_theta']` instead."
         )
-        return getattr(self, "memory_attention_rope_theta", 10_000)
+        return self.rope_parameters.get("rope_theta", 10_000)
+
+    @memory_attention_rope_theta.setter
+    def memory_attention_rope_theta(self, value):
+        logger.warning_once(
+            "`memory_attention_rope_theta` is deprecated and will be removed in v5.0. "
+            "Use `rope_parameters['rope_theta']` instead."
+        )
+        self.rope_parameters["rope_theta"] = value
 
 
 class EdgeTamVideoLayerNorm(Sam2VideoLayerNorm):
